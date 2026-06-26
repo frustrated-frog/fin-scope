@@ -116,6 +116,17 @@ public class XPostSourceAdapter implements SourceAdapter {
     private RawItem fetchFromVxTwitter(StatusRef ref, Exception previousFailure) throws Exception {
         JsonNode root = objectMapper.readTree(get(vxTwitterBaseUrl + "/" + ref.screenName + "/status/" + ref.statusId));
         String tweetText = clean(text(root, "text"));
+
+        // Validate that vxtwitter didn't return link-only content
+        if (looksLikeLinkOnly(tweetText)) {
+            String message = "vxtwitter 返回的正文仅包含 X Article 链接，无法提取实际内容。原始链接：" + ref.originalUrl;
+            if (previousFailure != null) {
+                message += "；fxtwitter 失败原因：" + previousFailure.getMessage();
+            }
+            message += "。建议：该推文可能包含长文内容，请稍后重试或直接访问原链接查看。";
+            throw new IllegalStateException(message);
+        }
+
         String title = "X 帖子 | @" + ref.screenName + "：" + limit(tweetText, 56);
         if (tweetText.isEmpty()) {
             String message = "vxtwitter 响应没有正文";
@@ -349,6 +360,20 @@ public class XPostSourceAdapter implements SourceAdapter {
             return value == null ? "" : value.substring(0, value.length() - 1);
         }
         return value;
+    }
+
+    private static boolean looksLikeLinkOnly(String content) {
+        String value = content == null ? "" : content.trim();
+        if (value.isEmpty()) {
+            return false;
+        }
+        String withoutUrls = value
+                .replaceAll("https?://\\S+", "")
+                .replaceAll("(?i)\\b(?:x|twitter)\\.com/\\S+", "")
+                .trim();
+        boolean containsArticleLink = value.toLowerCase(Locale.ROOT).contains("x.com/i/article/")
+                || value.toLowerCase(Locale.ROOT).contains("twitter.com/i/article/");
+        return containsArticleLink && withoutUrls.length() <= 8;
     }
 
     private static class StatusRef {

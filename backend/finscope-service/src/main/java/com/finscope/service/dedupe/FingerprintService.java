@@ -21,10 +21,21 @@ public class FingerprintService {
         }
         try {
             URI uri = new URI(rawUrl.trim());
+
+            // Canonicalize x.com and twitter.com to same domain
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if (host.startsWith("www.")) {
+                host = host.substring(4);
+            }
+            String canonicalHost = host;
+            if ("twitter.com".equals(host) || "mobile.twitter.com".equals(host)) {
+                canonicalHost = "x.com";
+            }
+
             String query = normalizeQuery(uri.getRawQuery());
             URI normalized = new URI(
                     lower(uri.getScheme()),
-                    lower(uri.getAuthority()),
+                    canonicalHost,
                     normalizePath(uri.getPath()),
                     query.isEmpty() ? null : query,
                     null

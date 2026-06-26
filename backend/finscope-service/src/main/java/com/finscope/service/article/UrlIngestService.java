@@ -10,20 +10,19 @@ import com.finscope.rpc.source.SourceAdapterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.net.URI;
 import java.util.List;
 
 @Service
 @Slf4j
 public class UrlIngestService {
-    private final SourceAdapterRegistry adapterRegistry;
-    private final ArticleIngestCoordinator articleIngestCoordinator;
 
-    public UrlIngestService(SourceAdapterRegistry adapterRegistry,
-                            ArticleIngestCoordinator articleIngestCoordinator) {
-        this.adapterRegistry = adapterRegistry;
-        this.articleIngestCoordinator = articleIngestCoordinator;
-    }
+    @Resource
+    private SourceAdapterRegistry adapterRegistry;
+    @Resource
+    private ArticleIngestCoordinator articleIngestCoordinator;
+
 
     public ArticleIngestResult ingest(String url, String sourceName, String tags) {
         validateUrl(url);
@@ -85,6 +84,11 @@ public class UrlIngestService {
         if (isDynamicShell(title, combined)) {
             throw new IllegalArgumentException("未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页，无法生成可靠情报卡片。URL: " + url);
         }
+        if (isLinkOnlyContent(title, summary, body)) {
+            throw new IllegalArgumentException(
+                    "未能读取到可用正文：检测到正文仅包含 X Article 链接，缺少实际内容。URL: " + url
+                    + "。该推文可能包含长文内容，建议稍后重试或直接访问原链接。");
+        }
         String evidence = (summary + " " + body).trim();
         if (evidence.length() < 40) {
             throw new IllegalArgumentException("未能读取到可用正文：页面正文过短，无法生成可靠情报卡片。URL: " + url);
@@ -105,6 +109,20 @@ public class UrlIngestService {
             return true;
         }
         return false;
+    }
+
+    private boolean isLinkOnlyContent(String title, String summary, String body) {
+        String combined = (summary + " " + body).trim();
+        if (combined.isEmpty()) {
+            return false;
+        }
+        String withoutUrls = combined
+                .replaceAll("https?://\\S+", "")
+                .replaceAll("(?i)\\b(?:x|twitter)\\.com/\\S+", "")
+                .trim();
+        boolean containsArticleLink = combined.toLowerCase().contains("x.com/i/article/")
+                || combined.toLowerCase().contains("twitter.com/i/article/");
+        return containsArticleLink && withoutUrls.length() <= 8;
     }
 
     private String text(String value) {
