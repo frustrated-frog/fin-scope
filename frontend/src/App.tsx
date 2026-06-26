@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
-type View = 'dashboard' | 'sources' | 'inbox' | 'briefs' | 'topics' | 'learning' | 'agents' | 'settings';
+type View = 'dashboard' | 'sources' | 'article' | 'briefs' | 'topics' | 'learning' | 'agents' | 'settings';
 
 type Source = {
   id?: number;
@@ -108,7 +108,7 @@ type DeleteArticlesRequest = {
 const navItems: Array<{ id: View; label: string; hint: string; code: string }> = [
   { id: 'dashboard', label: 'Dashboard', hint: '总览', code: '01' },
   { id: 'sources', label: 'Sources', hint: '信源', code: '02' },
-  { id: 'inbox', label: 'Inbox', hint: '信息流', code: '03' },
+  { id: 'article', label: 'Article', hint: '文章', code: '03' },
   { id: 'briefs', label: 'Briefs', hint: '日报', code: '04' },
   { id: 'topics', label: 'Topics', hint: '主题', code: '05' },
   { id: 'learning', label: 'Learning', hint: '学习', code: '06' },
@@ -232,7 +232,7 @@ export default function App() {
         </div>
         <div className="sidebar-signal">
           <span>Pipeline</span>
-          <strong>Sources / Inbox / Brief / Topics</strong>
+          <strong>Sources / Article / Brief / Topics</strong>
         </div>
         <nav aria-label="Workspace">
           {navItems.map((item) => (
@@ -259,26 +259,31 @@ export default function App() {
             <h2>{currentTitle}</h2>
           </div>
           <div className="topbar-actions">
-            <div className="market-chip">
+            <div className="market-chip topbar-pill">
               <span>Articles</span>
               <strong>{articles.length}</strong>
             </div>
-            <div className="market-chip">
+            <div className="market-chip topbar-pill">
               <span>Topics</span>
               <strong>{topics.length}</strong>
             </div>
-            <button className="ghost-button" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? '浅色' : '深色'}
+            <button
+              className="ghost-button topbar-pill theme-toggle"
+              type="button"
+              aria-label={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              {theme === 'dark' ? '☀' : '☾'}
             </button>
-            <button className="ghost-button" type="button" onClick={refreshWorkspace}>刷新</button>
-            <div className="status-pill">{message}</div>
+            <button className="ghost-button topbar-pill" type="button" onClick={refreshWorkspace}>刷新</button>
+            <div className="status-pill topbar-pill">{message}</div>
           </div>
         </header>
 
         {view === 'dashboard' && <DashboardView dashboard={dashboard} articles={articles} />}
         {view === 'sources' && <SourcesView sources={sources} onChanged={refresh} setMessage={setMessage} addToast={addToast} />}
-        {view === 'inbox' && (
-          <InboxView articles={articles} onChanged={refresh} setMessage={setMessage} setView={setView} addToast={addToast} />
+        {view === 'article' && (
+          <ArticleView articles={articles} onChanged={refresh} setMessage={setMessage} setView={setView} addToast={addToast} />
         )}
         {view === 'briefs' && (
           <BriefsView briefs={briefs} onChanged={refresh} setMessage={setMessage} setView={setView} />
@@ -336,7 +341,7 @@ function DashboardView({ dashboard, articles }: { dashboard: Dashboard | null; a
 
   const metrics = [
     { label: '信息源', value: sourceCount, caption: 'Sources' },
-    { label: '文章池', value: articleCount, caption: 'Inbox' },
+    { label: '文章池', value: articleCount, caption: 'Article' },
     { label: '简报', value: briefCount, caption: 'Briefs' },
     { label: '新内容', value: novelCount, caption: 'Novelty' }
   ];
@@ -484,7 +489,7 @@ function SourcesView({
   );
 }
 
-function InboxView({
+function ArticleView({
   articles: initialArticles,
   onChanged,
   setMessage,
@@ -622,12 +627,12 @@ function InboxView({
   };
 
   return (
-    <section className="inbox-container">
+    <section className="article-container">
       <div className="card">
         <div className="card-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>信息流 Inbox</h3>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>信息流 Article</h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
                 URL / RSS / Web 抓取内容统一进入卡片化信息池
               </p>
@@ -664,11 +669,11 @@ function InboxView({
             </label>
             {selectedIds.size > 0 && (
               <>
-                <span className="badge" style={{ background: 'var(--accent)' }}>
+                <span className="badge selection-pill" style={{ background: 'var(--accent)' }}>
                   已选 {selectedIds.size} 项
                 </span>
                 <button
-                  className="danger-button"
+                  className="danger-button selection-pill"
                   onClick={() => setShowBatchDeleteConfirm(true)}
                 >
                   删除所选
@@ -1024,7 +1029,7 @@ function LearningView({
                   ))}
                 </ul>
               </div>
-              <button className="compact-button" onClick={() => onOpenTopic(topic.id)}>记录理解</button>
+              <button className="compact-button learning-action-button" onClick={() => onOpenTopic(topic.id)}>记录理解</button>
             </article>
           ))}
         </div>

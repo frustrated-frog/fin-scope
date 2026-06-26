@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
@@ -26,6 +26,30 @@ const responses: Record<string, unknown> = {
       }
     }
   ],
+  '/api/articles/paged?page=0&pageSize=20': {
+    items: [
+      {
+        id: 1,
+        title: '美联储释放降息信号 黄金走强',
+        sourceName: '测试财经RSS',
+        noveltyType: 'NEW',
+        noveltyReason: '首次进入信息流',
+        category: '宏观',
+        insightCard: {
+          oneSentenceSummary: '美联储释放偏鸽信号，黄金价格继续走强。',
+          coreEvent: '市场重新交易降息预期。',
+          importance: '影响利率预期、资产定价和风险偏好。',
+          impactTargets: '黄金、美元、债券、权益市场',
+          followUpQuestions: '下一次验证窗口是什么？',
+          cardMarkdown: '## 情报卡片'
+        }
+      }
+    ],
+    totalCount: 1,
+    page: 0,
+    pageSize: 20,
+    totalPages: 1
+  },
   '/api/articles/ingest-url': {
     article: { id: 2, title: '粘贴 URL 生成情报卡片', sourceName: '手动研究', noveltyType: 'NEW', category: '市场' },
     insightCard: {
@@ -103,6 +127,28 @@ test('renders the FinScope workspace shell and dashboard metrics', async () => {
   expect(screen.getByText('简报')).toBeInTheDocument();
 });
 
+test('topbar status controls use matching pills and icon theme toggle', async () => {
+  render(<App />);
+
+  expect(await screen.findByText('Articles')).toBeInTheDocument();
+
+  const topbarActions = document.querySelector('.topbar-actions') as HTMLElement;
+  const topbar = within(topbarActions);
+  const articlesChip = topbar.getByText('Articles').closest('.topbar-pill');
+  const topicsChip = topbar.getByText('Topics').closest('.topbar-pill');
+  const themeButton = topbar.getByRole('button', { name: '切换为浅色模式' });
+  const refreshButton = topbar.getByRole('button', { name: '刷新' });
+  const statusChip = topbar.getByText('准备就绪').closest('.topbar-pill');
+
+  expect(articlesChip).toBeTruthy();
+  expect(topicsChip).toBeTruthy();
+  expect(themeButton).toHaveClass('topbar-pill');
+  expect(refreshButton).toHaveClass('topbar-pill');
+  expect(statusChip).toBeTruthy();
+  expect(themeButton).toHaveTextContent('☀');
+  expect(themeButton).not.toHaveTextContent('浅色');
+});
+
 test('switches to inbox and shows novelty reasoning', async () => {
   render(<App />);
 
@@ -146,6 +192,19 @@ test('can compound an inbox article into a topic', async () => {
   expect(fetch).toHaveBeenCalledWith('/api/topics/from-article/1', expect.objectContaining({ method: 'POST' }));
 });
 
+test('batch selection controls use the same compact pill shape', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Inbox' }));
+  await userEvent.click(await screen.findByLabelText('全选当前页'));
+
+  const selectedBadge = await screen.findByText('已选 1 项');
+  const deleteButton = screen.getByRole('button', { name: '删除所选' });
+
+  expect(selectedBadge).toHaveClass('selection-pill');
+  expect(deleteButton).toHaveClass('selection-pill');
+});
+
 test('topics show learning metadata and vault path', async () => {
   render(<App />);
 
@@ -172,4 +231,17 @@ test('learning view opens a topic and appends personal understanding', async () 
     method: 'POST',
     body: JSON.stringify({ status: 'REVIEWING', note: '我理解的核心变量是利率预期。' })
   }));
+});
+
+test('learning queue action buttons keep a fixed single-line size', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
+
+  const noteButtons = await screen.findAllByRole('button', { name: '记录理解' });
+
+  expect(noteButtons.length).toBeGreaterThan(0);
+  noteButtons.forEach((button) => {
+    expect(button).toHaveClass('learning-action-button');
+  });
 });
