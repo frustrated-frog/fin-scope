@@ -1550,3 +1550,143 @@ td {
     justify-content: flex-start;
   }
 }
+
+/* Danger Button */
+.danger-button {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  min-height: 24px;
+  padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+.danger-button:hover {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+  transform: translateY(-1px);
+}
+
+.danger-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Secondary Button */
+.secondary-button {
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-button:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Batch Toolbar */
+.batch-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin-bottom: 16px;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal */
+.modal {
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 90%;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.modal-content {
+  padding: 20px;
+}
+
+.modal-content p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.modal-actions {
+  padding: 12px 20px 20px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* Pagination Controls */
+.pagination-controls {
+  margin-top: 16px;
+}
+
+/* Checkbox Styling */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}

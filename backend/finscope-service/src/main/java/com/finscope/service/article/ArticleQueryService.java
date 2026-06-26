@@ -4,6 +4,7 @@ import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.insight.InsightCardRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
+import com.finscope.domain.response.PageResponse;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -30,6 +31,22 @@ public class ArticleQueryService {
             views.add(new ArticleCardView(article, cards.get(article.getId())));
         }
         return views;
+    }
+
+    public PageResponse<ArticleCardView> listPaged(int page, int pageSize) {
+        List<Article> articles = articleRepository.findAllPaged(page, pageSize);
+        List<Long> articleIds = articles.stream().map(Article::getId).collect(Collectors.toList());
+        Map<Long, InsightCard> cards = new HashMap<Long, InsightCard>(
+            insightCardRepository.findByArticleIds(articleIds)
+        );
+
+        List<ArticleCardView> views = new ArrayList<ArticleCardView>();
+        for (Article article : articles) {
+            views.add(new ArticleCardView(article, cards.get(article.getId())));
+        }
+
+        int totalCount = articleRepository.countAll();
+        return PageResponse.of(views, totalCount, page, pageSize);
     }
 
     public ArticleCardView detail(Long id) {

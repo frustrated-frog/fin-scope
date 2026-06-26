@@ -133,4 +133,19 @@ public class InsightCardRepository {
         }
         return byArticleId;
     }
+
+    public int deleteByArticleId(Long articleId) {
+        return jdbcTemplate.update("DELETE FROM insight_card WHERE article_id = ?", articleId);
+    }
+
+    public int deleteByArticleIds(List<Long> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return 0;
+        }
+        String placeholders = String.join(",", Collections.nCopies(articleIds.size(), "?"));
+        return jdbcTemplate.update(
+            "DELETE FROM insight_card WHERE article_id IN (" + placeholders + ")",
+            articleIds.toArray()
+        );
+    }
 }

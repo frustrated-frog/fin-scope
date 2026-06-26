@@ -12,6 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -105,6 +106,29 @@ public class ArticleRepository {
     public int countAll() {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM article", Integer.class);
         return count == null ? 0 : count;
+    }
+
+    public List<Article> findAllPaged(int page, int pageSize) {
+        int offset = page * pageSize;
+        return jdbcTemplate.query(
+            "SELECT * FROM article ORDER BY fetched_at DESC, id DESC LIMIT ? OFFSET ?",
+            mapper, pageSize, offset
+        );
+    }
+
+    public int deleteById(Long id) {
+        return jdbcTemplate.update("DELETE FROM article WHERE id = ?", id);
+    }
+
+    public int deleteByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        return jdbcTemplate.update(
+            "DELETE FROM article WHERE id IN (" + placeholders + ")",
+            ids.toArray()
+        );
     }
 
     public static class ArticleRecord {
