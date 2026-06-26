@@ -14,10 +14,13 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class ArticleInterpretationAgent {
     private static final String NODE_NAME = "article-interpret";
+    private static final int PROMPT_BODY_LIMIT = 9000;
+    private static final int FULL_TEXT_MIN_LENGTH = 800;
     private final LlmChatClient llmChatClient;
     private final AgentRunRepository agentRunRepository;
     private final TopicExtractor topicExtractor;
@@ -45,27 +48,33 @@ public class ArticleInterpretationAgent {
 
     public ArticleInterpretation interpret(Article article) {
         long start = System.currentTimeMillis();
-        String userPrompt = buildUserPrompt(article);
+        ArticleInterpretationInput input = ArticleInterpretationInput.from(article);
+        String userPrompt = buildUserPrompt(input);
         if (!isConfigured()) {
             ArticleInterpretation fallback = fallback(article);
-            record("FALLBACK", traceInput(article, userPrompt), traceOutput(fallback), null, start);
+            record("FALLBACK", traceInput(input, userPrompt), traceOutput(fallback), null, start);
             return fallback;
         }
+        String raw = null;
         try {
-            String raw = llmChatClient.complete(systemPrompt(), userPrompt);
-            ArticleInterpretation interpretation = parse(raw, article);
-            record("SUCCESS", traceInput(article, userPrompt), raw, null, start);
+            raw = llmChatClient.complete(systemPrompt(), userPrompt);
+            ArticleInterpretation interpretation = parse(raw, input);
+            record("SUCCESS", traceInput(input, userPrompt), raw, null, start);
             return interpretation;
+        } catch (InterpretationRejectedException ex) {
+            ArticleInterpretation fallback = fallback(article);
+            record("REJECTED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
+            return fallback;
         } catch (Exception ex) {
-            record("FAILED", traceInput(article, userPrompt), null, ex.getMessage(), start);
+            record("FAILED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
             return fallback(article);
         }
     }
 
-    private ArticleInterpretation parse(String raw, Article article) throws Exception {
+    private ArticleInterpretation parse(String raw, ArticleInterpretationInput input) throws Exception {
         String json = extractJson(raw);
         JsonNode root = objectMapper.readTree(json);
-        ArticleInterpretation fallback = fallback(article);
+        ArticleInterpretation fallback = fallback(input.article);
         ArticleInterpretation interpretation = new ArticleInterpretation();
         interpretation.setSource("LLM");
         interpretation.setRawJson(json);
@@ -97,6 +106,7 @@ public class ArticleInterpretationAgent {
         interpretation.setOpinions(text(root, "opinions", ""));
 
         validate(interpretation, fallback);
+        validateAgainstEvidence(interpretation, input);
         return interpretation;
     }
 
@@ -127,6 +137,47 @@ public class ArticleInterpretationAgent {
         }
     }
 
+    private void validateAgainstEvidence(ArticleInterpretation interpretation, ArticleInterpretationInput input) {
+        if (input.hasSubstantialText() && claimsBodyMissing(interpretation)) {
+            throw new InterpretationRejectedException(
+                    "LLM output contradicted article evidence: contentQuality=" + input.contentQuality
+                            + ", bodyLength=" + input.bodyLength);
+        }
+    }
+
+    private boolean claimsBodyMissing(ArticleInterpretation interpretation) {
+        String text = join(" ",
+                interpretation.getTopicName(),
+                interpretation.getTopicDescription(),
+                interpretation.getOneSentenceSummary(),
+                interpretation.getCoreEvent(),
+                interpretation.getImportance(),
+                interpretation.getBackground(),
+                interpretation.getKeyData(),
+                interpretation.getTimeline(),
+                interpretation.getRelatedParties(),
+                interpretation.getRiskFactors(),
+                interpretation.getFutureOutlook(),
+                interpretation.getImpactOnInvestment(),
+                interpretation.getImpactOnStartup(),
+                interpretation.getProfessionalInsight(),
+                interpretation.getFacts(),
+                interpretation.getReasoning(),
+                interpretation.getOpinions()).toLowerCase(Locale.ROOT);
+        return containsAny(text,
+                "正文未抓取",
+                "正文未提供",
+                "未提供文章正文",
+                "未提供正文",
+                "正文缺失",
+                "缺少正文",
+                "未获得文章主体内容",
+                "未抓取到正文",
+                "current data only shows",
+                "no article body",
+                "body is missing");
+    }
+
     private ArticleInterpretation fallback(Article article) {
         TopicExtraction topic = topicExtractor.extract(join(" ", article.getTitle(), article.getSummary(), article.getBody()));
         InsightCard card = insightCardGenerator.generate(article);
@@ -152,7 +203,8 @@ public class ArticleInterpretationAgent {
                 + "只返回 JSON,不返回 Markdown,不要包裹代码块。";
     }
 
-    private String buildUserPrompt(Article article) {
+    private String buildUserPrompt(ArticleInterpretationInput input) {
+        Article article = input.article;
         return "请深度解读下面文章,输出JSON对象。\n\n"
                 + "【字段说明】\n"
                 + "基础字段: contentType, topicName, topicDescription, oneSentenceSummary, coreEvent, importance, impactTargets, keyTerms, learningQuestions, confidence\n"
@@ -175,19 +227,32 @@ public class ArticleInterpretationAgent {
                 + "3. impactTargets/keyTerms/learningQuestions 使用字符串数组\n"
                 + "4. confidence 为 0 到 1\n"
                 + "5. 深度解读字段要求有实质内容,不能简单重复标题或摘要\n"
-                + "6. 对投资/创业的影响要有具体分析,而非泛泛而谈\n\n"
+                + "6. 对投资/创业的影响要有具体分析,而非泛泛而谈\n"
+                + "7. 必须基于已提供正文证据进行判断,不要只依据 URL、作者名或互动数据臆测原文。\n"
+                + "8. 如果 contentQuality 是 FULL_TEXT 或 PARTIAL_TEXT,禁止输出“正文未抓取”“未提供正文”“无法判断正文内容”等与输入事实冲突的说法。\n"
+                + "9. 如果 bodyWasTruncated=true,只能说明基于已提供正文片段分析,不能说正文不可读。\n\n"
+                + "【证据状态】\n"
+                + "contentQuality: " + input.contentQuality + "\n"
+                + "bodyLength: " + input.bodyLength + "\n"
+                + "bodyWasTruncated: " + input.bodyWasTruncated + "\n"
+                + "visibleBodyPreview: " + input.visibleBodyPreview + "\n\n"
                 + "【文章信息】\n"
                 + "来源: " + safe(article.getSourceName()) + "\n"
                 + "标题: " + safe(article.getTitle()) + "\n"
                 + "URL: " + safe(article.getUrl()) + "\n"
                 + "分类: " + safe(article.getCategory()) + "\n"
                 + "摘要: " + safe(article.getSummary()) + "\n"
-                + "正文:\n" + limit(safe(article.getBody()), 9000);
+                + "正文:\n" + input.promptBody;
     }
 
-    private String traceInput(Article article, String userPrompt) {
-        return "model=" + modelName() + "\narticleId=" + article.getId() + "\ntitle="
-                + safe(article.getTitle()) + "\n\n" + limit(userPrompt, 4000);
+    private String traceInput(ArticleInterpretationInput input, String userPrompt) {
+        return "model=" + modelName()
+                + "\narticleId=" + input.article.getId()
+                + "\ntitle=" + safe(input.article.getTitle())
+                + "\ncontentQuality=" + input.contentQuality
+                + "\nbodyLength=" + input.bodyLength
+                + "\nbodyWasTruncated=" + input.bodyWasTruncated
+                + "\n\n" + limit(userPrompt, 4000);
     }
 
     private String traceOutput(ArticleInterpretation interpretation) {
@@ -286,6 +351,15 @@ public class ArticleInterpretationAgent {
         return builder.toString();
     }
 
+    private boolean containsAny(String text, String... needles) {
+        for (String needle : needles) {
+            if (!isBlank(needle) && text.contains(needle.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String limit(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return value;
@@ -299,5 +373,124 @@ public class ArticleInterpretationAgent {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private static class ArticleInterpretationInput {
+        private final Article article;
+        private final String promptBody;
+        private final String visibleBodyPreview;
+        private final String contentQuality;
+        private final int bodyLength;
+        private final boolean bodyWasTruncated;
+
+        private ArticleInterpretationInput(Article article,
+                                           String promptBody,
+                                           String visibleBodyPreview,
+                                           String contentQuality,
+                                           int bodyLength,
+                                           boolean bodyWasTruncated) {
+            this.article = article;
+            this.promptBody = promptBody;
+            this.visibleBodyPreview = visibleBodyPreview;
+            this.contentQuality = contentQuality;
+            this.bodyLength = bodyLength;
+            this.bodyWasTruncated = bodyWasTruncated;
+        }
+
+        private static ArticleInterpretationInput from(Article article) {
+            String body = safeText(article == null ? null : article.getBody());
+            String content = extractVisibleContent(body);
+            String quality = quality(body, content);
+            String promptBody = limitText(body, PROMPT_BODY_LIMIT);
+            return new ArticleInterpretationInput(
+                    article,
+                    promptBody,
+                    limitText(content, 240),
+                    quality,
+                    body.length(),
+                    body.length() > PROMPT_BODY_LIMIT);
+        }
+
+        private boolean hasSubstantialText() {
+            return ("FULL_TEXT".equals(contentQuality) || "PARTIAL_TEXT".equals(contentQuality))
+                    && visibleBodyPreview.length() >= 40;
+        }
+
+        private static String quality(String body, String content) {
+            if (isBlankText(body)) {
+                return "EMPTY";
+            }
+            if (looksLikeLinkOnly(content)) {
+                return "LINK_ONLY";
+            }
+            if (body.length() >= FULL_TEXT_MIN_LENGTH) {
+                return "FULL_TEXT";
+            }
+            return "PARTIAL_TEXT";
+        }
+
+        private static String extractVisibleContent(String body) {
+            if (isBlankText(body)) {
+                return "";
+            }
+            StringBuilder builder = new StringBuilder();
+            boolean contentStarted = false;
+            for (String rawLine : body.split("\\R+")) {
+                String line = rawLine.trim();
+                if (isBlankText(line)) {
+                    continue;
+                }
+                if (line.startsWith("作者：") || line.startsWith("发布时间：") || line.startsWith("互动：")) {
+                    continue;
+                }
+                if ("正文：".equals(line)) {
+                    contentStarted = true;
+                    continue;
+                }
+                if (contentStarted || !line.contains("：")) {
+                    if (builder.length() > 0) {
+                        builder.append("\n");
+                    }
+                    builder.append(line);
+                }
+            }
+            return builder.length() == 0 ? body.trim() : builder.toString().trim();
+        }
+
+        private static boolean looksLikeLinkOnly(String content) {
+            String value = safeText(content);
+            if (value.isEmpty()) {
+                return false;
+            }
+            String withoutUrls = value
+                    .replaceAll("https?://\\S+", "")
+                    .replaceAll("(?i)\\b(?:x|twitter)\\.com/\\S+", "")
+                    .trim();
+            boolean containsArticleLink = value.toLowerCase(Locale.ROOT).contains("x.com/i/article/")
+                    || value.toLowerCase(Locale.ROOT).contains("twitter.com/i/article/");
+            return containsArticleLink && withoutUrls.length() <= 8;
+        }
+
+        private static String limitText(String value, int maxLength) {
+            String text = safeText(value);
+            if (text.length() <= maxLength) {
+                return text;
+            }
+            return text.substring(0, maxLength);
+        }
+
+        private static String safeText(String value) {
+            return value == null ? "" : value.trim();
+        }
+
+        private static boolean isBlankText(String value) {
+            return value == null || value.trim().isEmpty();
+        }
+    }
+
+    private static class InterpretationRejectedException extends RuntimeException {
+        private InterpretationRejectedException(String message) {
+            super(message);
+        }
     }
 }

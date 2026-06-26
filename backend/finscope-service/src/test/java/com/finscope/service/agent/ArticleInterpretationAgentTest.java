@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ArticleInterpretationAgentTest {
@@ -37,6 +38,79 @@ class ArticleInterpretationAgentTest {
         assertTrue(interpretation.getLearningQuestions().stream().noneMatch(question -> question.contains("资产定价")));
         assertTrue(llmClient.userPrompt.contains("Cloudflare"));
         assertTrue(llmClient.userPrompt.contains("Workers"));
+    }
+
+    @Test
+    void promptMarksFullTextEvidenceAndForbidsUnreadableClaims() {
+        CapturingLlmClient llmClient = new CapturingLlmClient(validQuantInterpretationJson());
+        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+
+        agent.interpret(quantLoopArticle());
+
+        assertTrue(llmClient.userPrompt.contains("contentQuality: FULL_TEXT"));
+        assertTrue(llmClient.userPrompt.contains("bodyLength: "));
+        assertTrue(llmClient.userPrompt.contains("禁止输出“正文未抓取”"));
+        assertTrue(llmClient.userPrompt.contains("基于已提供正文证据"));
+    }
+
+    @Test
+    void promptMarksXArticleLinkOnlyBodyAsLinkOnlyEvidence() {
+        CapturingLlmClient llmClient = new CapturingLlmClient("{\n"
+                + "  \"contentType\":\"SOCIAL_POST\",\n"
+                + "  \"topicName\":\"X Article链接待补抓\",\n"
+                + "  \"topicDescription\":\"帖子只包含X Article链接，需补抓长文正文。\",\n"
+                + "  \"oneSentenceSummary\":\"当前正文仅为X Article链接。\",\n"
+                + "  \"coreEvent\":\"作者发布了一个X Article链接。\",\n"
+                + "  \"importance\":\"应补抓全文后再解读。\",\n"
+                + "  \"impactTargets\":[\"内容抓取\"],\n"
+                + "  \"keyTerms\":[\"X Article\"],\n"
+                + "  \"learningQuestions\":[\"如何补抓X Article全文？\"],\n"
+                + "  \"confidence\":0.2\n"
+                + "}");
+        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+
+        agent.interpret(xArticleLinkOnlyPost());
+
+        assertTrue(llmClient.userPrompt.contains("contentQuality: LINK_ONLY"));
+        assertTrue(llmClient.userPrompt.contains("visibleBodyPreview: http://x.com/i/article/2067524770175057920"));
+    }
+
+    @Test
+    void rejectsUnreadableLlmOutputWhenFullTextExists() {
+        CapturingLlmClient llmClient = new CapturingLlmClient("{\n"
+                + "  \"contentType\":\"SOCIAL_POST\",\n"
+                + "  \"topicName\":\"RohOnChain发布X Article链接型市场帖子但正文内容未被抓取\",\n"
+                + "  \"topicDescription\":\"当前抓取结果未包含文章实质内容。\",\n"
+                + "  \"oneSentenceSummary\":\"RohOnChain发布一条指向X Article的市场类帖子，但因正文未抓取，暂无法判断具体观点。\",\n"
+                + "  \"coreEvent\":\"X账号发布了市场类帖子，当前未提供文章正文。\",\n"
+                + "  \"importance\":\"缺少正文内容，无法确认其对市场或投资决策的实质影响。\",\n"
+                + "  \"impactTargets\":[\"加密资产投资者\"],\n"
+                + "  \"keyTerms\":[\"X Article\",\"信息抓取缺失\"],\n"
+                + "  \"learningQuestions\":[\"该X Article正文是否包含具体交易观点？\"],\n"
+                + "  \"confidence\":0.31\n"
+                + "}");
+        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+
+        ArticleInterpretation interpretation = agent.interpret(quantLoopArticle());
+
+        assertEquals("FALLBACK", interpretation.getSource());
+        assertTrue(interpretation.getOneSentenceSummary().toLowerCase().contains("quant trading system"));
+        assertFalse(allText(interpretation).contains("正文未抓取"));
+        assertFalse(allText(interpretation).contains("未提供文章正文"));
+    }
+
+    @Test
+    void fallsBackToQuantLoopInterpretationWhenLlmFails() {
+        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(new FailingConfiguredClient());
+
+        ArticleInterpretation interpretation = agent.interpret(quantLoopArticle());
+
+        assertEquals("FALLBACK", interpretation.getSource());
+        assertEquals("Loop Engineering Quant Trading System", interpretation.getTopicName());
+        assertTrue(interpretation.getTopicDescription().contains("量化交易"));
+        assertTrue(interpretation.getKeyTerms().contains("quant trading"));
+        assertTrue(interpretation.getLearningQuestions().get(0).contains("信号"));
+        assertTrue(interpretation.getLearningQuestions().stream().noneMatch(question -> question.contains("风险偏好")));
     }
 
     @Test
@@ -99,6 +173,76 @@ class ArticleInterpretationAgentTest {
         return article;
     }
 
+    private Article quantLoopArticle() {
+        String paragraph = "I will break down exactly how to build the loops that run an entire quant trading system on their own. "
+                + "The system pulls market data, generates signals, backtests them, verifies every signal through a separate agent, "
+                + "executes only what passes verification, monitors risk, and writes lessons back to memory. "
+                + "Loop engineering matters because quant trading is already a loop: pull data, generate signals, backtest, execute, monitor risk, repeat. ";
+        StringBuilder body = new StringBuilder();
+        body.append("作者：Roan(@RohOnChain)\n");
+        body.append("发布时间：2026-06-22T21:54:52\n");
+        body.append("互动：likes=1366，retweets=167，replies=43，views=1455728\n");
+        body.append("正文：\n");
+        for (int i = 0; i < 12; i++) {
+            body.append(paragraph).append("\n\n");
+        }
+        Article article = Article.createFetched(null, "手动研究",
+                "How To Use Loop Engineering To Build A Self-Improving Quant Trading System",
+                "https://x.com/RohOnChain/status/2069056530960490835",
+                LocalDateTime.of(2026, 6, 22, 21, 54, 52),
+                "I will break down exactly how to build the loops that run an entire quant trading system on their own.",
+                body.toString());
+        article.setCategory("市场");
+        return article;
+    }
+
+    private Article xArticleLinkOnlyPost() {
+        Article article = Article.createFetched(null, "手动研究",
+                "X 帖子 | @RohOnChain：http://x.com/i/article/2067524770175057920",
+                "https://twitter.com/RohOnChain/status/2069056530960490835",
+                LocalDateTime.of(2026, 6, 22, 21, 54, 52),
+                "http://x.com/i/article/2067524770175057920",
+                "作者：Roan(@RohOnChain)\n"
+                        + "发布时间：2026-06-22T21:54:52\n"
+                        + "互动：likes=98，retweets=6，replies=11\n"
+                        + "正文：\n"
+                        + "http://x.com/i/article/2067524770175057920");
+        article.setCategory("市场");
+        return article;
+    }
+
+    private String validQuantInterpretationJson() {
+        return "{\n"
+                + "  \"contentType\":\"SOCIAL_POST\",\n"
+                + "  \"topicName\":\"Loop Engineering Quant Trading System\",\n"
+                + "  \"topicDescription\":\"拆解如何用循环式 agent 流程搭建自我改进的量化交易系统。\",\n"
+                + "  \"oneSentenceSummary\":\"文章说明量化交易本身就是数据、信号、回测、执行、风控和记忆复盘组成的自动化循环。\",\n"
+                + "  \"coreEvent\":\"作者提出用 loop engineering 把量化研究和交易执行串成自我改进系统。\",\n"
+                + "  \"importance\":\"它把 agent 从单次提示升级为持续运行的研究和执行流程。\",\n"
+                + "  \"impactTargets\":[\"量化交易系统\",\"agent workflow\",\"风险控制\"],\n"
+                + "  \"keyTerms\":[\"loop engineering\",\"quant trading\",\"backtest\",\"risk monitor\"],\n"
+                + "  \"learningQuestions\":[\"如何验证每个信号？\",\"如何把交易教训写回记忆？\"],\n"
+                + "  \"confidence\":0.88\n"
+                + "}";
+    }
+
+    private String allText(ArticleInterpretation interpretation) {
+        return String.join("\n",
+                text(interpretation.getTopicName()),
+                text(interpretation.getTopicDescription()),
+                text(interpretation.getOneSentenceSummary()),
+                text(interpretation.getCoreEvent()),
+                text(interpretation.getImportance()),
+                text(interpretation.getBackground()),
+                text(interpretation.getFacts()),
+                text(interpretation.getReasoning()),
+                text(interpretation.getOpinions()));
+    }
+
+    private String text(String value) {
+        return value == null ? "" : value;
+    }
+
     private static class CapturingLlmClient implements LlmChatClient {
         private final String response;
         private String userPrompt;
@@ -138,6 +282,23 @@ class ArticleInterpretationAgentTest {
         @Override
         public String complete(String systemPrompt, String userPrompt) {
             throw new AssertionError("Disabled client should not be called");
+        }
+    }
+
+    private static class FailingConfiguredClient implements LlmChatClient {
+        @Override
+        public boolean isConfigured() {
+            return true;
+        }
+
+        @Override
+        public String modelName() {
+            return "failing-model";
+        }
+
+        @Override
+        public String complete(String systemPrompt, String userPrompt) throws Exception {
+            throw new java.net.SocketTimeoutException("Read timed out");
         }
     }
 }

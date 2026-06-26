@@ -24,6 +24,10 @@ public class TopicExtractor {
         if (osint != null) {
             return osint;
         }
+        TopicExtraction quantLoop = extractQuantLoopPractice(value);
+        if (quantLoop != null) {
+            return quantLoop;
+        }
         List<String> terms = new ArrayList<String>();
         for (String term : FINANCIAL_TERMS) {
             if (value.contains(term) && !terms.contains(term)) {
@@ -93,6 +97,33 @@ public class TopicExtractor {
         return new TopicExtraction(
                 "OSINT 开源情报工具实践",
                 "梳理公开信息检索、网络资产搜索和暴露面排查工具的组合方式，同时记录合法合规边界和防滥用注意事项。",
+                terms,
+                questions);
+    }
+
+    private TopicExtraction extractQuantLoopPractice(String text) {
+        String lower = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        boolean quantLoop = lower.contains("quant trading")
+                && (lower.contains("loop engineering") || lower.contains("backtest") || lower.contains("monitor risk"));
+        if (!quantLoop) {
+            return null;
+        }
+        List<String> terms = new ArrayList<String>();
+        addIfPresent(terms, lower, "loop engineering", "loop engineering");
+        addIfPresent(terms, lower, "quant trading", "quant trading");
+        addIfPresent(terms, lower, "backtest", "backtest");
+        addIfPresent(terms, lower, "signal verification", "verifies every signal");
+        addIfPresent(terms, lower, "risk monitor", "monitor risk");
+        if (terms.isEmpty()) {
+            terms.add("quant trading");
+        }
+        List<String> questions = new ArrayList<String>();
+        questions.add("每个交易信号进入执行前如何验证、回测和拒绝？");
+        questions.add("市场数据、信号生成、风控监控和记忆复盘之间的循环边界如何设计？");
+        questions.add("哪些环节适合 agent 自动化，哪些环节必须保留人工审批或风控阈值？");
+        return new TopicExtraction(
+                "Loop Engineering Quant Trading System",
+                "围绕量化交易系统的 loop engineering 方法，沉淀数据、信号、回测、执行、风控和记忆复盘组成的自我改进流程。",
                 terms,
                 questions);
     }
