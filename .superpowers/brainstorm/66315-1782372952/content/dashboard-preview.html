@@ -1,0 +1,91 @@
+<h2>Dashboard 页面改造方案</h2>
+<p class="subtitle">深色主题 + 金绿点缀的高端金融风格</p>
+
+<div class="mockup">
+  <div class="mockup-header">Dashboard - 高端深色版</div>
+  <div class="mockup-body" style="background: linear-gradient(135deg, #0f1419 0%, #1a2332 100%); color: #e8eaed; padding: 20px; font-family: Inter, system-ui, sans-serif;">
+
+    <!-- Top Metrics -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+      <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);">
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">信息源</div>
+        <div style="font-size: 32px; font-weight: 700; color: #10b981; margin-top: 8px;">12</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">活跃频道</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);">
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">文章池</div>
+        <div style="font-size: 32px; font-weight: 700; color: #eab308; margin-top: 8px;">248</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">抓取内容</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);">
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">简报</div>
+        <div style="font-size: 32px; font-weight: 700; color: #3b82f6; margin-top: 8px;">15</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">日报记录</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(168, 85, 247, 0.05)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);">
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">新内容</div>
+        <div style="font-size: 32px; font-weight: 700; color: #a855f7; margin-top: 8px;">32</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">今日新增</div>
+      </div>
+    </div>
+
+    <!-- Signal Band -->
+    <div style="background: linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(234, 179, 8, 0.1), rgba(59, 130, 246, 0.1)); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+      <div>
+        <div style="color: #10b981; font-size: 11px; font-weight: 700; text-transform: uppercase;">今日信号</div>
+        <div style="color: #e8eaed; font-size: 18px; font-weight: 600; margin-top: 6px;">18 follow-ups</div>
+      </div>
+      <div>
+        <div style="color: #eab308; font-size: 11px; font-weight: 700; text-transform: uppercase;">简报覆盖</div>
+        <div style="color: #e8eaed; font-size: 18px; font-weight: 600; margin-top: 6px;">15 reports</div>
+      </div>
+      <div>
+        <div style="color: #3b82f6; font-size: 11px; font-weight: 700; text-transform: uppercase;">信源网络</div>
+        <div style="color: #e8eaed; font-size: 18px; font-weight: 600; margin-top: 6px;">12 channels</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div style="background: rgba(26, 35, 50, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);">
+      <div style="font-size: 16px; font-weight: 600; color: #e8eaed; margin-bottom: 16px;">最近抓取</div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+            <th style="text-align: left; padding: 12px 0; color: #9ca3af; font-size: 13px; font-weight: 600;">来源</th>
+            <th style="text-align: left; padding: 12px 0; color: #9ca3af; font-size: 13px; font-weight: 600;">状态</th>
+            <th style="text-align: left; padding: 12px 0; color: #9ca3af; font-size: 13px; font-weight: 600;">新增</th>
+            <th style="text-align: left; padding: 12px 0; color: #9ca3af; font-size: 13px; font-weight: 600;">重复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+            <td style="padding: 12px 0; color: #e8eaed;">财新网</td>
+            <td style="padding: 12px 0;"><span style="background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;">SUCCESS</span></td>
+            <td style="padding: 12px 0; color: #10b981; font-weight: 600;">12</td>
+            <td style="padding: 12px 0; color: #6b7280;">3</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 0; color: #e8eaed;">东方财富</td>
+            <td style="padding: 12px 0;"><span style="background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;">SUCCESS</span></td>
+            <td style="padding: 12px 0; color: #10b981; font-weight: 600;">8</td>
+            <td style="padding: 12px 0; color: #6b7280;">2</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>设计特点</h3>
+  <ul style="color: #9ca3af; line-height: 1.8;">
+    <li>深色渐变背景营造专业氛围</li>
+    <li>半透明毛玻璃卡片增加层次感</li>
+    <li>金绿蓝紫四色点缀不同数据类型</li>
+    <li>柔和的光晕和阴影效果</li>
+    <li>高对比度文字确保可读性</li>
+  </ul>
+</div>

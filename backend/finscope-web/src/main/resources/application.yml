@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:sqlite:../data/finance.db
+    driver-class-name: org.sqlite.JDBC
+
+logging:
+  charset:
+    console: UTF-8
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} traceId=%X{traceId} - %msg%n"
+
+finscope:
+  data-root: ../data
+  cors-origin: http://localhost:*
+  llm:
+    enabled: true
+    base-url: "https://api.letmyai.com/v1"
+    api-key: "sk-letmyai-08-c8c2d4b34676ecbe6ca375aecf5550e9229cc00e6980df7a"
+    model: "gpt-5.5"
+    timeout-ms: 300000
+    temperature: 0.2

@@ -1,0 +1,28 @@
+.DS_Store
+
+# Local data and secrets
+data/finance.db
+data/finance.db-*
+data/raw/
+data/exports/
+!data/
+!data/.gitkeep
+!data/vault/
+!data/vault/**/
+!data/vault/**/.gitkeep
+.env
+*.local
+
+# Backend build output
+backend/target/
+backend/**/target/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# IDE
+.idea/
+.vscode/
+*.iml

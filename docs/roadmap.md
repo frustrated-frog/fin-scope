@@ -1,0 +1,53 @@
+# FinScope 路线图
+
+## V0：项目骨架与本地优先底座
+
+- 在 `fin-scope/` 下创建 monorepo，包含 `backend/`、`frontend/`、`data/` 和 `docs/`。
+- 提供 Spring Boot REST API 和 React/Vite Web 工作台。
+- 本地数据根目录位于 `data/`，包含 SQLite 和 Markdown Vault。
+- Git 默认忽略个人运行时数据和凭证。
+
+## V1：信息源与 Inbox MVP
+
+- 管理 RSS/Web 信息源，包括名称、类型、URL、启用状态、频率、可信度和标签。
+- 支持手动触发信息源抓取。
+- 将抓取条目标准化进入 Inbox 文章池。
+- 记录抓取运行状态、成功数、重复数和错误信息。
+- Web 页面：Dashboard、Sources、Inbox。
+
+## V2：新意判断与每日简报
+
+- URL 指纹、标题相似度和正文 SimHash。
+- 新意判断类型：`NEW`、`FOLLOW_UP`、`DUPLICATE`。
+- 生成固定栏目每日 Markdown 简报：宏观、市场、行业、公司、政策和学习问题。
+- Web 页面：Briefs、文章新意原因展示。
+- 已实现增强：支持在 Inbox 直接粘贴网页 URL，自动抓取、入库、去重并生成固定格式情报卡片。
+- 已实现增强：每日简报优先使用情报卡片内容，形成“核心事件、为什么重要、影响对象、后续观察”的稳定结构。
+- 已实现增强：新增 URL 感知型抓取路由，手动粘贴 X/Twitter status URL 时可解析真实帖子或长文内容，而不是落入普通网页壳页。
+- 已实现增强：RSS 解析保留作者、分类和摘要证据；arXiv RSS 会生成研究论文卡片。
+- 已实现增强：情报卡片按金融资讯、研究论文、社媒长文分流生成，减少无意义兜底话术。
+
+## V3：主题知识库
+
+- 主题卡片包含名称、slug、状态、描述、关联笔记和学习状态。
+- Markdown Vault 结构：`daily-briefs/`、`topics/`、`terms/`、`learning-path/`。
+- 支持文章/简报关联主题和术语提取。
+- 已实现 MVP：将 Inbox 文章和每日简报沉淀为主题卡片。
+- 已实现 MVP：用 `topic_article` 和 `topic_brief` 持久化主题与文章/简报的关联关系。
+- 已实现 MVP：在 Web 中查看主题学习问题，并把个人理解追加回主题 Markdown 文件。
+
+## V4：Agent 工作流与可观测性
+
+- 增加显式工作流节点：classify、summarize、novelty-review、brief-generate、topic-suggest、content-draft。
+- 记录节点输入、输出、模型/服务商、耗时、状态和错误。
+- 增加 Trace 详情 UI。
+- 保持确定性流水线作为主干，只在判断和综合类任务中使用 Agent 步骤。
+- 已实现第一步：新增 OpenAI 兼容 `LlmChatClient`，支持 `baseUrl`、`apiKey`、`model` 环境变量配置。
+- 已实现第一步：新增 `article-interpret` Agent 节点，用于文章解读、主题命名、术语提取和学习问题整理。
+- 已实现第一步：情报卡片和文章到主题沉淀可消费 Agent 结构化结果，模型失败时保留确定性兜底。
+
+## V5：内容工作室与可迁移能力
+
+- Content Studio 支持选题池、文章大纲、短内容草稿和发布状态。
+- 导出/恢复包含 SQLite、Markdown Vault、信息源配置、Prompt 配置和 `manifest.json`。
+- 预留 PostgreSQL、向量检索、云端部署和静态博客发布的可选迁移路径。

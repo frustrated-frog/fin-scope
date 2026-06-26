@@ -1,0 +1,129 @@
+<h2>动效交互增强方案</h2>
+<p class="subtitle">丰富的过渡动画、微交互和状态反馈</p>
+
+<div class="mockup">
+  <div class="mockup-header">动效增强版 - 交互式预览</div>
+  <div class="mockup-body" style="background: linear-gradient(135deg, #0f1419 0%, #1a2332 100%); color: #e8eaed; padding: 20px; font-family: Inter, system-ui, sans-serif;">
+
+    <!-- Animated Metrics -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+      <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #10b981, #059669); transform: scaleX(0); transition: transform 0.6s ease;"></div>
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">信息源</div>
+        <div style="font-size: 32px; font-weight: 700; color: #10b981; margin-top: 8px; animation: countUp 0.8s ease-out;">12</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">活跃频道</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #eab308, #ca8a04); transform: scaleX(0); transition: transform 0.6s ease;"></div>
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">文章池</div>
+        <div style="font-size: 32px; font-weight: 700; color: #eab308; margin-top: 8px; animation: countUp 0.8s ease-out 0.1s;">248</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">抓取内容</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #3b82f6, #2563eb); transform: scaleX(0); transition: transform 0.6s ease;"></div>
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">简报</div>
+        <div style="font-size: 32px; font-weight: 700; color: #3b82f6; margin-top: 8px; animation: countUp 0.8s ease-out 0.2s;">15</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">日报记录</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(168, 85, 247, 0.05)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #a855f7, #9333ea); transform: scaleX(0); transition: transform 0.6s ease;"></div>
+        <div style="color: #9ca3af; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">新内容</div>
+        <div style="font-size: 32px; font-weight: 700; color: #a855f7; margin-top: 8px; animation: countUp 0.8s ease-out 0.3s;">32</div>
+        <div style="color: #6b7280; font-size: 13px; margin-top: 4px;">今日新增</div>
+      </div>
+    </div>
+
+    <!-- Interactive Cards -->
+    <div style="background: rgba(26, 35, 50, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); margin-bottom: 24px;">
+      <div style="font-size: 16px; font-weight: 600; color: #e8eaed; margin-bottom: 16px;">最新文章</div>
+
+      <!-- Article Item with hover effect -->
+      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(0);">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div style="flex: 1;">
+            <div style="font-size: 15px; font-weight: 600; color: #e8eaed; margin-bottom: 6px;">央行发布最新货币政策报告</div>
+            <div style="color: #9ca3af; font-size: 13px;">财新网 · 金融 · 2小时前</div>
+          </div>
+          <span style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1)); color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">NEW</span>
+        </div>
+
+        <!-- Expandable insight card -->
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 10px;">
+              <div style="color: #9ca3af; font-size: 11px; font-weight: 600; margin-bottom: 4px;">核心事件</div>
+              <div style="color: #e8eaed; font-size: 13px; line-height: 1.5;">央行调整存款准备金率</div>
+            </div>
+            <div style="background: rgba(234, 179, 8, 0.1); border-radius: 8px; padding: 10px;">
+              <div style="color: #9ca3af; font-size: 11px; font-weight: 600; margin-bottom: 4px;">影响对象</div>
+              <div style="color: #e8eaed; font-size: 13px; line-height: 1.5;">银行业、股市、债市</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Another Article Item -->
+      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(0);">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div style="flex: 1;">
+            <div style="font-size: 15px; font-weight: 600; color: #e8eaed; margin-bottom: 6px;">科技板块迎来政策利好</div>
+            <div style="color: #9ca3af; font-size: 13px;">东方财富 · 科技 · 3小时前</div>
+          </div>
+          <span style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1)); color: #eab308; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">FOLLOW_UP</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons with animations -->
+    <div style="display: flex; gap: 12px;">
+      <button style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); position: relative; overflow: hidden;">
+        <span style="position: relative; z-index: 1;">生成简报</span>
+        <div style="position: absolute; inset: 0; background: linear-gradient(135deg, #059669, #047857); opacity: 0; transition: opacity 0.3s ease;"></div>
+      </button>
+
+      <button style="background: rgba(255, 255, 255, 0.1); color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.2); padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+        刷新数据
+      </button>
+
+      <button style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+        导出报告
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>核心动效特性</h3>
+  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
+    <div style="background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 12px; border-radius: 6px;">
+      <strong style="color: #10b981;">数字滚动动画</strong>
+      <p style="color: #9ca3af; font-size: 13px; margin: 6px 0 0;">指标数字从0开始滚动增长，配合延迟呈现</p>
+    </div>
+    <div style="background: rgba(234, 179, 8, 0.1); border-left: 3px solid #eab308; padding: 12px; border-radius: 6px;">
+      <strong style="color: #eab308;">卡片悬停放大</strong>
+      <p style="color: #9ca3af; font-size: 13px; margin: 6px 0 0;">鼠标悬停时卡片上移、边框发光、内容展开</p>
+    </div>
+    <div style="background: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; padding: 12px; border-radius: 6px;">
+      <strong style="color: #3b82f6;">进度条动画</strong>
+      <p style="color: #9ca3af; font-size: 13px; margin: 6px 0 0;">卡片顶部渐变进度条从左到右展开</p>
+    </div>
+    <div style="background: rgba(168, 85, 247, 0.1); border-left: 3px solid #a855f7; padding: 12px; border-radius: 6px;">
+      <strong style="color: #a855f7;">按钮涟漪效果</strong>
+      <p style="color: #9ca3af; font-size: 13px; margin: 6px 0 0;">点击按钮时从点击位置扩散涟漪动画</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>交互增强</h3>
+  <ul style="color: #9ca3af; line-height: 1.8;">
+    <li>卡片展开/收起动画，显示详细情报信息</li>
+    <li>加载骨架屏动画，替代空白等待状态</li>
+    <li>Toast通知从右上角滑入，自动消失</li>
+    <li>表单输入时的实时验证反馈动效</li>
+    <li>页面切换的淡入淡出过渡效果</li>
+  </ul>
+</div>
