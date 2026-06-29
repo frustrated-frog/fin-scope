@@ -1,0 +1,43 @@
+package com.finscope.web.request;
+
+import java.time.LocalDate;
+import java.util.List;
+
+public class CreateResearchRunRequest {
+    private LocalDate runDate;
+    private List<String> themeCodes;
+    private Integer maxSourcesPerTheme;
+    private Boolean includeDisabled;
+
+    public LocalDate getRunDate() {
+        return runDate;
+    }
+
+    public void setRunDate(LocalDate runDate) {
+        this.runDate = runDate;
+    }
+
+    public List<String> getThemeCodes() {
+        return themeCodes;
+    }
+
+    public void setThemeCodes(List<String> themeCodes) {
+        this.themeCodes = themeCodes;
+    }
+
+    public Integer getMaxSourcesPerTheme() {
+        return maxSourcesPerTheme;
+    }
+
+    public void setMaxSourcesPerTheme(Integer maxSourcesPerTheme) {
+        this.maxSourcesPerTheme = maxSourcesPerTheme;
+    }
+
+    public Boolean getIncludeDisabled() {
+        return includeDisabled;
+    }
+
+    public void setIncludeDisabled(Boolean includeDisabled) {
+        this.includeDisabled = includeDisabled;
+    }
+}

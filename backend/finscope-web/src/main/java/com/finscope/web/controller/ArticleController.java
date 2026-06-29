@@ -17,19 +17,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/articles")
 public class ArticleController {
+    private final ArticleQueryService articleQueryService;
+    private final UrlIngestService urlIngestService;
+    private final ArticleDeletionService articleDeletionService;
 
-    @Resource
-    private ArticleQueryService articleQueryService;
-    @Resource
-    private UrlIngestService urlIngestService;
-    @Resource
-    private ArticleDeletionService articleDeletionService;
+    public ArticleController(ArticleQueryService articleQueryService,
+                             UrlIngestService urlIngestService,
+                             ArticleDeletionService articleDeletionService) {
+        this.articleQueryService = articleQueryService;
+        this.urlIngestService = urlIngestService;
+        this.articleDeletionService = articleDeletionService;
+    }
 
     @GetMapping
     public List<ArticleCardView> list() {

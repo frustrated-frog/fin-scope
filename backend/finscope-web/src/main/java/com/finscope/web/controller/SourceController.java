@@ -14,18 +14,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/sources")
 @Slf4j
 public class SourceController {
+    private final SourceService sourceService;
+    private final FetchService fetchService;
 
-    @Resource
-    private SourceService sourceService;
-    @Resource
-    private FetchService fetchService;
+    public SourceController(SourceService sourceService, FetchService fetchService) {
+        this.sourceService = sourceService;
+        this.fetchService = fetchService;
+    }
 
     @GetMapping
     public List<Source> list() {

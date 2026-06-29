@@ -145,6 +145,89 @@ public class DatabaseInitializer implements InitializingBean {
                 + "brief_id INTEGER NOT NULL,"
                 + "created_at TEXT NOT NULL,"
                 + "PRIMARY KEY(topic_id, brief_id))");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS event_cluster ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "canonical_title TEXT NOT NULL,"
+                + "canonical_event_key TEXT NOT NULL,"
+                + "theme_code TEXT NOT NULL,"
+                + "summary TEXT,"
+                + "status TEXT NOT NULL,"
+                + "first_seen_at TEXT NOT NULL,"
+                + "last_seen_at TEXT NOT NULL,"
+                + "last_meaningful_update_at TEXT,"
+                + "importance_score INTEGER NOT NULL DEFAULT 0,"
+                + "novelty_state TEXT NOT NULL,"
+                + "evidence_count INTEGER NOT NULL DEFAULT 0,"
+                + "article_count INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_theme ON event_cluster(theme_code)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_key ON event_cluster(canonical_event_key)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_seen ON event_cluster(last_seen_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS event_article_link ("
+                + "event_id INTEGER NOT NULL,"
+                + "article_id INTEGER NOT NULL,"
+                + "relation_type TEXT NOT NULL,"
+                + "match_score REAL NOT NULL,"
+                + "novelty_type TEXT NOT NULL,"
+                + "novelty_reason TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "PRIMARY KEY(event_id, article_id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_article_article ON event_article_link(article_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_article_novelty ON event_article_link(novelty_type)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS evidence_item ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "event_id INTEGER NOT NULL,"
+                + "article_id INTEGER NOT NULL,"
+                + "source_tier TEXT NOT NULL,"
+                + "evidence_type TEXT NOT NULL,"
+                + "claim TEXT NOT NULL,"
+                + "confidence INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_evidence_event ON evidence_item(event_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_evidence_article ON evidence_item(article_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS learning_task ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "event_id INTEGER,"
+                + "theme_code TEXT NOT NULL,"
+                + "question TEXT NOT NULL,"
+                + "concepts TEXT,"
+                + "difficulty TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "why_needed TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_learning_task_event ON learning_task(event_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_learning_task_status ON learning_task(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS content_idea ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "event_id INTEGER,"
+                + "theme_code TEXT NOT NULL,"
+                + "title TEXT NOT NULL,"
+                + "angle TEXT,"
+                + "format TEXT NOT NULL,"
+                + "audience TEXT,"
+                + "score INTEGER NOT NULL DEFAULT 0,"
+                + "score_reason TEXT,"
+                + "outline TEXT,"
+                + "status TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_event ON content_idea(event_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_score ON content_idea(score)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_status ON content_idea(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "run_date TEXT NOT NULL,"
+                + "theme_codes TEXT NOT NULL,"
+                + "source_count INTEGER NOT NULL DEFAULT 0,"
+                + "status TEXT NOT NULL,"
+                + "summary TEXT,"
+                + "error_message TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_date ON research_run(run_date)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_status ON research_run(status)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS agent_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "node_name TEXT NOT NULL,"

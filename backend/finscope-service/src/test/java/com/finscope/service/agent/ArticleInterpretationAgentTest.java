@@ -2,6 +2,8 @@ package com.finscope.service.agent;
 
 import com.finscope.domain.article.Article;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.insight.InsightCardGenerator;
+import com.finscope.service.topic.TopicExtractor;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -11,6 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ArticleInterpretationAgentTest {
+    private ArticleInterpretationAgent agent(LlmChatClient llmClient) {
+        return new ArticleInterpretationAgent(llmClient, null, new TopicExtractor(), new InsightCardGenerator());
+    }
+
     @Test
     void interpretsArticleWithStructuredLlmOutput() {
         CapturingLlmClient llmClient = new CapturingLlmClient("{\n"
@@ -25,7 +31,7 @@ class ArticleInterpretationAgentTest {
                 + "  \"learningQuestions\":[\"免费额度的边界和限制是什么？\",\"这套部署方案适合哪些个人项目？\",\"长期迁移和供应商锁定风险如何控制？\"],\n"
                 + "  \"confidence\":0.91\n"
                 + "}");
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+        ArticleInterpretationAgent agent = agent(llmClient);
 
         ArticleInterpretation interpretation = agent.interpret(cloudflareArticle());
 
@@ -43,7 +49,7 @@ class ArticleInterpretationAgentTest {
     @Test
     void promptMarksFullTextEvidenceAndForbidsUnreadableClaims() {
         CapturingLlmClient llmClient = new CapturingLlmClient(validQuantInterpretationJson());
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+        ArticleInterpretationAgent agent = agent(llmClient);
 
         agent.interpret(quantLoopArticle());
 
@@ -67,7 +73,7 @@ class ArticleInterpretationAgentTest {
                 + "  \"learningQuestions\":[\"如何补抓X Article全文？\"],\n"
                 + "  \"confidence\":0.2\n"
                 + "}");
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+        ArticleInterpretationAgent agent = agent(llmClient);
 
         agent.interpret(xArticleLinkOnlyPost());
 
@@ -89,7 +95,7 @@ class ArticleInterpretationAgentTest {
                 + "  \"learningQuestions\":[\"该X Article正文是否包含具体交易观点？\"],\n"
                 + "  \"confidence\":0.31\n"
                 + "}");
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(llmClient);
+        ArticleInterpretationAgent agent = agent(llmClient);
 
         ArticleInterpretation interpretation = agent.interpret(quantLoopArticle());
 
@@ -101,7 +107,7 @@ class ArticleInterpretationAgentTest {
 
     @Test
     void fallsBackToQuantLoopInterpretationWhenLlmFails() {
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(new FailingConfiguredClient());
+        ArticleInterpretationAgent agent = agent(new FailingConfiguredClient());
 
         ArticleInterpretation interpretation = agent.interpret(quantLoopArticle());
 
@@ -115,7 +121,7 @@ class ArticleInterpretationAgentTest {
 
     @Test
     void fallsBackToDomainSpecificInterpretationWhenLlmIsDisabled() {
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(new DisabledClient());
+        ArticleInterpretationAgent agent = agent(new DisabledClient());
 
         ArticleInterpretation interpretation = agent.interpret(cloudflareArticle());
 
@@ -130,7 +136,7 @@ class ArticleInterpretationAgentTest {
 
     @Test
     void fallsBackToOsintInterpretationInsteadOfFinancialTemplate() {
-        ArticleInterpretationAgent agent = new ArticleInterpretationAgent(new DisabledClient());
+        ArticleInterpretationAgent agent = agent(new DisabledClient());
 
         ArticleInterpretation interpretation = agent.interpret(osintArticle());
 

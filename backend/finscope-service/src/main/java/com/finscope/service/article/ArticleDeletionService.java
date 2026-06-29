@@ -6,17 +6,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 @Service
 @Slf4j
 public class ArticleDeletionService {
+    private final ArticleRepository articleRepository;
+    private final InsightCardRepository insightCardRepository;
 
-    @Resource
-    private ArticleRepository articleRepository;
-    @Resource
-    private InsightCardRepository insightCardRepository;
+    public ArticleDeletionService(ArticleRepository articleRepository,
+                                  InsightCardRepository insightCardRepository) {
+        this.articleRepository = articleRepository;
+        this.insightCardRepository = insightCardRepository;
+    }
 
     @Transactional
     public void deleteById(Long id) {

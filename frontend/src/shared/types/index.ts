@@ -1,0 +1,189 @@
+export type View =
+  | 'dashboard'
+  | 'sources'
+  | 'article'
+  | 'briefs'
+  | 'briefReader'
+  | 'events'
+  | 'evidence'
+  | 'topics'
+  | 'learning'
+  | 'contentStudio'
+  | 'agents'
+  | 'settings';
+
+export type Source = {
+  id?: number;
+  name: string;
+  type: string;
+  url: string;
+  enabled: boolean;
+  fetchFrequencyMinutes: number;
+  credibility: number;
+  tags?: string;
+};
+
+export type InsightCard = {
+  id?: number;
+  oneSentenceSummary?: string;
+  coreEvent?: string;
+  importance?: string;
+  impactTargets?: string;
+  followUpQuestions?: string;
+  cardMarkdown?: string;
+  background?: string;
+  keyData?: string;
+  timeline?: string;
+  relatedParties?: string;
+  riskFactors?: string;
+  futureOutlook?: string;
+  impactOnInvestment?: string;
+  impactOnStartup?: string;
+  professionalInsight?: string;
+  facts?: string;
+  reasoning?: string;
+  opinions?: string;
+};
+
+export type Article = {
+  id: number;
+  title: string;
+  url?: string;
+  sourceName: string;
+  category?: string;
+  noveltyType?: string;
+  noveltyReason?: string;
+  summary?: string;
+  body?: string;
+  publishedAt?: string;
+  fetchedAt?: string;
+  insightCard?: InsightCard;
+};
+
+export type Brief = {
+  id: number;
+  briefDate: string;
+  title: string;
+  markdownPath: string;
+  content?: string;
+};
+
+export type EventCluster = {
+  id: number;
+  canonicalTitle: string;
+  canonicalEventKey?: string;
+  themeCode: string;
+  summary?: string;
+  status?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  importanceScore?: number;
+  noveltyState?: string;
+  evidenceCount?: number;
+  articleCount?: number;
+};
+
+export type EventArticleLink = {
+  eventId: number;
+  articleId: number;
+  noveltyType?: string;
+  articleTitle?: string;
+  articleUrl?: string;
+};
+
+export type EvidenceItem = {
+  id: number;
+  eventId: number;
+  sourceTier: string;
+  evidenceType: string;
+  claim: string;
+  confidence: number;
+};
+
+export type LearningTask = {
+  id: number;
+  eventId: number;
+  themeCode: string;
+  question: string;
+  concepts?: string;
+  difficulty?: string;
+  status: string;
+  whyNeeded?: string;
+};
+
+export type ContentIdea = {
+  id: number;
+  eventId: number;
+  themeCode: string;
+  title: string;
+  angle?: string;
+  format: string;
+  audience?: string;
+  score: number;
+  scoreReason?: string;
+  outline?: string;
+  status?: string;
+};
+
+export type BriefResearchContext = {
+  briefDate: string;
+  events: EventCluster[];
+  evidenceItems: EvidenceItem[];
+  learningTasks: LearningTask[];
+  contentIdeas: ContentIdea[];
+};
+
+export type Topic = {
+  id: number;
+  name: string;
+  slug?: string;
+  status: string;
+  description?: string;
+  markdownPath?: string;
+  terms?: string;
+  learningQuestions?: string;
+  articleCount?: number;
+  briefCount?: number;
+};
+
+export type TopicDetail = {
+  topic: Topic;
+  linkedArticles: Article[];
+  linkedBriefs: Brief[];
+  markdown: string;
+};
+
+export type AgentRun = {
+  id: number;
+  nodeName: string;
+  status: string;
+  durationMs: number;
+  errorMessage?: string;
+};
+
+export type Dashboard = {
+  sourceCount: number;
+  articleCount: number;
+  briefCount: number;
+  latestFetchRuns: Array<{
+    id: number;
+    sourceName: string;
+    status: string;
+    successCount: number;
+    duplicateCount: number;
+  }>;
+};
+
+export type PageResponse<T> = {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type ToastItem = {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+};

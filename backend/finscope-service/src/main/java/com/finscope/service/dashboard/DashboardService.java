@@ -7,23 +7,26 @@ import com.finscope.domain.fetch.FetchRun;
 import com.finscope.service.article.ArticleQueryService;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class DashboardService {
+    private final SourceRepository sourceRepository;
+    private final ArticleQueryService articleQueryService;
+    private final BriefRepository briefRepository;
+    private final FetchRunRepository fetchRunRepository;
 
-    @Resource
-    private SourceRepository sourceRepository;
-    @Resource
-    private ArticleQueryService articleQueryService;
-    @Resource
-    private BriefRepository briefRepository;
-    @Resource
-    private FetchRunRepository fetchRunRepository;
-
+    public DashboardService(SourceRepository sourceRepository,
+                            ArticleQueryService articleQueryService,
+                            BriefRepository briefRepository,
+                            FetchRunRepository fetchRunRepository) {
+        this.sourceRepository = sourceRepository;
+        this.articleQueryService = articleQueryService;
+        this.briefRepository = briefRepository;
+        this.fetchRunRepository = fetchRunRepository;
+    }
 
     public Map<String, Object> summary() {
         Map<String, Object> result = new HashMap<String, Object>();

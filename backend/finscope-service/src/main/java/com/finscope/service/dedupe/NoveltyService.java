@@ -3,15 +3,17 @@ package com.finscope.service.dedupe;
 import com.finscope.dao.article.ArticleRepository;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 @Service
 public class NoveltyService {
-    @Resource
-    private FingerprintService fingerprintService;
-    @Resource
-    private ArticleRepository articleRepository;
+    private final FingerprintService fingerprintService;
+    private final ArticleRepository articleRepository;
+
+    public NoveltyService(FingerprintService fingerprintService, ArticleRepository articleRepository) {
+        this.fingerprintService = fingerprintService;
+        this.articleRepository = articleRepository;
+    }
 
     public NoveltyDecision decide(String urlFingerprint, String title, long bodySimhash) {
         List<ArticleRepository.ArticleRecord> records = articleRepository.findRecentRecords(500);

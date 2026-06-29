@@ -11,22 +11,25 @@ import com.finscope.service.article.ArticleIngestCoordinator;
 import com.finscope.domain.article.ArticleIngestResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import javax.annotation.Resource;
 import java.util.List;
 
 @Service
 @Slf4j
 public class FetchService {
+    private final SourceRepository sourceRepository;
+    private final FetchRunRepository fetchRunRepository;
+    private final SourceAdapterRegistry adapterRegistry;
+    private final ArticleIngestCoordinator articleIngestCoordinator;
 
-    @Resource
-    private SourceRepository sourceRepository;
-    @Resource
-    private FetchRunRepository fetchRunRepository;
-    @Resource
-    private SourceAdapterRegistry adapterRegistry;
-    @Resource
-    private ArticleIngestCoordinator articleIngestCoordinator;
+    public FetchService(SourceRepository sourceRepository,
+                        FetchRunRepository fetchRunRepository,
+                        SourceAdapterRegistry adapterRegistry,
+                        ArticleIngestCoordinator articleIngestCoordinator) {
+        this.sourceRepository = sourceRepository;
+        this.fetchRunRepository = fetchRunRepository;
+        this.adapterRegistry = adapterRegistry;
+        this.articleIngestCoordinator = articleIngestCoordinator;
+    }
 
     public FetchRun fetch(Long sourceId) {
         Source source = sourceRepository.findById(sourceId)

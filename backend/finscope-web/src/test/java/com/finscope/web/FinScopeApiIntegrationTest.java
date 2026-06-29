@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipFile;
@@ -23,6 +24,8 @@ import java.time.LocalDate;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -56,6 +59,12 @@ class FinScopeApiIntegrationTest {
     void setUp() throws Exception {
         deleteIfExists("topic_article");
         deleteIfExists("topic_brief");
+        deleteIfExists("content_idea");
+        deleteIfExists("learning_task");
+        deleteIfExists("evidence_item");
+        deleteIfExists("event_article_link");
+        deleteIfExists("event_cluster");
+        deleteIfExists("research_run");
         deleteIfExists("insight_card");
         jdbcTemplate.update("DELETE FROM agent_run");
         jdbcTemplate.update("DELETE FROM brief");
@@ -63,7 +72,9 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM fetch_run");
         jdbcTemplate.update("DELETE FROM source");
         jdbcTemplate.update("DELETE FROM topic");
-        jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN ('agent_run','brief','article','fetch_run','source','topic','insight_card')");
+        jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
+                + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
+                + "'event_cluster','evidence_item','learning_task','content_idea','research_run')");
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
             byte[] bytes = rss().getBytes(StandardCharsets.UTF_8);
@@ -75,6 +86,22 @@ class FinScopeApiIntegrationTest {
         });
         server.createContext("/article", exchange -> {
             byte[] bytes = htmlArticle().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
+        server.createContext("/fed-followup", exchange -> {
+            byte[] bytes = fedFollowUpArticle().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
+        server.createContext("/pboc-policy", exchange -> {
+            byte[] bytes = pbocPolicyArticle().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
             exchange.sendResponseHeaders(200, bytes.length);
             try (OutputStream body = exchange.getResponseBody()) {
@@ -143,6 +170,29 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void vaultBriefMarkdownIsIndexedWhenDatabaseIsEmpty() throws Exception {
+        Path dailyBriefs = Paths.get("target/test-data/api/vault/daily-briefs");
+        Files.createDirectories(dailyBriefs);
+        Files.write(dailyBriefs.resolve("2026-06-25.md"), (
+                "# 每日金融、投资、创业学习简报 - 2026-06-25\n\n"
+                        + "生成时间：2026-06-25 09:16 CST\n\n"
+                        + "## 今日摘要\n\n"
+                        + "市场正在从流动性和主题催化转向制度、融资窗口和资本效率。\n")
+                .getBytes(StandardCharsets.UTF_8));
+
+        mvc.perform(get("/api/briefs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].briefDate").value(hasItem("2026-06-25")))
+                .andExpect(jsonPath("$[*].title").value(hasItem("每日金融、投资、创业学习简报 - 2026-06-25")))
+                .andExpect(jsonPath("$[*].markdownPath").value(hasItem(containsString("vault/daily-briefs/2026-06-25.md"))));
+
+        mvc.perform(get("/api/briefs/2026-06-25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", containsString("## 今日摘要")))
+                .andExpect(jsonPath("$.content", containsString("资本效率")));
+    }
+
+    @Test
     void manualUrlCanBeIngestedAsInsightCardAndUsedByBrief() throws Exception {
         String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
 
@@ -172,8 +222,323 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", containsString("### 核心事件")))
-                .andExpect(jsonPath("$.content", containsString("### 后续观察")));
+                .andExpect(jsonPath("$.content", containsString("## 今日新变量")))
+                .andExpect(jsonPath("$.content", containsString("## 今天要补的金融知识")));
+    }
+
+    @Test
+    void eventMemoryGroupsRelatedArticles() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/events"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].canonicalTitle", containsString("美联储")))
+                .andExpect(jsonPath("$[0].themeCode").value("china_macro"))
+                .andExpect(jsonPath("$[0].articleCount").value(2))
+                .andExpect(jsonPath("$[0].noveltyState").value("FOLLOW_UP"));
+
+        mvc.perform(get("/api/events/1/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].noveltyType").value(hasItem("NEW")))
+                .andExpect(jsonPath("$[*].noveltyType").value(hasItem("FOLLOW_UP")));
+    }
+
+    @Test
+    void eventListSupportsResearchFilters() throws Exception {
+        String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + marketUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/events")
+                        .param("themeCode", "china_macro")
+                        .param("noveltyState", "NEW")
+                        .param("dateFrom", LocalDate.now().toString())
+                        .param("dateTo", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].themeCode").value(hasItem("china_macro")))
+                .andExpect(jsonPath("$[*].noveltyState").value(hasItem("NEW")));
+    }
+
+    @Test
+    void eventEvidenceReturnsStructuredClaims() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/events/1/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].sourceTier").value(hasItem("MEDIA")))
+                .andExpect(jsonPath("$[*].evidenceType").value(hasItem("DATA")))
+                .andExpect(jsonPath("$[*].claim").value(hasItem(containsString("12亿"))))
+                .andExpect(jsonPath("$[*].confidence").value(hasItem(greaterThanOrEqualTo(70))));
+    }
+
+    @Test
+    void evidenceLedgerListsCapturedEvidenceAcrossEvents() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(2)))
+                .andExpect(jsonPath("$[*].sourceTier").value(hasItem("MEDIA")))
+                .andExpect(jsonPath("$[*].sourceTier").value(hasItem("REGULATOR")))
+                .andExpect(jsonPath("$[*].claim").value(hasItem(containsString("MLF"))));
+    }
+
+    @Test
+    void evidenceLedgerSupportsDetailAndFiltering() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/evidence")
+                        .param("eventId", "2")
+                        .param("sourceTier", "REGULATOR")
+                        .param("evidenceType", "TIMELINE")
+                        .param("minConfidence", "80"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].eventId").value(2))
+                .andExpect(jsonPath("$[0].sourceTier").value("REGULATOR"))
+                .andExpect(jsonPath("$[0].evidenceType").value("TIMELINE"))
+                .andExpect(jsonPath("$[0].confidence").value(greaterThanOrEqualTo(80)));
+
+        mvc.perform(get("/api/evidence/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventId").value(2))
+                .andExpect(jsonPath("$.claim", containsString("MLF")));
+    }
+
+    @Test
+    void learningTasksAndContentIdeasAreGeneratedFromEvents() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/learning-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$[0].eventId").value(1))
+                .andExpect(jsonPath("$[0].themeCode").value("china_macro"))
+                .andExpect(jsonPath("$[0].question").isNotEmpty())
+                .andExpect(jsonPath("$[0].status").value("TODO"));
+
+        mvc.perform(get("/api/content-ideas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$[0].eventId").value(1))
+                .andExpect(jsonPath("$[0].title").isNotEmpty())
+                .andExpect(jsonPath("$[0].angle").isNotEmpty())
+                .andExpect(jsonPath("$[0].format").isNotEmpty())
+                .andExpect(jsonPath("$[0].score").value(greaterThanOrEqualTo(60)))
+                .andExpect(jsonPath("$[0].outline", containsString("1.")));
+    }
+
+    @Test
+    void generatedResearchArtifactsUseEventContext() throws Exception {
+        String marketReactionUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + marketReactionUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/events"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mvc.perform(get("/api/learning-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].concepts").value(hasItem(containsString("黄金"))))
+                .andExpect(jsonPath("$[*].concepts").value(hasItem(containsString("MLF"))))
+                .andExpect(jsonPath("$[*].whyNeeded").value(hasItem(containsString("政策工具"))));
+
+        mvc.perform(get("/api/content-ideas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].angle").value(hasItem(containsString("实际利率"))))
+                .andExpect(jsonPath("$[*].angle").value(hasItem(containsString("政策工具"))))
+                .andExpect(jsonPath("$[*].scoreReason").value(hasItem(containsString("政策信号"))));
+    }
+
+    @Test
+    void learningTaskStatusUpdateIsValidated() throws Exception {
+        seedResearchArtifacts();
+
+        mvc.perform(post("/api/learning-tasks/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"LEARNING\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("LEARNING"));
+
+        mvc.perform(post("/api/learning-tasks/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"broken\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("Unsupported learning task status: broken")));
+
+        mvc.perform(post("/api/learning-tasks/999/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"DONE\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", containsString("Learning task not found: 999")));
+    }
+
+    @Test
+    void contentIdeaStatusAndDetailAreValidated() throws Exception {
+        seedResearchArtifacts();
+
+        mvc.perform(get("/api/content-ideas/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value(not(containsString("DRAFTING"))));
+
+        mvc.perform(post("/api/content-ideas/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"DRAFTING\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("DRAFTING"));
+
+        mvc.perform(post("/api/content-ideas/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"INVALID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("Unsupported content idea status: INVALID")));
+
+        mvc.perform(get("/api/content-ideas/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", containsString("Content idea not found: 999")));
+    }
+
+    @Test
+    void briefIncludesResearchSectionsAndExposesResearchContext() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/briefs/generate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("每日金融、投资、创业学习简报 - " + LocalDate.now()))
+                .andExpect(jsonPath("$.content", containsString("## 今日新变量")))
+                .andExpect(jsonPath("$.content", containsString("## 事件追踪")))
+                .andExpect(jsonPath("$.content", containsString("## 中国宏观")))
+                .andExpect(jsonPath("$.content", containsString("## 今日证据来源")))
+                .andExpect(jsonPath("$.content", containsString("## 今天要补的金融知识")))
+                .andExpect(jsonPath("$.content", containsString("## 可发展为自媒体选题")))
+                .andExpect(jsonPath("$.content", containsString("## 今日思考题")));
+
+        mvc.perform(get("/api/briefs/" + LocalDate.now() + "/research-context"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.briefDate").value(LocalDate.now().toString()))
+                .andExpect(jsonPath("$.events.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.evidenceItems.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.learningTasks.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.contentIdeas.length()").value(greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    void researchRunCanBeCreatedFromThemes() throws Exception {
+        String macroSource = "{\"name\":\"Macro Source\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":5,\"tags\":\"china_macro,macro\"}";
+        String aiSource = "{\"name\":\"AI Source\",\"type\":\"WEB\",\"url\":\"http://example.com/ai\",\"enabled\":true,"
+                + "\"fetchFrequencyMinutes\":120,\"credibility\":4,\"tags\":\"ai_startup,ai\"}";
+        String disabledAiSource = "{\"name\":\"Disabled AI Source\",\"type\":\"WEB\",\"url\":\"http://example.com/ai-disabled\",\"enabled\":false,"
+                + "\"fetchFrequencyMinutes\":120,\"credibility\":5,\"tags\":\"ai_startup\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(macroSource))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/sources").contentType("application/json").content(aiSource))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/sources").contentType("application/json").content(disabledAiSource))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/research/runs")
+                        .contentType("application/json")
+                        .content("{\"runDate\":\"2026-06-27\",\"themeCodes\":[\"china_macro\",\"ai_startup\"],"
+                                + "\"maxSourcesPerTheme\":1,\"includeDisabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PLANNED"))
+                .andExpect(jsonPath("$.themeCodes.length()").value(2))
+                .andExpect(jsonPath("$.sourceCount").value(2))
+                .andExpect(jsonPath("$.plannedSources.length()").value(2))
+                .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("Macro Source")))
+                .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("AI Source")));
+
+        mvc.perform(get("/api/research/runs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("PLANNED"))
+                .andExpect(jsonPath("$[0].sourceCount").value(2));
     }
 
     @Test
@@ -335,6 +700,20 @@ class FinScopeApiIntegrationTest {
         }
     }
 
+    private void seedResearchArtifacts() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
+                .andExpect(status().isOk());
+    }
+
     private String rss() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<rss version=\"2.0\"><channel><title>Test Feed</title>"
@@ -355,6 +734,28 @@ class FinScopeApiIntegrationTest {
                 + "<h1>美联储暗示降息 黄金ETF获得资金流入</h1>"
                 + "<p>美联储官员释放偏鸽信号，市场开始交易降息预期。</p>"
                 + "<p>黄金ETF出现连续资金流入，美元指数回落，投资者关注下一次议息会议。</p>"
+                + "</article></body></html>";
+    }
+
+    private String fedFollowUpArticle() {
+        return "<!doctype html><html><head>"
+                + "<title>美联储降息预期升温 黄金ETF单周流入12亿美元</title>"
+                + "<meta name=\"description\" content=\"美联储降息预期继续升温，黄金ETF单周资金流入达到12亿美元。\">"
+                + "</head><body><article>"
+                + "<h1>美联储降息预期升温 黄金ETF单周流入12亿美元</h1>"
+                + "<p>美联储降息预期继续升温，黄金ETF单周资金流入达到12亿美元。</p>"
+                + "<p>分析师认为实际利率下行预期是黄金走强的重要变量。</p>"
+                + "</article></body></html>";
+    }
+
+    private String pbocPolicyArticle() {
+        return "<!doctype html><html><head>"
+                + "<title>央行开展3000亿元MLF操作并下调利率10个基点</title>"
+                + "<meta name=\"description\" content=\"中国人民银行开展3000亿元MLF操作，并将中期借贷便利利率下调10个基点。\">"
+                + "</head><body><article>"
+                + "<h1>央行开展3000亿元MLF操作并下调利率10个基点</h1>"
+                + "<p>中国人民银行公告称，今日开展3000亿元MLF操作，并将中期借贷便利利率下调10个基点。</p>"
+                + "<p>机构认为，这一政策信号将影响银行负债成本、信用扩张节奏以及后续LPR报价。</p>"
                 + "</article></body></html>";
     }
 

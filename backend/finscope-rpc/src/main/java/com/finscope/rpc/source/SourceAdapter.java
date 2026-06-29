@@ -6,6 +6,7 @@ import com.finscope.domain.source.Source;
 import java.util.List;
 
 public interface SourceAdapter {
+
     boolean supports(String type);
 
     default boolean supports(Source source) {

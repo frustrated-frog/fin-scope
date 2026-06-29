@@ -5,33 +5,39 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.domain.source.SourceType;
 import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import javax.annotation.Resource;
 import java.net.URI;
 import java.util.List;
 
 @Service
 @Slf4j
 public class UrlIngestService {
+    private final SourceAdapterRegistry adapterRegistry;
+    private final ArticleIngestCoordinator articleIngestCoordinator;
 
-    @Resource
-    private SourceAdapterRegistry adapterRegistry;
-    @Resource
-    private ArticleIngestCoordinator articleIngestCoordinator;
-
+    public UrlIngestService(SourceAdapterRegistry adapterRegistry,
+                            ArticleIngestCoordinator articleIngestCoordinator) {
+        this.adapterRegistry = adapterRegistry;
+        this.articleIngestCoordinator = articleIngestCoordinator;
+    }
 
     public ArticleIngestResult ingest(String url, String sourceName, String tags) {
         validateUrl(url);
         long start = System.currentTimeMillis();
+
+        // 自动识别来源类型
+        SourceType detectedType = SourceType.fromUrl(url);
+        String finalSourceName = isBlank(sourceName) ? detectedType.getDisplayName() : sourceName.trim();
+
         Source source = new Source();
-        source.setName(isBlank(sourceName) ? "手动研究" : sourceName.trim());
-        source.setType("WEB");
+        source.setName(finalSourceName);
+        source.setType(detectedType.getCode());
         source.setUrl(url.trim());
-        source.setTags(isBlank(tags) ? "市场" : tags.trim());
+        source.setTags(isBlank(tags) ? detectedType.getCategory() : tags.trim());
 
         try {
             log.info("manual url ingest start url={} sourceName={} tags={}", safeUrl(url), source.getName(), source.getTags());

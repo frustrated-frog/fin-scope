@@ -1,0 +1,39 @@
+package com.finscope.web.controller;
+
+import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchRunPlan;
+import com.finscope.service.research.ResearchService;
+import com.finscope.web.request.CreateResearchRunRequest;
+import com.finscope.web.response.ResearchRunResponse;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/research/runs")
+public class ResearchController {
+    private final ResearchService researchService;
+
+    public ResearchController(ResearchService researchService) {
+        this.researchService = researchService;
+    }
+
+    @PostMapping
+    public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {
+        ResearchRunPlan plan = researchService.createRun(
+                request.getRunDate(),
+                request.getThemeCodes(),
+                request.getMaxSourcesPerTheme(),
+                request.getIncludeDisabled());
+        return ResearchRunResponse.of(plan);
+    }
+
+    @GetMapping
+    public List<ResearchRun> list() {
+        return researchService.listRuns();
+    }
+}

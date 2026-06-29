@@ -8,7 +8,6 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -17,9 +16,11 @@ import java.util.Optional;
 
 @Repository
 public class SourceRepository {
+    private final JdbcTemplate jdbcTemplate;
 
-    @Resource
-    private JdbcTemplate jdbcTemplate;
+    public SourceRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     private final RowMapper<Source> mapper = (rs, rowNum) -> {
         Source source = new Source();

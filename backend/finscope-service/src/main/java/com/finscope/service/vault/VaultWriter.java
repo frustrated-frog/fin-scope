@@ -6,6 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 public class VaultWriter {
     private final Path vaultRoot;
@@ -20,6 +23,32 @@ public class VaultWriter {
         Path target = directory.resolve(date.toString() + ".md");
         Files.write(target, markdown.getBytes(StandardCharsets.UTF_8));
         return target;
+    }
+
+    public List<Path> listDailyBriefs() throws IOException {
+        Path directory = vaultRoot.resolve("daily-briefs");
+        if (!Files.exists(directory)) {
+            return new ArrayList<>();
+        }
+        List<Path> briefs = new ArrayList<>();
+        try (Stream<Path> stream = Files.list(directory)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".md"))
+                    .forEach(briefs::add);
+        }
+        return briefs;
+    }
+
+    public String readDailyBrief(LocalDate date) throws IOException {
+        Path target = dailyBriefPath(date);
+        if (!Files.exists(target)) {
+            return "";
+        }
+        return new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
+    }
+
+    public Path dailyBriefPath(LocalDate date) {
+        return vaultRoot.resolve("daily-briefs").resolve(date.toString() + ".md");
     }
 
     public Path writeTopic(String slug, String markdown) throws IOException {

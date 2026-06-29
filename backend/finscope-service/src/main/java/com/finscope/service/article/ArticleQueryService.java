@@ -7,7 +7,6 @@ import com.finscope.domain.insight.InsightCard;
 import com.finscope.domain.response.PageResponse;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,11 +15,14 @@ import java.util.stream.Collectors;
 
 @Service
 public class ArticleQueryService {
+    private final ArticleRepository articleRepository;
+    private final InsightCardRepository insightCardRepository;
 
-    @Resource
-    private ArticleRepository articleRepository;
-    @Resource
-    private InsightCardRepository insightCardRepository;
+    public ArticleQueryService(ArticleRepository articleRepository,
+                               InsightCardRepository insightCardRepository) {
+        this.articleRepository = articleRepository;
+        this.insightCardRepository = insightCardRepository;
+    }
 
     public List<ArticleCardView> list() {
         List<Article> articles = articleRepository.findAll();

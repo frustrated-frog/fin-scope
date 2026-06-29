@@ -9,7 +9,6 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.insight.InsightCardGenerator;
 import com.finscope.service.topic.TopicExtraction;
 import com.finscope.service.topic.TopicExtractor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -27,11 +26,6 @@ public class ArticleInterpretationAgent {
     private final InsightCardGenerator insightCardGenerator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ArticleInterpretationAgent(LlmChatClient llmChatClient) {
-        this(llmChatClient, null, new TopicExtractor(), new InsightCardGenerator());
-    }
-
-    @Autowired
     public ArticleInterpretationAgent(LlmChatClient llmChatClient,
                                       AgentRunRepository agentRunRepository,
                                       TopicExtractor topicExtractor,

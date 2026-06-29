@@ -11,25 +11,31 @@ import com.finscope.domain.source.Source;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.dedupe.NoveltyService;
 import com.finscope.service.insight.InsightCardService;
+import com.finscope.service.research.EventClusterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.Resource;
-
 @Service
 @Slf4j
 public class ArticleIngestCoordinator {
+    private final ArticleRepository articleRepository;
+    private final FingerprintService fingerprintService;
+    private final NoveltyService noveltyService;
+    private final InsightCardService insightCardService;
+    private final EventClusterService eventClusterService;
 
-    @Resource
-    private ArticleRepository articleRepository;
-    @Resource
-    private FingerprintService fingerprintService;
-    @Resource
-    private NoveltyService noveltyService;
-    @Resource
-    private InsightCardService insightCardService;
-
+    public ArticleIngestCoordinator(ArticleRepository articleRepository,
+                                    FingerprintService fingerprintService,
+                                    NoveltyService noveltyService,
+                                    InsightCardService insightCardService,
+                                    EventClusterService eventClusterService) {
+        this.articleRepository = articleRepository;
+        this.fingerprintService = fingerprintService;
+        this.noveltyService = noveltyService;
+        this.insightCardService = insightCardService;
+        this.eventClusterService = eventClusterService;
+    }
 
     @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {
@@ -51,6 +57,7 @@ public class ArticleIngestCoordinator {
 
         Article saved = articleRepository.save(article, urlFingerprint, titleFingerprint, bodySimhash);
         InsightCard card = insightCardService.createForArticle(saved);
+        eventClusterService.attachArticle(saved);
         log.info("article ingest success articleId={} sourceId={} noveltyType={} insightCardId={} durationMs={}",
                 saved.getId(), source.getId(), saved.getNoveltyType(), card.getId(), System.currentTimeMillis() - start);
         return new ArticleIngestResult(saved, card);
