@@ -1718,6 +1718,11 @@ td {
   color: var(--muted);
 }
 
+.empty-state.compact {
+  padding: 12px 0;
+  text-align: left;
+}
+
 .empty-state-icon {
   font-size: 48px;
   margin-bottom: 16px;
@@ -2087,6 +2092,127 @@ input[type="checkbox"] {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.research-workbench {
+  display: grid;
+  gap: 18px;
+}
+
+.research-control-panel,
+.research-detail-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 18px;
+}
+
+.research-control-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.research-controls,
+.theme-segments {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.research-toggle {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.segment {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.segment.active {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.run-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.agent-trace-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.planned-source-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.section-kicker {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.planned-source-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.planned-source-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.trace-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.trace-row div {
+  display: grid;
+  gap: 2px;
+}
+
+.trace-row span,
+.trace-row small,
+.run-summary span {
+  color: var(--muted);
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
 }
 
 .event-card {

@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -216,9 +217,9 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(get("/api/agent-runs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].nodeName").value("article-interpret"))
-                .andExpect(jsonPath("$[0].status").value("FALLBACK"))
-                .andExpect(jsonPath("$[0].output", containsString("FALLBACK")));
+                .andExpect(jsonPath("$[*].nodeName").value(hasItem("article-interpret")))
+                .andExpect(jsonPath("$[*].status").value(hasItem("FALLBACK")))
+                .andExpect(jsonPath("$[*].output").value(hasItem(containsString("FALLBACK"))));
 
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk())
@@ -507,38 +508,83 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void researchRunCanBeCreatedFromThemes() throws Exception {
+    void researchRunExecutesEndToEndFromThemes() throws Exception {
         String macroSource = "{\"name\":\"Macro Source\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
                 + "\"fetchFrequencyMinutes\":60,\"credibility\":5,\"tags\":\"china_macro,macro\"}";
-        String aiSource = "{\"name\":\"AI Source\",\"type\":\"WEB\",\"url\":\"http://example.com/ai\",\"enabled\":true,"
-                + "\"fetchFrequencyMinutes\":120,\"credibility\":4,\"tags\":\"ai_startup,ai\"}";
-        String disabledAiSource = "{\"name\":\"Disabled AI Source\",\"type\":\"WEB\",\"url\":\"http://example.com/ai-disabled\",\"enabled\":false,"
-                + "\"fetchFrequencyMinutes\":120,\"credibility\":5,\"tags\":\"ai_startup\"}";
 
         mvc.perform(post("/api/sources").contentType("application/json").content(macroSource))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/sources").contentType("application/json").content(aiSource))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/sources").contentType("application/json").content(disabledAiSource))
                 .andExpect(status().isOk());
 
         mvc.perform(post("/api/research/runs")
                         .contentType("application/json")
-                        .content("{\"runDate\":\"2026-06-27\",\"themeCodes\":[\"china_macro\",\"ai_startup\"],"
+                        .content("{\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
                                 + "\"maxSourcesPerTheme\":1,\"includeDisabled\":false}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PLANNED"))
-                .andExpect(jsonPath("$.themeCodes.length()").value(2))
-                .andExpect(jsonPath("$.sourceCount").value(2))
-                .andExpect(jsonPath("$.plannedSources.length()").value(2))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.themeCodes.length()").value(1))
+                .andExpect(jsonPath("$.sourceCount").value(1))
+                .andExpect(jsonPath("$.fetchedSourceCount").value(1))
+                .andExpect(jsonPath("$.articleCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.eventCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.evidenceCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.learningTaskCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.contentIdeaCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.briefDate").value(LocalDate.now().toString()))
+                .andExpect(jsonPath("$.plannedSources.length()").value(1))
                 .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("Macro Source")))
-                .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("AI Source")));
+                .andExpect(jsonPath("$.summary", containsString("sources=1")))
+                .andExpect(jsonPath("$.summary", containsString("events=")));
 
         mvc.perform(get("/api/research/runs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].status").value("PLANNED"))
-                .andExpect(jsonPath("$[0].sourceCount").value(2));
+                .andExpect(jsonPath("$[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$[0].sourceCount").value(1))
+                .andExpect(jsonPath("$[0].eventCount").value(greaterThanOrEqualTo(1)));
+
+        mvc.perform(get("/api/research/runs/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.run.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.plannedSources.length()").value(1))
+                .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("Macro Source")))
+                .andExpect(jsonPath("$.agentRuns.length()").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("research-orchestrate")))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("article-interpret")))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("evidence-extract")))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("learning-generate")))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("content-idea-generate")))
+                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("brief-synthesize")))
+                .andExpect(jsonPath("$.agentRuns[*].researchRunId").value(hasItem(1)));
+
+        mvc.perform(get("/api/briefs/" + LocalDate.now()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", containsString("## 今日新变量")))
+                .andExpect(jsonPath("$.content", containsString("美联储释放降息信号")));
+    }
+
+    @Test
+    void deletingArticleCleansResearchArtifactsAndCounts() throws Exception {
+        seedResearchArtifacts();
+
+        mvc.perform(get("/api/events/1/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mvc.perform(delete("/api/articles/batch")
+                        .contentType("application/json")
+                        .content("{\"ids\":[1]}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/events/1/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/events/1/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/events/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleCount").value(1))
+                .andExpect(jsonPath("$.evidenceCount").value(1));
     }
 
     @Test

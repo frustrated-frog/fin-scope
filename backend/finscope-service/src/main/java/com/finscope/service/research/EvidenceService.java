@@ -1,6 +1,9 @@
 package com.finscope.service.research;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.util.StringUtils;
+import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.article.Article;
@@ -8,8 +11,10 @@ import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -22,13 +27,29 @@ public class EvidenceService {
 
     private final EvidenceItemRepository evidenceItemRepository;
     private final SourceRepository sourceRepository;
+    private final AgentRunRepository agentRunRepository;
+    private final LlmChatClient llmChatClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public EvidenceService(EvidenceItemRepository evidenceItemRepository, SourceRepository sourceRepository) {
+    public EvidenceService(EvidenceItemRepository evidenceItemRepository,
+                           SourceRepository sourceRepository,
+                           AgentRunRepository agentRunRepository,
+                           LlmChatClient llmChatClient) {
         this.evidenceItemRepository = evidenceItemRepository;
         this.sourceRepository = sourceRepository;
+        this.agentRunRepository = agentRunRepository;
+        this.llmChatClient = llmChatClient;
     }
 
     public int capture(EventCluster event, Article article) {
+        long start = System.currentTimeMillis();
+        List<EvidenceItem> agentItems = extractWithAgent(event, article, start);
+        if (!agentItems.isEmpty()) {
+            for (EvidenceItem item : agentItems) {
+                evidenceItemRepository.save(item);
+            }
+            return evidenceItemRepository.countByEventId(event.getId());
+        }
         EvidenceItem item = new EvidenceItem();
         item.setEventId(event.getId());
         item.setArticleId(article.getId());
@@ -36,8 +57,81 @@ public class EvidenceService {
         item.setEvidenceType(resolveEvidenceType(article));
         item.setClaim(resolveClaim(article));
         item.setConfidence(resolveConfidence(item.getSourceTier()));
-        evidenceItemRepository.save(item);
-        return evidenceItemRepository.countByEventId(event.getId());
+        EvidenceItem saved = evidenceItemRepository.save(item);
+        int count = evidenceItemRepository.countByEventId(event.getId());
+        agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article.getId(),
+                "evidence-extract", "FALLBACK",
+                "articleId=" + article.getId() + ", eventId=" + event.getId(),
+                saved.getEvidenceType() + "/" + saved.getSourceTier() + ": " + saved.getClaim(),
+                null, System.currentTimeMillis() - start);
+        return count;
+    }
+
+    private List<EvidenceItem> extractWithAgent(EventCluster event, Article article, long start) {
+        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+            return java.util.Collections.emptyList();
+        }
+        String input = evidencePrompt(event, article);
+        try {
+            String raw = llmChatClient.complete(evidenceSystemPrompt(), input);
+            List<EvidenceItem> items = parseEvidence(raw, event, article);
+            if (items.isEmpty()) {
+                agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article.getId(),
+                        "evidence-extract", "REJECTED", input, raw, "No valid evidence item",
+                        System.currentTimeMillis() - start);
+                return java.util.Collections.emptyList();
+            }
+            agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article.getId(),
+                    "evidence-extract", "SUCCESS", input, raw, null, System.currentTimeMillis() - start);
+            return items;
+        } catch (Exception ex) {
+            agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article.getId(),
+                    "evidence-extract", "FAILED", input, null, ex.getMessage(), System.currentTimeMillis() - start);
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    private List<EvidenceItem> parseEvidence(String raw, EventCluster event, Article article) throws Exception {
+        JsonNode root = objectMapper.readTree(extractJson(raw));
+        JsonNode itemsNode = root.isArray() ? root : root.path("items");
+        List<EvidenceItem> items = new ArrayList<EvidenceItem>();
+        String sourceTier = resolveSourceTier(article);
+        if (!itemsNode.isArray()) {
+            return items;
+        }
+        for (JsonNode node : itemsNode) {
+            String claim = text(node, "claim", "");
+            if (StringUtils.isBlank(claim)) {
+                continue;
+            }
+            EvidenceItem item = new EvidenceItem();
+            item.setEventId(event.getId());
+            item.setArticleId(article.getId());
+            item.setSourceTier(sourceTier);
+            item.setEvidenceType(validEvidenceType(text(node, "evidenceType", resolveEvidenceType(article))));
+            item.setClaim(limit(claim.replaceAll("\\s+", " ").trim(), 180));
+            item.setConfidence(clamp(node.path("confidence").asInt(resolveConfidence(sourceTier))));
+            items.add(item);
+            if (items.size() >= 5) {
+                break;
+            }
+        }
+        return items;
+    }
+
+    private String evidenceSystemPrompt() {
+        return "你是 FinScope 证据抽取 Agent。只基于输入文章抽取可引用事实，返回 JSON，不写 Markdown。"
+                + "不要编造来源、URL、数字或投资建议。";
+    }
+
+    private String evidencePrompt(EventCluster event, Article article) {
+        return "输出格式:{\"items\":[{\"evidenceType\":\"FACT|DATA|TIMELINE\",\"claim\":\"事实句\","
+                + "\"confidence\":0-100}]}\n"
+                + "事件:" + event.getCanonicalTitle() + "\n"
+                + "来源:" + article.getSourceName() + "\n"
+                + "标题:" + article.getTitle() + "\n"
+                + "摘要:" + article.getSummary() + "\n"
+                + "正文:" + limit(article.getBody(), 5000);
     }
 
     public List<EvidenceItem> listByEventId(Long eventId) {
@@ -163,5 +257,43 @@ public class EvidenceService {
 
     private int value(Integer confidence) {
         return confidence == null ? 0 : confidence;
+    }
+
+    private String extractJson(String raw) {
+        String value = StringUtils.firstNonBlank(raw, "").trim();
+        if (value.startsWith("```")) {
+            value = value.replaceFirst("^```[a-zA-Z]*\\s*", "");
+            value = value.replaceFirst("\\s*```$", "");
+        }
+        int objectStart = value.indexOf('{');
+        int objectEnd = value.lastIndexOf('}');
+        int arrayStart = value.indexOf('[');
+        int arrayEnd = value.lastIndexOf(']');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+            return value.substring(objectStart, objectEnd + 1);
+        }
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            return value.substring(arrayStart, arrayEnd + 1);
+        }
+        return value;
+    }
+
+    private String text(JsonNode node, String field, String fallback) {
+        String value = node.path(field).asText("");
+        return StringUtils.isBlank(value) ? fallback : value.trim();
+    }
+
+    private String validEvidenceType(String value) {
+        String normalized = StringUtils.firstNonBlank(value, "").trim().toUpperCase(Locale.ROOT);
+        if (ResearchEnums.EVIDENCE_DATA.equals(normalized)
+                || ResearchEnums.EVIDENCE_TIMELINE.equals(normalized)
+                || ResearchEnums.EVIDENCE_FACT.equals(normalized)) {
+            return normalized;
+        }
+        return ResearchEnums.EVIDENCE_FACT;
+    }
+
+    private int clamp(int value) {
+        return Math.max(0, Math.min(100, value));
     }
 }

@@ -12,6 +12,8 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -133,6 +135,52 @@ public class EventClusterRepository {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM event_article_link WHERE event_id = ?",
                 Integer.class, eventId);
         return count == null ? 0 : count;
+    }
+
+    public int countAll() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM event_cluster", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    public List<Long> findEventIdsByArticleIds(List<Long> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String placeholders = String.join(",", Collections.nCopies(articleIds.size(), "?"));
+        return jdbcTemplate.query("SELECT DISTINCT event_id FROM event_article_link WHERE article_id IN (" + placeholders + ")",
+                (rs, rowNum) -> rs.getLong("event_id"), articleIds.toArray());
+    }
+
+    public int deleteLinksByArticleIds(List<Long> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return 0;
+        }
+        String placeholders = String.join(",", Collections.nCopies(articleIds.size(), "?"));
+        return jdbcTemplate.update("DELETE FROM event_article_link WHERE article_id IN (" + placeholders + ")",
+                articleIds.toArray());
+    }
+
+    public void refreshCounts(List<Long> eventIds) {
+        for (Long eventId : unique(eventIds)) {
+            jdbcTemplate.update("UPDATE event_cluster SET article_count = "
+                            + "(SELECT COUNT(*) FROM event_article_link WHERE event_id = ?), "
+                            + "evidence_count = (SELECT COUNT(*) FROM evidence_item WHERE event_id = ?), "
+                            + "updated_at = ? WHERE id = ?",
+                    eventId, eventId, TimeUtil.text(LocalDateTime.now()), eventId);
+        }
+    }
+
+    private List<Long> unique(List<Long> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> unique = new ArrayList<Long>();
+        for (Long eventId : eventIds) {
+            if (eventId != null && !unique.contains(eventId)) {
+                unique.add(eventId);
+            }
+        }
+        return unique;
     }
 
     private void bindEvent(PreparedStatement ps, EventCluster event) throws java.sql.SQLException {

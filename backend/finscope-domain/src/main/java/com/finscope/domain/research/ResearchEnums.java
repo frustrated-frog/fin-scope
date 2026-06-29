@@ -54,6 +54,7 @@ public final class ResearchEnums {
     public static final String RUN_STATUS_PLANNED = "PLANNED";
     public static final String RUN_STATUS_RUNNING = "RUNNING";
     public static final String RUN_STATUS_COMPLETED = "COMPLETED";
+    public static final String RUN_STATUS_PARTIAL_SUCCESS = "PARTIAL_SUCCESS";
     public static final String RUN_STATUS_FAILED = "FAILED";
 
     private ResearchEnums() {

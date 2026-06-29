@@ -1,5 +1,7 @@
 package com.finscope.service.brief;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.brief.BriefRepository;
@@ -8,7 +10,9 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.brief.Brief;
 import com.finscope.domain.insight.InsightCard;
 import com.finscope.domain.research.BriefResearchContext;
+import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.research.BriefResearchContextService;
+import com.finscope.service.research.ResearchRunContext;
 import com.finscope.service.vault.VaultWriter;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +33,8 @@ public class BriefService {
     private final VaultWriter vaultWriter;
     private final AgentRunRepository agentRunRepository;
     private final BriefResearchContextService briefResearchContextService;
+    private final LlmChatClient llmChatClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public BriefService(ArticleRepository articleRepository,
                         BriefRepository briefRepository,
@@ -36,7 +42,8 @@ public class BriefService {
                         BriefGenerator briefGenerator,
                         VaultWriter vaultWriter,
                         AgentRunRepository agentRunRepository,
-                        BriefResearchContextService briefResearchContextService) {
+                        BriefResearchContextService briefResearchContextService,
+                        LlmChatClient llmChatClient) {
         this.articleRepository = articleRepository;
         this.briefRepository = briefRepository;
         this.insightCardRepository = insightCardRepository;
@@ -44,6 +51,7 @@ public class BriefService {
         this.vaultWriter = vaultWriter;
         this.agentRunRepository = agentRunRepository;
         this.briefResearchContextService = briefResearchContextService;
+        this.llmChatClient = llmChatClient;
     }
 
     public Brief generateToday() {
@@ -72,9 +80,11 @@ public class BriefService {
             List<Long> articleIds = articles.stream().map(Article::getId).collect(Collectors.toList());
             Map<Long, InsightCard> cardsByArticleId = insightCardRepository.findByArticleIds(articleIds);
             BriefResearchContext context = briefResearchContextService.build(date);
-            String markdown = context.isEmpty()
+            String deterministicMarkdown = context.isEmpty()
                     ? briefGenerator.generate(date, articles, cardsByArticleId)
                     : briefGenerator.generate(date, articles, context);
+            String markdown = synthesizeWithAgent(date, context, deterministicMarkdown);
+            String synthStatus = deterministicMarkdown.equals(markdown) ? "FALLBACK" : "SUCCESS";
             Path markdownPath = vaultWriter.writeDailyBrief(date, markdown);
             Brief brief = new Brief();
             brief.setBriefDate(date);
@@ -82,13 +92,36 @@ public class BriefService {
             brief.setContent(markdown);
             brief.setMarkdownPath(markdownPath.toString());
             Brief saved = briefRepository.upsert(brief);
-            agentRunRepository.record("brief-generate", "SUCCESS", "date=" + date,
+            Long researchRunId = ResearchRunContext.currentRunId();
+            agentRunRepository.record(researchRunId, null, null, "brief-synthesize", synthStatus,
+                    "date=" + date + ", researchContextEmpty=" + context.isEmpty(),
+                    "markdownChars=" + markdown.length(), null, System.currentTimeMillis() - start);
+            agentRunRepository.record(researchRunId, null, null, "brief-generate", "SUCCESS", "date=" + date,
                     "articles=" + articles.size(), null, System.currentTimeMillis() - start);
             return saved;
         } catch (Exception ex) {
-            agentRunRepository.record("brief-generate", "FAILED", "date=" + date,
+            Long researchRunId = ResearchRunContext.currentRunId();
+            agentRunRepository.record(researchRunId, null, null, "brief-synthesize", "FAILED", "date=" + date,
+                    null, ex.getMessage(), System.currentTimeMillis() - start);
+            agentRunRepository.record(researchRunId, null, null, "brief-generate", "FAILED", "date=" + date,
                     null, ex.getMessage(), System.currentTimeMillis() - start);
             throw new IllegalStateException("Failed to generate brief", ex);
+        }
+    }
+
+    private String synthesizeWithAgent(LocalDate date, BriefResearchContext context, String fallbackMarkdown) {
+        if (context == null || context.isEmpty() || llmChatClient == null || !llmChatClient.isConfigured()) {
+            return fallbackMarkdown;
+        }
+        try {
+            String raw = llmChatClient.complete(briefSystemPrompt(), briefPrompt(date, fallbackMarkdown));
+            String markdown = objectMapper.readTree(extractJson(raw)).path("markdown").asText("");
+            if (isValidSynthesizedBrief(markdown)) {
+                return markdown.trim();
+            }
+            return fallbackMarkdown;
+        } catch (Exception ignored) {
+            return fallbackMarkdown;
         }
     }
 
@@ -143,5 +176,47 @@ public class BriefService {
             }
         }
         return GENERATED_BRIEF_TITLE_PREFIX + date;
+    }
+
+    private String briefSystemPrompt() {
+        return "你是 FinScope 简报组织 Agent。你只能基于输入 Markdown 做结构和表达优化，"
+                + "不得新增事实、来源、数字或投资建议。只返回 JSON:{\"markdown\":\"...\"}";
+    }
+
+    private String briefPrompt(LocalDate date, String markdown) {
+        return "日期:" + date + "\n"
+                + "要求:保留所有二级标题、证据和“不构成投资建议”提示；不要新增任何未出现的事实。\n"
+                + "待优化 Markdown:\n" + limit(markdown, 9000);
+    }
+
+    private boolean isValidSynthesizedBrief(String markdown) {
+        if (markdown == null || markdown.trim().length() < 80) {
+            return false;
+        }
+        return markdown.contains("# " + GENERATED_BRIEF_TITLE_PREFIX)
+                && markdown.contains("## 今日新变量")
+                && markdown.contains("## 今日证据来源")
+                && markdown.contains("不构成投资建议");
+    }
+
+    private String extractJson(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.startsWith("```")) {
+            value = value.replaceFirst("^```[a-zA-Z]*\\s*", "");
+            value = value.replaceFirst("\\s*```$", "");
+        }
+        int start = value.indexOf('{');
+        int end = value.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return value.substring(start, end + 1);
+        }
+        return value;
+    }
+
+    private String limit(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

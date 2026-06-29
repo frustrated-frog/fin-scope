@@ -4,6 +4,7 @@ export type View =
   | 'article'
   | 'briefs'
   | 'briefReader'
+  | 'research'
   | 'events'
   | 'evidence'
   | 'topics'
@@ -133,6 +134,40 @@ export type BriefResearchContext = {
   contentIdeas: ContentIdea[];
 };
 
+export type SourceProfile = {
+  sourceId?: number;
+  sourceName: string;
+  sourceTier?: string;
+  adapterType?: string;
+  credibility?: number;
+  enabled?: boolean;
+  themeCodes?: string[];
+};
+
+export type ResearchRun = {
+  id: number;
+  runDate: string;
+  themeCodes: string[];
+  sourceCount: number;
+  fetchedSourceCount?: number;
+  articleCount?: number;
+  eventCount?: number;
+  evidenceCount?: number;
+  learningTaskCount?: number;
+  contentIdeaCount?: number;
+  briefDate?: string;
+  status: string;
+  summary?: string;
+  errorMessage?: string;
+  plannedSources?: SourceProfile[];
+};
+
+export type ResearchRunDetail = {
+  run: ResearchRun;
+  plannedSources: SourceProfile[];
+  agentRuns: AgentRun[];
+};
+
 export type Topic = {
   id: number;
   name: string;
@@ -155,8 +190,13 @@ export type TopicDetail = {
 
 export type AgentRun = {
   id: number;
+  researchRunId?: number;
+  eventId?: number;
+  articleId?: number;
   nodeName: string;
   status: string;
+  input?: string;
+  output?: string;
   durationMs: number;
   errorMessage?: string;
 };

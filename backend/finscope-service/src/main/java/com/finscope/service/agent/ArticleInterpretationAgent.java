@@ -7,6 +7,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.insight.InsightCardGenerator;
+import com.finscope.service.research.ResearchRunContext;
 import com.finscope.service.topic.TopicExtraction;
 import com.finscope.service.topic.TopicExtractor;
 import org.springframework.stereotype.Service;
@@ -46,21 +47,21 @@ public class ArticleInterpretationAgent {
         String userPrompt = buildUserPrompt(input);
         if (!isConfigured()) {
             ArticleInterpretation fallback = fallback(article);
-            record("FALLBACK", traceInput(input, userPrompt), traceOutput(fallback), null, start);
+            record(input, "FALLBACK", traceInput(input, userPrompt), traceOutput(fallback), null, start);
             return fallback;
         }
         String raw = null;
         try {
             raw = llmChatClient.complete(systemPrompt(), userPrompt);
             ArticleInterpretation interpretation = parse(raw, input);
-            record("SUCCESS", traceInput(input, userPrompt), raw, null, start);
+            record(input, "SUCCESS", traceInput(input, userPrompt), raw, null, start);
             return interpretation;
         } catch (InterpretationRejectedException ex) {
             ArticleInterpretation fallback = fallback(article);
-            record("REJECTED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
+            record(input, "REJECTED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
             return fallback;
         } catch (Exception ex) {
-            record("FAILED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
+            record(input, "FAILED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
             return fallback(article);
         }
     }
@@ -261,11 +262,19 @@ public class ArticleInterpretationAgent {
         return llmChatClient == null ? "disabled" : llmChatClient.modelName();
     }
 
-    private void record(String status, String input, String output, String error, long start) {
+    private void record(ArticleInterpretationInput interpretationInput,
+                        String status,
+                        String input,
+                        String output,
+                        String error,
+                        long start) {
         if (agentRunRepository == null) {
             return;
         }
-        agentRunRepository.record(NODE_NAME, status, input, output, error, System.currentTimeMillis() - start);
+        Long articleId = interpretationInput == null || interpretationInput.article == null
+                ? null : interpretationInput.article.getId();
+        agentRunRepository.record(ResearchRunContext.currentRunId(), null, articleId, NODE_NAME, status,
+                input, output, error, System.currentTimeMillis() - start);
     }
 
     private String text(JsonNode root, String field, String fallback) {

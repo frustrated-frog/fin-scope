@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 
 @Repository
@@ -75,6 +76,20 @@ public class EvidenceItemRepository {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM evidence_item WHERE event_id = ?",
                 Integer.class, eventId);
         return count == null ? 0 : count;
+    }
+
+    public int countAll() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM evidence_item", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    public int deleteByArticleIds(List<Long> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return 0;
+        }
+        String placeholders = String.join(",", Collections.nCopies(articleIds.size(), "?"));
+        return jdbcTemplate.update("DELETE FROM evidence_item WHERE article_id IN (" + placeholders + ")",
+                articleIds.toArray());
     }
 
     private int value(Integer value) {

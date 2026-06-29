@@ -91,6 +91,11 @@ public class ContentIdeaRepository {
         return count == null ? 0 : count;
     }
 
+    public int countAll() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM content_idea", Integer.class);
+        return count == null ? 0 : count;
+    }
+
     public ContentIdea updateStatus(Long id, String status) {
         jdbcTemplate.update("UPDATE content_idea SET status = ?, updated_at = ? WHERE id = ?",
                 status, TimeUtil.text(LocalDateTime.now()), id);

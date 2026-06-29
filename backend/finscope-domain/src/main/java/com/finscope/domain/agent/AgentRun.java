@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 
 public class AgentRun {
     private Long id;
+    private Long researchRunId;
+    private Long eventId;
+    private Long articleId;
     private String nodeName;
     private String status;
     private String input;
@@ -18,6 +21,30 @@ public class AgentRun {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getResearchRunId() {
+        return researchRunId;
+    }
+
+    public void setResearchRunId(Long researchRunId) {
+        this.researchRunId = researchRunId;
+    }
+
+    public Long getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(Long eventId) {
+        this.eventId = eventId;
+    }
+
+    public Long getArticleId() {
+        return articleId;
+    }
+
+    public void setArticleId(Long articleId) {
+        this.articleId = articleId;
     }
 
     public String getNodeName() {

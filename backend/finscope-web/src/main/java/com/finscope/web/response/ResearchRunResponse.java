@@ -15,6 +15,13 @@ public class ResearchRunResponse {
     private LocalDate runDate;
     private List<String> themeCodes = Collections.emptyList();
     private Integer sourceCount;
+    private Integer fetchedSourceCount;
+    private Integer articleCount;
+    private Integer eventCount;
+    private Integer evidenceCount;
+    private Integer learningTaskCount;
+    private Integer contentIdeaCount;
+    private LocalDate briefDate;
     private String status;
     private String summary;
     private String errorMessage;
@@ -32,6 +39,13 @@ public class ResearchRunResponse {
         response.setRunDate(run.getRunDate());
         response.setThemeCodes(run.getThemeCodes());
         response.setSourceCount(run.getSourceCount());
+        response.setFetchedSourceCount(run.getFetchedSourceCount());
+        response.setArticleCount(run.getArticleCount());
+        response.setEventCount(run.getEventCount());
+        response.setEvidenceCount(run.getEvidenceCount());
+        response.setLearningTaskCount(run.getLearningTaskCount());
+        response.setContentIdeaCount(run.getContentIdeaCount());
+        response.setBriefDate(run.getBriefDate());
         response.setStatus(run.getStatus());
         response.setSummary(run.getSummary());
         response.setErrorMessage(run.getErrorMessage());
@@ -72,6 +86,62 @@ public class ResearchRunResponse {
 
     public void setSourceCount(Integer sourceCount) {
         this.sourceCount = sourceCount;
+    }
+
+    public Integer getFetchedSourceCount() {
+        return fetchedSourceCount;
+    }
+
+    public void setFetchedSourceCount(Integer fetchedSourceCount) {
+        this.fetchedSourceCount = fetchedSourceCount;
+    }
+
+    public Integer getArticleCount() {
+        return articleCount;
+    }
+
+    public void setArticleCount(Integer articleCount) {
+        this.articleCount = articleCount;
+    }
+
+    public Integer getEventCount() {
+        return eventCount;
+    }
+
+    public void setEventCount(Integer eventCount) {
+        this.eventCount = eventCount;
+    }
+
+    public Integer getEvidenceCount() {
+        return evidenceCount;
+    }
+
+    public void setEvidenceCount(Integer evidenceCount) {
+        this.evidenceCount = evidenceCount;
+    }
+
+    public Integer getLearningTaskCount() {
+        return learningTaskCount;
+    }
+
+    public void setLearningTaskCount(Integer learningTaskCount) {
+        this.learningTaskCount = learningTaskCount;
+    }
+
+    public Integer getContentIdeaCount() {
+        return contentIdeaCount;
+    }
+
+    public void setContentIdeaCount(Integer contentIdeaCount) {
+        this.contentIdeaCount = contentIdeaCount;
+    }
+
+    public LocalDate getBriefDate() {
+        return briefDate;
+    }
+
+    public void setBriefDate(LocalDate briefDate) {
+        this.briefDate = briefDate;
     }
 
     public String getStatus() {

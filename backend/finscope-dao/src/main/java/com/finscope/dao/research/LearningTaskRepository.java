@@ -84,6 +84,11 @@ public class LearningTaskRepository {
         return count == null ? 0 : count;
     }
 
+    public int countAll() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM learning_task", Integer.class);
+        return count == null ? 0 : count;
+    }
+
     public LearningTask updateStatus(Long id, String status) {
         jdbcTemplate.update("UPDATE learning_task SET status = ?, updated_at = ? WHERE id = ?",
                 status, TimeUtil.text(LocalDateTime.now()), id);

@@ -1,15 +1,21 @@
 package com.finscope.service.research;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.util.StringUtils;
+import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -27,11 +33,18 @@ public class LearningTaskService {
 
     private final LearningTaskRepository learningTaskRepository;
     private final EvidenceService evidenceService;
+    private final AgentRunRepository agentRunRepository;
+    private final LlmChatClient llmChatClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public LearningTaskService(LearningTaskRepository learningTaskRepository,
-                               EvidenceService evidenceService) {
+                               EvidenceService evidenceService,
+                               AgentRunRepository agentRunRepository,
+                               LlmChatClient llmChatClient) {
         this.learningTaskRepository = learningTaskRepository;
         this.evidenceService = evidenceService;
+        this.agentRunRepository = agentRunRepository;
+        this.llmChatClient = llmChatClient;
     }
 
     public void generateIfAbsent(EventCluster event, Article article, boolean meaningfulUpdate) {
@@ -44,8 +57,43 @@ public class LearningTaskService {
         List<EvidenceItem> evidenceItems = event.getId() == null
                 ? Collections.<EvidenceItem>emptyList()
                 : evidenceService.listByEventId(event.getId());
-        for (LearningTask task : buildTasks(event, article, evidenceItems)) {
+        long start = System.currentTimeMillis();
+        List<LearningTask> tasks = generateWithAgent(event, article, evidenceItems, start);
+        String status = "SUCCESS";
+        if (tasks.isEmpty()) {
+            tasks = buildTasks(event, article, evidenceItems);
+            status = "FALLBACK";
+        }
+        for (LearningTask task : tasks) {
             learningTaskRepository.save(task);
+        }
+        agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                "learning-generate", status,
+                "eventId=" + event.getId() + ", theme=" + event.getThemeCode(),
+                "tasks=" + tasks.size(), null, System.currentTimeMillis() - start);
+    }
+
+    private List<LearningTask> generateWithAgent(EventCluster event,
+                                                 Article article,
+                                                 List<EvidenceItem> evidenceItems,
+                                                 long start) {
+        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+            return Collections.emptyList();
+        }
+        String prompt = learningPrompt(event, article, evidenceItems);
+        try {
+            String raw = llmChatClient.complete(learningSystemPrompt(), prompt);
+            List<LearningTask> tasks = parseTasks(raw, event);
+            if (tasks.isEmpty()) {
+                agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                        "learning-generate", "REJECTED", prompt, raw, "No valid learning task",
+                        System.currentTimeMillis() - start);
+            }
+            return tasks;
+        } catch (Exception ex) {
+            agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                    "learning-generate", "FAILED", prompt, null, ex.getMessage(), System.currentTimeMillis() - start);
+            return Collections.emptyList();
         }
     }
 
@@ -65,6 +113,51 @@ public class LearningTaskService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported learning task status: " + status);
         }
         return learningTaskRepository.updateStatus(existing.getId(), normalizedStatus);
+    }
+
+    private List<LearningTask> parseTasks(String raw, EventCluster event) throws Exception {
+        JsonNode root = objectMapper.readTree(extractJson(raw));
+        JsonNode tasksNode = root.isArray() ? root : root.path("tasks");
+        List<LearningTask> tasks = new ArrayList<LearningTask>();
+        if (!tasksNode.isArray()) {
+            return tasks;
+        }
+        for (JsonNode node : tasksNode) {
+            String question = text(node, "question", "");
+            if (StringUtils.isBlank(question)) {
+                continue;
+            }
+            tasks.add(task(event,
+                    limit(question, 140),
+                    limit(text(node, "concepts", ""), 120),
+                    validDifficulty(text(node, "difficulty", ResearchEnums.LEARNING_DIFFICULTY_FOUNDATION)),
+                    limit(text(node, "whyNeeded", ""), 180)));
+            if (tasks.size() >= 3) {
+                break;
+            }
+        }
+        return tasks;
+    }
+
+    private String learningSystemPrompt() {
+        return "你是 FinScope 学习任务 Agent。基于事件和证据生成金融学习问题。只返回 JSON，不提供投资建议。";
+    }
+
+    private String learningPrompt(EventCluster event, Article article, List<EvidenceItem> evidenceItems) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("输出格式:{\"tasks\":[{\"question\":\"问题\",\"concepts\":\"概念,概念\",")
+                .append("\"difficulty\":\"FOUNDATION|INTERMEDIATE|ADVANCED\",\"whyNeeded\":\"为什么要补\"}]}\n");
+        builder.append("事件:").append(event.getCanonicalTitle()).append("\n");
+        builder.append("主题:").append(event.getThemeCode()).append("\n");
+        builder.append("摘要:").append(event.getSummary()).append("\n");
+        if (article != null) {
+            builder.append("文章:").append(article.getTitle()).append("\n");
+        }
+        for (EvidenceItem item : evidenceItems) {
+            builder.append("证据:").append(item.getEvidenceType()).append("/").append(item.getSourceTier())
+                    .append(" ").append(item.getClaim()).append("\n");
+        }
+        return builder.toString();
     }
 
     private List<LearningTask> buildTasks(EventCluster event, Article article, List<EvidenceItem> evidenceItems) {
@@ -177,5 +270,46 @@ public class LearningTaskService {
 
     private String normalizeStatus(String status) {
         return status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String extractJson(String raw) {
+        String value = StringUtils.firstNonBlank(raw, "").trim();
+        if (value.startsWith("```")) {
+            value = value.replaceFirst("^```[a-zA-Z]*\\s*", "");
+            value = value.replaceFirst("\\s*```$", "");
+        }
+        int objectStart = value.indexOf('{');
+        int objectEnd = value.lastIndexOf('}');
+        int arrayStart = value.indexOf('[');
+        int arrayEnd = value.lastIndexOf(']');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+            return value.substring(objectStart, objectEnd + 1);
+        }
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            return value.substring(arrayStart, arrayEnd + 1);
+        }
+        return value;
+    }
+
+    private String text(JsonNode node, String field, String fallback) {
+        String value = node.path(field).asText("");
+        return StringUtils.isBlank(value) ? fallback : value.trim();
+    }
+
+    private String validDifficulty(String value) {
+        String normalized = normalizeStatus(value);
+        if (ResearchEnums.LEARNING_DIFFICULTY_FOUNDATION.equals(normalized)
+                || ResearchEnums.LEARNING_DIFFICULTY_INTERMEDIATE.equals(normalized)
+                || ResearchEnums.LEARNING_DIFFICULTY_ADVANCED.equals(normalized)) {
+            return normalized;
+        }
+        return ResearchEnums.LEARNING_DIFFICULTY_FOUNDATION;
+    }
+
+    private String limit(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

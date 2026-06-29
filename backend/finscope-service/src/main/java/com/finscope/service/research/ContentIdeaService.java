@@ -1,16 +1,21 @@
 package com.finscope.service.research;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.StringUtils;
+import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.ContentIdea;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -29,11 +34,18 @@ public class ContentIdeaService {
 
     private final ContentIdeaRepository contentIdeaRepository;
     private final EvidenceService evidenceService;
+    private final AgentRunRepository agentRunRepository;
+    private final LlmChatClient llmChatClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ContentIdeaService(ContentIdeaRepository contentIdeaRepository,
-                              EvidenceService evidenceService) {
+                              EvidenceService evidenceService,
+                              AgentRunRepository agentRunRepository,
+                              LlmChatClient llmChatClient) {
         this.contentIdeaRepository = contentIdeaRepository;
         this.evidenceService = evidenceService;
+        this.agentRunRepository = agentRunRepository;
+        this.llmChatClient = llmChatClient;
     }
 
     public void generateIfAbsent(EventCluster event, Article article, boolean meaningfulUpdate) {
@@ -46,8 +58,43 @@ public class ContentIdeaService {
         List<EvidenceItem> evidenceItems = event.getId() == null
                 ? Collections.<EvidenceItem>emptyList()
                 : evidenceService.listByEventId(event.getId());
-        for (ContentIdea idea : buildIdeas(event, article, evidenceItems)) {
+        long start = System.currentTimeMillis();
+        List<ContentIdea> ideas = generateWithAgent(event, article, evidenceItems, start);
+        String status = "SUCCESS";
+        if (ideas.isEmpty()) {
+            ideas = buildIdeas(event, article, evidenceItems);
+            status = "FALLBACK";
+        }
+        for (ContentIdea idea : ideas) {
             contentIdeaRepository.save(idea);
+        }
+        agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                "content-idea-generate", status,
+                "eventId=" + event.getId() + ", theme=" + event.getThemeCode(),
+                "ideas=" + ideas.size(), null, System.currentTimeMillis() - start);
+    }
+
+    private List<ContentIdea> generateWithAgent(EventCluster event,
+                                                Article article,
+                                                List<EvidenceItem> evidenceItems,
+                                                long start) {
+        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+            return Collections.emptyList();
+        }
+        String prompt = contentPrompt(event, article, evidenceItems);
+        try {
+            String raw = llmChatClient.complete(contentSystemPrompt(), prompt);
+            List<ContentIdea> ideas = parseIdeas(raw, event);
+            if (ideas.isEmpty()) {
+                agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                        "content-idea-generate", "REJECTED", prompt, raw, "No valid content idea",
+                        System.currentTimeMillis() - start);
+            }
+            return ideas;
+        } catch (Exception ex) {
+            agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
+                    "content-idea-generate", "FAILED", prompt, null, ex.getMessage(), System.currentTimeMillis() - start);
+            return Collections.emptyList();
         }
     }
 
@@ -71,6 +118,57 @@ public class ContentIdeaService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported content idea status: " + status);
         }
         return contentIdeaRepository.updateStatus(existing.getId(), normalizedStatus);
+    }
+
+    private List<ContentIdea> parseIdeas(String raw, EventCluster event) throws Exception {
+        JsonNode root = objectMapper.readTree(extractJson(raw));
+        JsonNode ideasNode = root.isArray() ? root : root.path("ideas");
+        List<ContentIdea> ideas = new ArrayList<ContentIdea>();
+        if (!ideasNode.isArray()) {
+            return ideas;
+        }
+        for (JsonNode node : ideasNode) {
+            String title = text(node, "title", "");
+            String angle = text(node, "angle", "");
+            if (StringUtils.isBlank(title) || StringUtils.isBlank(angle)) {
+                continue;
+            }
+            ideas.add(idea(event,
+                    limit(title, 120),
+                    limit(angle, 220),
+                    validFormat(text(node, "format", ResearchEnums.CONTENT_FORMAT_LONG_ARTICLE)),
+                    limit(text(node, "audience", "金融学习和内容创作者"), 120),
+                    clamp(node.path("score").asInt(75)),
+                    limit(text(node, "scoreReason", "证据和学习价值较强。"), 180),
+                    limit(text(node, "outline", "1. 事件是什么\n2. 变量是什么\n3. 如何跟踪"), 260)));
+            if (ideas.size() >= 3) {
+                break;
+            }
+        }
+        return ideas;
+    }
+
+    private String contentSystemPrompt() {
+        return "你是 FinScope 内容选题 Agent。基于事件和证据生成教育型财经内容选题。"
+                + "只返回 JSON，不做买卖建议，不制造没有证据的事实。";
+    }
+
+    private String contentPrompt(EventCluster event, Article article, List<EvidenceItem> evidenceItems) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("输出格式:{\"ideas\":[{\"title\":\"标题\",\"angle\":\"角度\",")
+                .append("\"format\":\"LONG_ARTICLE|SHORT_VIDEO|PODCAST|X_THREAD|XIAOHONGSHU_NOTE\",")
+                .append("\"audience\":\"受众\",\"score\":0-100,\"scoreReason\":\"评分理由\",\"outline\":\"1. ...\"}]}\n");
+        builder.append("事件:").append(event.getCanonicalTitle()).append("\n");
+        builder.append("主题:").append(event.getThemeCode()).append("\n");
+        builder.append("摘要:").append(event.getSummary()).append("\n");
+        if (article != null) {
+            builder.append("文章:").append(article.getTitle()).append("\n");
+        }
+        for (EvidenceItem item : evidenceItems) {
+            builder.append("证据:").append(item.getEvidenceType()).append("/").append(item.getSourceTier())
+                    .append(" ").append(item.getClaim()).append("\n");
+        }
+        return builder.toString();
     }
 
     private List<ContentIdea> buildIdeas(EventCluster event, Article article, List<EvidenceItem> evidenceItems) {
@@ -203,5 +301,48 @@ public class ContentIdeaService {
 
     private String normalizeStatus(String status) {
         return status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String extractJson(String raw) {
+        String value = StringUtils.firstNonBlank(raw, "").trim();
+        if (value.startsWith("```")) {
+            value = value.replaceFirst("^```[a-zA-Z]*\\s*", "");
+            value = value.replaceFirst("\\s*```$", "");
+        }
+        int objectStart = value.indexOf('{');
+        int objectEnd = value.lastIndexOf('}');
+        int arrayStart = value.indexOf('[');
+        int arrayEnd = value.lastIndexOf(']');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+            return value.substring(objectStart, objectEnd + 1);
+        }
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            return value.substring(arrayStart, arrayEnd + 1);
+        }
+        return value;
+    }
+
+    private String text(JsonNode node, String field, String fallback) {
+        String value = node.path(field).asText("");
+        return StringUtils.isBlank(value) ? fallback : value.trim();
+    }
+
+    private String validFormat(String value) {
+        String normalized = normalizeStatus(value);
+        if (ResearchEnums.CONTENT_FORMAT_LONG_ARTICLE.equals(normalized)
+                || ResearchEnums.CONTENT_FORMAT_SHORT_VIDEO.equals(normalized)
+                || ResearchEnums.CONTENT_FORMAT_PODCAST.equals(normalized)
+                || ResearchEnums.CONTENT_FORMAT_X_THREAD.equals(normalized)
+                || ResearchEnums.CONTENT_FORMAT_XIAOHONGSHU_NOTE.equals(normalized)) {
+            return normalized;
+        }
+        return ResearchEnums.CONTENT_FORMAT_LONG_ARTICLE;
+    }
+
+    private String limit(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

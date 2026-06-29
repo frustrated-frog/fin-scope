@@ -268,6 +268,55 @@ const responses: Record<string, unknown> = {
       status: 'IDEA'
     }
   ],
+  '/api/research/runs': [
+    {
+      id: 1,
+      runDate: '2026-06-29',
+      themeCodes: ['china_macro'],
+      sourceCount: 1,
+      fetchedSourceCount: 1,
+      articleCount: 1,
+      eventCount: 1,
+      evidenceCount: 1,
+      learningTaskCount: 2,
+      contentIdeaCount: 1,
+      briefDate: '2026-06-25',
+      status: 'COMPLETED',
+      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2, contentIdeas=1'
+    }
+  ],
+  '/api/research/runs/1': {
+    run: {
+      id: 1,
+      runDate: '2026-06-29',
+      themeCodes: ['china_macro'],
+      sourceCount: 1,
+      fetchedSourceCount: 1,
+      articleCount: 1,
+      eventCount: 1,
+      evidenceCount: 1,
+      learningTaskCount: 2,
+      contentIdeaCount: 1,
+      briefDate: '2026-06-25',
+      status: 'COMPLETED',
+      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2, contentIdeas=1'
+    },
+    plannedSources: [
+      {
+        sourceId: 1,
+        sourceName: 'Macro Source',
+        sourceTier: 'OFFICIAL',
+        themeCodes: ['china_macro'],
+        credibility: 5,
+        enabled: true
+      }
+    ],
+    agentRuns: [
+      { id: 1, researchRunId: 1, nodeName: 'source-fetch', status: 'SUCCESS', durationMs: 12 },
+      { id: 2, researchRunId: 1, nodeName: 'evidence-extract', status: 'FALLBACK', durationMs: 4 },
+      { id: 3, researchRunId: 1, nodeName: 'research-orchestrate', status: 'COMPLETED', durationMs: 40 }
+    ]
+  },
   '/api/agent-runs': [
     { id: 1, nodeName: 'brief-generate', status: 'SUCCESS', durationMs: 12 }
   ]
@@ -298,6 +347,44 @@ beforeEach(() => {
       return {
         ok: true,
         json: async () => state['/api/content-ideas'][0]
+      } as Response;
+    }
+    if (url === '/api/research/runs' && init?.method === 'POST') {
+      const run = {
+        id: 2,
+        runDate: JSON.parse(String(init.body)).runDate,
+        themeCodes: JSON.parse(String(init.body)).themeCodes,
+        sourceCount: 3,
+        fetchedSourceCount: 3,
+        articleCount: 4,
+        eventCount: 2,
+        evidenceCount: 5,
+        learningTaskCount: 3,
+        contentIdeaCount: 2,
+        briefDate: '2026-06-25',
+        status: 'COMPLETED',
+        summary: 'sources=3, fetched=3, articles=4, events=2, evidence=5, learningTasks=3, contentIdeas=2'
+      };
+      state['/api/research/runs'] = [run, ...state['/api/research/runs']];
+      state['/api/research/runs/2'] = {
+        run,
+        plannedSources: [
+          {
+            sourceId: 1,
+            sourceName: 'Macro Source',
+            sourceTier: 'OFFICIAL',
+            themeCodes: ['china_macro'],
+            credibility: 5,
+            enabled: true
+          }
+        ],
+        agentRuns: [
+          { id: 4, researchRunId: 2, nodeName: 'research-orchestrate', status: 'COMPLETED', durationMs: 88 }
+        ]
+      };
+      return {
+        ok: true,
+        json: async () => run
       } as Response;
     }
     return {
@@ -522,6 +609,27 @@ test('brief reader shows research evidence, learning tasks and content ideas', a
   expect(screen.getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
   expect(screen.getByText((content) => content.includes('为什么市场还没等到降息，黄金已经先涨了？'))).toBeInTheDocument();
   expect(screen.getByText((content) => content.includes('证据强度够高，而且能沉淀成长期有效的宏观解释框架。'))).toBeInTheDocument();
+});
+
+test('research workbench runs a full research job and shows agent trace', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Research' }));
+
+  expect(await screen.findByText('生成今日研究')).toBeInTheDocument();
+  expect(screen.getByText('研究运行记录')).toBeInTheDocument();
+  expect(screen.getByText('1/1')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '运行研究' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/research/runs', expect.objectContaining({
+    method: 'POST',
+    body: expect.stringContaining('"themeCodes"')
+  }));
+  expect(await screen.findByText('计划来源')).toBeInTheDocument();
+  expect(screen.getByText('Macro Source')).toBeInTheDocument();
+  expect(await screen.findByText('research-orchestrate')).toBeInTheDocument();
+  expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
 });
 
 test('topics show learning metadata and vault path', async () => {

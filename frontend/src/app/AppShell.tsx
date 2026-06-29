@@ -8,13 +8,14 @@ const navItems: Array<{ id: View; label: string; hint: string; code: string }> =
   { id: 'sources', label: 'Sources', hint: '信源', code: '02' },
   { id: 'article', label: 'Article', hint: '文章', code: '03' },
   { id: 'briefs', label: 'Briefs', hint: '日报', code: '04' },
-  { id: 'events', label: 'Events', hint: '事件', code: '05' },
-  { id: 'evidence', label: 'Evidence', hint: '证据', code: '06' },
-  { id: 'topics', label: 'Topics', hint: '主题', code: '07' },
-  { id: 'learning', label: 'Learning', hint: '学习', code: '08' },
-  { id: 'contentStudio', label: 'Studio', hint: '选题', code: '09' },
-  { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '10' },
-  { id: 'settings', label: 'Settings', hint: '设置', code: '11' }
+  { id: 'research', label: 'Research', hint: '运行', code: '05' },
+  { id: 'events', label: 'Events', hint: '事件', code: '06' },
+  { id: 'evidence', label: 'Evidence', hint: '证据', code: '07' },
+  { id: 'topics', label: 'Topics', hint: '主题', code: '08' },
+  { id: 'learning', label: 'Learning', hint: '学习', code: '09' },
+  { id: 'contentStudio', label: 'Studio', hint: '选题', code: '10' },
+  { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '11' },
+  { id: 'settings', label: 'Settings', hint: '设置', code: '12' }
 ];
 
 export function AppShell({

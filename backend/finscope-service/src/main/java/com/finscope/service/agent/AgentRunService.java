@@ -17,4 +17,8 @@ public class AgentRunService {
     public List<AgentRun> latest(int limit) {
         return agentRunRepository.latest(limit);
     }
+
+    public List<AgentRun> findByResearchRunId(Long researchRunId) {
+        return agentRunRepository.findByResearchRunId(researchRunId);
+    }
 }

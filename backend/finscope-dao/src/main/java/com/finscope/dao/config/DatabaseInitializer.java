@@ -221,15 +221,44 @@ public class DatabaseInitializer implements InitializingBean {
                 + "run_date TEXT NOT NULL,"
                 + "theme_codes TEXT NOT NULL,"
                 + "source_count INTEGER NOT NULL DEFAULT 0,"
+                + "fetched_source_count INTEGER NOT NULL DEFAULT 0,"
+                + "article_count INTEGER NOT NULL DEFAULT 0,"
+                + "event_count INTEGER NOT NULL DEFAULT 0,"
+                + "evidence_count INTEGER NOT NULL DEFAULT 0,"
+                + "learning_task_count INTEGER NOT NULL DEFAULT 0,"
+                + "content_idea_count INTEGER NOT NULL DEFAULT 0,"
+                + "brief_date TEXT,"
                 + "status TEXT NOT NULL,"
                 + "summary TEXT,"
                 + "error_message TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
+        ensureColumn("research_run", "fetched_source_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "article_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "event_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "evidence_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "learning_task_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "content_idea_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "brief_date", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_date ON research_run(run_date)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_status ON research_run(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_source ("
+                + "run_id INTEGER NOT NULL,"
+                + "source_id INTEGER,"
+                + "source_name TEXT NOT NULL,"
+                + "source_tier TEXT,"
+                + "theme_codes TEXT,"
+                + "credibility INTEGER,"
+                + "enabled INTEGER NOT NULL DEFAULT 1,"
+                + "position INTEGER NOT NULL DEFAULT 0,"
+                + "PRIMARY KEY(run_id, position))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_source_run ON research_run_source(run_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_source_source ON research_run_source(source_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS agent_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "research_run_id INTEGER,"
+                + "event_id INTEGER,"
+                + "article_id INTEGER,"
                 + "node_name TEXT NOT NULL,"
                 + "status TEXT NOT NULL,"
                 + "input TEXT,"
@@ -237,6 +266,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "error_message TEXT,"
                 + "duration_ms INTEGER NOT NULL DEFAULT 0,"
                 + "created_at TEXT NOT NULL)");
+        ensureColumn("agent_run", "research_run_id", "INTEGER");
+        ensureColumn("agent_run", "event_id", "INTEGER");
+        ensureColumn("agent_run", "article_id", "INTEGER");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_research ON agent_run(research_run_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_event ON agent_run(event_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_article ON agent_run(article_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS export_manifest ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "file_name TEXT NOT NULL,"

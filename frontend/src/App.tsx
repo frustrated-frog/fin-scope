@@ -10,6 +10,7 @@ import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
 import { LearningView } from './features/learning/LearningView';
+import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
 import { SourcesView } from './features/sources/SourcesView';
 import { TopicsView } from './features/topics/TopicsView';
@@ -24,6 +25,8 @@ import {
   EvidenceItem,
   EventCluster,
   LearningTask,
+  ResearchRun,
+  ResearchRunDetail,
   Source,
   ToastItem,
   Topic,
@@ -46,6 +49,9 @@ export default function App() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
+  const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
+  const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
+  const [researchBusy, setResearchBusy] = useState(false);
   const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
@@ -70,6 +76,7 @@ export default function App() {
       topicData,
       learningTaskData,
       contentIdeaData,
+      researchRunData,
       agentData
     ] = await Promise.all([
       api<Dashboard>('/api/dashboard'),
@@ -81,6 +88,7 @@ export default function App() {
       api<Topic[]>('/api/topics'),
       api<LearningTask[]>('/api/learning-tasks'),
       api<ContentIdea[]>('/api/content-ideas'),
+      api<ResearchRun[]>('/api/research/runs'),
       api<AgentRun[]>('/api/agent-runs')
     ]);
     setDashboard(dashboardData);
@@ -92,6 +100,7 @@ export default function App() {
     setTopics(topicData);
     setLearningTasks(learningTaskData);
     setContentIdeas(contentIdeaData);
+    setResearchRuns(researchRunData);
     setAgentRuns(agentData);
   };
 
@@ -122,6 +131,8 @@ export default function App() {
         return 'Article';
       case 'briefs':
         return 'Briefs';
+      case 'research':
+        return 'Research';
       case 'events':
         return 'Events';
       case 'evidence':
@@ -165,6 +176,37 @@ export default function App() {
       setMessage('简报已打开');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '简报打开失败');
+    }
+  }
+
+  async function openResearchRun(id: number) {
+    const detail = await api<ResearchRunDetail>(`/api/research/runs/${id}`);
+    setResearchRunDetail(detail);
+  }
+
+  async function runResearch(input: {
+    runDate: string;
+    themeCodes: string[];
+    maxSourcesPerTheme: number;
+    includeDisabled: boolean;
+  }) {
+    setResearchBusy(true);
+    setMessage('正在运行研究');
+    try {
+      const run = await api<ResearchRun>('/api/research/runs', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      });
+      await refresh();
+      await openResearchRun(run.id);
+      setMessage(`研究运行完成：${run.status}`);
+      addToast(`研究运行完成：${run.status}`, run.status === 'FAILED' ? 'error' : 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '研究运行失败';
+      setMessage(message);
+      addToast(message, 'error');
+    } finally {
+      setResearchBusy(false);
     }
   }
 
@@ -246,6 +288,16 @@ export default function App() {
           researchContext={selectedBriefContext}
           onBack={() => setView('briefs')}
           onCompound={compoundBriefToTopics}
+        />
+      )}
+      {view === 'research' && (
+        <ResearchView
+          runs={researchRuns}
+          detail={researchRunDetail}
+          busy={researchBusy}
+          onRun={runResearch}
+          onOpenRun={openResearchRun}
+          onOpenBrief={openBrief}
         />
       )}
       {view === 'events' && <EventsView events={events} initialEventId={focusedEventId} />}
