@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
@@ -12,14 +13,10 @@ import java.util.Map;
 
 @Component
 public class DatabaseInitializer implements InitializingBean {
-    private final JdbcTemplate jdbcTemplate;
-    private final String dataRoot;
-
-    public DatabaseInitializer(JdbcTemplate jdbcTemplate,
-                               @Value("${finscope.data-root:../data}") String dataRoot) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.dataRoot = dataRoot;
-    }
+    @Resource
+    private JdbcTemplate jdbcTemplate;
+    @Value("${finscope.data-root:../data}")
+    private String dataRoot;
 
     @Override
     public void afterPropertiesSet() throws Exception {

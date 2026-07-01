@@ -4,13 +4,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import javax.annotation.Resource;
+
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
-    private final FinScopeProperties properties;
-
-    public CorsConfig(FinScopeProperties properties) {
-        this.properties = properties;
-    }
+    @Resource
+    private FinScopeProperties properties;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {

@@ -14,32 +14,31 @@ import com.finscope.domain.source.Source;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class EvidenceService {
     private static final Pattern DATA_PATTERN = Pattern.compile(".*(\\d|%|％|亿美元|亿元|万亿|bp|bps|million|billion|trillion).*",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+(?:\\.\\d+)?%?");
 
-    private final EvidenceItemRepository evidenceItemRepository;
-    private final SourceRepository sourceRepository;
-    private final AgentRunRepository agentRunRepository;
-    private final LlmChatClient llmChatClient;
+    @Resource
+    private EvidenceItemRepository evidenceItemRepository;
+    @Resource
+    private SourceRepository sourceRepository;
+    @Resource
+    private AgentRunRepository agentRunRepository;
+    @Resource
+    private LlmChatClient llmChatClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    public EvidenceService(EvidenceItemRepository evidenceItemRepository,
-                           SourceRepository sourceRepository,
-                           AgentRunRepository agentRunRepository,
-                           LlmChatClient llmChatClient) {
-        this.evidenceItemRepository = evidenceItemRepository;
-        this.sourceRepository = sourceRepository;
-        this.agentRunRepository = agentRunRepository;
-        this.llmChatClient = llmChatClient;
-    }
 
     public int capture(EventCluster event, Article article) {
         long start = System.currentTimeMillis();
@@ -100,8 +99,11 @@ public class EvidenceService {
             return items;
         }
         for (JsonNode node : itemsNode) {
-            String claim = text(node, "claim", "");
+            String claim = text(node, "claim", "").replaceAll("\\s+", " ").trim();
             if (StringUtils.isBlank(claim)) {
+                continue;
+            }
+            if (!isGroundedClaim(claim, article)) {
                 continue;
             }
             EvidenceItem item = new EvidenceItem();
@@ -109,7 +111,7 @@ public class EvidenceService {
             item.setArticleId(article.getId());
             item.setSourceTier(sourceTier);
             item.setEvidenceType(validEvidenceType(text(node, "evidenceType", resolveEvidenceType(article))));
-            item.setClaim(limit(claim.replaceAll("\\s+", " ").trim(), 180));
+            item.setClaim(limit(claim, 180));
             item.setConfidence(clamp(node.path("confidence").asInt(resolveConfidence(sourceTier))));
             items.add(item);
             if (items.size() >= 5) {
@@ -117,6 +119,34 @@ public class EvidenceService {
             }
         }
         return items;
+    }
+
+    private boolean isGroundedClaim(String claim, Article article) {
+        String claimNorm = normalizeGroundingText(claim);
+        String articleNorm = normalizeGroundingText(searchable(article));
+        if (claimNorm.length() < 4 || articleNorm.length() < 4) {
+            return false;
+        }
+        if (articleNorm.contains(claimNorm)) {
+            return true;
+        }
+        List<String> numbers = numbers(claimNorm);
+        for (String number : numbers) {
+            if (!articleNorm.contains(number)) {
+                return false;
+            }
+        }
+        List<String> terms = groundingTerms(claimNorm);
+        int hits = 0;
+        for (String term : terms) {
+            if (articleNorm.contains(term)) {
+                hits++;
+            }
+        }
+        if (!numbers.isEmpty()) {
+            return hits >= 1;
+        }
+        return hits >= 2 || (!terms.isEmpty() && hits * 100 / terms.size() >= 45);
     }
 
     private String evidenceSystemPrompt() {
@@ -221,6 +251,49 @@ public class EvidenceService {
         return (StringUtils.firstNonBlank(article.getTitle(), "") + " "
                 + StringUtils.firstNonBlank(article.getSummary(), "") + " "
                 + StringUtils.firstNonBlank(article.getBody(), "")).toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeGroundingText(String text) {
+        return StringUtils.firstNonBlank(text, "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[\\s\\p{Punct}，。！？、；：‘’“”（）《》【】％]", "");
+    }
+
+    private List<String> numbers(String text) {
+        List<String> values = new ArrayList<String>();
+        Matcher matcher = NUMBER_PATTERN.matcher(text);
+        while (matcher.find()) {
+            values.add(matcher.group());
+        }
+        return values;
+    }
+
+    private List<String> groundingTerms(String claimNorm) {
+        String text = claimNorm.replaceAll("\\d+(?:\\.\\d+)?%?", "");
+        Set<String> terms = new LinkedHashSet<String>();
+        int max = Math.min(8, text.length());
+        for (int size = max; size >= 3; size--) {
+            for (int index = 0; index + size <= text.length(); index++) {
+                String term = text.substring(index, index + size);
+                if (meaningfulTerm(term)) {
+                    terms.add(term);
+                }
+            }
+            if (terms.size() >= 8) {
+                break;
+            }
+        }
+        return new ArrayList<String>(terms);
+    }
+
+    private boolean meaningfulTerm(String term) {
+        if (StringUtils.isBlank(term)) {
+            return false;
+        }
+        if (containsAny(term, "公司披露", "据报道", "表示称", "市场认为")) {
+            return false;
+        }
+        return !containsAny(term, "亿美元", "万亿美元", "亿元", "万亿元", "million", "billion", "trillion");
     }
 
     private boolean containsAny(String text, String... keywords) {

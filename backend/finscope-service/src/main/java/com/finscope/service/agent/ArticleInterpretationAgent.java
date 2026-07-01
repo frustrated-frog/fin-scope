@@ -12,6 +12,7 @@ import com.finscope.service.topic.TopicExtraction;
 import com.finscope.service.topic.TopicExtractor;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -21,21 +22,18 @@ public class ArticleInterpretationAgent {
     private static final String NODE_NAME = "article-interpret";
     private static final int PROMPT_BODY_LIMIT = 9000;
     private static final int FULL_TEXT_MIN_LENGTH = 800;
-    private final LlmChatClient llmChatClient;
-    private final AgentRunRepository agentRunRepository;
-    private final TopicExtractor topicExtractor;
-    private final InsightCardGenerator insightCardGenerator;
+
+    @Resource
+    private LlmChatClient llmChatClient;
+    @Resource
+    private AgentRunRepository agentRunRepository;
+    @Resource
+    private TopicExtractor topicExtractor;
+    @Resource
+    private InsightCardGenerator insightCardGenerator;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ArticleInterpretationAgent(LlmChatClient llmChatClient,
-                                      AgentRunRepository agentRunRepository,
-                                      TopicExtractor topicExtractor,
-                                      InsightCardGenerator insightCardGenerator) {
-        this.llmChatClient = llmChatClient;
-        this.agentRunRepository = agentRunRepository;
-        this.topicExtractor = topicExtractor;
-        this.insightCardGenerator = insightCardGenerator;
-    }
 
     public boolean isConfigured() {
         return llmChatClient != null && llmChatClient.isConfigured();

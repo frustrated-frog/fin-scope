@@ -10,6 +10,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -19,7 +20,8 @@ import java.util.Optional;
 
 @Repository
 public class TopicRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<Topic> mapper = (rs, rowNum) -> {
         Topic topic = new Topic();
         topic.setId(rs.getLong("id"));
@@ -62,10 +64,6 @@ public class TopicRepository {
         brief.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return brief;
     };
-
-    public TopicRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public Topic save(Topic topic) {
         LocalDateTime now = LocalDateTime.now();

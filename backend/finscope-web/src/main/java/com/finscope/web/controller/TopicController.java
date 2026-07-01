@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -17,11 +18,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/topics")
 public class TopicController {
-    private final TopicService topicService;
-
-    public TopicController(TopicService topicService) {
-        this.topicService = topicService;
-    }
+    @Resource
+    private TopicService topicService;
 
     @GetMapping
     public List<Topic> list() {

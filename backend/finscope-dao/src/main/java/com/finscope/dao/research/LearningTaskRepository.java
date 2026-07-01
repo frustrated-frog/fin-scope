@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -16,7 +17,8 @@ import java.util.Optional;
 
 @Repository
 public class LearningTaskRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<LearningTask> mapper = (rs, rowNum) -> {
         LearningTask task = new LearningTask();
         task.setId(rs.getLong("id"));
@@ -31,10 +33,6 @@ public class LearningTaskRepository {
         task.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
         return task;
     };
-
-    public LearningTaskRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public LearningTask save(LearningTask task) {
         LocalDateTime now = LocalDateTime.now();

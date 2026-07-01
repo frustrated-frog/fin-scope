@@ -10,6 +10,7 @@ import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,23 +20,16 @@ import java.util.Set;
 
 @Service
 public class BriefResearchContextService {
-    private final ArticleRepository articleRepository;
-    private final EventClusterRepository eventClusterRepository;
-    private final EvidenceService evidenceService;
-    private final LearningTaskService learningTaskService;
-    private final ContentIdeaService contentIdeaService;
-
-    public BriefResearchContextService(ArticleRepository articleRepository,
-                                       EventClusterRepository eventClusterRepository,
-                                       EvidenceService evidenceService,
-                                       LearningTaskService learningTaskService,
-                                       ContentIdeaService contentIdeaService) {
-        this.articleRepository = articleRepository;
-        this.eventClusterRepository = eventClusterRepository;
-        this.evidenceService = evidenceService;
-        this.learningTaskService = learningTaskService;
-        this.contentIdeaService = contentIdeaService;
-    }
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private EventClusterRepository eventClusterRepository;
+    @Resource
+    private EvidenceService evidenceService;
+    @Resource
+    private LearningTaskService learningTaskService;
+    @Resource
+    private ContentIdeaService contentIdeaService;
 
     public BriefResearchContext build(LocalDate date) {
         BriefResearchContext context = new BriefResearchContext();

@@ -5,6 +5,7 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.insight.InsightCardGenerator;
 import com.finscope.service.topic.TopicExtractor;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 
@@ -14,7 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ArticleInterpretationAgentTest {
     private ArticleInterpretationAgent agent(LlmChatClient llmClient) {
-        return new ArticleInterpretationAgent(llmClient, null, new TopicExtractor(), new InsightCardGenerator());
+        ArticleInterpretationAgent agent = new ArticleInterpretationAgent();
+        ReflectionTestUtils.setField(agent, "llmChatClient", llmClient);
+        ReflectionTestUtils.setField(agent, "agentRunRepository", null);
+        ReflectionTestUtils.setField(agent, "topicExtractor", new TopicExtractor());
+        ReflectionTestUtils.setField(agent, "insightCardGenerator", new InsightCardGenerator());
+        return agent;
     }
 
     @Test

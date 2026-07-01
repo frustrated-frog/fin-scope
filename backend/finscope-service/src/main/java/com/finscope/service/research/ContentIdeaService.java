@@ -15,6 +15,7 @@ import com.finscope.domain.research.ResearchEnums;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,21 +33,15 @@ public class ContentIdeaService {
             ResearchEnums.CONTENT_STATUS_PUBLISHED,
             ResearchEnums.CONTENT_STATUS_ARCHIVED));
 
-    private final ContentIdeaRepository contentIdeaRepository;
-    private final EvidenceService evidenceService;
-    private final AgentRunRepository agentRunRepository;
-    private final LlmChatClient llmChatClient;
+    @Resource
+    private ContentIdeaRepository contentIdeaRepository;
+    @Resource
+    private EvidenceService evidenceService;
+    @Resource
+    private AgentRunRepository agentRunRepository;
+    @Resource
+    private LlmChatClient llmChatClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    public ContentIdeaService(ContentIdeaRepository contentIdeaRepository,
-                              EvidenceService evidenceService,
-                              AgentRunRepository agentRunRepository,
-                              LlmChatClient llmChatClient) {
-        this.contentIdeaRepository = contentIdeaRepository;
-        this.evidenceService = evidenceService;
-        this.agentRunRepository = agentRunRepository;
-        this.llmChatClient = llmChatClient;
-    }
 
     public void generateIfAbsent(EventCluster event, Article article, boolean meaningfulUpdate) {
         if (!meaningfulUpdate || event == null || event.getId() == null) {

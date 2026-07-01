@@ -16,6 +16,7 @@ import com.finscope.service.research.ResearchRunContext;
 import com.finscope.service.vault.VaultWriter;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
@@ -26,33 +27,23 @@ import java.util.stream.Collectors;
 public class BriefService {
     private static final String GENERATED_BRIEF_TITLE_PREFIX = "每日金融、投资、创业学习简报 - ";
 
-    private final ArticleRepository articleRepository;
-    private final BriefRepository briefRepository;
-    private final InsightCardRepository insightCardRepository;
-    private final BriefGenerator briefGenerator;
-    private final VaultWriter vaultWriter;
-    private final AgentRunRepository agentRunRepository;
-    private final BriefResearchContextService briefResearchContextService;
-    private final LlmChatClient llmChatClient;
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private BriefRepository briefRepository;
+    @Resource
+    private InsightCardRepository insightCardRepository;
+    @Resource
+    private BriefGenerator briefGenerator;
+    @Resource
+    private VaultWriter vaultWriter;
+    @Resource
+    private AgentRunRepository agentRunRepository;
+    @Resource
+    private BriefResearchContextService briefResearchContextService;
+    @Resource
+    private LlmChatClient llmChatClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    public BriefService(ArticleRepository articleRepository,
-                        BriefRepository briefRepository,
-                        InsightCardRepository insightCardRepository,
-                        BriefGenerator briefGenerator,
-                        VaultWriter vaultWriter,
-                        AgentRunRepository agentRunRepository,
-                        BriefResearchContextService briefResearchContextService,
-                        LlmChatClient llmChatClient) {
-        this.articleRepository = articleRepository;
-        this.briefRepository = briefRepository;
-        this.insightCardRepository = insightCardRepository;
-        this.briefGenerator = briefGenerator;
-        this.vaultWriter = vaultWriter;
-        this.agentRunRepository = agentRunRepository;
-        this.briefResearchContextService = briefResearchContextService;
-        this.llmChatClient = llmChatClient;
-    }
 
     public Brief generateToday() {
         return generate(LocalDate.now());

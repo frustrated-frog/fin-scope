@@ -8,23 +8,19 @@ import com.finscope.service.agent.ArticleInterpretationAgent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 @Slf4j
 public class InsightCardService {
-    private final InsightCardRepository insightCardRepository;
-    private final InsightCardGenerator insightCardGenerator;
-    private final ArticleInterpretationAgent articleInterpretationAgent;
-
-    public InsightCardService(InsightCardRepository insightCardRepository,
-                              InsightCardGenerator insightCardGenerator,
-                              ArticleInterpretationAgent articleInterpretationAgent) {
-        this.insightCardRepository = insightCardRepository;
-        this.insightCardGenerator = insightCardGenerator;
-        this.articleInterpretationAgent = articleInterpretationAgent;
-    }
+    @Resource
+    private InsightCardRepository insightCardRepository;
+    @Resource
+    private InsightCardGenerator insightCardGenerator;
+    @Resource
+    private ArticleInterpretationAgent articleInterpretationAgent;
 
     public InsightCard createForArticle(Article article) {
         Optional<InsightCard> existing = insightCardRepository.findByArticleId(article.getId());

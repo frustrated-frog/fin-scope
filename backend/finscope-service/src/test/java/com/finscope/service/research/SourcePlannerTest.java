@@ -3,6 +3,7 @@ package com.finscope.service.research;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SourcePlannerTest {
     private final ThemeProfileService themeProfileService = new ThemeProfileService();
-    private final SourcePlanner sourcePlanner = new SourcePlanner(themeProfileService);
+    private final SourcePlanner sourcePlanner = sourcePlanner();
 
     @Test
     void plansEnabledSourcesByThemeAndRespectsPerThemeLimit() {
@@ -62,5 +63,11 @@ class SourcePlannerTest {
         profile.setCredibility(credibility);
         profile.setThemeCodes(Arrays.asList(themeCodes.split(",")));
         return profile;
+    }
+
+    private SourcePlanner sourcePlanner() {
+        SourcePlanner planner = new SourcePlanner();
+        ReflectionTestUtils.setField(planner, "themeProfileService", themeProfileService);
+        return planner;
     }
 }

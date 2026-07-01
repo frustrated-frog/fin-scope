@@ -20,50 +20,37 @@ import com.finscope.service.brief.BriefService;
 import com.finscope.service.fetch.FetchService;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class ResearchService {
-    private final ThemeProfileService themeProfileService;
-    private final SourcePlanner sourcePlanner;
-    private final SourceRepository sourceRepository;
-    private final ResearchRunRepository researchRunRepository;
-    private final FetchService fetchService;
-    private final BriefService briefService;
-    private final ArticleRepository articleRepository;
-    private final EventClusterRepository eventClusterRepository;
-    private final EvidenceItemRepository evidenceItemRepository;
-    private final LearningTaskRepository learningTaskRepository;
-    private final ContentIdeaRepository contentIdeaRepository;
-    private final AgentRunRepository agentRunRepository;
-
-    public ResearchService(ThemeProfileService themeProfileService,
-                           SourcePlanner sourcePlanner,
-                           SourceRepository sourceRepository,
-                           ResearchRunRepository researchRunRepository,
-                           FetchService fetchService,
-                           BriefService briefService,
-                           ArticleRepository articleRepository,
-                           EventClusterRepository eventClusterRepository,
-                           EvidenceItemRepository evidenceItemRepository,
-                           LearningTaskRepository learningTaskRepository,
-                           ContentIdeaRepository contentIdeaRepository,
-                           AgentRunRepository agentRunRepository) {
-        this.themeProfileService = themeProfileService;
-        this.sourcePlanner = sourcePlanner;
-        this.sourceRepository = sourceRepository;
-        this.researchRunRepository = researchRunRepository;
-        this.fetchService = fetchService;
-        this.briefService = briefService;
-        this.articleRepository = articleRepository;
-        this.eventClusterRepository = eventClusterRepository;
-        this.evidenceItemRepository = evidenceItemRepository;
-        this.learningTaskRepository = learningTaskRepository;
-        this.contentIdeaRepository = contentIdeaRepository;
-        this.agentRunRepository = agentRunRepository;
-    }
+    @Resource
+    private ThemeProfileService themeProfileService;
+    @Resource
+    private SourcePlanner sourcePlanner;
+    @Resource
+    private SourceRepository sourceRepository;
+    @Resource
+    private ResearchRunRepository researchRunRepository;
+    @Resource
+    private FetchService fetchService;
+    @Resource
+    private BriefService briefService;
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private EventClusterRepository eventClusterRepository;
+    @Resource
+    private EvidenceItemRepository evidenceItemRepository;
+    @Resource
+    private LearningTaskRepository learningTaskRepository;
+    @Resource
+    private ContentIdeaRepository contentIdeaRepository;
+    @Resource
+    private AgentRunRepository agentRunRepository;
 
     public ResearchRunPlan createRun(LocalDate runDate,
                                      List<String> themeCodes,

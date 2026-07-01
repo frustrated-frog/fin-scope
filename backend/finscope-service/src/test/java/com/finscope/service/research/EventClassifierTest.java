@@ -5,6 +5,7 @@ import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.service.dedupe.FingerprintService;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -14,7 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class EventClassifierTest {
-    private final EventClassifier classifier = new EventClassifier(new FingerprintService());
+    private final EventClassifier classifier = classifier();
+
+    private EventClassifier classifier() {
+        EventClassifier classifier = new EventClassifier();
+        ReflectionTestUtils.setField(classifier, "fingerprintService", new FingerprintService());
+        return classifier;
+    }
 
     @Test
     void classifiesFollowUpWhenSameEventAddsNewNumbers() {

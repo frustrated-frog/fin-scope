@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -16,7 +17,8 @@ import java.util.List;
 
 @Repository
 public class EvidenceItemRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
 
     private final RowMapper<EvidenceItem> mapper = (rs, rowNum) -> {
         EvidenceItem item = new EvidenceItem();
@@ -30,10 +32,6 @@ public class EvidenceItemRepository {
         item.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return item;
     };
-
-    public EvidenceItemRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public EvidenceItem save(EvidenceItem item) {
         if (item.getCreatedAt() == null) {

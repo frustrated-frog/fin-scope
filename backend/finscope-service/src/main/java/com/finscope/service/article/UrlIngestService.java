@@ -10,20 +10,20 @@ import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
 import java.net.URI;
 import java.util.List;
 
 @Service
 @Slf4j
 public class UrlIngestService {
-    private final SourceAdapterRegistry adapterRegistry;
-    private final ArticleIngestCoordinator articleIngestCoordinator;
 
-    public UrlIngestService(SourceAdapterRegistry adapterRegistry,
-                            ArticleIngestCoordinator articleIngestCoordinator) {
-        this.adapterRegistry = adapterRegistry;
-        this.articleIngestCoordinator = articleIngestCoordinator;
-    }
+    @Resource
+    private SourceAdapterRegistry adapterRegistry;
+    @Resource
+    private ArticleIngestCoordinator articleIngestCoordinator;
+
 
     public ArticleIngestResult ingest(String url, String sourceName, String tags) {
         validateUrl(url);

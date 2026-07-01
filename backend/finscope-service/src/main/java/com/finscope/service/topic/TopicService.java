@@ -15,6 +15,7 @@ import com.finscope.service.vault.VaultWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -26,29 +27,20 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 public class TopicService {
-    private final TopicRepository topicRepository;
-    private final ArticleRepository articleRepository;
-    private final BriefRepository briefRepository;
-    private final InsightCardRepository insightCardRepository;
-    private final TopicExtractor topicExtractor;
-    private final ArticleInterpretationAgent articleInterpretationAgent;
-    private final VaultWriter vaultWriter;
-
-    public TopicService(TopicRepository topicRepository,
-                        ArticleRepository articleRepository,
-                        BriefRepository briefRepository,
-                        InsightCardRepository insightCardRepository,
-                        TopicExtractor topicExtractor,
-                        ArticleInterpretationAgent articleInterpretationAgent,
-                        VaultWriter vaultWriter) {
-        this.topicRepository = topicRepository;
-        this.articleRepository = articleRepository;
-        this.briefRepository = briefRepository;
-        this.insightCardRepository = insightCardRepository;
-        this.topicExtractor = topicExtractor;
-        this.articleInterpretationAgent = articleInterpretationAgent;
-        this.vaultWriter = vaultWriter;
-    }
+    @Resource
+    private TopicRepository topicRepository;
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private BriefRepository briefRepository;
+    @Resource
+    private InsightCardRepository insightCardRepository;
+    @Resource
+    private TopicExtractor topicExtractor;
+    @Resource
+    private ArticleInterpretationAgent articleInterpretationAgent;
+    @Resource
+    private VaultWriter vaultWriter;
 
     public List<Topic> list() {
         return topicRepository.findAll();

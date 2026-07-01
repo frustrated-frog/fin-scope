@@ -10,17 +10,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/events")
 public class EventController {
-    private final EventClusterService eventClusterService;
-
-    public EventController(EventClusterService eventClusterService) {
-        this.eventClusterService = eventClusterService;
-    }
+    @Resource
+    private EventClusterService eventClusterService;
 
     @GetMapping
     public List<EventCluster> list(@RequestParam(required = false) String themeCode,

@@ -54,7 +54,7 @@ class RssSourceAdapterTest {
         assertTrue(item.getBody().contains("摘要：arXiv:2606.23927v1"));
         assertFalse(item.getBody().contains("<description>"));
         assertEquals("RSS_ITEM", item.getContentType());
-        assertEquals("rss:rome", item.getExtractionMethod());
+        assertEquals("rss:rome-markdown", item.getExtractionMethod());
         assertTrue(item.getQualityScore() >= 80);
     }
 

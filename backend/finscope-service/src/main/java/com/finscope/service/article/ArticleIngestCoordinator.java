@@ -16,26 +16,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.Resource;
+
 @Service
 @Slf4j
 public class ArticleIngestCoordinator {
-    private final ArticleRepository articleRepository;
-    private final FingerprintService fingerprintService;
-    private final NoveltyService noveltyService;
-    private final InsightCardService insightCardService;
-    private final EventClusterService eventClusterService;
-
-    public ArticleIngestCoordinator(ArticleRepository articleRepository,
-                                    FingerprintService fingerprintService,
-                                    NoveltyService noveltyService,
-                                    InsightCardService insightCardService,
-                                    EventClusterService eventClusterService) {
-        this.articleRepository = articleRepository;
-        this.fingerprintService = fingerprintService;
-        this.noveltyService = noveltyService;
-        this.insightCardService = insightCardService;
-        this.eventClusterService = eventClusterService;
-    }
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private FingerprintService fingerprintService;
+    @Resource
+    private NoveltyService noveltyService;
+    @Resource
+    private InsightCardService insightCardService;
+    @Resource
+    private EventClusterService eventClusterService;
 
     @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {

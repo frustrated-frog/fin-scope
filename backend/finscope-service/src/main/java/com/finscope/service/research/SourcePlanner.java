@@ -4,6 +4,7 @@ import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,11 +16,8 @@ import java.util.Set;
 
 @Service
 public class SourcePlanner {
-    private final ThemeProfileService themeProfileService;
-
-    public SourcePlanner(ThemeProfileService themeProfileService) {
-        this.themeProfileService = themeProfileService;
-    }
+    @Resource
+    private ThemeProfileService themeProfileService;
 
     public List<SourceProfile> plan(LocalDate runDate,
                                     List<String> themeCodes,

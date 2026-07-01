@@ -3,17 +3,13 @@ package com.finscope.rpc.source;
 import com.finscope.domain.source.Source;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.util.List;
 
 @Component
 public class SourceAdapterRegistry {
-
-
-    private final List<SourceAdapter> adapters;
-
-    public SourceAdapterRegistry(List<SourceAdapter> adapters) {
-        this.adapters = adapters;
-    }
+    @Resource
+    private List<SourceAdapter> adapters;
 
     public SourceAdapter get(String type) {
         for (SourceAdapter adapter : adapters) {

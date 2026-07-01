@@ -9,18 +9,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api")
 public class EvidenceController {
-    private final EventClusterService eventClusterService;
-    private final EvidenceService evidenceService;
-
-    public EvidenceController(EventClusterService eventClusterService, EvidenceService evidenceService) {
-        this.eventClusterService = eventClusterService;
-        this.evidenceService = evidenceService;
-    }
+    @Resource
+    private EventClusterService eventClusterService;
+    @Resource
+    private EvidenceService evidenceService;
 
     @GetMapping("/events/{eventId}/evidence")
     public List<EvidenceItem> list(@PathVariable Long eventId) {

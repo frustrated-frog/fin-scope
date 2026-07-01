@@ -9,17 +9,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/briefs")
 public class BriefController {
-    private final BriefService briefService;
-
-    public BriefController(BriefService briefService) {
-        this.briefService = briefService;
-    }
+    @Resource
+    private BriefService briefService;
 
     @PostMapping("/generate")
     public Brief generate() {

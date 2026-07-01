@@ -6,12 +6,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public class AgentRunRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<AgentRun> mapper = (rs, rowNum) -> {
         AgentRun run = new AgentRun();
         run.setId(rs.getLong("id"));
@@ -27,10 +29,6 @@ public class AgentRunRepository {
         run.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return run;
     };
-
-    public AgentRunRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public void record(String nodeName, String status, String input, String output, String errorMessage, long durationMs) {
         record(null, null, null, nodeName, status, input, output, errorMessage, durationMs);

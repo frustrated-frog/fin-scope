@@ -14,18 +14,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/research/runs")
 public class ResearchController {
-    private final ResearchService researchService;
-    private final AgentRunService agentRunService;
-
-    public ResearchController(ResearchService researchService, AgentRunService agentRunService) {
-        this.researchService = researchService;
-        this.agentRunService = agentRunService;
-    }
+    @Resource
+    private ResearchService researchService;
+    @Resource
+    private AgentRunService agentRunService;
 
     @PostMapping
     public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {

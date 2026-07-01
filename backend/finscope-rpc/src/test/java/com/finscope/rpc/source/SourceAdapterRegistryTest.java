@@ -2,6 +2,7 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.source.Source;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
 
@@ -14,7 +15,8 @@ class SourceAdapterRegistryTest {
         source.setType("WEB");
         source.setUrl("https://x.com/justloveabit/status/2069292114794762335");
 
-        SourceAdapterRegistry registry = new SourceAdapterRegistry(Arrays.asList(
+        SourceAdapterRegistry registry = new SourceAdapterRegistry();
+        ReflectionTestUtils.setField(registry, "adapters", Arrays.asList(
                 new WebSourceAdapter(),
                 new XPostSourceAdapter("http://localhost:1", "http://localhost:1")));
 

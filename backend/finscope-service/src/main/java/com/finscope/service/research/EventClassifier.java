@@ -7,6 +7,7 @@ import com.finscope.domain.research.ResearchEnums;
 import com.finscope.service.dedupe.FingerprintService;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -17,14 +18,12 @@ import java.util.regex.Pattern;
 
 @Component
 public class EventClassifier {
+
     private static final Pattern NUMBER_PATTERN = Pattern.compile(".*(\\d|%|％|亿美元|亿元|万亿|million|billion|trillion).*",
             Pattern.CASE_INSENSITIVE);
 
-    private final FingerprintService fingerprintService;
-
-    public EventClassifier(FingerprintService fingerprintService) {
-        this.fingerprintService = fingerprintService;
-    }
+    @Resource
+    private FingerprintService fingerprintService;
 
     public EventSignature signature(Article article) {
         String text = searchable(article);

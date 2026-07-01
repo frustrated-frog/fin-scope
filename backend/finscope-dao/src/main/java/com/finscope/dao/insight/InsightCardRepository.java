@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -16,7 +17,8 @@ import java.util.Optional;
 
 @Repository
 public class InsightCardRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<InsightCard> mapper = (rs, rowNum) -> {
         InsightCard card = new InsightCard();
         card.setId(rs.getLong("id"));
@@ -52,10 +54,6 @@ public class InsightCardRepository {
         card.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
         return card;
     };
-
-    public InsightCardRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public InsightCard save(InsightCard card) {
         LocalDateTime now = LocalDateTime.now();

@@ -9,10 +9,14 @@ import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import javax.annotation.Resource;
 import java.nio.file.Paths;
 
 @Configuration
 public class AppConfig {
+    @Resource
+    private FinScopeProperties properties;
+
     @Bean
     public FingerprintService fingerprintService() {
         return new FingerprintService();
@@ -24,17 +28,17 @@ public class AppConfig {
     }
 
     @Bean
-    public VaultWriter vaultWriter(FinScopeProperties properties) {
+    public VaultWriter vaultWriter() {
         return new VaultWriter(Paths.get(properties.getDataRoot()).resolve("vault"));
     }
 
     @Bean
-    public ExportService exportService(FinScopeProperties properties) {
+    public ExportService exportService() {
         return new ExportService(Paths.get(properties.getDataRoot()));
     }
 
     @Bean
-    public LlmChatClient llmChatClient(FinScopeProperties properties) {
+    public LlmChatClient llmChatClient() {
         FinScopeProperties.LlmProperties llm = properties.getLlm();
         return new OpenAiCompatibleLlmClient(
                 llm.isEnabled(),

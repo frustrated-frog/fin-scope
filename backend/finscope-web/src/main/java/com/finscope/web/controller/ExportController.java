@@ -5,17 +5,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.util.Collections;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
 public class ExportController {
-    private final ExportService exportService;
-
-    public ExportController(ExportService exportService) {
-        this.exportService = exportService;
-    }
+    @Resource
+    private ExportService exportService;
 
     @PostMapping("/exports")
     public Map<String, Object> exportData() {

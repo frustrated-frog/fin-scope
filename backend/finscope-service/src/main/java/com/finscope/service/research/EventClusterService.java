@@ -8,6 +8,7 @@ import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -15,23 +16,17 @@ import java.util.stream.Collectors;
 
 @Service
 public class EventClusterService {
-    private final EventClusterRepository eventClusterRepository;
-    private final EventClassifier eventClassifier;
-    private final EvidenceService evidenceService;
-    private final LearningTaskService learningTaskService;
-    private final ContentIdeaService contentIdeaService;
 
-    public EventClusterService(EventClusterRepository eventClusterRepository,
-                               EventClassifier eventClassifier,
-                               EvidenceService evidenceService,
-                               LearningTaskService learningTaskService,
-                               ContentIdeaService contentIdeaService) {
-        this.eventClusterRepository = eventClusterRepository;
-        this.eventClassifier = eventClassifier;
-        this.evidenceService = evidenceService;
-        this.learningTaskService = learningTaskService;
-        this.contentIdeaService = contentIdeaService;
-    }
+    @Resource
+    private EventClusterRepository eventClusterRepository;
+    @Resource
+    private EventClassifier eventClassifier;
+    @Resource
+    private EvidenceService evidenceService;
+    @Resource
+    private LearningTaskService learningTaskService;
+    @Resource
+    private ContentIdeaService contentIdeaService;
 
     public EventCluster attachArticle(Article article) {
         if (article == null || article.getId() == null) {
@@ -123,7 +118,7 @@ public class EventClusterService {
                 || ResearchEnums.NOVELTY_NEW.equals(decision.getNoveltyType())) {
             event.setLastMeaningfulUpdateAt(seenAt);
             event.setNoveltyState(decision.getNoveltyType());
-            if (article.getSummary() != null && article.getSummary().length() > 0) {
+            if (article.getSummary() != null && !article.getSummary().isEmpty()) {
                 event.setSummary(article.getSummary());
             }
         } else if (!ResearchEnums.NOVELTY_FOLLOW_UP.equals(event.getNoveltyState())) {
@@ -147,9 +142,6 @@ public class EventClusterService {
         if (dateFrom != null && seenDate.isBefore(dateFrom)) {
             return false;
         }
-        if (dateTo != null && seenDate.isAfter(dateTo)) {
-            return false;
-        }
-        return true;
+        return dateTo == null || !seenDate.isAfter(dateTo);
     }
 }

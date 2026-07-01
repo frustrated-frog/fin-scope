@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -15,7 +16,8 @@ import java.util.List;
 
 @Repository
 public class FetchRunRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<FetchRun> mapper = (rs, rowNum) -> {
         FetchRun run = new FetchRun();
         run.setId(rs.getLong("id"));
@@ -29,10 +31,6 @@ public class FetchRunRepository {
         run.setErrorMessage(rs.getString("error_message"));
         return run;
     };
-
-    public FetchRunRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public FetchRun start(Long sourceId, String sourceName) {
         FetchRun run = new FetchRun();

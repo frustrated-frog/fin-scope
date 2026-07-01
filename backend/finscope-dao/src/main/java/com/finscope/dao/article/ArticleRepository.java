@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -18,7 +19,8 @@ import java.util.Optional;
 
 @Repository
 public class ArticleRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<Article> mapper = (rs, rowNum) -> {
         Article article = new Article();
         article.setId(rs.getLong("id"));
@@ -35,10 +37,6 @@ public class ArticleRepository {
         article.setFetchedAt(TimeUtil.localDateTime(rs, "fetched_at"));
         return article;
     };
-
-    public ArticleRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public Article save(Article article, String urlFingerprint, String titleFingerprint, long bodySimhash) {
         if (article.getFetchedAt() == null) {

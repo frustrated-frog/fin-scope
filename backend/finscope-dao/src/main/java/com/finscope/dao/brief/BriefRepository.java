@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,7 +14,8 @@ import java.util.Optional;
 
 @Repository
 public class BriefRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<Brief> mapper = (rs, rowNum) -> {
         Brief brief = new Brief();
         brief.setId(rs.getLong("id"));
@@ -24,10 +26,6 @@ public class BriefRepository {
         brief.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return brief;
     };
-
-    public BriefRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public Brief upsert(Brief brief) {
         brief.setCreatedAt(LocalDateTime.now());

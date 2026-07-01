@@ -9,6 +9,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -20,7 +21,8 @@ import java.util.Optional;
 
 @Repository
 public class ResearchRunRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<ResearchRun> mapper = (rs, rowNum) -> {
         ResearchRun run = new ResearchRun();
         run.setId(rs.getLong("id"));
@@ -41,10 +43,6 @@ public class ResearchRunRepository {
         run.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
         return run;
     };
-
-    public ResearchRunRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public ResearchRun save(ResearchRun run) {
         LocalDateTime now = LocalDateTime.now();

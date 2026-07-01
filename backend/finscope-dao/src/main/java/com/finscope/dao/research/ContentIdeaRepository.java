@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -16,7 +17,8 @@ import java.util.Optional;
 
 @Repository
 public class ContentIdeaRepository {
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
     private final RowMapper<ContentIdea> mapper = (rs, rowNum) -> {
         ContentIdea idea = new ContentIdea();
         idea.setId(rs.getLong("id"));
@@ -34,10 +36,6 @@ public class ContentIdeaRepository {
         idea.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
         return idea;
     };
-
-    public ContentIdeaRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public ContentIdea save(ContentIdea idea) {
         LocalDateTime now = LocalDateTime.now();
