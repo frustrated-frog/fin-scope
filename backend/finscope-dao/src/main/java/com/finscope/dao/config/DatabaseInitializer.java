@@ -266,9 +266,24 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("agent_run", "research_run_id", "INTEGER");
         ensureColumn("agent_run", "event_id", "INTEGER");
         ensureColumn("agent_run", "article_id", "INTEGER");
+        ensureColumn("agent_run", "step_id", "TEXT");
+        ensureColumn("agent_run", "attempt", "INTEGER NOT NULL DEFAULT 1");
+        ensureColumn("agent_run", "action_fingerprint", "TEXT");
+        ensureColumn("agent_run", "input_hash", "TEXT");
+        ensureColumn("agent_run", "output_hash", "TEXT");
+        ensureColumn("agent_run", "error_type", "TEXT");
+        ensureColumn("agent_run", "fallback_used", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("agent_run", "fallback_reason", "TEXT");
+        ensureColumn("agent_run", "termination_reason", "TEXT");
+        ensureColumn("agent_run", "progress_delta", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("agent_run", "budget_snapshot", "TEXT");
+        ensureColumn("agent_run", "metadata_json", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_research ON agent_run(research_run_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_event ON agent_run(event_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_article ON agent_run(article_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_fingerprint ON agent_run(action_fingerprint)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_step ON agent_run(research_run_id, step_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_status ON agent_run(status)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS export_manifest ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "file_name TEXT NOT NULL,"

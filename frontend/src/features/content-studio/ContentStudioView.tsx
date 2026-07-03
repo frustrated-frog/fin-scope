@@ -31,14 +31,14 @@ export function ContentStudioView({
   }
 
   return (
-    <section className="panel wide">
+    <section className="panel wide content-studio-panel">
       <div className="panel-heading">
         <h3>Content Studio</h3>
         <span className="subtle-badge">{contentIdeas.length} ideas</span>
       </div>
       <div className="studio-grid">
         {contentIdeas.map((idea) => (
-          <article className="studio-card" key={idea.id}>
+          <article className="studio-card content-studio-card" key={idea.id}>
             <div className="studio-card-top">
               <span className="studio-score">{idea.score}</span>
               <span className="badge">{idea.format}</span>

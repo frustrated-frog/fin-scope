@@ -8,6 +8,9 @@ import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.dao.source.SourceRepository;
+import com.finscope.domain.agent.AgentActionFingerprint;
+import com.finscope.domain.agent.AgentNodeResult;
+import com.finscope.domain.agent.AgentRunContext;
 import com.finscope.domain.brief.Brief;
 import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
@@ -16,6 +19,9 @@ import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.domain.source.Source;
+import com.finscope.service.agent.ActionFingerprintService;
+import com.finscope.service.agent.AgentHarness;
+import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.brief.BriefService;
 import com.finscope.service.fetch.FetchService;
 import org.springframework.stereotype.Service;
@@ -51,6 +57,12 @@ public class ResearchService {
     private ContentIdeaRepository contentIdeaRepository;
     @Resource
     private AgentRunRepository agentRunRepository;
+    @Resource
+    private AgentHarness agentHarness;
+    @Resource
+    private ActionFingerprintService actionFingerprintService;
+    @Resource
+    private AgentTraceService agentTraceService;
 
     public ResearchRunPlan createRun(LocalDate runDate,
                                      List<String> themeCodes,
@@ -116,22 +128,32 @@ public class ResearchService {
         List<String> errors = new ArrayList<String>();
         try {
             ResearchRunContext.setCurrentRunId(run.getId());
+            AgentRunContext context = ResearchRunContext.currentContext();
             for (SourceProfile plannedSource : plannedSources) {
                 Long sourceId = plannedSource.getSourceId();
                 if (sourceId == null) {
                     continue;
                 }
                 long sourceStart = System.currentTimeMillis();
-                FetchRun fetchRun = fetchService.fetch(sourceId);
-                if ("SUCCESS".equals(fetchRun.getStatus())) {
+                AgentActionFingerprint fingerprint = actionFingerprintService.sourceFetch(sourceId);
+                AgentNodeResult<FetchRun> nodeResult = agentHarness.runNode(context, fingerprint,
+                        ctx -> {
+                            FetchRun fetchRun = fetchService.fetch(sourceId);
+                            return AgentNodeResult.success(fetchRun,
+                                    sourceFetchInput(sourceId, plannedSource),
+                                    sourceFetchOutput(fetchRun),
+                                    fetchRun.getSuccessCount());
+                        });
+                FetchRun fetchRun = nodeResult.getValue();
+                if (fetchRun != null && "SUCCESS".equals(fetchRun.getStatus())) {
                     fetchedSources++;
-                } else {
+                } else if (fetchRun != null) {
                     errors.add(fetchRun.getSourceName() + ": " + fetchRun.getErrorMessage());
+                } else if (!"SUCCESS".equals(nodeResult.getStatus())) {
+                    errors.add(plannedSource.getSourceName() + ": " + nodeResult.getErrorMessage());
                 }
-                agentRunRepository.record(run.getId(), null, null, "source-fetch", fetchRun.getStatus(),
-                        "sourceId=" + sourceId + ", name=" + plannedSource.getSourceName(),
-                        "success=" + fetchRun.getSuccessCount() + ", duplicate=" + fetchRun.getDuplicateCount(),
-                        fetchRun.getErrorMessage(), System.currentTimeMillis() - sourceStart);
+                agentTraceService.recordNode(null, null, context, fingerprint, nodeResult,
+                        System.currentTimeMillis() - sourceStart, sourceFetchMetadata(sourceId));
             }
 
             Brief brief = briefService.generate(run.getRunDate());
@@ -208,5 +230,17 @@ public class ResearchService {
 
     private int value(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private String sourceFetchInput(Long sourceId, SourceProfile plannedSource) {
+        return "sourceId=" + sourceId + ", name=" + plannedSource.getSourceName();
+    }
+
+    private String sourceFetchOutput(FetchRun fetchRun) {
+        return "success=" + fetchRun.getSuccessCount() + ", duplicate=" + fetchRun.getDuplicateCount();
+    }
+
+    private String sourceFetchMetadata(Long sourceId) {
+        return "{\"sourceId\":" + sourceId + "}";
     }
 }

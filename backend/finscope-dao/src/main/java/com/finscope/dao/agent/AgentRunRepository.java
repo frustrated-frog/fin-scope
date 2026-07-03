@@ -6,14 +6,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public class AgentRunRepository {
-    @Resource
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+
+    public AgentRunRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     private final RowMapper<AgentRun> mapper = (rs, rowNum) -> {
         AgentRun run = new AgentRun();
@@ -28,6 +30,18 @@ public class AgentRunRepository {
         run.setErrorMessage(rs.getString("error_message"));
         run.setDurationMs(rs.getLong("duration_ms"));
         run.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
+        run.setStepId(rs.getString("step_id"));
+        run.setAttempt(rs.getInt("attempt"));
+        run.setActionFingerprint(rs.getString("action_fingerprint"));
+        run.setInputHash(rs.getString("input_hash"));
+        run.setOutputHash(rs.getString("output_hash"));
+        run.setErrorType(rs.getString("error_type"));
+        run.setFallbackUsed(rs.getInt("fallback_used") == 1);
+        run.setFallbackReason(rs.getString("fallback_reason"));
+        run.setTerminationReason(rs.getString("termination_reason"));
+        run.setProgressDelta(rs.getInt("progress_delta"));
+        run.setBudgetSnapshot(rs.getString("budget_snapshot"));
+        run.setMetadataJson(rs.getString("metadata_json"));
         return run;
     };
 
@@ -48,6 +62,19 @@ public class AgentRunRepository {
                         + "error_message,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 researchRunId, eventId, articleId, nodeName, status, input, output, errorMessage,
                 durationMs, TimeUtil.text(LocalDateTime.now()));
+    }
+
+    public void record(AgentRun run) {
+        jdbcTemplate.update("INSERT INTO agent_run(research_run_id,event_id,article_id,node_name,status,input,output,"
+                        + "error_message,duration_ms,created_at,step_id,attempt,action_fingerprint,input_hash,"
+                        + "output_hash,error_type,fallback_used,fallback_reason,termination_reason,progress_delta,"
+                        + "budget_snapshot,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                run.getResearchRunId(), run.getEventId(), run.getArticleId(), run.getNodeName(), run.getStatus(),
+                run.getInput(), run.getOutput(), run.getErrorMessage(), run.getDurationMs(),
+                TimeUtil.text(LocalDateTime.now()), run.getStepId(), run.getAttempt(), run.getActionFingerprint(),
+                run.getInputHash(), run.getOutputHash(), run.getErrorType(), run.isFallbackUsed() ? 1 : 0,
+                run.getFallbackReason(), run.getTerminationReason(), run.getProgressDelta(),
+                run.getBudgetSnapshot(), run.getMetadataJson());
     }
 
     public List<AgentRun> latest(int limit) {
