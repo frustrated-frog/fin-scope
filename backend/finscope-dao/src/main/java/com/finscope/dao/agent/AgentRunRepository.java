@@ -14,6 +14,7 @@ import java.util.List;
 public class AgentRunRepository {
     @Resource
     private JdbcTemplate jdbcTemplate;
+
     private final RowMapper<AgentRun> mapper = (rs, rowNum) -> {
         AgentRun run = new AgentRun();
         run.setId(rs.getLong("id"));
