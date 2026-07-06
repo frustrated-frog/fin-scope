@@ -1,8 +1,12 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { Article, PageResponse, View } from '../../shared/types';
+import { Article, AsyncTask, PageResponse, View } from '../../shared/types';
 import { ArticleCard } from './ArticleCard';
+
+type IngestStatus = 'idle' | 'loading' | 'success' | 'error';
+
+const ARTICLE_CATEGORIES = ['金融', '市场', '自我提升', '前沿技术'];
 
 export function ArticleView({
   setView,
@@ -20,10 +24,15 @@ export function ArticleView({
   const [pagedArticles, setPagedArticles] = useState<Article[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
-  const [urlForm, setUrlForm] = useState({ url: '', sourceName: '手动研究', tags: '市场' });
+  const [urlForm, setUrlForm] = useState({ url: '', sourceName: '手动研究', tags: '市场', category: '市场' });
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null);
+  const [highlightedArticleId, setHighlightedArticleId] = useState<number | null>(null);
+  const [ingestStatus, setIngestStatus] = useState<IngestStatus>('idle');
+  const [ingestMessage, setIngestMessage] = useState('');
+  const [ingestError, setIngestError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const highlightClearTimerRef = useRef<number | null>(null);
 
   const fetchArticles = async () => {
     try {
@@ -33,8 +42,10 @@ export function ArticleView({
       setTotalPages(response.totalPages);
       setSelectedIds(new Set());
       setSelectAll(false);
+      return response;
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Failed to load articles', 'error');
+      return null;
     }
   };
 
@@ -42,20 +53,92 @@ export function ArticleView({
     fetchArticles();
   }, [currentPage, pageSize]);
 
-  async function ingestUrl(event: FormEvent) {
-    event.preventDefault();
+  useEffect(() => () => {
+    if (highlightClearTimerRef.current !== null) {
+      window.clearTimeout(highlightClearTimerRef.current);
+    }
+  }, []);
+
+  async function submitIngestUrl() {
+    if (ingestStatus === 'loading') {
+      return;
+    }
+    const submittedUrl = urlForm.url;
+    setIngestStatus('loading');
+    setIngestMessage('正在提交生成任务');
+    setIngestError('');
     try {
-      await api('/api/articles/ingest-url', {
+      const submittedTask = await api<AsyncTask>('/api/articles/ingest-url', {
         method: 'POST',
         body: JSON.stringify(urlForm)
       });
-      setUrlForm((current) => ({ ...current, url: '' }));
-      addToast('URL 已生成情报卡片', 'success');
-      await fetchArticles();
+      const completedTask = await pollIngestTask(submittedTask);
+      if (completedTask.status === 'FAILED') {
+        throw new Error(completedTask.errorMessage || completedTask.message || 'URL 解析失败');
+      }
+      const refreshed = await fetchArticles();
+      const generatedArticleId = findGeneratedArticleId(completedTask.article, refreshed, submittedUrl);
+      if (generatedArticleId !== null) {
+        highlightGeneratedArticle(generatedArticleId);
+      }
       await onWorkspaceChanged();
+      setUrlForm((current) => ({ ...current, url: '' }));
+      setIngestStatus('success');
+      addToast('情报卡片已生成，已加入文章列表', 'success');
     } catch (error) {
-      addToast(error instanceof Error ? error.message : 'URL 解析失败', 'error');
+      const message = error instanceof Error ? error.message : 'URL 解析失败';
+      setIngestStatus('error');
+      setIngestError(message);
+      addToast(message, 'error');
     }
+  }
+
+  async function ingestUrl(event: FormEvent) {
+    event.preventDefault();
+    await submitIngestUrl();
+  }
+
+  async function pollIngestTask(initialTask: AsyncTask) {
+    updateIngestTaskProgress(initialTask);
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const currentTask = await api<AsyncTask>(`/api/tasks/${initialTask.taskId}`);
+      updateIngestTaskProgress(currentTask);
+      if (currentTask.status === 'COMPLETED' || currentTask.status === 'FAILED') {
+        return currentTask;
+      }
+      await wait(800);
+    }
+    throw new Error('生成任务超时，请稍后重试');
+  }
+
+  function updateIngestTaskProgress(task: AsyncTask) {
+    setIngestMessage(task.message || messageForTaskPhase(task.phase));
+    if (task.status === 'FAILED') {
+      setIngestStatus('error');
+      setIngestError(task.errorMessage || task.message || 'URL 解析失败');
+      return;
+    }
+    if (task.status === 'COMPLETED') {
+      setIngestStatus('success');
+      return;
+    }
+    setIngestStatus('loading');
+  }
+
+  function wait(ms: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  function highlightGeneratedArticle(articleId: number) {
+    setExpandedArticleId(articleId);
+    setHighlightedArticleId(articleId);
+    if (highlightClearTimerRef.current !== null) {
+      window.clearTimeout(highlightClearTimerRef.current);
+    }
+    highlightClearTimerRef.current = window.setTimeout(() => {
+      setHighlightedArticleId((currentArticleId) => currentArticleId === articleId ? null : currentArticleId);
+      highlightClearTimerRef.current = null;
+    }, 5000);
   }
 
   async function compoundArticle(articleId: number) {
@@ -126,8 +209,15 @@ export function ArticleView({
 
   function getCategoryColor(category?: string) {
     switch (category) {
+      case '金融':
       case '宏观':
         return '#10b981';
+      case '市场':
+        return '#2563eb';
+      case '自我提升':
+        return '#8b5cf6';
+      case '前沿技术':
+        return '#ec4899';
       case '政策':
         return '#3b82f6';
       case '公司':
@@ -140,6 +230,37 @@ export function ArticleView({
         return '#6b7280';
     }
   }
+
+  function findGeneratedArticleId(article: Article | undefined,
+                                  refreshed: PageResponse<Article> | null,
+                                  submittedUrl: string) {
+    if (article?.id != null) {
+      return article.id;
+    }
+    const matched = refreshed?.items.find((item) => item.url === submittedUrl);
+    return matched?.id ?? refreshed?.items[0]?.id ?? null;
+  }
+
+  function messageForTaskPhase(phase?: AsyncTask['phase']) {
+    switch (phase) {
+      case 'FETCHING':
+        return '正在抓取网页';
+      case 'PARSING':
+        return '正在解析正文';
+      case 'LLM':
+        return '正在生成情报卡片';
+      case 'PERSISTING':
+        return '正在写入文章库';
+      case 'COMPLETED':
+        return '情报卡片已生成，已加入文章列表';
+      case 'FAILED':
+        return '生成失败';
+      default:
+        return '正在排队等待生成';
+    }
+  }
+
+  const isIngesting = ingestStatus === 'loading';
 
   return (
     <section className="article-container">
@@ -162,10 +283,62 @@ export function ArticleView({
               value={urlForm.url}
               onChange={(event) => setUrlForm({ ...urlForm, url: event.target.value })}
               placeholder="输入文章URL..."
+              disabled={isIngesting}
               required
             />
-            <button className="primary-button" type="submit">生成情报卡片</button>
+            <div
+              className="article-category-segment"
+              aria-label="文章类型"
+            >
+              {ARTICLE_CATEGORIES.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={`article-category-option${urlForm.category === category ? ' is-active' : ''}`}
+                  aria-pressed={urlForm.category === category}
+                  disabled={isIngesting}
+                  onClick={() => setUrlForm({ ...urlForm, category })}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+            <button className="primary-button" type="submit" disabled={isIngesting}>
+              {isIngesting ? '生成中...' : '生成情报卡片'}
+            </button>
           </form>
+          {ingestStatus !== 'idle' && (
+            <div className={`url-ingest-status url-ingest-status-${ingestStatus}`} role="status">
+              <div className="url-ingest-status-main">
+                <strong>
+                  {ingestStatus === 'loading' && '正在抓取网页、解析正文并生成情报卡片'}
+                  {ingestStatus === 'success' && '生成完成'}
+                  {ingestStatus === 'error' && '生成失败'}
+                </strong>
+                {ingestStatus === 'loading' && (
+                  <span>{ingestMessage || '复杂页面可能需要几十秒，可继续浏览下方文章。'}</span>
+                )}
+                {ingestStatus === 'success' && (
+                  <span>{ingestMessage || '新卡片已展开并加入文章列表。'}</span>
+                )}
+                {ingestStatus === 'error' && (
+                  <span>{ingestError}</span>
+                )}
+              </div>
+              {ingestStatus === 'loading' && (
+                <div className="url-ingest-steps" aria-label="生成进度">
+                  <span>抓取网页</span>
+                  <span>提取正文</span>
+                  <span>生成卡片</span>
+                </div>
+              )}
+              {ingestStatus === 'error' && (
+                <button className="secondary-button" type="button" onClick={submitIngestUrl}>
+                  重试
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -227,6 +400,7 @@ export function ArticleView({
               <ArticleCard
                 article={article}
                 isExpanded={expandedArticleId === article.id}
+                isHighlighted={highlightedArticleId === article.id}
                 onToggle={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
                 onCompound={() => compoundArticle(article.id)}
                 onDelete={() => setShowDeleteConfirm(article.id)}

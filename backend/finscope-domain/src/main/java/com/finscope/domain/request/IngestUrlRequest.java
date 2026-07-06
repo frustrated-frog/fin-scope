@@ -7,4 +7,5 @@ public class IngestUrlRequest {
     private String url;
     private String sourceName;
     private String tags;
+    private String category;
 }

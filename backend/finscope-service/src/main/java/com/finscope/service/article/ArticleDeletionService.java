@@ -25,7 +25,7 @@ public class ArticleDeletionService {
 
     @Transactional
     public void deleteById(Long id) {
-        log.info("Deleting article with id={}", id);
+        log.info("删除文章开始 articleId={}", id);
         List<Long> ids = java.util.Collections.singletonList(id);
         List<Long> eventIds = eventClusterRepository.findEventIdsByArticleIds(ids);
         insightCardRepository.deleteByArticleId(id);
@@ -37,7 +37,7 @@ public class ArticleDeletionService {
             throw new IllegalArgumentException("Article not found: " + id);
         }
         eventClusterRepository.refreshCounts(eventIds);
-        log.info("Successfully deleted article id={}", id);
+        log.info("删除文章成功 articleId={}", id);
     }
 
     @Transactional
@@ -46,14 +46,14 @@ public class ArticleDeletionService {
             return 0;
         }
 
-        log.info("Batch deleting {} articles", ids.size());
+        log.info("批量删除文章开始 articleCount={}", ids.size());
         List<Long> eventIds = eventClusterRepository.findEventIdsByArticleIds(ids);
         insightCardRepository.deleteByArticleIds(ids);
         evidenceItemRepository.deleteByArticleIds(ids);
         eventClusterRepository.deleteLinksByArticleIds(ids);
         int deleted = articleRepository.deleteByIds(ids);
         eventClusterRepository.refreshCounts(eventIds);
-        log.info("Successfully deleted {} articles", deleted);
+        log.info("批量删除文章成功 deletedCount={}", deleted);
         return deleted;
     }
 }

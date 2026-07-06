@@ -53,14 +53,24 @@ const responses: Record<string, unknown> = {
     totalPages: 1
   },
   '/api/articles/ingest-url': {
-    article: { id: 2, title: '粘贴 URL 生成情报卡片', sourceName: '手动研究', noveltyType: 'NEW', category: '市场' },
-    insightCard: {
-      oneSentenceSummary: '网页内容已经被整理成固定格式卡片。',
-      coreEvent: '用户手动导入 URL。',
-      importance: '将临时阅读变成可复用信息资产。',
-      impactTargets: '个人学习、每日简报、自媒体选题',
-      followUpQuestions: '下一次应该追踪什么？'
-    }
+    taskId: 'task-manual',
+    status: 'QUEUED',
+    phase: 'QUEUED',
+    message: '等待开始'
+  },
+  '/api/tasks/task-manual': {
+    taskId: 'task-manual',
+    status: 'COMPLETED',
+    phase: 'COMPLETED',
+    message: '情报卡片已生成，已加入文章列表',
+    articleId: 2,
+    article: { id: 2, title: '粘贴 URL 生成情报卡片', sourceName: '手动研究', noveltyType: 'NEW', category: '市场' }
+  },
+  '/api/tasks/task-fail': {
+    taskId: 'task-fail',
+    status: 'FAILED',
+    phase: 'FAILED',
+    errorMessage: '未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页'
   },
   '/api/briefs': [
     { id: 1, briefDate: '2026-06-25', title: '每日金融、投资、创业学习简报 - 2026-06-25', markdownPath: 'data/vault/daily-briefs/2026-06-25.md' }
@@ -179,12 +189,18 @@ const responses: Record<string, unknown> = {
       markdownPath: 'data/vault/topics/jiang-xi-jiao-yi.md'
     },
     linkedArticles: [
-      { id: 1, title: '美联储释放降息信号 黄金走强', sourceName: '测试财经RSS', noveltyType: 'NEW' }
+      {
+        id: 1,
+        title: '美联储释放降息信号 黄金走强',
+        url: 'https://x.com/tester/status/123',
+        sourceName: '测试财经RSS',
+        noveltyType: 'NEW'
+      }
     ],
     linkedBriefs: [
       { id: 1, briefDate: '2026-06-23', title: 'FinScope Daily Brief - 2026-06-23', markdownPath: 'data/vault/daily-briefs/2026-06-23.md' }
     ],
-    markdown: '# 降息交易\n\n## 个人理解\n\n- 暂无'
+    markdown: '# 降息交易\n\n- 状态：LEARNING\n- 描述：跟踪利率预期如何影响黄金和风险资产。\n\n## 关键术语\n\n- 美联储\n- 实际利率\n- 黄金\n\n## 学习问题\n\n- 为什么降息会影响黄金？\n- 如何判断预期差？\n\n## 关联文章\n\n- [美联储释放降息信号 黄金走强](https://x.com/tester/status/123)\n\n## 文章解读\n\n### 一句话摘要\n\n美联储释放偏鸽信号，市场重新交易降息预期。'
   },
   '/api/events': [
     {
@@ -328,9 +344,8 @@ beforeEach(() => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/articles/ingest-url' && String(init?.body).includes('x-shell')) {
       return {
-        ok: false,
-        status: 400,
-        json: async () => ({ error: '未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页' })
+        ok: true,
+        json: async () => ({ taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' })
       } as Response;
     }
     if (url === '/api/learning-tasks/1/status' && init?.method === 'POST') {
@@ -457,7 +472,12 @@ test('can ingest a pasted url from inbox as an insight card', async () => {
 
   expect(fetch).toHaveBeenCalledWith('/api/articles/ingest-url', expect.objectContaining({
     method: 'POST',
-    body: JSON.stringify({ url: 'https://example.com/article', sourceName: '手动研究', tags: '市场' })
+    body: JSON.stringify({
+      url: 'https://example.com/article',
+      sourceName: '手动研究',
+      tags: '市场',
+      category: '市场'
+    })
   }));
 });
 
@@ -468,7 +488,7 @@ test('shows readable error when pasted url cannot be extracted', async () => {
   await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), 'https://x.com/x-shell');
   await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
 
-  expect(await screen.findByText('未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页')).toBeInTheDocument();
+  expect(await screen.findAllByText('未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页')).not.toHaveLength(0);
 });
 
 test('can compound an inbox article into a topic', async () => {
@@ -552,7 +572,7 @@ test('events view shows research event cards with evidence and article counts', 
   await userEvent.click(screen.getByRole('button', { name: 'Events' }));
 
   expect((await screen.findAllByText('美联储降息预期升温，黄金ETF出现增量资金')).length).toBeGreaterThan(0);
-  expect(screen.getByText('FOLLOW_UP')).toBeInTheDocument();
+  expect(screen.getAllByText('FOLLOW_UP').length).toBeGreaterThan(0);
   expect(screen.getByText(/证据 2/)).toBeInTheDocument();
   expect(screen.getByText(/文章 2/)).toBeInTheDocument();
 });
@@ -564,13 +584,17 @@ test('events view can filter evidence by source tier and shows novelty distribut
 
   expect(await screen.findByText('FOLLOW_UP 1')).toBeInTheDocument();
   expect(screen.getByText('NEW 1')).toBeInTheDocument();
-  expect(screen.getByText(/\[MEDIA\].*黄金ETF单周流入12亿美元。/)).toBeInTheDocument();
-  expect(screen.getByText(/\[REGULATOR\].*美联储官员释放偏鸽措辞。/)).toBeInTheDocument();
+  const detail = screen.getByRole('region', { name: '事件详情' });
+  expect(within(detail).getAllByText('MEDIA').length).toBeGreaterThan(0);
+  expect(within(detail).getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
+  expect(within(detail).getAllByText('REGULATOR').length).toBeGreaterThan(0);
+  expect(within(detail).getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
 
-  await userEvent.selectOptions(screen.getByLabelText('证据来源层级'), 'REGULATOR');
+  await userEvent.selectOptions(within(detail).getByLabelText('证据来源层级'), 'REGULATOR');
 
-  expect(screen.getByText(/\[REGULATOR\].*美联储官员释放偏鸽措辞。/)).toBeInTheDocument();
-  expect(screen.queryByText(/\[MEDIA\].*黄金ETF单周流入12亿美元。/)).not.toBeInTheDocument();
+  expect(within(detail).getAllByText('REGULATOR').length).toBeGreaterThan(0);
+  expect(within(detail).getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
+  expect(within(detail).queryByText('黄金ETF单周流入12亿美元。')).not.toBeInTheDocument();
 });
 
 test('evidence ledger shows source tiers and evidence types in one workspace', async () => {
@@ -644,6 +668,53 @@ test('topics show learning metadata and vault path', async () => {
   expect(screen.getByText('data/vault/topics/jiang-xi-jiao-yi.md')).toBeInTheDocument();
 });
 
+test('topics keep detail action on the left and learning status on the right', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
+
+  const topicCard = (await screen.findByText('降息交易')).closest('article');
+  expect(topicCard).toBeTruthy();
+
+  const actionRow = within(topicCard as HTMLElement).getByRole('group', { name: '主题操作' });
+  const detailButton = within(actionRow).getByRole('button', { name: '查看详情' });
+  const statusBadge = within(actionRow).getByText('LEARNING');
+
+  expect(actionRow).toHaveClass('topic-card-actions');
+  expect(detailButton.compareDocumentPosition(statusBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('topics open a full-width markdown topic reader', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.anything());
+  expect(await screen.findByText('Topic Reader')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '返回主题库' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '记录理解' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '主题详情正文' })).toHaveClass('topic-reader-document');
+  expect(screen.getByRole('complementary', { name: '主题上下文' })).toHaveClass('topic-reader-context');
+  expect(screen.getAllByText('关键术语').length).toBeGreaterThan(0);
+  expect(screen.getByText('文章解读')).toBeInTheDocument();
+  expect(screen.queryByText((content, element) => (
+    element?.tagName === 'PRE' && content.includes('# 降息交易')
+  ))).not.toBeInTheDocument();
+});
+
+test('topic reader can jump to the learning note form for the same topic', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
+  await userEvent.click(await screen.findByRole('button', { name: '记录理解' }));
+
+  expect(await screen.findByRole('heading', { name: 'Learning', level: 2 })).toBeInTheDocument();
+  expect(screen.getByLabelText('个人理解')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: '主题详情正文' })).not.toBeInTheDocument();
+});
+
 test('learning view opens a topic and appends personal understanding', async () => {
   render(<App />);
 
@@ -673,6 +744,44 @@ test('learning queue action buttons keep a fixed single-line size', async () => 
   });
 });
 
+test('learning queue filter has its own row above task cards', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
+
+  const filter = await screen.findByLabelText('学习主题筛选');
+  const heading = filter.closest('.learning-queue-heading');
+  expect(heading).toBeTruthy();
+  expect(filter.closest('label')).toHaveClass('learning-queue-filter');
+});
+
+test('learning task actions keep status update, note entry and event jump in one row', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
+
+  const taskCard = (await screen.findByText('为什么实际利率下行会推升黄金配置需求？')).closest('article');
+  expect(taskCard).toBeTruthy();
+
+  const actionRow = within(taskCard as HTMLElement).getByRole('group', { name: '学习任务操作-1' });
+
+  expect(actionRow).toHaveClass('learning-task-actions');
+  expect(within(actionRow).getByRole('button', { name: '更新任务状态-1' })).toBeInTheDocument();
+  expect(within(actionRow).getByRole('button', { name: '记录学习-1' })).toBeInTheDocument();
+  expect(within(actionRow).getByRole('button', { name: '查看关联事件-1' })).toBeInTheDocument();
+});
+
+test('learning task note action opens the right-side note form from the current page', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
+  await userEvent.click(await screen.findByRole('button', { name: '记录学习-1' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.anything());
+  expect(await screen.findByRole('heading', { name: '降息交易' })).toBeInTheDocument();
+  expect(screen.getByLabelText('个人理解')).toBeInTheDocument();
+});
+
 test('learning view can filter tasks by theme and jump to the related event', async () => {
   render(<App />);
 
@@ -689,6 +798,24 @@ test('learning view can filter tasks by theme and jump to the related event', as
 
   expect(await screen.findByText('事件记忆')).toBeInTheDocument();
   expect(screen.getAllByText('美联储降息预期升温，黄金ETF出现增量资金').length).toBeGreaterThan(0);
+});
+
+test('events view presents the selected event as a structured detail panel', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+
+  const detail = await screen.findByRole('region', { name: '事件详情' });
+
+  expect(within(detail).getByRole('heading', { name: '美联储降息预期升温，黄金ETF出现增量资金' })).toBeInTheDocument();
+  expect(within(detail).getByText('市场重新交易实际利率下行与黄金定价。')).toBeInTheDocument();
+  expect(within(detail).getByText('重要性')).toBeInTheDocument();
+  expect(within(detail).getByText('86')).toBeInTheDocument();
+  expect(within(detail).getAllByText('关联文章').length).toBeGreaterThan(0);
+  expect(within(detail).getByText('2 篇')).toBeInTheDocument();
+  expect(within(detail).getAllByText('事件证据').length).toBeGreaterThan(0);
+  expect(within(detail).getByText('2 条')).toBeInTheDocument();
+  expect(within(detail).getByLabelText('证据来源层级')).toBeInTheDocument();
 });
 
 test('learning view updates research task status through the typed endpoint', async () => {

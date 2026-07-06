@@ -51,7 +51,8 @@ export function ArticleCard({
   onToggle,
   onCompound,
   onDelete,
-  categoryColor
+  categoryColor,
+  isHighlighted = false
 }: {
   article: Article;
   isExpanded: boolean;
@@ -59,11 +60,12 @@ export function ArticleCard({
   onCompound: () => void;
   onDelete: () => void;
   categoryColor: string;
+  isHighlighted?: boolean;
 }) {
   const detectedSourceTag = detectSourceTag(article);
 
   return (
-    <div className="article-card">
+    <div className={`article-card${isHighlighted ? ' article-card-highlight' : ''}`}>
       <div className="article-card-header" onClick={onToggle}>
         <div className="article-tag-group">
           {detectedSourceTag && (

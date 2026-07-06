@@ -11,6 +11,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import javax.annotation.Resource;
 import java.io.OutputStream;
@@ -19,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
 import java.time.LocalDate;
 
@@ -67,6 +70,7 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("event_cluster");
         deleteIfExists("research_run");
         deleteIfExists("insight_card");
+        deleteIfExists("async_task");
         jdbcTemplate.update("DELETE FROM agent_run");
         jdbcTemplate.update("DELETE FROM brief");
         jdbcTemplate.update("DELETE FROM article");
@@ -197,12 +201,12 @@ class FinScopeApiIntegrationTest {
     void manualUrlCanBeIngestedAsInsightCardAndUsedByBrief() throws Exception {
         String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + articleUrl + "\",\"sourceName\":\"手动研究\",\"tags\":\"宏观,黄金\"}"))
+        ingestUrlAndWait(articleUrl, "手动研究", "宏观,黄金");
+
+        mvc.perform(get("/api/articles/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.article.title").value("美联储暗示降息 黄金ETF获得资金流入"))
-                .andExpect(jsonPath("$.article.sourceName").value("手动研究"))
+                .andExpect(jsonPath("$.title").value("美联储暗示降息 黄金ETF获得资金流入"))
+                .andExpect(jsonPath("$.sourceName").value("手动研究"))
                 .andExpect(jsonPath("$.insightCard.oneSentenceSummary", containsString("美联储")))
                 .andExpect(jsonPath("$.insightCard.coreEvent", containsString("降息")))
                 .andExpect(jsonPath("$.insightCard.importance", containsString("利率预期")))
@@ -228,18 +232,80 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void manualUrlIngestReturnsTaskIdAndTaskEventuallyCompletes() throws Exception {
+        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+
+        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
+                        .contentType("application/json")
+                        .content("{\"url\":\"" + articleUrl + "\",\"sourceName\":\"手动研究\",\"tags\":\"宏观,黄金\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskId").isNotEmpty())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andReturn();
+
+        String taskId = extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
+        String completed = waitForTask(taskId);
+
+        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
+        assertTrue(completed.contains("\"phase\":\"COMPLETED\""));
+        assertTrue(completed.contains("\"article\""));
+        assertTrue(completed.contains("\"articleId\":1"));
+    }
+
+    @Test
+    void manualUrlIngestExposesLlmPhaseWhileCardGenerationIsRunning() throws Exception {
+        CountDownLatch llmStarted = new CountDownLatch(1);
+        CountDownLatch releaseLlm = new CountDownLatch(1);
+        when(llmChatClient.isConfigured()).thenReturn(true);
+        when(llmChatClient.modelName()).thenReturn("fake-openai-model");
+        when(llmChatClient.complete(anyString(), anyString())).thenAnswer(invocation -> {
+            llmStarted.countDown();
+            assertTrue(releaseLlm.await(3, TimeUnit.SECONDS));
+            return cloudflareInterpretationJson();
+        });
+        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/cloudflare";
+
+        String taskId = submitIngestTask(articleUrl, "技术观察", "技术工具");
+        assertTrue(llmStarted.await(3, TimeUnit.SECONDS));
+
+        try {
+            mvc.perform(get("/api/tasks/" + taskId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("RUNNING"))
+                    .andExpect(jsonPath("$.phase").value("LLM"))
+                    .andExpect(jsonPath("$.message").value("正在生成情报卡片"));
+        } finally {
+            releaseLlm.countDown();
+        }
+        String completed = waitForTask(taskId);
+        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
+    }
+
+    @Test
+    void manualUrlIngestOnlyCapturesEvidenceForFinanceAndMarketCategories() throws Exception {
+        String selfImprovementUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String financeUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        ingestUrlAndWaitWithCategory(selfImprovementUrl, "手动研究", "自我提升");
+
+        mvc.perform(get("/api/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        ingestUrlAndWaitWithCategory(financeUrl, "CNBC", "金融");
+
+        mvc.perform(get("/api/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
     void eventMemoryGroupsRelatedArticles() throws Exception {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
 
         mvc.perform(get("/api/events"))
                 .andExpect(status().isOk())
@@ -261,14 +327,8 @@ class FinScopeApiIntegrationTest {
         String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + marketUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(marketUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
 
         mvc.perform(get("/api/events")
                         .param("themeCode", "china_macro")
@@ -286,14 +346,8 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
 
         mvc.perform(get("/api/events/1/evidence"))
                 .andExpect(status().isOk())
@@ -309,14 +363,8 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
 
         mvc.perform(get("/api/evidence"))
                 .andExpect(status().isOk())
@@ -331,14 +379,8 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
 
         mvc.perform(get("/api/evidence")
                         .param("eventId", "2")
@@ -363,14 +405,8 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
 
         mvc.perform(get("/api/learning-tasks"))
                 .andExpect(status().isOk())
@@ -396,14 +432,8 @@ class FinScopeApiIntegrationTest {
         String marketReactionUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + marketReactionUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + policyUrl + "\",\"sourceName\":\"中国人民银行\",\"tags\":\"宏观,政策\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(marketReactionUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
 
         mvc.perform(get("/api/events"))
                 .andExpect(status().isOk())
@@ -478,14 +508,8 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
 
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk())
@@ -594,9 +618,9 @@ class FinScopeApiIntegrationTest {
         when(llmChatClient.complete(anyString(), anyString())).thenReturn(cloudflareInterpretationJson());
         String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/cloudflare";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + articleUrl + "\",\"sourceName\":\"技术观察\",\"tags\":\"技术工具\"}"))
+        ingestUrlAndWait(articleUrl, "技术观察", "技术工具");
+
+        mvc.perform(get("/api/articles/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.insightCard.oneSentenceSummary", containsString("Cloudflare 免费额度")))
                 .andExpect(jsonPath("$.insightCard.importance", containsString("低成本独立开发")))
@@ -623,11 +647,12 @@ class FinScopeApiIntegrationTest {
     void manualUrlRejectsUnreadableDynamicShell() throws Exception {
         String shellUrl = "http://localhost:" + server.getAddress().getPort() + "/x-shell";
 
-        mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + shellUrl + "\",\"sourceName\":\"手动研究\",\"tags\":\"市场\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", containsString("未能读取到可用正文")));
+        String taskId = submitIngestTask(shellUrl, "手动研究", "市场");
+        String failed = waitForTask(taskId);
+
+        assertTrue(failed.contains("\"status\":\"FAILED\""));
+        assertTrue(failed.contains("\"errorMessage\""));
+        assertTrue(failed.contains("URL:"));
     }
 
     @Test
@@ -750,14 +775,74 @@ class FinScopeApiIntegrationTest {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
-        mvc.perform(post("/api/articles/ingest-url")
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
+    }
+
+    private void ingestUrlAndWait(String url, String sourceName, String tags) throws Exception {
+        String taskId = submitIngestTask(url, sourceName, tags);
+        String completed = waitForTask(taskId);
+        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
+    }
+
+    private void ingestUrlAndWaitWithCategory(String url, String sourceName, String category) throws Exception {
+        String taskId = submitIngestTaskWithCategory(url, sourceName, category);
+        String completed = waitForTask(taskId);
+        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
+    }
+
+    private String submitIngestTask(String url, String sourceName, String tags) throws Exception {
+        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
                         .contentType("application/json")
-                        .content("{\"url\":\"" + firstUrl + "\",\"sourceName\":\"Reuters\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/articles/ingest-url")
+                        .content("{\"url\":\"" + url + "\",\"sourceName\":\"" + sourceName + "\",\"tags\":\"" + tags + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskId").isNotEmpty())
+                .andReturn();
+        return extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
+    }
+
+    private String submitIngestTaskWithCategory(String url, String sourceName, String category) throws Exception {
+        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
                         .contentType("application/json")
-                        .content("{\"url\":\"" + followUpUrl + "\",\"sourceName\":\"CNBC\",\"tags\":\"宏观,市场\"}"))
-                .andExpect(status().isOk());
+                        .content("{\"url\":\"" + url + "\",\"sourceName\":\"" + sourceName
+                                + "\",\"category\":\"" + category + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskId").isNotEmpty())
+                .andReturn();
+        return extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
+    }
+
+    private String waitForTask(String taskId) throws Exception {
+        for (int attempt = 0; attempt < 30; attempt++) {
+            MvcResult result = mvc.perform(get("/api/tasks/" + taskId))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            String body = result.getResponse().getContentAsString();
+            if (body.contains("\"status\":\"COMPLETED\"") || body.contains("\"status\":\"FAILED\"")) {
+                return body;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw ex;
+            }
+        }
+        throw new AssertionError("Task did not finish in time: " + taskId);
+    }
+
+    private String extractJsonString(String json, String field) {
+        String marker = "\"" + field + "\":\"";
+        int start = json.indexOf(marker);
+        if (start < 0) {
+            throw new AssertionError("Missing JSON field " + field + " in " + json);
+        }
+        int valueStart = start + marker.length();
+        int valueEnd = json.indexOf("\"", valueStart);
+        if (valueEnd < 0) {
+            throw new AssertionError("Unterminated JSON field " + field + " in " + json);
+        }
+        return json.substring(valueStart, valueEnd);
     }
 
     private String rss() {

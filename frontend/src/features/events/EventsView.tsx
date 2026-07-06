@@ -94,55 +94,92 @@ export function EventsView({
         </div>
       </section>
 
-      <section className="panel detail-panel">
+      <section className="panel detail-panel event-detail-panel" role="region" aria-label="事件详情">
         {!selectedEvent ? (
           <p className="muted">选择一个事件查看文章与证据。</p>
         ) : (
           <>
-            <div className="panel-heading">
-              <div>
+            <header className="event-detail-hero">
+              <div className="event-detail-title">
+                <span className="section-kicker">{themeLabel(selectedEvent.themeCode)}</span>
                 <h3>{selectedEvent.canonicalTitle}</h3>
-                <p className="muted">{themeLabel(selectedEvent.themeCode)} · 重要性 {selectedEvent.importanceScore ?? 0}</p>
+                <p>{selectedEvent.summary || '暂无摘要'}</p>
               </div>
               <span className="badge">{selectedEvent.status ?? 'ACTIVE'}</span>
-            </div>
-            <div className="event-summary-strip">
-              <span className="subtle-badge">首次出现 {selectedEvent.firstSeenAt?.slice(0, 10) || '--'}</span>
-              <span className="subtle-badge">最近更新 {selectedEvent.lastSeenAt?.slice(0, 10) || '--'}</span>
-              <span className="subtle-badge">新意 {selectedEvent.noveltyState ?? 'NEW'}</span>
-            </div>
-            <div className="topic-links">
+            </header>
+
+            <div className="event-detail-metrics" aria-label="事件指标">
               <div>
-                <strong>关联文章</strong>
-                <ul>
-                  {eventArticles.map((article) => (
-                    <li key={`${article.eventId}-${article.articleId}`}>{article.articleTitle || `Article ${article.articleId}`}</li>
-                  ))}
-                </ul>
+                <span>重要性</span>
+                <strong>{selectedEvent.importanceScore ?? 0}</strong>
               </div>
               <div>
-                <div className="event-filter-bar">
-                  <strong>事件证据</strong>
-                  <label className="inline-select">
-                    <span>证据来源层级</span>
-                    <select
-                      aria-label="证据来源层级"
-                      value={sourceTierFilter}
-                      onChange={(event) => setSourceTierFilter(event.target.value)}
-                    >
-                      <option value="ALL">ALL</option>
-                      {sourceTierOptions.map((tier) => (
-                        <option key={tier} value={tier}>{tier}</option>
-                      ))}
-                    </select>
-                  </label>
+                <span>关联文章</span>
+                <strong>{selectedEvent.articleCount ?? eventArticles.length} 篇</strong>
+              </div>
+              <div>
+                <span>事件证据</span>
+                <strong>{selectedEvent.evidenceCount ?? eventEvidence.length} 条</strong>
+              </div>
+              <div>
+                <span>新意</span>
+                <strong>{selectedEvent.noveltyState ?? 'NEW'}</strong>
+              </div>
+            </div>
+
+            <div className="event-detail-timeline" aria-label="事件时间">
+              <span>首次出现 {selectedEvent.firstSeenAt?.slice(0, 10) || '--'}</span>
+              <span>最近更新 {selectedEvent.lastSeenAt?.slice(0, 10) || '--'}</span>
+            </div>
+
+            <div className="event-detail-content">
+              <section className="event-detail-section">
+                <div className="event-detail-section-head">
+                  <strong>关联文章</strong>
+                  <span>共 {eventArticles.length} 篇</span>
                 </div>
-                <ul>
-                  {visibleEvidence.map((item) => (
-                    <li key={item.id}>[{item.sourceTier}] {item.claim}</li>
-                  ))}
-                </ul>
-              </div>
+                {eventArticles.length ? (
+                  <ul className="event-detail-list">
+                    {eventArticles.map((article) => (
+                      <li key={`${article.eventId}-${article.articleId}`}>{article.articleTitle || `Article ${article.articleId}`}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">暂无关联文章。</p>
+                )}
+              </section>
+
+              <section className="event-detail-section">
+                <div className="event-detail-section-head">
+                  <strong>事件证据</strong>
+                  <span>共 {visibleEvidence.length} 条</span>
+                </div>
+                <label className="inline-select event-detail-filter">
+                  <span>证据来源层级</span>
+                  <select
+                    aria-label="证据来源层级"
+                    value={sourceTierFilter}
+                    onChange={(event) => setSourceTierFilter(event.target.value)}
+                  >
+                    <option value="ALL">ALL</option>
+                    {sourceTierOptions.map((tier) => (
+                      <option key={tier} value={tier}>{tier}</option>
+                    ))}
+                  </select>
+                </label>
+                {visibleEvidence.length ? (
+                  <ul className="event-detail-list">
+                    {visibleEvidence.map((item) => (
+                      <li key={item.id}>
+                        <span>{item.sourceTier}</span>
+                        {item.claim}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">暂无匹配证据。</p>
+                )}
+              </section>
             </div>
           </>
         )}

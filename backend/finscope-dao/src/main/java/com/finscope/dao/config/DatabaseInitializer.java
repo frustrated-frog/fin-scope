@@ -52,6 +52,21 @@ public class DatabaseInitializer implements InitializingBean {
                 + "success_count INTEGER NOT NULL DEFAULT 0,"
                 + "duplicate_count INTEGER NOT NULL DEFAULT 0,"
                 + "error_message TEXT)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS async_task ("
+                + "id TEXT PRIMARY KEY,"
+                + "type TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "phase TEXT NOT NULL,"
+                + "message TEXT,"
+                + "request_url TEXT,"
+                + "article_id INTEGER,"
+                + "error_message TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "started_at TEXT,"
+                + "ended_at TEXT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_async_task_status ON async_task(status)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_async_task_article ON async_task(article_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS article ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "source_id INTEGER,"

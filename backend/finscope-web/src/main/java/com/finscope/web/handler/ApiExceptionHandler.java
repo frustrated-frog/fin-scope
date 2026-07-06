@@ -45,10 +45,10 @@ public class ApiExceptionHandler {
         String traceId = currentTraceId(request);
         String path = request == null ? "" : request.getRequestURI();
         if (status.is5xxServerError()) {
-            log.error("api error code={} status={} path={} traceId={} message={}",
+            log.error("接口错误 code={} status={} path={} traceId={} message={}",
                     errorCode.getCode(), status.value(), path, traceId, ex.getMessage(), ex);
         } else {
-            log.warn("api error code={} status={} path={} traceId={} message={}",
+            log.warn("接口错误 code={} status={} path={} traceId={} message={}",
                     errorCode.getCode(), status.value(), path, traceId, ex.getMessage());
         }
         return ResponseEntity.status(status).body(ApiErrorResponse.of(errorCode, message, traceId, path));

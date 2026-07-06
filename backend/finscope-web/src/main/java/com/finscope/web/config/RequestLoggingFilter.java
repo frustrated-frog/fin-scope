@@ -30,11 +30,11 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         MDC.put(TRACE_ID, traceId);
         response.setHeader(REQUEST_ID_HEADER, traceId);
         try {
-            log.info("request start method={} path={} remote={}", request.getMethod(), request.getRequestURI(), request.getRemoteAddr());
+            log.info("请求开始 method={} path={} remote={}", request.getMethod(), request.getRequestURI(), request.getRemoteAddr());
             filterChain.doFilter(request, response);
         } finally {
             long durationMs = System.currentTimeMillis() - start;
-            log.info("request end method={} path={} status={} durationMs={}",
+            log.info("请求结束 method={} path={} status={} durationMs={}",
                     request.getMethod(), request.getRequestURI(), response.getStatus(), durationMs);
             MDC.remove(TRACE_ID);
         }

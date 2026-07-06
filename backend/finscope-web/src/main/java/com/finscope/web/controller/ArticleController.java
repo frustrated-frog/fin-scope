@@ -4,10 +4,10 @@ import com.finscope.domain.request.DeleteArticlesRequest;
 import com.finscope.domain.request.IngestUrlRequest;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.service.article.ArticleCardView;
-import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.service.article.ArticleDeletionService;
 import com.finscope.service.article.ArticleQueryService;
-import com.finscope.service.article.UrlIngestService;
+import com.finscope.service.task.TaskView;
+import com.finscope.service.task.UrlIngestTaskService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,7 +26,7 @@ public class ArticleController {
     @Resource
     private ArticleQueryService articleQueryService;
     @Resource
-    private UrlIngestService urlIngestService;
+    private UrlIngestTaskService urlIngestTaskService;
     @Resource
     private ArticleDeletionService articleDeletionService;
 
@@ -58,7 +58,7 @@ public class ArticleController {
     }
 
     @PostMapping("/ingest-url")
-    public ArticleIngestResult ingestUrl(@RequestBody IngestUrlRequest request) {
-        return urlIngestService.ingest(request.getUrl(), request.getSourceName(), request.getTags());
+    public TaskView ingestUrl(@RequestBody IngestUrlRequest request) {
+        return urlIngestTaskService.submit(request);
     }
 }

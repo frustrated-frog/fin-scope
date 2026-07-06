@@ -1,0 +1,285 @@
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
+import { api } from '../../shared/api/client';
+import { ArticleView } from './ArticleView';
+
+vi.mock('../../shared/api/client', () => ({
+  api: vi.fn()
+}));
+
+const firstArticle = {
+  id: 1,
+  title: '已有文章',
+  url: 'https://example.com/old',
+  sourceName: '测试来源',
+  category: '市场',
+  noveltyType: 'NEW',
+  summary: '已有摘要'
+};
+
+const generatedArticle = {
+  id: 2,
+  title: '新生成的情报卡片',
+  url: 'https://example.com/new-card',
+  sourceName: '手动研究',
+  category: '市场',
+  noveltyType: 'NEW',
+  summary: '生成摘要',
+  insightCard: {
+    oneSentenceSummary: '网页已整理成情报卡片。',
+    coreEvent: '用户导入 URL。',
+    importance: '提升信息整理效率。'
+  }
+};
+
+const secondGeneratedArticle = {
+  ...generatedArticle,
+  id: 3,
+  title: '第二张情报卡片',
+  url: 'https://example.com/second-card'
+};
+
+beforeEach(() => {
+  vi.mocked(api).mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+test('shows ingest progress while a pasted url is generating and highlights the new card after success', async () => {
+  let listRequestCount = 0;
+  let taskRequestCount = 0;
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      listRequestCount += 1;
+      return {
+        items: listRequestCount === 1 ? [firstArticle] : [generatedArticle, firstArticle],
+        totalCount: listRequestCount === 1 ? 1 : 2,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-1', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' };
+    }
+    if (path === '/api/tasks/task-1') {
+      taskRequestCount += 1;
+      if (taskRequestCount === 1) {
+        return { taskId: 'task-1', status: 'RUNNING', phase: 'LLM', message: '正在生成情报卡片' };
+      }
+      return {
+        taskId: 'task-1',
+        status: 'COMPLETED',
+        phase: 'COMPLETED',
+        message: '情报卡片已生成，已加入文章列表',
+        articleId: generatedArticle.id,
+        article: generatedArticle
+      };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), 'https://example.com/new-card');
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+
+  expect(screen.getByRole('button', { name: '生成中...' })).toBeDisabled();
+  expect(await screen.findByText('正在生成情报卡片')).toBeInTheDocument();
+  expect(screen.getByText('抓取网页')).toBeInTheDocument();
+  expect(screen.getByText('提取正文')).toBeInTheDocument();
+  expect(screen.getByText('生成卡片')).toBeInTheDocument();
+
+  expect(await screen.findByText('新生成的情报卡片')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/tasks/task-1');
+  expect(screen.getByText('AI 解读')).toBeInTheDocument();
+  expect(screen.getByText('网页已整理成情报卡片。')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByText('新生成的情报卡片').closest('.article-card')).toHaveClass('article-card-highlight');
+  });
+});
+
+test('submits the selected article category when generating an intelligence card', async () => {
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      return {
+        items: [],
+        totalCount: 0,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-tech', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' };
+    }
+    if (path === '/api/tasks/task-tech') {
+      return {
+        taskId: 'task-tech',
+        status: 'COMPLETED',
+        phase: 'COMPLETED',
+        articleId: generatedArticle.id,
+        article: { ...generatedArticle, category: '前沿技术' }
+      };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  const categoryControl = await screen.findByLabelText('文章类型');
+  await userEvent.click(within(categoryControl).getByRole('button', { name: '前沿技术' }));
+  await userEvent.type(screen.getByPlaceholderText('输入文章URL...'), 'https://example.com/frontier-tech');
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+
+  await waitFor(() => {
+    expect(api).toHaveBeenCalledWith('/api/articles/ingest-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: 'https://example.com/frontier-tech',
+        sourceName: '手动研究',
+        tags: '市场',
+        category: '前沿技术'
+      })
+    });
+  });
+});
+
+test('keeps the pasted url and offers retry when generation fails', async () => {
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      return {
+        items: [firstArticle],
+        totalCount: 1,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' };
+    }
+    if (path === '/api/tasks/task-fail') {
+      return {
+        taskId: 'task-fail',
+        status: 'FAILED',
+        phase: 'FAILED',
+        errorMessage: '未能读取到可用正文'
+      };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  const urlInput = await screen.findByPlaceholderText('输入文章URL...');
+  await userEvent.type(urlInput, 'https://example.com/fail');
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+
+  expect(await screen.findByText('生成失败')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+  expect(urlInput).toHaveValue('https://example.com/fail');
+});
+
+test('keeps the latest generated card highlighted when generations finish close together', async () => {
+  let ingestCount = 0;
+  let listRequestCount = 0;
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      listRequestCount += 1;
+      return {
+        items: [
+          ...(listRequestCount >= 3 ? [secondGeneratedArticle] : []),
+          ...(listRequestCount >= 2 ? [generatedArticle] : []),
+          firstArticle
+        ],
+        totalCount: listRequestCount,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      ingestCount += 1;
+      return { taskId: ingestCount === 1 ? 'task-1' : 'task-2', status: 'QUEUED', phase: 'QUEUED' };
+    }
+    if (path === '/api/tasks/task-1') {
+      return {
+        taskId: 'task-1',
+        status: 'COMPLETED',
+        phase: 'COMPLETED',
+        articleId: generatedArticle.id,
+        article: generatedArticle
+      };
+    }
+    if (path === '/api/tasks/task-2') {
+      return {
+        taskId: 'task-2',
+        status: 'COMPLETED',
+        phase: 'COMPLETED',
+        articleId: secondGeneratedArticle.id,
+        article: secondGeneratedArticle
+      };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  const urlInput = await screen.findByPlaceholderText('输入文章URL...');
+  const form = urlInput.closest('form');
+  expect(form).not.toBeNull();
+  vi.useFakeTimers();
+
+  fireEvent.change(urlInput, { target: { value: generatedArticle.url } });
+  await act(async () => {
+    fireEvent.submit(form!);
+  });
+  expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
+
+  act(() => {
+    vi.advanceTimersByTime(4000);
+  });
+
+  fireEvent.change(screen.getByPlaceholderText('输入文章URL...'), {
+    target: { value: secondGeneratedArticle.url }
+  });
+  await act(async () => {
+    fireEvent.submit(form!);
+  });
+  expect(screen.getByText('第二张情报卡片')).toBeInTheDocument();
+
+  act(() => {
+    vi.advanceTimersByTime(1000);
+  });
+
+  expect(screen.getByText('第二张情报卡片').closest('.article-card')).toHaveClass('article-card-highlight');
+});

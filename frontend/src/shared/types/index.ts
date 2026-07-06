@@ -8,6 +8,7 @@ export type View =
   | 'events'
   | 'evidence'
   | 'topics'
+  | 'topicReader'
   | 'learning'
   | 'contentStudio'
   | 'agents'
@@ -59,6 +60,17 @@ export type Article = {
   publishedAt?: string;
   fetchedAt?: string;
   insightCard?: InsightCard;
+};
+
+export type AsyncTask = {
+  taskId: string;
+  type?: string;
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  phase?: 'QUEUED' | 'FETCHING' | 'PARSING' | 'PERSISTING' | 'LLM' | 'COMPLETED' | 'FAILED';
+  message?: string;
+  errorMessage?: string;
+  articleId?: number;
+  article?: Article;
 };
 
 export type Brief = {

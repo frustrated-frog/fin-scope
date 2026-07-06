@@ -46,6 +46,25 @@ export function LearningView({
     () => Array.from(new Set(learningTasks.map((task) => task.themeCode))).filter(Boolean),
     [learningTasks]
   );
+  const taskTopicMap = useMemo(() => {
+    return learningTasks.reduce<Record<number, Topic | undefined>>((matches, task) => {
+      const conceptTokens = splitLines((task.concepts || '').replace(/[,，]/g, '\n'))
+        .map((token) => token.trim().toLowerCase())
+        .filter(Boolean);
+      const matchedTopic = topics.find((topic) => {
+        const topicText = [
+          topic.name,
+          topic.description,
+          topic.terms,
+          topic.learningQuestions,
+          topic.markdownPath
+        ].filter(Boolean).join('\n').toLowerCase();
+        return conceptTokens.some((token) => topicText.includes(token));
+      });
+      matches[task.id] = matchedTopic || (topics.length === 1 ? topics[0] : undefined);
+      return matches;
+    }, {});
+  }, [learningTasks, topics]);
   const visibleTasks = useMemo(
     () => themeFilter === 'ALL' ? learningTasks : learningTasks.filter((task) => task.themeCode === themeFilter),
     [learningTasks, themeFilter]
@@ -72,12 +91,19 @@ export function LearningView({
     addToast('学习任务状态已更新', 'success');
   }
 
+  async function openTaskTopic(task: LearningTask) {
+    const topic = taskTopicMap[task.id];
+    if (topic) {
+      await onOpenTopic(topic.id);
+    }
+  }
+
   return (
     <section className="learning-grid">
       <section className="panel learning-queue">
-        <div className="panel-heading">
+        <div className="panel-heading learning-queue-heading">
           <h3>学习队列</h3>
-          <label className="inline-select">
+          <label className="inline-select learning-queue-filter">
             <span>学习主题筛选</span>
             <select
               aria-label="学习主题筛选"
@@ -117,6 +143,8 @@ export function LearningView({
                       ))}
                     </select>
                   </label>
+                </div>
+                <div className="learning-task-actions" role="group" aria-label={`学习任务操作-${task.id}`}>
                   <button
                     aria-label={`更新任务状态-${task.id}`}
                     className="compact-button"
@@ -124,6 +152,15 @@ export function LearningView({
                     onClick={() => updateTaskStatus(task)}
                   >
                     更新任务状态
+                  </button>
+                  <button
+                    aria-label={`记录学习-${task.id}`}
+                    className="compact-button"
+                    type="button"
+                    disabled={!taskTopicMap[task.id]}
+                    onClick={() => openTaskTopic(task)}
+                  >
+                    记录学习
                   </button>
                   {task.eventId ? (
                     <button
@@ -152,7 +189,7 @@ export function LearningView({
                   ))}
                 </ul>
               </div>
-              <button className="compact-button learning-action-button" onClick={() => onOpenTopic(topic.id)}>记录理解</button>
+              <button className="compact-button learning-action-button" type="button" onClick={() => onOpenTopic(topic.id)}>记录理解</button>
             </article>
           ))}
         </div>
@@ -204,7 +241,6 @@ export function LearningView({
               </label>
               <button className="primary-button" type="submit">保存理解</button>
             </form>
-            <pre className="markdown-preview">{topicDetail.markdown}</pre>
           </>
         )}
       </section>

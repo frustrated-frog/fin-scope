@@ -7,11 +7,11 @@ import { Topic } from '../../shared/types';
 export function TopicsView({
   topics,
   onChanged,
-  onOpenTopic
+  onOpenTopicReader
 }: {
   topics: Topic[];
   onChanged: () => Promise<void>;
-  onOpenTopic: (topicId: number) => Promise<void>;
+  onOpenTopicReader: (topicId: number) => Promise<void>;
 }) {
   const [name, setName] = useState('');
 
@@ -43,10 +43,10 @@ export function TopicsView({
           <h3>主题库</h3>
           <span className="subtle-badge">{topics.length} topics</span>
         </div>
-        <div className="item-list">
+        <div className="item-list topic-list">
           {topics.map((topic) => (
-            <article className="list-item" key={topic.id}>
-              <div>
+            <article className="list-item topic-list-item" key={topic.id}>
+              <div className="topic-card-body">
                 <strong>{topic.name}</strong>
                 <p>{topic.description || '暂无描述'}</p>
                 <p className="topic-meta">
@@ -61,8 +61,8 @@ export function TopicsView({
                   ))}
                 </ul>
               </div>
-              <div className="item-actions">
-                <button className="compact-button" onClick={() => onOpenTopic(topic.id)}>查看详情</button>
+              <div className="topic-card-actions" role="group" aria-label="主题操作">
+                <button className="compact-button" type="button" onClick={() => onOpenTopicReader(topic.id)}>查看详情</button>
                 <span className="badge">{topic.status}</span>
               </div>
             </article>

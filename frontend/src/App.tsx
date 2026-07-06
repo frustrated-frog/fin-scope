@@ -12,6 +12,7 @@ import { EventsView } from './features/events/EventsView';
 import { LearningView } from './features/learning/LearningView';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
+import { TopicReaderView } from './features/topics/TopicReaderView';
 import { SourcesView } from './features/sources/SourcesView';
 import { TopicsView } from './features/topics/TopicsView';
 import { api } from './shared/api/client';
@@ -139,6 +140,8 @@ export default function App() {
         return 'Evidence Ledger';
       case 'topics':
         return 'Topics';
+      case 'topicReader':
+        return 'Topic Reader';
       case 'learning':
         return 'Learning';
       case 'contentStudio':
@@ -152,9 +155,19 @@ export default function App() {
     }
   }, [view]);
 
-  async function openTopic(topicId: number) {
+  async function loadTopicDetail(topicId: number) {
     const detail = await api<TopicDetail>(`/api/topics/${topicId}`);
     setTopicDetail(detail);
+    return detail;
+  }
+
+  async function openTopicReader(topicId: number) {
+    await loadTopicDetail(topicId);
+    setView('topicReader');
+  }
+
+  async function openTopicForLearning(topicId: number) {
+    await loadTopicDetail(topicId);
     setView('learning');
   }
 
@@ -306,7 +319,14 @@ export default function App() {
         <TopicsView
           topics={topics}
           onChanged={refresh}
-          onOpenTopic={openTopic}
+          onOpenTopicReader={openTopicReader}
+        />
+      )}
+      {view === 'topicReader' && (
+        <TopicReaderView
+          topicDetail={topicDetail}
+          onBack={() => setView('topics')}
+          onRecordLearning={openTopicForLearning}
         />
       )}
       {view === 'learning' && (
@@ -314,7 +334,7 @@ export default function App() {
           topics={topics}
           learningTasks={learningTasks}
           topicDetail={topicDetail}
-          onOpenTopic={openTopic}
+          onOpenTopic={openTopicForLearning}
           onOpenEvent={openEvent}
           onChanged={refresh}
           onTaskStatusChange={updateLearningTaskStatus}

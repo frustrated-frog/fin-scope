@@ -14,6 +14,7 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.research.BriefResearchContextService;
 import com.finscope.service.research.ResearchRunContext;
 import com.finscope.service.vault.VaultWriter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class BriefService {
     private static final String GENERATED_BRIEF_TITLE_PREFIX = "每日金融、投资、创业学习简报 - ";
 
@@ -50,7 +52,12 @@ public class BriefService {
     }
 
     public List<Brief> list() {
-        syncVaultBriefs();
+        try {
+            syncVaultBriefs();
+        } catch (IllegalStateException ex) {
+            log.warn("vault 简报索引失败，返回数据库已有简报列表 message={}", ex.getMessage());
+            log.trace("vault 简报索引失败详情", ex);
+        }
         return briefRepository.findAll();
     }
 

@@ -8,6 +8,7 @@ import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.insight.InsightCard;
 import com.finscope.domain.source.Source;
+import com.finscope.domain.task.TaskPhase;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.dedupe.NoveltyService;
 import com.finscope.service.insight.InsightCardService;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.util.function.Consumer;
 
 @Service
 @Slf4j
@@ -31,16 +33,36 @@ public class ArticleIngestCoordinator {
     private InsightCardService insightCardService;
     @Resource
     private EventClusterService eventClusterService;
+    @Resource
+    private ArticleCategoryPolicy articleCategoryPolicy;
 
     @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {
+        return ingestInternal(source, item, null, null);
+    }
+
+    public ArticleIngestResult ingest(Source source, RawItem item, Consumer<TaskPhase> phaseConsumer) {
+        return ingestInternal(source, item, null, phaseConsumer);
+    }
+
+    public ArticleIngestResult ingest(Source source,
+                                      RawItem item,
+                                      String category,
+                                      Consumer<TaskPhase> phaseConsumer) {
+        return ingestInternal(source, item, category, phaseConsumer);
+    }
+
+    private ArticleIngestResult ingestInternal(Source source,
+                                               RawItem item,
+                                               String category,
+                                               Consumer<TaskPhase> phaseConsumer) {
         long start = System.currentTimeMillis();
         String title = StringUtils.firstNonBlank(item.getTitle(), source.getUrl(), ContentConstants.DEFAULT_ARTICLE_TITLE);
         String url = StringUtils.firstNonBlank(item.getUrl(), source.getUrl(), "");
-        log.info("article ingest start sourceId={} sourceName={} title={}", source.getId(), source.getName(), title);
+        log.info("文章入库开始 sourceId={} sourceName={} title={}", source.getId(), source.getName(), title);
         Article article = Article.createFetched(source.getId(), StringUtils.firstNonBlank(source.getName(), ContentConstants.DEFAULT_SOURCE_NAME),
                 title, url, item.getPublishedAt(), item.getSummary(), item.getBody());
-        article.setCategory(resolveCategory(source.getTags(), item));
+        article.setCategory(resolveArticleCategory(category, source.getTags(), item));
 
         String urlFingerprint = fingerprintService.urlFingerprint(url);
         String titleFingerprint = fingerprintService.normalizeText(title);
@@ -50,12 +72,21 @@ public class ArticleIngestCoordinator {
         article.setNoveltyType(decision.getType());
         article.setNoveltyReason(decision.getReason());
 
+        publishPhase(phaseConsumer, TaskPhase.PERSISTING);
         Article saved = articleRepository.save(article, urlFingerprint, titleFingerprint, bodySimhash);
+        publishPhase(phaseConsumer, TaskPhase.LLM);
         InsightCard card = insightCardService.createForArticle(saved);
+        publishPhase(phaseConsumer, TaskPhase.PERSISTING);
         eventClusterService.attachArticle(saved);
-        log.info("article ingest success articleId={} sourceId={} noveltyType={} insightCardId={} durationMs={}",
+        log.info("文章入库成功 articleId={} sourceId={} noveltyType={} insightCardId={} durationMs={}",
                 saved.getId(), source.getId(), saved.getNoveltyType(), card.getId(), System.currentTimeMillis() - start);
         return new ArticleIngestResult(saved, card);
+    }
+
+    private void publishPhase(Consumer<TaskPhase> phaseConsumer, TaskPhase phase) {
+        if (phaseConsumer != null) {
+            phaseConsumer.accept(phase);
+        }
     }
 
     private String resolveCategory(String tags, RawItem item) {
@@ -75,5 +106,12 @@ public class ArticleIngestCoordinator {
             return ContentConstants.CATEGORY_INDUSTRY;
         }
         return ContentConstants.CATEGORY_MARKET;
+    }
+
+    private String resolveArticleCategory(String category, String tags, RawItem item) {
+        if (StringUtils.isNotBlank(category)) {
+            return articleCategoryPolicy.normalize(category);
+        }
+        return articleCategoryPolicy.fromLegacyCategory(resolveCategory(tags, item));
     }
 }

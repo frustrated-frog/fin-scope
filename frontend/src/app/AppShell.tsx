@@ -47,7 +47,9 @@ export function AppShell({
     <div className="app-shell" data-theme={theme}>
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">FS</span>
+          <span className="brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" />
+          </span>
           <div>
             <h1>FinScope</h1>
             <p>Research Intelligence</p>

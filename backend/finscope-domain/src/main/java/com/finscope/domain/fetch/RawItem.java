@@ -12,6 +12,9 @@ public class RawItem {
     private String extractionMethod;
     private String extractionNote;
     private int qualityScore;
+    private int sourceSignalScore;
+    private String sourceSignalReason;
+    private int sourceRank;
 
     public RawItem() {
     }
@@ -77,6 +80,30 @@ public class RawItem {
 
     public void setQualityScore(int qualityScore) {
         this.qualityScore = qualityScore;
+    }
+
+    public int getSourceSignalScore() {
+        return sourceSignalScore;
+    }
+
+    public void setSourceSignalScore(int sourceSignalScore) {
+        this.sourceSignalScore = sourceSignalScore;
+    }
+
+    public String getSourceSignalReason() {
+        return sourceSignalReason;
+    }
+
+    public void setSourceSignalReason(String sourceSignalReason) {
+        this.sourceSignalReason = sourceSignalReason;
+    }
+
+    public int getSourceRank() {
+        return sourceRank;
+    }
+
+    public void setSourceRank(int sourceRank) {
+        this.sourceRank = sourceRank;
     }
 
     public RawItem withExtraction(String contentType, String extractionMethod, int qualityScore, String extractionNote) {

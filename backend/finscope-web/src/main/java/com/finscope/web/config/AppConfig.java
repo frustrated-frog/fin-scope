@@ -8,9 +8,11 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.annotation.Resource;
 import java.nio.file.Paths;
+import java.util.concurrent.Executor;
 
 @Configuration
 public class AppConfig {
@@ -47,5 +49,16 @@ public class AppConfig {
                 llm.getModel(),
                 llm.getTimeoutMs(),
                 llm.getTemperature());
+    }
+
+    @Bean(name = "ingestTaskExecutor")
+    public Executor ingestTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("ingest-task-");
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.initialize();
+        return executor;
     }
 }

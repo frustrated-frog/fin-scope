@@ -48,7 +48,7 @@ public class SourceController {
 
     @PostMapping("/{id}/fetch")
     public FetchRun fetch(@PathVariable Long id) {
-        log.info("抓取信息源ID：{}", id);
+        log.info("开始抓取信息源 sourceId={}", id);
         return fetchService.fetch(id);
     }
 }

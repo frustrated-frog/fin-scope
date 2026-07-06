@@ -6,6 +6,7 @@ import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
 import com.finscope.domain.source.SourceType;
+import com.finscope.domain.task.TaskPhase;
 import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.net.URI;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Service
 @Slf4j
@@ -26,6 +28,18 @@ public class UrlIngestService {
 
 
     public ArticleIngestResult ingest(String url, String sourceName, String tags) {
+        return ingest(url, sourceName, tags, null, null);
+    }
+
+    public ArticleIngestResult ingest(String url, String sourceName, String tags, Consumer<TaskPhase> phaseConsumer) {
+        return ingest(url, sourceName, tags, null, phaseConsumer);
+    }
+
+    public ArticleIngestResult ingest(String url,
+                                      String sourceName,
+                                      String tags,
+                                      String category,
+                                      Consumer<TaskPhase> phaseConsumer) {
         validateUrl(url);
         long start = System.currentTimeMillis();
 
@@ -40,32 +54,34 @@ public class UrlIngestService {
         source.setTags(isBlank(tags) ? detectedType.getCategory() : tags.trim());
 
         try {
-            log.info("manual url ingest start url={} sourceName={} tags={}", safeUrl(url), source.getName(), source.getTags());
+            log.info("手动链接入库开始 url={} sourceName={} tags={}", safeUrl(url), source.getName(), source.getTags());
+            publishPhase(phaseConsumer, TaskPhase.FETCHING);
             SourceAdapter adapter = adapterRegistry.get(source);
             List<RawItem> items = adapter.fetch(source);
             if (items.isEmpty()) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "No readable content found: " + url);
             }
-            log.info("manual url ingest fetched url={} itemCount={}", safeUrl(url), items.size());
+            log.info("手动链接抓取完成 url={} itemCount={}", safeUrl(url), items.size());
             RawItem item = items.get(0);
+            publishPhase(phaseConsumer, TaskPhase.PARSING);
             assertReadable(item, url);
-            ArticleIngestResult result = articleIngestCoordinator.ingest(source, item);
-            log.info("manual url ingest success url={} articleId={} insightCardId={} durationMs={}",
+            ArticleIngestResult result = articleIngestCoordinator.ingest(source, item, category, phaseConsumer);
+            log.info("手动链接入库成功 url={} articleId={} insightCardId={} durationMs={}",
                     safeUrl(url), result.getArticle().getId(), result.getInsightCard().getId(), System.currentTimeMillis() - start);
             return result;
         } catch (BusinessException ex) {
-            log.warn("manual url ingest rejected url={} code={} message={}", safeUrl(url), ex.getErrorCode().getCode(), ex.getMessage());
+            log.warn("手动链接入库被拒绝 url={} code={} message={}", safeUrl(url), ex.getErrorCode().getCode(), ex.getMessage());
             throw ex;
         } catch (IllegalArgumentException ex) {
-            log.warn("manual url ingest rejected url={} message={}", safeUrl(url), ex.getMessage());
+            log.warn("手动链接入库被拒绝 url={} message={}", safeUrl(url), ex.getMessage());
             throw new BusinessException(ErrorCode.BAD_REQUEST, ex.getMessage(), ex);
         } catch (Exception ex) {
-            log.error("manual url ingest failed url={} durationMs={}", safeUrl(url), System.currentTimeMillis() - start, ex);
+            log.error("手动链接入库失败 url={} durationMs={}", safeUrl(url), System.currentTimeMillis() - start, ex);
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Failed to ingest URL: " + ex.getMessage(), ex);
         }
     }
 
-    private void validateUrl(String url) {
+    public void validateUrl(String url) {
         if (isBlank(url)) {
             throw new IllegalArgumentException("URL must not be empty");
         }
@@ -79,6 +95,12 @@ public class UrlIngestService {
             throw ex;
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid URL: " + url, ex);
+        }
+    }
+
+    private void publishPhase(Consumer<TaskPhase> phaseConsumer, TaskPhase phase) {
+        if (phaseConsumer != null) {
+            phaseConsumer.accept(phase);
         }
     }
 

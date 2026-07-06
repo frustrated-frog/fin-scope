@@ -84,7 +84,7 @@ public final class HtmlToMarkdownConverter {
 
             return postProcess(builder.build());
         } catch (Exception e) {
-            logger.error("HTML to Markdown conversion failed", e);
+            logger.error("转换 HTML 为 Markdown 失败", e);
             return fallbackExtraction(html);
         }
     }
@@ -99,7 +99,7 @@ public final class HtmlToMarkdownConverter {
             if (!elements.isEmpty()) {
                 Element element = elements.first();
                 if (hasSignificantContent(element)) {
-                    logger.debug("Found main content using selector: {}", selector);
+                    logger.debug("使用选择器找到正文 selector={}", selector);
                     return element;
                 }
             }
@@ -490,7 +490,7 @@ public final class HtmlToMarkdownConverter {
             Document doc = Jsoup.parse(html);
             return doc.text();
         } catch (Exception e) {
-            logger.error("Fallback extraction also failed", e);
+            logger.error("降级提取也失败", e);
             return "";
         }
     }

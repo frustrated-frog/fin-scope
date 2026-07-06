@@ -6,6 +6,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.service.article.ArticleCategoryPolicy;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -27,6 +28,8 @@ public class EventClusterService {
     private LearningTaskService learningTaskService;
     @Resource
     private ContentIdeaService contentIdeaService;
+    @Resource
+    private ArticleCategoryPolicy articleCategoryPolicy;
 
     public EventCluster attachArticle(Article article) {
         if (article == null || article.getId() == null) {
@@ -56,7 +59,9 @@ public class EventClusterService {
         eventClusterRepository.linkArticle(link);
 
         event.setArticleCount(eventClusterRepository.countLinks(event.getId()));
-        event.setEvidenceCount(evidenceService.capture(event, article));
+        if (articleCategoryPolicy.isEvidenceEligible(article.getCategory())) {
+            event.setEvidenceCount(evidenceService.capture(event, article));
+        }
         boolean meaningfulUpdate = ResearchEnums.NOVELTY_NEW.equals(decision.getNoveltyType())
                 || ResearchEnums.NOVELTY_FOLLOW_UP.equals(decision.getNoveltyType());
         learningTaskService.generateIfAbsent(event, article, meaningfulUpdate);

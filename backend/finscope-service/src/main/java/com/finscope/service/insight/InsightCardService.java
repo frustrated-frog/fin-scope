@@ -25,14 +25,14 @@ public class InsightCardService {
     public InsightCard createForArticle(Article article) {
         Optional<InsightCard> existing = insightCardRepository.findByArticleId(article.getId());
         if (existing.isPresent()) {
-            log.info("insight card reuse articleId={} insightCardId={}", article.getId(), existing.get().getId());
+            log.info("复用情报卡片 articleId={} insightCardId={}", article.getId(), existing.get().getId());
             return existing.get();
         }
         long start = System.currentTimeMillis();
-        log.info("insight card generation start articleId={} title={}", article.getId(), article.getTitle());
+        log.info("情报卡片生成开始 articleId={} title={}", article.getId(), article.getTitle());
         ArticleInterpretation interpretation = articleInterpretationAgent.interpret(article);
         InsightCard card = insightCardRepository.save(insightCardGenerator.generate(article, interpretation));
-        log.info("insight card generation success articleId={} insightCardId={} durationMs={}",
+        log.info("情报卡片生成成功 articleId={} insightCardId={} durationMs={}",
                 article.getId(), card.getId(), System.currentTimeMillis() - start);
         return card;
     }

@@ -48,7 +48,7 @@ public class TopicService {
 
     public Topic create(Topic topic) {
         long start = System.currentTimeMillis();
-        log.info("topic create start name={} slug={}", topic.getName(), topic.getSlug());
+        log.info("主题创建开始 name={} slug={}", topic.getName(), topic.getSlug());
         if (topic.getSlug() == null || topic.getSlug().isEmpty()) {
             topic.setSlug(slug(topic.getName()));
         }
@@ -65,28 +65,28 @@ public class TopicService {
                     renderTopic(topic, new ArrayList<Article>(), new ArrayList<Brief>(), Collections.<Long, InsightCard>emptyMap()));
             topic.setMarkdownPath(markdown.toString());
             Topic saved = topicRepository.upsertBySlug(topic);
-            log.info("topic create success topicId={} slug={} durationMs={}", saved.getId(), saved.getSlug(), System.currentTimeMillis() - start);
+            log.info("主题创建成功 topicId={} slug={} durationMs={}", saved.getId(), saved.getSlug(), System.currentTimeMillis() - start);
             return saved;
         } catch (Exception ex) {
-            log.error("topic create failed name={} durationMs={}", topic.getName(), System.currentTimeMillis() - start, ex);
+            log.error("主题创建失败 name={} durationMs={}", topic.getName(), System.currentTimeMillis() - start, ex);
             throw new IllegalStateException("Failed to create topic", ex);
         }
     }
 
     public Topic createFromArticle(Long articleId) {
-        log.info("topic create from article start articleId={}", articleId);
+        log.info("从文章创建主题开始 articleId={}", articleId);
         Article article = articleRepository.findById(articleId)
                 .orElseThrow(() -> new IllegalArgumentException("Article not found: " + articleId));
         TopicExtraction extraction = extractFromArticle(article);
         Topic topic = createTopicFromExtraction(extraction);
         topicRepository.linkArticle(topic.getId(), article.getId());
         Topic refreshed = refreshMarkdown(topic.getId());
-        log.info("topic create from article success articleId={} topicId={}", articleId, refreshed.getId());
+        log.info("从文章创建主题成功 articleId={} topicId={}", articleId, refreshed.getId());
         return refreshed;
     }
 
     public List<Topic> createFromBrief(LocalDate date) {
-        log.info("topic create from brief start date={}", date);
+        log.info("从日报创建主题开始 date={}", date);
         Brief brief = briefRepository.findByDate(date)
                 .orElseThrow(() -> new IllegalArgumentException("Brief not found: " + date));
         TopicExtraction extraction = topicExtractor.extract(brief.getContent());
@@ -94,12 +94,12 @@ public class TopicService {
         topicRepository.linkBrief(topic.getId(), brief.getId());
         List<Topic> topics = new ArrayList<Topic>();
         topics.add(refreshMarkdown(topic.getId()));
-        log.info("topic create from brief success date={} topicId={}", date, topic.getId());
+        log.info("从日报创建主题成功 date={} topicId={}", date, topic.getId());
         return topics;
     }
 
     public TopicDetail detail(Long id) {
-        log.info("topic detail start topicId={}", id);
+        log.info("查询主题详情开始 topicId={}", id);
         Topic topic = topicRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + id));
         try {
