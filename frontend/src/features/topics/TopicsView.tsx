@@ -13,7 +13,7 @@ export function TopicsView({
   topics: Topic[];
   onChanged: () => Promise<void>;
   onOpenTopicReader: (topicId: number) => Promise<void>;
-  onDeleteTopic: (topic: Topic) => Promise<void>;
+  onDeleteTopic: (topic: Topic) => void;
 }) {
   const [name, setName] = useState('');
 
@@ -65,7 +65,7 @@ export function TopicsView({
               </div>
               <div className="topic-card-actions" role="group" aria-label="主题操作">
                 <button className="compact-button" type="button" onClick={() => onOpenTopicReader(topic.id)}>查看详情</button>
-                <button className="danger-button topic-delete-button" type="button" onClick={() => onDeleteTopic(topic)}>删除主题</button>
+                <button className="compact-button topic-delete-button" type="button" onClick={() => onDeleteTopic(topic)}>删除主题</button>
                 <span className="badge">{topic.status}</span>
               </div>
             </article>

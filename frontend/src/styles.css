@@ -768,7 +768,22 @@ textarea {
 }
 
 .topic-card-actions .topic-delete-button {
-  padding: 9px 12px;
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+  box-shadow: 0 8px 18px rgba(185, 28, 28, 0.18);
+  padding: 8px 12px;
+}
+
+[data-theme="dark"] .topic-card-actions .topic-delete-button {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.24);
+}
+
+.topic-card-actions .topic-delete-button:hover {
+  box-shadow: 0 12px 26px rgba(185, 28, 28, 0.26);
+}
+
+[data-theme="dark"] .topic-card-actions .topic-delete-button:hover {
+  box-shadow: 0 12px 26px rgba(220, 38, 38, 0.34);
 }
 
 .topic-card-actions .badge {
@@ -2609,6 +2624,64 @@ td {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+}
+
+.topic-delete-modal {
+  max-width: 440px;
+  overflow: hidden;
+}
+
+.topic-delete-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(180, 79, 55, 0.1), transparent);
+}
+
+.topic-delete-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(180, 79, 55, 0.14);
+  color: var(--danger);
+  font-weight: 850;
+}
+
+.modal-kicker {
+  margin: 0 0 2px;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.topic-delete-content {
+  display: grid;
+  gap: 10px;
+}
+
+.topic-delete-content .topic-delete-name {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(180, 79, 55, 0.24);
+  border-radius: 8px;
+  background: rgba(180, 79, 55, 0.08);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-weight: 780;
+  overflow-wrap: anywhere;
+}
+
+.topic-delete-confirm-button {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 760;
 }
 
 /* Pagination Controls */

@@ -686,13 +686,16 @@ test('topics keep detail action on the left and learning status on the right', a
 
   const actionRow = within(topicCard as HTMLElement).getByRole('group', { name: '主题操作' });
   const detailButton = within(actionRow).getByRole('button', { name: '查看详情' });
+  const deleteButton = within(actionRow).getByRole('button', { name: '删除主题' });
   const statusBadge = within(actionRow).getByText('LEARNING');
 
   expect(actionRow).toHaveClass('topic-card-actions');
+  expect(deleteButton).toHaveClass('compact-button');
+  expect(deleteButton).toHaveClass('topic-delete-button');
   expect(detailButton.compareDocumentPosition(statusBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('topics can delete a topic after confirmation', async () => {
+test('topics delete with an in-app confirmation dialog', async () => {
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
@@ -701,7 +704,14 @@ test('topics can delete a topic after confirmation', async () => {
   expect(topicCard).toBeTruthy();
   await userEvent.click(within(topicCard as HTMLElement).getByRole('button', { name: '删除主题' }));
 
-  expect(confirm).toHaveBeenCalledWith('确定要删除主题“降息交易”吗？关联文章、简报和原始内容不会被删除。');
+  expect(confirm).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalledWith('/api/topics/1', expect.objectContaining({ method: 'DELETE' }));
+  const dialog = await screen.findByRole('dialog', { name: '删除主题' });
+  expect(within(dialog).getByText('降息交易')).toBeInTheDocument();
+  expect(within(dialog).getByText('关联文章、简报和原始内容不会被删除。')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
   expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.objectContaining({ method: 'DELETE' }));
   expect(await screen.findByText('0 topics')).toBeInTheDocument();
   expect(screen.queryByText('降息交易')).not.toBeInTheDocument();

@@ -54,6 +54,8 @@ export default function App() {
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
+  const [topicDeleteTarget, setTopicDeleteTarget] = useState<Topic | null>(null);
+  const [deletingTopicId, setDeletingTopicId] = useState<number | null>(null);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -172,17 +174,15 @@ export default function App() {
   }
 
   async function deleteTopic(topic: Topic) {
-    const confirmed = confirm(`确定要删除主题“${topic.name}”吗？关联文章、简报和原始内容不会被删除。`);
-    if (!confirmed) {
-      return;
-    }
     setMessage('正在删除主题');
+    setDeletingTopicId(topic.id);
     try {
       await api<void>(`/api/topics/${topic.id}`, { method: 'DELETE' });
       if (topicDetail?.topic.id === topic.id) {
         setTopicDetail(null);
         setView('topics');
       }
+      setTopicDeleteTarget(null);
       await refresh();
       setMessage('主题已删除');
       addToast('主题已删除', 'success');
@@ -190,6 +190,8 @@ export default function App() {
       const message = error instanceof Error ? error.message : '主题删除失败';
       setMessage(message);
       addToast(message, 'error');
+    } finally {
+      setDeletingTopicId(null);
     }
   }
 
@@ -342,7 +344,9 @@ export default function App() {
           topics={topics}
           onChanged={refresh}
           onOpenTopicReader={openTopicReader}
-          onDeleteTopic={deleteTopic}
+          onDeleteTopic={(topic) => {
+            setTopicDeleteTarget(topic);
+          }}
         />
       )}
       {view === 'topicReader' && (
@@ -374,6 +378,36 @@ export default function App() {
       )}
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
+      {topicDeleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal topic-delete-modal" role="dialog" aria-modal="true" aria-labelledby="topic-delete-title">
+            <div className="modal-header topic-delete-header">
+              <span className="topic-delete-mark" aria-hidden="true">!</span>
+              <div>
+                <p className="modal-kicker">Confirm action</p>
+                <h4 id="topic-delete-title">删除主题</h4>
+              </div>
+            </div>
+            <div className="modal-content topic-delete-content">
+              <p className="topic-delete-name">{topicDeleteTarget.name}</p>
+              <p>关联文章、简报和原始内容不会被删除。</p>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setTopicDeleteTarget(null)}>
+                取消
+              </button>
+              <button
+                className="danger-button topic-delete-confirm-button"
+                type="button"
+                disabled={deletingTopicId === topicDeleteTarget.id}
+                onClick={() => deleteTopic(topicDeleteTarget)}
+              >
+                {deletingTopicId === topicDeleteTarget.id ? '删除中' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
