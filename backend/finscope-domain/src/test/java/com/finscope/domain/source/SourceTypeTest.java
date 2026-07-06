@@ -19,6 +19,20 @@ class SourceTypeTest {
     }
 
     @Test
+    void testFromUrl_OfficialDataSources() {
+        assertEquals(SourceType.FEDERAL_RESERVE, SourceType.fromUrl("https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm"));
+        assertEquals(SourceType.BEA, SourceType.fromUrl("https://www.bea.gov/news/2026/gross-domestic-product-second-quarter-2026"));
+        assertEquals(SourceType.SEC, SourceType.fromUrl("https://www.sec.gov/newsroom/press-releases/2026-101"));
+        assertEquals(SourceType.BIS, SourceType.fromUrl("https://www.bis.org/press/p260620.htm"));
+        assertEquals(SourceType.BANK_OF_ENGLAND, SourceType.fromUrl("https://www.bankofengland.co.uk/news/2026/june/monetary-policy-summary"));
+        assertEquals(SourceType.IEA, SourceType.fromUrl("https://www.iea.org/news/example-energy-market-report"));
+        assertEquals(SourceType.CONFERENCE_BOARD, SourceType.fromUrl("https://www.conference-board.org/topics/consumer-confidence/press/cci-june-2026"));
+        assertEquals(SourceType.GOV_CN, SourceType.fromUrl("https://www.gov.cn/zhengce/2026-06/20/content_1234567.htm"));
+        assertEquals(SourceType.NBS_CN, SourceType.fromUrl("https://www.stats.gov.cn/sj/zxfb/202606/t20260620_1234567.html"));
+        assertEquals(SourceType.CSRC, SourceType.fromUrl("https://www.csrc.gov.cn/csrc/c100028/c7890123/content.shtml"));
+    }
+
+    @Test
     void testFromUrl_Eastmoney() {
         assertEquals(SourceType.EASTMONEY, SourceType.fromUrl("https://eastmoney.com/stock/123"));
         assertEquals(SourceType.EASTMONEY, SourceType.fromUrl("https://guba.eastmoney.com/thread/123"));
@@ -27,6 +41,12 @@ class SourceTypeTest {
     @Test
     void testFromUrl_Tonghuashun() {
         assertEquals(SourceType.TONGHUASHUN, SourceType.fromUrl("https://10jqka.com.cn/news/123"));
+    }
+
+    @Test
+    void testFromUrl_ChineseFinanceSources() {
+        assertEquals(SourceType.SECURITIES_TIMES, SourceType.fromUrl("https://www.stcn.com/article/detail/123456.html"));
+        assertEquals(SourceType.SECURITIES_STAR, SourceType.fromUrl("https://stock.stockstar.com/IG202606200001.shtml"));
     }
 
     @Test
@@ -56,11 +76,13 @@ class SourceTypeTest {
         assertEquals("新华网", SourceType.XINHUA.getDisplayName());
         assertEquals("东方财富", SourceType.EASTMONEY.getDisplayName());
         assertEquals("同花顺", SourceType.TONGHUASHUN.getDisplayName());
+        assertEquals("美联储", SourceType.FEDERAL_RESERVE.getDisplayName());
     }
 
     @Test
     void testCredibility() {
         assertEquals(5, SourceType.XINHUA.getCredibility()); // 官方媒体
+        assertEquals(5, SourceType.SEC.getCredibility()); // 官方机构
         assertEquals(4, SourceType.EASTMONEY.getCredibility()); // 财经媒体
         assertEquals(3, SourceType.X.getCredibility()); // 社交媒体
     }

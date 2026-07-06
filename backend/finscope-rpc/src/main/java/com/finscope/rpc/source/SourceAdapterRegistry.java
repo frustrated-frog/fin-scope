@@ -22,7 +22,7 @@ public class SourceAdapterRegistry {
 
     public SourceAdapter get(Source source) {
         for (SourceAdapter adapter : adapters) {
-            if (adapter.supports(source) && !adapter.supports(source.getType())) {
+            if (adapter.supports(source) && !adapter.supports(source.getType()) && !isGenericWebAdapter(adapter)) {
                 return adapter;
             }
         }
@@ -37,5 +37,9 @@ public class SourceAdapterRegistry {
             }
         }
         throw new IllegalArgumentException("Unsupported source: " + source.getType() + " " + source.getUrl());
+    }
+
+    private boolean isGenericWebAdapter(SourceAdapter adapter) {
+        return adapter.supports("WEB");
     }
 }

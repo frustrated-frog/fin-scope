@@ -71,6 +71,58 @@ class WebArticleExtractorTest {
     }
 
     @Test
+    void extractsBeaReleaseFromOfficialProfile() {
+        String url = "https://www.bea.gov/news/2026/gross-domestic-product-second-quarter-2026";
+        RawItem item = extractor.extract(document(url, officialArticleHtml(
+                "U.S. GDP Increased in the Second Quarter",
+                "Real gross domestic product increased at an annual rate in the second quarter.",
+                "Real gross domestic product increased at an annual rate in the second quarter of 2026.",
+                "Consumer spending and private investment contributed to the increase.",
+                "2026-07-30T08:30:00-04:00")), source(url));
+
+        assertEquals("U.S. GDP Increased in the Second Quarter", item.getTitle());
+        assertTrue(item.getBody().contains("Consumer spending and private investment contributed"));
+        assertEquals("web:profile:bea", item.getExtractionMethod());
+    }
+
+    @Test
+    void extractsBankOfEnglandReleaseFromOfficialProfile() {
+        String url = "https://www.bankofengland.co.uk/news/2026/june/monetary-policy-summary";
+        RawItem item = extractor.extract(document(url, officialArticleHtml(
+                "Monetary Policy Summary",
+                "The Monetary Policy Committee voted to maintain Bank Rate.",
+                "The Monetary Policy Committee voted to maintain Bank Rate at its latest meeting.",
+                "The Committee will continue to monitor inflationary pressures closely.",
+                "2026-06-18T12:00:00Z")), source(url));
+
+        assertEquals("Monetary Policy Summary", item.getTitle());
+        assertTrue(item.getBody().contains("monitor inflationary pressures closely"));
+        assertEquals("web:profile:bank-of-england", item.getExtractionMethod());
+    }
+
+    @Test
+    void extractsChineseRegulatorArticleFromOfficialProfile() {
+        String url = "https://www.csrc.gov.cn/csrc/c100028/c7890123/content.shtml";
+        RawItem item = extractor.extract(document(url, chineseOfficialHtml()), source(url));
+
+        assertEquals("证监会发布资本市场高质量发展举措", item.getTitle());
+        assertTrue(item.getBody().contains("进一步完善资本市场基础制度"));
+        assertTrue(item.getBody().contains("提升上市公司质量"));
+        assertEquals("web:profile:csrc", item.getExtractionMethod());
+    }
+
+    @Test
+    void extractsTonghuashunArticleFromFinanceProfile() {
+        String url = "https://www.10jqka.com.cn/20260620/c123456789.shtml";
+        RawItem item = extractor.extract(document(url, tonghuashunHtml()), source(url));
+
+        assertEquals("A股市场延续震荡修复", item.getTitle());
+        assertTrue(item.getBody().contains("市场成交保持活跃"));
+        assertFalse(item.getBody().contains("同花顺财经"));
+        assertEquals("web:profile:tonghuashun", item.getExtractionMethod());
+    }
+
+    @Test
     void doesNotApplyProfileToLookalikeHost() {
         String url = "https://federalreserve.gov.example.com/article";
         RawItem item = extractor.extract(document(url, federalReserveHtml()), source(url));
@@ -147,6 +199,48 @@ class WebArticleExtractorTest {
                 + "<p>多家机构认为，市场风险偏好仍在修复，高股息资产具备防御和收益属性。</p>"
                 + "<p>配置上关注现金流稳定、分红能力强的公司，同时跟踪政策变化。</p>"
                 + "<div class=\"article-bottom\">热门推荐：相关阅读</div>"
+                + "</div>"
+                + "</body></html>";
+    }
+
+    private String officialArticleHtml(String title, String summary, String firstParagraph, String secondParagraph, String date) {
+        return "<html><head>"
+                + "<meta property=\"og:title\" content=\"" + title + "\">"
+                + "<meta name=\"description\" content=\"" + summary + "\">"
+                + "<meta property=\"article:published_time\" content=\"" + date + "\">"
+                + "</head><body>"
+                + "<header>Global navigation</header>"
+                + "<main class=\"article-content\">"
+                + "<h1>" + title + "</h1>"
+                + "<p>" + firstParagraph + "</p>"
+                + "<p>" + secondParagraph + "</p>"
+                + "<aside>Related content</aside>"
+                + "</main>"
+                + "</body></html>";
+    }
+
+    private String chineseOfficialHtml() {
+        return "<html><head>"
+                + "<meta name=\"PubDate\" content=\"2026年06月20日 09:15\">"
+                + "</head><body>"
+                + "<h1>证监会发布资本市场高质量发展举措</h1>"
+                + "<div class=\"TRS_Editor\">"
+                + "<p>进一步完善资本市场基础制度，加强投资者保护。</p>"
+                + "<p>提升上市公司质量，促进市场平稳健康发展。</p>"
+                + "</div>"
+                + "</body></html>";
+    }
+
+    private String tonghuashunHtml() {
+        return "<html><head>"
+                + "<meta property=\"og:title\" content=\"A股市场延续震荡修复\">"
+                + "<meta name=\"description\" content=\"市场成交保持活跃，资金关注政策和业绩主线。\">"
+                + "</head><body>"
+                + "<h1>A股市场延续震荡修复</h1>"
+                + "<div class=\"article-content\">"
+                + "<p>市场成交保持活跃，资金继续围绕政策预期和业绩确定性展开。</p>"
+                + "<p>机构认为后续需要关注宏观数据和流动性变化。</p>"
+                + "<div>同花顺财经 责任编辑</div>"
                 + "</div>"
                 + "</body></html>";
     }
