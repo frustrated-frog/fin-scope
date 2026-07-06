@@ -340,6 +340,7 @@ const responses: Record<string, unknown> = {
 
 beforeEach(() => {
   const state = JSON.parse(JSON.stringify(responses)) as Record<string, any>;
+  vi.stubGlobal('confirm', vi.fn(() => true));
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/articles/ingest-url' && String(init?.body).includes('x-shell')) {
@@ -362,6 +363,13 @@ beforeEach(() => {
       return {
         ok: true,
         json: async () => state['/api/content-ideas'][0]
+      } as Response;
+    }
+    if (url === '/api/topics/1' && init?.method === 'DELETE') {
+      state['/api/topics'] = state['/api/topics'].filter((topic: { id: number }) => topic.id !== 1);
+      return {
+        ok: true,
+        json: async () => ({})
       } as Response;
     }
     if (url === '/api/research/runs' && init?.method === 'POST') {
@@ -682,6 +690,21 @@ test('topics keep detail action on the left and learning status on the right', a
 
   expect(actionRow).toHaveClass('topic-card-actions');
   expect(detailButton.compareDocumentPosition(statusBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('topics can delete a topic after confirmation', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
+
+  const topicCard = (await screen.findByText('降息交易')).closest('article');
+  expect(topicCard).toBeTruthy();
+  await userEvent.click(within(topicCard as HTMLElement).getByRole('button', { name: '删除主题' }));
+
+  expect(confirm).toHaveBeenCalledWith('确定要删除主题“降息交易”吗？关联文章、简报和原始内容不会被删除。');
+  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.objectContaining({ method: 'DELETE' }));
+  expect(await screen.findByText('0 topics')).toBeInTheDocument();
+  expect(screen.queryByText('降息交易')).not.toBeInTheDocument();
 });
 
 test('topics open a full-width markdown topic reader', async () => {

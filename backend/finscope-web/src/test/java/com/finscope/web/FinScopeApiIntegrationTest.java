@@ -763,6 +763,36 @@ class FinScopeApiIntegrationTest {
         assertTrue(noteWritten);
     }
 
+    @Test
+    void topicCanBeDeletedWithoutDeletingLinkedContent() throws Exception {
+        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/sources/1/fetch"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/briefs/generate"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/topics/from-article/1"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/topics/from-brief/" + LocalDate.now()))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete("/api/topics/1"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/topics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/api/articles/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("美联储释放降息信号 黄金走强"));
+        mvc.perform(get("/api/briefs/" + LocalDate.now()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title", containsString("每日")));
+    }
+
     private void deleteIfExists(String table) {
         try {
             jdbcTemplate.update("DELETE FROM " + table);

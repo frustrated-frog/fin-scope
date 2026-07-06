@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <title>PageAgent 测试页面</title>
+</head>
+<body>
+<h1>PageAgent 测试页面</h1>
+
+<div>
+    <label>用户名：</label>
+    <input placeholder="请输入用户名" />
+</div>
+
+<div>
+    <label>密码：</label>
+    <input placeholder="请输入密码" type="password" />
+</div>
+
+<button onclick="alert('登录成功')">登录</button>
+
+<!-- 关键就是这一行：引入 PageAgent -->
+<script src="https://cdn.jsdelivr.net/npm/page-agent@1.11.0/dist/iife/page-agent.demo.js" crossorigin="true"></script>
+</body>
+</html>

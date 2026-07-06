@@ -754,16 +754,21 @@ textarea {
 
 .topic-card-actions {
   display: grid;
-  grid-template-columns: minmax(108px, 1fr) max-content;
+  grid-template-columns: minmax(108px, 1fr) minmax(96px, max-content) max-content;
   align-items: center;
   gap: 10px;
   justify-self: end;
-  min-width: 220px;
+  min-width: 326px;
 }
 
-.topic-card-actions .compact-button {
+.topic-card-actions .compact-button,
+.topic-card-actions .topic-delete-button {
   min-width: 108px;
   white-space: nowrap;
+}
+
+.topic-card-actions .topic-delete-button {
+  padding: 9px 12px;
 }
 
 .topic-card-actions .badge {

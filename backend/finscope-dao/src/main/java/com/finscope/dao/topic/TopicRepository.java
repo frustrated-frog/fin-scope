@@ -154,6 +154,12 @@ public class TopicRepository {
                 briefMapper, topicId);
     }
 
+    public int deleteById(Long topicId) {
+        jdbcTemplate.update("DELETE FROM topic_article WHERE topic_id = ?", topicId);
+        jdbcTemplate.update("DELETE FROM topic_brief WHERE topic_id = ?", topicId);
+        return jdbcTemplate.update("DELETE FROM topic WHERE id = ?", topicId);
+    }
+
     private String selectTopicSql() {
         return "SELECT t.*, "
                 + "(SELECT COUNT(*) FROM topic_article ta WHERE ta.topic_id = t.id) AS article_count, "

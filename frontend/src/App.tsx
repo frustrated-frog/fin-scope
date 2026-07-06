@@ -171,6 +171,28 @@ export default function App() {
     setView('learning');
   }
 
+  async function deleteTopic(topic: Topic) {
+    const confirmed = confirm(`确定要删除主题“${topic.name}”吗？关联文章、简报和原始内容不会被删除。`);
+    if (!confirmed) {
+      return;
+    }
+    setMessage('正在删除主题');
+    try {
+      await api<void>(`/api/topics/${topic.id}`, { method: 'DELETE' });
+      if (topicDetail?.topic.id === topic.id) {
+        setTopicDetail(null);
+        setView('topics');
+      }
+      await refresh();
+      setMessage('主题已删除');
+      addToast('主题已删除', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '主题删除失败';
+      setMessage(message);
+      addToast(message, 'error');
+    }
+  }
+
   function openEvent(eventId: number) {
     setFocusedEventId(eventId);
     setView('events');
@@ -320,6 +342,7 @@ export default function App() {
           topics={topics}
           onChanged={refresh}
           onOpenTopicReader={openTopicReader}
+          onDeleteTopic={deleteTopic}
         />
       )}
       {view === 'topicReader' && (

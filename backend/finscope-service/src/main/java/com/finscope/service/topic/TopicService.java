@@ -125,6 +125,17 @@ public class TopicService {
         }
     }
 
+    public void delete(Long id) {
+        long start = System.currentTimeMillis();
+        Topic topic = topicRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + id));
+        int deleted = topicRepository.deleteById(id);
+        if (deleted == 0) {
+            throw new IllegalArgumentException("Topic not found: " + id);
+        }
+        log.info("主题删除成功 topicId={} slug={} durationMs={}", id, topic.getSlug(), System.currentTimeMillis() - start);
+    }
+
     private Topic createTopicFromExtraction(TopicExtraction extraction) {
         Topic topic = new Topic();
         topic.setName(extraction.getPrimaryTopicName());
