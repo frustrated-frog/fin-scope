@@ -1,6 +1,7 @@
 import { InsightCard } from '../../shared/types';
 
 export function InsightCardPreview({ card }: { card: InsightCard }) {
+  const analysisSections = (card.analysisSections || []).filter((section) => section.title && section.content);
   const basicFields = [
     ['一句话摘要', card.oneSentenceSummary],
     ['核心事件', card.coreEvent],
@@ -35,7 +36,19 @@ export function InsightCardPreview({ card }: { card: InsightCard }) {
         </div>
       ))}
 
-      {deepFields.length > 0 && (
+      {analysisSections.length > 0 && (
+        <div className="insight-deep-section">
+          <div className="insight-section-title">分类解读</div>
+          {analysisSections.map((section) => (
+            <div className="insight-field-item" key={section.title}>
+              <div className="insight-field-label">{section.title}</div>
+              <div className="insight-field-value">{section.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {analysisSections.length === 0 && deepFields.length > 0 && (
         <div className="insight-deep-section">
           <div className="insight-section-title">深度解读</div>
           {deepFields.map(([label, value]) => (

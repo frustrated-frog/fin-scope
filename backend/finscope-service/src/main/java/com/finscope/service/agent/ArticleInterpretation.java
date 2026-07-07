@@ -1,5 +1,7 @@
 package com.finscope.service.agent;
 
+import com.finscope.domain.insight.InsightSection;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +32,7 @@ public class ArticleInterpretation {
     private String facts;
     private String reasoning;
     private String opinions;
+    private List<InsightSection> analysisSections = new ArrayList<InsightSection>();
 
     public String getSource() {
         return source;
@@ -221,5 +224,15 @@ public class ArticleInterpretation {
 
     public void setOpinions(String opinions) {
         this.opinions = opinions;
+    }
+
+    public List<InsightSection> getAnalysisSections() {
+        return analysisSections;
+    }
+
+    public void setAnalysisSections(List<InsightSection> analysisSections) {
+        this.analysisSections = analysisSections == null
+                ? new ArrayList<InsightSection>()
+                : new ArrayList<InsightSection>(analysisSections);
     }
 }

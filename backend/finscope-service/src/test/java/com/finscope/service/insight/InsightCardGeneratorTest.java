@@ -2,9 +2,13 @@ package com.finscope.service.insight;
 
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
+import com.finscope.domain.insight.InsightSection;
+import com.finscope.service.agent.ArticleInterpretation;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -112,5 +116,60 @@ class InsightCardGeneratorTest {
         assertTrue(card.getFollowUpQuestions().contains("合法合规"));
         assertFalse(card.getFollowUpQuestions().contains("免费额度"));
         assertFalse(card.getImpactTargets().contains("社媒实践经验"));
+    }
+
+    @Test
+    void marketCategoryUsesPolicyEventAndReactionSections() {
+        Article article = Article.createFetched(10L, "新闻发布会", "国新办发布会释放稳增长政策信号",
+                "https://example.com/policy-briefing",
+                LocalDateTime.of(2026, 7, 6, 10, 0),
+                "新闻发布会提到加快专项债发行、稳定就业和扩大内需。",
+                "国新办新闻发布会介绍宏观政策落实情况，强调加快专项债发行、推动消费品以旧换新、稳定就业。"
+                        + "市场随后关注基建链、消费和利率债的政策验证窗口。");
+        article.setId(46L);
+        article.setCategory("市场");
+
+        InsightCard card = new InsightCardGenerator().generate(article);
+        List<InsightSection> sections = card.getAnalysisSections();
+
+        assertFalse(sections.isEmpty());
+        assertTrue(hasSection(sections, "政策/事件脉络"));
+        assertTrue(hasSection(sections, "市场反应"));
+        assertTrue(hasSection(sections, "下一观察窗口"));
+        assertTrue(card.getCardMarkdown().contains("### 政策/事件脉络"));
+        assertTrue(card.getCardMarkdown().contains("### 市场反应"));
+    }
+
+    @Test
+    void llmInterpretationCarriesChineseTranslationSectionForEnglishOriginal() {
+        Article article = Article.createFetched(11L, "OpenAI Blog", "OpenAI releases a new coding agent",
+                "https://example.com/openai-agent",
+                LocalDateTime.of(2026, 7, 6, 12, 0),
+                "OpenAI released a coding agent that can plan tasks, edit files, and run tests.",
+                "OpenAI released a coding agent that can plan tasks, edit files, and run tests. "
+                        + "The product focuses on developer workflows and safer code review loops.");
+        article.setId(47L);
+        article.setCategory("前沿技术");
+
+        ArticleInterpretation interpretation = new ArticleInterpretation();
+        interpretation.setOneSentenceSummary("OpenAI 发布了面向开发者工作流的新 coding agent。");
+        interpretation.setCoreEvent("OpenAI 发布 coding agent。");
+        interpretation.setImportance("它把代码编辑、测试和审查流程进一步产品化。");
+        interpretation.setImpactTargets(Arrays.asList("开发者工具", "AI 编程", "代码审查"));
+        interpretation.setLearningQuestions(Arrays.asList("它降低了哪类开发任务成本？"));
+        interpretation.setAnalysisSections(Arrays.asList(
+                new InsightSection("中文译文摘要", "OpenAI 发布了一款可以规划任务、编辑文件并运行测试的编程代理。"),
+                new InsightSection("它做了什么", "它将开发者工作流中的计划、修改和验证串成一个 agent 流程。")
+        ));
+
+        InsightCard card = new InsightCardGenerator().generate(article, interpretation);
+
+        assertTrue(hasSection(card.getAnalysisSections(), "中文译文摘要"));
+        assertTrue(card.getCardMarkdown().contains("### 中文译文摘要"));
+        assertTrue(card.getCardMarkdown().contains("编程代理"));
+    }
+
+    private boolean hasSection(List<InsightSection> sections, String title) {
+        return sections.stream().anyMatch((section) -> title.equals(section.getTitle()));
     }
 }

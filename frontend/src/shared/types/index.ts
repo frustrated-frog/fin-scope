@@ -33,6 +33,10 @@ export type InsightCard = {
   impactTargets?: string;
   followUpQuestions?: string;
   cardMarkdown?: string;
+  analysisSections?: Array<{
+    title: string;
+    content: string;
+  }>;
   background?: string;
   keyData?: string;
   timeline?: string;

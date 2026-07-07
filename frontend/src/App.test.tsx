@@ -23,7 +23,12 @@ const responses: Record<string, unknown> = {
         importance: '影响利率预期、资产定价和风险偏好。',
         impactTargets: '黄金、美元、债券、权益市场',
         followUpQuestions: '下一次验证窗口是什么？',
-        cardMarkdown: '## 情报卡片'
+        cardMarkdown: '## 情报卡片',
+        analysisSections: [
+          { title: '政策/事件脉络', content: '美联储释放偏鸽信号，市场开始重新评估降息节奏。' },
+          { title: '市场反应', content: '黄金走强，美元和美债收益率承压，权益风险偏好改善。' },
+          { title: '下一观察窗口', content: '继续观察通胀数据、议息会议和就业数据。' }
+        ]
       }
     }
   ],
@@ -43,7 +48,12 @@ const responses: Record<string, unknown> = {
           importance: '影响利率预期、资产定价和风险偏好。',
           impactTargets: '黄金、美元、债券、权益市场',
           followUpQuestions: '下一次验证窗口是什么？',
-          cardMarkdown: '## 情报卡片'
+          cardMarkdown: '## 情报卡片',
+          analysisSections: [
+            { title: '政策/事件脉络', content: '美联储释放偏鸽信号，市场开始重新评估降息节奏。' },
+            { title: '市场反应', content: '黄金走强，美元和美债收益率承压，权益风险偏好改善。' },
+            { title: '下一观察窗口', content: '继续观察通胀数据、议息会议和就业数据。' }
+          ]
         }
       }
     ],
@@ -497,6 +507,19 @@ test('shows readable error when pasted url cannot be extracted', async () => {
   await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
 
   expect(await screen.findAllByText('未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页')).not.toHaveLength(0);
+});
+
+test('article insight renders category-aware sections', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Article' }));
+  await userEvent.click(await screen.findByText('美联储释放降息信号 黄金走强'));
+
+  expect(await screen.findByText('分类解读')).toBeInTheDocument();
+  expect(screen.getByText('政策/事件脉络')).toBeInTheDocument();
+  expect(screen.getByText('市场反应')).toBeInTheDocument();
+  expect(screen.getByText('下一观察窗口')).toBeInTheDocument();
+  expect(screen.getByText('美联储释放偏鸽信号，市场开始重新评估降息节奏。')).toBeInTheDocument();
 });
 
 test('can compound an inbox article into a topic', async () => {

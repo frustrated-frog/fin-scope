@@ -110,6 +110,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "facts TEXT,"
                 + "reasoning TEXT,"
                 + "opinions TEXT,"
+                + "analysis_sections TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brief ("
@@ -147,6 +148,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("insight_card", "facts", "TEXT");
         ensureColumn("insight_card", "reasoning", "TEXT");
         ensureColumn("insight_card", "opinions", "TEXT");
+        ensureColumn("insight_card", "analysis_sections", "TEXT");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS topic_article ("
                 + "topic_id INTEGER NOT NULL,"
                 + "article_id INTEGER NOT NULL,"

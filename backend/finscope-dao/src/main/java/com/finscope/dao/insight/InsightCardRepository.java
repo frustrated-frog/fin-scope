@@ -1,7 +1,10 @@
 package com.finscope.dao.insight;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.insight.InsightCard;
+import com.finscope.domain.insight.InsightSection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -19,6 +22,9 @@ import java.util.Optional;
 public class InsightCardRepository {
     @Resource
     private JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final TypeReference<List<InsightSection>> sectionListType = new TypeReference<List<InsightSection>>() {
+    };
     private final RowMapper<InsightCard> mapper = (rs, rowNum) -> {
         InsightCard card = new InsightCard();
         card.setId(rs.getLong("id"));
@@ -49,6 +55,7 @@ public class InsightCardRepository {
         card.setFacts(rs.getString("facts"));
         card.setReasoning(rs.getString("reasoning"));
         card.setOpinions(rs.getString("opinions"));
+        card.setAnalysisSections(readSections(rs.getString("analysis_sections")));
 
         card.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         card.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
@@ -67,7 +74,7 @@ public class InsightCardRepository {
                     + "importance,impact_targets,novelty_type,novelty_reason,follow_up_questions,card_markdown,"
                     + "background,key_data,timeline,related_parties,risk_factors,future_outlook,"
                     + "impact_on_investment,impact_on_startup,professional_insight,facts,reasoning,opinions,"
-                    + "created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                    + "analysis_sections,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             int i = 1;
             ps.setLong(i++, card.getArticleId());
             ps.setString(i++, card.getTitle());
@@ -96,6 +103,7 @@ public class InsightCardRepository {
             ps.setString(i++, card.getFacts());
             ps.setString(i++, card.getReasoning());
             ps.setString(i++, card.getOpinions());
+            ps.setString(i++, writeSections(card.getAnalysisSections()));
 
             ps.setString(i++, TimeUtil.text(card.getCreatedAt()));
             ps.setString(i++, TimeUtil.text(card.getUpdatedAt()));
@@ -145,5 +153,27 @@ public class InsightCardRepository {
             "DELETE FROM insight_card WHERE article_id IN (" + placeholders + ")",
             articleIds.toArray()
         );
+    }
+
+    private List<InsightSection> readSections(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(value, sectionListType);
+        } catch (Exception ex) {
+            return Collections.emptyList();
+        }
+    }
+
+    private String writeSections(List<InsightSection> sections) {
+        if (sections == null || sections.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(sections);
+        } catch (Exception ex) {
+            return "[]";
+        }
     }
 }

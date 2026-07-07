@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
+import com.finscope.domain.insight.InsightSection;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.insight.InsightCardGenerator;
 import com.finscope.service.research.ResearchRunContext;
@@ -97,6 +98,7 @@ public class ArticleInterpretationAgent {
         interpretation.setFacts(text(root, "facts", ""));
         interpretation.setReasoning(text(root, "reasoning", ""));
         interpretation.setOpinions(text(root, "opinions", ""));
+        interpretation.setAnalysisSections(sectionList(root.get("analysisSections")));
 
         validate(interpretation, fallback);
         validateAgainstEvidence(interpretation, input);
@@ -156,7 +158,8 @@ public class ArticleInterpretationAgent {
                 interpretation.getProfessionalInsight(),
                 interpretation.getFacts(),
                 interpretation.getReasoning(),
-                interpretation.getOpinions()).toLowerCase(Locale.ROOT);
+                interpretation.getOpinions(),
+                sectionText(interpretation.getAnalysisSections())).toLowerCase(Locale.ROOT);
         return containsAny(text,
                 "正文未抓取",
                 "正文未提供",
@@ -185,14 +188,16 @@ public class ArticleInterpretationAgent {
         interpretation.setImpactTargets(splitTargets(card.getImpactTargets()));
         interpretation.setKeyTerms(topic.getTerms());
         interpretation.setLearningQuestions(topic.getLearningQuestions());
+        interpretation.setAnalysisSections(new ArrayList<InsightSection>());
         interpretation.setConfidence(0.45);
         return interpretation;
     }
 
     private String systemPrompt() {
         return "你是 FinScope 的资深金融分析师和投研专家。你的任务是对抓取的文章进行深度解读,生成结构化的投研分析卡片。"
-                + "分析需要包含:事件概述、背景脉络、关键数据、时间线、相关方、风险因素、未来展望、对投资和创业的影响等维度。"
+                + "分析需要按文章分类选择小标题,不要对所有文章套同一套模板。"
                 + "同时要区分事实、推理和观点,提供专业的独立判断。"
+                + "如果原文主要是英文,必须用中文输出,并在 analysisSections 第一项给出中文译文摘要。"
                 + "只返回 JSON,不返回 Markdown,不要包裹代码块。";
     }
 
@@ -201,6 +206,13 @@ public class ArticleInterpretationAgent {
         return "请深度解读下面文章,输出JSON对象。\n\n"
                 + "【字段说明】\n"
                 + "基础字段: contentType, topicName, topicDescription, oneSentenceSummary, coreEvent, importance, impactTargets, keyTerms, learningQuestions, confidence\n"
+                + "动态解读字段: analysisSections, 数组, 每项包含 title 和 content。title 必须使用中文。\n"
+                + "请按分类选择小标题:\n"
+                + "- 金融: 发生了什么;关键数据/政策变量;影响链条;受影响资产;投资含义;反证与风险;下一观察窗口\n"
+                + "- 市场: 政策/事件脉络;发布会/公告要点;市场反应;受影响方向;短期与中期影响;拥挤度与风险点;下一观察窗口\n"
+                + "- 自我提升: 核心观点;适用场景;方法步骤;背后的原则;可以立刻做什么;常见误区/边界;给自己的复盘问题\n"
+                + "- 前沿技术: 它做了什么;解决了什么问题;关键机制/技术路线;性能/成本/体验变化;生态与竞争格局;落地场景;风险与限制;我应该补什么知识\n"
+                + "如果原文主要是英文,analysisSections 第一项必须是 title=中文译文摘要, content=自然中文摘要或短文完整译文。\n"
                 + "深度解读字段(参考每日金融投资创业简报的深度分析风格):\n"
                 + "- background: 事件背景是什么(150字内,提供必要的上下文脉络)\n"
                 + "- keyData: 关键数据(列举2-5个核心数据,如金额、增长率、市场规模等)\n"
@@ -218,12 +230,13 @@ public class ArticleInterpretationAgent {
                 + "1. topicName 要像知识库主题名,不要截断标题\n"
                 + "2. learningQuestions 必须贴合原文,不要泛泛而谈\n"
                 + "3. impactTargets/keyTerms/learningQuestions 使用字符串数组\n"
-                + "4. confidence 为 0 到 1\n"
-                + "5. 深度解读字段要求有实质内容,不能简单重复标题或摘要\n"
-                + "6. 对投资/创业的影响要有具体分析,而非泛泛而谈\n"
-                + "7. 必须基于已提供正文证据进行判断,不要只依据 URL、作者名或互动数据臆测原文。\n"
-                + "8. 如果 contentQuality 是 FULL_TEXT 或 PARTIAL_TEXT,禁止输出“正文未抓取”“未提供正文”“无法判断正文内容”等与输入事实冲突的说法。\n"
-                + "9. 如果 bodyWasTruncated=true,只能说明基于已提供正文片段分析,不能说正文不可读。\n\n"
+                + "4. analysisSections 使用对象数组,每项 title 不超过16字,content 必须是中文且基于原文证据\n"
+                + "5. confidence 为 0 到 1\n"
+                + "6. 深度解读字段要求有实质内容,不能简单重复标题或摘要\n"
+                + "7. 对投资/创业的影响要有具体分析,而非泛泛而谈\n"
+                + "8. 必须基于已提供正文证据进行判断,不要只依据 URL、作者名或互动数据臆测原文。\n"
+                + "9. 如果 contentQuality 是 FULL_TEXT 或 PARTIAL_TEXT,禁止输出“正文未抓取”“未提供正文”“无法判断正文内容”等与输入事实冲突的说法。\n"
+                + "10. 如果 bodyWasTruncated=true,只能说明基于已提供正文片段分析,不能说正文不可读。\n\n"
                 + "【证据状态】\n"
                 + "contentQuality: " + input.contentQuality + "\n"
                 + "bodyLength: " + input.bodyLength + "\n"
@@ -254,6 +267,33 @@ public class ArticleInterpretationAgent {
         } catch (Exception ex) {
             return "source=" + safe(interpretation.getSource()) + ", topicName=" + safe(interpretation.getTopicName());
         }
+    }
+
+    private List<InsightSection> sectionList(JsonNode node) {
+        List<InsightSection> sections = new ArrayList<InsightSection>();
+        if (node == null || !node.isArray()) {
+            return sections;
+        }
+        for (JsonNode item : node) {
+            String title = text(item, "title", "");
+            String content = text(item, "content", "");
+            if (!isBlank(title) && !isBlank(content)) {
+                sections.add(new InsightSection(title.trim(), content.trim()));
+            }
+        }
+        return sections;
+    }
+
+    private String sectionText(List<InsightSection> sections) {
+        if (sections == null || sections.isEmpty()) {
+            return "";
+        }
+        List<String> values = new ArrayList<String>();
+        for (InsightSection section : sections) {
+            values.add(section.getTitle());
+            values.add(section.getContent());
+        }
+        return join(" ", values.toArray(new String[0]));
     }
 
     private String modelName() {

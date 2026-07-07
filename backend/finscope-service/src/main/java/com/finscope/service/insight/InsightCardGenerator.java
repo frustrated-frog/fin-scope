@@ -2,6 +2,7 @@ package com.finscope.service.insight;
 
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
+import com.finscope.domain.insight.InsightSection;
 import com.finscope.service.agent.ArticleInterpretation;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,7 @@ public class InsightCardGenerator {
         card.setImportance(buildImportance(article, contentKind));
         card.setImpactTargets(buildImpactTargets(article, contentKind));
         card.setFollowUpQuestions(buildFollowUpQuestions(article, contentKind));
+        card.setAnalysisSections(defaultSections(article, card, contentKind));
         card.setCardMarkdown(renderMarkdown(card));
         return card;
     }
@@ -67,6 +69,11 @@ public class InsightCardGenerator {
         card.setFacts(empty(interpretation.getFacts(), ""));
         card.setReasoning(empty(interpretation.getReasoning(), ""));
         card.setOpinions(empty(interpretation.getOpinions(), ""));
+        if (interpretation.getAnalysisSections() == null || interpretation.getAnalysisSections().isEmpty()) {
+            card.setAnalysisSections(defaultSections(article, card, detectContentKind(article)));
+        } else {
+            card.setAnalysisSections(interpretation.getAnalysisSections());
+        }
 
         card.setCardMarkdown(renderMarkdown(card, interpretation));
         return card;
@@ -244,6 +251,51 @@ public class InsightCardGenerator {
         return String.join("\n", questions);
     }
 
+    private List<InsightSection> defaultSections(Article article, InsightCard card, String contentKind) {
+        String category = empty(article.getCategory(), "市场");
+        List<InsightSection> sections = new ArrayList<InsightSection>();
+        if ("PAPER".equals(contentKind) || category.contains("前沿") || category.contains("技术") || category.contains("科技")) {
+            addSection(sections, "它做了什么", card.getCoreEvent());
+            addSection(sections, "解决了什么问题", card.getImportance());
+            addSection(sections, "关键机制/技术路线", firstNonBlank(card.getImpactTargets(), "从原文抽取技术对象、方法和系统边界。"));
+            addSection(sections, "风险与限制", firstNonBlank(card.getRiskFactors(), "关注复现难度、成本、依赖方和实际落地约束。"));
+            addSection(sections, "我应该补什么知识", card.getFollowUpQuestions());
+            return sections;
+        }
+        if (category.contains("自我")) {
+            addSection(sections, "核心观点", card.getOneSentenceSummary());
+            addSection(sections, "适用场景", firstNonBlank(card.getCoreEvent(), card.getImportance()));
+            addSection(sections, "方法步骤", card.getFollowUpQuestions());
+            addSection(sections, "常见误区/边界", firstNonBlank(card.getRiskFactors(), "避免把个人经验当作普适结论，先确认约束条件和适用人群。"));
+            addSection(sections, "给自己的复盘问题", card.getFollowUpQuestions());
+            return sections;
+        }
+        if (category.contains("金融") || category.contains("宏观")) {
+            addSection(sections, "发生了什么", card.getCoreEvent());
+            addSection(sections, "关键数据/政策变量", firstNonBlank(card.getKeyData(), card.getOneSentenceSummary()));
+            addSection(sections, "影响链条", card.getImportance());
+            addSection(sections, "受影响资产", card.getImpactTargets());
+            addSection(sections, "投资含义", firstNonBlank(card.getImpactOnInvestment(), card.getImportance()));
+            addSection(sections, "反证与风险", firstNonBlank(card.getRiskFactors(), "需要观察后续数据是否支持当前市场解释。"));
+            addSection(sections, "下一观察窗口", card.getFollowUpQuestions());
+            return sections;
+        }
+        addSection(sections, "政策/事件脉络", card.getCoreEvent());
+        addSection(sections, "发布会/公告要点", firstNonBlank(card.getKeyData(), card.getOneSentenceSummary()));
+        addSection(sections, "市场反应", card.getImportance());
+        addSection(sections, "受影响方向", card.getImpactTargets());
+        addSection(sections, "短期与中期影响", firstNonBlank(card.getFutureOutlook(), card.getImportance()));
+        addSection(sections, "拥挤度与风险点", firstNonBlank(card.getRiskFactors(), "关注政策预期是否被提前交易，以及落地节奏是否低于市场预期。"));
+        addSection(sections, "下一观察窗口", card.getFollowUpQuestions());
+        return sections;
+    }
+
+    private void addSection(List<InsightSection> sections, String title, String content) {
+        if (!isBlank(title) && !isBlank(content)) {
+            sections.add(new InsightSection(title, content));
+        }
+    }
+
     private String renderMarkdown(InsightCard card) {
         StringBuilder markdown = new StringBuilder();
         markdown.append("## 情报卡片：").append(card.getTitle()).append("\n\n");
@@ -255,6 +307,7 @@ public class InsightCardGenerator {
         markdown.append("### 核心事件\n\n").append(empty(card.getCoreEvent(), "")).append("\n\n");
         markdown.append("### 为什么重要\n\n").append(empty(card.getImportance(), "")).append("\n\n");
         markdown.append("### 影响对象\n\n").append(empty(card.getImpactTargets(), "")).append("\n\n");
+        appendAnalysisSections(markdown, card);
         markdown.append("### 后续观察\n\n");
         for (String question : splitLines(card.getFollowUpQuestions())) {
             markdown.append("- ").append(question).append("\n");
@@ -277,6 +330,8 @@ public class InsightCardGenerator {
         markdown.append("### 核心事件\n\n").append(empty(card.getCoreEvent(), "")).append("\n\n");
         markdown.append("### 为什么重要\n\n").append(empty(card.getImportance(), "")).append("\n\n");
         markdown.append("### 影响对象\n\n").append(empty(card.getImpactTargets(), "")).append("\n\n");
+
+        appendAnalysisSections(markdown, card);
 
         // 深度解读
         if (!isBlank(card.getBackground())) {
@@ -343,6 +398,18 @@ public class InsightCardGenerator {
         }
 
         return markdown.toString();
+    }
+
+    private void appendAnalysisSections(StringBuilder markdown, InsightCard card) {
+        if (card.getAnalysisSections() == null || card.getAnalysisSections().isEmpty()) {
+            return;
+        }
+        for (InsightSection section : card.getAnalysisSections()) {
+            if (!isBlank(section.getTitle()) && !isBlank(section.getContent())) {
+                markdown.append("### ").append(section.getTitle()).append("\n\n")
+                        .append(section.getContent()).append("\n\n");
+            }
+        }
     }
 
     private List<String> splitLines(String value) {

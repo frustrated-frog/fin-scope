@@ -1,6 +1,8 @@
 package com.finscope.domain.insight;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class InsightCard {
     private Long id;
@@ -31,6 +33,7 @@ public class InsightCard {
     private String facts;                // 事实
     private String reasoning;            // 推理
     private String opinions;             // 观点
+    private List<InsightSection> analysisSections = new ArrayList<InsightSection>();
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -241,6 +244,16 @@ public class InsightCard {
 
     public void setOpinions(String opinions) {
         this.opinions = opinions;
+    }
+
+    public List<InsightSection> getAnalysisSections() {
+        return analysisSections;
+    }
+
+    public void setAnalysisSections(List<InsightSection> analysisSections) {
+        this.analysisSections = analysisSections == null
+                ? new ArrayList<InsightSection>()
+                : new ArrayList<InsightSection>(analysisSections);
     }
 
     public LocalDateTime getCreatedAt() {
