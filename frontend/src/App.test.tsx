@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
+import { ArticleCard } from './features/articles/ArticleCard';
 
 const responses: Record<string, unknown> = {
   '/api/dashboard': { sourceCount: 2, articleCount: 3, briefCount: 1, latestFetchRuns: [] },
@@ -520,6 +521,43 @@ test('article insight renders category-aware sections', async () => {
   expect(screen.getByText('市场反应')).toBeInTheDocument();
   expect(screen.getByText('下一观察窗口')).toBeInTheDocument();
   expect(screen.getByText('美联储释放偏鸽信号，市场开始重新评估降息节奏。')).toBeInTheDocument();
+});
+
+test('market article insight derives category-aware sections from legacy fields', () => {
+  render(
+    <ArticleCard
+      article={{
+        id: 99,
+        title: '国新办发布会释放循环经济政策信号',
+        url: 'https://example.com/policy-briefing',
+        sourceName: '新闻发布会',
+        category: '市场',
+        insightCard: {
+          oneSentenceSummary: '发布会明确循环经济十五五规划方向。',
+          coreEvent: '国新办发布会介绍循环经济规划。',
+          importance: '政策可能改变资源循环产业链预期。',
+          impactTargets: '地方政府、回收企业、新能源车产业链',
+          keyData: '主要再生资源回收利用量超过4.1亿吨。',
+          riskFactors: '落地节奏和地方执行力度仍需验证。',
+          futureOutlook: '后续关注清单、行业标准和财政金融支持。',
+          followUpQuestions: '下一场发布会、配套细则和地方试点。'
+        }
+      }}
+      isExpanded
+      onToggle={vi.fn()}
+      onCompound={vi.fn()}
+      onDelete={vi.fn()}
+      categoryColor="#f0b90b"
+    />
+  );
+
+  expect(screen.getByText('分类解读')).toBeInTheDocument();
+  expect(screen.getByText('政策/事件脉络')).toBeInTheDocument();
+  expect(screen.getByText('发布会/公告要点')).toBeInTheDocument();
+  expect(screen.getByText('市场反应')).toBeInTheDocument();
+  expect(screen.getByText('下一观察窗口')).toBeInTheDocument();
+  expect(screen.queryByText('深度解读')).not.toBeInTheDocument();
+  expect(screen.queryByText('背景是什么')).not.toBeInTheDocument();
 });
 
 test('can compound an inbox article into a topic', async () => {

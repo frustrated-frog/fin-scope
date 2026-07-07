@@ -203,6 +203,55 @@ test('keeps the pasted url and offers retry when generation fails', async () => 
   expect(urlInput).toHaveValue('https://example.com/fail');
 });
 
+test('keeps generation successful when workspace refresh fails after task completion', async () => {
+  let listRequestCount = 0;
+  const addToast = vi.fn();
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      listRequestCount += 1;
+      return {
+        items: listRequestCount === 1 ? [firstArticle] : [generatedArticle, firstArticle],
+        totalCount: listRequestCount === 1 ? 1 : 2,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-refresh-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' };
+    }
+    if (path === '/api/tasks/task-refresh-fail') {
+      return {
+        taskId: 'task-refresh-fail',
+        status: 'COMPLETED',
+        phase: 'COMPLETED',
+        message: '情报卡片已生成，已加入文章列表',
+        articleId: generatedArticle.id,
+        article: generatedArticle
+      };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockRejectedValue(new Error('Agent Runs 刷新失败'))}
+      addToast={addToast}
+    />
+  );
+
+  const urlInput = await screen.findByPlaceholderText('输入文章URL...');
+  await userEvent.type(urlInput, generatedArticle.url);
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+
+  expect(await screen.findByText('生成完成')).toBeInTheDocument();
+  expect(screen.getByText('情报卡片已生成，已加入文章列表')).toBeInTheDocument();
+  expect(screen.queryByText('生成失败')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
+  expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
+});
+
 test('keeps the latest generated card highlighted when generations finish close together', async () => {
   let ingestCount = 0;
   let listRequestCount = 0;

@@ -81,10 +81,11 @@ export function ArticleView({
       if (generatedArticleId !== null) {
         highlightGeneratedArticle(generatedArticleId);
       }
-      await onWorkspaceChanged();
       setUrlForm((current) => ({ ...current, url: '' }));
       setIngestStatus('success');
+      setIngestMessage(completedTask.message || messageForTaskPhase(completedTask.phase));
       addToast('情报卡片已生成，已加入文章列表', 'success');
+      await syncWorkspaceAfterSuccessfulIngest();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'URL 解析失败';
       setIngestStatus('error');
@@ -96,6 +97,15 @@ export function ArticleView({
   async function ingestUrl(event: FormEvent) {
     event.preventDefault();
     await submitIngestUrl();
+  }
+
+  async function syncWorkspaceAfterSuccessfulIngest() {
+    try {
+      await onWorkspaceChanged();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '刷新失败';
+      addToast(`卡片已生成，但工作区数据刷新失败：${message}`, 'error');
+    }
   }
 
   async function pollIngestTask(initialTask: AsyncTask) {

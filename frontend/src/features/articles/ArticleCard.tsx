@@ -107,7 +107,7 @@ export function ArticleCard({
           {article.insightCard && (
             <div className="insight-section">
               <h5>AI 解读</h5>
-              <InsightCardPreview card={article.insightCard} />
+              <InsightCardPreview card={article.insightCard} category={article.category || '市场'} />
             </div>
           )}
 
