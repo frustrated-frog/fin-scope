@@ -252,6 +252,53 @@ test('keeps generation successful when workspace refresh fails after task comple
   expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
 });
 
+test('treats a polling timeout as successful when the generated article is already in the list', async () => {
+  let listRequestCount = 0;
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      listRequestCount += 1;
+      return {
+        items: listRequestCount === 1 ? [firstArticle] : [generatedArticle, firstArticle],
+        totalCount: listRequestCount === 1 ? 1 : 2,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-slow', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' };
+    }
+    if (path === '/api/tasks/task-slow') {
+      return { taskId: 'task-slow', status: 'RUNNING', phase: 'LLM', message: '正在生成情报卡片' };
+    }
+    return {};
+  });
+
+  render(
+    <ArticleView
+      setView={vi.fn()}
+      onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  const urlInput = await screen.findByPlaceholderText('输入文章URL...');
+  const form = urlInput.closest('form');
+  expect(form).not.toBeNull();
+  fireEvent.change(urlInput, { target: { value: generatedArticle.url } });
+  vi.useFakeTimers();
+  fireEvent.submit(form!);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60 * 800 + 1);
+  });
+
+  expect(screen.getByText('生成完成')).toBeInTheDocument();
+  expect(screen.queryByText('生成任务超时，请稍后重试')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
+  expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
+});
+
 test('keeps the latest generated card highlighted when generations finish close together', async () => {
   let ingestCount = 0;
   let listRequestCount = 0;

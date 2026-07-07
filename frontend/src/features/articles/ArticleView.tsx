@@ -77,16 +77,14 @@ export function ArticleView({
         throw new Error(completedTask.errorMessage || completedTask.message || 'URL 解析失败');
       }
       const refreshed = await fetchArticles();
-      const generatedArticleId = findGeneratedArticleId(completedTask.article, refreshed, submittedUrl);
-      if (generatedArticleId !== null) {
-        highlightGeneratedArticle(generatedArticleId);
-      }
-      setUrlForm((current) => ({ ...current, url: '' }));
-      setIngestStatus('success');
-      setIngestMessage(completedTask.message || messageForTaskPhase(completedTask.phase));
-      addToast('情报卡片已生成，已加入文章列表', 'success');
-      await syncWorkspaceAfterSuccessfulIngest();
+      await finishSuccessfulIngest(completedTask, refreshed, submittedUrl);
     } catch (error) {
+      if (isIngestTaskTimeout(error)) {
+        const recovered = await recoverTimedOutIngest(submittedUrl);
+        if (recovered) {
+          return;
+        }
+      }
       const message = error instanceof Error ? error.message : 'URL 解析失败';
       setIngestStatus('error');
       setIngestError(message);
@@ -97,6 +95,35 @@ export function ArticleView({
   async function ingestUrl(event: FormEvent) {
     event.preventDefault();
     await submitIngestUrl();
+  }
+
+  async function finishSuccessfulIngest(task: AsyncTask,
+                                        refreshed: PageResponse<Article> | null,
+                                        submittedUrl: string) {
+    const generatedArticleId = findGeneratedArticleId(task.article, refreshed, submittedUrl);
+    if (generatedArticleId !== null) {
+      highlightGeneratedArticle(generatedArticleId);
+    }
+    setUrlForm((current) => ({ ...current, url: '' }));
+    setIngestStatus('success');
+    setIngestMessage(task.message || messageForTaskPhase(task.phase));
+    addToast('情报卡片已生成，已加入文章列表', 'success');
+    await syncWorkspaceAfterSuccessfulIngest();
+  }
+
+  async function recoverTimedOutIngest(submittedUrl: string) {
+    const refreshed = await fetchArticles();
+    const generatedArticleId = findGeneratedArticleId(undefined, refreshed, submittedUrl);
+    if (generatedArticleId === null) {
+      return false;
+    }
+    await finishSuccessfulIngest({
+      taskId: '',
+      status: 'COMPLETED',
+      phase: 'COMPLETED',
+      message: '情报卡片已生成，已加入文章列表'
+    }, refreshed, submittedUrl);
+    return true;
   }
 
   async function syncWorkspaceAfterSuccessfulIngest() {
@@ -119,6 +146,10 @@ export function ArticleView({
       await wait(800);
     }
     throw new Error('生成任务超时，请稍后重试');
+  }
+
+  function isIngestTaskTimeout(error: unknown) {
+    return error instanceof Error && error.message === '生成任务超时，请稍后重试';
   }
 
   function updateIngestTaskProgress(task: AsyncTask) {
