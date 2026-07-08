@@ -92,6 +92,12 @@ public class EventClusterRepository {
         return findById(event.getId()).orElse(event);
     }
 
+    public EventCluster updateStatus(Long id, String status) {
+        jdbcTemplate.update("UPDATE event_cluster SET status = ?, updated_at = ? WHERE id = ?",
+                status, TimeUtil.text(LocalDateTime.now()), id);
+        return findById(id).orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
+    }
+
     public Optional<EventCluster> findById(Long id) {
         List<EventCluster> events = jdbcTemplate.query("SELECT * FROM event_cluster WHERE id = ?", eventMapper, id);
         return events.isEmpty() ? Optional.empty() : Optional.of(events.get(0));
@@ -127,6 +133,23 @@ public class EventClusterRepository {
         List<EventArticleLink> links = jdbcTemplate.query("SELECT * FROM event_article_link WHERE article_id = ?",
                 linkMapper, articleId);
         return links.isEmpty() ? Optional.empty() : Optional.of(links.get(0));
+    }
+
+    public Optional<EventArticleLink> findLink(Long eventId, Long articleId) {
+        List<EventArticleLink> links = jdbcTemplate.query("SELECT * FROM event_article_link WHERE event_id = ? AND article_id = ?",
+                linkMapper, eventId, articleId);
+        return links.isEmpty() ? Optional.empty() : Optional.of(links.get(0));
+    }
+
+    public int moveLinks(Long sourceEventId, Long targetEventId) {
+        return jdbcTemplate.update("UPDATE OR REPLACE event_article_link SET event_id = ? WHERE event_id = ?",
+                targetEventId, sourceEventId);
+    }
+
+    public int moveArticleLink(Long sourceEventId, Long articleId, Long targetEventId, String noveltyReason) {
+        return jdbcTemplate.update("UPDATE OR REPLACE event_article_link SET event_id = ?, novelty_reason = ? "
+                        + "WHERE event_id = ? AND article_id = ?",
+                targetEventId, noveltyReason, sourceEventId, articleId);
     }
 
     public int countLinks(Long eventId) {

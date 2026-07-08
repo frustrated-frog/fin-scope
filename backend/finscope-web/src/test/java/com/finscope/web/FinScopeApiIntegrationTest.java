@@ -323,6 +323,75 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void eventGovernanceUpdatesStatusAndRejectsInvalidStatus() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+
+        mvc.perform(post("/api/events/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"COOLING\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COOLING"));
+
+        mvc.perform(post("/api/events/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"BROKEN\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("Unsupported event status: BROKEN")));
+    }
+
+    @Test
+    void eventGovernanceMergesEventsAndArchivesSource() throws Exception {
+        String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        ingestUrlAndWait(marketUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
+
+        mvc.perform(post("/api/events/2/merge")
+                        .contentType("application/json")
+                        .content("{\"targetEventId\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.articleCount").value(2));
+
+        mvc.perform(get("/api/events/1/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get("/api/events/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"))
+                .andExpect(jsonPath("$.articleCount").value(0));
+    }
+
+    @Test
+    void eventGovernanceMovesArticleIntoNewEvent() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
+
+        mvc.perform(post("/api/events/1/articles/2/move")
+                        .contentType("application/json")
+                        .content("{\"createNewEvent\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(2))
+                .andExpect(jsonPath("$.articleCount").value(1));
+
+        mvc.perform(get("/api/events/1/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/events/2/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].noveltyReason", containsString("人工治理调整")));
+        mvc.perform(get("/api/events/2/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
     void eventListSupportsResearchFilters() throws Exception {
         String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";

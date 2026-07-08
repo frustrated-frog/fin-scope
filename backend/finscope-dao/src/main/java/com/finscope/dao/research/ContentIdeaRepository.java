@@ -99,4 +99,9 @@ public class ContentIdeaRepository {
                 status, TimeUtil.text(LocalDateTime.now()), id);
         return findById(id).orElseThrow(() -> new IllegalArgumentException("Content idea not found: " + id));
     }
+
+    public int moveByEventId(Long sourceEventId, Long targetEventId) {
+        return jdbcTemplate.update("UPDATE content_idea SET event_id = ?, updated_at = ? WHERE event_id = ?",
+                targetEventId, TimeUtil.text(LocalDateTime.now()), sourceEventId);
+    }
 }

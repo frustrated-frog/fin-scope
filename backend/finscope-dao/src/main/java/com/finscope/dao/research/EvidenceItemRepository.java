@@ -90,6 +90,16 @@ public class EvidenceItemRepository {
                 articleIds.toArray());
     }
 
+    public int moveByEventId(Long sourceEventId, Long targetEventId) {
+        return jdbcTemplate.update("UPDATE evidence_item SET event_id = ? WHERE event_id = ?",
+                targetEventId, sourceEventId);
+    }
+
+    public int moveByEventIdAndArticleId(Long sourceEventId, Long articleId, Long targetEventId) {
+        return jdbcTemplate.update("UPDATE evidence_item SET event_id = ? WHERE event_id = ? AND article_id = ?",
+                targetEventId, sourceEventId, articleId);
+    }
+
     private int value(Integer value) {
         return value == null ? 0 : value;
     }

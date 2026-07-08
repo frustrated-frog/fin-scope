@@ -282,6 +282,36 @@ export default function App() {
     await refresh();
   }
 
+  async function updateEventStatus(eventId: number, status: string) {
+    await api<EventCluster>(`/api/events/${eventId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    });
+    setMessage(`事件状态已更新为 ${status}`);
+    await refresh();
+  }
+
+  async function mergeEvent(sourceEventId: number, targetEventId: number) {
+    await api<EventCluster>(`/api/events/${sourceEventId}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ targetEventId })
+    });
+    setMessage('事件已合并');
+    await refresh();
+  }
+
+  async function moveEventArticle(sourceEventId: number, articleId: number, input: {
+    targetEventId?: number;
+    createNewEvent?: boolean;
+  }) {
+    await api<EventCluster>(`/api/events/${sourceEventId}/articles/${articleId}/move`, {
+      method: 'POST',
+      body: JSON.stringify(input)
+    });
+    setMessage('文章归属已调整');
+    await refresh();
+  }
+
   return (
     <AppShell
       view={view}
@@ -337,7 +367,20 @@ export default function App() {
           onOpenBrief={openBrief}
         />
       )}
-      {view === 'events' && <EventsView events={events} initialEventId={focusedEventId} />}
+      {view === 'events' && (
+        <EventsView
+          events={events}
+          initialEventId={focusedEventId}
+          learningTasks={learningTasks}
+          contentIdeas={contentIdeas}
+          onLearningTaskStatusChange={updateLearningTaskStatus}
+          onContentIdeaStatusChange={updateContentIdeaStatus}
+          onEventStatusChange={updateEventStatus}
+          onMergeEvent={mergeEvent}
+          onMoveEventArticle={moveEventArticle}
+          onChanged={refresh}
+        />
+      )}
       {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} />}
       {view === 'topics' && (
         <TopicsView

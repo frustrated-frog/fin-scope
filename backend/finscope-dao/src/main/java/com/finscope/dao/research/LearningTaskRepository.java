@@ -92,4 +92,9 @@ public class LearningTaskRepository {
                 status, TimeUtil.text(LocalDateTime.now()), id);
         return findById(id).orElseThrow(() -> new IllegalArgumentException("Learning task not found: " + id));
     }
+
+    public int moveByEventId(Long sourceEventId, Long targetEventId) {
+        return jdbcTemplate.update("UPDATE learning_task SET event_id = ?, updated_at = ? WHERE event_id = ?",
+                targetEventId, TimeUtil.text(LocalDateTime.now()), sourceEventId);
+    }
 }

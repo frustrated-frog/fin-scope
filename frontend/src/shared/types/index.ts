@@ -94,6 +94,8 @@ export type EventCluster = {
   status?: string;
   firstSeenAt?: string;
   lastSeenAt?: string;
+  lastMeaningfulUpdateAt?: string;
+  updatedAt?: string;
   importanceScore?: number;
   noveltyState?: string;
   evidenceCount?: number;
@@ -104,6 +106,10 @@ export type EventArticleLink = {
   eventId: number;
   articleId: number;
   noveltyType?: string;
+  noveltyReason?: string;
+  relationType?: string;
+  matchScore?: number;
+  createdAt?: string;
   articleTitle?: string;
   articleUrl?: string;
 };
@@ -111,10 +117,12 @@ export type EventArticleLink = {
 export type EvidenceItem = {
   id: number;
   eventId: number;
+  articleId?: number;
   sourceTier: string;
   evidenceType: string;
   claim: string;
   confidence: number;
+  createdAt?: string;
 };
 
 export type LearningTask = {

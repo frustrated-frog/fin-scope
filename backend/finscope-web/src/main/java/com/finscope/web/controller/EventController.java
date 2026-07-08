@@ -3,9 +3,14 @@ package com.finscope.web.controller;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.service.research.EventClusterService;
+import com.finscope.web.request.MergeEventRequest;
+import com.finscope.web.request.MoveEventArticleRequest;
+import com.finscope.web.request.UpdateEventStatusRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,5 +42,24 @@ public class EventController {
     @GetMapping("/{id}/articles")
     public List<EventArticleLink> articles(@PathVariable Long id) {
         return eventClusterService.articles(id);
+    }
+
+    @PostMapping("/{id}/status")
+    public EventCluster updateStatus(@PathVariable Long id, @RequestBody UpdateEventStatusRequest request) {
+        return eventClusterService.updateStatus(id, request == null ? null : request.getStatus());
+    }
+
+    @PostMapping("/{sourceId}/merge")
+    public EventCluster merge(@PathVariable Long sourceId, @RequestBody MergeEventRequest request) {
+        return eventClusterService.merge(sourceId, request == null ? null : request.getTargetEventId());
+    }
+
+    @PostMapping("/{sourceEventId}/articles/{articleId}/move")
+    public EventCluster moveArticle(@PathVariable Long sourceEventId,
+                                    @PathVariable Long articleId,
+                                    @RequestBody MoveEventArticleRequest request) {
+        return eventClusterService.moveArticle(sourceEventId, articleId,
+                request == null ? null : request.getTargetEventId(),
+                request == null ? null : request.getCreateNewEvent());
     }
 }

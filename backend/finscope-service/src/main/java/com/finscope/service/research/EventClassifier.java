@@ -6,6 +6,7 @@ import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.service.dedupe.FingerprintService;
 import org.springframework.stereotype.Component;
+import org.springframework.util.DigestUtils;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
@@ -203,5 +204,16 @@ public class EventClassifier {
         public String getNoveltyReason() {
             return noveltyReason;
         }
+    }
+
+    public static void main(String[] args) {
+        String appId = "jdt-a2ui-manage";
+        String appSecret = "fac5a933-b976-4130-92f4-6509462da7f6";
+        Long timestamp = System.currentTimeMillis();
+
+        String plainText = appId + timestamp + appSecret;
+
+        String signature = DigestUtils.md5DigestAsHex(plainText.getBytes());
+        System.out.println(signature + " " + timestamp);
     }
 }

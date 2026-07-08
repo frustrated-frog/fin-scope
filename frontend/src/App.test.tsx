@@ -242,15 +242,42 @@ const responses: Record<string, unknown> = {
     }
   ],
   '/api/events/1/articles': [
-    { eventId: 1, articleId: 1, noveltyType: 'NEW', articleTitle: '美联储释放降息信号 黄金走强', articleUrl: 'https://example.com/1' },
-    { eventId: 1, articleId: 2, noveltyType: 'FOLLOW_UP', articleTitle: '黄金ETF单周流入12亿美元', articleUrl: 'https://example.com/2' }
+    {
+      eventId: 1,
+      articleId: 1,
+      relationType: 'PRIMARY',
+      matchScore: 1,
+      noveltyType: 'NEW',
+      noveltyReason: '首次进入事件记忆',
+      articleTitle: '美联储释放降息信号 黄金走强',
+      articleUrl: 'https://example.com/1'
+    },
+    {
+      eventId: 1,
+      articleId: 2,
+      relationType: 'SUPPORTING',
+      matchScore: 0.88,
+      noveltyType: 'FOLLOW_UP',
+      noveltyReason: '命中历史事件，包含新的数据、时间线或市场反应',
+      articleTitle: '黄金ETF单周流入12亿美元',
+      articleUrl: 'https://example.com/2'
+    }
   ],
   '/api/events/1/evidence': [
     { id: 1, eventId: 1, sourceTier: 'MEDIA', evidenceType: 'DATA', claim: '黄金ETF单周流入12亿美元。', confidence: 75 },
     { id: 2, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'TIMELINE', claim: '美联储官员释放偏鸽措辞。', confidence: 90 }
   ],
   '/api/events/2/articles': [
-    { eventId: 2, articleId: 3, noveltyType: 'NEW', articleTitle: 'Claude Code 推出新的多代理工作流', articleUrl: 'https://example.com/3' }
+    {
+      eventId: 2,
+      articleId: 3,
+      relationType: 'PRIMARY',
+      matchScore: 1,
+      noveltyType: 'NEW',
+      noveltyReason: '首次进入事件记忆',
+      articleTitle: 'Claude Code 推出新的多代理工作流',
+      articleUrl: 'https://example.com/3'
+    }
   ],
   '/api/events/2/evidence': [
     { id: 3, eventId: 2, sourceTier: 'COMPANY', evidenceType: 'FACT', claim: '官方文档公布了多代理工作流能力。', confidence: 85 }
@@ -374,6 +401,27 @@ beforeEach(() => {
       return {
         ok: true,
         json: async () => state['/api/content-ideas'][0]
+      } as Response;
+    }
+    if (url === '/api/events/1/status' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body));
+      state['/api/events'][0].status = payload.status;
+      return {
+        ok: true,
+        json: async () => state['/api/events'][0]
+      } as Response;
+    }
+    if (url === '/api/events/2/merge' && init?.method === 'POST') {
+      state['/api/events'][1].status = 'ARCHIVED';
+      return {
+        ok: true,
+        json: async () => state['/api/events'][0]
+      } as Response;
+    }
+    if (url === '/api/events/1/articles/2/move' && init?.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({ ...state['/api/events'][1], articleCount: 2 })
       } as Response;
     }
     if (url === '/api/topics/1' && init?.method === 'DELETE') {
@@ -910,6 +958,54 @@ test('events view presents the selected event as a structured detail panel', asy
   expect(within(detail).getAllByText('事件证据').length).toBeGreaterThan(0);
   expect(within(detail).getByText('2 条')).toBeInTheDocument();
   expect(within(detail).getByLabelText('证据来源层级')).toBeInTheDocument();
+});
+
+test('events workbench explains timeline, merge basis, evidence strength and event outputs', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+
+  const detail = await screen.findByRole('region', { name: '事件详情' });
+
+  expect(screen.getByText('事件研究台')).toBeInTheDocument();
+  expect(within(detail).getByText('事件时间线')).toBeInTheDocument();
+  expect(within(detail).getByText('归并依据')).toBeInTheDocument();
+  expect(within(detail).getByText('证据强度')).toBeInTheDocument();
+  expect(within(detail).getByText('学习任务')).toBeInTheDocument();
+  expect(within(detail).getByText('内容选题')).toBeInTheDocument();
+  expect(within(detail).getByText(/匹配 88%/)).toBeInTheDocument();
+  expect(within(detail).getByText('命中历史事件，包含新的数据、时间线或市场反应')).toBeInTheDocument();
+  expect(within(detail).getByText('最高可信证据')).toBeInTheDocument();
+  expect(within(detail).getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
+  expect(within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
+});
+
+test('events governance panel updates status, merges events and moves articles', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+
+  const detail = await screen.findByRole('region', { name: '事件详情' });
+  await userEvent.selectOptions(within(detail).getByLabelText('事件状态'), 'COOLING');
+  await userEvent.click(within(detail).getByRole('button', { name: '保存事件状态' }));
+  expect(fetch).toHaveBeenCalledWith('/api/events/1/status', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ status: 'COOLING' })
+  }));
+
+  await userEvent.selectOptions(within(detail).getByLabelText('合并到事件'), '2');
+  await userEvent.click(within(detail).getByRole('button', { name: '合并事件' }));
+  expect(fetch).toHaveBeenCalledWith('/api/events/1/merge', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ targetEventId: 2 })
+  }));
+
+  await userEvent.selectOptions(within(detail).getByLabelText('移动文章-2'), 'NEW_EVENT');
+  await userEvent.click(within(detail).getByRole('button', { name: '移动文章-2' }));
+  expect(fetch).toHaveBeenCalledWith('/api/events/1/articles/2/move', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ createNewEvent: true })
+  }));
 });
 
 test('learning view updates research task status through the typed endpoint', async () => {

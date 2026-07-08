@@ -1,25 +1,48 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.StringUtils;
+import com.finscope.dao.article.ArticleRepository;
+import com.finscope.dao.research.ContentIdeaRepository;
+import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.EventClusterRepository;
+import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.service.article.ArticleCategoryPolicy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
 @Service
 public class EventClusterService {
+    private static final Set<String> VALID_EVENT_STATUSES = new LinkedHashSet<String>(Arrays.asList(
+            ResearchEnums.EVENT_ACTIVE,
+            ResearchEnums.EVENT_COOLING,
+            ResearchEnums.EVENT_ARCHIVED));
 
     @Resource
     private EventClusterRepository eventClusterRepository;
+    @Resource
+    private ArticleRepository articleRepository;
+    @Resource
+    private EvidenceItemRepository evidenceItemRepository;
+    @Resource
+    private LearningTaskRepository learningTaskRepository;
+    @Resource
+    private ContentIdeaRepository contentIdeaRepository;
     @Resource
     private EventClassifier eventClassifier;
     @Resource
@@ -97,6 +120,67 @@ public class EventClusterService {
         return eventClusterRepository.findLinksByEventId(eventId);
     }
 
+    public EventCluster updateStatus(Long eventId, String status) {
+        detail(eventId);
+        String normalizedStatus = normalizeStatus(status);
+        if (!VALID_EVENT_STATUSES.contains(normalizedStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported event status: " + status);
+        }
+        return eventClusterRepository.updateStatus(eventId, normalizedStatus);
+    }
+
+    @Transactional
+    public EventCluster merge(Long sourceEventId, Long targetEventId) {
+        if (sourceEventId == null || targetEventId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "sourceEventId and targetEventId are required");
+        }
+        if (sourceEventId.equals(targetEventId)) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Cannot merge an event into itself");
+        }
+        EventCluster source = detail(sourceEventId);
+        EventCluster target = detail(targetEventId);
+
+        eventClusterRepository.moveLinks(source.getId(), target.getId());
+        evidenceItemRepository.moveByEventId(source.getId(), target.getId());
+        learningTaskRepository.moveByEventId(source.getId(), target.getId());
+        contentIdeaRepository.moveByEventId(source.getId(), target.getId());
+        eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
+
+        EventCluster archivedSource = detail(source.getId());
+        archivedSource.setStatus(ResearchEnums.EVENT_ARCHIVED);
+        eventClusterRepository.update(archivedSource);
+        return detail(target.getId());
+    }
+
+    @Transactional
+    public EventCluster moveArticle(Long sourceEventId,
+                                    Long articleId,
+                                    Long targetEventId,
+                                    Boolean createNewEvent) {
+        EventCluster source = detail(sourceEventId);
+        EventArticleLink link = eventClusterRepository.findLink(source.getId(), articleId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "Article link not found for event " + sourceEventId + " and article " + articleId));
+        Article article = articleRepository.findById(articleId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Article not found: " + articleId));
+
+        boolean shouldCreateNewEvent = Boolean.TRUE.equals(createNewEvent);
+        if (shouldCreateNewEvent == (targetEventId != null)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Specify either targetEventId or createNewEvent=true");
+        }
+
+        EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
+        if (source.getId().equals(target.getId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Cannot move article to the same event");
+        }
+
+        eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
+                governanceReason(link.getNoveltyReason()));
+        evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
+        eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
+        return detail(target.getId());
+    }
+
     private EventCluster createEvent(Article article, EventClassifier.EventSignature signature) {
         LocalDateTime seenAt = article.getFetchedAt() == null ? LocalDateTime.now() : article.getFetchedAt();
         EventCluster event = new EventCluster();
@@ -113,6 +197,11 @@ public class EventClusterService {
         event.setEvidenceCount(0);
         event.setArticleCount(0);
         return eventClusterRepository.save(event);
+    }
+
+    private EventCluster createEventFromGovernance(Article article) {
+        EventClassifier.EventSignature signature = eventClassifier.signature(article);
+        return createEvent(article, signature);
     }
 
     private EventCluster updateEvent(Article article, EventClassifier.MatchDecision decision) {
@@ -148,5 +237,20 @@ public class EventClusterService {
             return false;
         }
         return dateTo == null || !seenDate.isAfter(dateTo);
+    }
+
+    private String normalizeStatus(String status) {
+        return StringUtils.firstNonBlank(status, "").trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String governanceReason(String originalReason) {
+        String marker = "人工治理调整";
+        if (StringUtils.isBlank(originalReason)) {
+            return marker;
+        }
+        if (originalReason.contains(marker)) {
+            return originalReason;
+        }
+        return originalReason + "；" + marker;
     }
 }
