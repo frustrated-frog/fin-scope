@@ -1,0 +1,258 @@
+# 技术方案：Events 事件研究工作台
+
+## 1. 背景与目标
+
+Events 原页面主要承担“事件列表 + 文章/证据展示”的职责，用户进入页面后不容易立刻理解：
+
+1. 当前事件到底在讲什么。
+2. 为什么多篇文章被归并到同一事件。
+3. 证据强度如何，来源是否可信。
+4. 这个事件能转化成哪些学习任务和内容选题。
+5. 如果系统归并不准，用户如何人工修正。
+
+本次改造把 Events 从普通列表升级为 **事件研究工作台**。页面第一屏明确表达：
+
+> Events 用来追踪事件生命周期和证据链。
+
+第一版目标不是接入 Copilot 或对话 Agent，而是先让事件数据本身可读、可解释、可治理。
+
+## 2. 总体设计
+
+前端 `EventsView` 被重构为三层信息架构：
+
+```text
+事件队列
+  -> 事件详情
+      -> 事件时间线
+      -> 归并依据
+      -> 证据强度
+      -> 学习任务
+      -> 内容选题
+      -> 人工治理
+```
+
+后端保持现有模块化单体分层：
+
+```text
+frontend EventsView
+  -> App 全局数据与操作回调
+  -> /api/events
+  -> EventController
+  -> EventClusterService
+  -> EventClusterRepository / EvidenceItemRepository
+```
+
+前端不新增重复接口获取学习任务和内容选题，而是复用 App 已加载的全局数组，按 `eventId` 在 `EventsView` 内过滤。
+
+## 3. 前端实现
+
+### 3.1 事件队列
+
+事件队列使用工作台式布局，不再把 Events 呈现为简单列表。队列支持：
+
+1. 按主题筛选。
+2. 按事件状态筛选。
+3. 按新意状态筛选。
+4. 展示新意分布摘要。
+
+每张事件卡展示：
+
+1. 事件标题。
+2. 主题。
+3. 状态。
+4. 新意状态。
+5. 文章数。
+6. 证据数。
+7. 重要性。
+8. 最近更新时间。
+
+文案从偏抽象的“事件记忆”转为更清晰的“事件研究台”，帮助用户理解这是事件生命周期和证据链工作区。
+
+### 3.2 事件详情
+
+选中事件后，详情区解释“这个事件在讲什么”：
+
+1. 标题和摘要。
+2. 主题、状态、重要性、新意。
+3. 首次发现时间、最近更新时间、最近有效更新时间。
+
+事件时间线按关联文章顺序展示：
+
+```text
+NEW / FOLLOW_UP / RECAP
+文章标题
+matchScore
+noveltyReason
+```
+
+归并依据不再只显示文章标题，而是展示每篇文章的：
+
+1. `relationType`
+2. `matchScore`
+3. `noveltyType`
+4. `noveltyReason`
+
+这让用户能判断系统是因为“同主体、同变量、后续进展”归并，还是只是弱相关。
+
+### 3.3 证据强度
+
+证据区把证据从普通列表升级为强度视图：
+
+1. 最高置信证据。
+2. source tier 分布。
+3. evidence type 分布。
+4. 证据列表。
+5. source tier 筛选。
+
+排序规则：
+
+1. `REGULATOR / OFFICIAL` 优先。
+2. 其次按 `confidence` 降序。
+
+高可信来源在 UI 中突出展示，让用户快速判断当前事件的证据基础是否扎实。
+
+### 3.4 学习与创作
+
+事件详情内直接展示当前事件关联的：
+
+1. `LearningTask`
+2. `ContentIdea`
+
+状态更新复用已有接口：
+
+```text
+POST /api/learning-tasks/{id}/status
+POST /api/content-ideas/{id}/status
+```
+
+这样 Events 页面可以回答：
+
+1. 这个事件值得补什么金融知识。
+2. 这个事件可以发展成什么内容选题。
+3. 当前学习任务和选题推进到什么状态。
+
+### 3.5 人工治理
+
+治理面板提供三类人工修正能力：
+
+1. 修改事件状态：`ACTIVE / COOLING / ARCHIVED`
+2. 把当前事件合并到另一个事件。
+3. 把当前事件中的某篇文章移到另一个事件，或拆成一个新事件。
+
+高影响操作必须二次确认：
+
+```text
+修改事件状态 -> confirm
+合并事件 -> confirm
+移动文章 -> confirm
+```
+
+操作成功后调用 `onChanged()` 刷新全局数据，并重新懒加载当前事件的文章和证据。
+
+## 4. 后端接口
+
+本次新增或完善的 Events 治理接口：
+
+```text
+POST /api/events/{id}/status
+body: { "status": "ACTIVE|COOLING|ARCHIVED" }
+
+POST /api/events/{sourceId}/merge
+body: { "targetEventId": 123 }
+
+POST /api/events/{sourceEventId}/articles/{articleId}/move
+body: { "targetEventId": 123 }
+或
+body: { "createNewEvent": true }
+```
+
+已有查询接口继续使用：
+
+```text
+GET /api/events
+GET /api/events/{id}
+GET /api/events/{id}/articles
+GET /api/events/{id}/evidence
+GET /api/learning-tasks
+GET /api/content-ideas
+```
+
+接口路径保持 REST 风格，治理入参使用 request DTO，不在 Controller 中写业务判断。
+
+## 5. 数据流
+
+### 5.1 页面初始化
+
+```text
+App.refresh()
+  -> /api/events
+  -> /api/evidence
+  -> /api/learning-tasks
+  -> /api/content-ideas
+  -> EventsView props
+```
+
+### 5.2 选中事件
+
+```text
+用户选择事件
+  -> EventsView.selectedEventId
+  -> GET /api/events/{id}/articles
+  -> GET /api/events/{id}/evidence
+  -> 本地按 eventId 过滤 learningTasks/contentIdeas
+```
+
+### 5.3 治理动作
+
+```text
+用户确认治理动作
+  -> App 对应 handler
+  -> typed endpoint
+  -> EventClusterService
+  -> Repository 迁移/更新
+  -> App.refresh()
+  -> EventsView reloadSelectedEvent()
+```
+
+## 6. 测试与验证
+
+后端覆盖：
+
+1. 更新事件状态。
+2. 非法状态返回 `BAD_REQUEST`。
+3. 合并事件后 source archived，target counts 增加。
+4. 移动文章到新事件后 source/target counts 正确。
+5. 查询事件文章和证据仍可用。
+
+前端覆盖：
+
+1. Events 页面展示事件时间线。
+2. 展示归并依据。
+3. 展示证据强度。
+4. 展示学习任务和内容选题。
+5. 修改状态、合并、移动文章会调用 typed endpoint。
+6. 空状态下页面仍能解释当前事件。
+
+验证命令：
+
+```bash
+cd backend && mvn test
+cd frontend && npm test
+cd frontend && npm run build
+```
+
+## 7. 当前边界与后续方向
+
+当前版本刻意不做：
+
+1. 不接 Copilot。
+2. 不做自然语言对话。
+3. 不做人为编辑事件标题/摘要/主题。
+4. 不做完整治理审计日志。
+
+后续优先方向：
+
+1. 继续提高事件归并质量。
+2. 增加治理审计表，记录谁在什么时候合并/移动/归档。
+3. 接入向量数据库后，把向量召回作为候选事件来源。
+4. 等 Events 数据可信后，再叠加对话式 Copilot。

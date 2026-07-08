@@ -341,6 +341,32 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void archivedEventDoesNotReceiveNewAutoIngestedArticles() throws Exception {
+        String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
+
+        ingestUrlAndWait(firstUrl, "Reuters", "宏观,市场");
+        mvc.perform(post("/api/events/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"ARCHIVED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        ingestUrlAndWait(followUpUrl, "CNBC", "宏观,市场");
+
+        mvc.perform(get("/api/events"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get("/api/events/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"))
+                .andExpect(jsonPath("$.articleCount").value(1));
+        mvc.perform(get("/api/events/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleCount").value(1));
+    }
+
+    @Test
     void eventGovernanceMergesEventsAndArchivesSource() throws Exception {
         String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
@@ -362,6 +388,25 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ARCHIVED"))
                 .andExpect(jsonPath("$.articleCount").value(0));
+    }
+
+    @Test
+    void eventGovernanceRejectsMergeIntoArchivedTarget() throws Exception {
+        String marketUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String policyUrl = "http://localhost:" + server.getAddress().getPort() + "/pboc-policy";
+
+        ingestUrlAndWait(marketUrl, "Reuters", "宏观,市场");
+        ingestUrlAndWait(policyUrl, "中国人民银行", "宏观,政策");
+        mvc.perform(post("/api/events/1/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"ARCHIVED\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/events/2/merge")
+                        .contentType("application/json")
+                        .content("{\"targetEventId\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", containsString("Cannot govern archived target event")));
     }
 
     @Test

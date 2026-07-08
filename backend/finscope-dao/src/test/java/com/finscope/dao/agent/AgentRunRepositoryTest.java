@@ -10,11 +10,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentRunRepositoryTest {
     private AgentRunRepository repository;
@@ -81,5 +83,17 @@ class AgentRunRepositoryTest {
         assertEquals(0, saved.getProgressDelta());
         assertEquals("{\"nodeCount\":3}", saved.getBudgetSnapshot());
         assertEquals("{\"sourceId\":1}", saved.getMetadataJson());
+    }
+
+    @Test
+    void recordsCreatedAtAsNodeStartTime() {
+        LocalDateTime beforeRecord = LocalDateTime.now();
+
+        repository.record(300L, null, null, "brief-generate", "SUCCESS",
+                "articles=3", "markdownChars=1200", null, 60_000L);
+
+        AgentRun saved = repository.latest(1).get(0);
+        assertTrue(saved.getCreatedAt().isBefore(beforeRecord),
+                "createdAt should be the node start time, not the persistence time");
     }
 }

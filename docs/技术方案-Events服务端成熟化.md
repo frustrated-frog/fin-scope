@@ -1,0 +1,328 @@
+# 技术方案：Events 服务端成熟化
+
+## 1. 背景与目标
+
+Events 工作台 UI 成熟后，服务端暴露出几个会影响长期可信度的问题：
+
+1. 人工归档的事件仍可能被自动归并新文章。
+2. 事件合并/移动使用 `UPDATE OR REPLACE`，在主键冲突时可能静默覆盖目标链接元数据。
+3. 治理动作缺少状态边界，归档事件仍可能被合并或接收文章。
+4. 事件识别主要依赖宽泛关键词和标题相似度，容易把“同主题但不同事件”的文章误归并。
+5. Events 和 Evidence 的部分查询在内存中过滤，数据量增大后会拖慢。
+
+本次服务端成熟化的目标是：
+
+> 先让事件归并更可信，再让人工治理不会制造脏数据。
+
+本轮不处理第 8 点硬编码问题，不引入向量数据库，不调用 LLM 做事件归并判断。
+
+## 2. 总体设计
+
+服务端仍保持现有分层：
+
+```text
+EventController / EvidenceController
+  -> EventClusterService / EvidenceService
+  -> EventClassifier
+  -> EventClusterRepository / EvidenceItemRepository
+  -> SQLite
+```
+
+核心变化分为五类：
+
+1. 事件分类器从“关键词 + 相似度”升级为“事件信号评分”。
+2. 自动归并只选择可归并状态的候选事件。
+3. 治理动作增加状态边界和影响行数校验。
+4. 链接迁移显式合并冲突，不再依赖 `UPDATE OR REPLACE`。
+5. 查询过滤下推到 SQL。
+
+## 3. 事件识别增强
+
+### 3.1 事件信号模型
+
+`EventClassifier` 新增内部事件信号抽取，核心信号包括：
+
+```text
+themeCode
+subjects
+variables
+actions
+dataPoints
+text
+```
+
+不同主题抽取不同信号。
+
+中国宏观：
+
+```text
+subjects: fed, pboc
+variables: rate, gold, inflation, liquidity, etf_flow
+actions: rate_cut, rate_hike, liquidity_operation
+dataPoints: 12亿美元, 3000亿元, 10个基点
+```
+
+公司 / IPO：
+
+```text
+subjects: 宁德时代, 比亚迪, 阿里巴巴, 腾讯等公司主体
+variables: ipo, earnings
+actions: ipo, ipo_filing, ipo_hearing, earnings
+```
+
+AI / 创业：
+
+```text
+subjects: openai, anthropic, google, github, cloudflare, runway
+variables: agent, model, funding
+actions: product_launch, funding
+```
+
+### 3.2 归并评分
+
+候选事件必须先满足基本边界：
+
+1. 主题一致。
+2. 公司 / AI 主题在双方都有主体时必须主体重合。
+3. 宏观主题如果主体分别是 `fed` 和 `pboc`，不能只因都有“利率”而归并。
+4. 主体、变量、动作至少有一类重合。
+
+评分由以下部分组成：
+
+```text
+canonical key
+shared subjects
+shared variables
+shared actions
+title similarity
+context similarity
+```
+
+达到阈值后才归并。归并后根据是否有新增数据点、变量或动作判断：
+
+```text
+FOLLOW_UP
+RECAP
+```
+
+### 3.3 可解释原因
+
+`noveltyReason` 从固定文案升级为可解释文本：
+
+```text
+同主体：美联储；同变量：利率/降息、黄金；新增变量：12亿美元
+```
+
+这会直接服务 Events 工作台里的“归并依据”展示。
+
+## 4. 自动归并与治理状态
+
+### 4.1 自动归并候选
+
+自动归并从：
+
+```text
+findRecentByTheme(themeCode, limit)
+```
+
+改为：
+
+```text
+findRecentMergeableByTheme(themeCode, limit)
+```
+
+只返回：
+
+```text
+ACTIVE
+COOLING
+```
+
+`ARCHIVED` 事件不会再接收新文章。这样用户执行“归档”或“合并后归档”后，后续 ingest 不会把新文章重新挂回死事件。
+
+### 4.2 治理边界
+
+`EventClusterService` 增加治理状态校验：
+
+```text
+merge:
+  - 禁止 source == target
+  - 禁止 archived source
+  - 禁止 archived target
+
+moveArticle:
+  - 禁止 archived source
+  - 禁止 archived target
+  - 禁止移动到同一事件
+  - 移动链接影响行数为 0 时返回 CONFLICT
+```
+
+事件不存在统一返回 `BusinessException(ErrorCode.NOT_FOUND)`，接口层保持清晰的 `404` 语义。
+
+## 5. 安全迁移链接
+
+### 5.1 问题
+
+原治理迁移使用：
+
+```sql
+UPDATE OR REPLACE event_article_link SET event_id = ? WHERE event_id = ?
+```
+
+由于 `event_article_link` 的主键是：
+
+```text
+(event_id, article_id)
+```
+
+当 target 事件已经存在同一篇文章链接时，`OR REPLACE` 可能静默覆盖目标侧的：
+
+1. `relationType`
+2. `matchScore`
+3. `noveltyType`
+4. `noveltyReason`
+5. `createdAt`
+
+### 5.2 新策略
+
+链接迁移改为显式合并：
+
+```text
+source link -> target event
+  if target 没有同 articleId link:
+    UPDATE source link event_id
+  else:
+    merge target/source metadata
+    UPDATE target link
+    DELETE source link
+```
+
+冲突合并规则：
+
+1. `relationType`：只要任一侧为 `PRIMARY`，保留 `PRIMARY`。
+2. `matchScore`：保留较高分。
+3. `noveltyType`：优先保留目标侧。
+4. `noveltyReason`：合并两侧原因，避免重复。
+5. `createdAt`：保留更早时间，保留事件时间线语义。
+
+整事件合并时，迁移文章链接、证据、学习任务、内容选题，然后刷新 source/target counts，最后归档 source。
+
+单篇文章移动时，只迁移该文章对应证据，学习任务和内容选题默认留在原事件。
+
+## 6. 查询性能优化
+
+### 6.1 事件列表
+
+事件列表过滤从 service 内存过滤改为 repository SQL 过滤：
+
+```text
+findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo)
+```
+
+支持原有参数：
+
+```text
+themeCode
+status
+noveltyState
+dateFrom
+dateTo
+```
+
+新增索引：
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_event_cluster_status_theme_seen
+ON event_cluster(status, theme_code, last_seen_at)
+```
+
+### 6.2 证据列表
+
+证据列表过滤从：
+
+```text
+evidenceItemRepository.findAll().stream().filter(...)
+```
+
+改为：
+
+```text
+findFiltered(eventId, sourceTier, evidenceType, minConfidence)
+```
+
+支持原有 `/api/evidence` 参数：
+
+```text
+eventId
+sourceTier
+evidenceType
+minConfidence
+```
+
+接口形状保持不变。
+
+## 7. 测试覆盖
+
+### 7.1 分类器单测
+
+新增覆盖：
+
+1. 同一美联储降息事件，有新增资金流入数据，归为 `FOLLOW_UP`。
+2. 美联储降息 vs 人民银行 MLF 操作，不误合并。
+3. 同公司 IPO 进展归并。
+4. 不同公司 IPO 不归并。
+5. OpenAI 产品发布 vs Anthropic 融资，不因都有 AI 关键词而误合并。
+6. `noveltyReason` 包含同主体、同变量、新增变量。
+
+### 7.2 服务层单测
+
+新增覆盖：
+
+1. 合并归档 source 返回 `CONFLICT`。
+2. 合并到归档 target 返回 `CONFLICT`。
+3. 从归档事件移动文章返回 `CONFLICT`。
+4. 移动到归档目标事件返回 `CONFLICT`。
+5. 移动文章影响行数为 0 返回 `CONFLICT`。
+
+### 7.3 DAO 单测
+
+新增 `EventClusterRepositoryTest`，覆盖：
+
+1. target 已有同 article link 时，不丢目标元数据。
+2. 保留更高 `matchScore`。
+3. 保留 `PRIMARY` 关系。
+4. 合并 `noveltyReason`。
+5. 删除 source link。
+
+### 7.4 API 集成测试
+
+新增覆盖：
+
+1. 归档事件后，后续 ingest 的相似文章会创建新事件，不会挂回旧事件。
+2. 合并到归档 target 返回 `409 CONFLICT`。
+3. 原有 Events、Evidence、Learning、Content、Brief 流程不回归。
+
+验证命令：
+
+```bash
+cd backend && mvn test
+cd frontend && npm test
+cd frontend && npm run build
+```
+
+## 8. 当前边界与后续方向
+
+本轮没有做：
+
+1. 不新增向量数据库。
+2. 不新增 embedding 字段。
+3. 不调用 LLM 做事件归并。
+4. 不新增完整治理审计表。
+5. 不处理第 8 点硬编码问题。
+
+后续建议：
+
+1. 引入向量数据库后，将向量召回作为候选事件来源，而不是替代当前规则边界。
+2. 增加 `event_governance_action` 表，记录合并、移动、归档的 before/after。
+3. 增加事件标题、摘要、主题的人为编辑能力，但需要审计日志先落地。
+4. 为分类器增加更多金融主题样本，逐步扩展主体词典和变量词典。

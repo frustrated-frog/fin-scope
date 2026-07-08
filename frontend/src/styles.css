@@ -1979,6 +1979,55 @@ td {
   color: var(--ink);
 }
 
+.agent-runs-panel .table-scroll table {
+  table-layout: fixed;
+  min-width: 780px;
+}
+
+.agent-runs-panel th:nth-child(1),
+.agent-runs-panel td:nth-child(1) {
+  width: 230px;
+}
+
+.agent-runs-panel th:nth-child(2),
+.agent-runs-panel td:nth-child(2) {
+  width: 188px;
+}
+
+.agent-runs-panel th:nth-child(3),
+.agent-runs-panel td:nth-child(3) {
+  width: 130px;
+}
+
+.agent-runs-panel th:nth-child(4),
+.agent-runs-panel td:nth-child(4) {
+  width: 130px;
+}
+
+.agent-runs-panel th:nth-child(5),
+.agent-runs-panel td:nth-child(5) {
+  width: 120px;
+}
+
+.agent-runs-panel th,
+.agent-runs-panel td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-runs-panel th:nth-child(1),
+.agent-runs-panel td:nth-child(1),
+.agent-runs-panel th:nth-child(2),
+.agent-runs-panel td:nth-child(2),
+.agent-runs-panel th:nth-child(3),
+.agent-runs-panel td:nth-child(3),
+.agent-runs-panel th:nth-child(4),
+.agent-runs-panel td:nth-child(4),
+.agent-runs-panel th:nth-child(5),
+.agent-runs-panel td:nth-child(5) {
+  white-space: nowrap;
+}
+
 /* Card Component */
 .card {
   border: 1px solid var(--line);

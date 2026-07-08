@@ -12,6 +12,7 @@ import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -70,6 +71,29 @@ public class EvidenceItemRepository {
         return jdbcTemplate.query("SELECT * FROM evidence_item ORDER BY created_at DESC, id DESC", mapper);
     }
 
+    public List<EvidenceItem> findFiltered(Long eventId, String sourceTier, String evidenceType, Integer minConfidence) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM evidence_item WHERE 1=1");
+        List<Object> args = new ArrayList<Object>();
+        if (eventId != null) {
+            sql.append(" AND event_id = ?");
+            args.add(eventId);
+        }
+        if (!isBlank(sourceTier)) {
+            sql.append(" AND lower(source_tier) = lower(?)");
+            args.add(sourceTier.trim());
+        }
+        if (!isBlank(evidenceType)) {
+            sql.append(" AND lower(evidence_type) = lower(?)");
+            args.add(evidenceType.trim());
+        }
+        if (minConfidence != null) {
+            sql.append(" AND confidence >= ?");
+            args.add(minConfidence);
+        }
+        sql.append(" ORDER BY created_at DESC, id DESC");
+        return jdbcTemplate.query(sql.toString(), mapper, args.toArray());
+    }
+
     public int countByEventId(Long eventId) {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM evidence_item WHERE event_id = ?",
                 Integer.class, eventId);
@@ -102,5 +126,9 @@ public class EvidenceItemRepository {
 
     private int value(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

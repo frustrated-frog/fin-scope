@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Repository
@@ -61,17 +62,20 @@ public class AgentRunRepository {
         jdbcTemplate.update("INSERT INTO agent_run(research_run_id,event_id,article_id,node_name,status,input,output,"
                         + "error_message,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 researchRunId, eventId, articleId, nodeName, status, input, output, errorMessage,
-                durationMs, TimeUtil.text(LocalDateTime.now()));
+                durationMs, TimeUtil.text(nodeStartTime(durationMs)));
     }
 
     public void record(AgentRun run) {
+        LocalDateTime createdAt = run.getCreatedAt() == null
+                ? nodeStartTime(run.getDurationMs())
+                : run.getCreatedAt();
         jdbcTemplate.update("INSERT INTO agent_run(research_run_id,event_id,article_id,node_name,status,input,output,"
                         + "error_message,duration_ms,created_at,step_id,attempt,action_fingerprint,input_hash,"
                         + "output_hash,error_type,fallback_used,fallback_reason,termination_reason,progress_delta,"
                         + "budget_snapshot,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 run.getResearchRunId(), run.getEventId(), run.getArticleId(), run.getNodeName(), run.getStatus(),
                 run.getInput(), run.getOutput(), run.getErrorMessage(), run.getDurationMs(),
-                TimeUtil.text(LocalDateTime.now()), run.getStepId(), run.getAttempt(), run.getActionFingerprint(),
+                TimeUtil.text(createdAt), run.getStepId(), run.getAttempt(), run.getActionFingerprint(),
                 run.getInputHash(), run.getOutputHash(), run.getErrorType(), run.isFallbackUsed() ? 1 : 0,
                 run.getFallbackReason(), run.getTerminationReason(), run.getProgressDelta(),
                 run.getBudgetSnapshot(), run.getMetadataJson());
@@ -89,5 +93,9 @@ public class AgentRunRepository {
     private Long readLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
         long value = rs.getLong(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private LocalDateTime nodeStartTime(long durationMs) {
+        return LocalDateTime.now().minus(Math.max(0L, durationMs), ChronoUnit.MILLIS);
     }
 }

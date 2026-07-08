@@ -1,6 +1,7 @@
 package com.finscope.service.research;
 
 import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -68,6 +70,31 @@ class EventClusterServiceTest {
     }
 
     @Test
+    void mergeRejectsArchivedSourceOrTarget() {
+        EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
+        EventCluster archivedSource = event(1L, ResearchEnums.EVENT_ARCHIVED);
+        EventCluster activeTarget = event(2L, ResearchEnums.EVENT_ACTIVE);
+        when(eventClusterRepository.findById(1L)).thenReturn(Optional.of(archivedSource));
+        when(eventClusterRepository.findById(2L)).thenReturn(Optional.of(activeTarget));
+
+        BusinessException sourceError = assertThrows(BusinessException.class,
+                () -> service(eventClusterRepository).merge(1L, 2L));
+
+        assertEquals(ErrorCode.CONFLICT, sourceError.getErrorCode());
+        verify(eventClusterRepository, never()).moveLinks(any(), any());
+
+        EventCluster activeSource = event(3L, ResearchEnums.EVENT_ACTIVE);
+        EventCluster archivedTarget = event(4L, ResearchEnums.EVENT_ARCHIVED);
+        when(eventClusterRepository.findById(3L)).thenReturn(Optional.of(activeSource));
+        when(eventClusterRepository.findById(4L)).thenReturn(Optional.of(archivedTarget));
+
+        BusinessException targetError = assertThrows(BusinessException.class,
+                () -> service(eventClusterRepository).merge(3L, 4L));
+
+        assertEquals(ErrorCode.CONFLICT, targetError.getErrorCode());
+    }
+
+    @Test
     void moveArticleCanCreateNewEventAndMoveArticleEvidence() {
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
@@ -94,6 +121,8 @@ class EventClusterServiceTest {
             event.setId(3L);
             return event;
         });
+        when(eventClusterRepository.moveArticleLink(1L, 2L, 3L, "命中历史事件；人工治理调整"))
+                .thenReturn(1);
 
         EventCluster moved = service(eventClusterRepository, evidenceItemRepository,
                 mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class), articleRepository,
@@ -103,6 +132,61 @@ class EventClusterServiceTest {
         verify(eventClusterRepository).moveArticleLink(1L, 2L, 3L, "命中历史事件；人工治理调整");
         verify(evidenceItemRepository).moveByEventIdAndArticleId(1L, 2L, 3L);
         verify(eventClusterRepository).refreshCounts(Arrays.asList(1L, 3L));
+    }
+
+    @Test
+    void moveArticleRejectsArchivedSourceOrTarget() {
+        EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
+        ArticleRepository articleRepository = mock(ArticleRepository.class);
+        EventCluster archivedSource = event(1L, ResearchEnums.EVENT_ARCHIVED);
+        EventCluster activeTarget = event(3L, ResearchEnums.EVENT_ACTIVE);
+        when(eventClusterRepository.findById(1L)).thenReturn(Optional.of(archivedSource));
+        when(eventClusterRepository.findById(3L)).thenReturn(Optional.of(activeTarget));
+        when(eventClusterRepository.findLink(1L, 2L)).thenReturn(Optional.of(link(1L, 2L)));
+        when(articleRepository.findById(2L)).thenReturn(Optional.of(article(2L)));
+
+        BusinessException sourceError = assertThrows(BusinessException.class,
+                () -> service(eventClusterRepository, mock(EvidenceItemRepository.class),
+                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
+
+        assertEquals(ErrorCode.CONFLICT, sourceError.getErrorCode());
+
+        EventCluster activeSource = event(4L, ResearchEnums.EVENT_ACTIVE);
+        EventCluster archivedTarget = event(5L, ResearchEnums.EVENT_ARCHIVED);
+        when(eventClusterRepository.findById(4L)).thenReturn(Optional.of(activeSource));
+        when(eventClusterRepository.findById(5L)).thenReturn(Optional.of(archivedTarget));
+        when(eventClusterRepository.findLink(4L, 2L)).thenReturn(Optional.of(link(4L, 2L)));
+
+        BusinessException targetError = assertThrows(BusinessException.class,
+                () -> service(eventClusterRepository, mock(EvidenceItemRepository.class),
+                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        articleRepository, mock(EventClassifier.class)).moveArticle(4L, 2L, 5L, null));
+
+        assertEquals(ErrorCode.CONFLICT, targetError.getErrorCode());
+    }
+
+    @Test
+    void moveArticleRejectsWhenLinkMoveAffectsNoRows() {
+        EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
+        EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
+        ArticleRepository articleRepository = mock(ArticleRepository.class);
+        EventCluster source = event(1L, ResearchEnums.EVENT_ACTIVE);
+        EventCluster target = event(3L, ResearchEnums.EVENT_ACTIVE);
+        when(eventClusterRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(eventClusterRepository.findById(3L)).thenReturn(Optional.of(target));
+        when(eventClusterRepository.findLink(1L, 2L)).thenReturn(Optional.of(link(1L, 2L)));
+        when(articleRepository.findById(2L)).thenReturn(Optional.of(article(2L)));
+        when(eventClusterRepository.moveArticleLink(1L, 2L, 3L, "命中历史事件；人工治理调整"))
+                .thenReturn(0);
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service(eventClusterRepository, evidenceItemRepository,
+                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
+
+        assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
+        verify(evidenceItemRepository, never()).moveByEventIdAndArticleId(any(), any(), any());
     }
 
     private EventClusterService service(EventClusterRepository eventClusterRepository) {
@@ -158,5 +242,13 @@ class EventClusterServiceTest {
                 "市场交易降息预期。");
         article.setId(id);
         return article;
+    }
+
+    private EventArticleLink link(Long eventId, Long articleId) {
+        EventArticleLink link = new EventArticleLink();
+        link.setEventId(eventId);
+        link.setArticleId(articleId);
+        link.setNoveltyReason("命中历史事件");
+        return link;
     }
 }

@@ -22,7 +22,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 public class EvidenceService {
@@ -173,12 +172,7 @@ public class EvidenceService {
     }
 
     public List<EvidenceItem> listAll(Long eventId, String sourceTier, String evidenceType, Integer minConfidence) {
-        return evidenceItemRepository.findAll().stream()
-                .filter(item -> eventId == null || eventId.equals(item.getEventId()))
-                .filter(item -> matches(item.getSourceTier(), sourceTier))
-                .filter(item -> matches(item.getEvidenceType(), evidenceType))
-                .filter(item -> minConfidence == null || value(item.getConfidence()) >= minConfidence)
-                .collect(Collectors.toList());
+        return evidenceItemRepository.findFiltered(eventId, sourceTier, evidenceType, minConfidence);
     }
 
     public EvidenceItem detail(Long id) {
@@ -319,17 +313,6 @@ public class EvidenceService {
             return text;
         }
         return text.substring(0, maxLength);
-    }
-
-    private boolean matches(String actual, String expected) {
-        if (StringUtils.isBlank(expected)) {
-            return true;
-        }
-        return StringUtils.firstNonBlank(actual, "").equalsIgnoreCase(expected.trim());
-    }
-
-    private int value(Integer confidence) {
-        return confidence == null ? 0 : confidence;
     }
 
     private String extractJson(String raw) {

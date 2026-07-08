@@ -223,6 +223,7 @@ export type AgentRun = {
   output?: string;
   durationMs: number;
   errorMessage?: string;
+  createdAt?: string;
 };
 
 export type Dashboard = {

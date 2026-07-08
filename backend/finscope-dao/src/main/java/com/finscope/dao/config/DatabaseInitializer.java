@@ -178,6 +178,8 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_theme ON event_cluster(theme_code)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_key ON event_cluster(canonical_event_key)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_seen ON event_cluster(last_seen_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_cluster_status_theme_seen "
+                + "ON event_cluster(status, theme_code, last_seen_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS event_article_link ("
                 + "event_id INTEGER NOT NULL,"
                 + "article_id INTEGER NOT NULL,"

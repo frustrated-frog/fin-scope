@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.LinkedHashSet;
-import java.util.stream.Collectors;
 
 @Service
 public class EventClusterService {
@@ -65,7 +64,7 @@ public class EventClusterService {
         }
 
         EventClassifier.EventSignature signature = eventClassifier.signature(article);
-        List<EventCluster> candidates = eventClusterRepository.findRecentByTheme(signature.getThemeCode(), 80);
+        List<EventCluster> candidates = eventClusterRepository.findRecentMergeableByTheme(signature.getThemeCode(), 80);
         EventClassifier.MatchDecision decision = eventClassifier.decide(article, signature, candidates);
         EventCluster event = decision.getEvent() == null
                 ? createEvent(article, signature)
@@ -102,17 +101,12 @@ public class EventClusterService {
                                    String noveltyState,
                                    LocalDate dateFrom,
                                    LocalDate dateTo) {
-        return eventClusterRepository.findAll().stream()
-                .filter(event -> matches(event.getThemeCode(), themeCode))
-                .filter(event -> matches(event.getStatus(), status))
-                .filter(event -> matches(event.getNoveltyState(), noveltyState))
-                .filter(event -> withinDateRange(event, dateFrom, dateTo))
-                .collect(Collectors.toList());
+        return eventClusterRepository.findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo);
     }
 
     public EventCluster detail(Long id) {
         return eventClusterRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Event not found: " + id));
     }
 
     public List<EventArticleLink> articles(Long eventId) {
@@ -139,6 +133,8 @@ public class EventClusterService {
         }
         EventCluster source = detail(sourceEventId);
         EventCluster target = detail(targetEventId);
+        ensureGovernable(source, "source event");
+        ensureGovernable(target, "target event");
 
         eventClusterRepository.moveLinks(source.getId(), target.getId());
         evidenceItemRepository.moveByEventId(source.getId(), target.getId());
@@ -158,6 +154,7 @@ public class EventClusterService {
                                     Long targetEventId,
                                     Boolean createNewEvent) {
         EventCluster source = detail(sourceEventId);
+        ensureGovernable(source, "source event");
         EventArticleLink link = eventClusterRepository.findLink(source.getId(), articleId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
                         "Article link not found for event " + sourceEventId + " and article " + articleId));
@@ -170,12 +167,17 @@ public class EventClusterService {
         }
 
         EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
+        ensureGovernable(target, "target event");
         if (source.getId().equals(target.getId())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Cannot move article to the same event");
         }
 
-        eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
+        int moved = eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
                 governanceReason(link.getNoveltyReason()));
+        if (moved == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    "Article link changed before move could be completed: " + articleId);
+        }
         evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
         eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
         return detail(target.getId());
@@ -221,26 +223,15 @@ public class EventClusterService {
         return eventClusterRepository.update(event);
     }
 
-    private boolean matches(String actual, String expected) {
-        if (StringUtils.isBlank(expected)) {
-            return true;
-        }
-        return StringUtils.firstNonBlank(actual, "").equalsIgnoreCase(expected.trim());
-    }
-
-    private boolean withinDateRange(EventCluster event, LocalDate dateFrom, LocalDate dateTo) {
-        LocalDate seenDate = event.getLastSeenAt() == null ? null : event.getLastSeenAt().toLocalDate();
-        if (seenDate == null) {
-            return dateFrom == null && dateTo == null;
-        }
-        if (dateFrom != null && seenDate.isBefore(dateFrom)) {
-            return false;
-        }
-        return dateTo == null || !seenDate.isAfter(dateTo);
-    }
-
     private String normalizeStatus(String status) {
         return StringUtils.firstNonBlank(status, "").trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void ensureGovernable(EventCluster event, String role) {
+        if (ResearchEnums.EVENT_ARCHIVED.equals(event.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    "Cannot govern archived " + role + ": " + event.getId());
+        }
     }
 
     private String governanceReason(String originalReason) {

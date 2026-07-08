@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -107,9 +108,46 @@ public class EventClusterRepository {
         return jdbcTemplate.query("SELECT * FROM event_cluster ORDER BY last_seen_at DESC, id DESC", eventMapper);
     }
 
+    public List<EventCluster> findAllFiltered(String themeCode,
+                                              String status,
+                                              String noveltyState,
+                                              LocalDate dateFrom,
+                                              LocalDate dateTo) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM event_cluster WHERE 1=1");
+        List<Object> args = new ArrayList<Object>();
+        if (!isBlank(themeCode)) {
+            sql.append(" AND lower(theme_code) = lower(?)");
+            args.add(themeCode.trim());
+        }
+        if (!isBlank(status)) {
+            sql.append(" AND lower(status) = lower(?)");
+            args.add(status.trim());
+        }
+        if (!isBlank(noveltyState)) {
+            sql.append(" AND lower(novelty_state) = lower(?)");
+            args.add(noveltyState.trim());
+        }
+        if (dateFrom != null) {
+            sql.append(" AND last_seen_at >= ?");
+            args.add(dateFrom.toString() + "T00:00:00");
+        }
+        if (dateTo != null) {
+            sql.append(" AND last_seen_at <= ?");
+            args.add(dateTo.toString() + "T23:59:59");
+        }
+        sql.append(" ORDER BY last_seen_at DESC, id DESC");
+        return jdbcTemplate.query(sql.toString(), eventMapper, args.toArray());
+    }
+
     public List<EventCluster> findRecentByTheme(String themeCode, int limit) {
         return jdbcTemplate.query("SELECT * FROM event_cluster WHERE theme_code = ? "
                         + "ORDER BY last_seen_at DESC, id DESC LIMIT ?",
+                eventMapper, themeCode, limit);
+    }
+
+    public List<EventCluster> findRecentMergeableByTheme(String themeCode, int limit) {
+        return jdbcTemplate.query("SELECT * FROM event_cluster WHERE theme_code = ? "
+                        + "AND status IN ('ACTIVE','COOLING') ORDER BY last_seen_at DESC, id DESC LIMIT ?",
                 eventMapper, themeCode, limit);
     }
 
@@ -142,14 +180,24 @@ public class EventClusterRepository {
     }
 
     public int moveLinks(Long sourceEventId, Long targetEventId) {
-        return jdbcTemplate.update("UPDATE OR REPLACE event_article_link SET event_id = ? WHERE event_id = ?",
-                targetEventId, sourceEventId);
+        List<EventArticleLink> links = jdbcTemplate.query("SELECT * FROM event_article_link WHERE event_id = ?",
+                linkMapper, sourceEventId);
+        int moved = 0;
+        for (EventArticleLink link : links) {
+            link.setNoveltyReason(mergeReasons(link.getNoveltyReason(), "人工治理合并"));
+            moved += moveLinkSafely(link, targetEventId);
+        }
+        return moved;
     }
 
     public int moveArticleLink(Long sourceEventId, Long articleId, Long targetEventId, String noveltyReason) {
-        return jdbcTemplate.update("UPDATE OR REPLACE event_article_link SET event_id = ?, novelty_reason = ? "
-                        + "WHERE event_id = ? AND article_id = ?",
-                targetEventId, noveltyReason, sourceEventId, articleId);
+        Optional<EventArticleLink> sourceLink = findLink(sourceEventId, articleId);
+        if (!sourceLink.isPresent()) {
+            return 0;
+        }
+        EventArticleLink link = sourceLink.get();
+        link.setNoveltyReason(noveltyReason);
+        return moveLinkSafely(link, targetEventId);
     }
 
     public int countLinks(Long eventId) {
@@ -204,6 +252,77 @@ public class EventClusterRepository {
         return unique;
     }
 
+    private int moveLinkSafely(EventArticleLink sourceLink, Long targetEventId) {
+        Optional<EventArticleLink> existingTarget = findLink(targetEventId, sourceLink.getArticleId());
+        if (!existingTarget.isPresent()) {
+            return jdbcTemplate.update("UPDATE event_article_link SET event_id = ?, novelty_reason = ? "
+                            + "WHERE event_id = ? AND article_id = ?",
+                    targetEventId, sourceLink.getNoveltyReason(),
+                    sourceLink.getEventId(), sourceLink.getArticleId());
+        }
+
+        EventArticleLink merged = mergeLinks(existingTarget.get(), sourceLink);
+        updateLink(merged);
+        deleteLink(sourceLink.getEventId(), sourceLink.getArticleId());
+        return 1;
+    }
+
+    private EventArticleLink mergeLinks(EventArticleLink target, EventArticleLink source) {
+        EventArticleLink merged = new EventArticleLink();
+        merged.setEventId(target.getEventId());
+        merged.setArticleId(target.getArticleId());
+        merged.setRelationType(preferredRelationType(target.getRelationType(), source.getRelationType()));
+        merged.setMatchScore(Math.max(value(target.getMatchScore()), value(source.getMatchScore())));
+        merged.setNoveltyType(isBlank(target.getNoveltyType()) ? source.getNoveltyType() : target.getNoveltyType());
+        merged.setNoveltyReason(mergeReasons(target.getNoveltyReason(), source.getNoveltyReason()));
+        merged.setCreatedAt(earlier(target.getCreatedAt(), source.getCreatedAt()));
+        return merged;
+    }
+
+    private void updateLink(EventArticleLink link) {
+        jdbcTemplate.update("UPDATE event_article_link SET relation_type = ?, match_score = ?, novelty_type = ?, "
+                        + "novelty_reason = ?, created_at = ? WHERE event_id = ? AND article_id = ?",
+                link.getRelationType(), value(link.getMatchScore()), link.getNoveltyType(),
+                link.getNoveltyReason(), TimeUtil.text(link.getCreatedAt()),
+                link.getEventId(), link.getArticleId());
+    }
+
+    private int deleteLink(Long eventId, Long articleId) {
+        return jdbcTemplate.update("DELETE FROM event_article_link WHERE event_id = ? AND article_id = ?",
+                eventId, articleId);
+    }
+
+    private String preferredRelationType(String targetRelationType, String sourceRelationType) {
+        if ("PRIMARY".equals(targetRelationType) || "PRIMARY".equals(sourceRelationType)) {
+            return "PRIMARY";
+        }
+        return isBlank(targetRelationType) ? sourceRelationType : targetRelationType;
+    }
+
+    private String mergeReasons(String first, String second) {
+        if (isBlank(first)) {
+            return second;
+        }
+        if (isBlank(second) || first.contains(second)) {
+            return first;
+        }
+        return first + "；" + second;
+    }
+
+    private LocalDateTime earlier(LocalDateTime first, LocalDateTime second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.isBefore(second) ? first : second;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
     private void bindEvent(PreparedStatement ps, EventCluster event) throws java.sql.SQLException {
         int i = 1;
         ps.setString(i++, event.getCanonicalTitle());
@@ -224,5 +343,9 @@ public class EventClusterRepository {
 
     private int value(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private double value(Double value) {
+        return value == null ? 0.0 : value;
     }
 }

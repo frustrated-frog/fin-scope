@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
+import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleCard } from './features/articles/ArticleCard';
 
 const responses: Record<string, unknown> = {
@@ -735,6 +736,27 @@ test('content studio shows idea score and outline for generated topics', async (
   expect(screen.getByText('X_THREAD')).toBeInTheDocument();
   expect(screen.getByText('证据强度够高，而且能沉淀成长期有效的宏观解释框架。')).toBeInTheDocument();
   expect(screen.getByText(/1\. 先看降息预期/)).toBeInTheDocument();
+});
+
+test('agent runs table shows node start time', () => {
+  render(
+    <AgentRunsView
+      agentRuns={[
+        {
+          id: 1,
+          nodeName: 'brief-generate',
+          status: 'SUCCESS',
+          durationMs: 12,
+          createdAt: '2026-06-29T09:16:42'
+        }
+      ]}
+    />
+  );
+
+  const table = screen.getByRole('table');
+  expect(table.closest('.agent-runs-panel')).toBeTruthy();
+  expect(within(table).getByText('开始时间')).toBeInTheDocument();
+  expect(within(table).getByText('2026-06-29 09:16')).toBeInTheDocument();
 });
 
 test('brief reader shows research evidence, learning tasks and content ideas', async () => {
