@@ -1,83 +1,83 @@
-# FinScope Intake Workflow Design
+# FinScope Intake 信息摄入工作流设计方案
 
-Date: 2026-07-09
+日期：2026-07-09
 
-## Background
+## 背景
 
-The current Sources tab is a thin source configuration and manual fetch page. Fetched items go through the existing fetch pipeline and can enter the Article workspace directly. This is acceptable for a small number of curated sources, but it does not scale once FinScope supports richer source types, larger batch fetches, and scheduled daily intake.
+当前 Sources tab 只是一个很薄的信息源配置和手动抓取页面。抓取结果会进入现有 fetch pipeline，并有机会直接进入 Article 工作区。对于少量人工精挑的信息源，这个模式还能工作；但一旦 FinScope 支持更多来源类型、更大的批量抓取和每天定时抓取，直接把内容塞进 Article 会制造信息爆炸。
 
-The new direction is to turn Sources into the configuration side of an information intake system, and add a separate Intake workspace for reviewing fetched candidates before they become formal Articles.
+新的方向是：把 Sources 改造成“信息源配置与抓取运行台”，同时新增一个 Intake 工作区，用来审核抓取出来的候选内容。候选内容只有经过人工 Promote，才会进入正式 Article。
 
-## Product Principles
+## 产品原则
 
-1. All fetched content enters an intake candidate pool first.
-2. No candidate is promoted to Article automatically in Phase 1.
-3. Agent Harness is used for review, scoring, Chinese decision summaries, and batch summaries.
-4. The user is the final decision maker. Human status controls whether a candidate enters Article.
-5. Promoting a candidate uses the full existing Article ingest and insight card generation chain.
-6. The system must reduce decision load, not create a larger unread queue.
+1. 所有抓取结果都先进入候选池。
+2. 第一阶段绝不自动入 Article。
+3. Agent Harness 用于预审、打分、中文决策摘要和批次总结。
+4. 用户是最终决策者，人工状态决定候选内容是否进入 Article。
+5. 候选内容被人工 Promote 后，必须走现有完整 Article ingest 和 insight card 生成链路。
+6. 系统目标是减少决策负担，而不是制造更大的未读队列。
 
-## Phase 1 Scope
+## 第一阶段范围
 
-Phase 1 implements a two-stage Agent workflow:
+第一阶段实现“两段式 Agent Workflow”：
 
 ```text
-Source manual/scheduled fetch
-  -> Fetch Batch
-  -> Raw Candidate persistence
-  -> Deterministic precheck
-     - 3-day lookback
-     - max items per run
-     - URL/title/body dedupe
-     - extraction quality metadata
+Source 手动/定时抓取
+  -> Fetch Batch 抓取批次
+  -> Raw Candidate 候选内容落库
+  -> 确定性预处理
+     - 最近 3 天过滤
+     - 每次抓取条数限制
+     - URL/标题/正文指纹去重
+     - 抽取质量元数据
   -> CandidateReviewAgent
-     - Chinese research title
-     - decision summary
-     - key facts
-     - why it matters
-     - novelty judgment
-     - risk flags
-     - score and recommendation
+     - 中文研究标题
+     - 决策摘要
+     - 核心事实
+     - 为什么重要
+     - 新信息判断
+     - 风险/缺口
+     - 分数和建议动作
   -> BatchSummaryAgent
-     - batch quality overview
-     - recommended review order
-     - noise/duplicate/low-value shape
-  -> Intake tab human review
-  -> Promote
+     - 本批质量概览
+     - 推荐优先审核顺序
+     - 噪音/重复/低价值内容分布
+  -> Intake tab 人工审核
+  -> 人工 Promote
   -> ArticleIngestCoordinator
   -> Article + Insight Card
 ```
 
-Phase 1 source support:
+第一阶段支持的信息源类型：
 
-1. RSS feeds.
-2. Single web article URLs.
-3. X/Twitter status URLs.
-4. Web list pages that produce multiple article links.
+1. RSS feed。
+2. 单篇网页文章。
+3. X/Twitter status 链接。
+4. 网页列表页，即一个列表/栏目/首页抽取多篇文章链接。
 
-Out of scope for Phase 1:
+第一阶段不做：
 
-1. Automatic promotion.
-2. Direct promotion to Brief, Evidence, Learning, or Topic.
-3. Custom lookback windows. Lookback is fixed to the latest 3 days.
-4. PDF, newsletter mailbox ingestion, authenticated sites, and JavaScript-heavy browser extraction.
-5. Multi-agent editorial board workflow. This is reserved for Phase 2.
+1. 自动入库。
+2. 直接进入 Brief、Evidence、Learning 或 Topic。
+3. 自定义时间窗口。时间范围固定为最近 3 天。
+4. PDF、邮箱 Newsletter、需要登录的网站、强依赖 JavaScript 渲染的网站。
+5. 多 Agent 审稿台。多 Agent 审稿台放到第二阶段。
 
-## Domain Model
+## 领域模型
 
 ### Source
 
-The existing `Source` remains the configuration root. It gains intake-specific configuration:
+现有 `Source` 仍然是信息源配置根对象。第一阶段新增摄入配置字段：
 
 ```text
-maxItemsPerRun: integer, default 10
-scheduleTimes: text, comma-separated HH:mm values, e.g. "08:30,12:30,21:30"
-scheduledEnabled: boolean, default false
+maxItemsPerRun: integer，默认 10
+scheduleTimes: text，逗号分隔的 HH:mm，例如 "08:30,12:30,21:30"
+scheduledEnabled: boolean，默认 false
 ```
 
-Existing `fetchFrequencyMinutes` remains for backward compatibility but is not used by the Phase 1 daily fixed-time scheduler.
+现有 `fetchFrequencyMinutes` 保留用于兼容，但第一阶段固定时间调度不再使用它。
 
-Phase 1 source type options:
+第一阶段 Source 类型：
 
 ```text
 RSS
@@ -86,13 +86,18 @@ X_POST
 WEB_LIST
 ```
 
-`WEB` means a single article page. `WEB_LIST` means a listing/index page that should produce candidate article links.
+含义：
+
+1. `RSS`：RSS/Atom feed，多条内容。
+2. `WEB`：单篇网页文章，通常产出 1 条候选。
+3. `X_POST`：X/Twitter status 或长文。
+4. `WEB_LIST`：列表页、栏目页或网站首页，抽取多个文章链接。
 
 ### Fetch Batch
 
-`fetch_batch` records one manual or scheduled intake run.
+新增 `fetch_batch` 表，记录一次手动或定时摄入运行。
 
-Fields:
+字段：
 
 ```text
 id
@@ -102,7 +107,7 @@ trigger_type              MANUAL | SCHEDULED
 status                    RUNNING | COMPLETED | PARTIAL_SUCCESS | FAILED
 started_at
 ended_at
-lookback_days             always 3 in Phase 1
+lookback_days             第一阶段固定为 3
 max_items_requested
 raw_item_count
 candidate_count
@@ -116,13 +121,13 @@ created_at
 updated_at
 ```
 
-The existing `fetch_run` remains for backward compatibility and dashboard continuity. Phase 1 keeps `fetch_run` intact and adds `fetch_batch` for Intake. Manual intake fetch creates a `fetch_batch` and also records a compatible `fetch_run` result so existing dashboard behavior remains stable.
+现有 `fetch_run` 保留，用于兼容 Dashboard 的最近抓取展示。第一阶段新增 `fetch_batch` 给 Intake 使用；手动 intake fetch 同时记录兼容的 `fetch_run` 结果，避免破坏现有 Dashboard 行为。
 
 ### Intake Candidate
 
-`intake_candidate` stores every fetched item that is eligible for human review or trace.
+新增 `intake_candidate` 表，保存每一条待审核候选内容。
 
-Fields:
+字段：
 
 ```text
 id
@@ -171,13 +176,13 @@ created_at
 updated_at
 ```
 
-Human status defaults to `PENDING` for every new non-duplicate candidate. Agent recommendation never changes human status by itself.
+所有非确定重复的候选内容默认 `human_status=PENDING`。Agent 的建议状态只做参考，不能直接改变人工状态。
 
-## Candidate Status Semantics
+## 状态语义
 
-### Agent Recommendation
+### Agent 建议状态
 
-Agent recommendation is advisory:
+Agent 建议状态是机器预审结果，只供用户判断时参考：
 
 ```text
 PROMOTABLE
@@ -188,9 +193,9 @@ OFF_TOPIC
 EXTRACTION_FAILED
 ```
 
-### Human Status
+### 人工处理状态
 
-Human status is authoritative:
+人工处理状态是最终处置结果：
 
 ```text
 PENDING
@@ -200,11 +205,11 @@ SKIPPED
 REJECTED
 ```
 
-Promotion is only allowed from `PENDING` or `SAVED_FOR_LATER`. A promoted candidate stores `promotedArticleId` and becomes read-only for promotion.
+只有 `PENDING` 和 `SAVED_FOR_LATER` 可以被 Promote。候选内容 Promote 后记录 `promoted_article_id`，并且不能重复 Promote。
 
-## Agent Review Contract
+## Agent 预审契约
 
-`CandidateReviewAgent` must output structured JSON. The UI renders this structure directly.
+`CandidateReviewAgent` 必须输出结构化 JSON。前端直接按照这个结构渲染候选卡片。
 
 ```json
 {
@@ -228,19 +233,19 @@ Promotion is only allowed from `PENDING` or `SAVED_FOR_LATER`. A promoted candid
 }
 ```
 
-Requirements:
+要求：
 
-1. The output is always Chinese, regardless of source language.
-2. `decisionSummary` must be decision-oriented, not a generic abstract.
-3. `keyFacts` should contain 2-4 concise facts when extraction quality allows it.
-4. `score` is an integer from 0 to 100.
-5. If the LLM is unavailable or returns malformed JSON, the system creates a deterministic fallback review with `agentStatus=FALLBACK`.
+1. 输出必须是中文，不受原文语言影响。
+2. `decisionSummary` 必须服务于“是否入库”的决策，不写泛泛摘要。
+3. `keyFacts` 在抽取质量允许时提供 2-4 条关键事实。
+4. `score` 是 0-100 的整数。
+5. LLM 不可用或返回 JSON 不合法时，系统生成确定性 fallback 预审结果，并设置 `agentStatus=FALLBACK`。
 
-## Batch Summary Contract
+## 批次总结契约
 
-`BatchSummaryAgent` summarizes a completed batch after candidate reviews finish.
+`BatchSummaryAgent` 在单条候选预审完成后，总结整个抓取批次。
 
-Output fields:
+输出字段：
 
 ```text
 summaryText
@@ -250,86 +255,86 @@ noiseNotes
 suggestedReviewOrder
 ```
 
-The batch summary helps the user decide where to spend attention before opening individual candidates.
+批次总结的目标是让用户在打开单条候选之前，先知道这一批整体质量如何、最值得优先看的内容在哪里、噪音和重复大概有多少。
 
-If the LLM is unavailable, the fallback summary should use deterministic counts:
+LLM 不可用时，使用确定性 fallback：
 
 ```text
 本批共 N 条候选，高分 X 条，需复核 Y 条，低价值 Z 条，重复 D 条。
 ```
 
-## Backend Architecture
+## 后端架构
 
-### New Services
+### 新增服务
 
 `IntakeService`
 
-Responsibilities:
+职责：
 
-1. Start manual intake fetch for a source.
-2. Create and update `fetch_batch`.
-3. Convert adapter `RawItem` values into `intake_candidate` records.
-4. Run deterministic precheck.
-5. Invoke candidate review Agent.
-6. Invoke batch summary Agent.
-7. Update human status.
-8. Promote a candidate to Article.
+1. 启动某个 Source 的手动 intake fetch。
+2. 创建和更新 `fetch_batch`。
+3. 将 adapter 产出的 `RawItem` 转成 `intake_candidate`。
+4. 执行确定性预处理。
+5. 调用单条候选预审 Agent。
+6. 调用批次总结 Agent。
+7. 更新人工处理状态。
+8. 将候选内容 Promote 到 Article。
 
 `CandidateReviewAgent`
 
-Responsibilities:
+职责：
 
-1. Build the review prompt from source metadata and extracted content.
-2. Call the existing OpenAI-compatible LLM client through the Agent Harness pattern.
-3. Parse structured JSON.
-4. Return deterministic fallback review on failure.
-5. Record trace data in `agent_run`.
+1. 基于 source metadata 和抽取内容构造预审 prompt。
+2. 通过现有 OpenAI-compatible LLM client 和 Agent Harness 模式调用模型。
+3. 解析结构化 JSON。
+4. 失败时返回确定性 fallback 预审结果。
+5. 将调用轨迹记录到 `agent_run`。
 
 `BatchSummaryAgent`
 
-Responsibilities:
+职责：
 
-1. Summarize scored candidates from one batch.
-2. Return a structured batch-level review.
-3. Record trace data in `agent_run`.
+1. 汇总一个 batch 内已评分的候选内容。
+2. 返回结构化批次总结。
+3. 将调用轨迹记录到 `agent_run`。
 
 `WebListSourceAdapter`
 
-Responsibilities:
+职责：
 
-1. Fetch a list page.
-2. Extract likely article links using deterministic heuristics.
-3. Resolve relative URLs against the list page URL.
-4. Fetch each selected article through the existing web extraction path where possible.
-5. Preserve risk metadata when publication time is unknown.
+1. 抓取列表页。
+2. 用确定性启发式抽取可能的文章链接。
+3. 基于列表页 URL 解析相对链接。
+4. 对选中的文章链接复用现有网页抽取路径。
+5. 发布时间无法识别时保留风险元数据。
 
-### Existing Services Reused
+### 复用现有服务
 
-1. `SourceAdapterRegistry` remains the adapter selection point.
-2. `RssSourceAdapter`, `WebSourceAdapter`, and `XPostSourceAdapter` continue to produce `RawItem`.
-3. `RawItemSelector` can be reused for ranking and dedupe within one source run. Phase 1 adds lookback filtering before candidate persistence.
-4. `ArticleIngestCoordinator` remains the only path for creating promoted Articles.
-5. `InsightCardGenerator` continues to create the post-promotion insight card.
+1. `SourceAdapterRegistry` 仍然作为 adapter 选择入口。
+2. `RssSourceAdapter`、`WebSourceAdapter`、`XPostSourceAdapter` 继续产出 `RawItem`。
+3. `RawItemSelector` 可继续用于单次 source run 内排序和去重。第一阶段在候选落库前增加最近 3 天过滤。
+4. `ArticleIngestCoordinator` 仍然是创建正式 Article 的唯一入口。
+5. `InsightCardGenerator` 继续负责 Promote 后的 insight card 生成。
 
-## Deterministic Precheck
+## 确定性预处理
 
-Before Agent review, the system applies deterministic rules:
+Agent 预审前先执行确定性规则：
 
-1. Drop items older than 3 days when `publishedAt` is known.
-2. Keep items with unknown `publishedAt`, but add risk flag `发布时间不确定`.
-3. Limit selected candidates to `source.maxItemsPerRun`.
-4. Detect duplicate URL against existing candidates and existing articles.
-5. Detect duplicate title/body similarity when URL differs.
-6. Mark duplicate candidates with `agentRecommendation=DUPLICATE` and `humanStatus=REJECTED` only if the duplicate is certain.
-7. When duplicate certainty is not high, keep `humanStatus=PENDING` and expose duplicate risk.
+1. `publishedAt` 已知且早于最近 3 天的内容不进入候选池。
+2. `publishedAt` 未知的内容保留，但添加风险标记 `发布时间不确定`。
+3. 候选数量受 `source.maxItemsPerRun` 限制。
+4. 基于 URL 指纹检测是否已存在候选或正式 Article。
+5. URL 不同但标题/正文高度相似时，标记重复风险。
+6. 只有确定重复时，才直接设置 `agentRecommendation=DUPLICATE` 并将人工状态设为 `REJECTED`。
+7. 重复证据不够强时，保留 `humanStatus=PENDING`，并在风险标记中提示。
 
-The system should prefer preserving a borderline candidate over silently dropping it. The Intake tab exists so the user can make the final call.
+系统倾向于保留边界候选，而不是静默丢弃。Intake tab 的存在就是为了让用户最终判断。
 
-## API Design
+## API 设计
 
 ### Sources
 
-Existing:
+保留现有接口：
 
 ```text
 GET    /api/sources
@@ -338,7 +343,7 @@ PUT    /api/sources/{id}
 DELETE /api/sources/{id}
 ```
 
-Updated source payload includes:
+Source payload 新增字段：
 
 ```json
 {
@@ -354,13 +359,13 @@ Updated source payload includes:
 }
 ```
 
-New manual intake endpoint:
+新增手动 intake fetch 接口：
 
 ```text
 POST /api/sources/{id}/intake-fetch
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -371,9 +376,11 @@ Response:
 }
 ```
 
-The existing `POST /api/sources/{id}/fetch` should remain for compatibility until the UI fully moves to intake fetch.
+现有 `POST /api/sources/{id}/fetch` 继续保留，直到 UI 完全切换到 intake fetch。
 
 ### Intake
+
+新增接口：
 
 ```text
 GET  /api/intake/batches
@@ -384,7 +391,7 @@ POST /api/intake/candidates/{id}/status
 POST /api/intake/candidates/{id}/promote
 ```
 
-Status request:
+状态更新请求：
 
 ```json
 {
@@ -393,7 +400,7 @@ Status request:
 }
 ```
 
-Promote response:
+Promote 响应：
 
 ```json
 {
@@ -403,73 +410,74 @@ Promote response:
 }
 ```
 
-## Frontend Design
+## 前端设计
 
 ### Sources Tab
 
-Sources remains the source management workspace.
+Sources 继续作为信息源管理工作区。
 
-Capabilities:
+能力：
 
-1. Create a source.
-2. Edit a source.
-3. Delete a source.
-4. Enable or disable scheduled fetch.
-5. Configure `maxItemsPerRun`.
-6. Configure fixed daily schedule times.
-7. Manually run intake fetch.
-8. Show recent batch status per source.
+1. 创建信息源。
+2. 编辑信息源。
+3. 删除信息源。
+4. 开启或关闭定时抓取。
+5. 配置每次抓取条数 `maxItemsPerRun`。
+6. 配置每天固定抓取时间 `scheduleTimes`。
+7. 手动触发 intake fetch。
+8. 展示每个 source 最近抓取批次状态。
 
-Phase 1 form fields:
+第一阶段表单字段：
 
 ```text
-Name
-Type: RSS | Web Article | X/Twitter | Web List
+名称
+类型：RSS | Web Article | X/Twitter | Web List
 URL
-Tags
-Credibility
-Max items per run
-Scheduled enabled
-Schedule times
-Enabled
+标签
+可信度
+每次抓取条数
+是否开启定时抓取
+每天抓取时间
+是否启用
 ```
 
-The page should stay operational and dense. It is a configuration tool, not the review workspace.
+页面定位是配置工具，应保持紧凑、可操作，而不是承担候选审核。
 
 ### Intake Tab
 
-Add a new navigation item:
+新增导航项：
 
 ```text
 Intake
 ```
 
-Intake is the daily review workspace.
+Intake 是每日候选审核工作区。
 
-Views:
+视图：
 
-1. Left-side batch list with the selected batch summary above the candidate list.
-2. Status filters: Pending, Later, Promoted, Skipped, Rejected.
-3. Candidate list sorted by `agentScore` descending by default.
-4. Candidate detail drawer or expanded panel.
+1. 左侧批次列表。
+2. 当前批次总结显示在候选列表上方。
+3. 状态过滤：Pending、Later、Promoted、Skipped、Rejected。
+4. 候选列表默认按 `agentScore` 从高到低排序。
+5. 候选详情使用展开面板或抽屉。
 
-Candidate card fields:
+候选卡片字段：
 
 ```text
-Chinese research title
-Score and Agent recommendation
-Decision summary
-Key facts
-Why it matters
-Novelty judgment
-Risk flags
-Source name
-Published time
-Original link
-Human status
+中文研究标题
+分数和 Agent 建议动作
+决策摘要
+核心事实
+为什么重要
+新信息判断
+风险/缺口
+来源名称
+发布时间
+原文链接
+人工状态
 ```
 
-Candidate actions:
+候选操作：
 
 ```text
 入文章库
@@ -478,137 +486,138 @@ Candidate actions:
 低价值
 ```
 
-After promotion:
+Promote 成功后：
 
-1. Candidate status becomes `PROMOTED`.
-2. `promotedArticleId` is shown.
-3. User can jump to Article workspace.
+1. 候选状态变为 `PROMOTED`。
+2. 显示 `promotedArticleId`。
+3. 用户可以跳转到 Article 工作区。
 
-## Scheduling Design
+## 定时调度设计
 
-Phase 1 uses fixed daily times.
+第一阶段只支持每天固定时间抓取。
 
-Rules:
+规则：
 
-1. A source participates only when `scheduledEnabled=true`.
-2. `scheduleTimes` contains comma-separated local times in `HH:mm`.
-3. Scheduler checks due sources periodically.
-4. The scheduler must avoid running the same source/time slot twice in one day.
-5. Manual fetch is always allowed even when scheduled fetch is disabled.
-6. Lookback is fixed to 3 days.
+1. 只有 `scheduledEnabled=true` 的 source 参与定时抓取。
+2. `scheduleTimes` 是逗号分隔的本地时间，格式为 `HH:mm`。
+3. Scheduler 周期性扫描到期 source。
+4. 同一个 source 的同一个时间点，每天最多运行一次。
+5. 手动抓取不受定时开关影响。
+6. 抓取时间范围固定为最近 3 天。
 
-Implementation options:
+实现：
 
-1. Add a simple Spring scheduled poller that scans sources and recent batches.
-2. Record scheduled execution in `fetch_batch` to prevent duplicate runs.
+1. 新增简单 Spring scheduled poller。
+2. 扫描 sources 和最近 `fetch_batch`。
+3. 通过 `fetch_batch` 防止同一天同一时间点重复运行。
 
-Phase 1 uses the simple Spring scheduled poller rather than a general job scheduler.
+第一阶段使用简单 Spring poller，不引入通用任务调度系统。
 
-## Promotion Flow
+## Promote 入文章库流程
 
-When the user clicks "入文章库":
+用户点击“入文章库”时：
 
-1. Load candidate.
-2. Validate human status is promotable.
-3. Build a `RawItem` from candidate content.
-4. Load the original `Source`.
-5. Call `ArticleIngestCoordinator.ingest(source, rawItem)`.
-6. Store `promoted_article_id`.
-7. Set `human_status=PROMOTED`.
-8. Return the created Article ID.
+1. 加载 candidate。
+2. 校验 candidate 是否可 Promote。
+3. 基于 candidate 内容构造 `RawItem`。
+4. 加载原始 `Source`。
+5. 调用 `ArticleIngestCoordinator.ingest(source, rawItem)`。
+6. 写入 `promoted_article_id`。
+7. 设置 `human_status=PROMOTED`。
+8. 返回创建或命中的 Article ID。
 
-Promotion must be idempotent:
+Promote 必须幂等：
 
-1. If candidate is already promoted, return the existing `promoted_article_id`.
-2. If Article ingest identifies a duplicate article, still mark candidate as promoted only when a stable article ID exists.
+1. 如果 candidate 已经 Promote，直接返回已有 `promoted_article_id`。
+2. 如果 Article ingest 判定为重复文章，只有拿到稳定 Article ID 时才将 candidate 标为 `PROMOTED`。
 
-## Error Handling
+## 错误处理
 
-Fetch errors:
+抓取错误：
 
-1. Mark batch `FAILED` if no candidate can be produced.
-2. Mark batch `PARTIAL_SUCCESS` if some candidates were produced and some failed.
-3. Store error message on batch.
+1. 没有产出任何候选时，batch 标记为 `FAILED`。
+2. 部分候选成功、部分失败时，batch 标记为 `PARTIAL_SUCCESS`。
+3. 错误信息记录在 batch 上。
 
-Agent errors:
+Agent 错误：
 
-1. Candidate remains visible.
-2. Store fallback Chinese decision card.
-3. Set `agentStatus=FALLBACK` or `FAILED`.
-4. Expose the risk on the candidate card.
+1. Candidate 仍然可见。
+2. 写入 fallback 中文决策卡片。
+3. 设置 `agentStatus=FALLBACK` 或 `FAILED`。
+4. 候选卡片展示风险提示。
 
-Promotion errors:
+Promote 错误：
 
-1. Candidate remains in its previous human status.
-2. UI shows an error toast.
-3. No partial status update should claim promotion without an Article ID.
+1. Candidate 保持原人工状态。
+2. UI 展示错误 toast。
+3. 没有 Article ID 时，不能声称 Promote 成功。
 
-## Testing Strategy
+## 测试策略
 
-Backend tests:
+后端测试：
 
-1. Source repository persists new fields.
-2. Intake fetch creates a batch and candidates.
-3. RSS candidate filtering respects the 3-day lookback.
-4. `maxItemsPerRun` limits candidate count.
-5. Duplicate URL does not create duplicate pending review noise.
-6. Candidate review fallback works when LLM is disabled.
-7. Batch summary fallback works when LLM is disabled.
-8. Promote creates Article and Insight Card through the existing pipeline.
-9. Promote is idempotent.
-10. Scheduler does not run the same source/time slot twice in one day.
+1. Source repository 能保存新增字段。
+2. Intake fetch 能创建 batch 和 candidates。
+3. RSS 候选过滤遵守最近 3 天规则。
+4. `maxItemsPerRun` 能限制候选数量。
+5. 重复 URL 不制造重复 Pending 审核噪音。
+6. LLM 关闭时，Candidate review fallback 可用。
+7. LLM 关闭时，Batch summary fallback 可用。
+8. Promote 通过现有 pipeline 创建 Article 和 Insight Card。
+9. Promote 幂等。
+10. Scheduler 同一天同一 source/time slot 不重复运行。
 
-Frontend tests:
+前端测试：
 
-1. Sources tab creates and edits source intake settings.
-2. Sources tab can trigger manual intake fetch.
-3. Intake tab lists pending candidates.
-4. Candidate card shows Chinese decision fields.
-5. Status actions update the candidate list.
-6. Promote calls the API and shows the promoted Article link.
-7. Promoted candidates do not remain in the default Pending view.
+1. Sources tab 能创建和编辑 intake 配置。
+2. Sources tab 能触发手动 intake fetch。
+3. Intake tab 能列出 Pending candidates。
+4. Candidate card 展示中文决策字段。
+5. 状态操作能更新候选列表。
+6. Promote 调用 API 并展示 promoted Article link。
+7. Promoted candidates 不再出现在默认 Pending 视图。
 
-Manual QA:
+手工 QA：
 
-1. Add an RSS source with `maxItemsPerRun=3`.
-2. Run manual intake fetch.
-3. Confirm candidates show Chinese titles and decision summaries.
-4. Promote one candidate.
-5. Confirm Article tab shows the promoted article and insight card.
-6. Mark one candidate as low value.
-7. Confirm it disappears from Pending and appears under Rejected or low-value filter.
+1. 添加一个 RSS source，设置 `maxItemsPerRun=3`。
+2. 手动运行 intake fetch。
+3. 确认候选内容展示中文标题和决策摘要。
+4. Promote 一条候选内容。
+5. 确认 Article tab 展示 promoted article 和 insight card。
+6. 将一条候选标为低价值。
+7. 确认它从 Pending 消失，并出现在 Rejected 或低价值过滤视图下。
 
-## Phase 2 Direction
+## 第二阶段方向
 
-Phase 2 can evolve from the two-stage workflow into a multi-agent editorial board:
+第二阶段可以从两段式 workflow 演进为多 Agent 审稿台：
 
-1. Translation Agent.
-2. Fact Extraction Agent.
-3. Novelty/Dedupe Agent.
-4. Investment Relevance Agent.
-5. Startup/Learning Relevance Agent.
-6. Orchestrator Agent that merges judgments.
+1. 翻译 Agent。
+2. 事实抽取 Agent。
+3. 新颖性/去重 Agent。
+4. 投资相关性 Agent。
+5. 创业/学习相关性 Agent。
+6. 汇总多个判断的 Orchestrator Agent。
 
-Phase 2 should not change the Phase 1 human-only promotion principle unless explicitly redesigned.
+除非重新设计并明确确认，第二阶段也不应改变“人工才能入库”的原则。
 
-## Acceptance Criteria
+## 验收标准
 
-Phase 1 is complete when:
+第一阶段完成时必须满足：
 
-1. Sources can configure type, URL, max items per run, scheduled enabled, and schedule times.
-2. Manual intake fetch creates a fetch batch and candidate records.
-3. Candidates are reviewed by Agent or deterministic fallback and shown in Chinese.
-4. Intake tab supports filtering and human status changes.
-5. No candidate enters Article automatically.
-6. Manual promotion creates a normal Article and insight card.
-7. Fetch, review, and promotion failures are visible and recoverable.
-8. Automated tests cover the core backend and frontend paths.
+1. Sources 可以配置类型、URL、每次抓取条数、是否开启定时、每天定时点。
+2. 手动 intake fetch 能创建 fetch batch 和 candidate records。
+3. Candidates 经过 Agent 或 deterministic fallback 预审，并以中文展示。
+4. Intake tab 支持过滤和人工状态修改。
+5. 没有 candidate 会自动进入 Article。
+6. 人工 Promote 能创建正常 Article 和 Insight Card。
+7. 抓取、预审、Promote 失败都可见且可恢复。
+8. 自动化测试覆盖核心后端和前端路径。
 
-## Self-Review
+## 自检
 
-1. No unfinished markers remain.
-2. Phase 1 and Phase 2 are separated.
-3. Automatic promotion is explicitly out of scope.
-4. The 3-day lookback is fixed and not exposed in UI.
-5. Human status is authoritative; Agent recommendation is advisory.
-6. Promotion uses the existing Article ingest chain.
+1. 没有未完成标记。
+2. 第一阶段和第二阶段边界清楚。
+3. 自动入库明确不在第一阶段范围内。
+4. 最近 3 天 lookback 固定，且不在 UI 暴露。
+5. 人工状态是权威状态，Agent 建议只做参考。
+6. Promote 复用现有 Article ingest chain。
