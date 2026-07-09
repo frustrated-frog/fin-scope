@@ -53,22 +53,6 @@ export function SourcesView({
     }
   }
 
-  async function fetchSource(id?: number) {
-    if (!id) {
-      return;
-    }
-    setBusySourceId(id);
-    try {
-      await api(`/api/sources/${id}/fetch`, { method: 'POST' });
-      addToast('抓取完成', 'success');
-      await onChanged();
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : '抓取失败', 'error');
-    } finally {
-      setBusySourceId(null);
-    }
-  }
-
   async function intakeFetchSource(id?: number) {
     if (!id) {
       return;
@@ -261,18 +245,9 @@ export function SourcesView({
                     className="compact-button"
                     type="button"
                     disabled={busySourceId === source.id}
-                    onClick={() => fetchSource(source.id)}
-                  >
-                    抓取
-                  </button>
-                  <button
-                    className="compact-button"
-                    type="button"
-                    aria-label={`摄入候选-${source.id}`}
-                    disabled={busySourceId === source.id}
                     onClick={() => intakeFetchSource(source.id)}
                   >
-                    摄入候选
+                    抓取
                   </button>
                   <button
                     className="secondary-button"

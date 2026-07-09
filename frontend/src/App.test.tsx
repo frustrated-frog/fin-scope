@@ -742,9 +742,11 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
   expect(screen.getByText('5 条/次')).toBeInTheDocument();
   expect(screen.getByText('08:30')).toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole('button', { name: '摄入候选-1' }));
+  const sourceCard = (await screen.findByText('测试财经RSS')).closest('.source-item') as HTMLElement;
+  await userEvent.click(within(sourceCard).getByRole('button', { name: '抓取' }));
 
   expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch', expect.objectContaining({ method: 'POST' }));
+  expect(fetch).not.toHaveBeenCalledWith('/api/sources/1/fetch', expect.objectContaining({ method: 'POST' }));
 });
 
 test('intake workspace shows agent-reviewed Chinese candidates and promotes to articles', async () => {
