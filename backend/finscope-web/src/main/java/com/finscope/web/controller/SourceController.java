@@ -1,8 +1,10 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.fetch.FetchRun;
+import com.finscope.domain.intake.FetchBatch;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.domain.source.Source;
+import com.finscope.service.intake.IntakeService;
 import com.finscope.service.source.SourceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,6 +27,8 @@ public class SourceController {
     private SourceService sourceService;
     @Resource
     private FetchService fetchService;
+    @Resource
+    private IntakeService intakeService;
 
     @GetMapping
     public List<Source> list() {
@@ -50,5 +54,11 @@ public class SourceController {
     public FetchRun fetch(@PathVariable Long id) {
         log.info("开始抓取信息源 sourceId={}", id);
         return fetchService.fetch(id);
+    }
+
+    @PostMapping("/{id}/intake-fetch")
+    public FetchBatch intakeFetch(@PathVariable Long id) {
+        log.info("开始摄入信息源 sourceId={}", id);
+        return intakeService.intakeFetch(id);
     }
 }

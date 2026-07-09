@@ -70,6 +70,8 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("event_cluster");
         deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
+        deleteIfExists("intake_candidate");
+        deleteIfExists("fetch_batch");
         deleteIfExists("insight_card");
         deleteIfExists("async_task");
         jdbcTemplate.update("DELETE FROM agent_run");
@@ -80,7 +82,8 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM topic");
         jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
                 + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
-                + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan')");
+                + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan',"
+                + "'fetch_batch','intake_candidate')");
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
             byte[] bytes = rss().getBytes(StandardCharsets.UTF_8);
@@ -173,6 +176,50 @@ class FinScopeApiIntegrationTest {
         mvc.perform(get("/api/briefs/" + LocalDate.now()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", containsString("美联储释放降息信号")));
+    }
+
+    @Test
+    void intakeFetchCreatesReviewedCandidatesAndPromotesToArticle() throws Exception {
+        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
+                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxItemsPerRun").value(1))
+                .andExpect(jsonPath("$.scheduleTimes").value("08:30"));
+
+        mvc.perform(post("/api/sources/1/intake-fetch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.candidateCount").value(1))
+                .andExpect(jsonPath("$.agentReviewedCount").value(1))
+                .andExpect(jsonPath("$.batchSummaryText", containsString("本批共 1 条候选")));
+
+        mvc.perform(get("/api/intake/candidates?status=PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].chineseTitle", containsString("美联储")))
+                .andExpect(jsonPath("$[0].decisionSummary", containsString("值得")))
+                .andExpect(jsonPath("$[0].agentStatus").value("FALLBACK"))
+                .andExpect(jsonPath("$[0].humanStatus").value("PENDING"));
+
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidateId").value(1))
+                .andExpect(jsonPath("$.articleId").value(1))
+                .andExpect(jsonPath("$.status").value("PROMOTED"));
+
+        mvc.perform(get("/api/articles/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title", containsString("美联储")))
+                .andExpect(jsonPath("$.insightCard.cardMarkdown", containsString("情报卡片")));
+
+        mvc.perform(get("/api/intake/candidates?status=PROMOTED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].promotedArticleId").value(1));
     }
 
     @Test
