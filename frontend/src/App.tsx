@@ -9,6 +9,7 @@ import { ContentStudioView } from './features/content-studio/ContentStudioView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
+import { IntakeView } from './features/intake/IntakeView';
 import { LearningView } from './features/learning/LearningView';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -25,6 +26,8 @@ import {
   Dashboard,
   EvidenceItem,
   EventCluster,
+  FetchBatch,
+  IntakeCandidate,
   LearningTask,
   ResearchRun,
   ResearchRunDetail,
@@ -49,6 +52,9 @@ export default function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
+  const [fetchBatches, setFetchBatches] = useState<FetchBatch[]>([]);
+  const [intakeCandidates, setIntakeCandidates] = useState<IntakeCandidate[]>([]);
+  const [intakeStatus, setIntakeStatus] = useState('PENDING');
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [selectedBrief, setSelectedBrief] = useState<Brief | null>(null);
   const [selectedBriefContext, setSelectedBriefContext] = useState<BriefResearchContext | null>(null);
@@ -92,7 +98,9 @@ export default function App() {
       learningTaskData,
       contentIdeaData,
       researchRunData,
-      agentData
+      agentData,
+      fetchBatchData,
+      intakeCandidateData
     ] = await Promise.all([
       api<Dashboard>('/api/dashboard'),
       api<Source[]>('/api/sources'),
@@ -104,7 +112,9 @@ export default function App() {
       api<LearningTask[]>('/api/learning-tasks'),
       api<ContentIdea[]>('/api/content-ideas'),
       api<ResearchRun[]>('/api/research/runs'),
-      api<AgentRun[]>('/api/agent-runs')
+      api<AgentRun[]>('/api/agent-runs'),
+      api<FetchBatch[]>('/api/intake/batches'),
+      api<IntakeCandidate[]>(`/api/intake/candidates?status=${intakeStatus}`)
     ]);
     setDashboard(dashboardData);
     setSources(sourceData);
@@ -117,6 +127,8 @@ export default function App() {
     setContentIdeas(contentIdeaData);
     setResearchRuns(researchRunData);
     setAgentRuns(agentData);
+    setFetchBatches(fetchBatchData);
+    setIntakeCandidates(intakeCandidateData);
   };
 
   useEffect(() => {
@@ -195,6 +207,8 @@ export default function App() {
         return 'Dashboard';
       case 'sources':
         return 'Sources';
+      case 'intake':
+        return 'Intake';
       case 'article':
         return 'Article';
       case 'briefs':
@@ -340,6 +354,13 @@ export default function App() {
     }
   }
 
+  async function loadIntakeCandidates(status: string) {
+    setIntakeStatus(status);
+    const candidates = await api<IntakeCandidate[]>(`/api/intake/candidates?status=${status}`);
+    setIntakeCandidates(candidates);
+    return candidates;
+  }
+
   async function compoundBriefToTopics(date: string) {
     await api(`/api/topics/from-brief/${date}`, { method: 'POST' });
     setMessage('简报已沉淀到主题库');
@@ -412,6 +433,17 @@ export default function App() {
       {view === 'sources' && (
         <SourcesView
           sources={sources}
+          fetchBatches={fetchBatches}
+          onChanged={refresh}
+          addToast={addToast}
+        />
+      )}
+      {view === 'intake' && (
+        <IntakeView
+          batches={fetchBatches}
+          candidates={intakeCandidates}
+          status={intakeStatus}
+          onStatusChange={loadIntakeCandidates}
           onChanged={refresh}
           addToast={addToast}
         />

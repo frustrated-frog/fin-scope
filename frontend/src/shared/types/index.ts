@@ -1,6 +1,7 @@
 export type View =
   | 'dashboard'
   | 'sources'
+  | 'intake'
   | 'article'
   | 'briefs'
   | 'briefReader'
@@ -23,6 +24,64 @@ export type Source = {
   fetchFrequencyMinutes: number;
   credibility: number;
   tags?: string;
+  maxItemsPerRun?: number;
+  scheduleTimes?: string;
+  scheduledEnabled?: boolean;
+};
+
+export type FetchBatch = {
+  id: number;
+  sourceId?: number;
+  sourceName?: string;
+  triggerType: string;
+  status: string;
+  startedAt?: string;
+  endedAt?: string;
+  lookbackDays?: number;
+  maxItemsRequested?: number;
+  rawItemCount?: number;
+  candidateCount?: number;
+  agentReviewedCount?: number;
+  duplicateCount?: number;
+  lowValueCount?: number;
+  errorMessage?: string;
+  batchSummaryJson?: string;
+  batchSummaryText?: string;
+};
+
+export type IntakeCandidate = {
+  id: number;
+  batchId: number;
+  sourceId?: number;
+  sourceName?: string;
+  sourceType?: string;
+  originalTitle?: string;
+  originalUrl?: string;
+  originalSummary?: string;
+  originalBody?: string;
+  contentType?: string;
+  extractionMethod?: string;
+  extractionQualityScore?: number;
+  publishedAt?: string;
+  fetchedAt?: string;
+  chineseTitle?: string;
+  decisionSummary?: string;
+  keyFactsJson?: string;
+  whyItMatters?: string;
+  noveltyJudgment?: string;
+  riskFlagsJson?: string;
+  agentScore?: number;
+  agentRecommendation?: string;
+  agentReason?: string;
+  agentModel?: string;
+  agentStatus?: string;
+  agentErrorMessage?: string;
+  agentReviewJson?: string;
+  humanStatus?: string;
+  humanNote?: string;
+  promotedArticleId?: number;
+  duplicateOfCandidateId?: number;
+  duplicateOfArticleId?: number;
 };
 
 export type InsightCard = {

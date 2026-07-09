@@ -10,8 +10,65 @@ import { ArticleCard } from './features/articles/ArticleCard';
 const responses: Record<string, unknown> = {
   '/api/dashboard': { sourceCount: 2, articleCount: 3, briefCount: 1, latestFetchRuns: [] },
   '/api/sources': [
-    { id: 1, name: '测试财经RSS', type: 'RSS', url: 'https://example.com/rss', enabled: true, credibility: 4, tags: '宏观' }
+    {
+      id: 1,
+      name: '测试财经RSS',
+      type: 'RSS',
+      url: 'https://example.com/rss',
+      enabled: true,
+      fetchFrequencyMinutes: 60,
+      credibility: 4,
+      tags: '宏观',
+      maxItemsPerRun: 5,
+      scheduleTimes: '08:30',
+      scheduledEnabled: true
+    }
   ],
+  '/api/intake/batches': [
+    {
+      id: 1,
+      sourceId: 1,
+      sourceName: '测试财经RSS',
+      triggerType: 'MANUAL',
+      status: 'COMPLETED',
+      startedAt: '2026-07-09T08:30:00',
+      endedAt: '2026-07-09T08:30:05',
+      lookbackDays: 3,
+      maxItemsRequested: 5,
+      rawItemCount: 3,
+      candidateCount: 2,
+      agentReviewedCount: 2,
+      duplicateCount: 0,
+      lowValueCount: 0,
+      batchSummaryText: '本批共 2 条候选，优先看美联储政策与 AI Agent 工作流。'
+    }
+  ],
+  '/api/intake/candidates?status=PENDING': [
+    {
+      id: 1,
+      batchId: 1,
+      sourceId: 1,
+      sourceName: '测试财经RSS',
+      sourceType: 'RSS',
+      originalTitle: 'Fed signals cuts',
+      originalUrl: 'https://example.com/fed',
+      originalSummary: 'Fed officials discussed rate cuts.',
+      chineseTitle: '美联储释放降息信号',
+      decisionSummary: '值得入库：这是影响黄金、美元和风险偏好的高相关宏观信号。',
+      keyFactsJson: '["美联储官员释放偏鸽表述","市场重新定价降息预期"]',
+      whyItMatters: '会影响利率预期、黄金定价和权益风险偏好。',
+      noveltyJudgment: '与已有降息交易主题相关，但有新的政策表述。',
+      riskFlagsJson: '["需要核对原文语境"]',
+      agentScore: 86,
+      agentRecommendation: 'PROMOTABLE',
+      agentReason: '宏观相关性强，且具备后续跟踪价值。',
+      agentStatus: 'FALLBACK',
+      humanStatus: 'PENDING'
+    }
+  ],
+  '/api/intake/candidates?status=SKIPPED': [],
+  '/api/intake/candidates?status=PROMOTED': [],
+  '/api/intake/candidates?status=REJECTED': [],
   '/api/articles': [
     {
       id: 1,
@@ -465,6 +522,34 @@ beforeEach(() => {
         json: async () => ({ ...state['/api/events'][1], articleCount: 2 })
       } as Response;
     }
+    if (url === '/api/intake/candidates/1/promote' && init?.method === 'POST') {
+      const [candidate] = state['/api/intake/candidates?status=PENDING'];
+      candidate.humanStatus = 'PROMOTED';
+      candidate.promotedArticleId = 3;
+      state['/api/intake/candidates?status=PENDING'] = [];
+      state['/api/intake/candidates?status=PROMOTED'] = [candidate];
+      return {
+        ok: true,
+        json: async () => ({ candidateId: 1, articleId: 3, status: 'PROMOTED' })
+      } as Response;
+    }
+    if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body));
+      const [candidate] = state['/api/intake/candidates?status=PENDING'];
+      candidate.humanStatus = payload.humanStatus;
+      state['/api/intake/candidates?status=PENDING'] = [];
+      state[`/api/intake/candidates?status=${payload.humanStatus}`] = [candidate];
+      return {
+        ok: true,
+        json: async () => candidate
+      } as Response;
+    }
+    if (url === '/api/sources/1/intake-fetch' && init?.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => state['/api/intake/batches'][0]
+      } as Response;
+    }
     if (url === '/api/topics/1' && init?.method === 'DELETE') {
       state['/api/topics'] = state['/api/topics'].filter((topic: { id: number }) => topic.id !== 1);
       return {
@@ -643,6 +728,41 @@ test('theme toggle keeps the document root in sync with the active theme', async
   await userEvent.click(screen.getByRole('button', { name: '切换为浅色模式' }));
 
   expect(document.documentElement.dataset.theme).toBe('light');
+});
+
+test('sources workspace exposes intake configuration and manual candidate fetch', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Sources' }));
+
+  expect(await screen.findByLabelText('每次抓取条数')).toBeInTheDocument();
+  expect(screen.getByLabelText('每天抓取时间')).toBeInTheDocument();
+  expect(screen.getByLabelText('开启定时抓取')).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: '网页列表' })).toBeInTheDocument();
+  expect(screen.getByText('5 条/次')).toBeInTheDocument();
+  expect(screen.getByText('08:30')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '摄入候选-1' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch', expect.objectContaining({ method: 'POST' }));
+});
+
+test('intake workspace shows agent-reviewed Chinese candidates and promotes to articles', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Intake' }));
+
+  expect(await screen.findByText('候选池')).toBeInTheDocument();
+  expect(screen.getByText('美联储释放降息信号')).toBeInTheDocument();
+  expect(screen.getByText('86')).toBeInTheDocument();
+  expect(screen.getByText('值得入库：这是影响黄金、美元和风险偏好的高相关宏观信号。')).toBeInTheDocument();
+  expect(screen.getByText('美联储官员释放偏鸽表述')).toBeInTheDocument();
+  expect(screen.getByText('本批共 2 条候选，优先看美联储政策与 AI Agent 工作流。')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '入文章库-1' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/promote', expect.objectContaining({ method: 'POST' }));
+  expect(await screen.findByText('已入文章库 #3')).toBeInTheDocument();
 });
 
 test('switches to inbox and shows novelty reasoning', async () => {

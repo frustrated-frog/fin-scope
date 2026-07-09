@@ -1,49 +1,126 @@
 import { FormEvent, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { Source } from '../../shared/types';
+import { FetchBatch, Source } from '../../shared/types';
+
+const EMPTY_SOURCE: Source = {
+  name: '',
+  type: 'RSS',
+  url: '',
+  enabled: true,
+  fetchFrequencyMinutes: 60,
+  credibility: 3,
+  tags: '',
+  maxItemsPerRun: 10,
+  scheduleTimes: '08:30',
+  scheduledEnabled: false
+};
 
 export function SourcesView({
   sources,
+  fetchBatches,
   onChanged,
   addToast
 }: {
   sources: Source[];
+  fetchBatches: FetchBatch[];
   onChanged: () => Promise<void>;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }) {
-  const [form, setForm] = useState<Source>({
-    name: '',
-    type: 'RSS',
-    url: '',
-    enabled: true,
-    fetchFrequencyMinutes: 60,
-    credibility: 3,
-    tags: ''
-  });
+  const [form, setForm] = useState<Source>(EMPTY_SOURCE);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [busySourceId, setBusySourceId] = useState<number | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await api<Source>('/api/sources', { method: 'POST', body: JSON.stringify(form) });
-    setForm((current) => ({ ...current, name: '', url: '', tags: '' }));
-    addToast('信息源已保存', 'success');
-    await onChanged();
+    const payload = {
+      ...form,
+      maxItemsPerRun: Number(form.maxItemsPerRun || 10),
+      credibility: Number(form.credibility || 3),
+      fetchFrequencyMinutes: Number(form.fetchFrequencyMinutes || 60)
+    };
+    try {
+      await api<Source>(editingId ? `/api/sources/${editingId}` : '/api/sources', {
+        method: editingId ? 'PUT' : 'POST',
+        body: JSON.stringify(payload)
+      });
+      setForm(EMPTY_SOURCE);
+      setEditingId(null);
+      addToast(editingId ? '信息源已更新' : '信息源已保存', 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '信息源保存失败', 'error');
+    }
   }
 
   async function fetchSource(id?: number) {
     if (!id) {
       return;
     }
-    await api(`/api/sources/${id}/fetch`, { method: 'POST' });
-    addToast('抓取完成', 'success');
-    await onChanged();
+    setBusySourceId(id);
+    try {
+      await api(`/api/sources/${id}/fetch`, { method: 'POST' });
+      addToast('抓取完成', 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '抓取失败', 'error');
+    } finally {
+      setBusySourceId(null);
+    }
+  }
+
+  async function intakeFetchSource(id?: number) {
+    if (!id) {
+      return;
+    }
+    setBusySourceId(id);
+    try {
+      await api(`/api/sources/${id}/intake-fetch`, { method: 'POST' });
+      addToast('已抓取到候选池', 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '摄入候选失败', 'error');
+    } finally {
+      setBusySourceId(null);
+    }
+  }
+
+  async function deleteSource(id?: number) {
+    if (!id) {
+      return;
+    }
+    setBusySourceId(id);
+    try {
+      await api<void>(`/api/sources/${id}`, { method: 'DELETE' });
+      addToast('信息源已删除', 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '信息源删除失败', 'error');
+    } finally {
+      setBusySourceId(null);
+    }
+  }
+
+  function editSource(source: Source) {
+    setEditingId(source.id ?? null);
+    setForm({
+      ...EMPTY_SOURCE,
+      ...source,
+      maxItemsPerRun: source.maxItemsPerRun ?? 10,
+      scheduleTimes: source.scheduleTimes || '08:30',
+      scheduledEnabled: Boolean(source.scheduledEnabled)
+    });
+  }
+
+  function recentBatch(sourceId?: number) {
+    return fetchBatches.find((batch) => batch.sourceId === sourceId);
   }
 
   return (
     <section className="split">
       <form className="panel form-panel" onSubmit={submit}>
         <div className="panel-heading">
-          <h3>新增信息源</h3>
+          <h3>{editingId ? '编辑信息源' : '新增信息源'}</h3>
           <span className="badge">Source</span>
         </div>
         <label>
@@ -61,7 +138,9 @@ export function SourcesView({
             onChange={(event) => setForm({ ...form, type: event.target.value })}
           >
             <option value="RSS">RSS</option>
-            <option value="WEB">Web</option>
+            <option value="WEB">网页</option>
+            <option value="WEB_LIST">网页列表</option>
+            <option value="X_POST">X Post</option>
           </select>
         </label>
         <label>
@@ -79,7 +158,67 @@ export function SourcesView({
             onChange={(event) => setForm({ ...form, tags: event.target.value })}
           />
         </label>
-        <button className="primary-button" type="submit">保存信息源</button>
+        <div className="source-form-grid">
+          <label>
+            可信度
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={form.credibility}
+              onChange={(event) => setForm({ ...form, credibility: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            每次抓取条数
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={form.maxItemsPerRun ?? 10}
+              onChange={(event) => setForm({ ...form, maxItemsPerRun: Number(event.target.value) })}
+            />
+          </label>
+        </div>
+        <label>
+          每天抓取时间
+          <input
+            value={form.scheduleTimes || ''}
+            placeholder="08:30,18:00"
+            onChange={(event) => setForm({ ...form, scheduleTimes: event.target.value })}
+          />
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(form.scheduledEnabled)}
+            onChange={(event) => setForm({ ...form, scheduledEnabled: event.target.checked })}
+          />
+          开启定时抓取
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(form.enabled)}
+            onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+          />
+          启用信息源
+        </label>
+        <div className="source-form-actions">
+          {editingId && (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setForm(EMPTY_SOURCE);
+              }}
+            >
+              取消编辑
+            </button>
+          )}
+          <button className="primary-button" type="submit">{editingId ? '更新信息源' : '保存信息源'}</button>
+        </div>
       </form>
 
       <section className="panel">
@@ -96,15 +235,63 @@ export function SourcesView({
             sources.map((source) => (
               <div key={source.id} className="source-item">
                 <div className="source-info">
-                  <h4>{source.name}</h4>
-                  <p>{source.tags || '未标记'} · 可信度 {source.credibility}</p>
+                  <div className="source-title-row">
+                    <h4>{source.name}</h4>
+                    <span className="badge">{source.type}</span>
+                    {!source.enabled && <span className="subtle-badge">Disabled</span>}
+                  </div>
+                  <p>
+                    <span>{source.tags || '未标记'}</span>
+                    <span> · 可信度 {source.credibility}</span>
+                    <span> · </span>
+                    <span>{`${source.maxItemsPerRun ?? 10} 条/次`}</span>
+                  </p>
+                  <p>
+                    <span>定时：</span>
+                    <span>{source.scheduledEnabled ? source.scheduleTimes || '未配置' : '关闭'}</span>
+                  </p>
+                  {recentBatch(source.id) && (
+                    <p className="source-batch-summary">
+                      最近批次：{recentBatch(source.id)?.status} · {recentBatch(source.id)?.candidateCount ?? 0} 条候选
+                    </p>
+                  )}
                 </div>
-                <button
-                  className="compact-button"
-                  onClick={() => fetchSource(source.id)}
-                >
-                  抓取
-                </button>
+                <div className="source-actions">
+                  <button
+                    className="compact-button"
+                    type="button"
+                    disabled={busySourceId === source.id}
+                    onClick={() => fetchSource(source.id)}
+                  >
+                    抓取
+                  </button>
+                  <button
+                    className="compact-button"
+                    type="button"
+                    aria-label={`摄入候选-${source.id}`}
+                    disabled={busySourceId === source.id}
+                    onClick={() => intakeFetchSource(source.id)}
+                  >
+                    摄入候选
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    aria-label={`编辑-${source.id}`}
+                    onClick={() => editSource(source)}
+                  >
+                    编辑
+                  </button>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    aria-label={`删除-${source.id}`}
+                    disabled={busySourceId === source.id}
+                    onClick={() => deleteSource(source.id)}
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
             ))
           )}

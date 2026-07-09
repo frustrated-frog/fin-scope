@@ -1,0 +1,206 @@
+import { useState } from 'react';
+
+import { api } from '../../shared/api/client';
+import { FetchBatch, IntakeCandidate } from '../../shared/types';
+
+const STATUS_OPTIONS = [
+  { value: 'PENDING', label: '待打标' },
+  { value: 'SKIPPED', label: '已跳过' },
+  { value: 'PROMOTED', label: '已入库' },
+  { value: 'REJECTED', label: '已拒绝' }
+];
+
+export function IntakeView({
+  batches,
+  candidates,
+  status,
+  onStatusChange,
+  onChanged,
+  addToast
+}: {
+  batches: FetchBatch[];
+  candidates: IntakeCandidate[];
+  status: string;
+  onStatusChange: (status: string) => Promise<IntakeCandidate[]>;
+  onChanged: () => Promise<void>;
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+}) {
+  const [busyCandidateId, setBusyCandidateId] = useState<number | null>(null);
+  const [promotedArticleId, setPromotedArticleId] = useState<number | null>(null);
+
+  async function promote(candidateId: number) {
+    setBusyCandidateId(candidateId);
+    try {
+      const result = await api<{ articleId: number }>(`/api/intake/candidates/${candidateId}/promote`, {
+        method: 'POST'
+      });
+      setPromotedArticleId(result.articleId);
+      addToast(`候选项已入库，Article #${result.articleId}`, 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '入文章库失败', 'error');
+    } finally {
+      setBusyCandidateId(null);
+    }
+  }
+
+  async function updateStatus(candidateId: number, humanStatus: string) {
+    setBusyCandidateId(candidateId);
+    try {
+      await api<IntakeCandidate>(`/api/intake/candidates/${candidateId}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ humanStatus })
+      });
+      addToast(`候选项已标记为 ${humanStatus}`, 'success');
+      await onChanged();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '状态更新失败', 'error');
+    } finally {
+      setBusyCandidateId(null);
+    }
+  }
+
+  return (
+    <section className="intake-workspace">
+      <section className="panel intake-summary-panel">
+        <div className="panel-heading">
+          <h3>候选池</h3>
+          <span className="subtle-badge">{candidates.length} candidates</span>
+        </div>
+        {promotedArticleId && (
+          <p className="intake-promote-result">
+            <span>{`已入文章库 #${promotedArticleId}`}</span>
+          </p>
+        )}
+        <div className="intake-status-tabs" role="group" aria-label="候选状态筛选">
+          {STATUS_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={status === option.value ? 'compact-button intake-status-tab active' : 'ghost-button intake-status-tab'}
+              onClick={() => onStatusChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="intake-batch-list" aria-label="最近摄入批次">
+          {batches.slice(0, 4).map((batch) => (
+            <article key={batch.id} className="intake-batch-row">
+              <div>
+                <strong>{batch.sourceName || `Source #${batch.sourceId}`}</strong>
+                <p>{batch.batchSummaryText || batch.errorMessage || '暂无批次总结'}</p>
+              </div>
+              <span className="subtle-badge">{batch.status}</span>
+            </article>
+          ))}
+          {batches.length === 0 && <p className="muted">暂无摄入批次</p>}
+        </div>
+      </section>
+
+      <section className="intake-candidate-list" aria-label="候选内容列表">
+        {candidates.length === 0 ? (
+          <div className="panel empty-state">
+            <p className="empty-state-text">当前状态下暂无候选项</p>
+          </div>
+        ) : (
+          candidates.map((candidate) => (
+            <article key={candidate.id} className="panel intake-candidate-card">
+              <div className="intake-candidate-top">
+                <div className="intake-score" aria-label={`Agent 分数 ${candidate.agentScore ?? 0}`}>
+                  <strong>{candidate.agentScore ?? 0}</strong>
+                  <span>score</span>
+                </div>
+                <div className="intake-candidate-title">
+                  <div className="intake-badges">
+                    <span className="badge">{candidate.agentRecommendation || 'NEED_REVIEW'}</span>
+                    <span className="subtle-badge">{candidate.agentStatus || 'PENDING'}</span>
+                    <span className="subtle-badge">{candidate.sourceName || '未知来源'}</span>
+                  </div>
+                  <h3>{candidate.chineseTitle || candidate.originalTitle || '未命名候选'}</h3>
+                  {candidate.originalTitle && candidate.originalTitle !== candidate.chineseTitle && (
+                    <p className="muted">{candidate.originalTitle}</p>
+                  )}
+                </div>
+              </div>
+
+              <p className="intake-decision">{candidate.decisionSummary || '暂无决策摘要'}</p>
+
+              <div className="intake-detail-grid">
+                <div>
+                  <h4>关键事实</h4>
+                  <ul>
+                    {parseJsonList(candidate.keyFactsJson).map((fact) => (
+                      <li key={fact}>{fact}</li>
+                    ))}
+                    {parseJsonList(candidate.keyFactsJson).length === 0 && <li>暂无关键事实</li>}
+                  </ul>
+                </div>
+                <div>
+                  <h4>为什么重要</h4>
+                  <p>{candidate.whyItMatters || '暂无说明'}</p>
+                </div>
+                <div>
+                  <h4>新颖性判断</h4>
+                  <p>{candidate.noveltyJudgment || '暂无判断'}</p>
+                </div>
+                <div>
+                  <h4>风险提示</h4>
+                  <ul>
+                    {parseJsonList(candidate.riskFlagsJson).map((flag) => (
+                      <li key={flag}>{flag}</li>
+                    ))}
+                    {parseJsonList(candidate.riskFlagsJson).length === 0 && <li>暂无风险提示</li>}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="intake-candidate-actions">
+                <a className="ghost-button intake-source-link" href={candidate.originalUrl} target="_blank" rel="noreferrer">
+                  原文
+                </a>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busyCandidateId === candidate.id}
+                  onClick={() => updateStatus(candidate.id, 'SKIPPED')}
+                >
+                  跳过
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  disabled={busyCandidateId === candidate.id}
+                  onClick={() => updateStatus(candidate.id, 'REJECTED')}
+                >
+                  拒绝
+                </button>
+                <button
+                  type="button"
+                  className="compact-button"
+                  aria-label={`入文章库-${candidate.id}`}
+                  disabled={busyCandidateId === candidate.id || candidate.humanStatus === 'PROMOTED'}
+                  onClick={() => promote(candidate.id)}
+                >
+                  入文章库
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </section>
+    </section>
+  );
+}
+
+function parseJsonList(value?: string) {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return value.split(/\n|;/).map((item) => item.trim()).filter(Boolean);
+  }
+}

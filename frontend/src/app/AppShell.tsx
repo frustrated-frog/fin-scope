@@ -6,16 +6,17 @@ import { ToastItem, View } from '../shared/types';
 const navItems: Array<{ id: View; label: string; hint: string; code: string }> = [
   { id: 'dashboard', label: 'Dashboard', hint: '总览', code: '01' },
   { id: 'sources', label: 'Sources', hint: '信源', code: '02' },
-  { id: 'article', label: 'Article', hint: '文章', code: '03' },
-  { id: 'briefs', label: 'Briefs', hint: '日报', code: '04' },
-  { id: 'research', label: 'Research', hint: '运行', code: '05' },
-  { id: 'events', label: 'Events', hint: '事件', code: '06' },
-  { id: 'evidence', label: 'Evidence', hint: '证据', code: '07' },
-  { id: 'topics', label: 'Topics', hint: '主题', code: '08' },
-  { id: 'learning', label: 'Learning', hint: '学习', code: '09' },
-  { id: 'contentStudio', label: 'Studio', hint: '选题', code: '10' },
-  { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '11' },
-  { id: 'settings', label: 'Settings', hint: '设置', code: '12' }
+  { id: 'intake', label: 'Intake', hint: '候选', code: '03' },
+  { id: 'article', label: 'Article', hint: '文章', code: '04' },
+  { id: 'briefs', label: 'Briefs', hint: '日报', code: '05' },
+  { id: 'research', label: 'Research', hint: '运行', code: '06' },
+  { id: 'events', label: 'Events', hint: '事件', code: '07' },
+  { id: 'evidence', label: 'Evidence', hint: '证据', code: '08' },
+  { id: 'topics', label: 'Topics', hint: '主题', code: '09' },
+  { id: 'learning', label: 'Learning', hint: '学习', code: '10' },
+  { id: 'contentStudio', label: 'Studio', hint: '选题', code: '11' },
+  { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '12' },
+  { id: 'settings', label: 'Settings', hint: '设置', code: '13' }
 ];
 
 export function AppShell({
@@ -57,7 +58,7 @@ export function AppShell({
         </div>
         <div className="sidebar-signal">
           <span>Pipeline</span>
-          <strong>Sources / Article / Brief / Topics</strong>
+          <strong>Sources / Intake / Article / Brief / Topics</strong>
         </div>
         <nav aria-label="Workspace">
           {navItems.map((item) => (
