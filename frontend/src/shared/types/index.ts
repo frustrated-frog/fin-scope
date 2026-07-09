@@ -168,6 +168,30 @@ export type SourceProfile = {
   themeCodes?: string[];
 };
 
+export type ResearchRunPlanStep = {
+  id?: number;
+  researchRunId?: number;
+  stepId: string;
+  title: string;
+  stepType?: string;
+  executor?: string;
+  status: string;
+  dependencies?: string[];
+  inputSummary?: string;
+  outputSummary?: string;
+  errorType?: string;
+  errorMessage?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
+  terminationReason?: string;
+  attempt?: number;
+  maxAttempts?: number;
+  progressDelta?: number;
+  startedAt?: string;
+  endedAt?: string;
+  metadataJson?: string;
+};
+
 export type ResearchRun = {
   id: number;
   runDate: string;
@@ -189,6 +213,7 @@ export type ResearchRun = {
 export type ResearchRunDetail = {
   run: ResearchRun;
   plannedSources: SourceProfile[];
+  planSteps: ResearchRunPlanStep[];
   agentRuns: AgentRun[];
 };
 
@@ -224,6 +249,18 @@ export type AgentRun = {
   durationMs: number;
   errorMessage?: string;
   createdAt?: string;
+  stepId?: string;
+  attempt?: number;
+  actionFingerprint?: string;
+  inputHash?: string;
+  outputHash?: string;
+  errorType?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
+  terminationReason?: string;
+  progressDelta?: number;
+  budgetSnapshot?: string;
+  metadataJson?: string;
 };
 
 export type Dashboard = {

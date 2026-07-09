@@ -61,4 +61,15 @@ public class AppConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "researchTaskExecutor")
+    public Executor researchTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("research-task-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(20);
+        executor.initialize();
+        return executor;
+    }
 }

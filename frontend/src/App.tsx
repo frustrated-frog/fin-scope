@@ -35,6 +35,14 @@ import {
   View
 } from './shared/types';
 
+const AGENT_RUN_REFRESH_INTERVAL_MS = 3000;
+const RESEARCH_RUN_REFRESH_INTERVAL_MS = 750;
+const RESEARCH_ACTIVE_STATUSES = new Set(['RUNNING']);
+
+function isResearchRunActive(status?: string) {
+  return Boolean(status && RESEARCH_ACTIVE_STATUSES.has(status));
+}
+
 export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -66,6 +74,10 @@ export default function App() {
     setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, 3000);
+  };
+
+  const upsertResearchRun = (run: ResearchRun) => {
+    setResearchRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
   };
 
   const refresh = async () => {
@@ -110,6 +122,59 @@ export default function App() {
   useEffect(() => {
     refresh().catch((error) => setMessage(error instanceof Error ? error.message : '初始化失败'));
   }, []);
+
+  useEffect(() => {
+    if (view !== 'agents') {
+      return undefined;
+    }
+    let cancelled = false;
+    const loadAgentRuns = async () => {
+      try {
+        const agentData = await api<AgentRun[]>('/api/agent-runs');
+        if (!cancelled) {
+          setAgentRuns(agentData);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(error instanceof Error ? error.message : 'Agent Runs 刷新失败');
+        }
+      }
+    };
+    loadAgentRuns();
+    const timer = window.setInterval(loadAgentRuns, AGENT_RUN_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    const runId = researchRunDetail?.run?.id;
+    const status = researchRunDetail?.run?.status;
+    if (!runId || !isResearchRunActive(status)) {
+      return undefined;
+    }
+    let cancelled = false;
+    const loadProgress = async () => {
+      try {
+        const detail = await loadResearchRunProgress(runId);
+        if (!cancelled && !isResearchRunActive(detail.run.status)) {
+          setMessage(`研究运行完成：${detail.run.status}`);
+          addToast(`研究运行完成：${detail.run.status}`, detail.run.status === 'FAILED' ? 'error' : 'success');
+          refresh().catch((error) => setMessage(error instanceof Error ? error.message : '研究结果同步失败'));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(error instanceof Error ? error.message : '研究进度同步失败');
+        }
+      }
+    };
+    const timer = window.setInterval(loadProgress, RESEARCH_RUN_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [researchRunDetail?.run?.id, researchRunDetail?.run?.status]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -216,9 +281,22 @@ export default function App() {
     }
   }
 
-  async function openResearchRun(id: number) {
-    const detail = await api<ResearchRunDetail>(`/api/research/runs/${id}`);
+  async function loadResearchRunProgress(id: number) {
+    const [detail, runs] = await Promise.all([
+      api<ResearchRunDetail>(`/api/research/runs/${id}`),
+      api<ResearchRun[]>('/api/research/runs')
+    ]);
     setResearchRunDetail(detail);
+    setResearchRuns(runs);
+    return detail;
+  }
+
+  async function openResearchRun(id: number) {
+    const detail = await loadResearchRunProgress(id);
+    if (isResearchRunActive(detail.run.status)) {
+      setMessage('研究运行已启动，正在同步进度');
+    }
+    return detail;
   }
 
   async function runResearch(input: {
@@ -228,16 +306,21 @@ export default function App() {
     includeDisabled: boolean;
   }) {
     setResearchBusy(true);
-    setMessage('正在运行研究');
+    setMessage('正在启动研究运行');
     try {
       const run = await api<ResearchRun>('/api/research/runs', {
         method: 'POST',
         body: JSON.stringify(input)
       });
-      await refresh();
-      await openResearchRun(run.id);
-      setMessage(`研究运行完成：${run.status}`);
-      addToast(`研究运行完成：${run.status}`, run.status === 'FAILED' ? 'error' : 'success');
+      upsertResearchRun(run);
+      const detail = await openResearchRun(run.id);
+      if (isResearchRunActive(detail.run.status)) {
+        setMessage('研究运行已启动，正在同步进度');
+        addToast('研究运行已启动，正在同步进度', 'info');
+      } else {
+        setMessage(`研究运行完成：${detail.run.status}`);
+        addToast(`研究运行完成：${detail.run.status}`, detail.run.status === 'FAILED' ? 'error' : 'success');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '研究运行失败';
       setMessage(message);

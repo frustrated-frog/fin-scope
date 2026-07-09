@@ -22,7 +22,12 @@ import java.util.Locale;
 public class ArticleInterpretationAgent {
     private static final String NODE_NAME = "article-interpret";
     private static final int PROMPT_BODY_LIMIT = 9000;
+    private static final int COMPACT_RETRY_BODY_LIMIT = 3600;
+    private static final int LONG_BODY_COMPACT_THRESHOLD = 12000;
     private static final int FULL_TEXT_MIN_LENGTH = 800;
+    private static final String PROMPT_MODE_FULL = "FULL";
+    private static final String PROMPT_MODE_COMPACT_LONG = "COMPACT_LONG";
+    private static final String PROMPT_MODE_COMPACT_RETRY = "COMPACT_RETRY";
 
     @Resource
     private LlmChatClient llmChatClient;
@@ -60,7 +65,35 @@ public class ArticleInterpretationAgent {
             record(input, "REJECTED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
             return fallback;
         } catch (Exception ex) {
+            if (shouldRetryWithCompactPrompt(ex, input)) {
+                return retryWithCompactPrompt(article, input, raw, ex, start);
+            }
             record(input, "FAILED", traceInput(input, userPrompt), raw, ex.getMessage(), start);
+            return fallback(article);
+        }
+    }
+
+    private ArticleInterpretation retryWithCompactPrompt(Article article,
+                                                         ArticleInterpretationInput originalInput,
+                                                         String originalRaw,
+                                                         Exception originalError,
+                                                         long start) {
+        ArticleInterpretationInput retryInput = originalInput.compactRetry();
+        String retryPrompt = buildUserPrompt(retryInput);
+        String retryRaw = originalRaw;
+        try {
+            retryRaw = llmChatClient.complete(systemPrompt(), retryPrompt);
+            ArticleInterpretation interpretation = parse(retryRaw, retryInput);
+            record(retryInput, "SUCCESS", traceInput(retryInput, retryPrompt, originalError), retryRaw, null, start);
+            return interpretation;
+        } catch (InterpretationRejectedException ex) {
+            ArticleInterpretation fallback = fallback(article);
+            record(retryInput, "REJECTED", traceInput(retryInput, retryPrompt, originalError), retryRaw,
+                    combineErrors(originalError, ex), start);
+            return fallback;
+        } catch (Exception ex) {
+            record(retryInput, "FAILED", traceInput(retryInput, retryPrompt, originalError), retryRaw,
+                    combineErrors(originalError, ex), start);
             return fallback(article);
         }
     }
@@ -238,6 +271,7 @@ public class ArticleInterpretationAgent {
                 + "9. 如果 contentQuality 是 FULL_TEXT 或 PARTIAL_TEXT,禁止输出“正文未抓取”“未提供正文”“无法判断正文内容”等与输入事实冲突的说法。\n"
                 + "10. 如果 bodyWasTruncated=true,只能说明基于已提供正文片段分析,不能说正文不可读。\n\n"
                 + "【证据状态】\n"
+                + "promptMode: " + input.promptMode + "\n"
                 + "contentQuality: " + input.contentQuality + "\n"
                 + "bodyLength: " + input.bodyLength + "\n"
                 + "bodyWasTruncated: " + input.bodyWasTruncated + "\n"
@@ -255,10 +289,16 @@ public class ArticleInterpretationAgent {
         return "model=" + modelName()
                 + "\narticleId=" + input.article.getId()
                 + "\ntitle=" + safe(input.article.getTitle())
+                + "\npromptMode=" + input.promptMode
                 + "\ncontentQuality=" + input.contentQuality
                 + "\nbodyLength=" + input.bodyLength
                 + "\nbodyWasTruncated=" + input.bodyWasTruncated
                 + "\n\n" + limit(userPrompt, 4000);
+    }
+
+    private String traceInput(ArticleInterpretationInput input, String userPrompt, Exception retryReason) {
+        return traceInput(input, userPrompt)
+                + "\nretryReason=" + safe(retryReason == null ? null : retryReason.getMessage());
     }
 
     private String traceOutput(ArticleInterpretation interpretation) {
@@ -401,6 +441,36 @@ public class ArticleInterpretationAgent {
         return false;
     }
 
+    private boolean shouldRetryWithCompactPrompt(Exception ex, ArticleInterpretationInput input) {
+        return input != null
+                && !PROMPT_MODE_COMPACT_RETRY.equals(input.promptMode)
+                && (input.bodyWasTruncated || input.bodyLength > COMPACT_RETRY_BODY_LIMIT)
+                && isRetryableLlmFailure(ex);
+    }
+
+    private boolean isRetryableLlmFailure(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException) {
+                return true;
+            }
+            String message = safe(current.getMessage()).toLowerCase(Locale.ROOT);
+            if (message.contains("http 524")
+                    || message.contains("timed out")
+                    || message.contains("timeout")
+                    || message.contains("gateway")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String combineErrors(Exception first, Exception second) {
+        return "initial failure: " + safe(first == null ? null : first.getMessage())
+                + "; compact retry failure: " + safe(second == null ? null : second.getMessage());
+    }
+
     private String limit(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return value;
@@ -423,33 +493,54 @@ public class ArticleInterpretationAgent {
         private final String contentQuality;
         private final int bodyLength;
         private final boolean bodyWasTruncated;
+        private final String promptMode;
 
         private ArticleInterpretationInput(Article article,
                                            String promptBody,
                                            String visibleBodyPreview,
                                            String contentQuality,
                                            int bodyLength,
-                                           boolean bodyWasTruncated) {
+                                           boolean bodyWasTruncated,
+                                           String promptMode) {
             this.article = article;
             this.promptBody = promptBody;
             this.visibleBodyPreview = visibleBodyPreview;
             this.contentQuality = contentQuality;
             this.bodyLength = bodyLength;
             this.bodyWasTruncated = bodyWasTruncated;
+            this.promptMode = promptMode;
         }
 
         private static ArticleInterpretationInput from(Article article) {
             String body = safeText(article == null ? null : article.getBody());
             String content = extractVisibleContent(body);
             String quality = quality(body, content);
-            String promptBody = limitText(body, PROMPT_BODY_LIMIT);
+            boolean useCompactPrompt = body.length() > LONG_BODY_COMPACT_THRESHOLD;
+            String promptBody = useCompactPrompt
+                    ? compactText(content, COMPACT_RETRY_BODY_LIMIT)
+                    : limitText(body, PROMPT_BODY_LIMIT);
             return new ArticleInterpretationInput(
                     article,
                     promptBody,
                     limitText(content, 240),
                     quality,
                     body.length(),
-                    body.length() > PROMPT_BODY_LIMIT);
+                    body.length() > PROMPT_BODY_LIMIT,
+                    useCompactPrompt ? PROMPT_MODE_COMPACT_LONG : PROMPT_MODE_FULL);
+        }
+
+        private ArticleInterpretationInput compactRetry() {
+            String body = safeText(article == null ? null : article.getBody());
+            String content = extractVisibleContent(body);
+            String compactBody = compactText(content, COMPACT_RETRY_BODY_LIMIT);
+            return new ArticleInterpretationInput(
+                    article,
+                    compactBody,
+                    limitText(content, 240),
+                    contentQuality,
+                    bodyLength,
+                    bodyWasTruncated,
+                    PROMPT_MODE_COMPACT_RETRY);
         }
 
         private boolean hasSubstantialText() {
@@ -518,6 +609,18 @@ public class ArticleInterpretationAgent {
                 return text;
             }
             return text.substring(0, maxLength);
+        }
+
+        private static String compactText(String value, int maxLength) {
+            String text = safeText(value);
+            if (text.length() <= maxLength) {
+                return text;
+            }
+            int headLength = Math.max(maxLength * 2 / 3, 1);
+            int tailLength = Math.max(maxLength - headLength, 1);
+            return text.substring(0, headLength)
+                    + "\n\n[中间内容已省略, 用于超时后紧凑重试]\n\n"
+                    + text.substring(text.length() - tailLength);
         }
 
         private static String safeText(String value) {

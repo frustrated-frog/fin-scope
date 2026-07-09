@@ -126,6 +126,36 @@ class ArticleInterpretationAgentTest {
     }
 
     @Test
+    void retriesTimeoutWithCompactArticlePromptBeforeFallback() {
+        RetryCapturingLlmClient llmClient = new RetryCapturingLlmClient();
+        ArticleInterpretationAgent agent = agent(llmClient);
+
+        ArticleInterpretation interpretation = agent.interpret(retrySizedQuantArticle());
+
+        assertEquals("LLM", interpretation.getSource());
+        assertEquals("普通人量化交易循环系统", interpretation.getTopicName());
+        assertEquals(2, llmClient.userPrompts.size());
+        assertTrue(llmClient.userPrompts.get(0).contains("promptMode: FULL"));
+        assertTrue(llmClient.userPrompts.get(1).contains("promptMode: COMPACT_RETRY"));
+        assertTrue(llmClient.userPrompts.get(1).length() < llmClient.userPrompts.get(0).length());
+        assertTrue(llmClient.userPrompts.get(1).contains("量化交易是一个循环"));
+    }
+
+    @Test
+    void usesCompactPromptForVeryLongArticlesBeforeCallingLlm() {
+        CapturingLlmClient llmClient = new CapturingLlmClient(validQuantInterpretationJson());
+        ArticleInterpretationAgent agent = agent(llmClient);
+
+        ArticleInterpretation interpretation = agent.interpret(longQuantArticle());
+
+        assertEquals("LLM", interpretation.getSource());
+        assertTrue(llmClient.userPrompt.contains("promptMode: COMPACT_LONG"));
+        assertTrue(llmClient.userPrompt.contains("bodyWasTruncated: true"));
+        assertTrue(llmClient.userPrompt.contains("量化交易是一个循环"));
+        assertTrue(llmClient.userPrompt.length() < 7000);
+    }
+
+    @Test
     void fallsBackToDomainSpecificInterpretationWhenLlmIsDisabled() {
         ArticleInterpretationAgent agent = agent(new DisabledClient());
 
@@ -205,6 +235,37 @@ class ArticleInterpretationAgentTest {
                 "I will break down exactly how to build the loops that run an entire quant trading system on their own.",
                 body.toString());
         article.setCategory("市场");
+        return article;
+    }
+
+    private Article retrySizedQuantArticle() {
+        return quantArticleWithRepeatedParagraphs(40);
+    }
+
+    private Article longQuantArticle() {
+        return quantArticleWithRepeatedParagraphs(180);
+    }
+
+    private Article quantArticleWithRepeatedParagraphs(int repeatCount) {
+        String paragraph = "量化交易是一个循环：收集行情数据、生成交易信号、回测信号、验证风险、执行仓位、监控回撤、复盘并写回记忆。"
+                + "普通人不需要一开始追求全自动交易，应该先把数据、策略、风控和复盘做成可检查的闭环。";
+        StringBuilder body = new StringBuilder();
+        body.append("作者：Mr.RC｜0xU(@MrRyanChi)\n");
+        body.append("发布时间：2026-04-01T18:00:01\n");
+        body.append("互动：likes=5758，retweets=1433，replies=114，views=1892770\n");
+        body.append("正文：\n");
+        body.append("原文作者：@gemchange_ltd\n\n");
+        body.append("原文链接：https://x.com/gemchange_ltd/status/2028904166895112617\n\n");
+        for (int i = 0; i < repeatCount; i++) {
+            body.append(paragraph).append("\n\n");
+        }
+        Article article = Article.createFetched(null, "手动研究",
+                "2026年，普通人如何量化交易",
+                "https://x.com/MrRyanChi/status/2039281623418695791",
+                LocalDateTime.of(2026, 4, 1, 18, 0, 1),
+                "原文作者：@gemchange_ltd",
+                body.toString());
+        article.setCategory("金融");
         return article;
     }
 
@@ -311,6 +372,41 @@ class ArticleInterpretationAgentTest {
         @Override
         public String complete(String systemPrompt, String userPrompt) throws Exception {
             throw new java.net.SocketTimeoutException("Read timed out");
+        }
+    }
+
+    private static class RetryCapturingLlmClient implements LlmChatClient {
+        private final java.util.List<String> userPrompts = new java.util.ArrayList<String>();
+
+        @Override
+        public boolean isConfigured() {
+            return true;
+        }
+
+        @Override
+        public String modelName() {
+            return "retry-model";
+        }
+
+        @Override
+        public String complete(String systemPrompt, String userPrompt) {
+            userPrompts.add(userPrompt);
+            if (userPrompts.size() == 1) {
+                throw new IllegalStateException("OpenAI compatible LLM request failed, HTTP 524: error code: 524");
+            }
+            return "{\n"
+                    + "  \"contentType\":\"SOCIAL_POST\",\n"
+                    + "  \"topicName\":\"普通人量化交易循环系统\",\n"
+                    + "  \"topicDescription\":\"把量化交易拆成数据、信号、回测、风控、执行和复盘的闭环。\",\n"
+                    + "  \"oneSentenceSummary\":\"文章说明普通人做量化交易应先搭建可检查的交易循环，而不是追求一次性全自动系统。\",\n"
+                    + "  \"coreEvent\":\"作者围绕普通人如何在2026年搭建量化交易闭环给出方法论。\",\n"
+                    + "  \"importance\":\"它把量化交易从神秘系统拆成可学习、可验证、可复盘的流程。\",\n"
+                    + "  \"impactTargets\":[\"量化交易\",\"风险控制\",\"交易复盘\"],\n"
+                    + "  \"keyTerms\":[\"量化交易\",\"交易信号\",\"回测\",\"风控\"],\n"
+                    + "  \"learningQuestions\":[\"如何验证交易信号？\",\"如何把复盘写回策略？\"],\n"
+                    + "  \"analysisSections\":[{\"title\":\"发生了什么\",\"content\":\"作者拆解普通人搭建量化交易系统的循环方法。\"}],\n"
+                    + "  \"confidence\":0.86\n"
+                    + "}";
         }
     }
 }

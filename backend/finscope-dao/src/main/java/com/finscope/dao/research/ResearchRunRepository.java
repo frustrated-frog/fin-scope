@@ -104,6 +104,14 @@ public class ResearchRunRepository {
         return findById(id).orElseThrow(() -> new IllegalArgumentException("Research run not found: " + id));
     }
 
+    public int failRunningRuns(String errorMessage) {
+        LocalDateTime updatedAt = LocalDateTime.now();
+        return jdbcTemplate.update("UPDATE research_run SET status = 'FAILED', "
+                        + "summary = 'Run interrupted before completion', error_message = ?, updated_at = ? "
+                        + "WHERE status = 'RUNNING'",
+                errorMessage, TimeUtil.text(updatedAt));
+    }
+
     public ResearchRun updateResult(ResearchRun run) {
         run.setUpdatedAt(LocalDateTime.now());
         jdbcTemplate.update("UPDATE research_run SET fetched_source_count=?, article_count=?, event_count=?, "

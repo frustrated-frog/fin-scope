@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
 import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleCard } from './features/articles/ArticleCard';
@@ -366,9 +368,47 @@ const responses: Record<string, unknown> = {
         enabled: true
       }
     ],
+    planSteps: [
+      {
+        id: 1,
+        researchRunId: 1,
+        stepId: 'plan_sources',
+        title: '规划来源',
+        stepType: 'PLANNING',
+        executor: 'SourcePlanner',
+        status: 'COMPLETED',
+        outputSummary: 'plannedSources=1',
+        attempt: 0,
+        maxAttempts: 1,
+        progressDelta: 1
+      },
+      {
+        id: 2,
+        researchRunId: 1,
+        stepId: 'fetch_sources',
+        title: '抓取来源',
+        stepType: 'FETCH',
+        executor: 'FetchService',
+        status: 'COMPLETED',
+        outputSummary: 'fetchedSources=1, errors=0',
+        attempt: 1,
+        maxAttempts: 1,
+        progressDelta: 1
+      }
+    ],
     agentRuns: [
       { id: 1, researchRunId: 1, nodeName: 'source-fetch', status: 'SUCCESS', durationMs: 12 },
-      { id: 2, researchRunId: 1, nodeName: 'evidence-extract', status: 'FALLBACK', durationMs: 4 },
+      {
+        id: 2,
+        researchRunId: 1,
+        nodeName: 'evidence-extract',
+        status: 'FALLBACK',
+        durationMs: 4,
+        fallbackUsed: true,
+        fallbackReason: 'LLM_UNCONFIGURED',
+        errorType: 'LLM_UNCONFIGURED',
+        terminationReason: 'FALLBACK'
+      },
       { id: 3, researchRunId: 1, nodeName: 'research-orchestrate', status: 'COMPLETED', durationMs: 40 }
     ]
   },
@@ -438,6 +478,54 @@ beforeEach(() => {
         runDate: JSON.parse(String(init.body)).runDate,
         themeCodes: JSON.parse(String(init.body)).themeCodes,
         sourceCount: 3,
+        fetchedSourceCount: 0,
+        articleCount: 0,
+        eventCount: 0,
+        evidenceCount: 0,
+        learningTaskCount: 0,
+        contentIdeaCount: 0,
+        status: 'RUNNING',
+        summary: 'Planned 3 sources for themes: 中国宏观, AI 创业'
+      };
+      state['/api/research/runs'] = [run, ...state['/api/research/runs']];
+      const plannedSources = [
+        {
+          sourceId: 1,
+          sourceName: 'Macro Source',
+          sourceTier: 'OFFICIAL',
+          themeCodes: ['china_macro'],
+          credibility: 5,
+          enabled: true
+        }
+      ];
+      const planSourceStep = {
+        id: 3,
+        researchRunId: 2,
+        stepId: 'plan_sources',
+        title: '规划来源',
+        stepType: 'PLANNING',
+        executor: 'SourcePlanner',
+        status: 'COMPLETED',
+        outputSummary: 'plannedSources=3',
+        attempt: 0,
+        maxAttempts: 1,
+        progressDelta: 3
+      };
+      const runningFetchStep = {
+        id: 4,
+        researchRunId: 2,
+        stepId: 'fetch_sources',
+        title: '抓取来源',
+        stepType: 'FETCH',
+        executor: 'FetchService',
+        status: 'RUNNING',
+        outputSummary: 'fetchedSources=0, errors=0',
+        attempt: 1,
+        maxAttempts: 1,
+        progressDelta: 0
+      };
+      const completedRun = {
+        ...run,
         fetchedSourceCount: 3,
         articleCount: 4,
         eventCount: 2,
@@ -448,26 +536,60 @@ beforeEach(() => {
         status: 'COMPLETED',
         summary: 'sources=3, fetched=3, articles=4, events=2, evidence=5, learningTasks=3, contentIdeas=2'
       };
-      state['/api/research/runs'] = [run, ...state['/api/research/runs']];
       state['/api/research/runs/2'] = {
-        run,
-        plannedSources: [
-          {
-            sourceId: 1,
-            sourceName: 'Macro Source',
-            sourceTier: 'OFFICIAL',
-            themeCodes: ['china_macro'],
-            credibility: 5,
-            enabled: true
-          }
-        ],
-        agentRuns: [
-          { id: 4, researchRunId: 2, nodeName: 'research-orchestrate', status: 'COMPLETED', durationMs: 88 }
-        ]
+        reads: 0,
+        runningDetail: {
+          run,
+          plannedSources,
+          planSteps: [planSourceStep, runningFetchStep],
+          agentRuns: []
+        },
+        completedDetail: {
+          run: completedRun,
+          plannedSources,
+          planSteps: [
+            planSourceStep,
+            {
+              ...runningFetchStep,
+              status: 'COMPLETED',
+              outputSummary: 'fetchedSources=3, errors=0',
+              progressDelta: 3
+            }
+          ],
+          agentRuns: [
+            {
+              id: 5,
+              researchRunId: 2,
+              nodeName: 'evidence-extract',
+              status: 'FALLBACK',
+              durationMs: 14,
+              fallbackUsed: true,
+              fallbackReason: 'LLM_UNCONFIGURED',
+              errorType: 'LLM_UNCONFIGURED',
+              terminationReason: 'FALLBACK'
+            },
+            { id: 4, researchRunId: 2, nodeName: 'research-orchestrate', status: 'COMPLETED', durationMs: 88 }
+          ]
+        }
       };
       return {
         ok: true,
         json: async () => run
+      } as Response;
+    }
+    if (url === '/api/research/runs/2' && state[url]) {
+      const progress = state[url];
+      progress.reads += 1;
+      const detail = progress.reads < 2 ? progress.runningDetail : progress.completedDetail;
+      if (progress.reads >= 2) {
+        state['/api/research/runs'] = [
+          detail.run,
+          ...state['/api/research/runs'].filter((item: { id: number }) => item.id !== detail.run.id)
+        ];
+      }
+      return {
+        ok: true,
+        json: async () => detail
       } as Response;
     }
     return {
@@ -475,6 +597,10 @@ beforeEach(() => {
       json: async () => state[url] ?? {}
     } as Response;
   }));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('renders the FinScope workspace shell and dashboard metrics', async () => {
@@ -759,6 +885,35 @@ test('agent runs table shows node start time', () => {
   expect(within(table).getByText('2026-06-29 09:16')).toBeInTheDocument();
 });
 
+test('agent runs view refreshes itself while visible', async () => {
+  const state = JSON.parse(JSON.stringify(responses)) as Record<string, any>;
+  let agentRunRequests = 0;
+  vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === '/api/agent-runs') {
+      agentRunRequests += 1;
+      return {
+        ok: true,
+        json: async () => agentRunRequests > 1
+          ? [{ id: 2, nodeName: 'article-interpret', status: 'SUCCESS', durationMs: 88, createdAt: '2026-07-08T22:10:00' }]
+          : []
+      } as Response;
+    }
+    return {
+      ok: true,
+      json: async () => state[url] ?? {}
+    } as Response;
+  });
+
+  render(<App />);
+
+  await screen.findByText('Articles');
+  await userEvent.click(screen.getByRole('button', { name: 'Agent Runs' }));
+
+  expect(await screen.findByText('article-interpret')).toBeInTheDocument();
+  expect(agentRunRequests).toBeGreaterThan(1);
+});
+
 test('brief reader shows research evidence, learning tasks and content ideas', async () => {
   render(<App />);
 
@@ -775,22 +930,30 @@ test('brief reader shows research evidence, learning tasks and content ideas', a
 });
 
 test('research workbench runs a full research job and shows agent trace', async () => {
+  const user = userEvent.setup();
   render(<App />);
 
-  await userEvent.click(screen.getByRole('button', { name: 'Research' }));
+  await user.click(screen.getByRole('button', { name: 'Research' }));
 
   expect(await screen.findByText('生成今日研究')).toBeInTheDocument();
   expect(screen.getByText('研究运行记录')).toBeInTheDocument();
   expect(screen.getByText('1/1')).toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole('button', { name: '运行研究' }));
+  await user.click(screen.getByRole('button', { name: '运行研究' }));
 
   expect(fetch).toHaveBeenCalledWith('/api/research/runs', expect.objectContaining({
     method: 'POST',
     body: expect.stringContaining('"themeCodes"')
   }));
+  expect(await screen.findAllByText('研究运行已启动，正在同步进度')).not.toHaveLength(0);
   expect(await screen.findByText('计划来源')).toBeInTheDocument();
+  expect(screen.getByText('Plan steps')).toBeInTheDocument();
+  expect(screen.getByText('规划来源')).toBeInTheDocument();
+  expect(screen.getByText('抓取来源')).toBeInTheDocument();
   expect(screen.getByText('Macro Source')).toBeInTheDocument();
+  expect(screen.getAllByText('RUNNING').length).toBeGreaterThan(0);
+
+  expect(await screen.findByText('fallback: LLM_UNCONFIGURED')).toBeInTheDocument();
   expect(await screen.findByText('research-orchestrate')).toBeInTheDocument();
   expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
 });
@@ -1000,6 +1163,16 @@ test('events workbench explains timeline, merge basis, evidence strength and eve
   expect(within(detail).getByText('最高可信证据')).toBeInTheDocument();
   expect(within(detail).getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
   expect(within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
+});
+
+test('events stylesheet prevents long article urls from widening the workbench', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\.events-workbench\s*{[^}]*overflow-x:\s*hidden;/s);
+  expect(styles).toMatch(/\.event-card\s*{[^}]*min-width:\s*0;/s);
+  expect(styles).toMatch(/\.event-card-top\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
+  expect(styles).toMatch(/\.event-timeline-list\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
 });
 
 test('events governance panel updates status, merges events and moves articles', async () => {

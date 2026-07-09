@@ -65,6 +65,13 @@ public class FetchRunRepository {
         return run;
     }
 
+    public int failRunningRuns(String errorMessage) {
+        LocalDateTime endedAt = LocalDateTime.now();
+        return jdbcTemplate.update("UPDATE fetch_run SET status = 'FAILED', ended_at = ?, error_message = ? "
+                        + "WHERE status = 'RUNNING'",
+                TimeUtil.text(endedAt), errorMessage);
+    }
+
     public List<FetchRun> latest(int limit) {
         return jdbcTemplate.query("SELECT * FROM fetch_run ORDER BY id DESC LIMIT ?", mapper, limit);
     }

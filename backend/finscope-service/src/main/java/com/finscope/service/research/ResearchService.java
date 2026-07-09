@@ -16,6 +16,7 @@ import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
+import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.domain.source.Source;
@@ -30,6 +31,7 @@ import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 @Service
 public class ResearchService {
@@ -63,6 +65,10 @@ public class ResearchService {
     private ActionFingerprintService actionFingerprintService;
     @Resource
     private AgentTraceService agentTraceService;
+    @Resource
+    private ResearchRunPlanService researchRunPlanService;
+    @Resource(name = "researchTaskExecutor")
+    private Executor researchTaskExecutor;
 
     public ResearchRunPlan createRun(LocalDate runDate,
                                      List<String> themeCodes,
@@ -96,10 +102,23 @@ public class ResearchService {
 
         ResearchRun saved = researchRunRepository.save(run);
         researchRunRepository.replaceSources(saved.getId(), plannedSources);
-        saved = execute(saved, plannedSources);
+        List<ResearchRunPlanStep> planSteps = researchRunPlanService.initializeDefaultPlan(saved.getId(), plannedSources.size());
+        startStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES);
+        if (plannedSources.isEmpty()) {
+            saved = failWithoutPlannedSources(saved, planSteps);
+            ResearchRunPlan plan = new ResearchRunPlan();
+            plan.setRun(saved);
+            plan.setPlannedSources(plannedSources);
+            plan.setPlanSteps(planSteps);
+            return plan;
+        }
+        completeStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES,
+                "plannedSources=" + plannedSources.size(), plannedSources.size());
+        scheduleExecution(saved, plannedSources, planSteps);
         ResearchRunPlan plan = new ResearchRunPlan();
         plan.setRun(saved);
         plan.setPlannedSources(plannedSources);
+        plan.setPlanSteps(planSteps);
         return plan;
     }
 
@@ -117,7 +136,27 @@ public class ResearchService {
         return researchRunRepository.findSourcesByRunId(id);
     }
 
-    private ResearchRun execute(ResearchRun run, List<SourceProfile> plannedSources) {
+    private void scheduleExecution(ResearchRun run, List<SourceProfile> plannedSources, List<ResearchRunPlanStep> planSteps) {
+        try {
+            researchTaskExecutor.execute(() -> execute(run, plannedSources, planSteps));
+        } catch (RuntimeException ex) {
+            failScheduledRun(run, planSteps, ex);
+        }
+    }
+
+    private void failScheduledRun(ResearchRun run, List<ResearchRunPlanStep> planSteps, RuntimeException ex) {
+        run.setStatus(ResearchEnums.RUN_STATUS_FAILED);
+        run.setSummary(resultSummary(run));
+        run.setErrorMessage(ex.getMessage());
+        researchRunRepository.updateResult(run);
+        ResearchRunPlanStep fetchStep = researchRunPlanService.findStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES);
+        failStep(fetchStep, "RESEARCH_EXECUTOR_REJECTED", ex.getMessage());
+        agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
+                "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
+                null, ex.getMessage(), 0L);
+    }
+
+    private ResearchRun execute(ResearchRun run, List<SourceProfile> plannedSources, List<ResearchRunPlanStep> planSteps) {
         long start = System.currentTimeMillis();
         int articleBefore = articleRepository.countAll();
         int eventBefore = eventClusterRepository.countAll();
@@ -126,9 +165,11 @@ public class ResearchService {
         int ideaBefore = contentIdeaRepository.countAll();
         int fetchedSources = 0;
         List<String> errors = new ArrayList<String>();
+        ResearchRunPlanStep currentStep = null;
         try {
             ResearchRunContext.setCurrentRunId(run.getId());
             AgentRunContext context = ResearchRunContext.currentContext();
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES);
             for (SourceProfile plannedSource : plannedSources) {
                 Long sourceId = plannedSource.getSourceId();
                 if (sourceId == null) {
@@ -156,7 +197,21 @@ public class ResearchService {
                         System.currentTimeMillis() - sourceStart, sourceFetchMetadata(sourceId));
             }
 
+            completeStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES,
+                    "fetchedSources=" + fetchedSources + ", errors=" + errors.size(), fetchedSources);
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS);
+            completeStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS,
+                    "events=" + delta(eventBefore, eventClusterRepository.countAll()),
+                    delta(eventBefore, eventClusterRepository.countAll()));
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE);
+            completeStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE,
+                    "evidence=" + delta(evidenceBefore, evidenceItemRepository.countAll()),
+                    delta(evidenceBefore, evidenceItemRepository.countAll()));
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF);
             Brief brief = briefService.generate(run.getRunDate());
+            completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF,
+                    "briefDate=" + brief.getBriefDate(), 1);
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN);
             run.setFetchedSourceCount(fetchedSources);
             run.setArticleCount(delta(articleBefore, articleRepository.countAll()));
             run.setEventCount(delta(eventBefore, eventClusterRepository.countAll()));
@@ -169,10 +224,11 @@ public class ResearchService {
                     : ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS);
             run.setSummary(resultSummary(run));
             run.setErrorMessage(errors.isEmpty() ? null : String.join("; ", errors));
-            ResearchRun updated = researchRunRepository.updateResult(run);
-            agentRunRepository.record(run.getId(), null, null, "research-orchestrate", updated.getStatus(),
+            completeStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN, run.getSummary(), 1);
+            agentRunRepository.record(run.getId(), null, null, "research-orchestrate", run.getStatus(),
                     "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
-                    updated.getSummary(), updated.getErrorMessage(), System.currentTimeMillis() - start);
+                    run.getSummary(), run.getErrorMessage(), System.currentTimeMillis() - start);
+            ResearchRun updated = researchRunRepository.updateResult(run);
             return updated;
         } catch (Exception ex) {
             run.setFetchedSourceCount(fetchedSources);
@@ -180,6 +236,9 @@ public class ResearchService {
             run.setSummary(resultSummary(run));
             run.setErrorMessage(ex.getMessage());
             ResearchRun updated = researchRunRepository.updateResult(run);
+            if (currentStep != null) {
+                failStep(currentStep, "UNKNOWN", ex.getMessage());
+            }
             agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
                     "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                     null, ex.getMessage(), System.currentTimeMillis() - start);
@@ -242,5 +301,51 @@ public class ResearchService {
 
     private String sourceFetchMetadata(Long sourceId) {
         return "{\"sourceId\":" + sourceId + "}";
+    }
+
+    private ResearchRun failWithoutPlannedSources(ResearchRun run, List<ResearchRunPlanStep> planSteps) {
+        String message = "No planned sources matched themes=" + String.join(",", run.getThemeCodes())
+                + ". Add source tags such as 市场/宏观/AI/公司 or enable matching sources.";
+        ResearchRunPlanStep planStep = researchRunPlanService.findStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES);
+        researchRunPlanService.fail(planStep, "NO_PLANNED_SOURCES", message);
+        skipStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES, "NO_PLANNED_SOURCES");
+        skipStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS, "NO_PLANNED_SOURCES");
+        skipStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE, "NO_PLANNED_SOURCES");
+        skipStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF, "NO_PLANNED_SOURCES");
+        skipStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN, "NO_PLANNED_SOURCES");
+        run.setFetchedSourceCount(0);
+        run.setArticleCount(0);
+        run.setEventCount(0);
+        run.setEvidenceCount(0);
+        run.setLearningTaskCount(0);
+        run.setContentIdeaCount(0);
+        run.setStatus(ResearchEnums.RUN_STATUS_FAILED);
+        run.setSummary("No research sources were planned for this run.");
+        run.setErrorMessage(message);
+        ResearchRun updated = researchRunRepository.updateResult(run);
+        agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
+                "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
+                null, message, 0L);
+        return updated;
+    }
+
+    private ResearchRunPlanStep startStep(List<ResearchRunPlanStep> planSteps, String stepId) {
+        ResearchRunPlanStep step = researchRunPlanService.findStep(planSteps, stepId);
+        researchRunPlanService.start(step);
+        return step;
+    }
+
+    private void completeStep(List<ResearchRunPlanStep> planSteps, String stepId, String outputSummary, int progressDelta) {
+        ResearchRunPlanStep step = researchRunPlanService.findStep(planSteps, stepId);
+        researchRunPlanService.complete(step, outputSummary, progressDelta);
+    }
+
+    private void failStep(ResearchRunPlanStep step, String errorType, String errorMessage) {
+        researchRunPlanService.fail(step, errorType, errorMessage);
+    }
+
+    private void skipStep(List<ResearchRunPlanStep> planSteps, String stepId, String reason) {
+        ResearchRunPlanStep step = researchRunPlanService.findStep(planSteps, stepId);
+        researchRunPlanService.skip(step, reason);
     }
 }

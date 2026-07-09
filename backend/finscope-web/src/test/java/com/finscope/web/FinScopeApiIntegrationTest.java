@@ -68,6 +68,7 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("evidence_item");
         deleteIfExists("event_article_link");
         deleteIfExists("event_cluster");
+        deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
         deleteIfExists("insight_card");
         deleteIfExists("async_task");
@@ -79,7 +80,7 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM topic");
         jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
                 + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
-                + "'event_cluster','evidence_item','learning_task','content_idea','research_run')");
+                + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan')");
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
             byte[] bytes = rss().getBytes(StandardCharsets.UTF_8);
@@ -658,20 +659,16 @@ class FinScopeApiIntegrationTest {
                         .content("{\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
                                 + "\"maxSourcesPerTheme\":1,\"includeDisabled\":false}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.status").value("RUNNING"))
                 .andExpect(jsonPath("$.themeCodes.length()").value(1))
                 .andExpect(jsonPath("$.sourceCount").value(1))
-                .andExpect(jsonPath("$.fetchedSourceCount").value(1))
-                .andExpect(jsonPath("$.articleCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.eventCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.evidenceCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.learningTaskCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.contentIdeaCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.briefDate").value(LocalDate.now().toString()))
+                .andExpect(jsonPath("$.fetchedSourceCount").value(0))
                 .andExpect(jsonPath("$.plannedSources.length()").value(1))
                 .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("Macro Source")))
-                .andExpect(jsonPath("$.summary", containsString("sources=1")))
-                .andExpect(jsonPath("$.summary", containsString("events=")));
+                .andExpect(jsonPath("$.summary", containsString("Planned 1 sources")));
+
+        String completed = waitForResearchRun(1L);
+        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
 
         mvc.perform(get("/api/research/runs"))
                 .andExpect(status().isOk())
@@ -685,6 +682,10 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.run.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.plannedSources.length()").value(1))
                 .andExpect(jsonPath("$.plannedSources[*].sourceName").value(hasItem("Macro Source")))
+                .andExpect(jsonPath("$.planSteps.length()").value(6))
+                .andExpect(jsonPath("$.planSteps[*].stepId").value(hasItem("plan_sources")))
+                .andExpect(jsonPath("$.planSteps[*].stepId").value(hasItem("fetch_sources")))
+                .andExpect(jsonPath("$.planSteps[*].status").value(hasItem("COMPLETED")))
                 .andExpect(jsonPath("$.agentRuns.length()").value(greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("research-orchestrate")))
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("article-interpret")))
@@ -973,6 +974,25 @@ class FinScopeApiIntegrationTest {
             }
         }
         throw new AssertionError("Task did not finish in time: " + taskId);
+    }
+
+    private String waitForResearchRun(Long runId) throws Exception {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            MvcResult result = mvc.perform(get("/api/research/runs"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            String body = result.getResponse().getContentAsString();
+            if (body.contains("\"status\":\"COMPLETED\"") || body.contains("\"status\":\"FAILED\"")) {
+                return body;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw ex;
+            }
+        }
+        throw new AssertionError("Research run did not finish in time: " + runId);
     }
 
     private String extractJsonString(String json, String field) {

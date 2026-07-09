@@ -771,3 +771,96 @@ Internal consistency: mission, plan, trace, and recovery are separated by phase.
 Scope check: the full vision spans multiple phases, but Phase 1 is a single implementable slice with clear acceptance criteria.
 
 Ambiguity check: run statuses, step statuses, table shape, service methods, API response, UI behavior, and verification commands are explicit.
+
+## 21. Phase B/C Implementation Contract: Asynchronous Agent Workflow
+
+This section records the implementation contract added on 2026-07-09 after manual QA showed that clicking "运行研究" could block for minutes and leave the Research tab without useful feedback.
+
+### 21.1 Problem Statement
+
+The synchronous `POST /api/research/runs` contract made the UI wait for source fetch, article ingest, LLM-backed interpretation, evidence extraction, learning task generation, content idea generation, and brief composition before showing the run detail. In local runs this meant:
+
+1. The button appeared stuck.
+2. `sources=0` or empty plan state could be shown without actionable explanation.
+3. A killed backend could leave `RUNNING` rows in `research_run`, `research_run_plan`, and `fetch_run`.
+4. The frontend could not show the agent workflow while it was actually running.
+
+### 21.2 Backend Contract
+
+`POST /api/research/runs` now means "create and start a research run", not "complete a research run synchronously".
+
+Required behavior:
+
+1. Resolve themes and planned sources.
+2. Persist `research_run` with `status=RUNNING`.
+3. Persist the planned source snapshot.
+4. Persist the default `research_run_plan` steps.
+5. Complete `plan_sources` before returning.
+6. Return immediately with the run, planned sources, and `status=RUNNING`.
+7. Execute the remaining workflow on `researchTaskExecutor`.
+8. If no sources match, fail immediately with visible `NO_PLANNED_SOURCES` plan state and skip downstream steps.
+
+The dedicated executor is named `researchTaskExecutor`. It is intentionally single-threaded in the first implementation to avoid overlapping SQLite writes and expensive LLM work from concurrent research runs.
+
+### 21.3 Terminal State Ordering
+
+A run must not become terminal before its visible workflow state is complete.
+
+For successful or partial runs, the required final ordering is:
+
+1. Complete `fetch_sources`.
+2. Complete event, evidence, brief, and summary steps.
+3. Record `agent_run` for `research-orchestrate`.
+4. Persist the terminal `research_run.status` and aggregate counts.
+
+This prevents the UI from seeing `run.status=COMPLETED` while `summarize_run` is still `RUNNING` or the orchestrator trace is missing.
+
+### 21.4 Startup Recovery
+
+On application startup, interrupted work is recovered defensively:
+
+1. `research_run.status=RUNNING` becomes `FAILED`.
+2. `fetch_run.status=RUNNING` becomes `FAILED`.
+3. `research_run_plan.status=RUNNING` becomes `FAILED`.
+4. `research_run_plan.status=PENDING` for interrupted runs becomes `SKIPPED`.
+5. Recovery termination reason is `PROCESS_RESTART`.
+
+This is not resumability yet. It is honest recovery so the UI never presents stale running work as live.
+
+### 21.5 Source Planning Robustness
+
+`SourceProfile.from(Source)` must infer usable source tiers and theme codes from local source names, tags, types, and URLs. The first implementation recognizes both English and Chinese source hints:
+
+1. Market and macro hints such as `市场`, `宏观`, `政策`, `财经`, `金融`, `market`, `markets`, `economy`, and `fed` map to `china_macro`.
+2. AI and startup hints such as `ai`, `arxiv`, `cs.AI`, `人工智能`, `大模型`, `机器学习`, and `创业` map to `ai_startup`.
+3. Company and IPO hints such as `company`, `ipo`, `公司`, `上市`, `融资`, `财报`, and `产业` map to `company_ipo`.
+4. RSS, MarketWatch, DJ, and Zhihu sources map to `MEDIA`.
+5. arXiv and `cs.AI` sources map to `CURATED_AI`.
+
+### 21.6 Frontend Contract
+
+The Research tab must treat run creation and run completion as separate states.
+
+Required behavior:
+
+1. While the POST request is in flight, the button label is `启动中`.
+2. When POST returns `RUNNING`, the app immediately opens the run detail and shows plan steps plus planned sources.
+3. The global status message says `研究运行已启动，正在同步进度`.
+4. While the selected run is active, the frontend polls:
+   - `GET /api/research/runs/{id}`
+   - `GET /api/research/runs`
+5. Polling stops when the selected run status leaves the active set.
+6. On terminal status, the workspace refreshes so Events, Evidence, Briefs, Learning, Content Studio, and Agent Runs reflect backend artifacts.
+
+The initial active status set is `RUNNING`. Future phases may add `QUEUED`, `PAUSING`, or `RESUMING`.
+
+### 21.7 Verification Requirements
+
+Any change to this area must keep these checks current:
+
+1. Service-level test: `ResearchServiceHarnessTest#createsRunPlanBeforeBackgroundExecutionFetchesSources`.
+2. Zero-source test: `ResearchServiceHarnessTest#failsRunWithVisiblePlanWhenNoSourcesArePlanned`.
+3. Source inference test: `SourcePlannerTest#plansChineseTaggedLocalSourcesByTheme`.
+4. Startup recovery test: `ResearchStartupRecoveryServiceTest`.
+5. API test: `FinScopeApiIntegrationTest#researchRunExecutesEndToEndFromThemes`.
+6. UI test: `App.test.tsx` Research workbench scenario must assert startup feedback, visible plan steps, planned sources, polling, trace, and terminal state.

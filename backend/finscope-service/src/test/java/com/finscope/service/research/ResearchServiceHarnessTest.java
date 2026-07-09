@@ -14,6 +14,7 @@ import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
+import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.service.agent.ActionFingerprintService;
@@ -28,6 +29,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,13 +41,15 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchServiceHarnessTest {
     @Test
-    void skipsRepeatedSourceFetchAtHardThresholdAndRecordsTrace() {
+    void createsRunPlanBeforeBackgroundExecutionFetchesSources() {
         ResearchService service = new ResearchService();
         ThemeProfileService themeProfileService = mock(ThemeProfileService.class);
         SourcePlanner sourcePlanner = mock(SourcePlanner.class);
@@ -58,6 +63,8 @@ class ResearchServiceHarnessTest {
         LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
         ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
+        ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+        CapturingExecutor researchTaskExecutor = new CapturingExecutor();
 
         ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
         ReflectionTestUtils.setField(service, "sourcePlanner", sourcePlanner);
@@ -74,12 +81,31 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
+        ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
 
-        LocalDate runDate = LocalDate.of(2026, 7, 3);
+        LocalDate runDate = LocalDate.of(2026, 7, 9);
+        List<ResearchRunPlanStep> defaultSteps = defaultSteps();
         when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
         when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
-                .thenReturn(Arrays.asList(source(12L), source(12L), source(12L)));
+                .thenReturn(Collections.singletonList(source(12L)));
+        when(researchRunPlanService.initializeDefaultPlan(501L, 1)).thenReturn(defaultSteps);
+        when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
+            List<ResearchRunPlanStep> steps = invocation.getArgument(0);
+            String stepId = invocation.getArgument(1);
+            for (ResearchRunPlanStep step : steps) {
+                if (stepId.equals(step.getStepId())) {
+                    return step;
+                }
+            }
+            return steps.get(0);
+        });
+        when(researchRunPlanService.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.complete(any(ResearchRunPlanStep.class), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.fail(any(ResearchRunPlanStep.class), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(researchRunRepository.save(any(ResearchRun.class))).thenAnswer(invocation -> {
             ResearchRun run = invocation.getArgument(0);
             run.setId(501L);
@@ -92,6 +118,90 @@ class ResearchServiceHarnessTest {
         ResearchRunPlan plan = service.createRun(runDate,
                 Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
 
+        assertEquals(ResearchEnums.RUN_STATUS_RUNNING, plan.getRun().getStatus());
+        assertEquals(6, plan.getPlanSteps().size());
+        verify(fetchService, never()).fetch(anyLong());
+
+        researchTaskExecutor.runCaptured();
+
+        verify(fetchService).fetch(12L);
+        verify(researchRunRepository).updateResult(any(ResearchRun.class));
+    }
+
+    @Test
+    void skipsRepeatedSourceFetchAtHardThresholdAndRecordsTrace() {
+        ResearchService service = new ResearchService();
+        ThemeProfileService themeProfileService = mock(ThemeProfileService.class);
+        SourcePlanner sourcePlanner = mock(SourcePlanner.class);
+        SourceRepository sourceRepository = mock(SourceRepository.class);
+        ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
+        FetchService fetchService = mock(FetchService.class);
+        BriefService briefService = mock(BriefService.class);
+        ArticleRepository articleRepository = mock(ArticleRepository.class);
+        EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
+        EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
+        LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
+        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
+        AgentTraceService agentTraceService = mock(AgentTraceService.class);
+        ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+        CapturingExecutor researchTaskExecutor = new CapturingExecutor();
+
+        ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
+        ReflectionTestUtils.setField(service, "sourcePlanner", sourcePlanner);
+        ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
+        ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
+        ReflectionTestUtils.setField(service, "fetchService", fetchService);
+        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
+        ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
+        ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
+        ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
+        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
+        ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
+        ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
+        ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
+        ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
+        ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
+
+        LocalDate runDate = LocalDate.of(2026, 7, 3);
+        List<ResearchRunPlanStep> defaultSteps = defaultSteps();
+        when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
+        when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+                .thenReturn(Arrays.asList(source(12L), source(12L), source(12L)));
+        when(researchRunPlanService.initializeDefaultPlan(501L, 3)).thenReturn(defaultSteps);
+        when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
+            List<ResearchRunPlanStep> steps = invocation.getArgument(0);
+            String stepId = invocation.getArgument(1);
+            for (ResearchRunPlanStep step : steps) {
+                if (stepId.equals(step.getStepId())) {
+                    return step;
+                }
+            }
+            return steps.get(0);
+        });
+        when(researchRunPlanService.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.complete(any(ResearchRunPlanStep.class), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.fail(any(ResearchRunPlanStep.class), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunRepository.save(any(ResearchRun.class))).thenAnswer(invocation -> {
+            ResearchRun run = invocation.getArgument(0);
+            run.setId(501L);
+            return run;
+        });
+        when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fetchService.fetch(12L)).thenReturn(fetchRun());
+        when(briefService.generate(runDate)).thenReturn(brief(runDate));
+
+        ResearchRunPlan plan = service.createRun(runDate,
+                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+        researchTaskExecutor.runCaptured();
+
+        assertEquals(6, plan.getPlanSteps().size());
+        verify(researchRunPlanService).initializeDefaultPlan(501L, 3);
+        verify(researchRunPlanService, atLeastOnce()).complete(any(ResearchRunPlanStep.class), any(), anyInt());
         verify(fetchService, times(2)).fetch(12L);
         ArgumentCaptor<AgentNodeResult> resultCaptor = ArgumentCaptor.forClass(AgentNodeResult.class);
         verify(agentTraceService, times(3)).recordNode(isNull(), isNull(), any(), any(),
@@ -101,6 +211,82 @@ class ResearchServiceHarnessTest {
         assertEquals("REPEATED_ACTION", skipped.getErrorType());
         assertEquals(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS, plan.getRun().getStatus());
         assertTrue(plan.getRun().getErrorMessage().contains("Repeated action reached hard threshold"));
+    }
+
+    @Test
+    void failsRunWithVisiblePlanWhenNoSourcesArePlanned() {
+        ResearchService service = new ResearchService();
+        ThemeProfileService themeProfileService = mock(ThemeProfileService.class);
+        SourcePlanner sourcePlanner = mock(SourcePlanner.class);
+        SourceRepository sourceRepository = mock(SourceRepository.class);
+        ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
+        FetchService fetchService = mock(FetchService.class);
+        BriefService briefService = mock(BriefService.class);
+        ArticleRepository articleRepository = mock(ArticleRepository.class);
+        EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
+        EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
+        LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
+        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
+        AgentTraceService agentTraceService = mock(AgentTraceService.class);
+        ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+
+        ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
+        ReflectionTestUtils.setField(service, "sourcePlanner", sourcePlanner);
+        ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
+        ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
+        ReflectionTestUtils.setField(service, "fetchService", fetchService);
+        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
+        ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
+        ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
+        ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
+        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
+        ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
+        ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
+        ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
+        ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
+        ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+
+        LocalDate runDate = LocalDate.of(2026, 7, 9);
+        List<ResearchRunPlanStep> defaultSteps = defaultSteps();
+        when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
+        when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+                .thenReturn(Collections.emptyList());
+        when(researchRunPlanService.initializeDefaultPlan(501L, 0)).thenReturn(defaultSteps);
+        when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
+            List<ResearchRunPlanStep> steps = invocation.getArgument(0);
+            String stepId = invocation.getArgument(1);
+            for (ResearchRunPlanStep step : steps) {
+                if (stepId.equals(step.getStepId())) {
+                    return step;
+                }
+            }
+            return steps.get(0);
+        });
+        when(researchRunPlanService.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.complete(any(ResearchRunPlanStep.class), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.fail(any(ResearchRunPlanStep.class), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.skip(any(ResearchRunPlanStep.class), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunRepository.save(any(ResearchRun.class))).thenAnswer(invocation -> {
+            ResearchRun run = invocation.getArgument(0);
+            run.setId(501L);
+            return run;
+        });
+        when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResearchRunPlan plan = service.createRun(runDate,
+                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+
+        assertEquals(6, plan.getPlanSteps().size());
+        assertEquals(ResearchEnums.RUN_STATUS_FAILED, plan.getRun().getStatus());
+        assertTrue(plan.getRun().getErrorMessage().contains("No planned sources"));
+        verify(briefService, never()).generate(any(LocalDate.class));
+        verify(researchRunPlanService).fail(any(ResearchRunPlanStep.class), any(), any());
+        verify(researchRunPlanService, atLeastOnce()).skip(any(ResearchRunPlanStep.class), any());
     }
 
     private ThemeProfile theme() {
@@ -138,5 +324,37 @@ class ResearchServiceHarnessTest {
         brief.setContent("content");
         brief.setMarkdownPath("daily.md");
         return brief;
+    }
+
+    private List<ResearchRunPlanStep> defaultSteps() {
+        return Arrays.asList(
+                step(ResearchRunPlanService.STEP_PLAN_SOURCES),
+                step(ResearchRunPlanService.STEP_FETCH_SOURCES),
+                step(ResearchRunPlanService.STEP_CLASSIFY_EVENTS),
+                step(ResearchRunPlanService.STEP_EXTRACT_EVIDENCE),
+                step(ResearchRunPlanService.STEP_COMPOSE_BRIEF),
+                step(ResearchRunPlanService.STEP_SUMMARIZE_RUN));
+    }
+
+    private ResearchRunPlanStep step(String stepId) {
+        ResearchRunPlanStep step = new ResearchRunPlanStep();
+        step.setResearchRunId(501L);
+        step.setStepId(stepId);
+        step.setTitle(stepId);
+        step.setStatus("PENDING");
+        return step;
+    }
+
+    private static class CapturingExecutor implements Executor {
+        private Runnable captured;
+
+        @Override
+        public void execute(Runnable command) {
+            this.captured = command;
+        }
+
+        void runCaptured() {
+            captured.run();
+        }
     }
 }

@@ -31,6 +31,8 @@ public class DatabaseInitializer implements InitializingBean {
     }
 
     private void createSchema() {
+        jdbcTemplate.execute("PRAGMA journal_mode=WAL");
+        jdbcTemplate.execute("PRAGMA busy_timeout=30000");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS source ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "name TEXT NOT NULL,"
@@ -303,6 +305,35 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_fingerprint ON agent_run(action_fingerprint)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_step ON agent_run(research_run_id, step_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_status ON agent_run(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_plan ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "research_run_id INTEGER NOT NULL,"
+                + "step_id TEXT NOT NULL,"
+                + "title TEXT NOT NULL,"
+                + "step_type TEXT NOT NULL,"
+                + "executor TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "dependencies TEXT,"
+                + "input_summary TEXT,"
+                + "output_summary TEXT,"
+                + "error_type TEXT,"
+                + "error_message TEXT,"
+                + "fallback_used INTEGER NOT NULL DEFAULT 0,"
+                + "fallback_reason TEXT,"
+                + "termination_reason TEXT,"
+                + "attempt INTEGER NOT NULL DEFAULT 0,"
+                + "max_attempts INTEGER NOT NULL DEFAULT 1,"
+                + "progress_delta INTEGER NOT NULL DEFAULT 0,"
+                + "started_at TEXT,"
+                + "ended_at TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "metadata_json TEXT,"
+                + "UNIQUE(research_run_id, step_id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_plan_run "
+                + "ON research_run_plan(research_run_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_plan_status "
+                + "ON research_run_plan(status)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS export_manifest ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "file_name TEXT NOT NULL,"

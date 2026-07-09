@@ -3,6 +3,7 @@ package com.finscope.web.controller;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.service.agent.AgentRunService;
+import com.finscope.service.research.ResearchRunPlanService;
 import com.finscope.service.research.ResearchService;
 import com.finscope.web.request.CreateResearchRunRequest;
 import com.finscope.web.response.ResearchRunDetailResponse;
@@ -24,6 +25,8 @@ public class ResearchController {
     private ResearchService researchService;
     @Resource
     private AgentRunService agentRunService;
+    @Resource
+    private ResearchRunPlanService researchRunPlanService;
 
     @PostMapping
     public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {
@@ -45,6 +48,7 @@ public class ResearchController {
         return new ResearchRunDetailResponse(
                 researchService.detail(id),
                 researchService.plannedSources(id),
+                researchRunPlanService.findByRunId(id),
                 agentRunService.findByResearchRunId(id));
     }
 }

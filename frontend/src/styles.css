@@ -2843,6 +2843,12 @@ input[type="checkbox"] {
   margin-top: 14px;
 }
 
+.research-plan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .section-kicker {
   color: var(--muted);
   font-size: 11px;
@@ -2861,6 +2867,37 @@ input[type="checkbox"] {
 .planned-source-row span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.research-plan-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.research-plan-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.research-plan-row span,
+.research-plan-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.research-plan-meta {
+  min-width: 84px;
+  text-align: right;
+}
+
+.research-plan-meta span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .trace-row {
@@ -2893,7 +2930,9 @@ input[type="checkbox"] {
 }
 
 .event-card {
+  min-width: 0;
   width: 100%;
+  overflow: hidden;
   text-align: left;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2915,9 +2954,19 @@ input[type="checkbox"] {
 .research-task-head,
 .studio-card-top {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.event-card-top strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-card-top .badge {
+  flex: 0 0 auto;
 }
 
 .research-task-head {
@@ -2940,6 +2989,10 @@ input[type="checkbox"] {
 .studio-card p,
 .context-block p {
   margin: 8px 0 0;
+}
+
+.event-card p {
+  overflow-wrap: anywhere;
 }
 
 .event-card-meta {
@@ -3069,6 +3122,7 @@ input[type="checkbox"] {
   max-width: 760px;
   font-size: 20px;
   line-height: 1.24;
+  overflow-wrap: anywhere;
 }
 
 .event-detail-title p {
@@ -3077,6 +3131,7 @@ input[type="checkbox"] {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .event-detail-metrics {
@@ -3140,9 +3195,14 @@ input[type="checkbox"] {
 
 .event-detail-section-head {
   display: flex;
+  min-width: 0;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.event-detail-section-head > * {
+  min-width: 0;
 }
 
 .event-detail-section-head strong {
@@ -3190,6 +3250,8 @@ input[type="checkbox"] {
 
 .events-workbench {
   display: grid;
+  min-width: 0;
+  overflow-x: hidden;
   grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
@@ -3198,6 +3260,7 @@ input[type="checkbox"] {
 .events-queue-panel,
 .events-detail-panel {
   min-width: 0;
+  overflow-x: hidden;
 }
 
 .events-heading {
@@ -3260,6 +3323,23 @@ input[type="checkbox"] {
   padding-top: 10px;
 }
 
+.event-timeline-list li > div,
+.merge-basis-list li > div,
+.evidence-list li > div,
+.article-move-row > div {
+  min-width: 0;
+}
+
+.event-timeline-list strong,
+.merge-basis-list strong,
+.event-output-card strong,
+.article-move-row strong,
+.top-evidence strong,
+.evidence-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .event-timeline-list li:first-child {
   border-top: 0;
   padding-top: 0;
@@ -3281,6 +3361,7 @@ input[type="checkbox"] {
 .merge-basis-list li,
 .evidence-list li {
   display: flex;
+  min-width: 0;
   justify-content: space-between;
   gap: 12px;
 }

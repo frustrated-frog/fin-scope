@@ -26,7 +26,7 @@ export function ResearchView({
     maxSourcesPerTheme: number;
     includeDisabled: boolean;
   }) => Promise<void>;
-  onOpenRun: (id: number) => Promise<void>;
+  onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
   onOpenBrief: (date: string) => void;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -94,7 +94,7 @@ export function ResearchView({
           disabled={busy || themeCodes.length === 0}
           onClick={submit}
         >
-          {busy ? '运行中' : '运行研究'}
+          {busy ? '启动中' : '运行研究'}
         </button>
       </div>
 
@@ -139,6 +139,26 @@ export function ResearchView({
                 <strong>{detail.run.status}</strong>
                 <span>{detail.run.summary || '-'}</span>
               </div>
+              <div className="research-plan-list">
+                <div className="section-kicker">Plan steps</div>
+                {(detail.planSteps || []).length ? detail.planSteps.map((step) => (
+                  <div className="research-plan-row" key={step.stepId}>
+                    <div>
+                      <strong>{step.title}</strong>
+                      <span>{step.stepId} · {step.executor || 'system'}</span>
+                      {(step.outputSummary || step.errorMessage || step.fallbackReason) && (
+                        <small>{step.errorMessage || step.fallbackReason || step.outputSummary}</small>
+                      )}
+                    </div>
+                    <div className="research-plan-meta">
+                      <span>{step.status}</span>
+                      <small>{step.attempt ?? 0}/{step.maxAttempts ?? 1} · Δ{step.progressDelta ?? 0}</small>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="empty-state compact">没有计划步骤</p>
+                )}
+              </div>
               <div className="planned-source-list">
                 <div className="section-kicker">计划来源</div>
                 {(detail.plannedSources || []).length ? detail.plannedSources.map((source) => (
@@ -158,6 +178,15 @@ export function ResearchView({
                       <span>{run.status}</span>
                       {(run.output || run.errorMessage) && (
                         <small>{run.errorMessage || run.output}</small>
+                      )}
+                      {run.fallbackReason && (
+                        <small>fallback: {run.fallbackReason}</small>
+                      )}
+                      {run.errorType && (
+                        <small>error: {run.errorType}</small>
+                      )}
+                      {run.terminationReason && (
+                        <small>stop: {run.terminationReason}</small>
                       )}
                     </div>
                     <small>{run.durationMs}ms</small>
