@@ -28,6 +28,9 @@ public class SourceRepository {
         source.setUrl(rs.getString("url"));
         source.setEnabled(rs.getInt("enabled") == 1);
         source.setFetchFrequencyMinutes(rs.getInt("fetch_frequency_minutes"));
+        source.setScheduledEnabled(rs.getInt("scheduled_enabled") == 1);
+        source.setScheduleTimes(rs.getString("schedule_times"));
+        source.setMaxItemsPerRun(rs.getInt("max_items_per_run"));
         source.setCredibility(rs.getInt("credibility"));
         source.setTags(rs.getString("tags"));
         source.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
@@ -42,18 +45,22 @@ public class SourceRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO source(name,type,url,enabled,fetch_frequency_minutes,credibility,tags,created_at,updated_at) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO source(name,type,url,enabled,fetch_frequency_minutes,scheduled_enabled,schedule_times,"
+                            + "max_items_per_run,credibility,tags,created_at,updated_at) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, source.getName());
             ps.setString(2, source.getType());
             ps.setString(3, source.getUrl());
             ps.setInt(4, source.isEnabled() ? 1 : 0);
             ps.setInt(5, source.getFetchFrequencyMinutes());
-            ps.setInt(6, source.getCredibility());
-            ps.setString(7, source.getTags());
-            ps.setString(8, TimeUtil.text(source.getCreatedAt()));
-            ps.setString(9, TimeUtil.text(source.getUpdatedAt()));
+            ps.setInt(6, source.isScheduledEnabled() ? 1 : 0);
+            ps.setString(7, source.getScheduleTimes());
+            ps.setInt(8, source.getMaxItemsPerRun() <= 0 ? 10 : source.getMaxItemsPerRun());
+            ps.setInt(9, source.getCredibility());
+            ps.setString(10, source.getTags());
+            ps.setString(11, TimeUtil.text(source.getCreatedAt()));
+            ps.setString(12, TimeUtil.text(source.getUpdatedAt()));
             return ps;
         }, keyHolder);
         source.setId(keyHolder.getKey().longValue());
@@ -73,9 +80,11 @@ public class SourceRepository {
         source.setId(id);
         source.setUpdatedAt(LocalDateTime.now());
         jdbcTemplate.update("UPDATE source SET name=?, type=?, url=?, enabled=?, fetch_frequency_minutes=?, "
-                        + "credibility=?, tags=?, updated_at=? WHERE id=?",
+                        + "scheduled_enabled=?, schedule_times=?, max_items_per_run=?, credibility=?, tags=?, updated_at=? WHERE id=?",
                 source.getName(), source.getType(), source.getUrl(), source.isEnabled() ? 1 : 0,
-                source.getFetchFrequencyMinutes(), source.getCredibility(), source.getTags(),
+                source.getFetchFrequencyMinutes(), source.isScheduledEnabled() ? 1 : 0,
+                source.getScheduleTimes(), source.getMaxItemsPerRun() <= 0 ? 10 : source.getMaxItemsPerRun(),
+                source.getCredibility(), source.getTags(),
                 TimeUtil.text(source.getUpdatedAt()), id);
         return findById(id).orElse(source);
     }

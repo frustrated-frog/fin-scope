@@ -9,6 +9,9 @@ public class Source {
     private String url;
     private boolean enabled = true;
     private int fetchFrequencyMinutes = 60;
+    private boolean scheduledEnabled = false;
+    private String scheduleTimes;
+    private int maxItemsPerRun = 10;
     private int credibility = 3;
     private String tags;
     private LocalDateTime createdAt;
@@ -60,6 +63,30 @@ public class Source {
 
     public void setFetchFrequencyMinutes(int fetchFrequencyMinutes) {
         this.fetchFrequencyMinutes = fetchFrequencyMinutes;
+    }
+
+    public boolean isScheduledEnabled() {
+        return scheduledEnabled;
+    }
+
+    public void setScheduledEnabled(boolean scheduledEnabled) {
+        this.scheduledEnabled = scheduledEnabled;
+    }
+
+    public String getScheduleTimes() {
+        return scheduleTimes;
+    }
+
+    public void setScheduleTimes(String scheduleTimes) {
+        this.scheduleTimes = scheduleTimes;
+    }
+
+    public int getMaxItemsPerRun() {
+        return maxItemsPerRun;
+    }
+
+    public void setMaxItemsPerRun(int maxItemsPerRun) {
+        this.maxItemsPerRun = maxItemsPerRun;
     }
 
     public int getCredibility() {
