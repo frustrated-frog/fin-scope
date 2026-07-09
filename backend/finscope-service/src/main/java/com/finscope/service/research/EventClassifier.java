@@ -5,6 +5,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.service.dedupe.FingerprintService;
+import lombok.Data;
 import org.springframework.stereotype.Component;
 import org.springframework.util.DigestUtils;
 
@@ -425,6 +426,7 @@ public class EventClassifier {
                 + StringUtils.firstNonBlank(article.getBody(), "")).toLowerCase(Locale.ROOT);
     }
 
+    @Data
     private static class EventSignal {
         private final String themeCode;
         private final String text;
@@ -432,46 +434,9 @@ public class EventClassifier {
         private final Set<String> variables;
         private final Set<String> actions;
         private final Set<String> dataPoints;
-
-        EventSignal(String themeCode,
-                    String text,
-                    Set<String> subjects,
-                    Set<String> variables,
-                    Set<String> actions,
-                    Set<String> dataPoints) {
-            this.themeCode = themeCode;
-            this.text = text;
-            this.subjects = subjects;
-            this.variables = variables;
-            this.actions = actions;
-            this.dataPoints = dataPoints;
-        }
-
-        String getThemeCode() {
-            return themeCode;
-        }
-
-        String getText() {
-            return text;
-        }
-
-        Set<String> getSubjects() {
-            return subjects;
-        }
-
-        Set<String> getVariables() {
-            return variables;
-        }
-
-        Set<String> getActions() {
-            return actions;
-        }
-
-        Set<String> getDataPoints() {
-            return dataPoints;
-        }
     }
 
+    @Data
     private static class MatchEvidence {
         private final double score;
         private final EventSignal articleSignal;
@@ -479,68 +444,13 @@ public class EventClassifier {
         private final Set<String> sharedSubjects;
         private final Set<String> sharedVariables;
         private final Set<String> sharedActions;
-
-        MatchEvidence(double score,
-                      EventSignal articleSignal,
-                      EventSignal candidateSignal,
-                      Set<String> sharedSubjects,
-                      Set<String> sharedVariables,
-                      Set<String> sharedActions) {
-            this.score = score;
-            this.articleSignal = articleSignal;
-            this.candidateSignal = candidateSignal;
-            this.sharedSubjects = sharedSubjects;
-            this.sharedVariables = sharedVariables;
-            this.sharedActions = sharedActions;
-        }
-
-        double getScore() {
-            return score;
-        }
-
-        EventSignal getArticleSignal() {
-            return articleSignal;
-        }
-
-        EventSignal getCandidateSignal() {
-            return candidateSignal;
-        }
-
-        Set<String> getSharedSubjects() {
-            return sharedSubjects;
-        }
-
-        Set<String> getSharedVariables() {
-            return sharedVariables;
-        }
-
-        Set<String> getSharedActions() {
-            return sharedActions;
-        }
     }
 
+    @Data
     public static class EventSignature {
         private final String themeCode;
         private final String canonicalEventKey;
         private final int importanceScore;
-
-        public EventSignature(String themeCode, String canonicalEventKey, int importanceScore) {
-            this.themeCode = themeCode;
-            this.canonicalEventKey = canonicalEventKey;
-            this.importanceScore = importanceScore;
-        }
-
-        public String getThemeCode() {
-            return themeCode;
-        }
-
-        public String getCanonicalEventKey() {
-            return canonicalEventKey;
-        }
-
-        public int getImportanceScore() {
-            return importanceScore;
-        }
     }
 
     public static class MatchDecision {

@@ -2,6 +2,7 @@ package com.finscope.service.article;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.util.StringUtils;
 import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
@@ -27,14 +28,6 @@ public class UrlIngestService {
     private ArticleIngestCoordinator articleIngestCoordinator;
 
 
-    public ArticleIngestResult ingest(String url, String sourceName, String tags) {
-        return ingest(url, sourceName, tags, null, null);
-    }
-
-    public ArticleIngestResult ingest(String url, String sourceName, String tags, Consumer<TaskPhase> phaseConsumer) {
-        return ingest(url, sourceName, tags, null, phaseConsumer);
-    }
-
     public ArticleIngestResult ingest(String url,
                                       String sourceName,
                                       String tags,
@@ -45,13 +38,13 @@ public class UrlIngestService {
 
         // 自动识别来源类型
         SourceType detectedType = SourceType.fromUrl(url);
-        String finalSourceName = isBlank(sourceName) ? detectedType.getDisplayName() : sourceName.trim();
+        String finalSourceName = StringUtils.isBlank(sourceName) ? detectedType.getDisplayName() : sourceName.trim();
 
         Source source = new Source();
         source.setName(finalSourceName);
         source.setType(detectedType.getCode());
         source.setUrl(url.trim());
-        source.setTags(isBlank(tags) ? detectedType.getCategory() : tags.trim());
+        source.setTags(StringUtils.isBlank(tags) ? detectedType.getCategory() : tags.trim());
 
         try {
             log.info("手动链接入库开始 url={} sourceName={} tags={}", safeUrl(url), source.getName(), source.getTags());
@@ -82,7 +75,7 @@ public class UrlIngestService {
     }
 
     public void validateUrl(String url) {
-        if (isBlank(url)) {
+        if (StringUtils.isBlank(url)) {
             throw new IllegalArgumentException("URL must not be empty");
         }
         try {
@@ -155,10 +148,6 @@ public class UrlIngestService {
 
     private String text(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
     }
 
     private String safeUrl(String url) {

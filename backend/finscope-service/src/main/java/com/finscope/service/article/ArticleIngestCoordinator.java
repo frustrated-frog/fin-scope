@@ -15,7 +15,6 @@ import com.finscope.service.insight.InsightCardService;
 import com.finscope.service.research.EventClusterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.function.Consumer;
@@ -36,7 +35,6 @@ public class ArticleIngestCoordinator {
     @Resource
     private ArticleCategoryPolicy articleCategoryPolicy;
 
-    @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {
         return ingestInternal(source, item, null, null);
     }
