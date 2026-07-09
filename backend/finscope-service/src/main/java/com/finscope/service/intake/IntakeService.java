@@ -25,7 +25,9 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class IntakeService {
@@ -92,8 +94,7 @@ public class IntakeService {
                 candidates.add(candidateRepository.save(candidate));
             }
             BatchSummaryAgent.BatchSummary summary = batchSummaryAgent.summarize(running, candidates);
-            String summaryJson = scheduleSlot == null ? summary.getSummaryJson()
-                    : "{\"slot\":\"" + scheduleSlot + "\",\"summaryText\":\"" + summary.getSummaryText() + "\"}";
+            String summaryJson = scheduleSlot == null ? summary.getSummaryJson() : scheduledSummaryJson(scheduleSlot, summary);
             FetchBatch completed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_COMPLETED, rawItems.size(),
                     candidates.size(), candidates.size(), duplicateCount, lowValueCount(candidates), null,
                     summaryJson, summary.getSummaryText());
@@ -190,9 +191,16 @@ public class IntakeService {
         candidate.setAgentScore(review.getScore());
         candidate.setAgentRecommendation(review.getRecommendation());
         candidate.setAgentReason(review.getReason());
-        candidate.setAgentModel("fallback".equals(fallbackStatus) ? "fallback" : "fallback");
+        candidate.setAgentModel(IntakeEnums.AGENT_FALLBACK.equals(fallbackStatus) ? "fallback" : candidate.getAgentModel());
         candidate.setAgentStatus(fallbackStatus);
         candidate.setAgentReviewJson(candidateReviewAgent.reviewJson(review));
+    }
+
+    private String scheduledSummaryJson(String scheduleSlot, BatchSummaryAgent.BatchSummary summary) {
+        Map<String, String> payload = new LinkedHashMap<String, String>();
+        payload.put("slot", scheduleSlot);
+        payload.put("summaryText", summary.getSummaryText());
+        return toJson(payload);
     }
 
     private boolean isDuplicate(IntakeCandidate candidate) {
