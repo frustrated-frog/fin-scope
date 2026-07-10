@@ -26,3 +26,7 @@ finscope:
     model: "gpt-5.5"
     timeout-ms: 300000
     temperature: 0.2
+  search:
+    enabled: ${FINSCOPE_SEARCH_ENABLED:true}
+    provider: tavily
+    api-key: ${FINSCOPE_SEARCH_API_KEY:}

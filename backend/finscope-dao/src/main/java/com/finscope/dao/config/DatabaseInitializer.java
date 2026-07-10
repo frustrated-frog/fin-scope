@@ -430,6 +430,34 @@ public class DatabaseInitializer implements InitializingBean {
                 + "sort_order INTEGER NOT NULL DEFAULT 0,"
                 + "created_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_instrument ON watchlist_item(instrument_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_report ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "instrument_code TEXT NOT NULL,"
+                + "instrument_name TEXT,"
+                + "instrument_type TEXT,"
+                + "report_date TEXT NOT NULL,"
+                + "change_pct REAL,"
+                + "status TEXT NOT NULL,"
+                + "summary TEXT,"
+                + "drivers_json TEXT,"
+                + "disclaimer TEXT,"
+                + "error_message TEXT,"
+                + "duration_ms INTEGER,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_code ON attribution_report(instrument_code)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_evidence ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "report_id INTEGER NOT NULL,"
+                + "origin TEXT,"
+                + "title TEXT,"
+                + "url TEXT,"
+                + "snippet TEXT,"
+                + "source_domain TEXT,"
+                + "source_tier TEXT,"
+                + "relevance INTEGER,"
+                + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_evidence_report ON attribution_evidence(report_id)");
     }
 
     private void ensureColumn(String table, String column, String type) {

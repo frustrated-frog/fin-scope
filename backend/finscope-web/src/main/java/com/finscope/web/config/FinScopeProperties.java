@@ -11,6 +11,7 @@ public class FinScopeProperties {
     private String dataRoot = "../data";
     private String corsOrigin = "http://localhost:*";
     private LlmProperties llm = new LlmProperties();
+    private SearchProperties search = new SearchProperties();
 
     @Data
     public static class LlmProperties {
@@ -20,5 +21,12 @@ public class FinScopeProperties {
         private String model = "";
         private int timeoutMs = 30000;
         private double temperature = 0.2;
+    }
+
+    @Data
+    public static class SearchProperties {
+        private boolean enabled = false;
+        private String provider = "tavily";
+        private String apiKey = "";
     }
 }

@@ -6,6 +6,8 @@ import com.finscope.service.export.ExportService;
 import com.finscope.service.vault.VaultWriter;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
+import com.finscope.rpc.search.TavilyWebSearchClient;
+import com.finscope.rpc.search.WebSearchClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -49,6 +51,12 @@ public class AppConfig {
                 llm.getModel(),
                 llm.getTimeoutMs(),
                 llm.getTemperature());
+    }
+
+    @Bean
+    public WebSearchClient webSearchClient() {
+        FinScopeProperties.SearchProperties search = properties.getSearch();
+        return new TavilyWebSearchClient(search.isEnabled(), search.getApiKey());
     }
 
     @Bean(name = "ingestTaskExecutor")

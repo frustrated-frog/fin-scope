@@ -366,6 +366,47 @@ export type ToastItem = {
   type: 'success' | 'error' | 'info';
 };
 
+export type AttributionDriver = {
+  claim: string;
+  impactLevel?: string;
+  confidence?: string;
+  detail?: string;
+};
+
+export type AttributionEvidence = {
+  id?: number;
+  origin?: string;
+  title?: string;
+  url?: string;
+  snippet?: string;
+  sourceDomain?: string;
+  sourceTier?: string;
+  relevance?: number;
+};
+
+export type AttributionReport = {
+  id: number;
+  instrumentCode: string;
+  instrumentName?: string;
+  instrumentType?: string;
+  reportDate?: string;
+  changePct?: number;
+  status: 'GENERATING' | 'COMPLETED' | 'FAILED';
+  summary?: string;
+  drivers?: AttributionDriver[];
+  disclaimer?: string;
+  evidences?: AttributionEvidence[];
+  errorMessage?: string;
+  durationMs?: number;
+};
+
+export type AttributionProgress = {
+  type: 'STAGE' | 'CLUE' | 'DONE' | 'ERROR';
+  stage?: string;
+  message?: string;
+  reportId?: number;
+};
+
 export type WatchlistItem = {
   id: number;
   code: string;

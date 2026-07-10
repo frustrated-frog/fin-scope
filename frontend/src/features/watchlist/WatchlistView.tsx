@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { WatchlistItem } from '../../shared/types';
+import { AttributionReaderView } from './AttributionReaderView';
+
+type AttributionTarget = {
+  taskId: string;
+  code: string;
+  name?: string;
+  changePct?: number;
+};
 
 const typeLabels: Record<string, string> = {
   STOCK: '股票',
@@ -71,17 +79,64 @@ export function WatchlistView({
   const [group, setGroup] = useState('');
   const [sortByChange, setSortByChange] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [attribution, setAttribution] = useState<AttributionTarget | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [attributing, setAttributing] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     try {
       const data = await api<WatchlistItem[]>('/api/watchlist');
       setItems(data);
+      loadSummaries(data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '自选列表加载失败');
     } finally {
       setLoading(false);
     }
+  }
+
+  // 拉取各标的最新归因摘要，用于卡片徽标
+  async function loadSummaries(list: WatchlistItem[]) {
+    const entries = await Promise.all(
+      list.map(async (item) => {
+        try {
+          const report = await api<{ summary?: string } | null>(
+            `/api/attribution/latest?code=${encodeURIComponent(item.code)}`
+          );
+          return [item.code, report && report.summary ? report.summary : ''] as const;
+        } catch {
+          return [item.code, ''] as const;
+        }
+      })
+    );
+    const next: Record<string, string> ={};
+    entries.forEach(([code, summary]) => {
+      if (summary) {
+        next[code] = summary;
+      }
+    });
+    setSummaries(next);
+  }
+
+  async function startAttribution(item: WatchlistItem) {
+    setAttributing(item.code);
+    try {
+      const res = await api<{ taskId: string }>('/api/attribution/start', {
+        method: 'POST',
+        body: JSON.stringify({ code: item.code, type: item.type, name: item.name, changePct: item.changePct })
+      });
+      setAttribution({ taskId: res.taskId, code: item.code, name: item.name, changePct: item.changePct });
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '归因启动失败', 'error');
+    } finally {
+      setAttributing(null);
+    }
+  }
+
+  function closeAttribution() {
+    setAttribution(null);
+    load();
   }
 
   useEffect(() => {
@@ -126,6 +181,18 @@ export function WatchlistView({
     } catch (error) {
       addToast(error instanceof Error ? error.message : '移除失败', 'error');
     }
+  }
+
+  if (attribution) {
+    return (
+      <AttributionReaderView
+        taskId={attribution.taskId}
+        code={attribution.code}
+        name={attribution.name}
+        changePct={attribution.changePct}
+        onBack={closeAttribution}
+      />
+    );
   }
 
   return (
@@ -231,6 +298,19 @@ export function WatchlistView({
               ) : (
                 <p className="muted watchlist-note">{item.quoteNote || '暂无行情'}</p>
               )}
+              {summaries[item.code] && (
+                <p className="watchlist-attr-summary" title={summaries[item.code]}>
+                  {summaries[item.code]}
+                </p>
+              )}
+              <button
+                className="watchlist-attr-button"
+                type="button"
+                disabled={attributing === item.code}
+                onClick={() => startAttribution(item)}
+              >
+                {attributing === item.code ? '启动中…' : '🔬 深度归因'}
+              </button>
             </article>
           ))}
         </div>
