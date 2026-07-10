@@ -411,6 +411,25 @@ public class DatabaseInitializer implements InitializingBean {
                 + "file_name TEXT NOT NULL,"
                 + "manifest_json TEXT NOT NULL,"
                 + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS instrument ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "code TEXT NOT NULL,"
+                + "type TEXT NOT NULL,"
+                + "name TEXT,"
+                + "market TEXT,"
+                + "aliases TEXT,"
+                + "sector_code TEXT,"
+                + "chain_tags TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_instrument_code_type ON instrument(code,type)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS watchlist_item ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "instrument_id INTEGER NOT NULL,"
+                + "group_name TEXT,"
+                + "sort_order INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_instrument ON watchlist_item(instrument_id)");
     }
 
     private void ensureColumn(String table, String column, String type) {

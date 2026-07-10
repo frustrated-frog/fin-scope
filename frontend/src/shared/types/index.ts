@@ -13,7 +13,8 @@ export type View =
   | 'learning'
   | 'contentStudio'
   | 'agents'
-  | 'settings';
+  | 'settings'
+  | 'watchlist';
 
 export type Source = {
   id?: number;
@@ -363,4 +364,23 @@ export type ToastItem = {
   id: number;
   message: string;
   type: 'success' | 'error' | 'info';
+};
+
+export type WatchlistItem = {
+  id: number;
+  code: string;
+  type: 'STOCK' | 'FUND' | 'SECTOR';
+  name?: string;
+  market?: string;
+  groupName?: string;
+  price?: number;
+  changePct?: number;
+  changeAmount?: number;
+  turnover?: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  amplitude?: number;
+  quoteValid: boolean;
+  quoteNote?: string;
 };
