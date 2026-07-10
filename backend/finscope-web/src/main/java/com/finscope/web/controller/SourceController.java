@@ -47,8 +47,9 @@ public class SourceController {
     }
 
     @PostMapping("/{id}/fetch")
+    @Deprecated
     public FetchBatch fetch(@PathVariable Long id) {
-        log.info("旧抓取入口转入摄入候选池 sourceId={}", id);
+        log.info("[已废弃] 旧抓取入口转入摄入候选池，请使用 /intake-fetch sourceId={}", id);
         return intakeService.intakeFetch(id);
     }
 

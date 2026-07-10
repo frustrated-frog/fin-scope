@@ -87,12 +87,14 @@ export type IntakeCandidate = {
 export type PromoteIntakeCandidateResponse = {
   candidateId: number;
   articleId: number;
-  status: string;
+  /** Candidate human status after promote — e.g. "PROMOTED" */
+  status: 'PROMOTED' | 'PENDING' | 'SAVED_FOR_LATER' | 'SKIPPED' | 'REJECTED';
   eventId?: number;
   eventTitle?: string;
   evidenceCount?: number;
   learningTaskCount?: number;
   contentIdeaCount?: number;
+  /** Workflow attach status — whether research package generation succeeded */
   workflowStatus?: 'SUCCESS' | 'FAILED';
   workflowSummary?: string;
   workflowErrorMessage?: string;

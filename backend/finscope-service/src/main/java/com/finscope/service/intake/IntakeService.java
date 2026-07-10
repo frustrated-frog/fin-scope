@@ -82,6 +82,7 @@ public class IntakeService {
             List<RawItem> rawItems = emptyIfNull(adapter.fetch(source));
             List<RawItem> selected = limit(rawItemSelector.select(source, filterByLookback(rawItems)), maxItems(source));
             List<IntakeCandidate> candidates = new ArrayList<IntakeCandidate>();
+            int newCandidateCount = 0;
             for (RawItem item : selected) {
                 IntakeCandidate candidate = toCandidate(running, source, item);
                 if (isDuplicate(candidate)) {
@@ -93,10 +94,11 @@ public class IntakeService {
                 } else {
                     CandidateReviewAgent.ReviewResult reviewResult = candidateReviewAgent.reviewWithResult(candidate);
                     applyReview(candidate, reviewResult);
+                    newCandidateCount++;
                 }
                 candidates.add(candidateRepository.save(candidate));
             }
-            if (candidates.isEmpty()) {
+            if (newCandidateCount == 0) {
                 String message = "没有产出候选内容：可能被最近 3 天窗口过滤、信息源为空或正文抽取失败。";
                 FetchBatch failed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_FAILED, rawItems.size(),
                         0, 0, duplicateCount, 0, message, null, message);
@@ -144,6 +146,15 @@ public class IntakeService {
     public PromoteIntakeCandidateResponse promote(Long id) {
         IntakeCandidate candidate = candidate(id);
         if (candidate.getPromotedArticleId() != null) {
+            if (IntakeEnums.HUMAN_PROMOTED.equals(candidate.getHumanStatus())) {
+                PromoteIntakeCandidateResponse response = new PromoteIntakeCandidateResponse();
+                response.setCandidateId(candidate.getId());
+                response.setStatus(candidate.getHumanStatus());
+                response.setArticleId(candidate.getPromotedArticleId());
+                response.setWorkflowStatus("SUCCESS");
+                response.setWorkflowSummary("候选项已入库，无需重复执行");
+                return response;
+            }
             return articleRepository.findById(candidate.getPromotedArticleId())
                     .map(article -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), article))
                     .orElseGet(() -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), null));

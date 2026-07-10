@@ -28,6 +28,7 @@ export function IntakeView({
 }) {
   const [busyCandidateId, setBusyCandidateId] = useState<number | null>(null);
   const [promoteResult, setPromoteResult] = useState<{
+    candidateId: number;
     articleText: string;
     fullText: string;
   } | null>(null);
@@ -40,7 +41,7 @@ export function IntakeView({
       });
       const articleText = `已入文章库 #${result.articleId}`;
       const fullText = promoteMessage(articleText, result);
-      setPromoteResult({ articleText, fullText });
+      setPromoteResult({ candidateId, articleText, fullText });
       addToast(result.workflowStatus === 'FAILED' ? fullText : `候选项已入库，Article #${result.articleId}`,
         result.workflowStatus === 'FAILED' ? 'error' : 'success');
       await onChanged();
@@ -75,7 +76,7 @@ export function IntakeView({
           <span className="subtle-badge">{candidates.length} candidates</span>
         </div>
         {promoteResult && (
-          <div className="intake-promote-result">
+          <div className="intake-promote-result" data-candidate-id={promoteResult.candidateId}>
             <span>{promoteResult.articleText}</span>
             <p>{promoteResult.fullText}</p>
           </div>
@@ -171,7 +172,7 @@ export function IntakeView({
                   type="button"
                   className="secondary-button"
                   aria-label={`稍后看-${candidate.id}`}
-                  disabled={busyCandidateId === candidate.id}
+                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
                   onClick={() => updateStatus(candidate.id, 'SAVED_FOR_LATER')}
                 >
                   稍后看
@@ -179,7 +180,7 @@ export function IntakeView({
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={busyCandidateId === candidate.id}
+                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
                   onClick={() => updateStatus(candidate.id, 'SKIPPED')}
                 >
                   跳过
@@ -187,7 +188,7 @@ export function IntakeView({
                 <button
                   type="button"
                   className="danger-button"
-                  disabled={busyCandidateId === candidate.id}
+                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
                   onClick={() => updateStatus(candidate.id, 'REJECTED')}
                 >
                   拒绝
@@ -218,6 +219,12 @@ function promoteMessage(articleText: string, result: PromoteIntakeCandidateRespo
     return `${articleText}；${result.workflowSummary}`;
   }
   return articleText;
+}
+
+const TERMINAL_STATUSES = new Set(['PROMOTED', 'REJECTED', 'SKIPPED']);
+
+function isTerminalStatus(status?: string) {
+  return TERMINAL_STATUSES.has(status || '');
 }
 
 function parseJsonList(value?: string) {

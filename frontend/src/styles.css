@@ -158,10 +158,6 @@ button {
   width: 48px;
   height: 48px;
   flex: 0 0 48px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18), 0 0 24px rgba(21, 148, 111, 0.12);
 }
 
 .brand-mark img {
@@ -373,8 +369,9 @@ button {
   margin: -22px -22px 22px;
   border-bottom: 1px solid rgba(217, 224, 220, 0.76);
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.72), rgba(247, 248, 245, 0.86)),
-    rgba(247, 248, 245, 0.86);
+    radial-gradient(circle at 8% 50%, rgba(21, 148, 111, 0.18), transparent 40%),
+    radial-gradient(circle at 80% 20%, rgba(37, 99, 235, 0.1), transparent 35%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(240, 244, 241, 0.82));
   padding: 18px 22px 14px;
   backdrop-filter: blur(14px);
 }
@@ -385,8 +382,9 @@ button {
 
 [data-theme="dark"] .topbar {
   background:
-    linear-gradient(90deg, rgba(15, 20, 25, 0.88), rgba(26, 35, 50, 0.72)),
-    rgba(15, 20, 25, 0.9);
+    radial-gradient(circle at 8% 50%, rgba(16, 185, 129, 0.2), transparent 40%),
+    radial-gradient(circle at 80% 20%, rgba(96, 165, 250, 0.12), transparent 35%),
+    linear-gradient(135deg, rgba(26, 35, 50, 0.9), rgba(15, 20, 25, 0.82));
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -3102,7 +3100,10 @@ td {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   color: #ffffff;
   border: 1px solid transparent;
-  border-radius: 9999px;
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 0 16px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);

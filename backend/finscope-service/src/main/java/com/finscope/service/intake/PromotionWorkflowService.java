@@ -45,7 +45,7 @@ public class PromotionWorkflowService {
                     + " 条，学习任务 " + learningTaskCount + " 个，选题 " + contentIdeaCount + " 个");
             return response;
         } catch (Exception ex) {
-            markFailed(response, ex.getMessage());
+            markFailed(response, "研究工作包生成异常，请稍后重试");
             return response;
         }
     }
