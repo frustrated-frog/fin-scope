@@ -20,6 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
@@ -93,6 +96,14 @@ class FinScopeApiIntegrationTest {
                 body.write(bytes);
             }
         });
+        server.createContext("/empty-rss", exchange -> {
+            byte[] bytes = emptyRss().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/rss+xml; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
         server.createContext("/article", exchange -> {
             byte[] bytes = htmlArticle().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
@@ -145,7 +156,7 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void sourceFetchInboxDedupeAndBriefFlowWorks() throws Exception {
+    void legacySourceFetchRoutesToIntakeAndDoesNotCreateArticles() throws Exception {
         String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
                 + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
 
@@ -156,17 +167,41 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(post("/api/sources/1/fetch"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.successCount").value(1));
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.candidateCount").value(1));
 
         mvc.perform(get("/api/articles"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$[0].title").value("美联储释放降息信号 黄金走强"))
-                .andExpect(jsonPath("$[0].noveltyType").value("NEW"));
+                .andExpect(jsonPath("$.length()").value(0));
+
+        mvc.perform(get("/api/intake/candidates?status=PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].originalTitle").value("美联储释放降息信号 黄金走强"));
 
         mvc.perform(post("/api/sources/1/fetch"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.duplicateCount").value(greaterThanOrEqualTo(1)));
+
+        mvc.perform(get("/api/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void sourceFetchPromoteThenBriefFlowWorks() throws Exception {
+        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/sources/1/fetch"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(1));
 
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk())
@@ -209,17 +244,124 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.candidateId").value(1))
                 .andExpect(jsonPath("$.articleId").value(1))
-                .andExpect(jsonPath("$.status").value("PROMOTED"));
+                .andExpect(jsonPath("$.status").value("PROMOTED"))
+                .andExpect(jsonPath("$.workflowStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.eventId").value(1))
+                .andExpect(jsonPath("$.eventTitle", containsString("美联储")))
+                .andExpect(jsonPath("$.evidenceCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.learningTaskCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.contentIdeaCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.workflowSummary", containsString("研究工作包")));
 
         mvc.perform(get("/api/articles/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", containsString("美联储")))
                 .andExpect(jsonPath("$.insightCard.cardMarkdown", containsString("情报卡片")));
 
+        mvc.perform(get("/api/events"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].canonicalTitle", containsString("美联储")))
+                .andExpect(jsonPath("$[0].articleCount").value(1))
+                .andExpect(jsonPath("$[0].evidenceCount").value(greaterThanOrEqualTo(1)));
+
+        mvc.perform(get("/api/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)));
+
+        mvc.perform(get("/api/learning-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)));
+
+        mvc.perform(get("/api/content-ideas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)));
+
         mvc.perform(get("/api/intake/candidates?status=PROMOTED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].promotedArticleId").value(1));
+    }
+
+    @Test
+    void intakePromoteIsIdempotentAndReturnsExistingResearchWorkflow() throws Exception {
+        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
+                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/sources/1/intake-fetch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidateCount").value(1));
+
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(1))
+                .andExpect(jsonPath("$.workflowStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.eventId").value(1));
+
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(1))
+                .andExpect(jsonPath("$.workflowStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.eventId").value(1))
+                .andExpect(jsonPath("$.workflowSummary", containsString("研究工作包")));
+
+        mvc.perform(get("/api/articles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        mvc.perform(get("/api/events"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].articleCount").value(1));
+    }
+
+    @Test
+    void intakeFetchStoresSuccessfulAgentReviewStatusAndModel() throws Exception {
+        when(llmChatClient.isConfigured()).thenReturn(true);
+        when(llmChatClient.modelName()).thenReturn("fake-intake-model");
+        when(llmChatClient.complete(anyString(), anyString())).thenReturn(candidateReviewJson());
+        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
+        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
+                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/sources/1/intake-fetch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.candidateCount").value(1));
+
+        mvc.perform(get("/api/intake/candidates?status=PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].chineseTitle").value("美联储降息信号推动黄金走强"))
+                .andExpect(jsonPath("$[0].decisionSummary", containsString("一针见血")))
+                .andExpect(jsonPath("$[0].agentStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$[0].agentModel").value("fake-intake-model"));
+    }
+
+    @Test
+    void intakeFetchWithNoCandidatesMarksBatchFailed() throws Exception {
+        String emptyRssUrl = "http://localhost:" + server.getAddress().getPort() + "/empty-rss";
+        String sourceJson = "{\"name\":\"空 RSS\",\"type\":\"RSS\",\"url\":\"" + emptyRssUrl + "\",\"enabled\":true,"
+                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":5,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":3,\"tags\":\"测试\"}";
+
+        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/sources/1/intake-fetch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.candidateCount").value(0))
+                .andExpect(jsonPath("$.errorMessage", containsString("没有产出候选")));
     }
 
     @Test
@@ -883,6 +1025,9 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(post("/api/sources/1/fetch"))
                 .andExpect(status().isOk());
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(1));
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk());
 
@@ -934,6 +1079,9 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(post("/api/sources/1/fetch"))
                 .andExpect(status().isOk());
+        mvc.perform(post("/api/intake/candidates/1/promote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleId").value(1));
         mvc.perform(post("/api/briefs/generate"))
                 .andExpect(status().isOk());
         mvc.perform(post("/api/topics/from-article/1"))
@@ -1063,9 +1211,14 @@ class FinScopeApiIntegrationTest {
                 + "<title>美联储释放降息信号 黄金走强</title>"
                 + "<link>https://example.com/fed-gold</link>"
                 + "<description>宏观市场关注美联储降息预期，黄金价格继续走强。</description>"
-                + "<pubDate>Tue, 23 Jun 2026 09:00:00 GMT</pubDate>"
+                + "<pubDate>" + DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC)) + "</pubDate>"
                 + "</item>"
                 + "</channel></rss>";
+    }
+
+    private String emptyRss() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<rss version=\"2.0\"><channel><title>Empty Feed</title></channel></rss>";
     }
 
     private String htmlArticle() {
@@ -1125,6 +1278,20 @@ class FinScopeApiIntegrationTest {
                 + "\"keyTerms\":[\"Cloudflare\",\"Workers\",\"D1\",\"R2\",\"Pages\",\"KV\",\"Serverless\"],"
                 + "\"learningQuestions\":[\"免费额度的边界和限制是什么？\",\"这套部署方案适合哪些个人项目？\",\"长期迁移和供应商锁定风险如何控制？\"],"
                 + "\"confidence\":0.91"
+                + "}";
+    }
+
+    private String candidateReviewJson() {
+        return "{"
+                + "\"chineseTitle\":\"美联储降息信号推动黄金走强\","
+                + "\"decisionSummary\":\"一针见血：这条信息说明市场正在重新定价美联储降息预期和黄金资产。\","
+                + "\"keyFacts\":[\"美联储释放降息信号\",\"黄金价格继续走强\"],"
+                + "\"whyItMatters\":\"它会影响利率预期、黄金和风险资产的短期定价。\","
+                + "\"noveltyJudgment\":\"NEW_EVENT\","
+                + "\"riskFlags\":[],"
+                + "\"score\":88,"
+                + "\"recommendation\":\"PROMOTABLE\","
+                + "\"reason\":\"具备明确宏观变量和资产价格影响，适合人工判断是否入库。\""
                 + "}";
     }
 

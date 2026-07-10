@@ -1,0 +1,142 @@
+# FinScope Intake Promotion 工作流第二阶段设计方案
+
+日期：2026-07-09
+
+## 背景
+
+第一阶段已经把 Sources 抓取结果全部拦在 Intake 候选池里，并保证候选内容只有人工 Promote 后才进入 Article。这个边界解决了“信息爆炸”和“抓取后直接污染文章库”的问题。
+
+第二阶段要补上用户之前明确提到的 Promotion 入选层：人工 Promote 不是简单创建一篇 Article，而是触发一个可追踪的研究工作流。这个工作流把被选中的文章接入现有事件记忆、证据账本、学习任务和内容选题，让一次人工打标沉淀成完整研究资产。
+
+## 产品原则
+
+1. Intake 候选仍然不能自动入库，人工 Promote 是唯一入口。
+2. Promote 成功后必须创建 Article，并继续生成 Insight Card。
+3. Promote 后要自动进入研究层：事件归类、证据抽取、学习任务、内容选题。
+4. 用户必须能在 Intake 里看到 Promotion Workflow 的结果摘要，而不是 Promote 后“黑箱消失”。
+5. 第二阶段优先复用已有研究服务，不新造一套平行工作流平台。
+6. 工作流失败不能吞掉错误；失败要以结构化字段返回给前端展示。
+
+## 第二阶段范围
+
+第二阶段实现“人工 Promote 后研究工作包”：
+
+```text
+Intake Candidate
+  -> 人工 Promote
+  -> ArticleIngestCoordinator
+     -> Article
+     -> Insight Card
+  -> PromotionWorkflow
+     -> EventClusterService.attachArticle(article)
+        -> Event Cluster
+        -> Evidence Items
+        -> Learning Tasks
+        -> Content Ideas
+  -> Promote API 返回工作流摘要
+  -> Intake UI 展示 Article 和研究工作包结果
+```
+
+本阶段不做：
+
+1. 不自动 Promote Intake 候选。
+2. 不把 LOW_VALUE 或 DUPLICATE 候选自动丢弃。
+3. 不新增完整 Workflow 编排平台或可视化 DAG。
+4. 不自动生成 Brief。
+5. 不自动发布内容选题。
+
+## 后端设计
+
+### Promote 响应模型
+
+新增 `PromoteIntakeCandidateResponse`，替代 controller 里的临时 `Map`。字段如下：
+
+```text
+candidateId
+articleId
+status
+eventId
+eventTitle
+evidenceCount
+learningTaskCount
+contentIdeaCount
+workflowStatus       SUCCESS | FAILED
+workflowSummary
+workflowErrorMessage
+```
+
+兼容要求：
+
+1. 保留原有 `candidateId`、`articleId`、`status` 字段，避免破坏已有前端和测试。
+2. `workflowStatus=SUCCESS` 表示 Article 已接入研究工作包。
+3. `workflowStatus=FAILED` 表示 Article 已创建，但研究工作包失败；错误原因写入 `workflowErrorMessage`。
+
+### PromotionWorkflow 编排
+
+新增 `PromotionWorkflowService`，职责保持很窄：
+
+1. 接收已经保存的 `Article`。
+2. 调用 `EventClusterService.attachArticle(article)`。
+3. 查询该 event 下的 Evidence、LearningTask、ContentIdea 数量。
+4. 组装中文 `workflowSummary`。
+
+不直接操作 Intake 状态，不创建 Article，不负责候选合法性判断。
+
+### IntakeService 改造
+
+`IntakeService.promote(id)` 从返回 `IntakeCandidate` 改为返回 `PromoteIntakeCandidateResponse`。
+
+流程：
+
+1. 读取 candidate。
+2. 如果 candidate 已有 `promotedArticleId`，返回幂等响应，并基于已有 Article 尝试读取/补齐研究工作包摘要。
+3. 校验只有 `PENDING` 和 `SAVED_FOR_LATER` 可以 Promote。
+4. 构造 `RawItem` 并调用 `ArticleIngestCoordinator.ingest(source, rawItem)`。
+5. 写入 `humanStatus=PROMOTED` 和 `promotedArticleId`。
+6. 调用 `PromotionWorkflowService.attach(article)`。
+7. 返回 Article 和研究工作包摘要。
+
+### 失败语义
+
+1. Article 创建失败：整个 Promote API 失败，不更新 candidate 为 PROMOTED。
+2. Article 创建成功但研究工作包失败：candidate 保持 PROMOTED，响应 `workflowStatus=FAILED`，前端展示失败原因。
+3. 重复 Promote：不重复创建 Article，返回已有 Article 的工作流摘要；如果之前研究工作包没生成，允许补跑 attach。
+
+## 前端设计
+
+Intake candidate 操作成功后显示更完整的结果：
+
+```text
+已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个
+```
+
+如果研究工作包失败：
+
+```text
+已入文章库 #3；研究工作包生成失败：<错误原因>
+```
+
+候选卡片区域新增最近一次 Promote 结果展示，不新增复杂面板。这样用户完成人工打标后，马上知道这条内容是否已经沉淀到研究系统。
+
+## 测试策略
+
+后端：
+
+1. Promote 后响应包含 `eventId`、`eventTitle`、`evidenceCount`、`learningTaskCount`、`contentIdeaCount`、`workflowStatus` 和 `workflowSummary`。
+2. Promote 后 `/api/events`、`/api/evidence`、`/api/learning-tasks`、`/api/content-ideas` 都能看到对应研究资产。
+3. 重复 Promote 不重复创建 Article，并返回已有研究工作包摘要。
+
+前端：
+
+1. Promote API mock 返回研究工作包字段。
+2. Intake UI 展示研究工作包摘要。
+3. 保留原有 `已入文章库 #id` 展示，兼容旧路径。
+
+## 验收标准
+
+1. Source 抓取仍然只进入 Intake，不自动进入 Article。
+2. 人工 Promote 后创建 Article 和 Insight Card。
+3. 人工 Promote 后生成或复用 Event、Evidence、LearningTask、ContentIdea。
+4. Promote API 返回结构化工作流结果。
+5. Intake UI 展示中文工作流摘要。
+6. 后端测试、前端测试和前端 build 全部通过。

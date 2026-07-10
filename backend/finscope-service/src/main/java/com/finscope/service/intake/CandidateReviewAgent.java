@@ -26,27 +26,61 @@ public class CandidateReviewAgent {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CandidateReview review(IntakeCandidate candidate) {
+        return reviewWithResult(candidate).getReview();
+    }
+
+    public ReviewResult reviewWithResult(IntakeCandidate candidate) {
         long start = System.currentTimeMillis();
         String input = traceInput(candidate);
         if (llmChatClient == null || !llmChatClient.isConfigured()) {
             CandidateReview fallback = fallback(candidate);
             record("FALLBACK", input, toJson(fallback), "LLM_UNCONFIGURED", start);
-            return fallback;
+            return new ReviewResult(fallback, IntakeEnums.AGENT_FALLBACK, "fallback", "LLM_UNCONFIGURED");
         }
         try {
             String raw = llmChatClient.complete(systemPrompt(), userPrompt(candidate));
             CandidateReview review = parse(raw, fallback(candidate));
             record("SUCCESS", input, raw, null, start);
-            return review;
+            return new ReviewResult(review, IntakeEnums.AGENT_SUCCESS, modelName(), null);
         } catch (Exception ex) {
             CandidateReview fallback = fallback(candidate);
             record("FALLBACK", input, toJson(fallback), ex.getMessage(), start);
-            return fallback;
+            return new ReviewResult(fallback, IntakeEnums.AGENT_FALLBACK, "fallback", ex.getMessage());
         }
     }
 
     public String reviewJson(CandidateReview review) {
         return toJson(review);
+    }
+
+    public static class ReviewResult {
+        private final CandidateReview review;
+        private final String status;
+        private final String model;
+        private final String errorMessage;
+
+        ReviewResult(CandidateReview review, String status, String model, String errorMessage) {
+            this.review = review;
+            this.status = status;
+            this.model = model;
+            this.errorMessage = errorMessage;
+        }
+
+        public CandidateReview getReview() {
+            return review;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
     }
 
     private CandidateReview parse(String raw, CandidateReview fallback) throws Exception {
@@ -150,6 +184,11 @@ public class CandidateReviewAgent {
 
     private void record(String status, String input, String output, String errorMessage, long start) {
         agentRunRepository.record(NODE_NAME, status, input, output, errorMessage, System.currentTimeMillis() - start);
+    }
+
+    private String modelName() {
+        String model = llmChatClient == null ? null : llmChatClient.modelName();
+        return isBlank(model) ? "llm" : model;
     }
 
     private String toJson(CandidateReview review) {

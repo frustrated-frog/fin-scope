@@ -13,6 +13,7 @@ import com.finscope.domain.intake.CandidateReview;
 import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.intake.IntakeCandidate;
 import com.finscope.domain.intake.IntakeEnums;
+import com.finscope.domain.intake.PromoteIntakeCandidateResponse;
 import com.finscope.domain.source.Source;
 import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;
@@ -55,6 +56,8 @@ public class IntakeService {
     private FingerprintService fingerprintService;
     @Resource
     private ArticleRepository articleRepository;
+    @Resource
+    private PromotionWorkflowService promotionWorkflowService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -88,10 +91,17 @@ public class IntakeService {
                     candidate.setDecisionSummary("重复内容：系统已发现相同 URL 的候选或文章。");
                     duplicateCount++;
                 } else {
-                    CandidateReview review = candidateReviewAgent.review(candidate);
-                    applyReview(candidate, review, IntakeEnums.AGENT_FALLBACK);
+                    CandidateReviewAgent.ReviewResult reviewResult = candidateReviewAgent.reviewWithResult(candidate);
+                    applyReview(candidate, reviewResult);
                 }
                 candidates.add(candidateRepository.save(candidate));
+            }
+            if (candidates.isEmpty()) {
+                String message = "没有产出候选内容：可能被最近 3 天窗口过滤、信息源为空或正文抽取失败。";
+                FetchBatch failed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_FAILED, rawItems.size(),
+                        0, 0, duplicateCount, 0, message, null, message);
+                fetchRunRepository.finish(compatibleRun, "FAILED", 0, duplicateCount, message);
+                return failed;
             }
             BatchSummaryAgent.BatchSummary summary = batchSummaryAgent.summarize(running, candidates);
             String summaryJson = scheduleSlot == null ? summary.getSummaryJson() : scheduledSummaryJson(scheduleSlot, summary);
@@ -131,10 +141,12 @@ public class IntakeService {
         return candidate(id);
     }
 
-    public IntakeCandidate promote(Long id) {
+    public PromoteIntakeCandidateResponse promote(Long id) {
         IntakeCandidate candidate = candidate(id);
         if (candidate.getPromotedArticleId() != null) {
-            return candidate;
+            return articleRepository.findById(candidate.getPromotedArticleId())
+                    .map(article -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), article))
+                    .orElseGet(() -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), null));
         }
         if (!IntakeEnums.HUMAN_PENDING.equals(candidate.getHumanStatus())
                 && !IntakeEnums.HUMAN_SAVED_FOR_LATER.equals(candidate.getHumanStatus())) {
@@ -155,7 +167,8 @@ public class IntakeService {
         ArticleIngestResult result = articleIngestCoordinator.ingest(source, item);
         Long articleId = result.getArticle().getId();
         candidateRepository.markPromoted(id, articleId);
-        return candidate(id);
+        IntakeCandidate promoted = candidate(id);
+        return promotionWorkflowService.attach(promoted.getId(), promoted.getHumanStatus(), result.getArticle());
     }
 
     private IntakeCandidate toCandidate(FetchBatch batch, Source source, RawItem item) {
@@ -181,7 +194,8 @@ public class IntakeService {
         return candidate;
     }
 
-    private void applyReview(IntakeCandidate candidate, CandidateReview review, String fallbackStatus) {
+    private void applyReview(IntakeCandidate candidate, CandidateReviewAgent.ReviewResult reviewResult) {
+        CandidateReview review = reviewResult.getReview();
         candidate.setChineseTitle(review.getChineseTitle());
         candidate.setDecisionSummary(review.getDecisionSummary());
         candidate.setKeyFactsJson(toJson(review.getKeyFacts()));
@@ -191,8 +205,9 @@ public class IntakeService {
         candidate.setAgentScore(review.getScore());
         candidate.setAgentRecommendation(review.getRecommendation());
         candidate.setAgentReason(review.getReason());
-        candidate.setAgentModel(IntakeEnums.AGENT_FALLBACK.equals(fallbackStatus) ? "fallback" : candidate.getAgentModel());
-        candidate.setAgentStatus(fallbackStatus);
+        candidate.setAgentModel(reviewResult.getModel());
+        candidate.setAgentStatus(reviewResult.getStatus());
+        candidate.setAgentErrorMessage(reviewResult.getErrorMessage());
         candidate.setAgentReviewJson(candidateReviewAgent.reviewJson(review));
     }
 

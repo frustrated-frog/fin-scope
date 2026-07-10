@@ -67,6 +67,7 @@ const responses: Record<string, unknown> = {
     }
   ],
   '/api/intake/candidates?status=SKIPPED': [],
+  '/api/intake/candidates?status=SAVED_FOR_LATER': [],
   '/api/intake/candidates?status=PROMOTED': [],
   '/api/intake/candidates?status=REJECTED': [],
   '/api/articles': [
@@ -530,7 +531,18 @@ beforeEach(() => {
       state['/api/intake/candidates?status=PROMOTED'] = [candidate];
       return {
         ok: true,
-        json: async () => ({ candidateId: 1, articleId: 3, status: 'PROMOTED' })
+        json: async () => ({
+          candidateId: 1,
+          articleId: 3,
+          status: 'PROMOTED',
+          workflowStatus: 'SUCCESS',
+          eventId: 1,
+          eventTitle: '美联储释放降息信号',
+          evidenceCount: 1,
+          learningTaskCount: 3,
+          contentIdeaCount: 2,
+          workflowSummary: '研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个'
+        })
       } as Response;
     }
     if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
@@ -749,6 +761,38 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
   expect(fetch).not.toHaveBeenCalledWith('/api/sources/1/fetch', expect.objectContaining({ method: 'POST' }));
 });
 
+test('sources workspace shows failed intake batches as errors', async () => {
+  vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === '/api/sources/1/intake-fetch' && init?.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 2,
+          sourceId: 1,
+          sourceName: '测试财经RSS',
+          status: 'FAILED',
+          candidateCount: 0,
+          errorMessage: '没有产出候选内容'
+        })
+      } as Response;
+    }
+    return {
+      ok: true,
+      json: async () => (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? {}
+    } as Response;
+  });
+
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Sources' }));
+  const sourceCard = (await screen.findByText('测试财经RSS')).closest('.source-item') as HTMLElement;
+  await userEvent.click(within(sourceCard).getByRole('button', { name: '抓取' }));
+
+  expect(await screen.findByText('没有产出候选内容')).toBeInTheDocument();
+  expect(screen.queryByText('已抓取到候选池')).not.toBeInTheDocument();
+});
+
 test('intake workspace shows agent-reviewed Chinese candidates and promotes to articles', async () => {
   render(<App />);
 
@@ -765,6 +809,26 @@ test('intake workspace shows agent-reviewed Chinese candidates and promotes to a
 
   expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/promote', expect.objectContaining({ method: 'POST' }));
   expect(await screen.findByText('已入文章库 #3')).toBeInTheDocument();
+  expect(screen.getByText('已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个')).toBeInTheDocument();
+});
+
+test('intake workspace supports saving candidates for later review', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Intake' }));
+
+  expect(await screen.findByRole('button', { name: '稍后看' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '稍后看-1' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/status', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ humanStatus: 'SAVED_FOR_LATER' })
+  }));
+  expect(await screen.findByText('候选项已标记为 SAVED_FOR_LATER')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '稍后看' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/intake/candidates?status=SAVED_FOR_LATER', expect.any(Object));
 });
 
 test('switches to inbox and shows novelty reasoning', async () => {

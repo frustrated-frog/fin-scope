@@ -59,8 +59,12 @@ export function SourcesView({
     }
     setBusySourceId(id);
     try {
-      await api(`/api/sources/${id}/intake-fetch`, { method: 'POST' });
-      addToast('已抓取到候选池', 'success');
+      const batch = await api<FetchBatch>(`/api/sources/${id}/intake-fetch`, { method: 'POST' });
+      if (batch.status === 'COMPLETED' || batch.status === 'PARTIAL_SUCCESS') {
+        addToast('已抓取到候选池', 'success');
+      } else {
+        addToast(batch.errorMessage || '摄入候选失败', 'error');
+      }
       await onChanged();
     } catch (error) {
       addToast(error instanceof Error ? error.message : '摄入候选失败', 'error');

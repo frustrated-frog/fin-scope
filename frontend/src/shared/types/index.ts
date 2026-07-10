@@ -84,6 +84,20 @@ export type IntakeCandidate = {
   duplicateOfArticleId?: number;
 };
 
+export type PromoteIntakeCandidateResponse = {
+  candidateId: number;
+  articleId: number;
+  status: string;
+  eventId?: number;
+  eventTitle?: string;
+  evidenceCount?: number;
+  learningTaskCount?: number;
+  contentIdeaCount?: number;
+  workflowStatus?: 'SUCCESS' | 'FAILED';
+  workflowSummary?: string;
+  workflowErrorMessage?: string;
+};
+
 export type InsightCard = {
   id?: number;
   oneSentenceSummary?: string;

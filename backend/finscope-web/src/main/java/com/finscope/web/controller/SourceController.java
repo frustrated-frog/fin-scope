@@ -1,8 +1,6 @@
 package com.finscope.web.controller;
 
-import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.intake.FetchBatch;
-import com.finscope.service.fetch.FetchService;
 import com.finscope.domain.source.Source;
 import com.finscope.service.intake.IntakeService;
 import com.finscope.service.source.SourceService;
@@ -25,8 +23,6 @@ import java.util.List;
 public class SourceController {
     @Resource
     private SourceService sourceService;
-    @Resource
-    private FetchService fetchService;
     @Resource
     private IntakeService intakeService;
 
@@ -51,9 +47,9 @@ public class SourceController {
     }
 
     @PostMapping("/{id}/fetch")
-    public FetchRun fetch(@PathVariable Long id) {
-        log.info("开始抓取信息源 sourceId={}", id);
-        return fetchService.fetch(id);
+    public FetchBatch fetch(@PathVariable Long id) {
+        log.info("旧抓取入口转入摄入候选池 sourceId={}", id);
+        return intakeService.intakeFetch(id);
     }
 
     @PostMapping("/{id}/intake-fetch")

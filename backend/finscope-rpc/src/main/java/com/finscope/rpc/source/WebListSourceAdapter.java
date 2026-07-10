@@ -36,7 +36,7 @@ public class WebListSourceAdapter implements SourceAdapter {
                 .userAgent("FinScope/0.1")
                 .timeout(10000)
                 .get();
-        List<String> urls = articleUrls(listDocument, source.getUrl());
+        List<String> urls = articleUrls(listDocument, source.getUrl(), linkLimit(source));
         List<RawItem> items = new ArrayList<RawItem>();
         for (String url : urls) {
             Document articleDocument = Jsoup.connect(url)
@@ -52,7 +52,7 @@ public class WebListSourceAdapter implements SourceAdapter {
         return items;
     }
 
-    private List<String> articleUrls(Document document, String sourceUrl) {
+    private List<String> articleUrls(Document document, String sourceUrl, int limit) {
         Set<String> urls = new LinkedHashSet<String>();
         collect(document, urls, "article a[href]");
         collect(document, urls, "main h1 a[href], main h2 a[href], main h3 a[href]");
@@ -66,11 +66,16 @@ public class WebListSourceAdapter implements SourceAdapter {
                 continue;
             }
             filtered.add(url);
-            if (filtered.size() >= MAX_LINKS) {
+            if (filtered.size() >= limit) {
                 break;
             }
         }
         return filtered;
+    }
+
+    private int linkLimit(Source source) {
+        int requested = source.getMaxItemsPerRun();
+        return requested > 0 ? Math.min(requested, MAX_LINKS) : MAX_LINKS;
     }
 
     private void collect(Document document, Set<String> urls, String selector) {

@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.intake.IntakeCandidate;
+import com.finscope.domain.intake.PromoteIntakeCandidateResponse;
 import com.finscope.service.intake.IntakeService;
 import com.finscope.web.request.UpdateIntakeCandidateStatusRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,9 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/intake")
@@ -52,12 +51,7 @@ public class IntakeController {
     }
 
     @PostMapping("/candidates/{id}/promote")
-    public Map<String, Object> promote(@PathVariable Long id) {
-        IntakeCandidate candidate = intakeService.promote(id);
-        Map<String, Object> response = new LinkedHashMap<String, Object>();
-        response.put("candidateId", candidate.getId());
-        response.put("articleId", candidate.getPromotedArticleId());
-        response.put("status", candidate.getHumanStatus());
-        return response;
+    public PromoteIntakeCandidateResponse promote(@PathVariable Long id) {
+        return intakeService.promote(id);
     }
 }

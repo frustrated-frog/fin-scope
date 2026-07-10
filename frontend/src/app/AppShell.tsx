@@ -46,6 +46,7 @@ export function AppShell({
 }) {
   return (
     <div className="app-shell" data-theme={theme}>
+      <div className="shell-ambient" aria-hidden="true" />
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -57,8 +58,15 @@ export function AppShell({
           </div>
         </div>
         <div className="sidebar-signal">
-          <span>Pipeline</span>
+          <span className="signal-label">Pipeline</span>
           <strong>Sources / Intake / Article / Brief / Topics</strong>
+          <div className="signal-flow" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
         <nav aria-label="Workspace">
           {navItems.map((item) => (
@@ -102,7 +110,10 @@ export function AppShell({
               {theme === 'dark' ? '☀' : '☾'}
             </button>
             <button className="ghost-button topbar-pill" type="button" onClick={onRefresh}>刷新</button>
-            <div className="status-pill topbar-pill">{message}</div>
+            <div className="status-pill topbar-pill">
+              <span className="status-dot" aria-hidden="true" />
+              {message}
+            </div>
           </div>
         </header>
 
