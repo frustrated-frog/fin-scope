@@ -598,6 +598,48 @@ public class DatabaseInitializer implements InitializingBean {
                 + "ended_at TEXT,"
                 + "UNIQUE(run_id, step_id))");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_step_run ON attribution_research_step(run_id)");
+        initializeQuantSchema();
+    }
+
+    private void initializeQuantSchema() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_dataset ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "name TEXT NOT NULL,market TEXT NOT NULL,universe_type TEXT NOT NULL,"
+                + "source_type TEXT NOT NULL,data_kind TEXT NOT NULL CHECK(data_kind IN ('REAL','LEARNING_SAMPLE')),"
+                + "start_date TEXT,end_date TEXT,status TEXT NOT NULL,fingerprint TEXT,quality_summary TEXT,"
+                + "revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_daily_bar ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,trade_date TEXT NOT NULL,"
+                + "instrument_code TEXT NOT NULL,open REAL NOT NULL,high REAL NOT NULL,low REAL NOT NULL,close REAL NOT NULL,"
+                + "adjusted_close REAL NOT NULL,volume REAL NOT NULL,amount REAL NOT NULL,trade_status TEXT NOT NULL,"
+                + "is_st INTEGER NOT NULL DEFAULT 0,limit_up INTEGER NOT NULL DEFAULT 0,limit_down INTEGER NOT NULL DEFAULT 0,"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE,"
+                + "UNIQUE(dataset_id,trade_date,instrument_code))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_bar_code_date "
+                + "ON quant_daily_bar(dataset_id,instrument_code,trade_date)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_bar_date "
+                + "ON quant_daily_bar(dataset_id,trade_date)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_fundamental_snapshot ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,instrument_code TEXT NOT NULL,"
+                + "report_period TEXT NOT NULL,disclosed_at TEXT NOT NULL,pe REAL,pb REAL,market_cap REAL,roe REAL,"
+                + "revenue_growth REAL,profit_growth REAL,debt_ratio REAL,"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE,"
+                + "UNIQUE(dataset_id,instrument_code,report_period,disclosed_at))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_fundamental_visible "
+                + "ON quant_fundamental_snapshot(dataset_id,instrument_code,disclosed_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_universe_member ("
+                + "dataset_id INTEGER NOT NULL,trade_date TEXT NOT NULL,instrument_code TEXT NOT NULL,"
+                + "member INTEGER NOT NULL DEFAULT 1,source_kind TEXT NOT NULL,"
+                + "PRIMARY KEY(dataset_id,trade_date,instrument_code),"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_universe_date "
+                + "ON quant_universe_member(dataset_id,trade_date,member)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_dataset_issue ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,severity TEXT NOT NULL,"
+                + "issue_code TEXT NOT NULL,trade_date TEXT,instrument_code TEXT,message TEXT NOT NULL,issue_count INTEGER NOT NULL,"
+                + "created_at TEXT NOT NULL,FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_issue_dataset "
+                + "ON quant_dataset_issue(dataset_id,severity)");
     }
 
     private void ensureColumn(String table, String column, String type) {
