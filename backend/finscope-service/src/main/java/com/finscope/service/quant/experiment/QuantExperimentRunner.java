@@ -2,6 +2,7 @@ package com.finscope.service.quant.experiment;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.dao.quant.QuantExperimentRepository;
 import com.finscope.dao.quant.QuantMarketDataRepository;
 import com.finscope.domain.quant.backtest.BacktestRequest;
@@ -26,7 +27,7 @@ public class QuantExperimentRunner {
     @Resource private QuantStrategyService strategies;
     @Resource private QuantDatasetService datasets;
     @Resource private QuantMarketDataRepository marketData;
-    private final ObjectMapper mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
+    private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule()).configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
     public void run(Long experimentId) {
         long started = System.currentTimeMillis();

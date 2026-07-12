@@ -5,6 +5,9 @@ import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
 import com.finscope.domain.quant.factor.FactorAnalysis;
+import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.service.quant.data.QuantDatasetService;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +24,9 @@ public class DatasetFactorAnalysisService {
     private final FactorAnalysisService analysis = new FactorAnalysisService();
 
     public FactorAnalysis analyze(Long datasetId, String factorCode) {
-        datasets.get(datasetId); registry.get(factorCode);
+        QuantDataset dataset = datasets.get(datasetId); registry.get(factorCode);
+        if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.CONFLICT, "只有通过质量门禁的数据集才能运行因子诊断");
+        if (!datasets.availableFactorCodes(datasetId).contains(factorCode)) throw new BusinessException(ErrorCode.CONFLICT, "当前数据集不具备该因子的有效覆盖");
         List<QuantDailyBar> bars = marketData.findBars(datasetId); List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(datasetId);
         List<QuantUniverseMember> events = marketData.findUniverseMembers(datasetId);
         TreeMap<LocalDate, Map<String, QuantDailyBar>> byDate = new TreeMap<LocalDate, Map<String, QuantDailyBar>>();
@@ -43,7 +48,8 @@ public class DatasetFactorAnalysisService {
             }
             if (factorValues.size() >= 2) dailyIc.add(analysis.rankIc(factorValues, nextReturns));
         }
-        return analysis.summarize(factorCode, dailyIc);
+        FactorAnalysis result = analysis.summarize(factorCode, dailyIc); result.setDatasetId(datasetId);
+        result.setDatasetFingerprint(dataset.getFingerprint()); return result;
     }
 
     private QuantFundamentalSnapshot latestVisible(List<QuantFundamentalSnapshot> values, String code, LocalDate date) {

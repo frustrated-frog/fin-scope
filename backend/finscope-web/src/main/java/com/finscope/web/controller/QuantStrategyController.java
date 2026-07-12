@@ -28,4 +28,5 @@ public class QuantStrategyController {
         return ResponseEntity.created(URI.create("/api/quant/strategies/" + value.getId())).body(value);
     }
     @GetMapping("/strategies") public List<QuantStrategyVersion> list() { return service.listVersions(); }
+    @GetMapping("/strategies/{id}") public QuantStrategyVersion get(@PathVariable Long id) { return service.getVersion(id); }
 }

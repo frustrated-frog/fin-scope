@@ -31,6 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @WebMvcTest({QuantDatasetController.class, QuantFactorController.class,
         QuantStrategyController.class, QuantExperimentController.class})
@@ -84,6 +85,7 @@ class QuantPlatformControllerTest {
         when(strategies.generateDraft(anyLong(), anyString())).thenReturn(draft);
         QuantStrategyVersion version = new QuantStrategyVersion(); version.setId(12L); version.setName("质量价值");
         when(strategies.confirm(11L)).thenReturn(version);
+        when(strategies.getVersion(12L)).thenReturn(version);
         QuantExperiment experiment = new QuantExperiment(); experiment.setId(13L); experiment.setStatus("QUEUED");
         when(experiments.create(12L)).thenReturn(experiment);
 
@@ -92,7 +94,8 @@ class QuantPlatformControllerTest {
                         .content("{\"datasetId\":7,\"prompt\":\"低估值高质量策略\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("VALIDATED"));
         mockMvc.perform(post("/api/quant/strategy-drafts/11/confirm"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(12));
+                .andExpect(status().isCreated()).andExpect(header().string("Location", "/api/quant/strategies/12")).andExpect(jsonPath("$.id").value(12));
+        mockMvc.perform(get("/api/quant/strategies/12")).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(12));
         mockMvc.perform(post("/api/quant/experiments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"strategyVersionId\":12}"))

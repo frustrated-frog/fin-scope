@@ -12,6 +12,7 @@ public class QuantStrategyDraft {
     private String normalizedSpec;
     private String status;
     private String model;
+    private String validatedDatasetFingerprint;
     private QuantStrategySpec spec;
     private List<String> validationIssues = new ArrayList<String>();
     private LocalDateTime createdAt;
@@ -29,6 +30,8 @@ public class QuantStrategyDraft {
     public void setStatus(String status) { this.status = status; }
     public String getModel() { return model; }
     public void setModel(String model) { this.model = model; }
+    public String getValidatedDatasetFingerprint() { return validatedDatasetFingerprint; }
+    public void setValidatedDatasetFingerprint(String validatedDatasetFingerprint) { this.validatedDatasetFingerprint = validatedDatasetFingerprint; }
     public QuantStrategySpec getSpec() { return spec; }
     public void setSpec(QuantStrategySpec spec) { this.spec = spec; }
     public List<String> getValidationIssues() { return validationIssues; }

@@ -28,13 +28,12 @@ public class QuantBacktestEngine {
     public BacktestResult run(BacktestRequest request) {
         if (request == null || request.getSpec() == null || request.getBars() == null) throw new IllegalArgumentException("回测输入不完整");
         QuantStrategySpec spec = request.getSpec();
-        List<QuantDailyBar> rangedBars = new ArrayList<QuantDailyBar>();
-        for (QuantDailyBar bar : request.getBars()) if ((spec.getStartDate() == null || !bar.getTradeDate().isBefore(spec.getStartDate()))
-                && (spec.getEndDate() == null || !bar.getTradeDate().isAfter(spec.getEndDate()))) rangedBars.add(bar);
-        TreeMap<LocalDate, Map<String, QuantDailyBar>> byDate = group(rangedBars);
+        List<QuantDailyBar> availableBars = new ArrayList<QuantDailyBar>();
+        for (QuantDailyBar bar : request.getBars()) if (spec.getEndDate() == null || !bar.getTradeDate().isAfter(spec.getEndDate())) availableBars.add(bar);
+        TreeMap<LocalDate, Map<String, QuantDailyBar>> byDate = group(availableBars);
         Map<String, List<QuantDailyBar>> histories = new LinkedHashMap<String, List<QuantDailyBar>>();
         PortfolioLedger ledger = new PortfolioLedger(request.getInitialCapital()); BacktestResult result = new BacktestResult();
-        LocalDate pendingSignal = null; Map<String, Double> pendingTargets = null; int index = 0;
+        LocalDate pendingSignal = null; Map<String, Double> pendingTargets = null; int index = 0, liveIndex = 0, warmupDays = 0;
         int startAt = spec.getFilters() == null ? 0 : spec.getFilters().getMinTradingDays();
         for (QuantStrategySpec.FactorWeight factor : spec.getFactors()) startAt = Math.max(startAt, registry.get(factor.getCode()).getLookbackDays());
         double benchmarkNav = 1d; Map<String, Double> previousClose = new LinkedHashMap<String, Double>();
@@ -42,6 +41,10 @@ public class QuantBacktestEngine {
         if (universe.isEmpty()) result.getWarnings().add("未提供时点股票池，使用当日可见行情标的作为研究范围");
         for (Map.Entry<LocalDate, Map<String, QuantDailyBar>> day : byDate.entrySet()) {
             LocalDate date = day.getKey(); Map<String, QuantDailyBar> bars = day.getValue();
+            if (spec.getStartDate() != null && date.isBefore(spec.getStartDate())) {
+                for (QuantDailyBar bar : bars.values()) histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
+                index++; warmupDays++; continue;
+            }
             if (pendingTargets != null) { ledger.rebalance(pendingSignal, date, pendingTargets, bars, spec, result.getWarnings()); pendingTargets = null; }
             for (QuantDailyBar bar : bars.values()) histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
             Set<String> dayMembers = universe.isEmpty() ? null : universe.getOrDefault(date, java.util.Collections.<String>emptySet());
@@ -51,12 +54,15 @@ public class QuantBacktestEngine {
             point.setTotalAsset(asset); point.setCash(ledger.getCash()); point.setPortfolioNav(asset / request.getInitialCapital());
             point.setBenchmarkNav(benchmarkNav); result.getEquityCurve().add(point);
             result.getPositions().addAll(ledger.snapshot(date, bars, asset));
-            if (index >= startAt && (index - startAt) % spec.getPortfolio().getRebalanceEvery() == 0 && index < byDate.size() - 1) {
+            int firstSignal = Math.max(0, startAt - warmupDays);
+            if (index >= startAt && liveIndex >= firstSignal && (liveIndex - firstSignal) % spec.getPortfolio().getRebalanceEvery() == 0
+                    && !date.equals(byDate.lastKey())) {
                 pendingTargets = select(date, bars, histories, request.getFundamentals(), spec, result.getWarnings(), dayMembers); pendingSignal = date;
             }
-            index++;
+            index++; liveIndex++;
         }
         result.setTrades(new ArrayList<com.finscope.domain.quant.backtest.BacktestTrade>(ledger.getTrades()));
+        if (!result.getEquityCurve().isEmpty() && result.getTrades().isEmpty()) result.getWarnings().add("策略在回测区间内未产生可执行交易，请检查样本长度、因子覆盖与过滤参数");
         PerformanceMetrics performance = new PerformanceMetrics();
         result.setMetrics(performance.calculate(result.getEquityCurve(), request.getAnnualRiskFreeRate(), ledger.turnover()));
         result.setAnnualPerformance(performance.annual(result.getEquityCurve()));

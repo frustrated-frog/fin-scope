@@ -69,6 +69,15 @@ class QuantBacktestEngineTest {
                 .allMatch(value -> value.getPortfolioNav() > 0.8));
     }
 
+    @Test
+    void keepsPreRangeHistoryForFactorWarmupButStartsEquityAtRequestedDate() {
+        List<LocalDate> dates = tradingDates(32); BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
+        QuantStrategySpec spec = spec(); spec.setStartDate(dates.get(20)); spec.setEndDate(dates.get(31)); request.setSpec(spec); request.setBars(bars(dates));
+        BacktestResult result = new QuantBacktestEngine().run(request);
+        assertEquals(dates.get(20), result.getEquityCurve().get(0).getTradeDate()); assertEquals(12, result.getEquityCurve().size());
+        assertEquals(dates.get(20), result.getTrades().get(0).getSignalDate()); assertEquals(dates.get(21), result.getTrades().get(0).getTradeDate());
+    }
+
     private QuantStrategySpec spec() {
         QuantStrategySpec spec = new QuantStrategySpec(); spec.setName("动量测试"); spec.setDatasetId(1L);
         spec.setBenchmark("EQUAL_WEIGHT"); spec.setInvestmentHypothesis("动量延续"); spec.setRiskBoundary("仅作历史研究");

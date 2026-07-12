@@ -26,6 +26,7 @@ public class QuantStrategyRepository {
         value.setPrompt(rs.getString("prompt")); value.setRawResponse(rs.getString("raw_response"));
         value.setNormalizedSpec(rs.getString("normalized_spec")); value.setStatus(rs.getString("status"));
         value.setModel(rs.getString("model")); value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
+        value.setValidatedDatasetFingerprint(rs.getString("validated_dataset_fingerprint"));
         String issues = rs.getString("validation_issues");
         if (issues != null && !issues.trim().isEmpty()) value.setValidationIssues(java.util.Arrays.asList(issues.split("\\n")));
         return value;
@@ -43,10 +44,11 @@ public class QuantStrategyRepository {
         LocalDateTime now = LocalDateTime.now(); KeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("INSERT INTO quant_strategy_draft(dataset_id,prompt,raw_response,"
-                    + "normalized_spec,status,model,validation_issues,created_at) VALUES(?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                    + "normalized_spec,status,model,validation_issues,validated_dataset_fingerprint,created_at) VALUES(?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, value.getDatasetId()); ps.setString(2, value.getPrompt()); ps.setString(3, value.getRawResponse());
             ps.setString(4, value.getNormalizedSpec()); ps.setString(5, value.getStatus()); ps.setString(6, value.getModel());
-            ps.setString(7, String.join("\n", value.getValidationIssues())); ps.setString(8, TimeUtil.text(now)); return ps;
+            ps.setString(7, String.join("\n", value.getValidationIssues())); ps.setString(8, value.getValidatedDatasetFingerprint());
+            ps.setString(9, TimeUtil.text(now)); return ps;
         }, keys);
         value.setId(keys.getKey().longValue()); value.setCreatedAt(now); return value;
     }

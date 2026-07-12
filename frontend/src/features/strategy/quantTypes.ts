@@ -7,7 +7,7 @@ export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;
 }
-export interface QuantFactorAnalysis { factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
+export interface QuantFactorAnalysis { datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
 
 export interface QuantStrategySpec {
   name: string; datasetId: number; benchmark: string; investmentHypothesis: string; riskBoundary: string;

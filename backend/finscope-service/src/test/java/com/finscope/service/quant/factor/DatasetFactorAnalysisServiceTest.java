@@ -21,7 +21,8 @@ class DatasetFactorAnalysisServiceTest {
     @Test
     void calculatesDatasetBackedRankIcAgainstNextOpenToCloseReturn() {
         QuantDatasetService datasets = mock(QuantDatasetService.class); QuantMarketDataRepository market = mock(QuantMarketDataRepository.class);
-        when(datasets.get(1L)).thenReturn(new QuantDataset()); List<QuantDailyBar> bars = new ArrayList<QuantDailyBar>();
+        QuantDataset dataset = new QuantDataset(); dataset.setId(1L); dataset.setStatus("READY"); dataset.setFingerprint("dataset-sha");
+        when(datasets.get(1L)).thenReturn(dataset); when(datasets.availableFactorCodes(1L)).thenReturn(Collections.singleton("MOMENTUM_20D")); List<QuantDailyBar> bars = new ArrayList<QuantDailyBar>();
         for (int day = 0; day < 22; day++) for (int instrument = 1; instrument <= 3; instrument++) {
             double close = 100 + day * instrument; QuantDailyBar bar = new QuantDailyBar(); bar.setInstrumentCode("S" + instrument);
             bar.setTradeDate(LocalDate.of(2024,1,1).plusDays(day)); bar.setAdjustedClose(BigDecimal.valueOf(close));

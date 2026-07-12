@@ -645,6 +645,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "raw_response TEXT,normalized_spec TEXT,status TEXT NOT NULL,model TEXT,validation_issues TEXT,"
                 + "created_at TEXT NOT NULL,FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE RESTRICT)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_draft_dataset ON quant_strategy_draft(dataset_id,id DESC)");
+        ensureColumn("quant_strategy_draft", "validated_dataset_fingerprint", "TEXT");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_strategy_version ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,dataset_id INTEGER NOT NULL,version INTEGER NOT NULL,"
                 + "spec_json TEXT NOT NULL,strategy_fingerprint TEXT NOT NULL UNIQUE,dataset_fingerprint TEXT NOT NULL,"

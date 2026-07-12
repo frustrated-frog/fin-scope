@@ -7,6 +7,8 @@ public class FactorAnalysis {
     private double icStd;
     private double icIr;
     private double positiveIcRatio;
+    private Long datasetId;
+    private String datasetFingerprint;
 
     public String getFactorCode() { return factorCode; }
     public void setFactorCode(String factorCode) { this.factorCode = factorCode; }
@@ -20,4 +22,8 @@ public class FactorAnalysis {
     public void setIcIr(double icIr) { this.icIr = icIr; }
     public double getPositiveIcRatio() { return positiveIcRatio; }
     public void setPositiveIcRatio(double positiveIcRatio) { this.positiveIcRatio = positiveIcRatio; }
+    public Long getDatasetId() { return datasetId; }
+    public void setDatasetId(Long datasetId) { this.datasetId = datasetId; }
+    public String getDatasetFingerprint() { return datasetFingerprint; }
+    public void setDatasetFingerprint(String datasetFingerprint) { this.datasetFingerprint = datasetFingerprint; }
 }
