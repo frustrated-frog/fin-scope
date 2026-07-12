@@ -10,6 +10,7 @@ import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
@@ -22,6 +23,7 @@ public class QuantStrategyAgent {
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
+    @Autowired
     public QuantStrategyAgent(LlmChatClient llm, FactorRegistry registry) {
         this(llm, registry, new QuantStrategySpecValidator(registry));
     }
