@@ -2,6 +2,7 @@ package com.finscope.service.quant.backtest;
 
 import com.finscope.domain.quant.backtest.BacktestMetrics;
 import com.finscope.domain.quant.backtest.EquityPoint;
+import com.finscope.domain.quant.backtest.AnnualPerformance;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,5 +29,24 @@ public class PerformanceMetrics {
         result.setMaxDrawdown(maxDrawdown); result.setCalmarRatio(safe(maxDrawdown == 0 ? 0 : result.getAnnualizedReturn() / maxDrawdown));
         result.setWinRate(returns.isEmpty() ? 0 : (double) wins / returns.size()); result.setTurnover(safe(turnover)); return result;
     }
+    public List<AnnualPerformance> annual(List<EquityPoint> curve) {
+        List<AnnualPerformance> result = new ArrayList<AnnualPerformance>();
+        if (curve == null || curve.isEmpty()) return result;
+        int cursor = 0;
+        while (cursor < curve.size()) {
+            int year = curve.get(cursor).getTradeDate().getYear(), end = cursor;
+            while (end + 1 < curve.size() && curve.get(end + 1).getTradeDate().getYear() == year) end++;
+            EquityPoint before = cursor == 0 ? curve.get(cursor) : curve.get(cursor - 1); EquityPoint last = curve.get(end);
+            AnnualPerformance value = new AnnualPerformance(); value.setYear(year);
+            value.setPortfolioReturn(ratio(last.getPortfolioNav(), before.getPortfolioNav()));
+            value.setBenchmarkReturn(ratio(last.getBenchmarkNav(), before.getBenchmarkNav()));
+            value.setExcessReturn(value.getPortfolioReturn() - value.getBenchmarkReturn());
+            double peak = before.getPortfolioNav(), drawdown = 0;
+            for (int i = cursor; i <= end; i++) { peak = Math.max(peak, curve.get(i).getPortfolioNav()); drawdown = Math.max(drawdown, peak <= 0 ? 0 : (peak - curve.get(i).getPortfolioNav()) / peak); }
+            value.setMaxDrawdown(drawdown); result.add(value); cursor = end + 1;
+        }
+        return result;
+    }
+    private double ratio(double last, double first) { return first <= 0 ? 0 : last / first - 1d; }
     private double safe(double value) { return Double.isFinite(value) ? value : 0d; }
 }

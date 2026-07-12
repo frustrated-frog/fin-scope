@@ -8,6 +8,7 @@ public class QuantExperiment {
     private String datasetFingerprint; private String engineVersion; private String status; private String errorMessage;
     private LocalDateTime createdAt; private LocalDateTime startedAt; private LocalDateTime completedAt;
     private BacktestResult result; private String interpretation;
+    private Long datasetId; private String datasetName; private String dataKind;
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Long getStrategyVersionId() { return strategyVersionId; }
@@ -32,4 +33,10 @@ public class QuantExperiment {
     public void setResult(BacktestResult result) { this.result = result; }
     public String getInterpretation() { return interpretation; }
     public void setInterpretation(String interpretation) { this.interpretation = interpretation; }
+    public Long getDatasetId() { return datasetId; }
+    public void setDatasetId(Long datasetId) { this.datasetId = datasetId; }
+    public String getDatasetName() { return datasetName; }
+    public void setDatasetName(String datasetName) { this.datasetName = datasetName; }
+    public String getDataKind() { return dataKind; }
+    public void setDataKind(String dataKind) { this.dataKind = dataKind; }
 }

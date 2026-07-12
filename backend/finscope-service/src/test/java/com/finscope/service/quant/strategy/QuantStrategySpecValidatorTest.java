@@ -33,7 +33,7 @@ class QuantStrategySpecValidatorTest {
 
     static QuantStrategySpec validSpec() {
         QuantStrategySpec spec = new QuantStrategySpec();
-        spec.setName("质量价值动量"); spec.setDatasetId(1L); spec.setBenchmark("000300.SH");
+        spec.setName("质量价值动量"); spec.setDatasetId(1L); spec.setBenchmark("EQUAL_WEIGHT");
         spec.setFactors(Arrays.asList(new QuantStrategySpec.FactorWeight("ROE", 0.5, "HIGH"),
                 new QuantStrategySpec.FactorWeight("MOMENTUM_20D", 0.5, "HIGH")));
         QuantStrategySpec.Portfolio portfolio = new QuantStrategySpec.Portfolio();

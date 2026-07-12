@@ -5,6 +5,8 @@ import com.finscope.dao.quant.QuantDatasetRepository;
 import com.finscope.dao.quant.QuantMarketDataRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -15,6 +17,7 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +33,22 @@ class QuantDatasetServiceTest {
 
         assertEquals(fingerprint.bars(Arrays.asList(first, second)),
                 fingerprint.bars(Arrays.asList(second, first)));
+    }
+
+    @Test
+    void fingerprintCoversFundamentalsAndPointInTimeUniverse() {
+        QuantDatasetFingerprint fingerprint = new QuantDatasetFingerprint(); QuantDailyBar bar = bar("600000.SH", "10", "10.2");
+        QuantFundamentalSnapshot fundamental = new QuantFundamentalSnapshot(); fundamental.setInstrumentCode("600000.SH");
+        fundamental.setReportPeriod(LocalDate.of(2024, 3, 31)); fundamental.setDisclosedAt(LocalDate.of(2024, 4, 30));
+        fundamental.setRoe(new BigDecimal("0.12"));
+        QuantUniverseMember member = new QuantUniverseMember(); member.setTradeDate(bar.getTradeDate());
+        member.setInstrumentCode("600000.SH"); member.setMember(true); member.setSourceKind("TEST");
+        String complete = fingerprint.dataset(Collections.singletonList(bar), Collections.singletonList(fundamental), Collections.singletonList(member));
+        fundamental.setRoe(new BigDecimal("0.13"));
+        String changedFundamental = fingerprint.dataset(Collections.singletonList(bar), Collections.singletonList(fundamental), Collections.singletonList(member));
+        member.setMember(false);
+        String changedUniverse = fingerprint.dataset(Collections.singletonList(bar), Collections.singletonList(fundamental), Collections.singletonList(member));
+        assertNotEquals(complete, changedFundamental); assertNotEquals(changedFundamental, changedUniverse);
     }
 
     @Test

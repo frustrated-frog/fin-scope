@@ -28,6 +28,7 @@ public class QuantExperimentAgent {
         try {
             String raw = llm.complete(systemPrompt(), metricSummary(experiment.getResult().getMetrics()));
             String json = extractJson(raw); JsonNode root = mapper.readTree(json);
+            if (!root.isObject() || root.size() != 3) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段不符合协议");
             requireArray(root, "observations"); requireArray(root, "risks"); requireArray(root, "nextExperiments");
             String normalized = mapper.writeValueAsString(root);
             repository.saveInterpretation(experiment.getId(), normalized, llm.modelName()); return normalized;
@@ -51,7 +52,15 @@ public class QuantExperimentAgent {
         return mapper.writeValueAsString(values);
     }
     private void requireArray(JsonNode root, String field) {
-        if (!root.path(field).isArray()) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读缺少字段：" + field);
+        JsonNode values = root.path(field);
+        if (!values.isArray() || values.size() < 1 || values.size() > 8) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段数量不合规：" + field);
+        }
+        for (JsonNode value : values) {
+            if (!value.isTextual() || value.textValue().trim().isEmpty() || value.textValue().length() > 300) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读必须是非空短文本：" + field);
+            }
+        }
     }
     private String extractJson(String value) {
         int start = value == null ? -1 : value.indexOf('{'); int end = value == null ? -1 : value.lastIndexOf('}');

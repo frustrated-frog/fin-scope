@@ -38,7 +38,9 @@ public class QuantExperimentRunner {
             if (!version.getDatasetFingerprint().equals(dataset.getFingerprint())) throw new IllegalStateException("数据指纹已变化，请创建新的策略版本");
             QuantStrategySpec spec = mapper.readValue(version.getSpecJson(), QuantStrategySpec.class);
             BacktestRequest request = new BacktestRequest(); request.setSpec(spec); request.setBars(marketData.findBars(dataset.getId()));
-            request.setFundamentals(marketData.findFundamentals(dataset.getId())); BacktestResult result = new QuantBacktestEngine().run(request);
+            request.setFundamentals(marketData.findFundamentals(dataset.getId()));
+            request.setUniverse(marketData.findUniverseMembers(dataset.getId()));
+            BacktestResult result = new QuantBacktestEngine().run(request);
             persistSuccess(experimentId, result);
             log.info("量化实验完成 experimentId={} durationMs={} trades={}", experimentId, System.currentTimeMillis() - started, result.getTrades().size());
         } catch (Exception ex) {

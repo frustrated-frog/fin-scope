@@ -12,7 +12,12 @@ public class FactorPreprocessor {
     public Map<String, Double> normalize(List<FactorValue> values) {
         List<Double> finite = new ArrayList<Double>();
         for (FactorValue value : values) if (Double.isFinite(value.getValue())) finite.add(value.getValue());
-        if (finite.size() < 2) return Collections.emptyMap();
+        if (finite.isEmpty()) return Collections.emptyMap();
+        if (finite.size() == 1) {
+            Map<String, Double> singleton = new LinkedHashMap<String, Double>();
+            for (FactorValue value : values) if (Double.isFinite(value.getValue())) singleton.put(value.getInstrumentCode(), 0d);
+            return singleton;
+        }
         Collections.sort(finite);
         double low = percentile(finite, 0.025); double high = percentile(finite, 0.975);
         List<Double> clipped = new ArrayList<Double>();

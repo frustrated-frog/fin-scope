@@ -33,7 +33,11 @@ export interface BacktestMetrics {
 
 export interface QuantExperiment {
   id: number; strategyVersionId: number; status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  datasetId?: number; datasetName?: string; dataKind?: 'REAL' | 'LEARNING_SAMPLE';
   datasetFingerprint: string; engineVersion: string; errorMessage?: string; createdAt?: string; completedAt?: string;
-  result?: { metrics: BacktestMetrics; equityCurve: Array<{ tradeDate: string; portfolioNav: number; benchmarkNav: number; drawdown: number }>; trades: unknown[] };
+  result?: { metrics: BacktestMetrics; equityCurve: Array<{ tradeDate: string; portfolioNav: number; benchmarkNav: number; drawdown: number }>;
+    annualPerformance: Array<{ year: number; portfolioReturn: number; benchmarkReturn: number; excessReturn: number; maxDrawdown: number }>;
+    trades: Array<{ signalDate: string; tradeDate: string; instrumentCode: string; side: string; quantity: number; price: number; fee: number }>;
+    warnings: string[] };
   interpretation?: string;
 }

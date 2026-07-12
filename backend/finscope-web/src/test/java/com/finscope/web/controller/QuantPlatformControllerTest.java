@@ -24,6 +24,7 @@ import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -85,5 +86,15 @@ class QuantPlatformControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"strategyVersionId\":12}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("QUEUED"));
+    }
+
+    @Test
+    void exposesControlledMarketDataImportsAndRejectsMissingRequiredBodyFields() throws Exception {
+        QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY");
+        when(datasets.importBars(org.mockito.ArgumentMatchers.eq(7L), anyList())).thenReturn(value);
+        mockMvc.perform(post("/api/quant/datasets/7/bars").contentType(MediaType.APPLICATION_JSON).content("[]"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("READY"));
+        mockMvc.perform(post("/api/quant/experiments").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
     }
 }

@@ -2,8 +2,6 @@ package com.finscope.service.quant.strategy;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
@@ -33,19 +31,28 @@ public class QuantStrategyAgent {
     }
 
     public QuantStrategyDraft generate(Long datasetId, String prompt) {
-        if (!llm.isConfigured()) throw new BusinessException(ErrorCode.BAD_REQUEST, "策略 Agent 尚未配置");
-        if (prompt == null || prompt.trim().isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "策略描述不能为空");
+        if (prompt == null || prompt.trim().isEmpty()) throw new IllegalArgumentException("策略描述不能为空");
+        if (!llm.isConfigured()) return failedDraft(datasetId, prompt.trim(), null, "策略 Agent 尚未配置");
+        String latestRaw = null;
         try {
-            String raw = llm.complete(systemPrompt(datasetId), prompt.trim());
+            String raw = llm.complete(systemPrompt(datasetId), prompt.trim()); latestRaw = raw;
             try {
                 return validatedDraft(datasetId, prompt.trim(), raw);
             } catch (Exception firstFailure) {
-                String repaired = llm.complete(repairPrompt(datasetId), repairRequest(raw));
+                String repaired = llm.complete(repairPrompt(datasetId), repairRequest(raw)); latestRaw = repaired;
                 return validatedDraft(datasetId, prompt.trim(), repaired);
             }
         } catch (Exception ex) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "策略 Agent 返回内容无法通过结构化校验", ex);
+            return failedDraft(datasetId, prompt.trim(), latestRaw, "策略 Agent 返回内容无法通过严格 DSL 校验");
         }
+    }
+
+    private QuantStrategyDraft failedDraft(Long datasetId, String prompt, String raw, String issue) {
+        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setDatasetId(datasetId); draft.setPrompt(prompt);
+        if (raw != null && raw.length() > 12000) raw = raw.substring(0, 12000);
+        draft.setRawResponse(raw); draft.setStatus("FAILED"); draft.setModel(llm.modelName());
+        draft.setValidationIssues(java.util.Collections.singletonList(issue)); draft.setCreatedAt(LocalDateTime.now());
+        return draft;
     }
 
     private QuantStrategyDraft validatedDraft(Long datasetId, String prompt, String raw) throws Exception {

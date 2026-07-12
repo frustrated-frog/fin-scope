@@ -26,6 +26,8 @@ public class QuantStrategyRepository {
         value.setPrompt(rs.getString("prompt")); value.setRawResponse(rs.getString("raw_response"));
         value.setNormalizedSpec(rs.getString("normalized_spec")); value.setStatus(rs.getString("status"));
         value.setModel(rs.getString("model")); value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
+        String issues = rs.getString("validation_issues");
+        if (issues != null && !issues.trim().isEmpty()) value.setValidationIssues(java.util.Arrays.asList(issues.split("\\n")));
         return value;
     };
     private final RowMapper<QuantStrategyVersion> versionMapper = (rs, rowNum) -> {

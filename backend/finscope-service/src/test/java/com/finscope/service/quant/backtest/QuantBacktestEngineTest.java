@@ -3,6 +3,7 @@ package com.finscope.service.quant.backtest;
 import com.finscope.domain.quant.backtest.BacktestRequest;
 import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.data.QuantDailyBar;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QuantBacktestEngineTest {
     @Test
@@ -36,8 +38,38 @@ class QuantBacktestEngineTest {
         assertEquals(first.getEquityCurve().size(), second.getEquityCurve().size());
     }
 
+    @Test
+    void appliesPointInTimeUniverseToSelectionAndBenchmark() {
+        List<LocalDate> dates = tradingDates(32);
+        BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
+        request.setSpec(spec()); request.setBars(bars(dates));
+        List<QuantUniverseMember> universe = new ArrayList<QuantUniverseMember>();
+        for (LocalDate date : dates) {
+            QuantUniverseMember member = new QuantUniverseMember(); member.setTradeDate(date);
+            member.setInstrumentCode("SLOW.SH"); member.setMember(true); member.setSourceKind("TEST"); universe.add(member);
+        }
+        request.setUniverse(universe);
+        BacktestResult result = new QuantBacktestEngine().run(request);
+        assertFalse(result.getTrades().isEmpty());
+        assertEquals("SLOW.SH", result.getTrades().get(0).getInstrumentCode());
+        assertTrue(result.getWarnings().stream().noneMatch(value -> value.contains("未提供时点股票池")));
+    }
+
+    @Test
+    void carriesLastCloseWhenHeldInstrumentHasNoBar() {
+        List<LocalDate> dates = tradingDates(34); List<QuantDailyBar> values = bars(dates);
+        values.removeIf(value -> "FAST.SH".equals(value.getInstrumentCode()) && dates.get(22).equals(value.getTradeDate()));
+        BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
+        request.setSpec(spec()); request.setBars(values);
+        BacktestResult result = new QuantBacktestEngine().run(request);
+        assertTrue(result.getWarnings().stream().anyMatch(value -> value.contains("沿用上一有效收盘价")), result.getWarnings().toString());
+        assertTrue(result.getEquityCurve().stream().filter(value -> dates.get(22).equals(value.getTradeDate()))
+                .allMatch(value -> value.getPortfolioNav() > 0.8));
+    }
+
     private QuantStrategySpec spec() {
         QuantStrategySpec spec = new QuantStrategySpec(); spec.setName("动量测试"); spec.setDatasetId(1L);
+        spec.setBenchmark("EQUAL_WEIGHT"); spec.setInvestmentHypothesis("动量延续"); spec.setRiskBoundary("仅作历史研究");
         spec.setFactors(Arrays.asList(new QuantStrategySpec.FactorWeight("MOMENTUM_20D", 1, "HIGH")));
         QuantStrategySpec.Portfolio portfolio = new QuantStrategySpec.Portfolio();
         portfolio.setTopN(1); portfolio.setRebalanceEvery(20); portfolio.setWeighting("EQUAL"); spec.setPortfolio(portfolio);

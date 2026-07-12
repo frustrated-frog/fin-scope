@@ -2,6 +2,7 @@ package com.finscope.dao.quant;
 
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
@@ -96,5 +97,25 @@ public class QuantMarketDataRepository {
     public List<QuantFundamentalSnapshot> findFundamentals(Long datasetId) {
         return jdbcTemplate.query("SELECT * FROM quant_fundamental_snapshot WHERE dataset_id=? "
                 + "ORDER BY disclosed_at,instrument_code,report_period", fundamentalMapper, datasetId);
+    }
+
+    public void insertUniverseMembers(final List<QuantUniverseMember> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_universe_member(dataset_id,trade_date,instrument_code,member,source_kind) VALUES(?,?,?,?,?)",
+                new BatchPreparedStatementSetter() {
+                    @Override public void setValues(PreparedStatement ps, int i) throws SQLException {
+                        QuantUniverseMember value = values.get(i); ps.setLong(1, value.getDatasetId());
+                        ps.setString(2, value.getTradeDate().toString()); ps.setString(3, value.getInstrumentCode());
+                        ps.setInt(4, value.isMember() ? 1 : 0); ps.setString(5, value.getSourceKind());
+                    }
+                    @Override public int getBatchSize() { return values.size(); }
+                });
+    }
+
+    public List<QuantUniverseMember> findUniverseMembers(Long datasetId) {
+        return jdbcTemplate.query("SELECT * FROM quant_universe_member WHERE dataset_id=? ORDER BY trade_date,instrument_code", (rs, row) -> {
+            QuantUniverseMember value = new QuantUniverseMember(); value.setDatasetId(rs.getLong("dataset_id"));
+            value.setTradeDate(LocalDate.parse(rs.getString("trade_date"))); value.setInstrumentCode(rs.getString("instrument_code"));
+            value.setMember(rs.getInt("member") == 1); value.setSourceKind(rs.getString("source_kind")); return value;
+        }, datasetId);
     }
 }

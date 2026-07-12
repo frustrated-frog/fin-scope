@@ -658,6 +658,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(strategy_version_id) REFERENCES quant_strategy_version(id) ON DELETE RESTRICT)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_experiment_status ON quant_experiment(status,id DESC)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_experiment_request ON quant_experiment(request_fingerprint,status)");
+        Integer activeDuplicates = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM (SELECT request_fingerprint FROM quant_experiment "
+                + "WHERE status IN ('QUEUED','RUNNING') GROUP BY request_fingerprint HAVING COUNT(*) > 1)", Integer.class);
+        if (activeDuplicates != null && activeDuplicates == 0) {
+            jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_quant_experiment_active_request ON quant_experiment(request_fingerprint) "
+                    + "WHERE status IN ('QUEUED','RUNNING')");
+        }
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_metric ("
                 + "experiment_id INTEGER NOT NULL,metric_code TEXT NOT NULL,metric_value REAL NOT NULL,"
                 + "PRIMARY KEY(experiment_id,metric_code),FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
@@ -670,6 +676,13 @@ public class DatabaseInitializer implements InitializingBean {
                 + "instrument_code TEXT NOT NULL,side TEXT NOT NULL,quantity INTEGER NOT NULL,price REAL NOT NULL,notional REAL NOT NULL,"
                 + "fee REAL NOT NULL,reason TEXT,FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_trade_experiment ON quant_trade(experiment_id,trade_date)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_warning ("
+                + "experiment_id INTEGER NOT NULL,warning_index INTEGER NOT NULL,message TEXT NOT NULL,"
+                + "PRIMARY KEY(experiment_id,warning_index),FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_year ("
+                + "experiment_id INTEGER NOT NULL,year INTEGER NOT NULL,portfolio_return REAL NOT NULL,benchmark_return REAL NOT NULL,"
+                + "excess_return REAL NOT NULL,max_drawdown REAL NOT NULL,PRIMARY KEY(experiment_id,year),"
+                + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_interpretation ("
                 + "experiment_id INTEGER PRIMARY KEY,content_json TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");

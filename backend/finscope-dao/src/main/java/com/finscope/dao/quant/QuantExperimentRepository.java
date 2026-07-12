@@ -5,6 +5,7 @@ import com.finscope.domain.quant.backtest.BacktestMetrics;
 import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.backtest.BacktestTrade;
 import com.finscope.domain.quant.backtest.EquityPoint;
+import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -61,11 +62,16 @@ public class QuantExperimentRepository {
     public List<QuantExperiment> findAll() { return jdbcTemplate.query("SELECT * FROM quant_experiment ORDER BY id DESC", mapper); }
     public boolean markRunning(Long id) { return jdbcTemplate.update("UPDATE quant_experiment SET status='RUNNING',started_at=? WHERE id=? AND status='QUEUED'",
             TimeUtil.text(LocalDateTime.now()), id) == 1; }
-    public void markFailed(Long id, String message) { jdbcTemplate.update("UPDATE quant_experiment SET status='FAILED',error_message=?,completed_at=? WHERE id=?",
-            message, TimeUtil.text(LocalDateTime.now()), id); }
+    public boolean markFailed(Long id, String message) { return jdbcTemplate.update("UPDATE quant_experiment SET status='FAILED',error_message=?,completed_at=? "
+                    + "WHERE id=? AND status IN ('QUEUED','RUNNING')",
+            message, TimeUtil.text(LocalDateTime.now()), id) == 1; }
 
     @Transactional
     public void complete(Long id, BacktestResult result) {
+        if (jdbcTemplate.update("UPDATE quant_experiment SET status='SUCCEEDED',completed_at=? WHERE id=? AND status='RUNNING'",
+                TimeUtil.text(LocalDateTime.now()), id) != 1) {
+            throw new IllegalStateException("实验状态已变化，拒绝写入不一致结果：" + id);
+        }
         BacktestMetrics m = result.getMetrics(); metric(id, "TOTAL_RETURN", m.getTotalReturn()); metric(id, "ANNUAL_RETURN", m.getAnnualizedReturn());
         metric(id, "VOLATILITY", m.getAnnualizedVolatility()); metric(id, "MAX_DRAWDOWN", m.getMaxDrawdown());
         metric(id, "SHARPE", m.getSharpeRatio()); metric(id, "CALMAR", m.getCalmarRatio()); metric(id, "WIN_RATE", m.getWinRate());
@@ -73,8 +79,8 @@ public class QuantExperimentRepository {
         metric(id, "BENCHMARK_RETURN", m.getBenchmarkReturn()); metric(id, "EXCESS_RETURN", m.getExcessReturn());
         saveEquityPoints(id, result.getEquityCurve());
         saveTrades(id, result.getTrades());
-        jdbcTemplate.update("UPDATE quant_experiment SET status='SUCCEEDED',completed_at=? WHERE id=? AND status='RUNNING'",
-                TimeUtil.text(LocalDateTime.now()), id);
+        saveWarnings(id, result.getWarnings());
+        saveAnnual(id, result.getAnnualPerformance());
     }
     public void saveInterpretation(Long id, String json, String model) {
         jdbcTemplate.update("INSERT OR REPLACE INTO quant_experiment_interpretation(experiment_id,content_json,model,created_at) VALUES(?,?,?,?)",
@@ -107,6 +113,27 @@ public class QuantExperimentRepository {
         });
     }
 
+    private void saveWarnings(final Long experimentId, final List<String> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_experiment_warning(experiment_id,warning_index,message) VALUES(?,?,?)",
+                new BatchPreparedStatementSetter() {
+                    @Override public void setValues(PreparedStatement ps, int index) throws SQLException {
+                        ps.setLong(1, experimentId); ps.setInt(2, index); ps.setString(3, values.get(index));
+                    }
+                    @Override public int getBatchSize() { return values == null ? 0 : values.size(); }
+                });
+    }
+    private void saveAnnual(final Long experimentId, final List<AnnualPerformance> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_experiment_year(experiment_id,year,portfolio_return,benchmark_return,excess_return,max_drawdown) VALUES(?,?,?,?,?,?)",
+                new BatchPreparedStatementSetter() {
+                    @Override public void setValues(PreparedStatement ps, int index) throws SQLException {
+                        AnnualPerformance value = values.get(index); ps.setLong(1, experimentId); ps.setInt(2, value.getYear());
+                        ps.setDouble(3, value.getPortfolioReturn()); ps.setDouble(4, value.getBenchmarkReturn());
+                        ps.setDouble(5, value.getExcessReturn()); ps.setDouble(6, value.getMaxDrawdown());
+                    }
+                    @Override public int getBatchSize() { return values == null ? 0 : values.size(); }
+                });
+    }
+
     private BacktestResult loadResult(Long id) {
         BacktestResult result = new BacktestResult(); BacktestMetrics metrics = new BacktestMetrics();
         java.util.Map<String, Double> values = new java.util.HashMap<String, Double>();
@@ -125,7 +152,15 @@ public class QuantExperimentRepository {
             BacktestTrade t = new BacktestTrade(); t.setSignalDate(LocalDate.parse(rs.getString("signal_date"))); t.setTradeDate(LocalDate.parse(rs.getString("trade_date")));
             t.setInstrumentCode(rs.getString("instrument_code")); t.setSide(rs.getString("side")); t.setQuantity(rs.getLong("quantity"));
             t.setPrice(rs.getDouble("price")); t.setNotional(rs.getDouble("notional")); t.setFee(rs.getDouble("fee")); t.setReason(rs.getString("reason")); return t;
-        }, id)); return result;
+        }, id));
+        result.setWarnings(jdbcTemplate.query("SELECT message FROM quant_experiment_warning WHERE experiment_id=? ORDER BY warning_index",
+                (rs,row) -> rs.getString(1), id));
+        result.setAnnualPerformance(jdbcTemplate.query("SELECT * FROM quant_experiment_year WHERE experiment_id=? ORDER BY year", (rs,row) -> {
+            AnnualPerformance value = new AnnualPerformance(); value.setYear(rs.getInt("year"));
+            value.setPortfolioReturn(rs.getDouble("portfolio_return")); value.setBenchmarkReturn(rs.getDouble("benchmark_return"));
+            value.setExcessReturn(rs.getDouble("excess_return")); value.setMaxDrawdown(rs.getDouble("max_drawdown")); return value;
+        }, id));
+        return result;
     }
     private double v(java.util.Map<String, Double> values, String key) { return values.containsKey(key) ? values.get(key) : 0d; }
 }

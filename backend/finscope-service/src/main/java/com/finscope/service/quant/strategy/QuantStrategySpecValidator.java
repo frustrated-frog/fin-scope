@@ -25,13 +25,16 @@ public class QuantStrategySpecValidator {
         if (!text(spec.getName())) issues.add("策略名称不能为空");
         if (spec.getDatasetId() == null) issues.add("必须选择数据集");
         if (!text(spec.getInvestmentHypothesis())) issues.add("投资假设不能为空");
+        if (!text(spec.getRiskBoundary())) issues.add("风险边界不能为空");
+        if (!"EQUAL_WEIGHT".equals(spec.getBenchmark())) issues.add("第二期基准仅支持时点股票池等权基准 EQUAL_WEIGHT");
         if (spec.getFactors() == null || spec.getFactors().isEmpty()) issues.add("至少选择一个因子");
         else {
             Set<String> seen = new HashSet<String>(); double weight = 0;
             for (QuantStrategySpec.FactorWeight item : spec.getFactors()) {
+                if (item == null) { issues.add("因子配置不能为空"); continue; }
                 if (!factors.contains(item.getCode())) issues.add("未知因子：" + item.getCode());
                 if (!seen.add(item.getCode())) issues.add("因子不能重复：" + item.getCode());
-                if (item.getWeight() <= 0 || item.getWeight() > 1) issues.add("因子权重必须在 0 到 1 之间");
+                if (!Double.isFinite(item.getWeight()) || item.getWeight() <= 0 || item.getWeight() > 1) issues.add("因子权重必须在 0 到 1 之间");
                 if (!"HIGH".equals(item.getDirection()) && !"LOW".equals(item.getDirection())) issues.add("因子方向只能是 HIGH 或 LOW");
                 weight += item.getWeight();
             }
@@ -43,15 +46,21 @@ public class QuantStrategySpecValidator {
             if (spec.getPortfolio().getRebalanceEvery() < 1 || spec.getPortfolio().getRebalanceEvery() > 120) issues.add("调仓周期必须在 1 到 120 个交易日之间");
             if (!"EQUAL".equals(spec.getPortfolio().getWeighting())) issues.add("第二期只支持等权组合");
         }
+        if (spec.getFilters() == null) issues.add("缺少股票池过滤参数");
+        else {
+            if (spec.getFilters().getMinTradingDays() < 0 || spec.getFilters().getMinTradingDays() > 5000) issues.add("最少交易日必须在 0 到 5000 之间");
+            if (!Double.isFinite(spec.getFilters().getMinAmount()) || spec.getFilters().getMinAmount() < 0) issues.add("最低成交额必须是非负有限数");
+        }
         if (spec.getExecution() == null) issues.add("缺少执行参数");
         else {
             if (!"CLOSE".equals(spec.getExecution().getSignalPrice())) issues.add("信号只能在收盘后生成");
             if (!"NEXT_OPEN".equals(spec.getExecution().getFillPrice())) issues.add("订单必须在下一交易日执行");
-            if (spec.getExecution().getSlippageBps() < 0 || spec.getExecution().getSlippageBps() > 500) issues.add("滑点必须在 0 到 500 bps 之间");
+            if (!Double.isFinite(spec.getExecution().getSlippageBps()) || spec.getExecution().getSlippageBps() < 0 || spec.getExecution().getSlippageBps() > 500) issues.add("滑点必须在 0 到 500 bps 之间");
         }
         if (spec.getCost() == null) issues.add("缺少交易成本参数");
         else if (!rate(spec.getCost().getBuyCommission()) || !rate(spec.getCost().getSellCommission())
-                || !rate(spec.getCost().getStampDuty()) || spec.getCost().getMinimumCommission() < 0) {
+                || !rate(spec.getCost().getStampDuty()) || !Double.isFinite(spec.getCost().getMinimumCommission())
+                || spec.getCost().getMinimumCommission() < 0 || spec.getCost().getMinimumCommission() > 10000) {
             issues.add("交易成本参数超出允许范围");
         }
         return issues;

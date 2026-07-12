@@ -2,6 +2,7 @@ package com.finscope.service.quant.data;
 
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
@@ -56,6 +57,16 @@ public class QuantLearningDatasetFactory {
             value.setRoe(decimal(0.06 + i * 0.006)); value.setRevenueGrowth(decimal(0.02 + i * 0.004));
             value.setProfitGrowth(decimal(-0.05 + i * 0.007)); value.setDebtRatio(decimal(0.2 + (i % 10) * 0.04));
             result.add(value);
+        }
+        return result;
+    }
+
+    public List<QuantUniverseMember> universe(Long datasetId, List<QuantDailyBar> bars) {
+        List<QuantUniverseMember> result = new ArrayList<QuantUniverseMember>();
+        for (QuantDailyBar bar : bars) {
+            QuantUniverseMember value = new QuantUniverseMember(); value.setDatasetId(datasetId);
+            value.setTradeDate(bar.getTradeDate()); value.setInstrumentCode(bar.getInstrumentCode());
+            value.setMember(true); value.setSourceKind("POINT_IN_TIME"); result.add(value);
         }
         return result;
     }

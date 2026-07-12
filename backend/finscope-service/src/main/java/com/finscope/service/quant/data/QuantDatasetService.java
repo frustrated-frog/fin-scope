@@ -7,6 +7,7 @@ import com.finscope.dao.quant.QuantMarketDataRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,11 @@ public class QuantDatasetService {
                 new BusinessException(ErrorCode.NOT_FOUND, "量化数据集不存在"));
     }
 
+    public boolean hasFundamentals(Long datasetId) {
+        get(datasetId);
+        return !marketData.findFundamentals(datasetId).isEmpty();
+    }
+
     public QuantDataset create(String name, String dataKind) {
         if (name == null || name.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集名称不能为空");
@@ -55,13 +61,15 @@ public class QuantDatasetService {
         QuantDataset dataset = create(name, "LEARNING_SAMPLE");
         List<QuantDailyBar> bars = learningDatasetFactory.bars(dataset.getId());
         List<QuantFundamentalSnapshot> fundamentals = learningDatasetFactory.fundamentals(dataset.getId());
+        List<QuantUniverseMember> universe = learningDatasetFactory.universe(dataset.getId(), bars);
         quality.assertValidBars(bars);
         quality.assertValidFundamentals(fundamentals);
         marketData.insertBars(bars);
         marketData.insertFundamentals(fundamentals);
+        marketData.insertUniverseMembers(universe);
         LocalDate start = bars.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
         LocalDate end = bars.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
-        String digest = fingerprint.bars(bars);
+        String digest = fingerprint.dataset(bars, fundamentals, universe);
         String summary = "{\"barCount\":" + bars.size() + ",\"instrumentCount\":30,"
                 + "\"fundamentalCount\":" + fundamentals.size() + ",\"blockingIssues\":0}";
         if (!datasets.updateSummary(dataset.getId(), start, end, "READY", digest, summary, dataset.getRevision())) {
@@ -83,7 +91,7 @@ public class QuantDatasetService {
         List<QuantDailyBar> all = marketData.findBars(datasetId);
         LocalDate start = all.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
         LocalDate end = all.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
-        String digest = fingerprint.bars(all);
+        String digest = fingerprint.dataset(all, marketData.findFundamentals(datasetId), marketData.findUniverseMembers(datasetId));
         if (!datasets.updateSummary(datasetId, start, end, "READY", digest,
                 "{\"barCount\":" + all.size() + ",\"blockingIssues\":0}", dataset.getRevision())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集已被更新，请刷新后重试");
@@ -96,7 +104,37 @@ public class QuantDatasetService {
         QuantDataset dataset = get(datasetId);
         quality.assertValidFundamentals(values);
         for (QuantFundamentalSnapshot value : values) value.setDatasetId(datasetId);
-        marketData.insertFundamentals(values);
-        return dataset;
+        try { marketData.insertFundamentals(values); }
+        catch (DataAccessException ex) { throw new BusinessException(ErrorCode.CONFLICT, "财务快照包含已存在的记录", ex); }
+        return refreshFingerprint(dataset);
+    }
+
+    @Transactional
+    public QuantDataset importUniverse(Long datasetId, List<QuantUniverseMember> values) {
+        QuantDataset dataset = get(datasetId);
+        if (values == null || values.isEmpty() || values.size() > 100_000) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "股票池成员不能为空且单次不能超过 100000 条");
+        }
+        for (QuantUniverseMember value : values) {
+            if (value.getTradeDate() == null || value.getInstrumentCode() == null || value.getInstrumentCode().trim().isEmpty()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "股票池成员缺少日期或标的代码");
+            }
+            value.setDatasetId(datasetId);
+            if (value.getSourceKind() == null) value.setSourceKind("POINT_IN_TIME");
+        }
+        try { marketData.insertUniverseMembers(values); }
+        catch (DataAccessException ex) { throw new BusinessException(ErrorCode.CONFLICT, "股票池包含已存在的记录", ex); }
+        return refreshFingerprint(dataset);
+    }
+
+    private QuantDataset refreshFingerprint(QuantDataset dataset) {
+        List<QuantDailyBar> bars = marketData.findBars(dataset.getId());
+        String digest = fingerprint.dataset(bars, marketData.findFundamentals(dataset.getId()),
+                marketData.findUniverseMembers(dataset.getId()));
+        if (!datasets.updateSummary(dataset.getId(), dataset.getStartDate(), dataset.getEndDate(), dataset.getStatus(),
+                digest, dataset.getQualitySummary(), dataset.getRevision())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "数据集已被更新，请刷新后重试");
+        }
+        return get(dataset.getId());
     }
 }

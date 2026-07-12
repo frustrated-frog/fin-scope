@@ -17,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 public class QuantBacktestEngine {
     private final FactorRegistry registry = new FactorRegistry();
@@ -33,21 +35,27 @@ public class QuantBacktestEngine {
         int startAt = spec.getFilters() == null ? 0 : spec.getFilters().getMinTradingDays();
         for (QuantStrategySpec.FactorWeight factor : spec.getFactors()) startAt = Math.max(startAt, registry.get(factor.getCode()).getLookbackDays());
         double benchmarkNav = 1d; Map<String, Double> previousClose = new LinkedHashMap<String, Double>();
+        Map<LocalDate, Set<String>> universe = universe(request);
+        if (universe.isEmpty()) result.getWarnings().add("未提供时点股票池，使用当日可见行情标的作为研究范围");
         for (Map.Entry<LocalDate, Map<String, QuantDailyBar>> day : byDate.entrySet()) {
             LocalDate date = day.getKey(); Map<String, QuantDailyBar> bars = day.getValue();
             if (pendingTargets != null) { ledger.rebalance(pendingSignal, date, pendingTargets, bars, spec, result.getWarnings()); pendingTargets = null; }
             for (QuantDailyBar bar : bars.values()) histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
-            benchmarkNav *= benchmarkDailyReturn(bars, previousClose); for (QuantDailyBar bar : bars.values()) previousClose.put(bar.getInstrumentCode(), bar.getClose().doubleValue());
-            double asset = ledger.totalAsset(bars, false); EquityPoint point = new EquityPoint(); point.setTradeDate(date);
+            Set<String> dayMembers = universe.isEmpty() ? null : universe.getOrDefault(date, java.util.Collections.<String>emptySet());
+            benchmarkNav *= benchmarkDailyReturn(bars, previousClose, dayMembers); for (QuantDailyBar bar : bars.values()) previousClose.put(bar.getInstrumentCode(), bar.getClose().doubleValue());
+            ledger.rememberClose(bars);
+            double asset = ledger.totalAsset(bars, false, result.getWarnings(), date); EquityPoint point = new EquityPoint(); point.setTradeDate(date);
             point.setTotalAsset(asset); point.setCash(ledger.getCash()); point.setPortfolioNav(asset / request.getInitialCapital());
             point.setBenchmarkNav(benchmarkNav); result.getEquityCurve().add(point);
             if (index >= startAt && (index - startAt) % spec.getPortfolio().getRebalanceEvery() == 0 && index < byDate.size() - 1) {
-                pendingTargets = select(date, bars, histories, request.getFundamentals(), spec, result.getWarnings()); pendingSignal = date;
+                pendingTargets = select(date, bars, histories, request.getFundamentals(), spec, result.getWarnings(), dayMembers); pendingSignal = date;
             }
             index++;
         }
         result.setTrades(new ArrayList<com.finscope.domain.quant.backtest.BacktestTrade>(ledger.getTrades()));
-        result.setMetrics(new PerformanceMetrics().calculate(result.getEquityCurve(), request.getAnnualRiskFreeRate(), ledger.turnover()));
+        PerformanceMetrics performance = new PerformanceMetrics();
+        result.setMetrics(performance.calculate(result.getEquityCurve(), request.getAnnualRiskFreeRate(), ledger.turnover()));
+        result.setAnnualPerformance(performance.annual(result.getEquityCurve()));
         result.getMetrics().setTradeCount(result.getTrades().size());
         if (!result.getEquityCurve().isEmpty()) {
             result.getMetrics().setBenchmarkReturn(result.getEquityCurve().get(result.getEquityCurve().size() - 1).getBenchmarkNav() - 1d);
@@ -58,11 +66,12 @@ public class QuantBacktestEngine {
 
     private Map<String, Double> select(LocalDate date, Map<String, QuantDailyBar> today,
                                        Map<String, List<QuantDailyBar>> histories, List<QuantFundamentalSnapshot> fundamentals,
-                                       QuantStrategySpec spec, List<String> warnings) {
+                                       QuantStrategySpec spec, List<String> warnings, Set<String> members) {
         Map<String, Double> scores = new LinkedHashMap<String, Double>();
         for (QuantStrategySpec.FactorWeight factor : spec.getFactors()) {
             List<FactorValue> raw = new ArrayList<FactorValue>();
             for (Map.Entry<String, QuantDailyBar> entry : today.entrySet()) {
+                if (members != null && !members.contains(entry.getKey())) continue;
                 QuantDailyBar bar = entry.getValue(); List<QuantDailyBar> history = histories.get(entry.getKey());
                 if (!eligible(bar, history, spec)) continue;
                 double value = calculator.value(factor.getCode(), history, latestVisible(fundamentals, entry.getKey(), date));
@@ -99,9 +108,22 @@ public class QuantBacktestEngine {
         for (QuantDailyBar value : ordered) result.computeIfAbsent(value.getTradeDate(), key -> new LinkedHashMap<String, QuantDailyBar>())
                 .put(value.getInstrumentCode(), value); return result;
     }
-    private double benchmarkDailyReturn(Map<String, QuantDailyBar> bars, Map<String, Double> previous) {
+    private double benchmarkDailyReturn(Map<String, QuantDailyBar> bars, Map<String, Double> previous, Set<String> members) {
         double sum = 0; int count = 0;
-        for (QuantDailyBar bar : bars.values()) { Double before = previous.get(bar.getInstrumentCode()); if (before != null && before > 0) { sum += bar.getClose().doubleValue() / before - 1d; count++; } }
+        for (QuantDailyBar bar : bars.values()) {
+            if (members != null && !members.contains(bar.getInstrumentCode())) continue;
+            Double before = previous.get(bar.getInstrumentCode()); if (before != null && before > 0) { sum += bar.getClose().doubleValue() / before - 1d; count++; }
+        }
         return 1d + (count == 0 ? 0 : sum / count);
+    }
+    private Map<LocalDate, Set<String>> universe(BacktestRequest request) {
+        Map<LocalDate, Set<String>> result = new LinkedHashMap<LocalDate, Set<String>>();
+        if (request.getUniverse() == null) return result;
+        request.getUniverse().stream().filter(com.finscope.domain.quant.data.QuantUniverseMember::isMember)
+                .sorted(Comparator.comparing(com.finscope.domain.quant.data.QuantUniverseMember::getTradeDate)
+                        .thenComparing(com.finscope.domain.quant.data.QuantUniverseMember::getInstrumentCode))
+                .forEach(value -> result.computeIfAbsent(value.getTradeDate(), key -> new LinkedHashSet<String>())
+                        .add(value.getInstrumentCode()));
+        return result;
     }
 }

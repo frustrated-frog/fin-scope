@@ -1,11 +1,16 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.domain.quant.data.QuantDailyBar;
+import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantUniverseMember;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.web.request.quant.CreateLearningDatasetRequest;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import java.util.List;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 
 @RestController
 @RequestMapping("/api/quant/datasets")
@@ -15,6 +20,21 @@ public class QuantDatasetController {
     @GetMapping("/{id}") public QuantDataset get(@PathVariable Long id) { return service.get(id); }
     @PostMapping("/learning-sample")
     public QuantDataset createLearningSample(@RequestBody CreateLearningDatasetRequest request) {
+        if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "请求不能为空");
         return service.createLearningSample(request.getName());
+    }
+    @PostMapping("/{id}/bars") public QuantDataset importBars(@PathVariable Long id, @RequestBody List<QuantDailyBar> values) {
+        return service.importBars(id, values);
+    }
+    @PostMapping("/{id}/fundamentals") public QuantDataset importFundamentals(@PathVariable Long id, @RequestBody List<QuantFundamentalSnapshot> values) {
+        return service.importFundamentals(id, values);
+    }
+    @PostMapping("/{id}/universe") public QuantDataset importUniverse(@PathVariable Long id, @RequestBody List<QuantUniverseMember> values) {
+        return service.importUniverse(id, values);
+    }
+    @GetMapping("/{id}/quality") public java.util.Map<String, Object> quality(@PathVariable Long id) {
+        QuantDataset value = service.get(id); java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+        result.put("datasetId", value.getId()); result.put("status", value.getStatus()); result.put("summary", value.getQualitySummary());
+        result.put("fingerprint", value.getFingerprint()); return result;
     }
 }

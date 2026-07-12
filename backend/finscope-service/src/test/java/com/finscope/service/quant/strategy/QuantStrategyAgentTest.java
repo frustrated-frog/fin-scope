@@ -1,20 +1,18 @@
 package com.finscope.service.quant.strategy;
 
-import com.finscope.common.exception.BusinessException;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class QuantStrategyAgentTest {
     @Test
     void extractsAndValidatesStructuredDraft() {
         LlmChatClient llm = client("```json\n{\"name\":\"质量动量\",\"datasetId\":1,"
-                + "\"benchmark\":\"000300.SH\",\"investmentHypothesis\":\"质量叠加趋势\","
+                + "\"benchmark\":\"EQUAL_WEIGHT\",\"investmentHypothesis\":\"质量叠加趋势\","
                 + "\"riskBoundary\":\"历史研究\",\"factors\":[{\"code\":\"ROE\",\"weight\":0.5,\"direction\":\"HIGH\"},"
                 + "{\"code\":\"MOMENTUM_20D\",\"weight\":0.5,\"direction\":\"HIGH\"}],"
                 + "\"portfolio\":{\"topN\":20,\"rebalanceEvery\":20,\"weighting\":\"EQUAL\"},"
@@ -34,10 +32,10 @@ class QuantStrategyAgentTest {
     @Test
     void refusesToInventDraftWhenLlmIsNotConfigured() {
         FactorRegistry registry = new FactorRegistry();
-        BusinessException error = assertThrows(BusinessException.class, () ->
-                new QuantStrategyAgent(client(null), registry, new QuantStrategySpecValidator(registry))
-                        .generate(1L, "任意策略"));
-        assertEquals("策略 Agent 尚未配置", error.getMessage());
+        QuantStrategyDraft draft = new QuantStrategyAgent(client(null), registry, new QuantStrategySpecValidator(registry))
+                .generate(1L, "任意策略");
+        assertEquals("FAILED", draft.getStatus());
+        assertEquals("策略 Agent 尚未配置", draft.getValidationIssues().get(0));
     }
 
     @Test

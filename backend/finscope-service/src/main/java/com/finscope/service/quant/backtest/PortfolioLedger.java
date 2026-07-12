@@ -13,6 +13,7 @@ class PortfolioLedger {
     private double cash;
     private final double initialCapital;
     private final Map<String, Long> positions = new LinkedHashMap<String, Long>();
+    private final Map<String, Double> lastClose = new LinkedHashMap<String, Double>();
     private final List<BacktestTrade> trades = new ArrayList<BacktestTrade>();
     private double tradedNotional;
 
@@ -20,7 +21,7 @@ class PortfolioLedger {
 
     void rebalance(LocalDate signalDate, LocalDate tradeDate, Map<String, Double> targets,
                    Map<String, QuantDailyBar> bars, QuantStrategySpec spec, List<String> warnings) {
-        double equity = totalAsset(bars, true); Map<String, Long> desired = new LinkedHashMap<String, Long>();
+        double equity = totalAsset(bars, true, warnings, tradeDate); Map<String, Long> desired = new LinkedHashMap<String, Long>();
         for (Map.Entry<String, Double> target : targets.entrySet()) {
             QuantDailyBar bar = bars.get(target.getKey()); if (!tradable(bar)) continue;
             double buyPrice = fillPrice(bar.getOpen().doubleValue(), true, spec.getExecution().getSlippageBps());
@@ -39,11 +40,21 @@ class PortfolioLedger {
         }
     }
 
-    double totalAsset(Map<String, QuantDailyBar> bars, boolean useOpen) {
+    void rememberClose(Map<String, QuantDailyBar> bars) {
+        for (QuantDailyBar bar : bars.values()) {
+            if (bar.getClose() != null && bar.getClose().doubleValue() > 0) lastClose.put(bar.getInstrumentCode(), bar.getClose().doubleValue());
+        }
+    }
+
+    double totalAsset(Map<String, QuantDailyBar> bars, boolean useOpen, List<String> warnings, LocalDate date) {
         double total = cash;
         for (Map.Entry<String, Long> position : positions.entrySet()) {
             QuantDailyBar bar = bars.get(position.getKey());
-            if (bar != null) total += position.getValue() * (useOpen ? bar.getOpen().doubleValue() : bar.getClose().doubleValue());
+            Double price = bar == null ? lastClose.get(position.getKey())
+                    : (useOpen ? bar.getOpen().doubleValue() : bar.getClose().doubleValue());
+            if (price == null) throw new IllegalStateException(date + " " + position.getKey() + " 缺少可用估值价格");
+            if (bar == null) addWarning(warnings, date + " " + position.getKey() + " 缺少行情，沿用上一有效收盘价");
+            total += position.getValue() * price;
         }
         return total;
     }
@@ -81,4 +92,5 @@ class PortfolioLedger {
         BacktestTrade trade = new BacktestTrade(); trade.setSignalDate(signal); trade.setTradeDate(date); trade.setInstrumentCode(code);
         trade.setSide(side); trade.setQuantity(quantity); trade.setPrice(price); trade.setNotional(notional); trade.setFee(fee); trade.setReason("REBALANCE"); trades.add(trade);
     }
+    private void addWarning(List<String> warnings, String value) { if (!warnings.contains(value)) warnings.add(value); }
 }

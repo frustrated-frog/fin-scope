@@ -10,6 +10,7 @@ import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
+import com.finscope.service.quant.factor.FactorRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,16 +25,24 @@ public class QuantStrategyService {
     @Resource private QuantStrategyRepository repository;
     @Resource private QuantDatasetService datasets;
     @Resource private QuantStrategyAgent agent;
+    @Resource private FactorRegistry factors;
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
     @Transactional
     public QuantStrategyDraft generateDraft(Long datasetId, String prompt) {
+        if (datasetId == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集不能为空");
+        if (prompt == null || prompt.trim().isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "策略描述不能为空");
         QuantDataset dataset = datasets.get(datasetId);
         if (!"READY".equals(dataset.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集尚未通过质量门禁");
         }
-        return repository.saveDraft(agent.generate(datasetId, prompt));
+        QuantStrategyDraft draft = agent.generate(datasetId, prompt);
+        if ("VALIDATED".equals(draft.getStatus()) && requiresFundamentals(draft.getSpec()) && !datasets.hasFundamentals(datasetId)) {
+            draft.setStatus("FAILED");
+            draft.setValidationIssues(java.util.Collections.singletonList("策略使用财务因子，但当前数据集没有可用的时点财务数据"));
+        }
+        return repository.saveDraft(draft);
     }
 
     @Transactional
@@ -75,4 +84,8 @@ public class QuantStrategyService {
         return result.toString();
     }
     private boolean text(String value) { return value != null && !value.trim().isEmpty(); }
+    private boolean requiresFundamentals(QuantStrategySpec spec) {
+        return spec != null && spec.getFactors() != null && spec.getFactors().stream()
+                .anyMatch(item -> factors.get(item.getCode()).isPointInTime());
+    }
 }
