@@ -640,6 +640,17 @@ public class DatabaseInitializer implements InitializingBean {
                 + "created_at TEXT NOT NULL,FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_issue_dataset "
                 + "ON quant_dataset_issue(dataset_id,severity)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_strategy_draft ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,prompt TEXT NOT NULL,"
+                + "raw_response TEXT,normalized_spec TEXT,status TEXT NOT NULL,model TEXT,validation_issues TEXT,"
+                + "created_at TEXT NOT NULL,FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_draft_dataset ON quant_strategy_draft(dataset_id,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_strategy_version ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,dataset_id INTEGER NOT NULL,version INTEGER NOT NULL,"
+                + "spec_json TEXT NOT NULL,strategy_fingerprint TEXT NOT NULL UNIQUE,dataset_fingerprint TEXT NOT NULL,"
+                + "engine_version TEXT NOT NULL,source TEXT NOT NULL,created_at TEXT NOT NULL,"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE RESTRICT,UNIQUE(name,version))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_strategy_dataset ON quant_strategy_version(dataset_id,id DESC)");
     }
 
     private void ensureColumn(String table, String column, String type) {
