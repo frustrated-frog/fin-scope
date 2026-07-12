@@ -166,9 +166,7 @@ public class QuantDatasetService {
         if (bars.isEmpty()) return "EMPTY";
         if (universe.isEmpty()) return "QUALITY_PENDING";
         if (universe.stream().anyMatch(value -> "CURRENT_SNAPSHOT".equals(value.getSourceKind()))) return "BLOCKED";
-        Set<String> active = new LinkedHashSet<String>();
-        for (QuantUniverseMember value : universe) { if (value.isMember()) active.add(value.getInstrumentCode()); else active.remove(value.getInstrumentCode()); }
-        return active.isEmpty() ? "BLOCKED" : "READY";
+        return hasCompleteUniverseCoverage(bars, universe) ? "READY" : "BLOCKED";
     }
     private String qualitySummary(List<QuantDailyBar> bars, List<QuantFundamentalSnapshot> fundamentals,
                                   List<QuantUniverseMember> universe, String status) {
@@ -213,5 +211,20 @@ public class QuantDatasetService {
         for (QuantFundamentalSnapshot value : values) if (code.equals(value.getInstrumentCode()) && !value.getDisclosedAt().isAfter(date)
                 && (latest == null || value.getDisclosedAt().isAfter(latest.getDisclosedAt()))) latest = value;
         return latest;
+    }
+    private boolean hasCompleteUniverseCoverage(List<QuantDailyBar> bars, List<QuantUniverseMember> universe) {
+        Map<LocalDate, Set<String>> barsByDate = new LinkedHashMap<LocalDate, Set<String>>();
+        for (QuantDailyBar bar : bars) barsByDate.computeIfAbsent(bar.getTradeDate(), key -> new LinkedHashSet<String>()).add(bar.getInstrumentCode());
+        List<LocalDate> dates = new java.util.ArrayList<LocalDate>(barsByDate.keySet()); java.util.Collections.sort(dates);
+        List<QuantUniverseMember> events = new java.util.ArrayList<QuantUniverseMember>(universe);
+        events.sort(java.util.Comparator.comparing(QuantUniverseMember::getTradeDate).thenComparing(QuantUniverseMember::getInstrumentCode));
+        Set<String> active = new LinkedHashSet<String>(); int cursor = 0;
+        for (LocalDate date : dates) {
+            while (cursor < events.size() && !events.get(cursor).getTradeDate().isAfter(date)) {
+                QuantUniverseMember event = events.get(cursor++); if (event.isMember()) active.add(event.getInstrumentCode()); else active.remove(event.getInstrumentCode());
+            }
+            if (active.isEmpty() || !barsByDate.get(date).containsAll(active)) return false;
+        }
+        return dates.size() >= 2;
     }
 }
