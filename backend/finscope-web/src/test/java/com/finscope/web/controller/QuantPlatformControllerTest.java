@@ -63,7 +63,7 @@ class QuantPlatformControllerTest {
         mockMvc.perform(post("/api/quant/datasets/learning-sample")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"多因子学习样本\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.dataKind").value("LEARNING_SAMPLE"))
                 .andExpect(jsonPath("$.status").value("READY"));
@@ -75,7 +75,7 @@ class QuantPlatformControllerTest {
         when(datasets.create("我的真实研究集", "REAL")).thenReturn(value);
         mockMvc.perform(post("/api/quant/datasets").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"我的真实研究集\",\"dataKind\":\"REAL\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.dataKind").value("REAL")).andExpect(jsonPath("$.status").value("EMPTY"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.dataKind").value("REAL")).andExpect(jsonPath("$.status").value("EMPTY"));
     }
 
     @Test
@@ -92,11 +92,11 @@ class QuantPlatformControllerTest {
                         .content("{\"datasetId\":7,\"prompt\":\"低估值高质量策略\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("VALIDATED"));
         mockMvc.perform(post("/api/quant/strategy-drafts/11/confirm"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(12));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(12));
         mockMvc.perform(post("/api/quant/experiments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"strategyVersionId\":12}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("QUEUED"));
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("QUEUED"));
     }
 
     @Test

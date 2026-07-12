@@ -9,6 +9,8 @@ import javax.annotation.Resource;
 import java.util.List;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import org.springframework.http.ResponseEntity;
+import java.net.URI;
 
 @RestController
 @RequestMapping("/api/quant")
@@ -21,6 +23,9 @@ public class QuantStrategyController {
         return service.generateDraft(request.getDatasetId(), request.getPrompt());
     }
     @PostMapping("/strategy-drafts/{id}/confirm")
-    public QuantStrategyVersion confirm(@PathVariable Long id) { return service.confirm(id); }
+    public ResponseEntity<QuantStrategyVersion> confirm(@PathVariable Long id) {
+        QuantStrategyVersion value = service.confirm(id);
+        return ResponseEntity.created(URI.create("/api/quant/strategies/" + value.getId())).body(value);
+    }
     @GetMapping("/strategies") public List<QuantStrategyVersion> list() { return service.listVersions(); }
 }
