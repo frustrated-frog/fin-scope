@@ -75,4 +75,9 @@ public class QuantMarketDataRepository {
                 datasetId, code, signalDate.toString());
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
+
+    public List<QuantFundamentalSnapshot> findFundamentals(Long datasetId) {
+        return jdbcTemplate.query("SELECT * FROM quant_fundamental_snapshot WHERE dataset_id=? "
+                + "ORDER BY disclosed_at,instrument_code,report_period", fundamentalMapper, datasetId);
+    }
 }

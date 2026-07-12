@@ -651,6 +651,28 @@ public class DatabaseInitializer implements InitializingBean {
                 + "engine_version TEXT NOT NULL,source TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE RESTRICT,UNIQUE(name,version))");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_strategy_dataset ON quant_strategy_version(dataset_id,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,strategy_version_id INTEGER NOT NULL,request_fingerprint TEXT NOT NULL,"
+                + "dataset_fingerprint TEXT NOT NULL,engine_version TEXT NOT NULL,status TEXT NOT NULL,error_message TEXT,"
+                + "created_at TEXT NOT NULL,started_at TEXT,completed_at TEXT,"
+                + "FOREIGN KEY(strategy_version_id) REFERENCES quant_strategy_version(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_experiment_status ON quant_experiment(status,id DESC)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_experiment_request ON quant_experiment(request_fingerprint,status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_metric ("
+                + "experiment_id INTEGER NOT NULL,metric_code TEXT NOT NULL,metric_value REAL NOT NULL,"
+                + "PRIMARY KEY(experiment_id,metric_code),FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_equity_point ("
+                + "experiment_id INTEGER NOT NULL,trade_date TEXT NOT NULL,portfolio_nav REAL NOT NULL,benchmark_nav REAL NOT NULL,"
+                + "cash REAL NOT NULL,total_asset REAL NOT NULL,drawdown REAL NOT NULL,PRIMARY KEY(experiment_id,trade_date),"
+                + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_trade ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,experiment_id INTEGER NOT NULL,signal_date TEXT NOT NULL,trade_date TEXT NOT NULL,"
+                + "instrument_code TEXT NOT NULL,side TEXT NOT NULL,quantity INTEGER NOT NULL,price REAL NOT NULL,notional REAL NOT NULL,"
+                + "fee REAL NOT NULL,reason TEXT,FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_trade_experiment ON quant_trade(experiment_id,trade_date)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_interpretation ("
+                + "experiment_id INTEGER PRIMARY KEY,content_json TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,"
+                + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
     }
 
     private void ensureColumn(String table, String column, String type) {
