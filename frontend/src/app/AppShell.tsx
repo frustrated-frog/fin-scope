@@ -17,7 +17,8 @@ const navItems: Array<{ id: View; label: string; hint: string; code: string }> =
   { id: 'contentStudio', label: 'Studio', hint: '选题', code: '11' },
   { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '12' },
   { id: 'settings', label: 'Settings', hint: '设置', code: '13' },
-  { id: 'watchlist', label: 'Watchlist', hint: '自选', code: '14' }
+  { id: 'watchlist', label: 'Watchlist', hint: '自选', code: '14' },
+  { id: 'strategy', label: 'Strategy', hint: '策略', code: '15' }
 ];
 
 export function AppShell({

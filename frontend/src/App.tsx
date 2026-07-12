@@ -17,6 +17,7 @@ import { TopicReaderView } from './features/topics/TopicReaderView';
 import { SourcesView } from './features/sources/SourcesView';
 import { TopicsView } from './features/topics/TopicsView';
 import { WatchlistView } from './features/watchlist/WatchlistView';
+import { StrategyView } from './features/strategy/StrategyView';
 import { api } from './shared/api/client';
 import {
   AgentRun,
@@ -234,6 +235,8 @@ export default function App() {
         return 'Settings';
       case 'watchlist':
         return 'Watchlist';
+      case 'strategy':
+        return 'Strategy Workbench';
       default:
         return 'Dashboard';
     }
@@ -540,6 +543,7 @@ export default function App() {
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
+      {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} />}
       {topicDeleteTarget && (
         <div className="modal-overlay">
           <div className="modal topic-delete-modal" role="dialog" aria-modal="true" aria-labelledby="topic-delete-title">
