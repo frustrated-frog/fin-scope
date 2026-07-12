@@ -39,6 +39,9 @@ class DatabaseInitializerStrategySchemaTest {
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_stock_thesis'", Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_review'", Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('strategy_holding') WHERE \"table\"='instrument'",
+                Integer.class));
 
         jdbcTemplate.update("INSERT INTO instrument(code,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
                 "020608", "FUND", "测试基金", "2026-07-12T00:00:00", "2026-07-12T00:00:00");

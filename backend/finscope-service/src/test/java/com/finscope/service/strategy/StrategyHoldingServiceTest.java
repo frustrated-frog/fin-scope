@@ -57,4 +57,19 @@ class StrategyHoldingServiceTest {
                 () -> service.update(8L, "CORE", 60, 55, "", 2));
         assertTrue(error.getMessage().contains("记录已被更新"));
     }
+
+    @Test
+    void rejectsDuplicateInstrumentInPortfolio() {
+        Instrument instrument = new Instrument();
+        instrument.setId(1L);
+        instrument.setCode("020608");
+        instrument.setType("FUND");
+        when(resolver.resolve("020608", "FUND")).thenReturn(instrument);
+        when(repository.existsByInstrumentId(1L)).thenReturn(true);
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.add("020608", "FUND", "CORE", 10, 0, ""));
+
+        assertTrue(error.getMessage().contains("已在策略组合中"));
+    }
 }

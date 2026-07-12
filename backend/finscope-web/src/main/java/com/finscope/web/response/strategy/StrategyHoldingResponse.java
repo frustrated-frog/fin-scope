@@ -2,11 +2,36 @@ package com.finscope.web.response.strategy;
 
 import com.finscope.domain.strategy.StrategyHolding;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 @Data
 public class StrategyHoldingResponse {
-    private Long id; private Long instrumentId; private String code; private String type; private String name; private String role;
-    private double targetWeight; private double currentWeight; private String note; private long revision; private LocalDateTime updatedAt;
-    public static StrategyHoldingResponse of(StrategyHolding value){StrategyHoldingResponse r=new StrategyHoldingResponse();r.id=value.getId();r.instrumentId=value.getInstrumentId();r.code=value.getCode();r.type=value.getType();r.name=value.getName();r.role=value.getRole();r.targetWeight=value.getTargetWeight();r.currentWeight=value.getCurrentWeight();r.note=value.getNote();r.revision=value.getRevision();r.updatedAt=value.getUpdatedAt();return r;}
+    private Long id;
+    private Long instrumentId;
+    private String code;
+    private String type;
+    private String name;
+    private String role;
+    private double targetWeight;
+    private double currentWeight;
+    private String note;
+    private long revision;
+    private LocalDateTime updatedAt;
+
+    public static StrategyHoldingResponse of(StrategyHolding value) {
+        StrategyHoldingResponse response = new StrategyHoldingResponse();
+        response.id = value.getId();
+        response.instrumentId = value.getInstrumentId();
+        response.code = value.getCode();
+        response.type = value.getType();
+        response.name = value.getName();
+        response.role = value.getRole();
+        response.targetWeight = value.getTargetWeight();
+        response.currentWeight = value.getCurrentWeight();
+        response.note = value.getNote();
+        response.revision = value.getRevision();
+        response.updatedAt = value.getUpdatedAt();
+        return response;
+    }
 }

@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:8080';
+
 export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8080'
+      '/api': apiTarget
     }
   },
   test: {

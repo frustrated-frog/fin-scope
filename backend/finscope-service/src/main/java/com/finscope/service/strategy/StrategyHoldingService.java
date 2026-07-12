@@ -16,30 +16,79 @@ import java.util.Set;
 
 @Service
 public class StrategyHoldingService {
-    private static final Set<String> FUND_ROLES = new HashSet<>(Arrays.asList("CORE","SATELLITE","DEFENSIVE","OBSERVE"));
-    private static final Set<String> STOCK_ROLES = new HashSet<>(Arrays.asList("OBSERVE","SIMULATED","LIVE_VALIDATION"));
-    @Resource private StrategyHoldingRepository holdingRepository;
-    @Resource private StrategyInstrumentResolver instrumentResolver;
+    private static final Set<String> FUND_ROLES = new HashSet<>(
+            Arrays.asList("CORE", "SATELLITE", "DEFENSIVE", "OBSERVE"));
+    private static final Set<String> STOCK_ROLES = new HashSet<>(
+            Arrays.asList("OBSERVE", "SIMULATED", "LIVE_VALIDATION"));
 
-    public List<StrategyHolding> list() { return holdingRepository.findAllWithInstrument(); }
+    @Resource
+    private StrategyHoldingRepository holdingRepository;
+    @Resource
+    private StrategyInstrumentResolver instrumentResolver;
 
-    @Transactional
-    public StrategyHolding add(String code,String type,String role,double targetWeight,double currentWeight,String note) {
-        validateWeights(targetWeight,currentWeight); validateRole(type,role); validateTotal(null,targetWeight);
-        Instrument instrument=instrumentResolver.resolve(code,type);
-        StrategyHolding value=new StrategyHolding(); value.setInstrumentId(instrument.getId()); value.setRole(role); value.setTargetWeight(targetWeight); value.setCurrentWeight(currentWeight); value.setNote(note); return holdingRepository.save(value);
+    public List<StrategyHolding> list() {
+        return holdingRepository.findAllWithInstrument();
     }
 
     @Transactional
-    public StrategyHolding update(Long id,String role,double targetWeight,double currentWeight,String note,long revision) {
-        StrategyHolding current=holdingRepository.findById(id).orElseThrow(()->new BusinessException(ErrorCode.NOT_FOUND,"组合条目不存在"));
-        validateWeights(targetWeight,currentWeight); validateRole(current.getType(),role); validateTotal(id,targetWeight);
-        if(!holdingRepository.update(id,role,targetWeight,currentWeight,note,revision)) throw new BusinessException(ErrorCode.CONFLICT,"记录已被更新，请刷新后再试");
-        return holdingRepository.findById(id).orElseThrow(()->new BusinessException(ErrorCode.NOT_FOUND,"组合条目不存在"));
+    public StrategyHolding add(String code, String type, String role, double targetWeight,
+                               double currentWeight, String note) {
+        validateWeights(targetWeight, currentWeight);
+        validateRole(type, role);
+        Instrument instrument = instrumentResolver.resolve(code, type);
+        if (holdingRepository.existsByInstrumentId(instrument.getId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "该标的已在策略组合中");
+        }
+        validateTotal(null, targetWeight);
+
+        StrategyHolding value = new StrategyHolding();
+        value.setInstrumentId(instrument.getId());
+        value.setRole(role);
+        value.setTargetWeight(targetWeight);
+        value.setCurrentWeight(currentWeight);
+        value.setNote(note);
+        return holdingRepository.save(value);
     }
 
-    public void delete(Long id,long revision) { if(!holdingRepository.deleteByIdAndRevision(id,revision)) throw new BusinessException(ErrorCode.CONFLICT,"记录已被更新，请刷新后再试"); }
-    private void validateTotal(Long id,double value){ if(holdingRepository.sumTargetWeightExcluding(id)+value>100.000001d) throw new BusinessException(ErrorCode.BAD_REQUEST,"目标权重合计不能超过 100%"); }
-    private void validateWeights(double target,double current){ if(target<0||target>100||current<0||current>100) throw new BusinessException(ErrorCode.BAD_REQUEST,"权重必须在 0 到 100 之间"); }
-    private void validateRole(String type,String role){ if("FUND".equals(type)&&!FUND_ROLES.contains(role)) throw new BusinessException(ErrorCode.BAD_REQUEST,"基金角色只能是核心、卫星、防守或观察"); if("STOCK".equals(type)&&!STOCK_ROLES.contains(role)) throw new BusinessException(ErrorCode.BAD_REQUEST,"股票角色只能是观察、模拟或真实验证"); }
+    @Transactional
+    public StrategyHolding update(Long id, String role, double targetWeight,
+                                  double currentWeight, String note, long revision) {
+        StrategyHolding current = holdingRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "组合条目不存在"));
+        validateWeights(targetWeight, currentWeight);
+        validateRole(current.getType(), role);
+        validateTotal(id, targetWeight);
+        if (!holdingRepository.update(id, role, targetWeight, currentWeight, note, revision)) {
+            throw new BusinessException(ErrorCode.CONFLICT, "记录已被更新，请刷新后再试");
+        }
+        return holdingRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "组合条目不存在"));
+    }
+
+    public void delete(Long id, long revision) {
+        if (!holdingRepository.deleteByIdAndRevision(id, revision)) {
+            throw new BusinessException(ErrorCode.CONFLICT, "记录已被更新，请刷新后再试");
+        }
+    }
+
+    private void validateTotal(Long id, double value) {
+        if (holdingRepository.sumTargetWeightExcluding(id) + value > 100.000001d) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "目标权重合计不能超过 100%");
+        }
+    }
+
+    private void validateWeights(double targetWeight, double currentWeight) {
+        if (targetWeight < 0 || targetWeight > 100 || currentWeight < 0 || currentWeight > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "权重必须在 0 到 100 之间");
+        }
+    }
+
+    private void validateRole(String type, String role) {
+        if ("FUND".equals(type) && !FUND_ROLES.contains(role)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "基金角色只能是核心、卫星、防守或观察");
+        }
+        if ("STOCK".equals(type) && !STOCK_ROLES.contains(role)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "股票角色只能是观察、模拟或真实验证");
+        }
+    }
 }

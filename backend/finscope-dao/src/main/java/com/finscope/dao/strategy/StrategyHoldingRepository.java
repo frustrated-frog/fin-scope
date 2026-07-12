@@ -77,6 +77,12 @@ public class StrategyHoldingRepository {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    public boolean existsByInstrumentId(Long instrumentId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM strategy_holding WHERE instrument_id=?", Integer.class, instrumentId);
+        return count != null && count > 0;
+    }
+
     public double sumTargetWeightExcluding(Long id) {
         Double result = id == null
                 ? jdbcTemplate.queryForObject("SELECT COALESCE(SUM(target_weight), 0) FROM strategy_holding", Double.class)

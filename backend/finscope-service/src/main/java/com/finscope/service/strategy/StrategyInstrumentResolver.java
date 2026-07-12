@@ -17,27 +17,42 @@ import java.util.regex.Pattern;
 @Component
 public class StrategyInstrumentResolver {
     private static final Pattern CODE = Pattern.compile("\\d{6}");
-    @Resource private InstrumentRepository instrumentRepository;
-    @Resource private QuoteService quoteService;
+    @Resource
+    private InstrumentRepository instrumentRepository;
+    @Resource
+    private QuoteService quoteService;
 
     public Instrument resolve(String rawCode, String rawType) {
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
         String type = rawType == null ? "" : rawType.trim().toUpperCase(Locale.ROOT);
-        if (!CODE.matcher(code).matches()) throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码必须是 6 位数字");
-        if (!"FUND".equals(type) && !"STOCK".equals(type)) throw new BusinessException(ErrorCode.BAD_REQUEST, "策略组合只支持基金和股票");
+        if (!CODE.matcher(code).matches()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码必须是 6 位数字");
+        }
+        if (!"FUND".equals(type) && !"STOCK".equals(type)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "策略组合只支持基金和股票");
+        }
         return instrumentRepository.findByCodeAndType(code, type).orElseGet(() -> create(code, type));
     }
 
     private Instrument create(String code, String type) {
-        Instrument value = new Instrument(); value.setCode(code); value.setType(type); value.setName(resolveName(code, type)); value.setAliases(code);
-        if ("STOCK".equals(type)) value.setMarket(code.startsWith("6") ? "SH" : "SZ");
+        Instrument value = new Instrument();
+        value.setCode(code);
+        value.setType(type);
+        value.setName(resolveName(code, type));
+        value.setAliases(code);
+        if ("STOCK".equals(type)) {
+            value.setMarket(code.startsWith("6") ? "SH" : "SZ");
+        }
         return instrumentRepository.save(value);
     }
 
     private String resolveName(String code, String type) {
         try {
             List<Quote> quotes = quoteService.fetch(type, Collections.singletonList(code));
-            return quotes.isEmpty() || quotes.get(0).getName() == null ? code : quotes.get(0).getName();
-        } catch (RuntimeException ignored) { return code; }
+            return quotes.isEmpty() || quotes.get(0).getName() == null
+                    ? code : quotes.get(0).getName();
+        } catch (RuntimeException ignored) {
+            return code;
+        }
     }
 }

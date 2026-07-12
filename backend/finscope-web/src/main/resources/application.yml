@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:sqlite:../data/finance.db
+    url: jdbc:sqlite:../data/finance.db?foreign_keys=on
     driver-class-name: org.sqlite.JDBC
     hikari:
       maximum-pool-size: 4
