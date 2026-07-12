@@ -1,0 +1,3 @@
+package com.finscope.web.request.strategy;
+import lombok.Data;
+@Data public class UpdateStrategyStockThesisRequest { private String stage; private String thesis; private String buyConditions; private String invalidationConditions; private String watchFocus; private String note; private long revision; }
