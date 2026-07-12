@@ -31,9 +31,9 @@ public class DatabaseInitializer implements InitializingBean {
     }
 
     private void createSchema() {
-        jdbcTemplate.execute("PRAGMA foreign_keys=ON");
         jdbcTemplate.execute("PRAGMA journal_mode=WAL");
         jdbcTemplate.execute("PRAGMA busy_timeout=30000");
+        jdbcTemplate.execute("PRAGMA foreign_keys=ON");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS source ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "name TEXT NOT NULL,"
@@ -197,7 +197,10 @@ public class DatabaseInitializer implements InitializingBean {
                 + "novelty_type TEXT NOT NULL,"
                 + "novelty_reason TEXT,"
                 + "created_at TEXT NOT NULL,"
-                + "PRIMARY KEY(event_id, article_id))");
+                + "PRIMARY KEY(event_id, article_id),"
+                + "UNIQUE(article_id),"
+                + "FOREIGN KEY(event_id) REFERENCES event_cluster(id) ON DELETE CASCADE,"
+                + "FOREIGN KEY(article_id) REFERENCES article(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_article_article ON event_article_link(article_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_article_novelty ON event_article_link(novelty_type)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS evidence_item ("
@@ -207,10 +210,23 @@ public class DatabaseInitializer implements InitializingBean {
                 + "source_tier TEXT NOT NULL,"
                 + "evidence_type TEXT NOT NULL,"
                 + "claim TEXT NOT NULL,"
+                + "claim_key TEXT,"
                 + "confidence INTEGER NOT NULL DEFAULT 0,"
-                + "created_at TEXT NOT NULL)");
+                + "created_at TEXT NOT NULL,"
+                + "FOREIGN KEY(event_id) REFERENCES event_cluster(id) ON DELETE CASCADE,"
+                + "FOREIGN KEY(article_id) REFERENCES article(id) ON DELETE CASCADE)");
+        ensureColumn("evidence_item", "claim_key", "TEXT");
+        jdbcTemplate.update("UPDATE evidence_item SET claim_key = lower(trim(replace(replace(claim, char(10), ' '), char(13), ' '))) "
+                + "WHERE claim_key IS NULL OR trim(claim_key) = ''");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_evidence_event ON evidence_item(event_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_evidence_article ON evidence_item(article_id)");
+        createUniqueIndexIfNoDuplicates("uq_evidence_event_article_claim", "evidence_item",
+                "event_id, article_id, claim_key");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS event_evidence_thesis (id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,statement TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,rationale TEXT,evidence_gap TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(event_id, statement),FOREIGN KEY(event_id) REFERENCES event_cluster(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS event_evidence_thesis_link (thesis_id INTEGER NOT NULL,evidence_id INTEGER NOT NULL,PRIMARY KEY(thesis_id,evidence_id),FOREIGN KEY(thesis_id) REFERENCES event_evidence_thesis(id) ON DELETE CASCADE,FOREIGN KEY(evidence_id) REFERENCES evidence_item(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_evidence_thesis_event_status ON event_evidence_thesis(event_id,status)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_event_evidence_thesis_link_evidence ON event_evidence_thesis_link(evidence_id)");
+        createUniqueIndexIfNoDuplicates("uq_event_article_single_event", "event_article_link", "article_id");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS learning_task ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "event_id INTEGER,"
@@ -253,6 +269,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "learning_task_count INTEGER NOT NULL DEFAULT 0,"
                 + "content_idea_count INTEGER NOT NULL DEFAULT 0,"
                 + "brief_date TEXT,"
+                + "thesis_id INTEGER,"
                 + "status TEXT NOT NULL,"
                 + "summary TEXT,"
                 + "error_message TEXT,"
@@ -265,8 +282,39 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("research_run", "learning_task_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "content_idea_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "brief_date", "TEXT");
+        ensureColumn("research_run", "thesis_id", "INTEGER");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_date ON research_run(run_date)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_status ON research_run(status)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_thesis ON research_run(thesis_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_output ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,research_run_id INTEGER NOT NULL,output_type TEXT NOT NULL,"
+                + "output_id INTEGER NOT NULL,created_at TEXT NOT NULL,UNIQUE(research_run_id,output_type,output_id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_output_run ON research_run_output(research_run_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_thesis ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "question TEXT NOT NULL,"
+                + "subject_type TEXT NOT NULL,"
+                + "subject_name TEXT NOT NULL,"
+                + "subject_code TEXT,"
+                + "status TEXT NOT NULL,"
+                + "conclusion TEXT,"
+                + "confidence TEXT,"
+                + "next_validation TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_thesis_status ON research_thesis(status)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_thesis_subject "
+                + "ON research_thesis(subject_type, subject_code)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS thesis_finding ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "thesis_id INTEGER NOT NULL,"
+                + "stance TEXT NOT NULL,"
+                + "summary TEXT NOT NULL,"
+                + "evidence_id INTEGER,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thesis_finding_thesis ON thesis_finding(thesis_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thesis_finding_stance ON thesis_finding(stance)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_source ("
                 + "run_id INTEGER NOT NULL,"
                 + "source_id INTEGER,"
@@ -443,10 +491,18 @@ public class DatabaseInitializer implements InitializingBean {
                 + "drivers_json TEXT,"
                 + "disclaimer TEXT,"
                 + "error_message TEXT,"
+                + "warning_message TEXT,"
+                + "uncertainties_json TEXT,"
+                + "observation_windows_json TEXT,"
                 + "duration_ms INTEGER,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
+        ensureColumn("attribution_report", "warning_message", "TEXT");
+        ensureColumn("attribution_report", "uncertainties_json", "TEXT");
+        ensureColumn("attribution_report", "observation_windows_json", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_code ON attribution_report(instrument_code)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_identity "
+                + "ON attribution_report(instrument_code, instrument_type, id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_evidence ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "report_id INTEGER NOT NULL,"
@@ -457,7 +513,19 @@ public class DatabaseInitializer implements InitializingBean {
                 + "source_domain TEXT,"
                 + "source_tier TEXT,"
                 + "relevance INTEGER,"
+                + "event_type TEXT,"
+                + "stance TEXT,"
+                + "directness TEXT,"
+                + "published_at TEXT,"
+                + "event_key TEXT,"
+                + "historical_context INTEGER NOT NULL DEFAULT 0,"
                 + "created_at TEXT NOT NULL)");
+        ensureColumn("attribution_evidence", "event_type", "TEXT");
+        ensureColumn("attribution_evidence", "stance", "TEXT");
+        ensureColumn("attribution_evidence", "directness", "TEXT");
+        ensureColumn("attribution_evidence", "published_at", "TEXT");
+        ensureColumn("attribution_evidence", "event_key", "TEXT");
+        ensureColumn("attribution_evidence", "historical_context", "INTEGER NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_evidence_report ON attribution_evidence(report_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_holding ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -503,6 +571,33 @@ public class DatabaseInitializer implements InitializingBean {
                 + "next_action TEXT NOT NULL,"
                 + "created_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_review_date ON strategy_review(review_date DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_research_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "report_id INTEGER NOT NULL UNIQUE,"
+                + "status TEXT NOT NULL,"
+                + "plan_json TEXT,"
+                + "budget_json TEXT,"
+                + "current_step TEXT,"
+                + "termination_reason TEXT,"
+                + "error_message TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_run_status ON attribution_research_run(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_research_step ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "run_id INTEGER NOT NULL,"
+                + "step_id TEXT NOT NULL,"
+                + "track TEXT,"
+                + "status TEXT NOT NULL,"
+                + "input_summary TEXT,"
+                + "output_summary TEXT,"
+                + "attempt INTEGER NOT NULL DEFAULT 0,"
+                + "max_attempts INTEGER NOT NULL DEFAULT 1,"
+                + "error_message TEXT,"
+                + "started_at TEXT,"
+                + "ended_at TEXT,"
+                + "UNIQUE(run_id, step_id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_step_run ON attribution_research_step(run_id)");
     }
 
     private void ensureColumn(String table, String column, String type) {
@@ -513,5 +608,17 @@ public class DatabaseInitializer implements InitializingBean {
             }
         }
         jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+    }
+
+    /**
+     * Existing local databases may contain legacy duplicates. Never discard user history during startup:
+     * install the stronger invariant only once the stored data is already compatible.
+     */
+    private void createUniqueIndexIfNoDuplicates(String indexName, String table, String columns) {
+        Integer duplicateGroups = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM (SELECT " + columns
+                        + " FROM " + table + " GROUP BY " + columns + " HAVING COUNT(*) > 1)", Integer.class);
+        if (duplicateGroups != null && duplicateGroups == 0) {
+            jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS " + indexName + " ON " + table + "(" + columns + ")");
+        }
     }
 }

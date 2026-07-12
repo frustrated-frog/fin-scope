@@ -33,6 +33,7 @@ import {
   LearningTask,
   ResearchRun,
   ResearchRunDetail,
+  ResearchThesis,
   Source,
   ToastItem,
   Topic,
@@ -67,6 +68,7 @@ export default function App() {
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
   const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
+  const [researchTheses, setResearchTheses] = useState<ResearchThesis[]>([]);
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
@@ -89,21 +91,7 @@ export default function App() {
   };
 
   const refresh = async () => {
-    const [
-      dashboardData,
-      sourceData,
-      articleData,
-      briefData,
-      eventData,
-      evidenceData,
-      topicData,
-      learningTaskData,
-      contentIdeaData,
-      researchRunData,
-      agentData,
-      fetchBatchData,
-      intakeCandidateData
-    ] = await Promise.all([
+    const results = await Promise.allSettled([
       api<Dashboard>('/api/dashboard'),
       api<Source[]>('/api/sources'),
       api<Article[]>('/api/articles'),
@@ -114,23 +102,33 @@ export default function App() {
       api<LearningTask[]>('/api/learning-tasks'),
       api<ContentIdea[]>('/api/content-ideas'),
       api<ResearchRun[]>('/api/research/runs'),
+      api<ResearchThesis[]>('/api/research/theses'),
       api<AgentRun[]>('/api/agent-runs'),
       api<FetchBatch[]>('/api/intake/batches'),
       api<IntakeCandidate[]>(`/api/intake/candidates?status=${intakeStatus}`)
     ]);
-    setDashboard(dashboardData);
-    setSources(sourceData);
-    setArticles(articleData);
-    setBriefs(briefData);
-    setEvents(eventData);
-    setEvidenceItems(evidenceData);
-    setTopics(topicData);
-    setLearningTasks(learningTaskData);
-    setContentIdeas(contentIdeaData);
-    setResearchRuns(researchRunData);
-    setAgentRuns(agentData);
-    setFetchBatches(fetchBatchData);
-    setIntakeCandidates(intakeCandidateData);
+    const value = <T,>(index: number): T | undefined => {
+      const result = results[index];
+      return result.status === 'fulfilled' ? result.value as T : undefined;
+    };
+    const dashboardData = value<Dashboard>(0); if (dashboardData) setDashboard(dashboardData);
+    const sourceData = value<Source[]>(1); if (sourceData) setSources(sourceData);
+    const articleData = value<Article[]>(2); if (articleData) setArticles(articleData);
+    const briefData = value<Brief[]>(3); if (briefData) setBriefs(briefData);
+    const eventData = value<EventCluster[]>(4); if (eventData) setEvents(eventData);
+    const evidenceData = value<EvidenceItem[]>(5); if (evidenceData) setEvidenceItems(evidenceData);
+    const topicData = value<Topic[]>(6); if (topicData) setTopics(topicData);
+    const learningTaskData = value<LearningTask[]>(7); if (learningTaskData) setLearningTasks(learningTaskData);
+    const contentIdeaData = value<ContentIdea[]>(8); if (contentIdeaData) setContentIdeas(contentIdeaData);
+    const researchRunData = value<ResearchRun[]>(9); if (researchRunData) setResearchRuns(researchRunData);
+    const researchThesisData = value<ResearchThesis[]>(10); if (researchThesisData) setResearchTheses(researchThesisData);
+    const agentData = value<AgentRun[]>(11); if (agentData) setAgentRuns(agentData);
+    const fetchBatchData = value<FetchBatch[]>(12); if (fetchBatchData) setFetchBatches(fetchBatchData);
+    const intakeCandidateData = value<IntakeCandidate[]>(13); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
+    const failureCount = results.filter((result) => result.status === 'rejected').length;
+    if (failureCount) {
+      setMessage(`部分工作区数据刷新失败（${failureCount} 项），已保留已加载内容`);
+    }
   };
 
   useEffect(() => {
@@ -219,6 +217,8 @@ export default function App() {
         return 'Research';
       case 'events':
         return 'Events';
+      case 'eventDetail':
+        return 'Event Archive';
       case 'evidence':
         return 'Evidence Ledger';
       case 'topics':
@@ -282,7 +282,7 @@ export default function App() {
 
   function openEvent(eventId: number) {
     setFocusedEventId(eventId);
-    setView('events');
+    setView('eventDetail');
   }
 
   async function openBrief(date: string) {
@@ -320,6 +320,7 @@ export default function App() {
   }
 
   async function runResearch(input: {
+    thesisId?: number;
     runDate: string;
     themeCodes: string[];
     maxSourcesPerTheme: number;
@@ -348,6 +349,16 @@ export default function App() {
     } finally {
       setResearchBusy(false);
     }
+  }
+
+  async function createResearchThesis(input: Omit<ResearchThesis, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
+    const thesis = await api<ResearchThesis>('/api/research/theses', {
+      method: 'POST',
+      body: JSON.stringify(input)
+    });
+    setResearchTheses((current) => [thesis, ...current.filter((item) => item.id !== thesis.id)]);
+    addToast('研究命题已创建', 'success');
+    return thesis;
   }
 
   async function refreshWorkspace() {
@@ -481,9 +492,11 @@ export default function App() {
       {view === 'research' && (
         <ResearchView
           runs={researchRuns}
+          theses={researchTheses}
           detail={researchRunDetail}
           busy={researchBusy}
           onRun={runResearch}
+          onCreateThesis={createResearchThesis}
           onOpenRun={openResearchRun}
           onOpenBrief={openBrief}
         />
@@ -492,6 +505,8 @@ export default function App() {
         <EventsView
           events={events}
           initialEventId={focusedEventId}
+          mode="queue"
+          onOpenEvent={openEvent}
           learningTasks={learningTasks}
           contentIdeas={contentIdeas}
           onLearningTaskStatusChange={updateLearningTaskStatus}
@@ -500,9 +515,30 @@ export default function App() {
           onMergeEvent={mergeEvent}
           onMoveEventArticle={moveEventArticle}
           onChanged={refresh}
+          addToast={addToast}
         />
       )}
-      {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} />}
+      {view === 'eventDetail' && (
+        <EventsView
+          events={events}
+          initialEventId={focusedEventId}
+          mode="detail"
+          onOpenEvent={openEvent}
+          onBack={() => setView('events')}
+          learningTasks={learningTasks}
+          contentIdeas={contentIdeas}
+          onLearningTaskStatusChange={updateLearningTaskStatus}
+          onContentIdeaStatusChange={updateContentIdeaStatus}
+          onEventStatusChange={updateEventStatus}
+          onMergeEvent={mergeEvent}
+          onMoveEventArticle={moveEventArticle}
+          onChanged={refresh}
+          addToast={addToast}
+        />
+      )}
+      {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenEvent={(eventId) => {
+        openEvent(eventId);
+      }} />}
       {view === 'topics' && (
         <TopicsView
           topics={topics}

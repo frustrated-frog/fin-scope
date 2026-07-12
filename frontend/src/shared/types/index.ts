@@ -7,6 +7,7 @@ export type View =
   | 'briefReader'
   | 'research'
   | 'events'
+  | 'eventDetail'
   | 'evidence'
   | 'topics'
   | 'topicReader'
@@ -160,6 +161,18 @@ export type AsyncTask = {
   article?: Article;
 };
 
+export type TaskProgressEvent = {
+  eventId: string;
+  taskId: string;
+  type: 'SNAPSHOT' | 'PHASE' | 'DONE' | 'ERROR' | 'HEARTBEAT';
+  status?: AsyncTask['status'];
+  phase?: AsyncTask['phase'];
+  message?: string;
+  errorMessage?: string;
+  articleId?: number;
+  occurredAt?: string;
+};
+
 export type Brief = {
   id: number;
   briefDate: string;
@@ -204,8 +217,12 @@ export type EvidenceItem = {
   sourceTier: string;
   evidenceType: string;
   claim: string;
+  claimKey?: string;
   confidence: number;
   createdAt?: string;
+  articleTitle?: string;
+  articleUrl?: string;
+  articlePublishedAt?: string;
 };
 
 export type LearningTask = {
@@ -277,6 +294,7 @@ export type ResearchRunPlanStep = {
 
 export type ResearchRun = {
   id: number;
+  thesisId?: number;
   runDate: string;
   themeCodes: string[];
   sourceCount: number;
@@ -292,6 +310,31 @@ export type ResearchRun = {
   errorMessage?: string;
   plannedSources?: SourceProfile[];
 };
+
+export type ResearchThesis = {
+  id: number;
+  question: string;
+  subjectType: 'COMPANY' | 'INDUSTRY' | 'WATCHLIST';
+  subjectName: string;
+  subjectCode?: string;
+  status: 'OPEN' | 'CONCLUDED' | 'ARCHIVED';
+  conclusion?: string;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+  nextValidation?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ThesisFinding = {
+  id: number;
+  thesisId: number;
+  stance: 'SUPPORT' | 'COUNTER' | 'UNKNOWN';
+  summary: string;
+  evidenceId?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+export type ResearchThesisDetail = { thesis: ResearchThesis; findings: ThesisFinding[]; runs: ResearchRun[]; outputs: { id: number; researchRunId: number; outputType: string; outputId: number }[] };
 
 export type ResearchRunDetail = {
   run: ResearchRun;
@@ -378,6 +421,11 @@ export type AttributionDriver = {
   impactLevel?: string;
   confidence?: string;
   detail?: string;
+  facts?: string[];
+  transmissionPath?: string;
+  counterEvidence?: string;
+  observationWindow?: string;
+  evidenceUrls?: string[];
 };
 
 export type AttributionEvidence = {
@@ -389,6 +437,12 @@ export type AttributionEvidence = {
   sourceDomain?: string;
   sourceTier?: string;
   relevance?: number;
+  eventType?: string;
+  stance?: string;
+  directness?: string;
+  publishedAt?: string;
+  eventKey?: string;
+  historicalContext?: boolean;
 };
 
 export type AttributionReport = {
@@ -401,9 +455,13 @@ export type AttributionReport = {
   status: 'GENERATING' | 'COMPLETED' | 'FAILED';
   summary?: string;
   drivers?: AttributionDriver[];
+  primaryDriver?: AttributionDriver;
+  uncertainties?: string[];
+  observationWindows?: string[];
   disclaimer?: string;
   evidences?: AttributionEvidence[];
   errorMessage?: string;
+  warningMessage?: string;
   durationMs?: number;
 };
 
@@ -414,6 +472,39 @@ export type AttributionProgress = {
   reportId?: number;
 };
 
+export type AttributionResearchStep = {
+  id?: number;
+  stepId: string;
+  track?: string;
+  status: 'PLANNED' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'SKIPPED';
+  inputSummary?: string;
+  outputSummary?: string;
+  attempt?: number;
+  maxAttempts?: number;
+  errorMessage?: string;
+};
+
+export type AttributionResearchRunView = {
+  run: {
+    id: number;
+    reportId: number;
+    status: 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
+    currentStep?: string;
+    terminationReason?: string;
+    errorMessage?: string;
+    planJson?: string;
+    budgetJson?: string;
+  };
+  steps: AttributionResearchStep[];
+  progress?: {
+    plannedTracks: number;
+    activatedTracks: number;
+    settledTracks: number;
+    currentTrack?: string;
+    currentStep?: string;
+  };
+};
+
 export type WatchlistItem = {
   id: number;
   code: string;
@@ -422,6 +513,9 @@ export type WatchlistItem = {
   market?: string;
   groupName?: string;
   price?: number;
+  confirmedNav?: number;
+  confirmedNavDate?: string;
+  confirmedNavChangePct?: number;
   changePct?: number;
   changeAmount?: number;
   turnover?: number;
@@ -429,6 +523,17 @@ export type WatchlistItem = {
   high?: number;
   low?: number;
   amplitude?: number;
+  quoteValid: boolean;
+  quoteNote?: string;
+  attributionSummary?: string;
+};
+
+export type MarketIndexQuote = {
+  code: string;
+  name: string;
+  price?: number;
+  changeAmount?: number;
+  changePct?: number;
   quoteValid: boolean;
   quoteNote?: string;
 };

@@ -3,7 +3,9 @@ package com.finscope.web.controller;
 import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.source.Source;
 import com.finscope.service.intake.IntakeService;
+import com.finscope.service.intake.IntakeFetchTaskService;
 import com.finscope.service.source.SourceService;
+import com.finscope.service.task.TaskView;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +27,8 @@ public class SourceController {
     private SourceService sourceService;
     @Resource
     private IntakeService intakeService;
+    @Resource
+    private IntakeFetchTaskService intakeFetchTaskService;
 
     @GetMapping
     public List<Source> list() {
@@ -57,5 +61,11 @@ public class SourceController {
     public FetchBatch intakeFetch(@PathVariable Long id) {
         log.info("开始摄入信息源 sourceId={}", id);
         return intakeService.intakeFetch(id);
+    }
+
+    @PostMapping("/{id}/intake-fetch-async")
+    public TaskView intakeFetchAsync(@PathVariable Long id) {
+        log.info("提交信息源异步摄入 sourceId={}", id);
+        return intakeFetchTaskService.submit(id);
     }
 }

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { WatchlistItem } from '../../shared/types';
+import { MarketIndexQuote, WatchlistItem } from '../../shared/types';
 import { AttributionReaderView } from './AttributionReaderView';
 
 type AttributionTarget = {
   taskId: string;
+  reportId: number;
   code: string;
   name?: string;
   changePct?: number;
@@ -25,11 +26,11 @@ function formatPct(value?: number) {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function formatPrice(value?: number) {
+function formatPrice(value?: number, type?: WatchlistItem['type']) {
   if (value === undefined || value === null) {
     return '--';
   }
-  return value.toFixed(2);
+  return value.toFixed(type === 'FUND' ? 4 : 2);
 }
 
 function changeClass(value?: number) {
@@ -60,9 +61,29 @@ function formatNum(value?: number) {
   return value.toFixed(2);
 }
 
+function formatChangeAmount(value?: number) {
+  if (value === undefined || value === null) {
+    return '--';
+  }
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}`;
+}
+
 // 异动：涨跌幅绝对值超过阈值
 function isAbnormal(value?: number) {
   return value !== undefined && value !== null && Math.abs(value) >= 5;
+}
+
+const DEFAULT_GROUP_LABEL = '未分组';
+const COLLAPSE_STORAGE_KEY = 'watchlist.collapsedGroups';
+
+function loadCollapsed(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
 }
 
 export function WatchlistView({
@@ -73,60 +94,62 @@ export function WatchlistView({
   setMessage: (message: string) => void;
 }) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
+  const [marketIndices, setMarketIndices] = useState<MarketIndexQuote[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [type, setType] = useState<'STOCK' | 'FUND' | 'SECTOR'>('STOCK');
   const [group, setGroup] = useState('');
   const [sortByChange, setSortByChange] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [attribution, setAttribution] = useState<AttributionTarget | null>(null);
-  const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [attributing, setAttributing] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
+  const [movingId, setMovingId] = useState<number | null>(null);
+  const [groupFocused, setGroupFocused] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
       const data = await api<WatchlistItem[]>('/api/watchlist');
       setItems(data);
-      loadSummaries(data);
+      setLoadError(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '自选列表加载失败');
+      const message = error instanceof Error ? error.message : '自选列表加载失败';
+      setLoadError(message);
+      setMessage(message);
     } finally {
       setLoading(false);
     }
   }
 
-  // 拉取各标的最新归因摘要，用于卡片徽标
-  async function loadSummaries(list: WatchlistItem[]) {
-    const entries = await Promise.all(
-      list.map(async (item) => {
-        try {
-          const report = await api<{ summary?: string } | null>(
-            `/api/attribution/latest?code=${encodeURIComponent(item.code)}`
-          );
-          return [item.code, report && report.summary ? report.summary : ''] as const;
-        } catch {
-          return [item.code, ''] as const;
-        }
-      })
-    );
-    const next: Record<string, string> ={};
-    entries.forEach(([code, summary]) => {
-      if (summary) {
-        next[code] = summary;
-      }
-    });
-    setSummaries(next);
+  async function loadMarketIndices() {
+    try {
+      const data = await api<MarketIndexQuote[]>('/api/market-indices');
+      setMarketIndices(data);
+    } catch {
+      setMarketIndices([]);
+    }
+  }
+
+  async function refreshQuotes() {
+    await Promise.all([load(), loadMarketIndices()]);
   }
 
   async function startAttribution(item: WatchlistItem) {
     setAttributing(item.code);
     try {
-      const res = await api<{ taskId: string }>('/api/attribution/start', {
+      const res = await api<{ taskId: string; reportId: string | number }>('/api/attribution/start', {
         method: 'POST',
         body: JSON.stringify({ code: item.code, type: item.type, name: item.name, changePct: item.changePct })
       });
-      setAttribution({ taskId: res.taskId, code: item.code, name: item.name, changePct: item.changePct });
+      setAttribution({
+        taskId: res.taskId,
+        reportId: Number(res.reportId),
+        code: item.code,
+        name: item.name,
+        changePct: item.changePct
+      });
     } catch (error) {
       addToast(error instanceof Error ? error.message : '归因启动失败', 'error');
     } finally {
@@ -136,11 +159,11 @@ export function WatchlistView({
 
   function closeAttribution() {
     setAttribution(null);
-    load();
+    refreshQuotes();
   }
 
   useEffect(() => {
-    load();
+    refreshQuotes();
   }, []);
 
   const sortedItems = useMemo(() => {
@@ -150,6 +173,91 @@ export function WatchlistView({
     }
     return clone;
   }, [items, sortByChange]);
+
+  // 按分组聚合：未填分组归入"未分组"，并计算每组汇总
+  const groups = useMemo(() => {
+    const map = new Map<string, WatchlistItem[]>();
+    for (const item of sortedItems) {
+      const key = item.groupName?.trim() || DEFAULT_GROUP_LABEL;
+      const bucket = map.get(key);
+      if (bucket) {
+        bucket.push(item);
+      } else {
+        map.set(key, [item]);
+      }
+    }
+    return Array.from(map.entries()).map(([name, list]) => {
+      const valid = list.filter((it) => it.changePct !== undefined && it.changePct !== null);
+      const avgChange = valid.length
+        ? valid.reduce((sum, it) => sum + (it.changePct ?? 0), 0) / valid.length
+        : undefined;
+      const abnormalCount = list.filter((it) => isAbnormal(it.changePct)).length;
+      return { name, list, avgChange, abnormalCount };
+    });
+  }, [sortedItems]);
+
+  // 已有分组名（供移动分组下拉与新增联想）
+  const existingGroups = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((it) => {
+      const g = it.groupName?.trim();
+      if (g) {
+        set.add(g);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh'));
+  }, [items]);
+
+  // 分组输入的联想候选：按已输入内容过滤
+  const groupSuggestions = useMemo(() => {
+    const keyword = group.trim().toLowerCase();
+    if (!keyword) {
+      return existingGroups;
+    }
+    return existingGroups.filter((g) => g.toLowerCase().includes(keyword) && g.toLowerCase() !== keyword);
+  }, [existingGroups, group]);
+
+  function persistCollapsed(next: Record<string, boolean>) {
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function toggleGroup(name: string) {
+    persistCollapsed({ ...collapsed, [name]: !collapsed[name] });
+  }
+
+  function setAllCollapsed(value: boolean) {
+    const next: Record<string, boolean> = {};
+    groups.forEach((g) => {
+      next[g.name] = value;
+    });
+    persistCollapsed(next);
+  }
+
+  // 将标的移动到目标分组（空串表示移出到"未分组"）
+  async function moveGroup(item: WatchlistItem, target: string) {
+    const normalized = target === DEFAULT_GROUP_LABEL ? '' : target.trim();
+    if ((item.groupName?.trim() || '') === normalized) {
+      return;
+    }
+    setMovingId(item.id);
+    try {
+      await api(`/api/watchlist/${item.id}/group`, {
+        method: 'PATCH',
+        body: JSON.stringify({ groupName: normalized || null })
+      });
+      addToast('已更新分组', 'success');
+      await load();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '分组更新失败', 'error');
+    } finally {
+      setMovingId(null);
+    }
+  }
 
   async function addItem() {
     if (!code.trim()) {
@@ -187,6 +295,7 @@ export function WatchlistView({
     return (
       <AttributionReaderView
         taskId={attribution.taskId}
+        reportId={attribution.reportId}
         code={attribution.code}
         name={attribution.name}
         changePct={attribution.changePct}
@@ -196,11 +305,48 @@ export function WatchlistView({
   }
 
   return (
-    <section className="panel wide">
-      <div className="panel-heading">
-        <h3>我的自选</h3>
-        <span className="subtle-badge">{items.length} 标的</span>
-      </div>
+    <div className="watchlist-page">
+      <section className="market-index-overview" aria-labelledby="market-index-title">
+        <h4 id="market-index-title">市场指数</h4>
+        <div className="market-index-grid">
+          {marketIndices.map((index) => (
+            <article className="market-index-card" data-testid="market-index-card" key={index.code}>
+              <span className="market-index-name">{index.name}</span>
+              {index.quoteValid ? (
+                <div className="market-index-values">
+                  <strong className={changeClass(index.changePct)}>{formatNum(index.price)}</strong>
+                  <div className="market-index-change-row">
+                    <span className={changeClass(index.changePct)}>{formatChangeAmount(index.changeAmount)}</span>
+                    <span className={changeClass(index.changePct)}>{formatPct(index.changePct)}</span>
+                  </div>
+                </div>
+              ) : (
+                <span className="muted market-index-note">{index.quoteNote || '暂无行情'}</span>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <h3>我的自选</h3>
+          {loadError ? (
+            <span className="subtle-badge watchlist-load-failed">加载失败</span>
+          ) : (
+            <span className="subtle-badge">{items.length} 标的</span>
+          )}
+          {groups.length > 1 && (
+            <div className="watchlist-group-toolbar">
+              <button className="ghost-button compact-button" type="button" onClick={() => setAllCollapsed(false)}>
+                全部展开
+              </button>
+              <button className="ghost-button compact-button" type="button" onClick={() => setAllCollapsed(true)}>
+                全部收起
+              </button>
+            </div>
+          )}
+        </div>
 
       <div className="watchlist-add-row">
         <input
@@ -219,16 +365,39 @@ export function WatchlistView({
           <option value="FUND">基金</option>
           <option value="SECTOR">板块</option>
         </select>
-        <input
-          className="watchlist-input"
-          placeholder="分组（可选）"
-          value={group}
-          onChange={(event) => setGroup(event.target.value)}
-        />
+        <div className="watchlist-group-field">
+          <input
+            className="watchlist-input"
+            placeholder="分组（可选）"
+            value={group}
+            onChange={(event) => setGroup(event.target.value)}
+            onFocus={() => setGroupFocused(true)}
+            onBlur={() => window.setTimeout(() => setGroupFocused(false), 120)}
+          />
+          {groupFocused && groupSuggestions.length > 0 && (
+            <ul className="watchlist-group-suggest" role="listbox">
+              {groupSuggestions.map((g) => (
+                <li key={g}>
+                  <button
+                    type="button"
+                    className="watchlist-group-suggest-item"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setGroup(g);
+                      setGroupFocused(false);
+                    }}
+                  >
+                    {g}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button className="primary-button" type="button" disabled={submitting} onClick={addItem}>
           {submitting ? '添加中…' : '加入自选'}
         </button>
-        <button className="ghost-button" type="button" onClick={load}>刷新行情</button>
+        <button className="ghost-button" type="button" onClick={refreshQuotes}>刷新行情</button>
         <label className="watchlist-sort">
           <input
             className="watchlist-toggle-input"
@@ -243,78 +412,138 @@ export function WatchlistView({
         </label>
       </div>
 
+      {loadError && (
+        <p className="watchlist-load-error" role="alert">
+          自选列表加载失败：{loadError}。请点击“刷新行情”重试。
+        </p>
+      )}
+
       {loading && items.length === 0 ? (
         <p className="muted">加载中…</p>
-      ) : sortedItems.length === 0 ? (
+      ) : loadError ? null : sortedItems.length === 0 ? (
         <p className="muted">还没有自选标的，输入代码加入吧。</p>
       ) : (
-        <div className="watchlist-grid">
-          {sortedItems.map((item) => (
-            <article
-              className={`panel watchlist-card${isAbnormal(item.changePct) ? ' watchlist-card-abnormal' : ''}`}
-              key={item.id}
-            >
-              <button
-                className="watchlist-remove"
-                type="button"
-                aria-label={`移除-${item.code}`}
-                title="移除"
-                onClick={() => removeItem(item.id)}
-              >
-                ×
-              </button>
-              <div className="watchlist-card-head">
-                <strong className="watchlist-name">
-                  {item.name || item.code}
-                  {isAbnormal(item.changePct) && <span className="watchlist-abnormal-tag">异动</span>}
-                </strong>
-                <span className="watchlist-meta">
-                  {item.code} · {typeLabels[item.type] || item.type}
-                  {item.groupName ? ` · ${item.groupName}` : ''}
-                </span>
-              </div>
-              {item.quoteValid ? (
-                <>
-                  <div className={`watchlist-quote ${changeClass(item.changePct)}`}>
-                    <span className="watchlist-price">{formatPrice(item.price)}</span>
-                    <span className="watchlist-change">{formatPct(item.changePct)}</span>
-                  </div>
-                  {item.type === 'STOCK' ? (
-                    <div className="watchlist-stats">
-                      <span>开： {formatNum(item.open)}</span>
-                      <span>高： {formatNum(item.high)}</span>
-                      <span>低： {formatNum(item.low)}</span>
-                      {item.amplitude !== undefined && item.amplitude !== null && (
-                        <span>振幅： {item.amplitude.toFixed(2)}%</span>
-                      )}
-                      {formatTurnover(item.turnover) && (
-                        <span>额： {formatTurnover(item.turnover)}</span>
-                      )}
+        <>
+          <div className="watchlist-groups">
+            {groups.map((groupBlock) => {
+              const isCollapsed = Boolean(collapsed[groupBlock.name]);
+              return (
+                <section className="watchlist-group" key={groupBlock.name}>
+                  <button
+                    className="watchlist-group-head"
+                    type="button"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleGroup(groupBlock.name)}
+                  >
+                    <span className={`watchlist-group-caret${isCollapsed ? ' is-collapsed' : ''}`} aria-hidden="true">
+                      ▾
+                    </span>
+                    <span className="watchlist-group-name">{groupBlock.name}</span>
+                    <span className="watchlist-group-count">{groupBlock.list.length}</span>
+                    {groupBlock.avgChange !== undefined && (
+                      <span className={`watchlist-group-avg ${changeClass(groupBlock.avgChange)}`}>
+                        均 {formatPct(groupBlock.avgChange)}
+                      </span>
+                    )}
+                    {groupBlock.abnormalCount > 0 && (
+                      <span className="watchlist-group-abnormal">{groupBlock.abnormalCount} 异动</span>
+                    )}
+                  </button>
+                  {!isCollapsed && (
+                    <div className="watchlist-grid">
+                      {groupBlock.list.map((item) => (
+                        <article
+                          className={`panel watchlist-card${isAbnormal(item.changePct) ? ' watchlist-card-abnormal' : ''}`}
+                          key={item.id}
+                        >
+                          <button
+                            className="watchlist-remove"
+                            type="button"
+                            aria-label={`移除-${item.code}`}
+                            title="移除"
+                            onClick={() => removeItem(item.id)}
+                          >
+                            ×
+                          </button>
+                          <div className="watchlist-card-head">
+                            <strong className="watchlist-name">
+                              {item.name || item.code}
+                              {isAbnormal(item.changePct) && <span className="watchlist-abnormal-tag">异动</span>}
+                            </strong>
+                            <span className="watchlist-meta">
+                              {item.code} · {typeLabels[item.type] || item.type}
+                            </span>
+                          </div>
+                          {item.quoteValid ? (
+                            <>
+                              <div className={`watchlist-quote ${changeClass(item.changePct)}`}>
+                                {item.type === 'FUND' ? (
+                                  <div className="fund-quote-values">
+                                    <span><small>确认净值</small><strong>{formatPrice(item.confirmedNav, item.type)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong></span>
+                                    <span><small>盘中估值</small><strong>{formatPrice(item.price, item.type)} <em>{formatPct(item.changePct)}</em></strong></span>
+                                  </div>
+                                ) : <><span className="watchlist-price">{formatPrice(item.price, item.type)}</span><span className="watchlist-change">{formatPct(item.changePct)}</span></>}
+                              </div>
+                              {item.type === 'STOCK' ? (
+                                <div className="watchlist-stats">
+                                  <span>开： {formatNum(item.open)}</span>
+                                  <span>高： {formatNum(item.high)}</span>
+                                  <span>低： {formatNum(item.low)}</span>
+                                  {item.amplitude !== undefined && item.amplitude !== null && (
+                                    <span>振幅： {item.amplitude.toFixed(2)}%</span>
+                                  )}
+                                  {formatTurnover(item.turnover) && <span>额： {formatTurnover(item.turnover)}</span>}
+                                </div>
+                              ) : item.type !== 'FUND' ? (
+                                item.quoteNote && <div className="watchlist-stats">{item.quoteNote}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="muted watchlist-note">{item.quoteNote || '暂无行情'}</p>
+                          )}
+                          {item.attributionSummary && (
+                            <p className="watchlist-attr-summary" title={item.attributionSummary}>
+                              {item.attributionSummary}
+                            </p>
+                          )}
+                          <div className="watchlist-card-actions">
+                            <label className="watchlist-move" title="移动到分组">
+                              <span className="watchlist-move-label">分组</span>
+                              <select
+                                className="watchlist-move-select"
+                                aria-label={`移动分组-${item.code}`}
+                                disabled={movingId === item.id}
+                                value={item.groupName?.trim() || DEFAULT_GROUP_LABEL}
+                                onChange={(event) => moveGroup(item, event.target.value)}
+                              >
+                                <option value={DEFAULT_GROUP_LABEL}>{DEFAULT_GROUP_LABEL}</option>
+                                {existingGroups.map((g) => (
+                                  <option key={g} value={g}>
+                                    {g}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              className="watchlist-attr-button"
+                              type="button"
+                              disabled={attributing === item.code}
+                              onClick={() => startAttribution(item)}
+                            >
+                              {attributing === item.code ? '启动中…' : '🔬 深度归因'}
+                            </button>
+                          </div>
+                        </article>
+                      ))}
                     </div>
-                  ) : (
-                    item.quoteNote && <div className="watchlist-stats">{item.quoteNote}</div>
                   )}
-                </>
-              ) : (
-                <p className="muted watchlist-note">{item.quoteNote || '暂无行情'}</p>
-              )}
-              {summaries[item.code] && (
-                <p className="watchlist-attr-summary" title={summaries[item.code]}>
-                  {summaries[item.code]}
-                </p>
-              )}
-              <button
-                className="watchlist-attr-button"
-                type="button"
-                disabled={attributing === item.code}
-                onClick={() => startAttribution(item)}
-              >
-                {attributing === item.code ? '启动中…' : '🔬 深度归因'}
-              </button>
-            </article>
-          ))}
-        </div>
+                </section>
+              );
+            })}
+          </div>
+        </>
       )}
-    </section>
+      </section>
+    </div>
   );
 }

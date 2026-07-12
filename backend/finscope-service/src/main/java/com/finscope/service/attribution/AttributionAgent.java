@@ -17,9 +17,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 归因研究 Agent：给定标的与行情异动，跑六节点研究工作流，产出结构化归因。
@@ -47,11 +53,51 @@ public class AttributionAgent {
                          Double changePct,
                          String taskId,
                          AttributionProgressPublisher publisher) {
+        researchInternal(report, instrument, changePct, taskId, publisher, null,
+                AttributionResearchProgressListener.NO_OP);
+    }
+
+    /** 按 Harness 已校验的研究计划执行，确保计划不是仅用于展示的旁路数据。 */
+    public AttributionResearchExecution researchWithPlan(AttributionReport report,
+                                 Instrument instrument,
+                                 Double changePct,
+                                 String taskId,
+                                 AttributionProgressPublisher publisher,
+                                 AttributionResearchPlan plan) {
+        return researchWithPlan(report, instrument, changePct, taskId, publisher, plan,
+                AttributionResearchProgressListener.NO_OP);
+    }
+
+    /** 执行期只上报事实，具体落库由 Harness 负责。 */
+    public AttributionResearchExecution researchWithPlan(AttributionReport report,
+                                 Instrument instrument,
+                                 Double changePct,
+                                 String taskId,
+                                 AttributionProgressPublisher publisher,
+                                 AttributionResearchPlan plan,
+                                 AttributionResearchProgressListener progressListener) {
+        return researchInternal(report, instrument, changePct, taskId, publisher, plan,
+                progressListener == null ? AttributionResearchProgressListener.NO_OP : progressListener);
+    }
+
+    private AttributionResearchExecution researchInternal(AttributionReport report,
+                                  Instrument instrument,
+                                  Double changePct,
+                                  String taskId,
+                                  AttributionProgressPublisher publisher,
+                                  AttributionResearchPlan plan,
+                                  AttributionResearchProgressListener progressListener) {
         List<AttributionEvidence> evidences = new ArrayList<>();
+        Set<String> evidenceKeys = new LinkedHashSet<>();
+        AttributionResearchExecution execution = new AttributionResearchExecution();
 
         // ① question-plan
         long t0 = System.currentTimeMillis();
-        List<String> questions = planQuestions(instrument, changePct);
+        progressListener.stageStarted("question-plan");
+        Map<String, String> queryTracks = plan == null
+                ? legacyQueryTracks(instrument, changePct) : plannedQueryTracks(plan);
+        List<String> questions = new ArrayList<>(queryTracks.keySet());
+        for (String track : queryTracks.values()) execution.track(track);
         publisher.publish(taskId, AttributionProgressEvent.stage("question-plan",
                 "已生成 " + questions.size() + " 个研究方向"));
         agentRunRepository.record("attribution:question-plan", "SUCCESS",
@@ -60,39 +106,90 @@ public class AttributionAgent {
         // ② web-search
         long t1 = System.currentTimeMillis();
         if (webSearchClient.isConfigured()) {
+            progressListener.stageStarted("web-search");
+            publisher.publish(taskId, AttributionProgressEvent.stage("web-search", "正在检索全网线索"));
+            int successfulQueries = 0;
+            List<String> failures = new ArrayList<>();
+            Set<String> startedTracks = new LinkedHashSet<>();
+            long deadline = plan == null ? Long.MAX_VALUE
+                    : System.currentTimeMillis() + plan.getBudget().getMaxRunSeconds() * 1000L;
             for (String q : questions) {
+                String track = queryTracks.get(q);
+                AttributionResearchExecution.TrackResult trackResult = execution.track(track);
+                if (startedTracks.add(track)) {
+                    progressListener.trackStarted(trackResult);
+                }
+                if (System.currentTimeMillis() >= deadline) {
+                    trackResult.setBudgetStopped(true);
+                    trackResult.setLastError("超过研究时间预算");
+                    progressListener.trackUpdated(trackResult);
+                    report.setWarningMessage("研究达到时间预算，已基于当前证据生成部分报告。");
+                    continue;
+                }
+                trackResult.attempted();
+                progressListener.trackUpdated(trackResult);
                 try {
                     List<SearchResult> hits = webSearchClient.search(q, 4);
+                    successfulQueries++;
+                    trackResult.succeeded();
                     for (SearchResult hit : hits) {
-                        evidences.add(toEvidence(hit));
-                        publisher.publish(taskId, AttributionProgressEvent.clue(
-                                "找到：" + shorten(hit.getTitle(), 40) + "（" + hit.getSourceTier() + "）"));
+                        AttributionEvidence evidence = toEvidence(hit, queryTracks.get(q));
+                        if (addEvidenceIfAbsent(evidences, evidenceKeys, evidence)) {
+                            trackResult.foundEvidence();
+                            publisher.publish(taskId, AttributionProgressEvent.clue(
+                                    "找到：" + shorten(hit.getTitle(), 40) + "（" + hit.getSourceTier() + "）"));
+                        }
                     }
+                    progressListener.trackUpdated(trackResult);
                 } catch (Exception ex) {
                     log.warn("归因搜索失败 q={} message={}", q, ex.getMessage());
+                    failures.add(StringUtils.firstNonBlank(ex.getMessage(), "未知错误"));
+                    trackResult.setLastError(StringUtils.firstNonBlank(ex.getMessage(), "未知错误"));
+                    progressListener.trackUpdated(trackResult);
                 }
             }
-            agentRunRepository.record("attribution:web-search", "SUCCESS", String.join(" | ", questions),
-                    "hits=" + evidences.size(), null, System.currentTimeMillis() - t1);
+            for (String track : queryTracks.values()) {
+                progressListener.trackFinished(execution.track(track));
+            }
+            String searchStatus = failures.isEmpty() ? "SUCCESS" : successfulQueries == 0 ? "FAILED" : "PARTIAL_SUCCESS";
+            String errorMessage = failures.isEmpty() ? null : shorten(String.join("；", failures), 300);
+            if (!failures.isEmpty()) {
+                report.setWarningMessage(successfulQueries == 0
+                        ? "全网搜索暂不可用，本次归因仅基于本地新闻与行情信息。"
+                        : "部分全网搜索请求失败，报告已基于可获得的证据生成。");
+            }
+            agentRunRepository.record("attribution:web-search", searchStatus, String.join(" | ", questions),
+                    "queries=" + questions.size() + ", successful=" + successfulQueries + ", uniqueHits=" + evidences.size(),
+                    errorMessage, System.currentTimeMillis() - t1);
         } else {
+            progressListener.stageStarted("web-search");
             publisher.publish(taskId, AttributionProgressEvent.stage("web-search", "未配置联网搜索，跳过"));
+            report.setWarningMessage("未配置联网搜索，本次归因仅基于本地新闻与行情信息。");
             agentRunRepository.record("attribution:web-search", "SKIPPED", null, null,
                     "WebSearchClient not configured", System.currentTimeMillis() - t1);
+            for (String track : queryTracks.values()) {
+                execution.track(track).setBudgetStopped(true);
+                execution.track(track).setLastError("WebSearchClient not configured");
+                progressListener.trackFinished(execution.track(track));
+            }
         }
 
         // ③ local-recall
         long t2 = System.currentTimeMillis();
-        int localCount = recallLocalNews(instrument, evidences);
+        progressListener.stageStarted("local-recall");
+        int localCount = recallLocalNews(instrument, evidences, evidenceKeys);
         publisher.publish(taskId, AttributionProgressEvent.stage("local-recall",
                 "本地关联到 " + localCount + " 篇已抓文章"));
         agentRunRepository.record("attribution:local-recall", "SUCCESS", instrument.getCode(),
                 "local=" + localCount, null, System.currentTimeMillis() - t2);
 
         // ④ chain-reason（产业链视角提示，纳入 prompt，不单独产出证据）
+        progressListener.stageStarted("chain-reason");
         publisher.publish(taskId, AttributionProgressEvent.stage("chain-reason", "已分析产业链关联"));
 
         // ⑤ evidence-rank
         long t4 = System.currentTimeMillis();
+        progressListener.stageStarted("evidence-rank");
         rankEvidences(evidences);
         publisher.publish(taskId, AttributionProgressEvent.stage("evidence-rank",
                 "已整理 " + evidences.size() + " 条有效证据"));
@@ -101,10 +198,12 @@ public class AttributionAgent {
 
         // ⑥ attribution-synth
         long t5 = System.currentTimeMillis();
+        progressListener.stageStarted("attribution-synth");
         boolean synthesized = synthesize(report, instrument, changePct, evidences);
         report.setEvidences(evidences);
         agentRunRepository.record("attribution:attribution-synth", synthesized ? "SUCCESS" : "FALLBACK",
                 instrument.getCode(), report.getSummary(), null, System.currentTimeMillis() - t5);
+        return execution;
     }
 
     // ---- ① 研究问题拆解：按标的类型套模板 ----
@@ -128,7 +227,7 @@ public class AttributionAgent {
     }
 
     // ---- ③ 本地新闻召回：按别名/名称在已抓文章中匹配 ----
-    private int recallLocalNews(Instrument instrument, List<AttributionEvidence> evidences) {
+    private int recallLocalNews(Instrument instrument, List<AttributionEvidence> evidences, Set<String> evidenceKeys) {
         List<String> aliases = new ArrayList<>();
         aliases.add(instrument.getCode());
         if (StringUtils.isNotBlank(instrument.getName())) {
@@ -158,8 +257,9 @@ public class AttributionAgent {
                         evidence.setSourceDomain(StringUtils.firstNonBlank(article.getSourceName(), "本地"));
                         evidence.setSourceTier("T2");
                         evidence.setRelevance(70);
-                        evidences.add(evidence);
-                        count++;
+                        if (addEvidenceIfAbsent(evidences, evidenceKeys, evidence)) {
+                            count++;
+                        }
                         break;
                     }
                 }
@@ -197,7 +297,7 @@ public class AttributionAgent {
         return 2;
     }
 
-    private AttributionEvidence toEvidence(SearchResult hit) {
+    private AttributionEvidence toEvidence(SearchResult hit, String track) {
         AttributionEvidence evidence = new AttributionEvidence();
         evidence.setOrigin("WEB_SEARCH");
         evidence.setTitle(hit.getTitle());
@@ -205,8 +305,80 @@ public class AttributionAgent {
         evidence.setSnippet(shorten(hit.getContent(), 200));
         evidence.setSourceDomain(hit.getSourceDomain());
         evidence.setSourceTier(hit.getSourceTier());
+        evidence.setPublishedAt(hit.getPublishedAt());
         evidence.setRelevance(hit.getScore() == null ? 50 : (int) Math.round(hit.getScore() * 100));
+        evidence.setEventType(StringUtils.firstNonBlank(track, "COMPANY"));
+        evidence.setStance("COUNTER".equals(track) ? "COUNTER" : "SUPPORT");
+        evidence.setDirectness("COMPANY".equals(track) ? "DIRECT" : "INDIRECT");
         return evidence;
+    }
+
+    private Map<String, String> legacyQueryTracks(Instrument instrument, Double changePct) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String query : planQuestions(instrument, changePct)) {
+            result.put(query, "COMPANY");
+        }
+        return result;
+    }
+
+    private Map<String, String> plannedQueryTracks(AttributionResearchPlan plan) {
+        Map<String, String> result = new LinkedHashMap<>();
+        int remaining = plan.getBudget().getMaxQueries();
+        for (AttributionResearchPlan.Track track : plan.getTracks()) {
+            int trackRemaining = Math.min(track.getMaxQueries(), plan.getBudget().getMaxQueriesPerTrack());
+            for (String query : track.getQueries()) {
+                if (remaining <= 0 || trackRemaining <= 0) break;
+                if (StringUtils.isNotBlank(query)) {
+                    result.put(query, track.getCode());
+                    remaining--;
+                    trackRemaining--;
+                }
+            }
+            if (remaining <= 0) break;
+        }
+        return result;
+    }
+
+    private boolean addEvidenceIfAbsent(List<AttributionEvidence> evidences,
+                                        Set<String> evidenceKeys,
+                                        AttributionEvidence evidence) {
+        String key = evidenceKey(evidence);
+        if (!evidenceKeys.add(key)) {
+            return false;
+        }
+        evidences.add(evidence);
+        return true;
+    }
+
+    private String evidenceKey(AttributionEvidence evidence) {
+        String normalizedUrl = normalizeUrl(evidence.getUrl());
+        if (StringUtils.isNotBlank(normalizedUrl)) {
+            return "url:" + normalizedUrl;
+        }
+        return "title:" + StringUtils.firstNonBlank(evidence.getTitle(), "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeUrl(String url) {
+        if (StringUtils.isBlank(url)) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String query = uri.getQuery();
+            String retainedQuery = query == null ? "" : Arrays.stream(query.split("&"))
+                    .filter(part -> {
+                        String key = part.split("=", 2)[0].toLowerCase(Locale.ROOT);
+                        return !(key.startsWith("utm_") || "gclid".equals(key) || "fbclid".equals(key));
+                    })
+                    .reduce((left, right) -> left + "&" + right)
+                    .orElse("");
+            return StringUtils.firstNonBlank(uri.getScheme(), "").toLowerCase(Locale.ROOT) + "://"
+                    + StringUtils.firstNonBlank(uri.getHost(), "").toLowerCase(Locale.ROOT)
+                    + StringUtils.firstNonBlank(uri.getPath(), "")
+                    + (retainedQuery.isEmpty() ? "" : "?" + retainedQuery);
+        } catch (IllegalArgumentException ex) {
+            return url.trim().toLowerCase(Locale.ROOT);
+        }
     }
 
     private String shorten(String text, int max) {
@@ -245,9 +417,13 @@ public class AttributionAgent {
 
     private String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences) {
         StringBuilder builder = new StringBuilder();
-        builder.append("输出格式:{\"summary\":\"一句话归因\",\"drivers\":[{\"claim\":\"原因\",")
-                .append("\"impactLevel\":\"HIGH|MID|LOW\",\"confidence\":\"HIGH|MID|LOW\",\"detail\":\"说明\"}],")
-                .append("\"disclaimer\":\"诚实说明\"}\n");
+        builder.append("输出格式:{\"summary\":\"综合归因\",\"drivers\":[{\"claim\":\"原因\",")
+                .append("\"impactLevel\":\"HIGH|MID|LOW\",\"confidence\":\"HIGH|MID|LOW\",\"detail\":\"详细解释\",")
+                .append("\"facts\":[\"明确事实\"],\"transmissionPath\":\"事件到价格的传导链\",")
+                .append("\"counterEvidence\":\"反证或局限\",\"observationWindow\":\"后续观察窗口\",")
+                .append("\"evidenceUrls\":[\"证据URL\"]}],\"uncertainties\":[\"不确定性\"],")
+                .append("\"observationWindows\":[\"整体观察项\"],\"disclaimer\":\"诚实说明\"}\n")
+                .append("要求给出 4-6 个不重复的驱动因素，覆盖公司、行业、宏观/政策、市场联动和反证；证据不足必须降低置信度。\n");
         builder.append("标的:").append(StringUtils.firstNonBlank(instrument.getName(), instrument.getCode()))
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
@@ -257,7 +433,8 @@ public class AttributionAgent {
         for (AttributionEvidence e : evidences) {
             builder.append(index++).append(". [").append(e.getSourceTier()).append("] ")
                     .append(StringUtils.firstNonBlank(e.getTitle(), "")).append(" - ")
-                    .append(StringUtils.firstNonBlank(e.getSnippet(), "")).append("\n");
+                    .append(StringUtils.firstNonBlank(e.getSnippet(), ""))
+                    .append(" URL=").append(StringUtils.firstNonBlank(e.getUrl(), "无")).append("\n");
             if (index > 10) {
                 break;
             }
@@ -289,10 +466,17 @@ public class AttributionAgent {
                     driver.setImpactLevel(normLevel(node.path("impactLevel").asText("MID")));
                     driver.setConfidence(normLevel(node.path("confidence").asText("MID")));
                     driver.setDetail(node.path("detail").asText("").trim());
+                    driver.setFacts(readStringArray(node.path("facts")));
+                    driver.setTransmissionPath(node.path("transmissionPath").asText("").trim());
+                    driver.setCounterEvidence(node.path("counterEvidence").asText("").trim());
+                    driver.setObservationWindow(node.path("observationWindow").asText("").trim());
+                    driver.setEvidenceUrls(readStringArray(node.path("evidenceUrls")));
                     drivers.add(driver);
                 }
             }
             report.setDrivers(drivers);
+            report.setUncertainties(readStringArray(root.path("uncertainties")));
+            report.setObservationWindows(readStringArray(root.path("observationWindows")));
             return true;
         } catch (Exception ex) {
             return false;
@@ -331,6 +515,16 @@ public class AttributionAgent {
             return v;
         }
         return "MID";
+    }
+
+    private List<String> readStringArray(JsonNode node) {
+        List<String> result = new ArrayList<>();
+        if (node != null && node.isArray()) {
+            for (JsonNode value : node) {
+                if (StringUtils.isNotBlank(value.asText())) result.add(value.asText().trim());
+            }
+        }
+        return result;
     }
 
     private String extractJson(String raw) {

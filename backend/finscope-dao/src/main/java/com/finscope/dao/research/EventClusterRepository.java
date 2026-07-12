@@ -139,6 +139,30 @@ public class EventClusterRepository {
         return jdbcTemplate.query(sql.toString(), eventMapper, args.toArray());
     }
 
+    public List<EventCluster> findFilteredPage(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
+        Filter filter = filter(themeCode, status, noveltyState, dateFrom, dateTo);
+        filter.sql.append(" ORDER BY last_seen_at DESC, id DESC LIMIT ? OFFSET ?"); filter.args.add(pageSize); filter.args.add(page * pageSize);
+        return jdbcTemplate.query(filter.sql.toString(), eventMapper, filter.args.toArray());
+    }
+
+    public int countFiltered(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
+        Filter filter = filter(themeCode, status, noveltyState, dateFrom, dateTo);
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM event_cluster" + filter.sql.substring(filter.sql.indexOf(" WHERE")), Integer.class, filter.args.toArray());
+        return count == null ? 0 : count;
+    }
+
+    private Filter filter(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
+        Filter filter = new Filter("SELECT * FROM event_cluster WHERE 1=1");
+        if (!isBlank(themeCode)) { filter.sql.append(" AND lower(theme_code) = lower(?)"); filter.args.add(themeCode.trim()); }
+        if (!isBlank(status)) { filter.sql.append(" AND lower(status) = lower(?)"); filter.args.add(status.trim()); }
+        if (!isBlank(noveltyState)) { filter.sql.append(" AND lower(novelty_state) = lower(?)"); filter.args.add(noveltyState.trim()); }
+        if (dateFrom != null) { filter.sql.append(" AND last_seen_at >= ?"); filter.args.add(dateFrom.toString() + "T00:00:00"); }
+        if (dateTo != null) { filter.sql.append(" AND last_seen_at <= ?"); filter.args.add(dateTo.toString() + "T23:59:59"); }
+        return filter;
+    }
+
+    private static class Filter { private final StringBuilder sql; private final List<Object> args = new ArrayList<Object>(); private Filter(String sql) { this.sql = new StringBuilder(sql); } }
+
     public List<EventCluster> findRecentByTheme(String themeCode, int limit) {
         return jdbcTemplate.query("SELECT * FROM event_cluster WHERE theme_code = ? "
                         + "ORDER BY last_seen_at DESC, id DESC LIMIT ?",
@@ -155,8 +179,9 @@ public class EventClusterRepository {
         if (link.getCreatedAt() == null) {
             link.setCreatedAt(LocalDateTime.now());
         }
-        jdbcTemplate.update("INSERT OR REPLACE INTO event_article_link(event_id,article_id,relation_type,match_score,"
-                        + "novelty_type,novelty_reason,created_at) VALUES(?,?,?,?,?,?,?)",
+        jdbcTemplate.update("INSERT INTO event_article_link(event_id,article_id,relation_type,match_score,"
+                        + "novelty_type,novelty_reason,created_at) VALUES(?,?,?,?,?,?,?) "
+                        + "ON CONFLICT(article_id) DO NOTHING",
                 link.getEventId(), link.getArticleId(), link.getRelationType(), link.getMatchScore(),
                 link.getNoveltyType(), link.getNoveltyReason(), TimeUtil.text(link.getCreatedAt()));
     }
@@ -168,7 +193,7 @@ public class EventClusterRepository {
     }
 
     public Optional<EventArticleLink> findByArticleId(Long articleId) {
-        List<EventArticleLink> links = jdbcTemplate.query("SELECT * FROM event_article_link WHERE article_id = ?",
+        List<EventArticleLink> links = jdbcTemplate.query("SELECT * FROM event_article_link WHERE article_id = ? ORDER BY created_at ASC",
                 linkMapper, articleId);
         return links.isEmpty() ? Optional.empty() : Optional.of(links.get(0));
     }
@@ -236,6 +261,14 @@ public class EventClusterRepository {
                             + "evidence_count = (SELECT COUNT(*) FROM evidence_item WHERE event_id = ?), "
                             + "updated_at = ? WHERE id = ?",
                     eventId, eventId, TimeUtil.text(LocalDateTime.now()), eventId);
+        }
+    }
+
+    public void archiveIfEmpty(List<Long> eventIds) {
+        for (Long eventId : unique(eventIds)) {
+            jdbcTemplate.update("UPDATE event_cluster SET status = 'ARCHIVED', updated_at = ? "
+                            + "WHERE id = ? AND article_count = 0",
+                    TimeUtil.text(LocalDateTime.now()), eventId);
         }
     }
 

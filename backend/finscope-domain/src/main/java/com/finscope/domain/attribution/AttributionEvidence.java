@@ -19,6 +19,18 @@ public class AttributionEvidence {
     private String sourceTier;
     /** 相关度 0~100 */
     private Integer relevance;
+    /** COMPANY | INDUSTRY | MACRO | MARKET | COUNTER 等研究事件类别。 */
+    private String eventType;
+    /** SUPPORT | COUNTER | BACKGROUND。 */
+    private String stance;
+    /** DIRECT | INDIRECT | BACKGROUND。 */
+    private String directness;
+    /** 来源给出的发布时间原文，避免不同来源格式导致反序列化失败。 */
+    private String publishedAt;
+    /** 归一化后的事件聚合键。 */
+    private String eventKey;
+    /** 是否为历史报告带入的背景，不计入当日证据质量。 */
+    private boolean historicalContext;
     private LocalDateTime createdAt;
 
     public Long getId() {
@@ -92,6 +104,19 @@ public class AttributionEvidence {
     public void setRelevance(Integer relevance) {
         this.relevance = relevance;
     }
+
+    public String getEventType() { return eventType; }
+    public void setEventType(String eventType) { this.eventType = eventType; }
+    public String getStance() { return stance; }
+    public void setStance(String stance) { this.stance = stance; }
+    public String getDirectness() { return directness; }
+    public void setDirectness(String directness) { this.directness = directness; }
+    public String getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(String publishedAt) { this.publishedAt = publishedAt; }
+    public String getEventKey() { return eventKey; }
+    public void setEventKey(String eventKey) { this.eventKey = eventKey; }
+    public boolean isHistoricalContext() { return historicalContext; }
+    public void setHistoricalContext(boolean historicalContext) { this.historicalContext = historicalContext; }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { Article, AsyncTask, PageResponse, View } from '../../shared/types';
 import { ArticleCard } from './ArticleCard';
+import { createIngestTaskChannel, IngestTaskChannel } from './ingestTaskChannel';
 
 type IngestStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -33,10 +34,20 @@ export function ArticleView({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   const highlightClearTimerRef = useRef<number | null>(null);
+  const ingestChannelRef = useRef<IngestTaskChannel | null>(null);
+  const ingestGenerationRef = useRef(0);
+  const articleFetchGenerationRef = useRef(0);
 
-  const fetchArticles = async () => {
+  const fetchArticles = async (generation?: number, page = currentPage) => {
+    const fetchGeneration = ++articleFetchGenerationRef.current;
     try {
-      const response = await api<PageResponse<Article>>(`/api/articles/paged?page=${currentPage}&pageSize=${pageSize}`);
+      const response = await api<PageResponse<Article>>(`/api/articles/paged?page=${page}&pageSize=${pageSize}`);
+      if (fetchGeneration !== articleFetchGenerationRef.current
+        || (generation !== undefined && ingestGenerationRef.current !== generation)) return null;
+      if (response.totalCount > 0 && response.items.length === 0 && response.totalPages > 0 && page >= response.totalPages) {
+        setCurrentPage(response.totalPages - 1);
+        return response;
+      }
       setPagedArticles(response.items);
       setTotalCount(response.totalCount);
       setTotalPages(response.totalPages);
@@ -44,7 +55,9 @@ export function ArticleView({
       setSelectAll(false);
       return response;
     } catch (error) {
-      addToast(error instanceof Error ? error.message : 'Failed to load articles', 'error');
+      if (generation === undefined || ingestGenerationRef.current === generation) {
+        addToast(error instanceof Error ? error.message : 'Failed to load articles', 'error');
+      }
       return null;
     }
   };
@@ -54,6 +67,8 @@ export function ArticleView({
   }, [currentPage, pageSize]);
 
   useEffect(() => () => {
+    ingestGenerationRef.current += 1;
+    ingestChannelRef.current?.dispose();
     if (highlightClearTimerRef.current !== null) {
       window.clearTimeout(highlightClearTimerRef.current);
     }
@@ -64,23 +79,39 @@ export function ArticleView({
       return;
     }
     const submittedUrl = urlForm.url;
+    let submittedTask: AsyncTask | null = null;
     setIngestStatus('loading');
     setIngestMessage('正在提交生成任务');
     setIngestError('');
+    const generation = ++ingestGenerationRef.current;
+    ingestChannelRef.current?.dispose();
     try {
-      const submittedTask = await api<AsyncTask>('/api/articles/ingest-url', {
+      const createdTask = await api<AsyncTask>('/api/articles/ingest-url', {
         method: 'POST',
         body: JSON.stringify(urlForm)
       });
-      const completedTask = await pollIngestTask(submittedTask);
+      submittedTask = createdTask;
+      if (ingestGenerationRef.current !== generation) return;
+      const channel = createIngestTaskChannel(createdTask, {
+        fetchTask: () => api<AsyncTask>(`/api/tasks/${createdTask.taskId}`),
+        onProgress: (task) => {
+          if (ingestGenerationRef.current === generation) updateIngestTaskProgress(task);
+        }
+      });
+      ingestChannelRef.current = channel;
+      const completedTask = await channel.completion;
+      if (ingestGenerationRef.current !== generation) return;
       if (completedTask.status === 'FAILED') {
         throw new Error(completedTask.errorMessage || completedTask.message || 'URL 解析失败');
       }
-      const refreshed = await fetchArticles();
-      await finishSuccessfulIngest(completedTask, refreshed, submittedUrl);
+      const refreshed = await fetchArticles(generation);
+      if (ingestGenerationRef.current !== generation) return;
+      await finishSuccessfulIngest(completedTask, refreshed, submittedUrl, generation);
     } catch (error) {
+      if (ingestGenerationRef.current !== generation) return;
       if (isIngestTaskTimeout(error)) {
-        const recovered = await recoverTimedOutIngest(submittedUrl);
+        const recovered = await recoverTimedOutIngest(submittedTask, generation);
+        if (ingestGenerationRef.current !== generation) return;
         if (recovered) {
           return;
         }
@@ -89,6 +120,8 @@ export function ArticleView({
       setIngestStatus('error');
       setIngestError(message);
       addToast(message, 'error');
+    } finally {
+      if (ingestGenerationRef.current === generation) ingestChannelRef.current = null;
     }
   }
 
@@ -99,7 +132,9 @@ export function ArticleView({
 
   async function finishSuccessfulIngest(task: AsyncTask,
                                         refreshed: PageResponse<Article> | null,
-                                        submittedUrl: string) {
+                                        submittedUrl: string,
+                                        generation?: number) {
+    if (generation !== undefined && ingestGenerationRef.current !== generation) return false;
     const generatedArticleId = findGeneratedArticleId(task.article, refreshed, submittedUrl);
     if (generatedArticleId !== null) {
       highlightGeneratedArticle(generatedArticleId);
@@ -108,44 +143,31 @@ export function ArticleView({
     setIngestStatus('success');
     setIngestMessage(task.message || messageForTaskPhase(task.phase));
     addToast('情报卡片已生成，已加入文章列表', 'success');
-    await syncWorkspaceAfterSuccessfulIngest();
+    await syncWorkspaceAfterSuccessfulIngest(generation);
+    return generation === undefined || ingestGenerationRef.current === generation;
   }
 
-  async function recoverTimedOutIngest(submittedUrl: string) {
-    const refreshed = await fetchArticles();
-    const generatedArticleId = findGeneratedArticleId(undefined, refreshed, submittedUrl);
-    if (generatedArticleId === null) {
+  async function recoverTimedOutIngest(task: AsyncTask | null, generation: number) {
+    if (!task?.taskId) {
       return false;
     }
-    await finishSuccessfulIngest({
-      taskId: '',
-      status: 'COMPLETED',
-      phase: 'COMPLETED',
-      message: '情报卡片已生成，已加入文章列表'
-    }, refreshed, submittedUrl);
-    return true;
+    const taskSnapshot = await api<AsyncTask>(`/api/tasks/${task.taskId}`);
+    if (taskSnapshot.status !== 'COMPLETED' || (taskSnapshot.articleId == null && taskSnapshot.article?.id == null)) {
+      return false;
+    }
+    const refreshed = await fetchArticles(generation);
+    if (ingestGenerationRef.current !== generation) return false;
+    return finishSuccessfulIngest(taskSnapshot, refreshed, '', generation);
   }
 
-  async function syncWorkspaceAfterSuccessfulIngest() {
+  async function syncWorkspaceAfterSuccessfulIngest(generation?: number) {
     try {
       await onWorkspaceChanged();
     } catch (error) {
+      if (generation !== undefined && ingestGenerationRef.current !== generation) return;
       const message = error instanceof Error ? error.message : '刷新失败';
       addToast(`卡片已生成，但工作区数据刷新失败：${message}`, 'error');
     }
-  }
-
-  async function pollIngestTask(initialTask: AsyncTask) {
-    updateIngestTaskProgress(initialTask);
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const currentTask = await api<AsyncTask>(`/api/tasks/${initialTask.taskId}`);
-      updateIngestTaskProgress(currentTask);
-      if (currentTask.status === 'COMPLETED' || currentTask.status === 'FAILED') {
-        return currentTask;
-      }
-      await wait(800);
-    }
-    throw new Error('生成任务超时，请稍后重试');
   }
 
   function isIngestTaskTimeout(error: unknown) {
@@ -164,10 +186,6 @@ export function ArticleView({
       return;
     }
     setIngestStatus('loading');
-  }
-
-  function wait(ms: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   function highlightGeneratedArticle(articleId: number) {
@@ -279,7 +297,7 @@ export function ArticleView({
       return article.id;
     }
     const matched = refreshed?.items.find((item) => item.url === submittedUrl);
-    return matched?.id ?? refreshed?.items[0]?.id ?? null;
+    return matched?.id ?? null;
   }
 
   function messageForTaskPhase(phase?: AsyncTask['phase']) {
@@ -389,6 +407,7 @@ export function ArticleView({
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
+                aria-label="全选文章"
                 checked={selectAll}
                 onChange={toggleSelectAll}
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
@@ -478,9 +497,9 @@ export function ArticleView({
 
       {showDeleteConfirm !== null && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-article-title">
             <div className="modal-header">
-              <h4>确认删除</h4>
+              <h4 id="delete-article-title">确认删除</h4>
             </div>
             <div className="modal-content">
               <p>确定要删除这篇文章吗?此操作无法撤销。</p>
@@ -499,9 +518,9 @@ export function ArticleView({
 
       {showBatchDeleteConfirm && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-articles-title">
             <div className="modal-header">
-              <h4>批量删除确认</h4>
+              <h4 id="delete-articles-title">批量删除确认</h4>
             </div>
             <div className="modal-content">
               <p>确定要删除选中的 {selectedIds.size} 篇文章吗?此操作无法撤销。</p>

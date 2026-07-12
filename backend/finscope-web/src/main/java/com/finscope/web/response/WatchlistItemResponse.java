@@ -16,6 +16,9 @@ public class WatchlistItemResponse {
     private String groupName;
 
     private Double price;
+    private Double confirmedNav;
+    private String confirmedNavDate;
+    private Double confirmedNavChangePct;
     private Double changePct;
     private Double changeAmount;
     private Double turnover;
@@ -25,6 +28,7 @@ public class WatchlistItemResponse {
     private Double amplitude;
     private boolean quoteValid;
     private String quoteNote;
+    private String attributionSummary;
 
     public static WatchlistItemResponse of(WatchlistItemView view) {
         WatchlistItem item = view.getItem();
@@ -36,8 +40,12 @@ public class WatchlistItemResponse {
         response.name = item.getName();
         response.market = item.getMarket();
         response.groupName = item.getGroupName();
+        response.attributionSummary = view.getAttributionSummary();
         if (quote != null) {
             response.price = quote.getPrice();
+            response.confirmedNav = quote.getConfirmedNav();
+            response.confirmedNavDate = quote.getConfirmedNavDate();
+            response.confirmedNavChangePct = quote.getConfirmedNavChangePct();
             response.changePct = quote.getChangePct();
             response.changeAmount = quote.getChangeAmount();
             response.turnover = quote.getTurnover();
@@ -82,6 +90,10 @@ public class WatchlistItemResponse {
         return price;
     }
 
+    public Double getConfirmedNav() { return confirmedNav; }
+    public String getConfirmedNavDate() { return confirmedNavDate; }
+    public Double getConfirmedNavChangePct() { return confirmedNavChangePct; }
+
     public Double getChangePct() {
         return changePct;
     }
@@ -116,5 +128,9 @@ public class WatchlistItemResponse {
 
     public String getQuoteNote() {
         return quoteNote;
+    }
+
+    public String getAttributionSummary() {
+        return attributionSummary;
     }
 }

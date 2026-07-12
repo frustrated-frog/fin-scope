@@ -8,6 +8,7 @@ import java.util.List;
 
 public class ResearchRun {
     private Long id;
+    private Long thesisId;
     private LocalDate runDate;
     private List<String> themeCodes = Collections.emptyList();
     private Integer sourceCount;
@@ -30,6 +31,14 @@ public class ResearchRun {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getThesisId() {
+        return thesisId;
+    }
+
+    public void setThesisId(Long thesisId) {
+        this.thesisId = thesisId;
     }
 
     public LocalDate getRunDate() {

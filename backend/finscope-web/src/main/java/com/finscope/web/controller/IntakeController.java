@@ -4,6 +4,8 @@ import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.intake.IntakeCandidate;
 import com.finscope.domain.intake.PromoteIntakeCandidateResponse;
 import com.finscope.service.intake.IntakeService;
+import com.finscope.service.intake.IntakePromotionTaskService;
+import com.finscope.service.task.TaskView;
 import com.finscope.web.request.UpdateIntakeCandidateStatusRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +23,7 @@ import java.util.List;
 public class IntakeController {
     @Resource
     private IntakeService intakeService;
+    @Resource private IntakePromotionTaskService intakePromotionTaskService;
 
     @GetMapping("/batches")
     public List<FetchBatch> batches() {
@@ -54,4 +57,7 @@ public class IntakeController {
     public PromoteIntakeCandidateResponse promote(@PathVariable Long id) {
         return intakeService.promote(id);
     }
+
+    @PostMapping("/candidates/{id}/promote-async")
+    public TaskView promoteAsync(@PathVariable Long id) { return intakePromotionTaskService.submit(id); }
 }

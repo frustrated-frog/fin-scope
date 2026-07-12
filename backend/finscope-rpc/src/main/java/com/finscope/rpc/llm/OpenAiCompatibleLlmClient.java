@@ -26,6 +26,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private final String model;
     private final int timeoutMs;
     private final double temperature;
+    private final boolean jsonMode;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final String USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -59,12 +60,23 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
                                      String model,
                                      int timeoutMs,
                                      double temperature) {
+        this(enabled, baseUrl, apiKey, model, timeoutMs, temperature, false);
+    }
+
+    public OpenAiCompatibleLlmClient(boolean enabled,
+                                     String baseUrl,
+                                     String apiKey,
+                                     String model,
+                                     int timeoutMs,
+                                     double temperature,
+                                     boolean jsonMode) {
         this.enabled = enabled;
         this.baseUrl = trim(baseUrl);
         this.apiKey = trim(apiKey);
         this.model = trim(model);
         this.timeoutMs = timeoutMs <= 0 ? 30000 : timeoutMs;
         this.temperature = temperature;
+        this.jsonMode = jsonMode;
     }
 
     @Override
@@ -115,9 +127,14 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         request.put("temperature", temperature);
         request.put("stream", false);
         request.put("messages", messages(systemPrompt, userPrompt));
-        Map<String, String> responseFormat = new LinkedHashMap<String, String>();
-        responseFormat.put("type", "json_object");
-        request.put("response_format", responseFormat);
+        // 仅在明确开启 json 模式时才附带 response_format。
+        // 部分模型（如 GLM-5）对 response_format=json_object 支持不佳，会提前 abort 返回残缺 JSON，
+        // 此时由上层的 extractJson 从纯文本中提取 JSON 更稳妥。
+        if (jsonMode) {
+            Map<String, String> responseFormat = new LinkedHashMap<String, String>();
+            responseFormat.put("type", "json_object");
+            request.put("response_format", responseFormat);
+        }
         return request;
     }
 

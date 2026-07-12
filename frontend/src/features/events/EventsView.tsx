@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { themeLabel } from '../../shared/brief/markdown';
@@ -7,7 +7,7 @@ import {
   EventArticleLink,
   EventCluster,
   EvidenceItem,
-  LearningTask
+  LearningTask, PageResponse
 } from '../../shared/types';
 
 const eventStatuses = ['ACTIVE', 'COOLING', 'ARCHIVED'];
@@ -17,6 +17,9 @@ const contentStatuses = ['IDEA', 'DRAFTING', 'READY', 'PUBLISHED', 'ARCHIVED'];
 export function EventsView({
   events,
   initialEventId,
+  mode = 'both',
+  onOpenEvent,
+  onBack,
   learningTasks,
   contentIdeas,
   onLearningTaskStatusChange,
@@ -24,10 +27,14 @@ export function EventsView({
   onEventStatusChange,
   onMergeEvent,
   onMoveEventArticle,
-  onChanged
+  onChanged,
+  addToast
 }: {
   events: EventCluster[];
   initialEventId?: number | null;
+  mode?: 'queue' | 'detail' | 'both';
+  onOpenEvent?: (eventId: number) => void;
+  onBack?: () => void;
   learningTasks: LearningTask[];
   contentIdeas: ContentIdea[];
   onLearningTaskStatusChange: (taskId: number, status: string) => Promise<void>;
@@ -40,6 +47,7 @@ export function EventsView({
     input: { targetEventId?: number; createNewEvent?: boolean }
   ) => Promise<void>;
   onChanged: () => Promise<void>;
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }) {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [eventArticles, setEventArticles] = useState<EventArticleLink[]>([]);
@@ -48,11 +56,22 @@ export function EventsView({
   const [themeFilter, setThemeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [noveltyFilter, setNoveltyFilter] = useState('ALL');
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+  const [serverPage, setServerPage] = useState<PageResponse<EventCluster> | null>(null);
   const [eventStatusDrafts, setEventStatusDrafts] = useState<Record<number, string>>({});
   const [mergeTargetId, setMergeTargetId] = useState('');
   const [articleMoveTargets, setArticleMoveTargets] = useState<Record<number, string>>({});
   const [taskStatusDrafts, setTaskStatusDrafts] = useState<Record<number, string>>({});
   const [ideaStatusDrafts, setIdeaStatusDrafts] = useState<Record<number, string>>({});
+  const [mutationPending, setMutationPending] = useState(false);
+  const detailRequestGeneration = useRef(0);
+  const mutationLockRef = useRef(false);
+  const selectedEventIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
 
   const themeOptions = useMemo(
     () => Array.from(new Set(events.map((event) => event.themeCode).filter(Boolean))),
@@ -74,21 +93,36 @@ export function EventsView({
     () => distribution(events.map((event) => event.noveltyState || 'UNKNOWN')),
     [events]
   );
+  const totalPages = Math.ceil(filteredEvents.length / pageSize);
+  const currentPage = Math.min(page, Math.max(totalPages - 1, 0));
+  const pagedEvents = serverPage?.items ?? filteredEvents.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
 
   useEffect(() => {
-    if (!events.length) {
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (themeFilter !== 'ALL') query.set('themeCode', themeFilter);
+    if (statusFilter !== 'ALL') query.set('status', statusFilter);
+    if (noveltyFilter !== 'ALL') query.set('noveltyState', noveltyFilter);
+    api<PageResponse<EventCluster>>(`/api/events/paged?${query}`).then(setServerPage).catch(() => setServerPage(null));
+  }, [page, themeFilter, statusFilter, noveltyFilter]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [themeFilter, statusFilter, noveltyFilter]);
+
+  useEffect(() => {
+    if (!filteredEvents.length) {
       setSelectedEventId(null);
       return;
     }
-    if (initialEventId && events.some((event) => event.id === initialEventId)) {
+    if (initialEventId && filteredEvents.some((event) => event.id === initialEventId)) {
       setSelectedEventId(initialEventId);
       return;
     }
     setSelectedEventId((current) => {
-      if (current && events.some((event) => event.id === current)) {
+      if (current && filteredEvents.some((event) => event.id === current)) {
         return current;
       }
-      return filteredEvents[0]?.id ?? events[0].id;
+      return filteredEvents[0].id;
     });
   }, [events, filteredEvents, initialEventId]);
 
@@ -98,15 +132,18 @@ export function EventsView({
       setEventEvidence([]);
       return;
     }
+    const requestGeneration = ++detailRequestGeneration.current;
     Promise.all([
       api<EventArticleLink[]>(`/api/events/${selectedEventId}/articles`),
       api<EvidenceItem[]>(`/api/events/${selectedEventId}/evidence`)
     ])
       .then(([articles, evidence]) => {
+        if (requestGeneration !== detailRequestGeneration.current) return;
         setEventArticles(articles);
         setEventEvidence(evidence);
       })
       .catch(() => {
+        if (requestGeneration !== detailRequestGeneration.current) return;
         setEventArticles([]);
         setEventEvidence([]);
       });
@@ -145,8 +182,7 @@ export function EventsView({
     if (!confirmAction(`确认把事件状态更新为 ${status}？`)) {
       return;
     }
-    await onEventStatusChange(selectedEvent.id, status);
-    await reloadSelectedEvent();
+    await runGovernanceAction(() => onEventStatusChange(selectedEvent.id, status));
   }
 
   async function mergeSelectedEvent() {
@@ -157,51 +193,74 @@ export function EventsView({
     if (!confirmAction('确认合并事件？这会迁移文章、证据、学习任务和内容选题，并归档当前事件。')) {
       return;
     }
-    await onMergeEvent(selectedEvent.id, targetId);
-    setMergeTargetId('');
-    await reloadSelectedEvent();
+    await runGovernanceAction(async () => {
+      await onMergeEvent(selectedEvent.id, targetId);
+      setMergeTargetId('');
+      setSelectedEventId(targetId);
+      await reloadSelectedEvent(targetId);
+    });
   }
 
   async function moveArticle(article: EventArticleLink) {
     if (!selectedEvent) {
       return;
     }
-    const target = articleMoveTargets[article.articleId] || 'NEW';
+    const target = articleMoveTargets[article.articleId] || 'NEW_EVENT';
     if (!confirmAction('确认调整这篇文章的事件归属？')) {
       return;
     }
     if (target === 'NEW_EVENT') {
-      await onMoveEventArticle(selectedEvent.id, article.articleId, { createNewEvent: true });
+      await runGovernanceAction(() => onMoveEventArticle(selectedEvent.id, article.articleId, { createNewEvent: true }));
     } else {
-      await onMoveEventArticle(selectedEvent.id, article.articleId, { targetEventId: Number(target) });
+      await runGovernanceAction(() => onMoveEventArticle(selectedEvent.id, article.articleId, { targetEventId: Number(target) }));
     }
-    await reloadSelectedEvent();
   }
 
   async function saveTaskStatus(task: LearningTask) {
-    await onLearningTaskStatusChange(task.id, taskStatusDrafts[task.id] || task.status);
+    await runGovernanceAction(() => onLearningTaskStatusChange(task.id, taskStatusDrafts[task.id] || task.status));
   }
 
   async function saveIdeaStatus(idea: ContentIdea) {
-    await onContentIdeaStatusChange(idea.id, ideaStatusDrafts[idea.id] || idea.status || 'IDEA');
+    await runGovernanceAction(() => onContentIdeaStatusChange(idea.id, ideaStatusDrafts[idea.id] || idea.status || 'IDEA'));
+  }
+
+  async function runGovernanceAction(action: () => Promise<void>) {
+    if (mutationLockRef.current) return;
+    mutationLockRef.current = true;
+    setMutationPending(true);
+    try {
+      await action();
+      await reloadSelectedEvent();
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '治理操作失败，请重试', 'error');
+    } finally {
+      mutationLockRef.current = false;
+      setMutationPending(false);
+    }
   }
 
   async function reloadSelectedEvent(eventId = selectedEvent?.id) {
-    await onChanged();
     if (!eventId) {
+      return;
+    }
+    const requestGeneration = ++detailRequestGeneration.current;
+    await onChanged();
+    if (requestGeneration !== detailRequestGeneration.current || selectedEventIdRef.current !== eventId) {
       return;
     }
     const [articles, evidence] = await Promise.all([
       api<EventArticleLink[]>(`/api/events/${eventId}/articles`),
       api<EvidenceItem[]>(`/api/events/${eventId}/evidence`)
     ]);
-    setEventArticles(articles);
-    setEventEvidence(evidence);
+    if (requestGeneration === detailRequestGeneration.current && selectedEventIdRef.current === eventId) {
+      setEventArticles(articles);
+      setEventEvidence(evidence);
+    }
   }
 
   return (
-    <section className="events-workbench">
-      <section className="panel events-queue-panel">
+    <section className={mode === 'detail' ? 'event-archive-page' : mode === 'queue' ? 'events-queue-page' : 'events-workbench'}>
+      {mode !== 'detail' && <section className="panel events-queue-panel">
         <div className="panel-heading events-heading">
           <div>
             <h3>事件研究台</h3>
@@ -250,12 +309,15 @@ export function EventsView({
         </div>
 
         <div className="item-list events-queue-list">
-          {filteredEvents.length ? filteredEvents.map((event) => (
+          {pagedEvents.length ? pagedEvents.map((event) => (
             <button
               key={event.id}
               type="button"
               className={selectedEventId === event.id ? 'event-card event-card-active' : 'event-card'}
-              onClick={() => setSelectedEventId(event.id)}
+              onClick={() => {
+                setSelectedEventId(event.id);
+                onOpenEvent?.(event.id);
+              }}
             >
               <div className="event-card-top">
                 <strong>{event.canonicalTitle}</strong>
@@ -277,14 +339,22 @@ export function EventsView({
             <p className="muted">暂无匹配事件。</p>
           )}
         </div>
-      </section>
+        {totalPages > 1 && (
+          <div className="pagination-controls events-pagination">
+            <button className="secondary-button" type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
+            <span>第 {currentPage + 1} / {totalPages} 页 · 共 {filteredEvents.length} 个事件</span>
+            <button className="secondary-button" type="button" disabled={currentPage >= totalPages - 1} onClick={() => setPage(currentPage + 1)}>下一页</button>
+          </div>
+        )}
+      </section>}
 
-      <section className="panel detail-panel events-detail-panel" role="region" aria-label="事件详情">
+      {mode !== 'queue' && <section className="panel detail-panel events-detail-panel" role="region" aria-label="事件详情">
         {!selectedEvent ? (
           <p className="muted">选择一个事件后查看时间线、归并依据、证据强度和治理动作。</p>
         ) : (
           <>
             <header className="event-detail-hero">
+              {onBack && <button className="secondary-button event-archive-back" type="button" onClick={onBack}>返回事件队列</button>}
               <div className="event-detail-title">
                 <span className="section-kicker">{themeLabel(selectedEvent.themeCode)}</span>
                 <h3>{selectedEvent.canonicalTitle}</h3>
@@ -328,7 +398,7 @@ export function EventsView({
                         <span className="badge">{article.noveltyType ?? 'NEW'}</span>
                         <div>
                           <strong>{article.articleTitle || `Article ${article.articleId}`}</strong>
-                          <p>{formatDate(article.createdAt)} · {article.articleUrl || '无链接'}</p>
+                          <p>{formatDate(article.createdAt)} · {article.articleUrl ? <a href={article.articleUrl} target="_blank" rel="noopener noreferrer">查看原文</a> : '无链接'}</p>
                         </div>
                       </li>
                     ))}
@@ -413,7 +483,7 @@ export function EventsView({
                         </span>
                         <div>
                           <strong>{item.evidenceType} · {item.confidence}</strong>
-                          <p>{item.claim}</p>
+                          <p>{item.claim}{item.articleUrl && <> · <a href={item.articleUrl} target="_blank" rel="noopener noreferrer">原文</a></>}</p>
                         </div>
                       </li>
                     ))}
@@ -449,7 +519,7 @@ export function EventsView({
                           ))}
                         </select>
                       </label>
-                      <button className="compact-button" type="button" onClick={() => saveTaskStatus(task)}>
+                      <button className="compact-button" type="button" disabled={mutationPending} onClick={() => saveTaskStatus(task)}>
                         保存任务状态
                       </button>
                     </div>
@@ -485,7 +555,7 @@ export function EventsView({
                           ))}
                         </select>
                       </label>
-                      <button className="compact-button" type="button" onClick={() => saveIdeaStatus(idea)}>
+                      <button className="compact-button" type="button" disabled={mutationPending} onClick={() => saveIdeaStatus(idea)}>
                         保存选题状态
                       </button>
                     </div>
@@ -516,7 +586,7 @@ export function EventsView({
                       ))}
                     </select>
                   </label>
-                  <button className="compact-button" type="button" onClick={saveEventStatus}>保存事件状态</button>
+                  <button className="compact-button" type="button" disabled={mutationPending} onClick={saveEventStatus}>保存事件状态</button>
 
                   <label className="inline-select">
                     <span>合并到事件</span>
@@ -531,7 +601,7 @@ export function EventsView({
                       ))}
                     </select>
                   </label>
-                  <button className="compact-button danger-button" type="button" onClick={mergeSelectedEvent}>
+                  <button className="compact-button danger-button" type="button" disabled={mutationPending} onClick={mergeSelectedEvent}>
                     合并事件
                   </button>
                 </div>
@@ -560,7 +630,7 @@ export function EventsView({
                             ))}
                           </select>
                         </label>
-                        <button className="compact-button" type="button" onClick={() => moveArticle(article)}>
+                        <button className="compact-button" type="button" disabled={mutationPending} onClick={() => moveArticle(article)}>
                           {`移动文章-${article.articleId}`}
                         </button>
                       </div>
@@ -573,7 +643,7 @@ export function EventsView({
             </div>
           </>
         )}
-      </section>
+      </section>}
     </section>
   );
 }

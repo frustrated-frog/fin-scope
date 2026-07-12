@@ -7,7 +7,11 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 行情服务：按标的类型路由到合适的 QuoteAdapter，抓取失败时兜底为无效行情，不阻断面板。
@@ -15,8 +19,11 @@ import java.util.List;
 @Service
 @Slf4j
 public class QuoteService {
+    private static final long CACHE_TTL_MS = 30_000L;
+
     @Resource
     private List<QuoteAdapter> adapters;
+    private final Map<String, CachedQuote> cache = new ConcurrentHashMap<String, CachedQuote>();
 
     /**
      * 拉取一批同类型标的的行情。
@@ -31,11 +38,46 @@ public class QuoteService {
             log.warn("未找到行情适配器 instrumentType={}", instrumentType);
             return fallback(codes, "暂不支持该类型行情");
         }
+        Map<String, Quote> quotesByCode = new LinkedHashMap<String, Quote>();
+        List<String> missingCodes = new ArrayList<String>();
+        long now = System.currentTimeMillis();
+        for (String code : codes) {
+            String key = cacheKey(instrumentType, code);
+            CachedQuote cached = cache.get(key);
+            if (cached != null && cached.expiresAt > now) {
+                quotesByCode.put(code, cached.quote);
+            } else {
+                cache.remove(key);
+                missingCodes.add(code);
+            }
+        }
+        if (missingCodes.isEmpty()) {
+            return orderedQuotes(codes, quotesByCode);
+        }
         try {
-            return adapter.fetch(codes);
+            List<Quote> fetched = adapter.fetch(missingCodes);
+            for (Quote quote : fetched) {
+                if (quote != null && quote.getInstrumentCode() != null) {
+                    quotesByCode.put(quote.getInstrumentCode(), quote);
+                    cache.put(cacheKey(instrumentType, quote.getInstrumentCode()), new CachedQuote(quote, now + CACHE_TTL_MS));
+                }
+            }
+            for (String code : missingCodes) {
+                if (!quotesByCode.containsKey(code)) {
+                    Quote fallback = fallback(java.util.Collections.singletonList(code), "行情源未返回该标的").get(0);
+                    quotesByCode.put(code, fallback);
+                    cache.put(cacheKey(instrumentType, code), new CachedQuote(fallback, now + CACHE_TTL_MS));
+                }
+            }
+            return orderedQuotes(codes, quotesByCode);
         } catch (Exception ex) {
             log.warn("行情抓取失败 instrumentType={} codes={} message={}", instrumentType, codes, ex.getMessage());
-            return fallback(codes, "行情抓取失败");
+            List<Quote> fallbacks = fallback(missingCodes, "行情抓取失败");
+            for (Quote fallback : fallbacks) {
+                quotesByCode.put(fallback.getInstrumentCode(), fallback);
+                cache.put(cacheKey(instrumentType, fallback.getInstrumentCode()), new CachedQuote(fallback, now + CACHE_TTL_MS));
+            }
+            return orderedQuotes(codes, quotesByCode);
         }
     }
 
@@ -58,5 +100,30 @@ public class QuoteService {
             quotes.add(quote);
         }
         return quotes;
+    }
+
+    private List<Quote> orderedQuotes(List<String> codes, Map<String, Quote> quotesByCode) {
+        List<Quote> quotes = new ArrayList<Quote>();
+        for (String code : codes) {
+            Quote quote = quotesByCode.get(code);
+            if (quote != null) {
+                quotes.add(quote);
+            }
+        }
+        return quotes;
+    }
+
+    private String cacheKey(String instrumentType, String code) {
+        return String.valueOf(instrumentType).toUpperCase(Locale.ROOT) + ":" + code;
+    }
+
+    private static class CachedQuote {
+        private final Quote quote;
+        private final long expiresAt;
+
+        private CachedQuote(Quote quote, long expiresAt) {
+            this.quote = quote;
+            this.expiresAt = expiresAt;
+        }
     }
 }

@@ -49,6 +49,7 @@ class EvidenceServiceTest {
         ReflectionTestUtils.setField(service, "sourceRepository", mock(SourceRepository.class));
         ReflectionTestUtils.setField(service, "agentRunRepository", agentRunRepository);
         ReflectionTestUtils.setField(service, "llmChatClient", llmChatClient);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", mock(ResearchRunOutputService.class));
         return service;
     }
 

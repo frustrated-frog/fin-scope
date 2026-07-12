@@ -71,4 +71,15 @@ public class WatchlistRepository {
     public void delete(Long id) {
         jdbcTemplate.update("DELETE FROM watchlist_item WHERE id = ?", id);
     }
+
+    /** 更新分组名（null/空表示移出分组，归入默认组）。 */
+    public int updateGroup(Long id, String groupName) {
+        return jdbcTemplate.update("UPDATE watchlist_item SET group_name = ? WHERE id = ?", groupName, id);
+    }
+
+    public boolean existsById(Long id) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM watchlist_item WHERE id = ?", Integer.class, id);
+        return count != null && count > 0;
+    }
 }

@@ -25,6 +25,10 @@ public class SourceService {
     }
 
     public void delete(Long id) {
-        sourceRepository.delete(id);
+        Source source = sourceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + id));
+        source.setEnabled(false);
+        source.setScheduledEnabled(false);
+        sourceRepository.update(id, source);
     }
 }

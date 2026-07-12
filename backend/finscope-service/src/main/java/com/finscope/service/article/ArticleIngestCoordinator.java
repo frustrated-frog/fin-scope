@@ -13,8 +13,10 @@ import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.dedupe.NoveltyService;
 import com.finscope.service.insight.InsightCardService;
 import com.finscope.service.research.EventClusterService;
+import com.finscope.service.research.ResearchRunOutputService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.function.Consumer;
@@ -34,15 +36,20 @@ public class ArticleIngestCoordinator {
     private EventClusterService eventClusterService;
     @Resource
     private ArticleCategoryPolicy articleCategoryPolicy;
+    @Resource
+    private ResearchRunOutputService researchRunOutputService;
 
+    @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {
         return ingestInternal(source, item, null, null);
     }
 
+    @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item, Consumer<TaskPhase> phaseConsumer) {
         return ingestInternal(source, item, null, phaseConsumer);
     }
 
+    @Transactional
     public ArticleIngestResult ingest(Source source,
                                       RawItem item,
                                       String category,
@@ -72,6 +79,7 @@ public class ArticleIngestCoordinator {
 
         publishPhase(phaseConsumer, TaskPhase.PERSISTING);
         Article saved = articleRepository.save(article, urlFingerprint, titleFingerprint, bodySimhash);
+        researchRunOutputService.recordCurrentRun(ResearchRunOutputService.ARTICLE, saved.getId());
         publishPhase(phaseConsumer, TaskPhase.LLM);
         InsightCard card = insightCardService.createForArticle(saved);
         publishPhase(phaseConsumer, TaskPhase.PERSISTING);

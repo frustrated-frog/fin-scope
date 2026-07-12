@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { FetchBatch, IntakeCandidate, PromoteIntakeCandidateResponse } from '../../shared/types';
+import { AsyncTask, FetchBatch, IntakeCandidate } from '../../shared/types';
+import { createIngestTaskChannel, IngestTaskChannel } from '../articles/ingestTaskChannel';
 
 const STATUS_OPTIONS = [
   { value: 'PENDING', label: '待打标' },
@@ -32,22 +33,36 @@ export function IntakeView({
     articleText: string;
     fullText: string;
   } | null>(null);
+  const [promoteTask, setPromoteTask] = useState<AsyncTask | null>(null);
+  const promoteChannelRef = useRef<IngestTaskChannel | null>(null);
+  useEffect(() => () => promoteChannelRef.current?.dispose(), []);
 
   async function promote(candidateId: number) {
     setBusyCandidateId(candidateId);
+    setPromoteTask(null);
     try {
-      const result = await api<PromoteIntakeCandidateResponse>(`/api/intake/candidates/${candidateId}/promote`, {
+      const task = await api<AsyncTask>(`/api/intake/candidates/${candidateId}/promote-async`, {
         method: 'POST'
       });
-      const articleText = `已入文章库 #${result.articleId}`;
-      const fullText = promoteMessage(articleText, result);
-      setPromoteResult({ candidateId, articleText, fullText });
-      addToast(result.workflowStatus === 'FAILED' ? fullText : `候选项已入库，Article #${result.articleId}`,
-        result.workflowStatus === 'FAILED' ? 'error' : 'success');
+      setPromoteTask(task);
+      promoteChannelRef.current?.dispose();
+      const channel = createIngestTaskChannel(task, {
+        fetchTask: () => api<AsyncTask>(`/api/tasks/${task.taskId}`),
+        timeoutMs: 5 * 60 * 1000,
+        onProgress: setPromoteTask
+      });
+      promoteChannelRef.current = channel;
+      const completed = await channel.completion;
+      setPromoteTask(completed);
+      if (completed.status === 'FAILED') throw new Error(completed.errorMessage || completed.message || '入文章库失败');
+      const articleText = `已入文章库 #${completed.articleId}`;
+      setPromoteResult({ candidateId, articleText, fullText: completed.message || articleText });
+      addToast(completed.message || articleText, 'success');
       await onChanged();
     } catch (error) {
       addToast(error instanceof Error ? error.message : '入文章库失败', 'error');
     } finally {
+      promoteChannelRef.current = null;
       setBusyCandidateId(null);
     }
   }
@@ -79,6 +94,12 @@ export function IntakeView({
           <div className="intake-promote-result" data-candidate-id={promoteResult.candidateId}>
             <span>{promoteResult.articleText}</span>
             <p>{promoteResult.fullText}</p>
+          </div>
+        )}
+        {promoteTask && busyCandidateId !== null && (
+          <div className="intake-promote-result" role="status">
+            <span>正在入文章库</span>
+            <p>{promoteTask.message || promoteTask.phase || '等待开始'}</p>
           </div>
         )}
         <div className="intake-status-tabs" role="group" aria-label="候选状态筛选">
@@ -114,7 +135,10 @@ export function IntakeView({
           </div>
         ) : (
           candidates.map((candidate) => (
-            <article key={candidate.id} className="panel intake-candidate-card">
+            <article
+              key={candidate.id}
+              className={`panel intake-candidate-card${busyCandidateId === candidate.id ? ' is-promoting' : ''}`}
+            >
               <div className="intake-candidate-top">
                 <div className="intake-score" aria-label={`Agent 分数 ${candidate.agentScore ?? 0}`}>
                   <strong>{candidate.agentScore ?? 0}</strong>
@@ -185,6 +209,16 @@ export function IntakeView({
                 >
                   跳过
                 </button>
+                {(candidate.humanStatus === 'SKIPPED' || candidate.humanStatus === 'REJECTED') && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busyCandidateId === candidate.id}
+                    onClick={() => updateStatus(candidate.id, 'PENDING')}
+                  >
+                    恢复待处理
+                  </button>
+                )}
                 <button
                   type="button"
                   className="danger-button"
@@ -197,28 +231,25 @@ export function IntakeView({
                   type="button"
                   className="compact-button"
                   aria-label={`入文章库-${candidate.id}`}
-                  disabled={busyCandidateId === candidate.id || candidate.humanStatus === 'PROMOTED'}
+                  disabled={busyCandidateId === candidate.id || (candidate.humanStatus === 'PROMOTED' && !candidate.promotedArticleId)}
                   onClick={() => promote(candidate.id)}
                 >
-                  入文章库
+                  {busyCandidateId === candidate.id
+                    ? '正在入库…'
+                    : candidate.humanStatus === 'PROMOTED' ? '重试工作包' : '入文章库'}
                 </button>
               </div>
+              {busyCandidateId === candidate.id && (
+                <div className="intake-candidate-progress" role="status" aria-live="polite">
+                  正在入文章库 · {promoteTask?.message || promoteTask?.phase || '正在提交入库任务'}
+                </div>
+              )}
             </article>
           ))
         )}
       </section>
     </section>
   );
-}
-
-function promoteMessage(articleText: string, result: PromoteIntakeCandidateResponse) {
-  if (result.workflowStatus === 'FAILED') {
-    return `${articleText}；研究工作包生成失败：${result.workflowErrorMessage || '未知错误'}`;
-  }
-  if (result.workflowSummary) {
-    return `${articleText}；${result.workflowSummary}`;
-  }
-  return articleText;
 }
 
 const TERMINAL_STATUSES = new Set(['PROMOTED', 'REJECTED', 'SKIPPED']);

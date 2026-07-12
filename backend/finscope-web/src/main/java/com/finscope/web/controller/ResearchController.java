@@ -31,6 +31,7 @@ public class ResearchController {
     @PostMapping
     public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {
         ResearchRunPlan plan = researchService.createRun(
+                request.getThesisId(),
                 request.getRunDate(),
                 request.getThemeCodes(),
                 request.getMaxSourcesPerTheme(),

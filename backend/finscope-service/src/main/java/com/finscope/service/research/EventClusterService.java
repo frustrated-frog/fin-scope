@@ -12,6 +12,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.domain.response.PageResponse;
 import com.finscope.service.article.ArticleCategoryPolicy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,13 +53,17 @@ public class EventClusterService {
     private ContentIdeaService contentIdeaService;
     @Resource
     private ArticleCategoryPolicy articleCategoryPolicy;
+    @Resource
+    private ResearchRunOutputService researchRunOutputService;
 
-    public EventCluster attachArticle(Article article) {
+    @Transactional
+    public synchronized EventCluster attachArticle(Article article) {
         if (article == null || article.getId() == null) {
             throw new IllegalArgumentException("Article must be saved before attaching to event memory");
         }
-        if (eventClusterRepository.findByArticleId(article.getId()).isPresent()) {
-            Long eventId = eventClusterRepository.findByArticleId(article.getId()).get().getEventId();
+        java.util.Optional<EventArticleLink> existingLink = eventClusterRepository.findByArticleId(article.getId());
+        if (existingLink.isPresent()) {
+            Long eventId = existingLink.get().getEventId();
             return eventClusterRepository.findById(eventId)
                     .orElseThrow(() -> new IllegalStateException("Event link points to missing event: " + eventId));
         }
@@ -79,6 +84,10 @@ public class EventClusterService {
         link.setNoveltyType(decision.getNoveltyType());
         link.setNoveltyReason(decision.getNoveltyReason());
         eventClusterRepository.linkArticle(link);
+        java.util.Optional<EventArticleLink> persistedLink = eventClusterRepository.findByArticleId(article.getId());
+        if (persistedLink.isPresent() && !event.getId().equals(persistedLink.get().getEventId())) {
+            return detail(persistedLink.get().getEventId());
+        }
 
         event.setArticleCount(eventClusterRepository.countLinks(event.getId()));
         if (articleCategoryPolicy.isEvidenceEligible(article.getCategory())) {
@@ -89,6 +98,7 @@ public class EventClusterService {
         learningTaskService.generateIfAbsent(event, article, meaningfulUpdate);
         contentIdeaService.generateIfAbsent(event, article, meaningfulUpdate);
         eventClusterRepository.update(event);
+        researchRunOutputService.recordCurrentRun(ResearchRunOutputService.EVENT, event.getId());
         return eventClusterRepository.findById(event.getId()).orElse(event);
     }
 
@@ -101,7 +111,19 @@ public class EventClusterService {
                                    String noveltyState,
                                    LocalDate dateFrom,
                                    LocalDate dateTo) {
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+        }
         return eventClusterRepository.findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo);
+    }
+
+    public PageResponse<EventCluster> listPaged(String themeCode, String status, String noveltyState,
+                                                 LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+        }
+        return PageResponse.of(eventClusterRepository.findFilteredPage(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize),
+                eventClusterRepository.countFiltered(themeCode, status, noveltyState, dateFrom, dateTo), page, pageSize);
     }
 
     public EventCluster detail(Long id) {
@@ -180,6 +202,7 @@ public class EventClusterService {
         }
         evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
         eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
+        eventClusterRepository.archiveIfEmpty(Arrays.asList(source.getId()));
         return detail(target.getId());
     }
 

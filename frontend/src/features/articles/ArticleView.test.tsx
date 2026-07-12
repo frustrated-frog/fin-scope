@@ -47,6 +47,73 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+class ArticleTaskEventSource {
+  onerror: (() => void) | null = null;
+  private listener?: (event: MessageEvent) => void;
+  addEventListener(_name: string, listener: (event: MessageEvent) => void) { this.listener = listener; }
+  close = vi.fn();
+  emit(data: unknown) { this.listener?.(new MessageEvent('progress', { data: JSON.stringify(data) })); }
+}
+
+test('updates article ingest phase from SSE and confirms completion from task API', async () => {
+  const source = new ArticleTaskEventSource();
+  vi.stubGlobal('EventSource', vi.fn(() => source));
+  let taskReads = 0;
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) return {
+      items: taskReads >= 2 ? [generatedArticle] : [], totalCount: taskReads >= 2 ? 1 : 0,
+      page: 0, pageSize: 20, totalPages: 1
+    };
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') {
+      return { taskId: 'task-sse', status: 'QUEUED', phase: 'QUEUED' };
+    }
+    if (path === '/api/tasks/task-sse') {
+      taskReads += 1;
+      return taskReads >= 2
+        ? { taskId: 'task-sse', status: 'COMPLETED', phase: 'COMPLETED', articleId: generatedArticle.id }
+        : { taskId: 'task-sse', status: 'RUNNING', phase: 'FETCHING', message: '正在抓取网页' };
+    }
+    return {};
+  });
+  render(<ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />);
+  await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), generatedArticle.url);
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+
+  source.emit({ eventId: '2', taskId: 'task-sse', type: 'PHASE', status: 'RUNNING', phase: 'LLM', message: '正在生成情报卡片' });
+  expect(await screen.findByText('正在生成情报卡片')).toBeInTheDocument();
+  source.emit({ eventId: '3', taskId: 'task-sse', type: 'DONE', status: 'COMPLETED', phase: 'COMPLETED' });
+
+  expect(await screen.findByText('新生成的情报卡片')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/tasks/task-sse');
+});
+
+test('does not create an SSE channel when the page unmounts during task submission', async () => {
+  let resolveSubmit!: (value: unknown) => void;
+  const pendingSubmit = new Promise((resolve) => { resolveSubmit = resolve; });
+  const eventSource = vi.fn();
+  vi.stubGlobal('EventSource', eventSource);
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) return {
+      items: [], totalCount: 0, page: 0, pageSize: 20, totalPages: 1
+    };
+    if (path === '/api/articles/ingest-url' && options?.method === 'POST') return pendingSubmit;
+    return {};
+  });
+  const rendered = render(
+    <ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
+  );
+  await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), 'https://example.com/slow-submit');
+  await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
+  rendered.unmount();
+
+  resolveSubmit({ taskId: 'task-late', status: 'QUEUED', phase: 'QUEUED' });
+  await pendingSubmit;
+  await Promise.resolve();
+
+  expect(eventSource).not.toHaveBeenCalled();
 });
 
 test('shows ingest progress while a pasted url is generating and highlights the new card after success', async () => {
@@ -252,7 +319,7 @@ test('keeps generation successful when workspace refresh fails after task comple
   expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
 });
 
-test('treats a polling timeout as successful when the generated article is already in the list', async () => {
+test('does not treat a polling timeout as successful without a completed task confirmation', async () => {
   let listRequestCount = 0;
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
     if (path.startsWith('/api/articles/paged')) {
@@ -293,10 +360,10 @@ test('treats a polling timeout as successful when the generated article is alrea
     await vi.advanceTimersByTimeAsync(60 * 800 + 1);
   });
 
-  expect(screen.getByText('生成完成')).toBeInTheDocument();
-  expect(screen.queryByText('生成任务超时，请稍后重试')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
-  expect(screen.getByText('新生成的情报卡片')).toBeInTheDocument();
+  expect(await screen.findByText('生成失败')).toBeInTheDocument();
+  expect(screen.getByText('生成任务超时，请稍后重试')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+  expect(screen.queryByText('新生成的情报卡片')).not.toBeInTheDocument();
 });
 
 test('keeps the latest generated card highlighted when generations finish close together', async () => {

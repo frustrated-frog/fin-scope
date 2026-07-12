@@ -66,7 +66,13 @@ export function ArticleCard({
 
   return (
     <div className={`article-card${isHighlighted ? ' article-card-highlight' : ''}`}>
-      <div className="article-card-header" onClick={onToggle}>
+      <button
+        type="button"
+        className="article-card-header"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? '收起' : '展开'}文章：${article.title}`}
+      >
         <div className="article-tag-group">
           {detectedSourceTag && (
             <span className={`article-source-tag article-source-tag-${detectedSourceTag.tone}`}>
@@ -91,7 +97,7 @@ export function ArticleCard({
         <span className="article-expand-icon">
           {isExpanded ? '▼' : '▶'}
         </span>
-      </div>
+      </button>
 
       {isExpanded && (
         <div className="article-card-expanded">

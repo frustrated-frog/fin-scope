@@ -10,6 +10,11 @@ public class Quote {
     private String name;
     /** 最新价 / 基金估值净值 */
     private Double price;
+    /** 基金最近确认的单位净值 */
+    private Double confirmedNav;
+    /** 确认净值对应日期，格式 yyyy-MM-dd */
+    private String confirmedNavDate;
+    private Double confirmedNavChangePct;
     /** 昨收 */
     private Double previousClose;
     /** 涨跌幅（百分比，如 -3.1 表示 -3.1%） */
@@ -58,6 +63,13 @@ public class Quote {
     public void setPrice(Double price) {
         this.price = price;
     }
+
+    public Double getConfirmedNav() { return confirmedNav; }
+    public void setConfirmedNav(Double confirmedNav) { this.confirmedNav = confirmedNav; }
+    public String getConfirmedNavDate() { return confirmedNavDate; }
+    public void setConfirmedNavDate(String confirmedNavDate) { this.confirmedNavDate = confirmedNavDate; }
+    public Double getConfirmedNavChangePct() { return confirmedNavChangePct; }
+    public void setConfirmedNavChangePct(Double confirmedNavChangePct) { this.confirmedNavChangePct = confirmedNavChangePct; }
 
     public Double getPreviousClose() {
         return previousClose;

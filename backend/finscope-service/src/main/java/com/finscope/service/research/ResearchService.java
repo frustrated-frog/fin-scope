@@ -7,6 +7,7 @@ import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.dao.research.ResearchRunRepository;
+import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentActionFingerprint;
 import com.finscope.domain.agent.AgentNodeResult;
@@ -44,6 +45,8 @@ public class ResearchService {
     @Resource
     private ResearchRunRepository researchRunRepository;
     @Resource
+    private ResearchThesisRepository researchThesisRepository;
+    @Resource
     private FetchService fetchService;
     @Resource
     private BriefService briefService;
@@ -67,6 +70,8 @@ public class ResearchService {
     private AgentTraceService agentTraceService;
     @Resource
     private ResearchRunPlanService researchRunPlanService;
+    @Resource
+    private ResearchRunOutputService researchRunOutputService;
     @Resource(name = "researchTaskExecutor")
     private Executor researchTaskExecutor;
 
@@ -74,6 +79,17 @@ public class ResearchService {
                                      List<String> themeCodes,
                                      Integer maxSourcesPerTheme,
                                      Boolean includeDisabled) {
+        return createRun(null, runDate, themeCodes, maxSourcesPerTheme, includeDisabled);
+    }
+
+    public ResearchRunPlan createRun(Long thesisId,
+                                     LocalDate runDate,
+                                     List<String> themeCodes,
+                                     Integer maxSourcesPerTheme,
+                                     Boolean includeDisabled) {
+        if (thesisId != null && (researchThesisRepository == null || !researchThesisRepository.findById(thesisId).isPresent())) {
+            throw new IllegalArgumentException("Research thesis not found: " + thesisId);
+        }
         LocalDate actualRunDate = runDate == null ? LocalDate.now() : runDate;
         int actualMaxSources = maxSourcesPerTheme == null ? 3 : maxSourcesPerTheme;
         boolean actualIncludeDisabled = includeDisabled != null && includeDisabled;
@@ -87,6 +103,7 @@ public class ResearchService {
                 toProfiles(sourceRepository.findAll()));
 
         ResearchRun run = new ResearchRun();
+        run.setThesisId(thesisId);
         run.setRunDate(actualRunDate);
         run.setThemeCodes(extractCodes(themes));
         run.setSourceCount(plannedSources.size());
@@ -201,21 +218,22 @@ public class ResearchService {
                     "fetchedSources=" + fetchedSources + ", errors=" + errors.size(), fetchedSources);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS);
             completeStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS,
-                    "events=" + delta(eventBefore, eventClusterRepository.countAll()),
-                    delta(eventBefore, eventClusterRepository.countAll()));
+                    "events=" + outputCount(run.getId(), ResearchRunOutputService.EVENT),
+                    outputCount(run.getId(), ResearchRunOutputService.EVENT));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE);
             completeStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE,
-                    "evidence=" + delta(evidenceBefore, evidenceItemRepository.countAll()),
-                    delta(evidenceBefore, evidenceItemRepository.countAll()));
+                    "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
+                    outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF);
             Brief brief = briefService.generate(run.getRunDate());
+            researchRunOutputService.recordCurrentRun(ResearchRunOutputService.BRIEF, brief.getId());
             completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF,
                     "briefDate=" + brief.getBriefDate(), 1);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN);
             run.setFetchedSourceCount(fetchedSources);
-            run.setArticleCount(delta(articleBefore, articleRepository.countAll()));
-            run.setEventCount(delta(eventBefore, eventClusterRepository.countAll()));
-            run.setEvidenceCount(delta(evidenceBefore, evidenceItemRepository.countAll()));
+            run.setArticleCount(outputCount(run.getId(), ResearchRunOutputService.ARTICLE));
+            run.setEventCount(outputCount(run.getId(), ResearchRunOutputService.EVENT));
+            run.setEvidenceCount(outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             run.setLearningTaskCount(delta(learningBefore, learningTaskRepository.countAll()));
             run.setContentIdeaCount(delta(ideaBefore, contentIdeaRepository.countAll()));
             run.setBriefDate(brief.getBriefDate());
@@ -254,6 +272,10 @@ public class ResearchService {
             profiles.add(SourceProfile.from(source));
         }
         return profiles;
+    }
+
+    private int outputCount(Long runId, String outputType) {
+        return researchRunOutputService == null ? 0 : researchRunOutputService.count(runId, outputType);
     }
 
     private List<String> extractCodes(List<ThemeProfile> themes) {

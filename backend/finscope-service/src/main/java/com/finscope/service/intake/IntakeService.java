@@ -29,10 +29,18 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Consumer;
+import com.finscope.domain.task.TaskPhase;
 
 @Service
 public class IntakeService {
     private static final int LOOKBACK_DAYS = 3;
+    private static final Set<String> HUMAN_STATUSES = new HashSet<String>(Arrays.asList(
+            IntakeEnums.HUMAN_PENDING, IntakeEnums.HUMAN_SAVED_FOR_LATER,
+            IntakeEnums.HUMAN_SKIPPED, IntakeEnums.HUMAN_REJECTED));
 
     @Resource
     private SourceRepository sourceRepository;
@@ -62,12 +70,17 @@ public class IntakeService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public FetchBatch intakeFetch(Long sourceId) {
-        return intakeFetch(sourceId, IntakeEnums.TRIGGER_MANUAL, null);
+        return intakeFetch(sourceId, IntakeEnums.TRIGGER_MANUAL, null, null);
     }
 
     public FetchBatch intakeFetch(Long sourceId, String triggerType, String scheduleSlot) {
+        return intakeFetch(sourceId, triggerType, scheduleSlot, null);
+    }
+
+    public FetchBatch intakeFetch(Long sourceId, String triggerType, String scheduleSlot, Consumer<TaskPhase> progress) {
         Source source = sourceRepository.findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        if (!source.isEnabled()) throw new IllegalStateException("信息源已归档，无法抓取");
         FetchBatch batch = new FetchBatch();
         batch.setSourceId(source.getId());
         batch.setSourceName(source.getName());
@@ -78,8 +91,10 @@ public class IntakeService {
         FetchRun compatibleRun = fetchRunRepository.start(source.getId(), source.getName());
         int duplicateCount = 0;
         try {
+            phase(progress, TaskPhase.FETCHING);
             SourceAdapter adapter = adapterRegistry.get(source);
             List<RawItem> rawItems = emptyIfNull(adapter.fetch(source));
+            phase(progress, TaskPhase.PARSING);
             List<RawItem> selected = limit(rawItemSelector.select(source, filterByLookback(rawItems)), maxItems(source));
             List<IntakeCandidate> candidates = new ArrayList<IntakeCandidate>();
             int newCandidateCount = 0;
@@ -92,19 +107,28 @@ public class IntakeService {
                     candidate.setDecisionSummary("重复内容：系统已发现相同 URL 的候选或文章。");
                     duplicateCount++;
                 } else {
+                    phase(progress, TaskPhase.LLM);
                     CandidateReviewAgent.ReviewResult reviewResult = candidateReviewAgent.reviewWithResult(candidate);
                     applyReview(candidate, reviewResult);
                     newCandidateCount++;
                 }
                 candidates.add(candidateRepository.save(candidate));
             }
-            if (newCandidateCount == 0) {
+            if (newCandidateCount == 0 && candidates.isEmpty()) {
                 String message = "没有产出候选内容：可能被最近 3 天窗口过滤、信息源为空或正文抽取失败。";
                 FetchBatch failed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_FAILED, rawItems.size(),
                         0, 0, duplicateCount, 0, message, null, message);
                 fetchRunRepository.finish(compatibleRun, "FAILED", 0, duplicateCount, message);
                 return failed;
             }
+            if (newCandidateCount == 0) {
+                String message = "本次未产生新候选，已识别 " + duplicateCount + " 条重复内容。";
+                FetchBatch completed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_PARTIAL_SUCCESS, rawItems.size(),
+                        candidates.size(), 0, duplicateCount, 0, null, null, message);
+                fetchRunRepository.finish(compatibleRun, "SUCCESS", 0, duplicateCount, null);
+                return completed;
+            }
+            phase(progress, TaskPhase.LLM);
             BatchSummaryAgent.BatchSummary summary = batchSummaryAgent.summarize(running, candidates);
             String summaryJson = scheduleSlot == null ? summary.getSummaryJson() : scheduledSummaryJson(scheduleSlot, summary);
             FetchBatch completed = fetchBatchRepository.finish(running, IntakeEnums.BATCH_COMPLETED, rawItems.size(),
@@ -139,22 +163,25 @@ public class IntakeService {
     }
 
     public IntakeCandidate updateHumanStatus(Long id, String status, String note) {
-        candidateRepository.updateHumanStatus(id, status, note);
+        IntakeCandidate candidate = candidate(id);
+        String target = status == null ? "" : status.trim().toUpperCase();
+        if (!HUMAN_STATUSES.contains(target)) {
+            throw new IllegalArgumentException("Unsupported candidate status: " + status);
+        }
+        if (IntakeEnums.HUMAN_PROMOTED.equals(candidate.getHumanStatus())) {
+            throw new IllegalArgumentException("已入库候选不能变更人工状态");
+        }
+        candidateRepository.updateHumanStatus(id, target, note);
         return candidate(id);
     }
 
     public PromoteIntakeCandidateResponse promote(Long id) {
+        return promote(id, null);
+    }
+
+    public PromoteIntakeCandidateResponse promote(Long id, Consumer<TaskPhase> progress) {
         IntakeCandidate candidate = candidate(id);
         if (candidate.getPromotedArticleId() != null) {
-            if (IntakeEnums.HUMAN_PROMOTED.equals(candidate.getHumanStatus())) {
-                PromoteIntakeCandidateResponse response = new PromoteIntakeCandidateResponse();
-                response.setCandidateId(candidate.getId());
-                response.setStatus(candidate.getHumanStatus());
-                response.setArticleId(candidate.getPromotedArticleId());
-                response.setWorkflowStatus("SUCCESS");
-                response.setWorkflowSummary("候选项已入库，无需重复执行");
-                return response;
-            }
             return articleRepository.findById(candidate.getPromotedArticleId())
                     .map(article -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), article))
                     .orElseGet(() -> promotionWorkflowService.attach(candidate.getId(), candidate.getHumanStatus(), null));
@@ -175,7 +202,7 @@ public class IntakeService {
                 firstNonBlank(candidate.getExtractionMethod(), "intake:promoted"),
                 candidate.getExtractionQualityScore(),
                 "Intake 人工 Promote 后入文章库");
-        ArticleIngestResult result = articleIngestCoordinator.ingest(source, item);
+        ArticleIngestResult result = articleIngestCoordinator.ingest(source, item, progress);
         Long articleId = result.getArticle().getId();
         candidateRepository.markPromoted(id, articleId);
         IntakeCandidate promoted = candidate(id);
@@ -233,7 +260,9 @@ public class IntakeService {
         if (candidate.getUrlFingerprint() == null || candidate.getUrlFingerprint().trim().isEmpty()) {
             return false;
         }
-        if (candidateRepository.findByUrlFingerprint(candidate.getUrlFingerprint()).isPresent()) {
+        java.util.Optional<IntakeCandidate> duplicate = candidateRepository.findByUrlFingerprint(candidate.getUrlFingerprint());
+        if (duplicate.isPresent()) {
+            candidate.setDuplicateOfCandidateId(duplicate.get().getId());
             return true;
         }
         for (ArticleRepository.ArticleRecord article : articleRepository.findRecentRecords(200)) {
@@ -300,5 +329,9 @@ public class IntakeService {
 
     private String blankDefault(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private void phase(Consumer<TaskPhase> progress, TaskPhase phase) {
+        if (progress != null) progress.accept(phase);
     }
 }

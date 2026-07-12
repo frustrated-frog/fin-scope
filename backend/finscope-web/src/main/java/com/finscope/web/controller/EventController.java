@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
+import com.finscope.domain.response.PageResponse;
 import com.finscope.service.research.EventClusterService;
 import com.finscope.web.request.MergeEventRequest;
 import com.finscope.web.request.MoveEventArticleRequest;
@@ -32,6 +33,21 @@ public class EventController {
                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
         return eventClusterService.list(themeCode, status, noveltyState, dateFrom, dateTo);
+    }
+
+    @GetMapping("/paged")
+    public PageResponse<EventCluster> listPaged(@RequestParam(required = false) String themeCode,
+                                                 @RequestParam(required = false) String status,
+                                                 @RequestParam(required = false) String noveltyState,
+                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+                                                 @RequestParam(defaultValue = "0") int page,
+                                                 @RequestParam(defaultValue = "50") int pageSize) {
+        if (page < 0 || pageSize < 1 || pageSize > 200) {
+            throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.BAD_REQUEST,
+                    "page must be >= 0 and pageSize must be between 1 and 200");
+        }
+        return eventClusterService.listPaged(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize);
     }
 
     @GetMapping("/{id}")

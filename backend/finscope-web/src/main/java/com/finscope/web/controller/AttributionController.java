@@ -29,13 +29,14 @@ public class AttributionController {
     @Resource
     private AttributionSseRegistry sseRegistry;
 
-    /** 触发深度归因，返回 taskId。 */
+    /** 触发深度归因，返回 taskId 和已创建的报告 id。 */
     @PostMapping("/start")
     public Map<String, String> start(@RequestBody StartAttributionRequest request) {
-        String taskId = attributionService.startAttribution(
+        AttributionService.AttributionStartResult started = attributionService.startAttribution(
                 request.getCode(), request.getType(), request.getName(), request.getChangePct());
         Map<String, String> result = new HashMap<>();
-        result.put("taskId", taskId);
+        result.put("taskId", started.getTaskId());
+        result.put("reportId", String.valueOf(started.getReportId()));
         return result;
     }
 
@@ -51,17 +52,24 @@ public class AttributionController {
         return attributionService.getReport(reportId);
     }
 
+    /** 查询 Harness 运行状态及各研究轨道步骤。 */
+    @GetMapping("/reports/{reportId}/run")
+    public AttributionService.AttributionResearchRunView researchRun(@PathVariable Long reportId) {
+        return attributionService.getResearchRun(reportId);
+    }
+
     /** 查询某标的最新归因（卡片摘要徽标用），无则返回空对象。 */
     @GetMapping("/latest")
-    public AttributionReport latest(@RequestParam String code) {
-        return attributionService.getLatestByCode(code);
+    public AttributionReport latest(@RequestParam String code, @RequestParam String type) {
+        return attributionService.getLatestByIdentity(code, type);
     }
 
     /** 查询某标的归因历史。 */
     @GetMapping("/history")
     public List<AttributionReport> history(@RequestParam String code,
+                                           @RequestParam String type,
                                            @RequestParam(defaultValue = "10") int limit) {
-        List<AttributionReport> list = attributionService.getHistory(code, limit);
+        List<AttributionReport> list = attributionService.getHistory(code, type, limit);
         return list == null ? Collections.emptyList() : list;
     }
 }

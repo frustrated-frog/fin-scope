@@ -17,6 +17,14 @@ public class AttributionDriver {
     private String detail;
     /** 关联证据的 url 列表（指向 AttributionEvidence） */
     private List<String> evidenceUrls;
+    /** 支撑该驱动的可核验事实。 */
+    private List<String> facts;
+    /** 事件如何传导到预期、资金或估值，再影响价格。 */
+    private String transmissionPath;
+    /** 与该驱动相冲突或限制其解释力的信息。 */
+    private String counterEvidence;
+    /** 后续验证该驱动的观察窗口。 */
+    private String observationWindow;
 
     public String getClaim() {
         return claim;
@@ -57,4 +65,13 @@ public class AttributionDriver {
     public void setEvidenceUrls(List<String> evidenceUrls) {
         this.evidenceUrls = evidenceUrls;
     }
+
+    public List<String> getFacts() { return facts; }
+    public void setFacts(List<String> facts) { this.facts = facts; }
+    public String getTransmissionPath() { return transmissionPath; }
+    public void setTransmissionPath(String transmissionPath) { this.transmissionPath = transmissionPath; }
+    public String getCounterEvidence() { return counterEvidence; }
+    public void setCounterEvidence(String counterEvidence) { this.counterEvidence = counterEvidence; }
+    public String getObservationWindow() { return observationWindow; }
+    public void setObservationWindow(String observationWindow) { this.observationWindow = observationWindow; }
 }

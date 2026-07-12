@@ -37,6 +37,7 @@ public class ArticleDeletionService {
             throw new IllegalArgumentException("Article not found: " + id);
         }
         eventClusterRepository.refreshCounts(eventIds);
+        eventClusterRepository.archiveIfEmpty(eventIds);
         log.info("删除文章成功 articleId={}", id);
     }
 
@@ -53,6 +54,7 @@ public class ArticleDeletionService {
         eventClusterRepository.deleteLinksByArticleIds(ids);
         int deleted = articleRepository.deleteByIds(ids);
         eventClusterRepository.refreshCounts(eventIds);
+        eventClusterRepository.archiveIfEmpty(eventIds);
         log.info("批量删除文章成功 deletedCount={}", deleted);
         return deleted;
     }

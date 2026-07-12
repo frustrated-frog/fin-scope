@@ -70,6 +70,28 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "quoteTaskExecutor")
+    public Executor quoteTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("quote-task-");
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "attributionTaskExecutor")
+    public Executor attributionTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("attribution-task-");
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(30);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "researchTaskExecutor")
     public Executor researchTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

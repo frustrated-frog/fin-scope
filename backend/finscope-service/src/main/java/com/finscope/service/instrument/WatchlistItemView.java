@@ -9,10 +9,12 @@ import com.finscope.domain.instrument.WatchlistItem;
 public class WatchlistItemView {
     private final WatchlistItem item;
     private final Quote quote;
+    private final String attributionSummary;
 
-    public WatchlistItemView(WatchlistItem item, Quote quote) {
+    public WatchlistItemView(WatchlistItem item, Quote quote, String attributionSummary) {
         this.item = item;
         this.quote = quote;
+        this.attributionSummary = attributionSummary;
     }
 
     public WatchlistItem getItem() {
@@ -21,5 +23,9 @@ public class WatchlistItemView {
 
     public Quote getQuote() {
         return quote;
+    }
+
+    public String getAttributionSummary() {
+        return attributionSummary;
     }
 }

@@ -10,6 +10,9 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.domain.response.PageResponse;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.source.Source;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,10 @@ public class EvidenceService {
     private AgentRunRepository agentRunRepository;
     @Resource
     private LlmChatClient llmChatClient;
+    @Resource
+    private ResearchRunOutputService researchRunOutputService;
+    @Resource
+    private EventEvidenceThesisService eventEvidenceThesisService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public int capture(EventCluster event, Article article) {
@@ -44,7 +51,11 @@ public class EvidenceService {
         List<EvidenceItem> agentItems = extractWithAgent(event, article, start);
         if (!agentItems.isEmpty()) {
             for (EvidenceItem item : agentItems) {
-                evidenceItemRepository.save(item);
+                EvidenceItem saved = evidenceItemRepository.save(item);
+                if (eventEvidenceThesisService != null) {
+                    eventEvidenceThesisService.syncForEvidence(saved);
+                }
+                researchRunOutputService.recordCurrentRun(ResearchRunOutputService.EVIDENCE, saved.getId());
             }
             return evidenceItemRepository.countByEventId(event.getId());
         }
@@ -54,8 +65,13 @@ public class EvidenceService {
         item.setSourceTier(resolveSourceTier(article));
         item.setEvidenceType(resolveEvidenceType(article));
         item.setClaim(resolveClaim(article));
+        item.setClaimKey(normalizeClaimKey(item.getClaim()));
         item.setConfidence(resolveConfidence(item.getSourceTier()));
         EvidenceItem saved = evidenceItemRepository.save(item);
+        if (eventEvidenceThesisService != null) {
+            eventEvidenceThesisService.syncForEvidence(saved);
+        }
+        researchRunOutputService.recordCurrentRun(ResearchRunOutputService.EVIDENCE, saved.getId());
         int count = evidenceItemRepository.countByEventId(event.getId());
         agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article.getId(),
                 "evidence-extract", "FALLBACK",
@@ -111,6 +127,7 @@ public class EvidenceService {
             item.setSourceTier(sourceTier);
             item.setEvidenceType(validEvidenceType(text(node, "evidenceType", resolveEvidenceType(article))));
             item.setClaim(limit(claim, 180));
+            item.setClaimKey(normalizeClaimKey(item.getClaim()));
             item.setConfidence(clamp(node.path("confidence").asInt(resolveConfidence(sourceTier))));
             items.add(item);
             if (items.size() >= 5) {
@@ -172,7 +189,21 @@ public class EvidenceService {
     }
 
     public List<EvidenceItem> listAll(Long eventId, String sourceTier, String evidenceType, Integer minConfidence) {
+        validateMinConfidence(minConfidence);
         return evidenceItemRepository.findFiltered(eventId, sourceTier, evidenceType, minConfidence);
+    }
+
+    public PageResponse<EvidenceItem> listPaged(Long eventId, String sourceTier, String evidenceType,
+                                                Integer minConfidence, int page, int pageSize) {
+        validateMinConfidence(minConfidence);
+        return PageResponse.of(evidenceItemRepository.findFilteredPage(eventId, sourceTier, evidenceType, minConfidence, page, pageSize),
+                evidenceItemRepository.countFiltered(eventId, sourceTier, evidenceType, minConfidence), page, pageSize);
+    }
+
+    private void validateMinConfidence(Integer minConfidence) {
+        if (minConfidence != null && (minConfidence < 0 || minConfidence > 100)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "minConfidence must be between 0 and 100");
+        }
     }
 
     public EvidenceItem detail(Long id) {
@@ -192,7 +223,8 @@ public class EvidenceService {
         if (containsAny(sourceName, "ir", "investor relations", "company", "公司公告")) {
             return ResearchEnums.SOURCE_TIER_COMPANY;
         }
-        if (containsAny(sourceName, "x", "twitter")) {
+        if ("x".equals(sourceName) || "twitter".equals(sourceName)
+                || "x.com".equals(sourceName) || "twitter.com".equals(sourceName)) {
             return ResearchEnums.SOURCE_TIER_SOCIAL;
         }
         if (article.getSourceId() != null) {
@@ -223,6 +255,11 @@ public class EvidenceService {
     private String resolveClaim(Article article) {
         String text = StringUtils.firstNonBlank(article.getSummary(), firstSentence(article.getBody()), article.getTitle(), "未提取到证据");
         return limit(text.replaceAll("\\s+", " ").trim(), 140);
+    }
+
+    private String normalizeClaimKey(String claim) {
+        return StringUtils.firstNonBlank(claim, "").toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", " ").trim();
     }
 
     private int resolveConfidence(String sourceTier) {

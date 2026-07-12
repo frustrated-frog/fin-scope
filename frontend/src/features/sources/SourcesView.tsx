@@ -1,7 +1,8 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { FetchBatch, Source } from '../../shared/types';
+import { AsyncTask, FetchBatch, Source } from '../../shared/types';
+import { createIngestTaskChannel, IngestTaskChannel } from '../articles/ingestTaskChannel';
 
 const EMPTY_SOURCE: Source = {
   name: '',
@@ -30,6 +31,10 @@ export function SourcesView({
   const [form, setForm] = useState<Source>(EMPTY_SOURCE);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busySourceId, setBusySourceId] = useState<number | null>(null);
+  const [fetchTask, setFetchTask] = useState<AsyncTask | null>(null);
+  const fetchChannelRef = useRef<IngestTaskChannel | null>(null);
+
+  useEffect(() => () => fetchChannelRef.current?.dispose(), []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -58,17 +63,26 @@ export function SourcesView({
       return;
     }
     setBusySourceId(id);
+    setFetchTask(null);
     try {
-      const batch = await api<FetchBatch>(`/api/sources/${id}/intake-fetch`, { method: 'POST' });
-      if (batch.status === 'COMPLETED' || batch.status === 'PARTIAL_SUCCESS') {
-        addToast('已抓取到候选池', 'success');
-      } else {
-        addToast(batch.errorMessage || '摄入候选失败', 'error');
-      }
+      const task = await api<AsyncTask>(`/api/sources/${id}/intake-fetch-async`, { method: 'POST' });
+      setFetchTask(task);
+      fetchChannelRef.current?.dispose();
+      const channel = createIngestTaskChannel(task, {
+        fetchTask: () => api<AsyncTask>(`/api/tasks/${task.taskId}`),
+        timeoutMs: 5 * 60 * 1000,
+        onProgress: setFetchTask
+      });
+      fetchChannelRef.current = channel;
+      const completed = await channel.completion;
+      setFetchTask(completed);
+      if (completed.status === 'FAILED') throw new Error(completed.errorMessage || completed.message || '摄入候选失败');
+      addToast(completed.message || '已抓取到候选池', 'success');
       await onChanged();
     } catch (error) {
       addToast(error instanceof Error ? error.message : '摄入候选失败', 'error');
     } finally {
+      fetchChannelRef.current = null;
       setBusySourceId(null);
     }
   }
@@ -182,7 +196,8 @@ export function SourcesView({
             checked={Boolean(form.scheduledEnabled)}
             onChange={(event) => setForm({ ...form, scheduledEnabled: event.target.checked })}
           />
-          开启定时抓取
+          <span className="checkbox-box" aria-hidden="true" />
+          <span className="checkbox-text">开启定时抓取</span>
         </label>
         <label className="checkbox-row">
           <input
@@ -190,7 +205,8 @@ export function SourcesView({
             checked={Boolean(form.enabled)}
             onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
           />
-          启用信息源
+          <span className="checkbox-box" aria-hidden="true" />
+          <span className="checkbox-text">启用信息源</span>
         </label>
         <div className="source-form-actions">
           {editingId && (
@@ -212,7 +228,7 @@ export function SourcesView({
       <section className="panel">
         <div className="panel-heading">
           <h3>已配置信息源</h3>
-          <span className="subtle-badge">{sources.length} active</span>
+          <span className="subtle-badge">{sources.filter((source) => source.enabled).length} active</span>
         </div>
         <div className="item-list">
           {sources.length === 0 ? (
@@ -243,12 +259,17 @@ export function SourcesView({
                       最近批次：{recentBatch(source.id)?.status} · {recentBatch(source.id)?.candidateCount ?? 0} 条候选
                     </p>
                   )}
+                  {fetchTask && busySourceId === source.id && (
+                    <p className="source-batch-summary" role="status">
+                      正在处理：{fetchTask.message || fetchTask.phase || '等待开始'}
+                    </p>
+                  )}
                 </div>
                 <div className="source-actions">
                   <button
                     className="compact-button"
                     type="button"
-                    disabled={busySourceId === source.id}
+                    disabled={busySourceId !== null || !source.enabled}
                     onClick={() => intakeFetchSource(source.id)}
                   >
                     抓取
@@ -268,7 +289,7 @@ export function SourcesView({
                     disabled={busySourceId === source.id}
                     onClick={() => deleteSource(source.id)}
                   >
-                    删除
+                    归档
                   </button>
                 </div>
               </div>

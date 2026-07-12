@@ -21,12 +21,12 @@ finscope:
   cors-origin: http://localhost:*
   llm:
     enabled: true
-    base-url: "https://api.letmyai.com/v1"
-    api-key: "sk-letmyai-08-c8c2d4b34676ecbe6ca375aecf5550e9229cc00e6980df7a"
-    model: "gpt-5.5"
+    base-url: "https://modelservice.jdcloud.com/v1"
+    api-key: "pk-1439bbdb-a7a8-47d3-a7f1-0d9e3bd103ea"
+    model: "GLM-5"
     timeout-ms: 300000
     temperature: 0.2
   search:
     enabled: ${FINSCOPE_SEARCH_ENABLED:true}
     provider: tavily
-    api-key: ${FINSCOPE_SEARCH_API_KEY:}
+    api-key: "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"

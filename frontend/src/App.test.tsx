@@ -134,6 +134,18 @@ const responses: Record<string, unknown> = {
     phase: 'QUEUED',
     message: '等待开始'
   },
+  '/api/sources/1/intake-fetch-async': {
+    taskId: 'task-intake',
+    status: 'QUEUED',
+    phase: 'QUEUED',
+    message: '等待抓取信息源'
+  },
+  '/api/tasks/task-intake': {
+    taskId: 'task-intake',
+    status: 'COMPLETED',
+    phase: 'COMPLETED',
+    message: '候选池已更新：2 条候选'
+  },
   '/api/tasks/task-manual': {
     taskId: 'task-manual',
     status: 'COMPLETED',
@@ -761,25 +773,26 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
   const sourceCard = (await screen.findByText('测试财经RSS')).closest('.source-item') as HTMLElement;
   await userEvent.click(within(sourceCard).getByRole('button', { name: '抓取' }));
 
-  expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch', expect.objectContaining({ method: 'POST' }));
+  expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch-async', expect.objectContaining({ method: 'POST' }));
   expect(fetch).not.toHaveBeenCalledWith('/api/sources/1/fetch', expect.objectContaining({ method: 'POST' }));
 });
 
 test('sources workspace shows failed intake batches as errors', async () => {
   vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
-    if (url === '/api/sources/1/intake-fetch' && init?.method === 'POST') {
+    if (url === '/api/sources/1/intake-fetch-async' && init?.method === 'POST') {
       return {
         ok: true,
         json: async () => ({
-          id: 2,
-          sourceId: 1,
-          sourceName: '测试财经RSS',
-          status: 'FAILED',
-          candidateCount: 0,
-          errorMessage: '没有产出候选内容'
+          taskId: 'task-intake-failed',
+          status: 'QUEUED',
+          phase: 'QUEUED',
+          message: '等待抓取信息源'
         })
       } as Response;
+    }
+    if (url === '/api/tasks/task-intake-failed') {
+      return { ok: true, json: async () => ({ taskId: 'task-intake-failed', status: 'FAILED', phase: 'FAILED', errorMessage: '没有产出候选内容' }) } as Response;
     }
     return {
       ok: true,
@@ -1011,6 +1024,17 @@ test('events view shows research event cards with evidence and article counts', 
   expect(screen.getByText(/文章 2/)).toBeInTheDocument();
 });
 
+test('event card opens an in-app archive and returns to the event queue', async () => {
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
+
+  expect(await screen.findByRole('region', { name: '事件详情' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '返回事件队列' }));
+  expect(await screen.findByText('事件研究台')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: '事件详情' })).not.toBeInTheDocument();
+});
+
 test('events view can filter evidence by source tier and shows novelty distribution', async () => {
   render(<App />);
 
@@ -1018,6 +1042,7 @@ test('events view can filter evidence by source tier and shows novelty distribut
 
   expect(await screen.findByText('FOLLOW_UP 1')).toBeInTheDocument();
   expect(screen.getByText('NEW 1')).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
   const detail = screen.getByRole('region', { name: '事件详情' });
   expect(within(detail).getAllByText('MEDIA').length).toBeGreaterThan(0);
   expect(within(detail).getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
@@ -1321,6 +1346,7 @@ test('events view presents the selected event as a structured detail panel', asy
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
 
   const detail = await screen.findByRole('region', { name: '事件详情' });
 
@@ -1339,10 +1365,11 @@ test('events workbench explains timeline, merge basis, evidence strength and eve
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
 
   const detail = await screen.findByRole('region', { name: '事件详情' });
 
-  expect(screen.getByText('事件研究台')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '返回事件队列' })).toBeInTheDocument();
   expect(within(detail).getByText('事件时间线')).toBeInTheDocument();
   expect(within(detail).getByText('归并依据')).toBeInTheDocument();
   expect(within(detail).getByText('证据强度')).toBeInTheDocument();
@@ -1369,6 +1396,7 @@ test('events governance panel updates status, merges events and moves articles',
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
 
   const detail = await screen.findByRole('region', { name: '事件详情' });
   await userEvent.selectOptions(within(detail).getByLabelText('事件状态'), 'COOLING');

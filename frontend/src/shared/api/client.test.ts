@@ -1,9 +1,28 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
+
 import { api } from './client';
 
-describe('api client', () => {
-  afterEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  vi.unstubAllGlobals();
+});
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+test('treats a successful empty response body as no content', async () => {
+  const response = {
+    ok: true,
+    status: 200,
+    text: vi.fn().mockResolvedValue('')
+  } as unknown as Response;
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+  await expect(api('/api/watchlist/1', { method: 'DELETE' })).resolves.toBeUndefined();
+  expect(response.text).toHaveBeenCalledTimes(1);
+});
+
+describe('api business errors', () => {
   it('surfaces the backend business error message', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       code: 'CONFLICT',

@@ -9,8 +9,12 @@ public class EvidenceItem {
     private String sourceTier;
     private String evidenceType;
     private String claim;
+    private String claimKey;
     private Integer confidence;
     private LocalDateTime createdAt;
+    private String articleTitle;
+    private String articleUrl;
+    private LocalDateTime articlePublishedAt;
 
     public Long getId() {
         return id;
@@ -60,6 +64,9 @@ public class EvidenceItem {
         this.claim = claim;
     }
 
+    public String getClaimKey() { return claimKey; }
+    public void setClaimKey(String claimKey) { this.claimKey = claimKey; }
+
     public Integer getConfidence() {
         return confidence;
     }
@@ -75,4 +82,11 @@ public class EvidenceItem {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
+    public String getArticleTitle() { return articleTitle; }
+    public void setArticleTitle(String articleTitle) { this.articleTitle = articleTitle; }
+    public String getArticleUrl() { return articleUrl; }
+    public void setArticleUrl(String articleUrl) { this.articleUrl = articleUrl; }
+    public LocalDateTime getArticlePublishedAt() { return articlePublishedAt; }
+    public void setArticlePublishedAt(LocalDateTime articlePublishedAt) { this.articlePublishedAt = articlePublishedAt; }
 }

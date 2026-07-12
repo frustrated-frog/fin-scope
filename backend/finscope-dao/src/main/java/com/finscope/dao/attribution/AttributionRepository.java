@@ -17,7 +17,9 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -38,8 +40,12 @@ public class AttributionRepository {
         report.setStatus(rs.getString("status"));
         report.setSummary(rs.getString("summary"));
         report.setDrivers(parseDrivers(rs.getString("drivers_json")));
+        report.setPrimaryDriver(report.getDrivers().isEmpty() ? null : report.getDrivers().get(0));
+        report.setUncertainties(parseStrings(rs.getString("uncertainties_json")));
+        report.setObservationWindows(parseStrings(rs.getString("observation_windows_json")));
         report.setDisclaimer(rs.getString("disclaimer"));
         report.setErrorMessage(rs.getString("error_message"));
+        report.setWarningMessage(rs.getString("warning_message"));
         long duration = rs.getLong("duration_ms");
         report.setDurationMs(rs.wasNull() ? null : duration);
         report.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
@@ -59,6 +65,12 @@ public class AttributionRepository {
         evidence.setSourceTier(rs.getString("source_tier"));
         int relevance = rs.getInt("relevance");
         evidence.setRelevance(rs.wasNull() ? null : relevance);
+        evidence.setEventType(rs.getString("event_type"));
+        evidence.setStance(rs.getString("stance"));
+        evidence.setDirectness(rs.getString("directness"));
+        evidence.setPublishedAt(rs.getString("published_at"));
+        evidence.setEventKey(rs.getString("event_key"));
+        evidence.setHistoricalContext(rs.getInt("historical_context") != 0);
         evidence.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return evidence;
     };
@@ -72,8 +84,8 @@ public class AttributionRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO attribution_report(instrument_code,instrument_name,instrument_type,report_date,"
-                            + "change_pct,status,summary,drivers_json,disclaimer,error_message,duration_ms,created_at,updated_at) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "change_pct,status,summary,drivers_json,disclaimer,error_message,warning_message,uncertainties_json,"
+                            + "observation_windows_json,duration_ms,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, report.getInstrumentCode());
             ps.setString(2, report.getInstrumentName());
@@ -89,13 +101,16 @@ public class AttributionRepository {
             ps.setString(8, writeDrivers(report.getDrivers()));
             ps.setString(9, report.getDisclaimer());
             ps.setString(10, report.getErrorMessage());
+            ps.setString(11, report.getWarningMessage());
+            ps.setString(12, writeStrings(report.getUncertainties()));
+            ps.setString(13, writeStrings(report.getObservationWindows()));
             if (report.getDurationMs() == null) {
-                ps.setObject(11, null);
+                ps.setObject(14, null);
             } else {
-                ps.setLong(11, report.getDurationMs());
+                ps.setLong(14, report.getDurationMs());
             }
-            ps.setString(12, TimeUtil.text(report.getCreatedAt()));
-            ps.setString(13, TimeUtil.text(report.getUpdatedAt()));
+            ps.setString(15, TimeUtil.text(report.getCreatedAt()));
+            ps.setString(16, TimeUtil.text(report.getUpdatedAt()));
             return ps;
         }, keyHolder);
         if (keyHolder.getKey() != null) {
@@ -107,9 +122,11 @@ public class AttributionRepository {
     /** 完成/失败时更新报告结果。 */
     public void updateResult(AttributionReport report) {
         jdbcTemplate.update("UPDATE attribution_report SET status=?, summary=?, drivers_json=?, disclaimer=?, "
-                        + "error_message=?, duration_ms=?, change_pct=?, updated_at=? WHERE id=?",
+                        + "error_message=?, warning_message=?, uncertainties_json=?, observation_windows_json=?, "
+                        + "duration_ms=?, change_pct=?, updated_at=? WHERE id=?",
                 report.getStatus(), report.getSummary(), writeDrivers(report.getDrivers()), report.getDisclaimer(),
-                report.getErrorMessage(), report.getDurationMs(), report.getChangePct(),
+                report.getErrorMessage(), report.getWarningMessage(), writeStrings(report.getUncertainties()),
+                writeStrings(report.getObservationWindows()), report.getDurationMs(), report.getChangePct(),
                 TimeUtil.text(LocalDateTime.now()), report.getId());
     }
 
@@ -120,32 +137,62 @@ public class AttributionRepository {
     }
 
     /** 某标的最新一条报告。 */
-    public Optional<AttributionReport> findLatestByCode(String instrumentCode) {
+    public Optional<AttributionReport> findLatestByIdentity(String instrumentCode, String instrumentType) {
         List<AttributionReport> list = jdbcTemplate.query(
-                "SELECT * FROM attribution_report WHERE instrument_code = ? ORDER BY id DESC LIMIT 1",
-                reportMapper, instrumentCode);
+                "SELECT * FROM attribution_report WHERE instrument_code = ? AND instrument_type = ? ORDER BY id DESC LIMIT 1",
+                reportMapper, instrumentCode, instrumentType);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
-    public List<AttributionReport> findHistoryByCode(String instrumentCode, int limit) {
+    public List<AttributionReport> findHistoryByIdentity(String instrumentCode, String instrumentType, int limit) {
         return jdbcTemplate.query(
-                "SELECT * FROM attribution_report WHERE instrument_code = ? ORDER BY id DESC LIMIT ?",
-                reportMapper, instrumentCode, limit);
+                "SELECT * FROM attribution_report WHERE instrument_code = ? AND instrument_type = ? ORDER BY id DESC LIMIT ?",
+                reportMapper, instrumentCode, instrumentType, limit);
+    }
+
+    /** 每个 (code,type) 只取最新一条已完成报告，供自选列表一次性读取。 */
+    public Map<String, String> findLatestCompletedSummaries() {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT r.instrument_code, r.instrument_type, r.summary FROM attribution_report r "
+                        + "JOIN (SELECT instrument_code, instrument_type, MAX(id) AS latest_id "
+                        + "FROM attribution_report WHERE status = 'COMPLETED' GROUP BY instrument_code, instrument_type) latest "
+                        + "ON r.id = latest.latest_id WHERE r.summary IS NOT NULL AND TRIM(r.summary) <> ''");
+        Map<String, String> summaries = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            summaries.put(identityKey((String) row.get("instrument_type"), (String) row.get("instrument_code")),
+                    (String) row.get("summary"));
+        }
+        return summaries;
+    }
+
+    private String identityKey(String type, String code) {
+        return String.valueOf(type) + ":" + String.valueOf(code);
     }
 
     public void saveEvidence(AttributionEvidence evidence) {
         evidence.setCreatedAt(LocalDateTime.now());
         jdbcTemplate.update("INSERT INTO attribution_evidence(report_id,origin,title,url,snippet,source_domain,"
-                        + "source_tier,relevance,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                        + "source_tier,relevance,event_type,stance,directness,published_at,event_key,historical_context,created_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 evidence.getReportId(), evidence.getOrigin(), evidence.getTitle(), evidence.getUrl(),
                 evidence.getSnippet(), evidence.getSourceDomain(), evidence.getSourceTier(),
-                evidence.getRelevance(), TimeUtil.text(evidence.getCreatedAt()));
+                evidence.getRelevance(), evidence.getEventType(), evidence.getStance(), evidence.getDirectness(),
+                evidence.getPublishedAt(), evidence.getEventKey(), evidence.isHistoricalContext() ? 1 : 0,
+                TimeUtil.text(evidence.getCreatedAt()));
     }
 
     public List<AttributionEvidence> findEvidenceByReportId(Long reportId) {
         return jdbcTemplate.query(
                 "SELECT * FROM attribution_evidence WHERE report_id = ? ORDER BY relevance DESC, id ASC",
                 evidenceMapper, reportId);
+    }
+
+    /** 读取同一标的最近已完成报告中的高相关证据，仅作为历史背景。 */
+    public List<AttributionEvidence> findRecentEvidenceContext(String code, String type, Long excludeReportId, int limit) {
+        return jdbcTemplate.query("SELECT e.* FROM attribution_evidence e JOIN attribution_report r ON r.id=e.report_id "
+                        + "WHERE r.instrument_code=? AND r.instrument_type=? AND r.status='COMPLETED' AND r.id<>? "
+                        + "ORDER BY r.id DESC, e.relevance DESC LIMIT ?",
+                evidenceMapper, code, type, excludeReportId, limit);
     }
 
     private String writeDrivers(List<AttributionDriver> drivers) {
@@ -166,6 +213,25 @@ public class AttributionRepository {
         try {
             CollectionType type = objectMapper.getTypeFactory()
                     .constructCollectionType(List.class, AttributionDriver.class);
+            return objectMapper.readValue(json, type);
+        } catch (Exception ex) {
+            return new ArrayList<>();
+        }
+    }
+
+    private String writeStrings(List<String> values) {
+        if (values == null || values.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private List<String> parseStrings(String json) {
+        if (json == null || json.trim().isEmpty()) return new ArrayList<>();
+        try {
+            CollectionType type = objectMapper.getTypeFactory().constructCollectionType(List.class, String.class);
             return objectMapper.readValue(json, type);
         } catch (Exception ex) {
             return new ArrayList<>();

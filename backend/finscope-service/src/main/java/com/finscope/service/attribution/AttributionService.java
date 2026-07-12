@@ -4,6 +4,9 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.attribution.AttributionRepository;
+import com.finscope.dao.attribution.AttributionResearchRunRepository;
+import com.finscope.domain.attribution.AttributionResearchRun;
+import com.finscope.domain.attribution.AttributionResearchStep;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionReport;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -29,16 +33,18 @@ public class AttributionService {
     @Resource
     private AttributionRepository attributionRepository;
     @Resource
-    private AttributionAgent attributionAgent;
+    private AttributionHarness attributionHarness;
+    @Resource(name = "attributionResearchRunRepository")
+    private AttributionResearchRunRepository researchRunRepository;
     @Resource
     private AttributionProgressPublisher progressPublisher;
-    @Resource(name = "ingestTaskExecutor")
+    @Resource(name = "attributionTaskExecutor")
     private Executor executor;
 
     /**
      * 触发一次归因研究，返回 taskId（前端据此订阅 SSE 进度）。
      */
-    public String startAttribution(String code, String type, String name, Double changePct) {
+    public AttributionStartResult startAttribution(String code, String type, String name, Double changePct) {
         if (StringUtils.isBlank(code)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码不能为空");
         }
@@ -57,15 +63,20 @@ public class AttributionService {
         AttributionReport saved = attributionRepository.createReport(report);
 
         String taskId = UUID.randomUUID().toString();
-        executor.execute(() -> runResearch(taskId, saved, instrument, changePct));
+        try {
+            executor.execute(() -> runResearch(taskId, saved, instrument, changePct));
+        } catch (RuntimeException ex) {
+            reportSubmissionFailed(saved, ex);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "归因任务提交失败，请稍后重试");
+        }
         log.info("归因任务已提交 taskId={} code={} reportId={}", taskId, code, saved.getId());
-        return taskId;
+        return new AttributionStartResult(taskId, saved.getId());
     }
 
     private void runResearch(String taskId, AttributionReport report, Instrument instrument, Double changePct) {
         long start = System.currentTimeMillis();
         try {
-            attributionAgent.research(report, instrument, changePct, taskId, progressPublisher);
+            attributionHarness.research(report, instrument, changePct, taskId, progressPublisher);
             // 持久化证据
             if (report.getEvidences() != null) {
                 for (AttributionEvidence evidence : report.getEvidences()) {
@@ -76,6 +87,7 @@ public class AttributionService {
             report.setStatus("COMPLETED");
             report.setDurationMs(System.currentTimeMillis() - start);
             attributionRepository.updateResult(report);
+            attributionHarness.markPersisted(report);
             progressPublisher.publish(taskId, AttributionProgressEvent.done(report.getId(), "归因报告已生成"));
         } catch (Exception ex) {
             log.error("归因研究失败 taskId={} code={}", taskId, instrument.getCode(), ex);
@@ -86,6 +98,11 @@ public class AttributionService {
                 attributionRepository.updateResult(report);
             } catch (Exception ignore) {
                 // 忽略持久化失败
+            }
+            try {
+                attributionHarness.markPersistenceFailed(report, ex);
+            } catch (Exception stateEx) {
+                log.error("归因运行失败状态写入失败 reportId={}", report.getId(), stateEx);
             }
             progressPublisher.publish(taskId, AttributionProgressEvent.error(
                     StringUtils.firstNonBlank(ex.getMessage(), "归因研究失败")));
@@ -101,13 +118,34 @@ public class AttributionService {
         return report;
     }
 
-    /** 某标的最新归因报告（用于卡片摘要徽标），无则返回 null。 */
-    public AttributionReport getLatestByCode(String code) {
-        return attributionRepository.findLatestByCode(code).orElse(null);
+    public AttributionResearchRunView getResearchRun(Long reportId) {
+        AttributionResearchRun run = researchRunRepository.findByReportId(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "归因研究运行不存在: " + reportId));
+        return new AttributionResearchRunView(run, researchRunRepository.findStepsByRunId(run.getId()));
     }
 
-    public List<AttributionReport> getHistory(String code, int limit) {
-        return attributionRepository.findHistoryByCode(code, limit <= 0 ? 10 : limit);
+    /** 某标的最新归因报告（用于卡片摘要徽标），无则返回 null。 */
+    public AttributionReport getLatestByIdentity(String code, String type) {
+        return attributionRepository.findLatestByIdentity(normalizeCode(code), normalizeType(type)).orElse(null);
+    }
+
+    public List<AttributionReport> getHistory(String code, String type, int limit) {
+        return attributionRepository.findHistoryByIdentity(normalizeCode(code), normalizeType(type), limit <= 0 ? 10 : limit);
+    }
+
+    private void reportSubmissionFailed(AttributionReport report, RuntimeException ex) {
+        log.error("归因任务提交被拒绝 reportId={}", report.getId(), ex);
+        report.setStatus("FAILED");
+        report.setErrorMessage("归因任务暂时繁忙，请稍后重试");
+        try {
+            attributionRepository.updateResult(report);
+        } catch (Exception persistenceEx) {
+            log.error("归因提交失败状态写入失败 reportId={}", report.getId(), persistenceEx);
+        }
+    }
+
+    private String normalizeCode(String code) {
+        return code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
     }
 
     private Instrument transientInstrument(String code, String type, String name) {
@@ -125,5 +163,76 @@ public class AttributionService {
             return normalized;
         }
         return "STOCK";
+    }
+
+    public static class AttributionStartResult {
+        private final String taskId;
+        private final Long reportId;
+
+        public AttributionStartResult(String taskId, Long reportId) {
+            this.taskId = taskId;
+            this.reportId = reportId;
+        }
+
+        public String getTaskId() {
+            return taskId;
+        }
+
+        public Long getReportId() {
+            return reportId;
+        }
+    }
+
+    public static class AttributionResearchRunView {
+        private final AttributionResearchRun run;
+        private final List<AttributionResearchStep> steps;
+        private final AttributionResearchProgress progress;
+        public AttributionResearchRunView(AttributionResearchRun run, List<AttributionResearchStep> steps) {
+            this.run = run;
+            this.steps = steps == null ? Collections.<AttributionResearchStep>emptyList() : steps;
+            this.progress = new AttributionResearchProgress(run, this.steps);
+        }
+        public AttributionResearchRun getRun() { return run; }
+        public List<AttributionResearchStep> getSteps() { return steps; }
+        public AttributionResearchProgress getProgress() { return progress; }
+    }
+
+    /** 由服务端统一定义可展示的真实轨道进度，前端不得自行推断。 */
+    public static class AttributionResearchProgress {
+        private final int plannedTracks;
+        private final int activatedTracks;
+        private final int settledTracks;
+        private final String currentTrack;
+        private final String currentStep;
+
+        AttributionResearchProgress(AttributionResearchRun run, List<AttributionResearchStep> steps) {
+            plannedTracks = steps.size();
+            int activated = 0;
+            int settled = 0;
+            String runningTrack = null;
+            for (AttributionResearchStep step : steps) {
+                String status = step.getStatus();
+                if (!"PLANNED".equals(status) && !"PENDING".equals(status)) {
+                    activated++;
+                }
+                if ("COMPLETED".equals(status) || "PARTIAL".equals(status)
+                        || "FAILED".equals(status) || "SKIPPED".equals(status)) {
+                    settled++;
+                }
+                if (runningTrack == null && "RUNNING".equals(status)) {
+                    runningTrack = step.getTrack();
+                }
+            }
+            activatedTracks = activated;
+            settledTracks = settled;
+            currentTrack = runningTrack;
+            currentStep = run == null ? null : run.getCurrentStep();
+        }
+
+        public int getPlannedTracks() { return plannedTracks; }
+        public int getActivatedTracks() { return activatedTracks; }
+        public int getSettledTracks() { return settledTracks; }
+        public String getCurrentTrack() { return currentTrack; }
+        public String getCurrentStep() { return currentStep; }
     }
 }

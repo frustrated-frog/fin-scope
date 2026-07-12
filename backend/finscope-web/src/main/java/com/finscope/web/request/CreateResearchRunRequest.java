@@ -4,10 +4,19 @@ import java.time.LocalDate;
 import java.util.List;
 
 public class CreateResearchRunRequest {
+    private Long thesisId;
     private LocalDate runDate;
     private List<String> themeCodes;
     private Integer maxSourcesPerTheme;
     private Boolean includeDisabled;
+
+    public Long getThesisId() {
+        return thesisId;
+    }
+
+    public void setThesisId(Long thesisId) {
+        this.thesisId = thesisId;
+    }
 
     public LocalDate getRunDate() {
         return runDate;

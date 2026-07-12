@@ -26,6 +26,8 @@ public class ResearchRunRepository {
     private final RowMapper<ResearchRun> mapper = (rs, rowNum) -> {
         ResearchRun run = new ResearchRun();
         run.setId(rs.getLong("id"));
+        long thesisId = rs.getLong("thesis_id");
+        run.setThesisId(rs.wasNull() ? null : thesisId);
         run.setRunDate(LocalDate.parse(rs.getString("run_date")));
         run.setThemeCodes(parseThemeCodes(rs.getString("theme_codes")));
         run.setSourceCount(rs.getInt("source_count"));
@@ -53,7 +55,7 @@ public class ResearchRunRepository {
             PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO research_run(run_date,theme_codes,source_count,fetched_source_count,article_count,"
                             + "event_count,evidence_count,learning_task_count,content_idea_count,brief_date,status,"
-                            + "summary,error_message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "summary,error_message,thesis_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, run.getRunDate().toString());
             ps.setString(2, joinThemeCodes(run.getThemeCodes()));
@@ -68,8 +70,13 @@ public class ResearchRunRepository {
             ps.setString(11, run.getStatus());
             ps.setString(12, run.getSummary());
             ps.setString(13, run.getErrorMessage());
-            ps.setString(14, TimeUtil.text(run.getCreatedAt()));
-            ps.setString(15, TimeUtil.text(run.getUpdatedAt()));
+            if (run.getThesisId() == null) {
+                ps.setObject(14, null);
+            } else {
+                ps.setLong(14, run.getThesisId());
+            }
+            ps.setString(15, TimeUtil.text(run.getCreatedAt()));
+            ps.setString(16, TimeUtil.text(run.getUpdatedAt()));
             return ps;
         }, keyHolder);
         run.setId(keyHolder.getKey().longValue());
@@ -126,6 +133,10 @@ public class ResearchRunRepository {
 
     public List<ResearchRun> findAll() {
         return jdbcTemplate.query("SELECT * FROM research_run ORDER BY created_at DESC, id DESC", mapper);
+    }
+
+    public List<ResearchRun> findByThesisId(Long thesisId) {
+        return jdbcTemplate.query("SELECT * FROM research_run WHERE thesis_id = ? ORDER BY created_at DESC, id DESC", mapper, thesisId);
     }
 
     public Optional<ResearchRun> findById(Long id) {
