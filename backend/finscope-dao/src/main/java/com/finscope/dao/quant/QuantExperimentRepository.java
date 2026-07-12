@@ -8,6 +8,7 @@ import com.finscope.domain.quant.backtest.EquityPoint;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -69,13 +71,8 @@ public class QuantExperimentRepository {
         metric(id, "SHARPE", m.getSharpeRatio()); metric(id, "CALMAR", m.getCalmarRatio()); metric(id, "WIN_RATE", m.getWinRate());
         metric(id, "TURNOVER", m.getTurnover()); metric(id, "TRADE_COUNT", m.getTradeCount());
         metric(id, "BENCHMARK_RETURN", m.getBenchmarkReturn()); metric(id, "EXCESS_RETURN", m.getExcessReturn());
-        for (EquityPoint point : result.getEquityCurve()) jdbcTemplate.update("INSERT INTO quant_equity_point(experiment_id,trade_date,portfolio_nav,"
-                        + "benchmark_nav,cash,total_asset,drawdown) VALUES(?,?,?,?,?,?,?)", id, point.getTradeDate().toString(),
-                point.getPortfolioNav(), point.getBenchmarkNav(), point.getCash(), point.getTotalAsset(), point.getDrawdown());
-        for (BacktestTrade trade : result.getTrades()) jdbcTemplate.update("INSERT INTO quant_trade(experiment_id,signal_date,trade_date,instrument_code,"
-                        + "side,quantity,price,notional,fee,reason) VALUES(?,?,?,?,?,?,?,?,?,?)", id, trade.getSignalDate().toString(),
-                trade.getTradeDate().toString(), trade.getInstrumentCode(), trade.getSide(), trade.getQuantity(), trade.getPrice(),
-                trade.getNotional(), trade.getFee(), trade.getReason());
+        saveEquityPoints(id, result.getEquityCurve());
+        saveTrades(id, result.getTrades());
         jdbcTemplate.update("UPDATE quant_experiment SET status='SUCCEEDED',completed_at=? WHERE id=? AND status='RUNNING'",
                 TimeUtil.text(LocalDateTime.now()), id);
     }
@@ -84,6 +81,31 @@ public class QuantExperimentRepository {
                 id, json, model, TimeUtil.text(LocalDateTime.now()));
     }
     private void metric(Long id, String code, double value) { jdbcTemplate.update("INSERT INTO quant_experiment_metric(experiment_id,metric_code,metric_value) VALUES(?,?,?)", id, code, value); }
+
+    private void saveEquityPoints(final Long experimentId, final List<EquityPoint> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_equity_point(experiment_id,trade_date,portfolio_nav,"
+                + "benchmark_nav,cash,total_asset,drawdown) VALUES(?,?,?,?,?,?,?)", new BatchPreparedStatementSetter() {
+            @Override public void setValues(PreparedStatement ps, int index) throws SQLException {
+                EquityPoint value = values.get(index); ps.setLong(1, experimentId); ps.setString(2, value.getTradeDate().toString());
+                ps.setDouble(3, value.getPortfolioNav()); ps.setDouble(4, value.getBenchmarkNav()); ps.setDouble(5, value.getCash());
+                ps.setDouble(6, value.getTotalAsset()); ps.setDouble(7, value.getDrawdown());
+            }
+            @Override public int getBatchSize() { return values.size(); }
+        });
+    }
+
+    private void saveTrades(final Long experimentId, final List<BacktestTrade> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_trade(experiment_id,signal_date,trade_date,instrument_code,"
+                + "side,quantity,price,notional,fee,reason) VALUES(?,?,?,?,?,?,?,?,?,?)", new BatchPreparedStatementSetter() {
+            @Override public void setValues(PreparedStatement ps, int index) throws SQLException {
+                BacktestTrade value = values.get(index); ps.setLong(1, experimentId); ps.setString(2, value.getSignalDate().toString());
+                ps.setString(3, value.getTradeDate().toString()); ps.setString(4, value.getInstrumentCode()); ps.setString(5, value.getSide());
+                ps.setLong(6, value.getQuantity()); ps.setDouble(7, value.getPrice()); ps.setDouble(8, value.getNotional());
+                ps.setDouble(9, value.getFee()); ps.setString(10, value.getReason());
+            }
+            @Override public int getBatchSize() { return values.size(); }
+        });
+    }
 
     private BacktestResult loadResult(Long id) {
         BacktestResult result = new BacktestResult(); BacktestMetrics metrics = new BacktestMetrics();
