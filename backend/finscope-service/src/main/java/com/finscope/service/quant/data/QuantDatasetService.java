@@ -43,7 +43,8 @@ public class QuantDatasetService {
     public Set<String> availableFactorCodes(Long datasetId) {
         QuantDataset dataset = get(datasetId); List<QuantDailyBar> bars = marketData.findBars(datasetId);
         Set<String> result = new LinkedHashSet<String>(); if (bars.isEmpty()) return result;
-        for (FactorDefinition factor : factors.list()) if (!factor.isPointInTime()) result.add(factor.getCode());
+        long tradingDates = bars.stream().map(QuantDailyBar::getTradeDate).distinct().count();
+        for (FactorDefinition factor : factors.list()) if (!factor.isPointInTime() && tradingDates > factor.getLookbackDays()) result.add(factor.getCode());
         List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(datasetId);
         List<QuantUniverseMember> universe = marketData.findUniverseMembers(datasetId);
         for (FactorDefinition factor : factors.list()) {
