@@ -1,0 +1,140 @@
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { api } from '../../shared/api/client';
+import { QuantDataset, QuantExperiment, QuantFactor, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion } from './quantTypes';
+
+type Pane = 'laboratory' | 'factors' | 'experiments';
+type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
+const statusText: Record<string, string> = { EMPTY: '等待数据', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
+
+function percent(value: number) { return `${(value * 100).toFixed(2)}%`; }
+function parseSpec(value: QuantStrategyVersion): QuantStrategySpec | null {
+  try { return JSON.parse(value.specJson) as QuantStrategySpec; } catch { return null; }
+}
+
+function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
+  const points = experiment?.result?.equityCurve ?? [];
+  if (points.length < 2) return <div className="quant-chart-empty"><span>Equity trace</span><strong>等待实验曲线</strong><p>确认策略并启动实验后，这里会显示策略净值与基准轨迹。</p></div>;
+  const values = points.flatMap(item => [item.portfolioNav, item.benchmarkNav]);
+  const min = Math.min(...values); const max = Math.max(...values); const range = max - min || 1;
+  const path = (key: 'portfolioNav' | 'benchmarkNav') => points.map((item, index) => {
+    const x = (index / (points.length - 1)) * 1000;
+    const y = 250 - ((item[key] - min) / range) * 210;
+    return `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return <div className="quant-chart" aria-label="策略与基准净值曲线">
+    <div className="quant-chart-head"><span>Equity trace</span><div><i className="strategy-line" />策略净值 <i className="benchmark-line" />等权基准</div></div>
+    <svg viewBox="0 0 1000 280" role="img"><defs><linearGradient id="quantFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#31b7cf" stopOpacity=".28"/><stop offset="1" stopColor="#31b7cf" stopOpacity="0"/></linearGradient></defs><path className="quant-gridline" d="M0 40H1000M0 110H1000M0 180H1000M0 250H1000"/><path className="quant-benchmark-path" d={path('benchmarkNav')}/><path className="quant-strategy-path" d={path('portfolioNav')}/></svg>
+  </div>;
+}
+
+export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setMessage: (message: string) => void }) {
+  const [pane, setPane] = useState<Pane>('laboratory');
+  const [datasets, setDatasets] = useState<QuantDataset[]>([]);
+  const [factors, setFactors] = useState<QuantFactor[]>([]);
+  const [strategies, setStrategies] = useState<QuantStrategyVersion[]>([]);
+  const [experiments, setExperiments] = useState<QuantExperiment[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
+  const [selectedExperimentId, setSelectedExperimentId] = useState<number | null>(null);
+  const [experimentDetail, setExperimentDetail] = useState<QuantExperiment>();
+  const [draft, setDraft] = useState<QuantStrategyDraft>();
+  const [prompt, setPrompt] = useState('选择盈利收益率、ROE、低负债与20日动量，构建一套偏稳健的质量价值策略；每20个交易日调仓，重视回撤与交易成本。');
+  const [busy, setBusy] = useState<string>();
+
+  async function load() {
+    const [datasetValues, factorValues, strategyValues, experimentValues] = await Promise.all([
+      api<QuantDataset[]>('/api/quant/datasets'), api<QuantFactor[]>('/api/quant/factors'),
+      api<QuantStrategyVersion[]>('/api/quant/strategies'), api<QuantExperiment[]>('/api/quant/experiments')
+    ]);
+    setDatasets(datasetValues); setFactors(factorValues); setStrategies(strategyValues); setExperiments(experimentValues);
+    setSelectedDatasetId(current => current ?? datasetValues.find(item => item.status === 'READY')?.id ?? null);
+    setSelectedExperimentId(current => current ?? experimentValues[0]?.id ?? null);
+    setMessage('量化研究环境已同步');
+  }
+
+  useEffect(() => { load().catch(error => addToast(error instanceof Error ? error.message : '量化工作台加载失败', 'error')); }, []);
+  useEffect(() => {
+    if (!selectedExperimentId) { setExperimentDetail(undefined); return; }
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const value = await api<QuantExperiment>(`/api/quant/experiments/${selectedExperimentId}`);
+        if (!cancelled) setExperimentDetail(value);
+      } catch (error) { if (!cancelled) addToast(error instanceof Error ? error.message : '实验详情加载失败', 'error'); }
+    };
+    refresh(); const active = experiments.find(item => item.id === selectedExperimentId);
+    const timer = active && ['QUEUED', 'RUNNING'].includes(active.status) ? window.setInterval(async () => { await refresh(); await load(); }, 1200) : undefined;
+    return () => { cancelled = true; if (timer) window.clearInterval(timer); };
+  }, [selectedExperimentId, experiments.find(item => item.id === selectedExperimentId)?.status]);
+
+  async function createLearningDataset() {
+    setBusy('dataset');
+    try { const value = await api<QuantDataset>('/api/quant/datasets/learning-sample', { method: 'POST', body: JSON.stringify({ name: `A股多因子学习样本 ${datasets.length + 1}` }) }); await load(); setSelectedDatasetId(value.id); addToast('学习数据集已建立，质量门禁通过', 'success'); }
+    catch (error) { addToast(error instanceof Error ? error.message : '学习数据创建失败', 'error'); }
+    finally { setBusy(undefined); }
+  }
+
+  async function generateDraft(event: FormEvent) {
+    event.preventDefault(); if (!selectedDatasetId) return;
+    setBusy('agent'); setDraft(undefined);
+    try { const value = await api<QuantStrategyDraft>('/api/quant/strategy-drafts', { method: 'POST', body: JSON.stringify({ datasetId: selectedDatasetId, prompt }) }); setDraft(value); addToast('Agent 草案已通过结构与因子校验', 'success'); }
+    catch (error) { addToast(error instanceof Error ? error.message : 'Agent 草案生成失败', 'error'); }
+    finally { setBusy(undefined); }
+  }
+
+  async function confirmDraft() {
+    if (!draft) return; setBusy('confirm');
+    try { await api<QuantStrategyVersion>(`/api/quant/strategy-drafts/${draft.id}/confirm`, { method: 'POST' }); await load(); setDraft(undefined); addToast('策略版本已锁定，可启动实验', 'success'); }
+    catch (error) { addToast(error instanceof Error ? error.message : '策略确认失败', 'error'); }
+    finally { setBusy(undefined); }
+  }
+
+  async function runExperiment(strategyVersionId: number) {
+    setBusy(`run-${strategyVersionId}`);
+    try { const value = await api<QuantExperiment>('/api/quant/experiments', { method: 'POST', body: JSON.stringify({ strategyVersionId }) }); await load(); setSelectedExperimentId(value.id); setPane('experiments'); addToast('实验已进入受控计算队列', 'success'); }
+    catch (error) { addToast(error instanceof Error ? error.message : '实验启动失败', 'error'); }
+    finally { setBusy(undefined); }
+  }
+
+  async function interpret() {
+    if (!selectedExperimentId) return; setBusy('interpret');
+    try { const value = await api<QuantExperiment>(`/api/quant/experiments/${selectedExperimentId}/interpretations`, { method: 'POST' }); setExperimentDetail(value); addToast('Agent 已生成结构化解读', 'success'); }
+    catch (error) { addToast(error instanceof Error ? error.message : '结果解读失败', 'error'); }
+    finally { setBusy(undefined); }
+  }
+
+  const selectedDataset = datasets.find(item => item.id === selectedDatasetId);
+  const selectedMetrics = experimentDetail?.result?.metrics;
+  const draftSpec = draft?.spec;
+  const categories = useMemo(() => Array.from(new Set(factors.map(item => item.category))), [factors]);
+
+  return <section className="quant-workspace">
+    <header className="quant-hero">
+      <div className="quant-hero-copy"><p className="quant-eyebrow">FinScope Quant · Research protocol</p><h3>把想法压进一条<br/><em>可复现的实验链</em></h3><p>数据快照、因子假设、T+1 执行与结果解读各自留痕。Agent 可以起草，但不会替你确认或偷偷运行。</p></div>
+      <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
+    </header>
+
+    <nav className="quant-panes" aria-label="量化工作台页面">
+      {([['laboratory','策略实验室'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'laboratory' ? strategies.length : id === 'factors' ? factors.length : experiments.length}</small></button>)}
+    </nav>
+
+    {pane === 'laboratory' && <div className="quant-lab-grid">
+      <aside className="quant-dataset-panel quant-panel"><div className="quant-panel-title"><span>01 / DATASET</span><h4>研究样本</h4></div>
+        {datasets.length === 0 ? <div className="quant-empty"><strong>先建立一份学习样本</strong><p>30 个虚拟标的、320 个交易日，适合验证完整流程，不代表真实市场。</p></div> : <div className="quant-dataset-list">{datasets.map(item => <button type="button" className={selectedDatasetId === item.id ? 'active' : ''} onClick={() => setSelectedDatasetId(item.id)} key={item.id}><span><i data-status={item.status}/>{item.name}</span><small>{item.dataKind === 'LEARNING_SAMPLE' ? '虚拟学习数据' : '真实数据'} · {statusText[item.status] ?? item.status}</small></button>)}</div>}
+        <button type="button" className="quant-action secondary" onClick={createLearningDataset} disabled={busy === 'dataset'}>{busy === 'dataset' ? '正在生成 9,600 条行情…' : '＋ 新建学习样本'}</button>
+        {selectedDataset && <dl className="quant-dataset-meta"><div><dt>区间</dt><dd>{selectedDataset.startDate ?? '—'} → {selectedDataset.endDate ?? '—'}</dd></div><div><dt>指纹</dt><dd>{selectedDataset.fingerprint?.slice(0, 12) ?? '等待生成'}</dd></div><div><dt>性质</dt><dd>{selectedDataset.dataKind === 'LEARNING_SAMPLE' ? '虚拟 / 不可用于实盘结论' : '真实数据'}</dd></div></dl>}
+      </aside>
+      <main className="quant-agent-panel quant-panel"><div className="quant-panel-title"><span>02 / AGENT DRAFT</span><h4>用自然语言描述假设</h4><p>Agent 只能从登记因子中组装受限策略 DSL。</p></div>
+        <form onSubmit={generateDraft}><textarea aria-label="策略研究假设" rows={6} value={prompt} onChange={event => setPrompt(event.target.value)} /><div className="quant-agent-actions"><span>{selectedDataset ? `绑定数据集 #${selectedDataset.id}` : '请先选择可用数据集'}</span><button className="quant-action" disabled={!selectedDataset || busy === 'agent'}>{busy === 'agent' ? 'Agent 校验中…' : '生成策略草案'}</button></div></form>
+        {draftSpec && <article className="quant-draft"><header><div><span>VALIDATED DRAFT</span><h4>{draftSpec.name}</h4></div><b>等待你的确认</b></header><p>{draftSpec.investmentHypothesis}</p><div className="quant-factor-weights">{draftSpec.factors.map(item => <div key={item.code}><span>{item.code}</span><i><b style={{ width: `${item.weight * 100}%` }}/></i><strong>{(item.weight * 100).toFixed(0)}%</strong></div>)}</div><footer><small>T 日收盘信号 · T+1 开盘成交 · Top {draftSpec.portfolio.topN} 等权 · 每 {draftSpec.portfolio.rebalanceEvery} 日调仓</small><button type="button" className="quant-action confirm" onClick={confirmDraft} disabled={busy === 'confirm'}>确认并锁定版本</button></footer></article>}
+      </main>
+      <aside className="quant-versions-panel quant-panel"><div className="quant-panel-title"><span>03 / VERSIONS</span><h4>可运行策略</h4></div>{strategies.length === 0 ? <div className="quant-empty compact"><strong>暂无已确认版本</strong><p>草案必须由你确认后才能进入实验队列。</p></div> : <div className="quant-version-list">{strategies.map(item => { const spec = parseSpec(item); return <article key={item.id}><header><span>v{item.version}</span><b>{item.name}</b></header><p>{spec?.riskBoundary ?? '已锁定策略边界'}</p><small>{item.engineVersion} · {item.strategyFingerprint.slice(0,8)}</small><button type="button" onClick={() => runExperiment(item.id)} disabled={busy === `run-${item.id}`}>{busy === `run-${item.id}` ? '正在入队…' : '启动实验'}</button></article>; })}</div>}</aside>
+    </div>}
+
+    {pane === 'factors' && <div className="quant-factor-page"><header><span>FACTOR CATALOG / 13</span><h4>因子不是答案，是可被证伪的观察角度</h4><p>首批覆盖价量与财务因子；所有财务值只允许在披露日之后进入计算。</p></header>{categories.map(category => <section key={category}><h5>{category}</h5><div>{factors.filter(item => item.category === category).map(item => <article key={item.code}><span>{item.code}</span><h4>{item.name}</h4><p>{item.description}</p><footer><b>{item.direction === 'HIGH' ? '高值优先' : '低值优先'}</b><small>{item.pointInTime ? '披露时点约束' : `${item.lookbackDays} 日窗口`}</small></footer></article>)}</div></section>)}</div>}
+
+    {pane === 'experiments' && <div className="quant-experiment-grid"><aside className="quant-run-list quant-panel"><div className="quant-panel-title"><span>RUN ARCHIVE</span><h4>实验批次</h4></div>{experiments.length === 0 ? <div className="quant-empty compact"><strong>暂无实验</strong><p>从已确认的策略版本启动第一轮回测。</p></div> : experiments.map(item => <button type="button" className={selectedExperimentId === item.id ? 'active' : ''} onClick={() => setSelectedExperimentId(item.id)} key={item.id}><i data-status={item.status}/><span><b>实验 #{item.id}</b><small>策略版本 #{item.strategyVersionId}</small></span><em>{statusText[item.status]}</em></button>)}</aside>
+      <main className="quant-results"><div className="quant-metrics">{[['年化收益', selectedMetrics ? percent(selectedMetrics.annualizedReturn) : '—'],['最大回撤', selectedMetrics ? percent(selectedMetrics.maxDrawdown) : '—'],['Sharpe', selectedMetrics ? selectedMetrics.sharpeRatio.toFixed(2) : '—'],['超额收益', selectedMetrics ? percent(selectedMetrics.excessReturn) : '—']].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><EquityChart experiment={experimentDetail}/>
+        <section className="quant-readout"><header><div><span>AGENT READOUT</span><h4>只解释结果，不替你下结论</h4></div><button type="button" className="quant-action" disabled={experimentDetail?.status !== 'SUCCEEDED' || busy === 'interpret'} onClick={interpret}>{busy === 'interpret' ? '正在归纳…' : '生成结果解读'}</button></header>{experimentDetail?.status === 'FAILED' ? <p className="quant-error">{experimentDetail.errorMessage}</p> : experimentDetail?.interpretation ? <pre>{JSON.stringify(JSON.parse(experimentDetail.interpretation), null, 2)}</pre> : <p>实验完成后，可让 Agent 从表现、风险与下一轮可验证实验三个角度生成结构化解读。</p>}</section>
+      </main></div>}
+  </section>;
+}

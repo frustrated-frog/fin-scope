@@ -8,6 +8,7 @@ test('shows empty workspace and creates the first fund', async () => {
   const overview = { holdings: [], targetWeight: 0, currentWeight: 0 };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input); const method = init?.method ?? 'GET'; requests.push({ url, method });
+    if (url.startsWith('/api/quant/')) return new Response(JSON.stringify([]), { status: 200 });
     if (url === '/api/strategy/overview' && method === 'GET') return new Response(JSON.stringify(overview), { status: 200 });
     if (url === '/api/strategy/playbooks') return new Response(JSON.stringify([]), { status: 200 });
     if (url === '/api/strategy/stock-theses') return new Response(JSON.stringify([]), { status: 200 });
@@ -21,6 +22,7 @@ test('shows empty workspace and creates the first fund', async () => {
   }));
   const user = userEvent.setup();
   render(<StrategyView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.click(screen.getByRole('button', { name: /长期投资工作台/ }));
   expect(await screen.findByText('还没有组合资产')).toBeInTheDocument();
   await user.click(screen.getAllByRole('button', { name: '添加资产' })[0]);
   await user.type(screen.getByLabelText('标的代码'), '020608');
