@@ -31,6 +31,7 @@ public class DatabaseInitializer implements InitializingBean {
     }
 
     private void createSchema() {
+        jdbcTemplate.execute("PRAGMA foreign_keys=ON");
         jdbcTemplate.execute("PRAGMA journal_mode=WAL");
         jdbcTemplate.execute("PRAGMA busy_timeout=30000");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS source ("
@@ -458,6 +459,50 @@ public class DatabaseInitializer implements InitializingBean {
                 + "relevance INTEGER,"
                 + "created_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_evidence_report ON attribution_evidence(report_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_holding ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "instrument_id INTEGER NOT NULL UNIQUE,"
+                + "role TEXT NOT NULL CHECK(role IN ('CORE','SATELLITE','DEFENSIVE','OBSERVE','SIMULATED','LIVE_VALIDATION')),"
+                + "target_weight REAL NOT NULL CHECK(target_weight >= 0 AND target_weight <= 100),"
+                + "current_weight REAL NOT NULL CHECK(current_weight >= 0 AND current_weight <= 100),"
+                + "note TEXT,"
+                + "sort_order INTEGER NOT NULL DEFAULT 0,"
+                + "revision INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_holding_instrument ON strategy_holding(instrument_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_playbook ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "code TEXT NOT NULL UNIQUE,"
+                + "status TEXT NOT NULL CHECK(status IN ('RESEARCHING','ACTIVE','PAUSED')),"
+                + "note TEXT,"
+                + "revision INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_playbook_status ON strategy_playbook(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_stock_thesis ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "instrument_id INTEGER NOT NULL UNIQUE,"
+                + "stage TEXT NOT NULL CHECK(stage IN ('RESEARCH_POOL','WATCH_POOL','SIMULATED_PORTFOLIO','LIVE_VALIDATION')),"
+                + "thesis TEXT NOT NULL,"
+                + "buy_conditions TEXT NOT NULL,"
+                + "invalidation_conditions TEXT NOT NULL,"
+                + "watch_focus TEXT NOT NULL,"
+                + "note TEXT,"
+                + "revision INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_stock_thesis_stage ON strategy_stock_thesis(stage)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_review ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "review_date TEXT NOT NULL,"
+                + "facts TEXT NOT NULL,"
+                + "reasoning TEXT NOT NULL,"
+                + "next_action TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_review_date ON strategy_review(review_date DESC)");
     }
 
     private void ensureColumn(String table, String column, String type) {
