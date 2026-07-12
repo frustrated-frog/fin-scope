@@ -9,8 +9,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.springframework.stereotype.Component;
 
 /** 仅用于学习闭环；代码和价格均为虚拟数据，调用方必须保留 LEARNING_SAMPLE 标识。 */
+@Component
 public class QuantLearningDatasetFactory {
     public List<QuantDailyBar> bars(Long datasetId) {
         List<QuantDailyBar> result = new ArrayList<QuantDailyBar>();

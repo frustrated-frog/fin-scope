@@ -19,6 +19,7 @@ import java.util.List;
 public class QuantDatasetService {
     @Resource private QuantDatasetRepository datasets;
     @Resource private QuantMarketDataRepository marketData;
+    @Resource private QuantLearningDatasetFactory learningDatasetFactory;
     private final QuantDatasetFingerprint defaultFingerprint = new QuantDatasetFingerprint();
     private final QuantDataQualityService defaultQuality = new QuantDataQualityService();
     private QuantDatasetFingerprint fingerprint = defaultFingerprint;
@@ -43,6 +44,30 @@ public class QuantDatasetService {
         value.setSourceType("LEARNING_SAMPLE".equals(dataKind) ? "BUILT_IN" : "MANUAL_IMPORT");
         value.setDataKind(dataKind); value.setStatus("EMPTY");
         return datasets.save(value);
+    }
+
+    /**
+     * 建立一份可立即运行策略实验的确定性虚拟数据集。
+     * 学习样本永远保留显式 dataKind，避免与真实行情混用。
+     */
+    @Transactional
+    public QuantDataset createLearningSample(String name) {
+        QuantDataset dataset = create(name, "LEARNING_SAMPLE");
+        List<QuantDailyBar> bars = learningDatasetFactory.bars(dataset.getId());
+        List<QuantFundamentalSnapshot> fundamentals = learningDatasetFactory.fundamentals(dataset.getId());
+        quality.assertValidBars(bars);
+        quality.assertValidFundamentals(fundamentals);
+        marketData.insertBars(bars);
+        marketData.insertFundamentals(fundamentals);
+        LocalDate start = bars.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
+        LocalDate end = bars.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
+        String digest = fingerprint.bars(bars);
+        String summary = "{\"barCount\":" + bars.size() + ",\"instrumentCount\":30,"
+                + "\"fundamentalCount\":" + fundamentals.size() + ",\"blockingIssues\":0}";
+        if (!datasets.updateSummary(dataset.getId(), start, end, "READY", digest, summary, dataset.getRevision())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "学习数据集创建期间发生并发更新");
+        }
+        return get(dataset.getId());
     }
 
     @Transactional

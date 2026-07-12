@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
@@ -61,6 +62,7 @@ public class QuantExperimentRepository {
     public void markFailed(Long id, String message) { jdbcTemplate.update("UPDATE quant_experiment SET status='FAILED',error_message=?,completed_at=? WHERE id=?",
             message, TimeUtil.text(LocalDateTime.now()), id); }
 
+    @Transactional
     public void complete(Long id, BacktestResult result) {
         BacktestMetrics m = result.getMetrics(); metric(id, "TOTAL_RETURN", m.getTotalReturn()); metric(id, "ANNUAL_RETURN", m.getAnnualizedReturn());
         metric(id, "VOLATILITY", m.getAnnualizedVolatility()); metric(id, "MAX_DRAWDOWN", m.getMaxDrawdown());
