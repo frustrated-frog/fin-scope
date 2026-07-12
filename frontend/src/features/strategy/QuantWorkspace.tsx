@@ -21,9 +21,11 @@ function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
     const y = 250 - ((item[key] - min) / range) * 210;
     return `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
+  const tablePoints = points.filter((_, index) => index === 0 || index === points.length - 1 || index % 20 === 0);
   return <div className="quant-chart" aria-label="策略与基准净值曲线">
     <div className="quant-chart-head"><span>Equity trace</span><div><i className="strategy-line" />策略净值 <i className="benchmark-line" />等权基准</div></div>
-    <svg viewBox="0 0 1000 280" role="img"><defs><linearGradient id="quantFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#31b7cf" stopOpacity=".28"/><stop offset="1" stopColor="#31b7cf" stopOpacity="0"/></linearGradient></defs><path className="quant-gridline" d="M0 40H1000M0 110H1000M0 180H1000M0 250H1000"/><path className="quant-benchmark-path" d={path('benchmarkNav')}/><path className="quant-strategy-path" d={path('portfolioNav')}/></svg>
+    <svg viewBox="0 0 1000 280" role="img" aria-labelledby="quant-equity-title quant-equity-desc"><title id="quant-equity-title">策略与等权基准净值曲线</title><desc id="quant-equity-desc">展示回测区间内策略净值和时点股票池等权基准净值的变化。</desc><defs><linearGradient id="quantFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#31b7cf" stopOpacity=".28"/><stop offset="1" stopColor="#31b7cf" stopOpacity="0"/></linearGradient></defs><path className="quant-gridline" d="M0 40H1000M0 110H1000M0 180H1000M0 250H1000"/><path className="quant-benchmark-path" d={path('benchmarkNav')}/><path className="quant-strategy-path" d={path('portfolioNav')}/></svg>
+    <details className="quant-curve-data"><summary>查看净值数据表</summary><div className="quant-table-wrap"><table><caption>每 20 个交易日抽样，含首尾日期</caption><thead><tr><th>日期</th><th>策略净值</th><th>等权基准</th><th>回撤</th></tr></thead><tbody>{tablePoints.map(point => <tr key={point.tradeDate}><td>{point.tradeDate}</td><td>{point.portfolioNav.toFixed(4)}</td><td>{point.benchmarkNav.toFixed(4)}</td><td>{percent(point.drawdown)}</td></tr>)}</tbody></table></div></details>
   </div>;
 }
 
@@ -116,7 +118,7 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
     </header>
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['laboratory','策略实验室'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'laboratory' ? strategies.length : id === 'factors' ? factors.length : experiments.length}</small></button>)}
+      {([['laboratory','策略实验室'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'laboratory' ? strategies.length : id === 'factors' ? factors.length : experiments.length}</small></button>)}
     </nav>
 
     {pane === 'laboratory' && <div className="quant-lab-grid">

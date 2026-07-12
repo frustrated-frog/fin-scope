@@ -31,6 +31,14 @@ class QuantStrategySpecValidatorTest {
         org.junit.jupiter.api.Assertions.assertTrue(error.getMessage().contains("下一交易日"));
     }
 
+    @Test
+    void rejectsDirectionThatReversesRegisteredFactorSemantics() {
+        QuantStrategySpec spec = validSpec(); spec.getFactors().get(0).setDirection("LOW");
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> new QuantStrategySpecValidator(new FactorRegistry()).validateOrThrow(spec));
+        org.junit.jupiter.api.Assertions.assertTrue(error.getMessage().contains("因子方向必须与登记目录一致"));
+    }
+
     static QuantStrategySpec validSpec() {
         QuantStrategySpec spec = new QuantStrategySpec();
         spec.setName("质量价值动量"); spec.setDatasetId(1L); spec.setBenchmark("EQUAL_WEIGHT");

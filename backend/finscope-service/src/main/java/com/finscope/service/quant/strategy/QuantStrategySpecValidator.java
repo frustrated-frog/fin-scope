@@ -33,6 +33,8 @@ public class QuantStrategySpecValidator {
             for (QuantStrategySpec.FactorWeight item : spec.getFactors()) {
                 if (item == null) { issues.add("因子配置不能为空"); continue; }
                 if (!factors.contains(item.getCode())) issues.add("未知因子：" + item.getCode());
+                else if (!factors.get(item.getCode()).getDirection().equals(item.getDirection()))
+                    issues.add("因子方向必须与登记目录一致：" + item.getCode());
                 if (!seen.add(item.getCode())) issues.add("因子不能重复：" + item.getCode());
                 if (!Double.isFinite(item.getWeight()) || item.getWeight() <= 0 || item.getWeight() > 1) issues.add("因子权重必须在 0 到 1 之间");
                 if (!"HIGH".equals(item.getDirection()) && !"LOW".equals(item.getDirection())) issues.add("因子方向只能是 HIGH 或 LOW");
