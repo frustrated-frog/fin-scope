@@ -71,6 +71,7 @@ public class QuantStrategyService {
             QuantStrategySpec spec = mapper.readValue(draft.getNormalizedSpec(), QuantStrategySpec.class);
             QuantDataset dataset = datasets.get(spec.getDatasetId());
             if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.CONFLICT, "数据集已不再满足质量门禁");
+            if (!text(dataset.getFingerprint())) throw new BusinessException(ErrorCode.CONFLICT, "数据集缺少可复现指纹");
             if (!dataset.getFingerprint().equals(draft.getValidatedDatasetFingerprint()))
                 throw new BusinessException(ErrorCode.CONFLICT, "数据集在草案生成后已变化，请重新生成策略草案");
             new QuantStrategySpecValidator(factors).validateOrThrow(spec);
@@ -80,9 +81,6 @@ public class QuantStrategyService {
             if (spec.getStartDate() == null || spec.getEndDate() == null || spec.getStartDate().isBefore(dataset.getStartDate())
                     || spec.getEndDate().isAfter(dataset.getEndDate()))
                 throw new BusinessException(ErrorCode.CONFLICT, "策略回测日期已超出当前数据集范围");
-            if (!text(dataset.getFingerprint())) {
-                throw new BusinessException(ErrorCode.CONFLICT, "数据集缺少可复现指纹");
-            }
             QuantStrategyVersion value = new QuantStrategyVersion();
             value.setName(spec.getName()); value.setDatasetId(spec.getDatasetId());
             value.setVersion(repository.nextVersion(spec.getName())); value.setSpecJson(draft.getNormalizedSpec());
