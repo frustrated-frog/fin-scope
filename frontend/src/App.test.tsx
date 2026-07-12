@@ -8,6 +8,10 @@ import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleCard } from './features/articles/ArticleCard';
 
 const responses: Record<string, unknown> = {
+  '/api/strategy/overview': { holdings: [], targetWeight: 0, currentWeight: 0 },
+  '/api/strategy/playbooks': [],
+  '/api/strategy/stock-theses': [],
+  '/api/strategy/reviews': [],
   '/api/dashboard': { sourceCount: 2, articleCount: 3, briefCount: 1, latestFetchRuns: [] },
   '/api/sources': [
     {
