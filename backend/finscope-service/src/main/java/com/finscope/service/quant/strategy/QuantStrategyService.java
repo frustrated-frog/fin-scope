@@ -37,8 +37,9 @@ public class QuantStrategyService {
         if (!"READY".equals(dataset.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集尚未通过质量门禁");
         }
-        QuantStrategyDraft draft = agent.generate(datasetId, prompt);
-        if ("VALIDATED".equals(draft.getStatus()) && requiresFundamentals(draft.getSpec()) && !datasets.hasFundamentals(datasetId)) {
+        boolean fundamentalsAvailable = datasets.hasFundamentals(datasetId);
+        QuantStrategyDraft draft = agent.generate(datasetId, prompt, fundamentalsAvailable);
+        if ("VALIDATED".equals(draft.getStatus()) && requiresFundamentals(draft.getSpec()) && !fundamentalsAvailable) {
             draft.setStatus("FAILED");
             draft.setValidationIssues(java.util.Collections.singletonList("策略使用财务因子，但当前数据集没有可用的时点财务数据"));
         }
