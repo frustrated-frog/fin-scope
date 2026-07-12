@@ -46,7 +46,7 @@ public class QuantStrategyRepository {
             ps.setString(4, value.getNormalizedSpec()); ps.setString(5, value.getStatus()); ps.setString(6, value.getModel());
             ps.setString(7, String.join("\n", value.getValidationIssues())); ps.setString(8, TimeUtil.text(now)); return ps;
         }, keys);
-        value.setId(keys.getKey().longValue()); return findDraft(value.getId()).orElse(value);
+        value.setId(keys.getKey().longValue()); value.setCreatedAt(now); return value;
     }
 
     public Optional<QuantStrategyDraft> findDraft(Long id) {
