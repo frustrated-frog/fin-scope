@@ -6,6 +6,7 @@ import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.web.request.quant.CreateLearningDatasetRequest;
+import com.finscope.web.request.quant.CreateQuantDatasetRequest;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import java.util.List;
@@ -17,6 +18,10 @@ import com.finscope.common.exception.ErrorCode;
 public class QuantDatasetController {
     @Resource private QuantDatasetService service;
     @GetMapping public List<QuantDataset> list() { return service.list(); }
+    @PostMapping public QuantDataset create(@RequestBody CreateQuantDatasetRequest request) {
+        if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "请求不能为空");
+        return service.create(request.getName(), request.getDataKind());
+    }
     @GetMapping("/{id}") public QuantDataset get(@PathVariable Long id) { return service.get(id); }
     @PostMapping("/learning-sample")
     public QuantDataset createLearningSample(@RequestBody CreateLearningDatasetRequest request) {
@@ -35,6 +40,6 @@ public class QuantDatasetController {
     @GetMapping("/{id}/quality") public java.util.Map<String, Object> quality(@PathVariable Long id) {
         QuantDataset value = service.get(id); java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
         result.put("datasetId", value.getId()); result.put("status", value.getStatus()); result.put("summary", value.getQualitySummary());
-        result.put("fingerprint", value.getFingerprint()); return result;
+        result.put("fingerprint", value.getFingerprint()); result.put("availableFactors", service.availableFactorCodes(id)); return result;
     }
 }

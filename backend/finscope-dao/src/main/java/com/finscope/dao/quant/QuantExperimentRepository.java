@@ -6,6 +6,7 @@ import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.backtest.BacktestTrade;
 import com.finscope.domain.quant.backtest.EquityPoint;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
+import com.finscope.domain.quant.backtest.PositionSnapshot;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -81,6 +82,7 @@ public class QuantExperimentRepository {
         saveTrades(id, result.getTrades());
         saveWarnings(id, result.getWarnings());
         saveAnnual(id, result.getAnnualPerformance());
+        savePositions(id, result.getPositions());
     }
     public void saveInterpretation(Long id, String json, String model) {
         jdbcTemplate.update("INSERT OR REPLACE INTO quant_experiment_interpretation(experiment_id,content_json,model,created_at) VALUES(?,?,?,?)",
@@ -133,6 +135,17 @@ public class QuantExperimentRepository {
                     @Override public int getBatchSize() { return values == null ? 0 : values.size(); }
                 });
     }
+    private void savePositions(final Long experimentId, final List<PositionSnapshot> values) {
+        jdbcTemplate.batchUpdate("INSERT INTO quant_position_snapshot(experiment_id,trade_date,instrument_code,quantity,price,market_value,weight) VALUES(?,?,?,?,?,?,?)",
+                new BatchPreparedStatementSetter() {
+                    @Override public void setValues(PreparedStatement ps, int index) throws SQLException {
+                        PositionSnapshot value = values.get(index); ps.setLong(1, experimentId); ps.setString(2, value.getTradeDate().toString());
+                        ps.setString(3, value.getInstrumentCode()); ps.setLong(4, value.getQuantity()); ps.setDouble(5, value.getPrice());
+                        ps.setDouble(6, value.getMarketValue()); ps.setDouble(7, value.getWeight());
+                    }
+                    @Override public int getBatchSize() { return values == null ? 0 : values.size(); }
+                });
+    }
 
     private BacktestResult loadResult(Long id) {
         BacktestResult result = new BacktestResult(); BacktestMetrics metrics = new BacktestMetrics();
@@ -159,6 +172,11 @@ public class QuantExperimentRepository {
             AnnualPerformance value = new AnnualPerformance(); value.setYear(rs.getInt("year"));
             value.setPortfolioReturn(rs.getDouble("portfolio_return")); value.setBenchmarkReturn(rs.getDouble("benchmark_return"));
             value.setExcessReturn(rs.getDouble("excess_return")); value.setMaxDrawdown(rs.getDouble("max_drawdown")); return value;
+        }, id));
+        result.setPositions(jdbcTemplate.query("SELECT * FROM quant_position_snapshot WHERE experiment_id=? ORDER BY trade_date,instrument_code", (rs,row) -> {
+            PositionSnapshot value = new PositionSnapshot(); value.setTradeDate(LocalDate.parse(rs.getString("trade_date")));
+            value.setInstrumentCode(rs.getString("instrument_code")); value.setQuantity(rs.getLong("quantity")); value.setPrice(rs.getDouble("price"));
+            value.setMarketValue(rs.getDouble("market_value")); value.setWeight(rs.getDouble("weight")); return value;
         }, id));
         return result;
     }

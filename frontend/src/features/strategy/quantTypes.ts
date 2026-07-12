@@ -7,9 +7,11 @@ export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;
 }
+export interface QuantFactorAnalysis { factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
 
 export interface QuantStrategySpec {
   name: string; datasetId: number; benchmark: string; investmentHypothesis: string; riskBoundary: string;
+  startDate?: string; endDate?: string;
   factors: Array<{ code: string; weight: number; direction: string }>;
   portfolio: { topN: number; rebalanceEvery: number; weighting: string };
   execution: { signalPrice: string; fillPrice: string; slippageBps: number };
@@ -38,6 +40,7 @@ export interface QuantExperiment {
   result?: { metrics: BacktestMetrics; equityCurve: Array<{ tradeDate: string; portfolioNav: number; benchmarkNav: number; drawdown: number }>;
     annualPerformance: Array<{ year: number; portfolioReturn: number; benchmarkReturn: number; excessReturn: number; maxDrawdown: number }>;
     trades: Array<{ signalDate: string; tradeDate: string; instrumentCode: string; side: string; quantity: number; price: number; fee: number }>;
+    positions: Array<{ tradeDate: string; instrumentCode: string; quantity: number; price: number; marketValue: number; weight: number }>;
     warnings: string[] };
   interpretation?: string;
 }

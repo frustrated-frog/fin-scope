@@ -23,6 +23,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
+import com.finscope.service.quant.factor.FactorRegistry;
 
 class QuantDatasetServiceTest {
     @Test
@@ -71,6 +74,37 @@ class QuantDatasetServiceTest {
 
         assertEquals("日行情存在非法 OHLC", error.getMessage());
         verify(marketData, never()).insertBars(any());
+    }
+
+    @Test
+    void realBarsRemainPendingUntilPointInTimeUniversePassesGate() {
+        QuantDatasetRepository datasets = mock(QuantDatasetRepository.class); QuantMarketDataRepository marketData = mock(QuantMarketDataRepository.class);
+        QuantDataset value = new QuantDataset(); value.setId(1L); value.setRevision(0); value.setStatus("EMPTY"); value.setDataKind("REAL");
+        QuantDailyBar bar = bar("600000.SH", "10", "10.2"); when(datasets.findById(1L)).thenReturn(java.util.Optional.of(value));
+        when(marketData.findBars(1L)).thenReturn(Collections.singletonList(bar)); when(marketData.findFundamentals(1L)).thenReturn(Collections.emptyList());
+        when(marketData.findUniverseMembers(1L)).thenReturn(Collections.emptyList()); when(datasets.updateSummary(any(), any(), any(), anyString(), anyString(), anyString(), eq(0L))).thenReturn(true);
+        QuantDatasetService service = service(datasets, marketData);
+        service.importBars(1L, Collections.singletonList(bar));
+        verify(datasets).updateSummary(eq(1L), any(), any(), eq("QUALITY_PENDING"), anyString(), anyString(), eq(0L));
+    }
+
+    @Test
+    void financialFactorRequiresBroadPointInTimeFieldCoverage() {
+        QuantDatasetRepository datasets = mock(QuantDatasetRepository.class); QuantMarketDataRepository marketData = mock(QuantMarketDataRepository.class);
+        QuantDataset value = new QuantDataset(); value.setId(1L); value.setStatus("READY"); value.setDataKind("REAL");
+        when(datasets.findById(1L)).thenReturn(java.util.Optional.of(value)); java.util.List<QuantDailyBar> bars = new java.util.ArrayList<QuantDailyBar>();
+        for (int day = 0; day < 61; day++) for (String code : Arrays.asList("A.SH","B.SH")) { QuantDailyBar bar = bar(code,"10","10.2"); bar.setTradeDate(LocalDate.of(2024,1,1).plusDays(day)); bars.add(bar); }
+        QuantFundamentalSnapshot one = new QuantFundamentalSnapshot(); one.setInstrumentCode("A.SH"); one.setReportPeriod(LocalDate.of(2023,12,31));
+        one.setDisclosedAt(LocalDate.of(2024,1,1)); one.setPe(BigDecimal.TEN); when(marketData.findBars(1L)).thenReturn(bars);
+        when(marketData.findFundamentals(1L)).thenReturn(Collections.singletonList(one)); when(marketData.findUniverseMembers(1L)).thenReturn(Collections.emptyList());
+        QuantDatasetService service = service(datasets, marketData); java.util.Set<String> available = service.availableFactorCodes(1L);
+        org.junit.jupiter.api.Assertions.assertTrue(available.contains("MOMENTUM_20D")); org.junit.jupiter.api.Assertions.assertFalse(available.contains("EP"));
+    }
+
+    private QuantDatasetService service(QuantDatasetRepository datasets, QuantMarketDataRepository marketData) {
+        QuantDatasetService service = new QuantDatasetService(); ReflectionTestUtils.setField(service, "datasets", datasets);
+        ReflectionTestUtils.setField(service, "marketData", marketData); ReflectionTestUtils.setField(service, "fingerprint", new QuantDatasetFingerprint());
+        ReflectionTestUtils.setField(service, "quality", new QuantDataQualityService()); ReflectionTestUtils.setField(service, "factors", new FactorRegistry()); return service;
     }
 
     private QuantDailyBar bar(String code, String open, String close) {

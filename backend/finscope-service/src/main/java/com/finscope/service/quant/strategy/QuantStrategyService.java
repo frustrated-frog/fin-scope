@@ -10,7 +10,6 @@ import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
-import com.finscope.service.quant.factor.FactorRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +24,6 @@ public class QuantStrategyService {
     @Resource private QuantStrategyRepository repository;
     @Resource private QuantDatasetService datasets;
     @Resource private QuantStrategyAgent agent;
-    @Resource private FactorRegistry factors;
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
@@ -37,11 +35,17 @@ public class QuantStrategyService {
         if (!"READY".equals(dataset.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集尚未通过质量门禁");
         }
-        boolean fundamentalsAvailable = datasets.hasFundamentals(datasetId);
-        QuantStrategyDraft draft = agent.generate(datasetId, prompt, fundamentalsAvailable);
-        if ("VALIDATED".equals(draft.getStatus()) && requiresFundamentals(draft.getSpec()) && !fundamentalsAvailable) {
+        java.util.Set<String> availableFactors = datasets.availableFactorCodes(datasetId);
+        QuantStrategyDraft draft = agent.generate(datasetId, prompt, availableFactors);
+        if ("VALIDATED".equals(draft.getStatus())) {
+            draft.getSpec().setStartDate(dataset.getStartDate()); draft.getSpec().setEndDate(dataset.getEndDate());
+            try { draft.setNormalizedSpec(mapper.writeValueAsString(draft.getSpec())); }
+            catch (Exception ex) { throw new BusinessException(ErrorCode.INTERNAL_ERROR, "策略日期锁定失败", ex); }
+        }
+        if ("VALIDATED".equals(draft.getStatus()) && draft.getSpec().getFactors().stream()
+                .anyMatch(item -> !availableFactors.contains(item.getCode()))) {
             draft.setStatus("FAILED");
-            draft.setValidationIssues(java.util.Collections.singletonList("策略使用财务因子，但当前数据集没有可用的时点财务数据"));
+            draft.setValidationIssues(java.util.Collections.singletonList("策略使用了当前数据集覆盖不足的因子"));
         }
         return repository.saveDraft(draft);
     }
@@ -85,8 +89,4 @@ public class QuantStrategyService {
         return result.toString();
     }
     private boolean text(String value) { return value != null && !value.trim().isEmpty(); }
-    private boolean requiresFundamentals(QuantStrategySpec spec) {
-        return spec != null && spec.getFactors() != null && spec.getFactors().stream()
-                .anyMatch(item -> factors.get(item.getCode()).isPointInTime());
-    }
 }

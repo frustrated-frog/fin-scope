@@ -53,6 +53,15 @@ class FactorCalculatorTest {
         assertTrue(normalized.get("D") < 2);
     }
 
+    @Test
+    void turnoverProxyKeepsPositiveVariationForRegisteredLowDirection() {
+        FactorCalculator calculator = new FactorCalculator(); List<QuantDailyBar> stable = history(21); List<QuantDailyBar> volatileVolume = history(21);
+        for (int i = 1; i < volatileVolume.size(); i += 2) volatileVolume.get(i).setVolume(BigDecimal.valueOf(300_000));
+        assertTrue(calculator.value("TURNOVER_PROXY_20D", volatileVolume, null)
+                > calculator.value("TURNOVER_PROXY_20D", stable, null));
+        assertEquals("LOW", new FactorRegistry().get("TURNOVER_PROXY_20D").getDirection());
+    }
+
     private com.finscope.domain.quant.factor.FactorValue value(String code, double value) {
         return new com.finscope.domain.quant.factor.FactorValue(LocalDate.of(2024, 1, 1), code, "TEST", value);
     }

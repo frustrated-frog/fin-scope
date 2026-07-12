@@ -8,6 +8,7 @@ public class BacktestResult {
     private List<BacktestTrade> trades = new ArrayList<BacktestTrade>();
     private List<String> warnings = new ArrayList<String>();
     private List<AnnualPerformance> annualPerformance = new ArrayList<AnnualPerformance>();
+    private List<PositionSnapshot> positions = new ArrayList<PositionSnapshot>();
     private BacktestMetrics metrics = new BacktestMetrics();
     public List<EquityPoint> getEquityCurve() { return equityCurve; }
     public void setEquityCurve(List<EquityPoint> equityCurve) { this.equityCurve = equityCurve; }
@@ -17,6 +18,8 @@ public class BacktestResult {
     public void setWarnings(List<String> warnings) { this.warnings = warnings; }
     public List<AnnualPerformance> getAnnualPerformance() { return annualPerformance; }
     public void setAnnualPerformance(List<AnnualPerformance> annualPerformance) { this.annualPerformance = annualPerformance; }
+    public List<PositionSnapshot> getPositions() { return positions; }
+    public void setPositions(List<PositionSnapshot> positions) { this.positions = positions; }
     public BacktestMetrics getMetrics() { return metrics; }
     public void setMetrics(BacktestMetrics metrics) { this.metrics = metrics; }
 }

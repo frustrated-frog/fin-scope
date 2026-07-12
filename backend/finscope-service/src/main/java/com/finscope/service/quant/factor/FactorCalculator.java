@@ -13,7 +13,7 @@ public class FactorCalculator {
         if ("REVERSAL_5D".equals(code)) return -returnOver(history, 5);
         if ("VOLATILITY_20D".equals(code)) return -volatility(history, 20);
         if ("AVG_AMOUNT_20D".equals(code)) return Math.log(Math.max(1d, averageAmount(history, 20)));
-        if ("TURNOVER_PROXY_20D".equals(code)) return -volumeVariation(history, 20);
+        if ("TURNOVER_PROXY_20D".equals(code)) return volumeVariation(history, 20);
         if (fundamental == null) return Double.NaN;
         if ("LOG_MARKET_CAP".equals(code)) return log(fundamental.getMarketCap());
         if ("EP".equals(code)) return reciprocal(fundamental.getPe());

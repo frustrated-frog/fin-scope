@@ -6,6 +6,7 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantExperimentRepository;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
+import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Component;
@@ -26,10 +27,11 @@ public class QuantExperimentAgent {
         }
         if (!llm.isConfigured()) throw new BusinessException(ErrorCode.BAD_REQUEST, "实验解读 Agent 尚未配置");
         try {
-            String raw = llm.complete(systemPrompt(), metricSummary(experiment.getResult().getMetrics()));
+            String raw = llm.complete(systemPrompt(), metricSummary(experiment.getResult()));
             String json = extractJson(raw); JsonNode root = mapper.readTree(json);
             if (!root.isObject() || root.size() != 3) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段不符合协议");
-            requireArray(root, "observations"); requireArray(root, "risks"); requireArray(root, "nextExperiments");
+            requireObservations(root.path("observations")); requireStringArray(root.path("risks"), "risks");
+            requireNextExperiments(root.path("nextExperiments"));
             String normalized = mapper.writeValueAsString(root);
             repository.saveInterpretation(experiment.getId(), normalized, llm.modelName()); return normalized;
         } catch (BusinessException ex) {
@@ -40,28 +42,52 @@ public class QuantExperimentAgent {
     }
 
     private String systemPrompt() {
-        return "你是量化实验审阅 Agent。只能根据用户消息中的服务端指标做定性解读，不得生成新指标、收益承诺或交易指令。"
-                + "只输出 JSON：observations、risks、nextExperiments 三个字符串数组。每个下一实验只能改变一个主要变量，且不会自动执行。";
+        return "你是量化实验审阅 Agent。只能根据用户消息中的服务端指标、年度表现与告警做定性解读，不得复述或生成任何数字、收益承诺或交易指令。"
+                + "只输出 JSON。observations 为对象数组，每项严格包含 metricCode 和 assessment；metricCode 只能取服务端指标代码。"
+                + "risks 为不含数字的字符串数组。nextExperiments 为对象数组，每项严格包含 variable、change、rationale，"
+                + "variable 只能是 FACTORS、TOP_N、REBALANCE_EVERY、COST、FILTERS 之一，每项只改变该一个变量，所有文本不得含数字。";
     }
-    private String metricSummary(BacktestMetrics m) throws Exception {
+    private String metricSummary(BacktestResult result) throws Exception {
+        BacktestMetrics m = result.getMetrics();
         java.util.Map<String,Object> values = new java.util.LinkedHashMap<String,Object>();
-        values.put("totalReturn", m.getTotalReturn()); values.put("annualizedReturn", m.getAnnualizedReturn());
-        values.put("maxDrawdown", m.getMaxDrawdown()); values.put("sharpe", m.getSharpeRatio());
-        values.put("turnover", m.getTurnover()); values.put("benchmarkReturn", m.getBenchmarkReturn());
-        values.put("excessReturn", m.getExcessReturn()); values.put("tradeCount", m.getTradeCount());
+        values.put("TOTAL_RETURN", m.getTotalReturn()); values.put("ANNUAL_RETURN", m.getAnnualizedReturn());
+        values.put("MAX_DRAWDOWN", m.getMaxDrawdown()); values.put("SHARPE", m.getSharpeRatio());
+        values.put("TURNOVER", m.getTurnover()); values.put("BENCHMARK_RETURN", m.getBenchmarkReturn());
+        values.put("EXCESS_RETURN", m.getExcessReturn()); values.put("TRADE_COUNT", m.getTradeCount());
+        values.put("annualPerformance", result.getAnnualPerformance()); values.put("warnings", result.getWarnings());
         return mapper.writeValueAsString(values);
     }
-    private void requireArray(JsonNode root, String field) {
-        JsonNode values = root.path(field);
+    private void requireStringArray(JsonNode values, String field) {
         if (!values.isArray() || values.size() < 1 || values.size() > 8) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段数量不合规：" + field);
         }
         for (JsonNode value : values) {
-            if (!value.isTextual() || value.textValue().trim().isEmpty() || value.textValue().length() > 300) {
+            if (!safeText(value)) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读必须是非空短文本：" + field);
             }
         }
     }
+    private void requireObservations(JsonNode values) {
+        if (!values.isArray() || values.size() < 1 || values.size() > 8) throw bad("observations");
+        java.util.Set<String> allowed = new java.util.HashSet<String>(java.util.Arrays.asList(
+                "TOTAL_RETURN","ANNUAL_RETURN","MAX_DRAWDOWN","SHARPE","TURNOVER","BENCHMARK_RETURN","EXCESS_RETURN","TRADE_COUNT"));
+        for (JsonNode value : values) {
+            if (!value.isObject() || value.size() != 2 || !allowed.contains(value.path("metricCode").asText()) || !safeText(value.path("assessment"))) throw bad("observations");
+        }
+    }
+    private void requireNextExperiments(JsonNode values) {
+        if (!values.isArray() || values.size() < 1 || values.size() > 8) throw bad("nextExperiments");
+        java.util.Set<String> allowed = new java.util.HashSet<String>(java.util.Arrays.asList("FACTORS","TOP_N","REBALANCE_EVERY","COST","FILTERS"));
+        for (JsonNode value : values) {
+            if (!value.isObject() || value.size() != 3 || !allowed.contains(value.path("variable").asText())
+                    || !safeText(value.path("change")) || !safeText(value.path("rationale"))) throw bad("nextExperiments");
+        }
+    }
+    private boolean safeText(JsonNode value) {
+        return value.isTextual() && !value.textValue().trim().isEmpty() && value.textValue().length() <= 300
+                && !value.textValue().matches(".*[0-9０-９].*");
+    }
+    private BusinessException bad(String field) { return new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段不符合协议：" + field); }
     private String extractJson(String value) {
         int start = value == null ? -1 : value.indexOf('{'); int end = value == null ? -1 : value.lastIndexOf('}');
         if (start < 0 || end <= start) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读不是合法 JSON");

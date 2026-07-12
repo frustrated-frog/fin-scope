@@ -683,6 +683,10 @@ public class DatabaseInitializer implements InitializingBean {
                 + "experiment_id INTEGER NOT NULL,year INTEGER NOT NULL,portfolio_return REAL NOT NULL,benchmark_return REAL NOT NULL,"
                 + "excess_return REAL NOT NULL,max_drawdown REAL NOT NULL,PRIMARY KEY(experiment_id,year),"
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_position_snapshot ("
+                + "experiment_id INTEGER NOT NULL,trade_date TEXT NOT NULL,instrument_code TEXT NOT NULL,quantity INTEGER NOT NULL,"
+                + "price REAL NOT NULL,market_value REAL NOT NULL,weight REAL NOT NULL,PRIMARY KEY(experiment_id,trade_date,instrument_code),"
+                + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_interpretation ("
                 + "experiment_id INTEGER PRIMARY KEY,content_json TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");

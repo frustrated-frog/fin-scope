@@ -9,6 +9,8 @@ public class QuantStrategySpec {
     private String benchmark;
     private String investmentHypothesis;
     private String riskBoundary;
+    private java.time.LocalDate startDate;
+    private java.time.LocalDate endDate;
     private List<FactorWeight> factors = new ArrayList<FactorWeight>();
     private Portfolio portfolio;
     private Filters filters;
@@ -25,6 +27,10 @@ public class QuantStrategySpec {
     public void setInvestmentHypothesis(String investmentHypothesis) { this.investmentHypothesis = investmentHypothesis; }
     public String getRiskBoundary() { return riskBoundary; }
     public void setRiskBoundary(String riskBoundary) { this.riskBoundary = riskBoundary; }
+    public java.time.LocalDate getStartDate() { return startDate; }
+    public void setStartDate(java.time.LocalDate startDate) { this.startDate = startDate; }
+    public java.time.LocalDate getEndDate() { return endDate; }
+    public void setEndDate(java.time.LocalDate endDate) { this.endDate = endDate; }
     public List<FactorWeight> getFactors() { return factors; }
     public void setFactors(List<FactorWeight> factors) { this.factors = factors; }
     public Portfolio getPortfolio() { return portfolio; }

@@ -3,6 +3,7 @@ package com.finscope.service.quant.backtest;
 import com.finscope.domain.quant.backtest.BacktestTrade;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
+import com.finscope.domain.quant.backtest.PositionSnapshot;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,6 +60,16 @@ class PortfolioLedger {
         return total;
     }
     double getCash() { return cash; }
+    List<PositionSnapshot> snapshot(LocalDate date, Map<String, QuantDailyBar> bars, double totalAsset) {
+        List<PositionSnapshot> result = new ArrayList<PositionSnapshot>();
+        for (Map.Entry<String, Long> position : positions.entrySet()) {
+            QuantDailyBar bar = bars.get(position.getKey()); double price = bar == null ? lastClose.get(position.getKey()) : bar.getClose().doubleValue();
+            PositionSnapshot value = new PositionSnapshot(); value.setTradeDate(date); value.setInstrumentCode(position.getKey());
+            value.setQuantity(position.getValue()); value.setPrice(price); value.setMarketValue(price * position.getValue());
+            value.setWeight(totalAsset <= 0 ? 0 : value.getMarketValue() / totalAsset); result.add(value);
+        }
+        return result;
+    }
     List<BacktestTrade> getTrades() { return trades; }
     double turnover() { return initialCapital == 0 ? 0 : tradedNotional / initialCapital; }
 

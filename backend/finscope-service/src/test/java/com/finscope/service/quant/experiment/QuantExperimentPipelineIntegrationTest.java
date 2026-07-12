@@ -13,6 +13,7 @@ import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.quant.data.QuantLearningDatasetFactory;
 import com.finscope.service.quant.strategy.QuantStrategyService;
+import com.finscope.service.quant.factor.FactorRegistry;
 import org.junit.jupiter.api.Test;
 import org.sqlite.SQLiteDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,7 +40,9 @@ class QuantExperimentPipelineIntegrationTest {
         ReflectionTestUtils.setField(datasetService, "datasets", datasets);
         ReflectionTestUtils.setField(datasetService, "marketData", marketData);
         ReflectionTestUtils.setField(datasetService, "learningDatasetFactory", new QuantLearningDatasetFactory());
+        ReflectionTestUtils.setField(datasetService, "factors", new FactorRegistry());
         QuantDataset dataset = datasetService.createLearningSample("流水线学习样本");
+        org.junit.jupiter.api.Assertions.assertTrue(datasetService.availableFactorCodes(dataset.getId()).contains("ROE"));
 
         QuantStrategyVersion version = new QuantStrategyVersion();
         version.setName("20日动量学习策略"); version.setDatasetId(dataset.getId()); version.setVersion(1);
@@ -67,6 +70,8 @@ class QuantExperimentPipelineIntegrationTest {
         assertNotNull(completed.getResult());
         assertFalse(completed.getResult().getEquityCurve().isEmpty());
         assertFalse(completed.getResult().getTrades().isEmpty());
+        assertFalse(completed.getResult().getPositions().isEmpty());
+        assertFalse(completed.getResult().getAnnualPerformance().isEmpty());
         assertEquals(9600, marketData.findBars(dataset.getId()).size());
     }
 

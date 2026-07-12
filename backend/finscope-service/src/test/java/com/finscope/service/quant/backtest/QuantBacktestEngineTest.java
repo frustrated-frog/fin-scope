@@ -44,10 +44,12 @@ class QuantBacktestEngineTest {
         BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
         request.setSpec(spec()); request.setBars(bars(dates));
         List<QuantUniverseMember> universe = new ArrayList<QuantUniverseMember>();
-        for (LocalDate date : dates) {
-            QuantUniverseMember member = new QuantUniverseMember(); member.setTradeDate(date);
-            member.setInstrumentCode("SLOW.SH"); member.setMember(true); member.setSourceKind("TEST"); universe.add(member);
-        }
+        QuantUniverseMember member = new QuantUniverseMember(); member.setTradeDate(dates.get(0));
+        member.setInstrumentCode("SLOW.SH"); member.setMember(true); member.setSourceKind("POINT_IN_TIME"); universe.add(member);
+        QuantUniverseMember fastIn = new QuantUniverseMember(); fastIn.setTradeDate(dates.get(0)); fastIn.setInstrumentCode("FAST.SH");
+        fastIn.setMember(true); fastIn.setSourceKind("POINT_IN_TIME"); universe.add(fastIn);
+        QuantUniverseMember fastOut = new QuantUniverseMember(); fastOut.setTradeDate(dates.get(20)); fastOut.setInstrumentCode("FAST.SH");
+        fastOut.setMember(false); fastOut.setSourceKind("POINT_IN_TIME"); universe.add(fastOut);
         request.setUniverse(universe);
         BacktestResult result = new QuantBacktestEngine().run(request);
         assertFalse(result.getTrades().isEmpty());

@@ -8,6 +8,7 @@ import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.quant.experiment.QuantExperimentService;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.quant.factor.DatasetFactorAnalysisService;
 import com.finscope.service.quant.strategy.QuantStrategyService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -38,6 +39,7 @@ class QuantPlatformControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private QuantDatasetService datasets;
     @MockBean private FactorRegistry factors;
+    @MockBean private DatasetFactorAnalysisService factorAnalysis;
     @MockBean private QuantStrategyService strategies;
     @MockBean private QuantExperimentService experiments;
 
@@ -65,6 +67,15 @@ class QuantPlatformControllerTest {
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.dataKind").value("LEARNING_SAMPLE"))
                 .andExpect(jsonPath("$.status").value("READY"));
+    }
+
+    @Test
+    void createsAnEmptyRealDatasetBeforeControlledImports() throws Exception {
+        QuantDataset value = new QuantDataset(); value.setId(8L); value.setName("我的真实研究集"); value.setDataKind("REAL"); value.setStatus("EMPTY");
+        when(datasets.create("我的真实研究集", "REAL")).thenReturn(value);
+        mockMvc.perform(post("/api/quant/datasets").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"我的真实研究集\",\"dataKind\":\"REAL\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.dataKind").value("REAL")).andExpect(jsonPath("$.status").value("EMPTY"));
     }
 
     @Test

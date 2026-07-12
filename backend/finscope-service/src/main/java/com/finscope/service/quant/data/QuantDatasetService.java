@@ -15,12 +15,19 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.domain.quant.factor.FactorDefinition;
 
 @Service
 public class QuantDatasetService {
     @Resource private QuantDatasetRepository datasets;
     @Resource private QuantMarketDataRepository marketData;
     @Resource private QuantLearningDatasetFactory learningDatasetFactory;
+    @Resource private FactorRegistry factors;
     private final QuantDatasetFingerprint defaultFingerprint = new QuantDatasetFingerprint();
     private final QuantDataQualityService defaultQuality = new QuantDataQualityService();
     private QuantDatasetFingerprint fingerprint = defaultFingerprint;
@@ -33,9 +40,16 @@ public class QuantDatasetService {
                 new BusinessException(ErrorCode.NOT_FOUND, "量化数据集不存在"));
     }
 
-    public boolean hasFundamentals(Long datasetId) {
-        get(datasetId);
-        return !marketData.findFundamentals(datasetId).isEmpty();
+    public Set<String> availableFactorCodes(Long datasetId) {
+        QuantDataset dataset = get(datasetId); List<QuantDailyBar> bars = marketData.findBars(datasetId);
+        Set<String> result = new LinkedHashSet<String>(); if (bars.isEmpty()) return result;
+        for (FactorDefinition factor : factors.list()) if (!factor.isPointInTime()) result.add(factor.getCode());
+        List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(datasetId);
+        List<QuantUniverseMember> universe = marketData.findUniverseMembers(datasetId);
+        for (FactorDefinition factor : factors.list()) {
+            if (factor.isPointInTime() && coverage(bars, fundamentals, universe, factor.getCode()) >= 0.90d) result.add(factor.getCode());
+        }
+        return result;
     }
 
     public QuantDataset create(String name, String dataKind) {
@@ -91,9 +105,12 @@ public class QuantDatasetService {
         List<QuantDailyBar> all = marketData.findBars(datasetId);
         LocalDate start = all.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
         LocalDate end = all.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
-        String digest = fingerprint.dataset(all, marketData.findFundamentals(datasetId), marketData.findUniverseMembers(datasetId));
-        if (!datasets.updateSummary(datasetId, start, end, "READY", digest,
-                "{\"barCount\":" + all.size() + ",\"blockingIssues\":0}", dataset.getRevision())) {
+        List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(datasetId);
+        List<QuantUniverseMember> universe = marketData.findUniverseMembers(datasetId);
+        String digest = fingerprint.dataset(all, fundamentals, universe);
+        String status = researchStatus(dataset, all, universe);
+        if (!datasets.updateSummary(datasetId, start, end, status, digest,
+                qualitySummary(all, fundamentals, universe, status), dataset.getRevision())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return get(datasetId);
@@ -121,6 +138,9 @@ public class QuantDatasetService {
             }
             value.setDatasetId(datasetId);
             if (value.getSourceKind() == null) value.setSourceKind("POINT_IN_TIME");
+            if (!"POINT_IN_TIME".equals(value.getSourceKind()) && !"CURRENT_SNAPSHOT".equals(value.getSourceKind())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "股票池来源只能是 POINT_IN_TIME 或 CURRENT_SNAPSHOT");
+            }
         }
         try { marketData.insertUniverseMembers(values); }
         catch (DataAccessException ex) { throw new BusinessException(ErrorCode.CONFLICT, "股票池包含已存在的记录", ex); }
@@ -129,12 +149,69 @@ public class QuantDatasetService {
 
     private QuantDataset refreshFingerprint(QuantDataset dataset) {
         List<QuantDailyBar> bars = marketData.findBars(dataset.getId());
-        String digest = fingerprint.dataset(bars, marketData.findFundamentals(dataset.getId()),
-                marketData.findUniverseMembers(dataset.getId()));
-        if (!datasets.updateSummary(dataset.getId(), dataset.getStartDate(), dataset.getEndDate(), dataset.getStatus(),
-                digest, dataset.getQualitySummary(), dataset.getRevision())) {
+        List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(dataset.getId());
+        List<QuantUniverseMember> universe = marketData.findUniverseMembers(dataset.getId());
+        String digest = fingerprint.dataset(bars, fundamentals, universe); String status = researchStatus(dataset, bars, universe);
+        LocalDate start = bars.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
+        LocalDate end = bars.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
+        if (!datasets.updateSummary(dataset.getId(), start, end, status,
+                digest, qualitySummary(bars, fundamentals, universe, status), dataset.getRevision())) {
             throw new BusinessException(ErrorCode.CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return get(dataset.getId());
+    }
+
+    private String researchStatus(QuantDataset dataset, List<QuantDailyBar> bars, List<QuantUniverseMember> universe) {
+        if ("LEARNING_SAMPLE".equals(dataset.getDataKind())) return bars.isEmpty() ? "EMPTY" : "READY";
+        if (bars.isEmpty()) return "EMPTY";
+        if (universe.isEmpty()) return "QUALITY_PENDING";
+        if (universe.stream().anyMatch(value -> "CURRENT_SNAPSHOT".equals(value.getSourceKind()))) return "BLOCKED";
+        Set<String> active = new LinkedHashSet<String>();
+        for (QuantUniverseMember value : universe) { if (value.isMember()) active.add(value.getInstrumentCode()); else active.remove(value.getInstrumentCode()); }
+        return active.isEmpty() ? "BLOCKED" : "READY";
+    }
+    private String qualitySummary(List<QuantDailyBar> bars, List<QuantFundamentalSnapshot> fundamentals,
+                                  List<QuantUniverseMember> universe, String status) {
+        Set<String> instruments = new LinkedHashSet<String>(); Set<LocalDate> dates = new LinkedHashSet<LocalDate>();
+        for (QuantDailyBar bar : bars) { instruments.add(bar.getInstrumentCode()); dates.add(bar.getTradeDate()); }
+        int blocking = "BLOCKED".equals(status) ? 1 : 0; int pending = "QUALITY_PENDING".equals(status) ? 1 : 0;
+        return "{\"barCount\":" + bars.size() + ",\"instrumentCount\":" + instruments.size() + ",\"tradingDateCount\":" + dates.size()
+                + ",\"fundamentalCount\":" + fundamentals.size() + ",\"universeEventCount\":" + universe.size()
+                + ",\"blockingIssues\":" + blocking + ",\"pendingIssues\":" + pending + "}";
+    }
+    private boolean supports(QuantFundamentalSnapshot value, String code) {
+        if (value == null) return false;
+        if ("LOG_MARKET_CAP".equals(code)) return value.getMarketCap() != null;
+        if ("EP".equals(code)) return value.getPe() != null;
+        if ("BP".equals(code)) return value.getPb() != null;
+        if ("ROE".equals(code)) return value.getRoe() != null;
+        if ("LOW_DEBT".equals(code)) return value.getDebtRatio() != null;
+        if ("REVENUE_GROWTH".equals(code)) return value.getRevenueGrowth() != null;
+        if ("PROFIT_GROWTH".equals(code)) return value.getProfitGrowth() != null;
+        return false;
+    }
+    private double coverage(List<QuantDailyBar> bars, List<QuantFundamentalSnapshot> fundamentals,
+                            List<QuantUniverseMember> universe, String factorCode) {
+        Map<LocalDate, Set<String>> codesByDate = new LinkedHashMap<LocalDate, Set<String>>();
+        for (QuantDailyBar bar : bars) codesByDate.computeIfAbsent(bar.getTradeDate(), key -> new LinkedHashSet<String>()).add(bar.getInstrumentCode());
+        List<LocalDate> dates = new java.util.ArrayList<LocalDate>(codesByDate.keySet()); java.util.Collections.sort(dates);
+        List<QuantUniverseMember> events = new java.util.ArrayList<QuantUniverseMember>(universe);
+        events.sort(java.util.Comparator.comparing(QuantUniverseMember::getTradeDate).thenComparing(QuantUniverseMember::getInstrumentCode));
+        Set<String> active = new LinkedHashSet<String>(); int cursor = 0, available = 0, total = 0;
+        for (int index = 0; index < dates.size(); index++) {
+            LocalDate date = dates.get(index); while (cursor < events.size() && !events.get(cursor).getTradeDate().isAfter(date)) {
+                QuantUniverseMember event = events.get(cursor++); if (event.isMember()) active.add(event.getInstrumentCode()); else active.remove(event.getInstrumentCode());
+            }
+            if (index < 60) continue;
+            Set<String> researchCodes = events.isEmpty() ? codesByDate.get(date) : active;
+            for (String code : researchCodes) { total++; if (supports(latestVisible(fundamentals, code, date), factorCode)) available++; }
+        }
+        return total == 0 ? 0 : (double) available / total;
+    }
+    private QuantFundamentalSnapshot latestVisible(List<QuantFundamentalSnapshot> values, String code, LocalDate date) {
+        QuantFundamentalSnapshot latest = null;
+        for (QuantFundamentalSnapshot value : values) if (code.equals(value.getInstrumentCode()) && !value.getDisclosedAt().isAfter(date)
+                && (latest == null || value.getDisclosedAt().isAfter(latest.getDisclosedAt()))) latest = value;
+        return latest;
     }
 }

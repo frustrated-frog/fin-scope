@@ -26,6 +26,8 @@ public class QuantStrategySpecValidator {
         if (spec.getDatasetId() == null) issues.add("必须选择数据集");
         if (!text(spec.getInvestmentHypothesis())) issues.add("投资假设不能为空");
         if (!text(spec.getRiskBoundary())) issues.add("风险边界不能为空");
+        if ((spec.getStartDate() == null) != (spec.getEndDate() == null)) issues.add("回测起止日期必须同时提供");
+        if (spec.getStartDate() != null && spec.getStartDate().isAfter(spec.getEndDate())) issues.add("回测开始日期不能晚于结束日期");
         if (!"EQUAL_WEIGHT".equals(spec.getBenchmark())) issues.add("第二期基准仅支持时点股票池等权基准 EQUAL_WEIGHT");
         if (spec.getFactors() == null || spec.getFactors().isEmpty()) issues.add("至少选择一个因子");
         else {
