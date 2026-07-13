@@ -4,7 +4,14 @@ import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, Researc
 import { api } from '../../shared/api/client';
 import { ResearchProgressPanel } from './ResearchProgressPanel';
 import { ResearchReportReader } from './ResearchReportReader';
-import { presentAgentRun } from './researchPresentation';
+import {
+  groupThesisFindings,
+  PresentedFindingLane,
+  presentAgentRun,
+  presentConfidence,
+  presentThesisStage,
+  summarizeResearchDiagnostics
+} from './researchPresentation';
 
 export function ResearchView({
   runs,
@@ -116,25 +123,25 @@ export function ResearchView({
           </div>
         </div>
         <div className="research-thesis-list" aria-label="研究命题列表">
-          {theses.length ? theses.slice(0, 5).map((thesis) => (
-            <button
-              key={thesis.id}
-              className={selectedThesisId === thesis.id ? 'research-thesis-card active' : 'research-thesis-card'}
-              type="button"
-              onClick={() => setSelectedThesisId(thesis.id)}
-            >
-              <span>{thesis.subjectType === 'COMPANY' ? '公司' : thesis.subjectType === 'INDUSTRY' ? '行业' : '自选'} · {thesis.subjectName}</span>
-              <strong>{thesis.question}</strong>
-              <small>{thesis.status === 'OPEN' ? '待验证' : thesis.status}</small>
-            </button>
-          )) : <p className="empty-state compact">还没有命题。先把你想验证的公司或行业判断写下来。</p>}
+          {theses.length ? theses.slice(0, 5).map((thesis) => {
+            const findingCount = thesisDetail?.thesis.id === thesis.id ? thesisDetail.findings.length : 0;
+            const stage = presentThesisStage(thesis, findingCount);
+            return (
+              <button
+                key={thesis.id}
+                className={selectedThesisId === thesis.id ? 'research-thesis-card active' : 'research-thesis-card'}
+                type="button"
+                onClick={() => setSelectedThesisId(thesis.id)}
+              >
+                <span>{thesis.subjectType === 'COMPANY' ? '公司' : thesis.subjectType === 'INDUSTRY' ? '行业' : '自选'} · {thesis.subjectName}</span>
+                <strong>{thesis.question}</strong>
+                <small className={`research-thesis-stage ${stage.tone}`}>{stage.label}</small>
+              </button>
+            );
+          }) : <p className="empty-state compact">还没有命题。先把你想验证的公司或行业判断写下来。</p>}
         </div>
       </div>
-      {thesisDetail && <div className="research-thesis-detail">
-        <div><p className="eyebrow">当前判断</p><strong>{thesisDetail.thesis.conclusion || '尚未形成结论'}</strong><p>{thesisDetail.thesis.nextValidation || '下一验证窗口尚未设置'}</p></div>
-        {['SUPPORT','COUNTER','UNKNOWN'].map((stance) => <div key={stance}><p className="eyebrow">{stance === 'SUPPORT' ? '支持证据' : stance === 'COUNTER' ? '反证' : '未知项'}</p>{thesisDetail.findings.filter((item) => item.stance === stance).map((item) => <p key={item.id}>{item.summary}</p>) || <p>暂无</p>}</div>)}
-        <div><p className="eyebrow">本次研究产物</p><strong>{thesisDetail.outputs.length} 项</strong><p>{thesisDetail.runs.length} 次绑定运行</p></div>
-      </div>}
+      {thesisDetail && <ThesisDecisionSummary detail={thesisDetail} />}
       <div className="research-control-panel">
         <div className="research-run-heading">
           <div>
@@ -193,7 +200,7 @@ export function ResearchView({
             </div>
             <span className="research-run-count">共 {runs.length} 次</span>
           </div>
-          {runs[0] && <button className="research-latest-run" type="button" onClick={() => onOpenRun(runs[0].id)}>
+          {runs[0] && <button className="research-latest-run" style={{ marginTop: 12 }} type="button" onClick={() => onOpenRun(runs[0].id)}>
             <span>最近一次 · {runs[0].runDate} · {runs[0].status}</span>
             <strong>新增 {runs[0].evidenceCount ?? 0} 条证据 →</strong>
           </button>}
@@ -213,7 +220,7 @@ export function ResearchView({
         </div>
 
         <aside className="research-detail-panel">
-          <div className="panel-head">
+          <div className="panel-head research-detail-head">
             <div>
               <p className="eyebrow">Trace</p>
               <h3>运行细节</h3>
@@ -239,59 +246,7 @@ export function ResearchView({
                 <strong>{presentRunStatus(detail.run.status)}</strong>
                 <span>{detail.run.summary || '-'}</span>
               </div>
-              <details className="research-diagnostic-section">
-                <summary>查看执行步骤诊断</summary>
-                <div className="research-plan-list">
-                  {(detail.planSteps || []).length ? detail.planSteps.map((step) => (
-                    <div className="research-plan-row" key={step.stepId}>
-                      <div>
-                        <strong>{step.title}</strong>
-                        <span>{step.stepId} · {step.executor || 'system'}</span>
-                        {(step.outputSummary || step.errorMessage || step.fallbackReason) && (
-                          <small>{step.errorMessage || step.fallbackReason || step.outputSummary}</small>
-                        )}
-                      </div>
-                      <div className="research-plan-meta">
-                        <span>{presentRunStatus(step.status)}</span>
-                        <small>{step.attempt ?? 0}/{step.maxAttempts ?? 1} · Δ{step.progressDelta ?? 0}</small>
-                      </div>
-                    </div>
-                  )) : <p className="empty-state compact">没有计划步骤</p>}
-                </div>
-              </details>
-              <div className="planned-source-list">
-                <div className="section-kicker">计划来源</div>
-                {(detail.plannedSources || []).length ? detail.plannedSources.map((source) => (
-                  <div className="planned-source-row" key={`${source.sourceId}-${source.sourceName}`}>
-                    <strong>{source.sourceName}</strong>
-                    <span>{source.sourceTier || 'UNKNOWN'} · C{source.credibility ?? '-'} · {source.enabled ? 'ON' : 'OFF'}</span>
-                  </div>
-                )) : (
-                  <p className="empty-state compact">没有来源快照</p>
-                )}
-              </div>
-              <div className="agent-trace-list">
-                <div className="section-kicker">智能处理记录</div>
-                {detail.agentRuns.length ? detail.agentRuns.map((run) => {
-                  const presented = presentAgentRun(run);
-                  return (
-                  <div className="trace-row" key={run.id}>
-                    <div>
-                      <strong>{presented.label}</strong>
-                      <span>{presentRunStatus(run.status)}</span>
-                      <small>{presented.summary}</small>
-                      {(run.output || run.errorType || run.terminationReason) && (
-                        <details className="trace-diagnostic">
-                          <summary>诊断信息</summary>
-                          <pre>{formatAgentDiagnostic(run)}</pre>
-                        </details>
-                      )}
-                    </div>
-                    <small>{presentDuration(run.durationMs)}</small>
-                  </div>
-                  );
-                }) : <p className="empty-state compact">暂无智能处理记录</p>}
-              </div>
+              <ResearchDiagnostics detail={detail} />
             </>
           ) : (
             <p className="empty-state">选择一次运行查看 agent trace。</p>
@@ -324,4 +279,182 @@ function formatAgentDiagnostic(run: ResearchRunDetail['agentRuns'][number]) {
     run.terminationReason ? `停止原因：${run.terminationReason}` : '',
     run.output ? `原始输出：\n${run.output}` : ''
   ].filter(Boolean).join('\n');
+}
+
+function ThesisDecisionSummary({ detail }: { detail: ResearchThesisDetail }) {
+  const stage = presentThesisStage(detail.thesis, detail.findings.length);
+  const findings = groupThesisFindings(detail.findings, 2);
+  const latestRunDate = [...detail.runs]
+    .sort((left, right) => right.runDate.localeCompare(left.runDate))[0]?.runDate;
+
+  return (
+    <section className="research-decision-summary" aria-label="命题决策摘要">
+      <header className="research-decision-hero">
+        <div>
+          <div className="research-decision-stage-row">
+            <span className={`research-decision-stage ${stage.tone}`}>{stage.label}</span>
+            <span>{stage.description}</span>
+          </div>
+          <p className="eyebrow">当前研究判断</p>
+          <h3>{detail.thesis.conclusion || '尚未形成稳定结论'}</h3>
+        </div>
+        <div className="research-decision-confidence">
+          <span>判断置信度</span>
+          <strong>{presentConfidence(detail.thesis.confidence)}</strong>
+        </div>
+      </header>
+
+      <div className="research-next-validation">
+        <span>下一验证点</span>
+        <strong>{detail.thesis.nextValidation || '补充关键经营或行业数据后再次验证'}</strong>
+      </div>
+
+      <div className="research-finding-lanes">
+        <FindingLane
+          title="支持判断"
+          description="哪些事实支持当前方向"
+          lane={findings.SUPPORT}
+          empty="尚无直接支持当前判断的证据"
+          tone="support"
+        />
+        <FindingLane
+          title="反向信号"
+          description="什么变化可能推翻判断"
+          lane={findings.COUNTER}
+          empty="尚未发现足以推翻判断的信号"
+          tone="counter"
+        />
+        <FindingLane
+          title="仍待确认"
+          description="还缺哪些关键变量"
+          lane={findings.UNKNOWN}
+          empty="关键变量已覆盖，继续关注新变化"
+          tone="unknown"
+        />
+      </div>
+
+      <footer className="research-decision-meta">
+        <span>{detail.runs.length} 次研究</span>
+        <span>{detail.outputs.length} 项关联产物</span>
+        <span>{latestRunDate ? `最近研究 ${latestRunDate}` : '尚未绑定研究运行'}</span>
+      </footer>
+    </section>
+  );
+}
+
+function FindingLane({
+  title,
+  description,
+  lane,
+  empty,
+  tone
+}: {
+  title: string;
+  description: string;
+  lane: PresentedFindingLane;
+  empty: string;
+  tone: 'support' | 'counter' | 'unknown';
+}) {
+  return (
+    <section className={`research-finding-lane ${tone}`} aria-label={title}>
+      <header>
+        <div><strong>{title}</strong><span>{description}</span></div>
+        <small>{lane.total}</small>
+      </header>
+      {lane.items.length ? (
+        <ul>{lane.items.map((finding) => <li key={finding.id}>{finding.summary}</li>)}</ul>
+      ) : <p className="research-finding-empty">{empty}</p>}
+      {lane.remaining > 0 && <span className="research-finding-remainder">另有 {lane.remaining} 条</span>}
+    </section>
+  );
+}
+
+function ResearchDiagnostics({ detail }: { detail: ResearchRunDetail }) {
+  const summary = summarizeResearchDiagnostics(detail);
+  const visibleSources = detail.plannedSources.slice(0, 4);
+  const remainingSources = Math.max(0, detail.plannedSources.length - visibleSources.length);
+
+  return (
+    <details className="research-diagnostics">
+      <summary>
+        <div>
+          <strong>研究过程与来源</strong>
+          <span>{summary.label}</span>
+        </div>
+        <span className="research-diagnostics-toggle" aria-hidden="true" />
+      </summary>
+
+      <div className="research-diagnostics-content">
+        <section className="research-diagnostics-section" aria-label="执行步骤">
+          <header><strong>执行步骤</strong><span>{detail.planSteps.length} 步</span></header>
+          <div className="research-plan-list">
+            {detail.planSteps.length ? detail.planSteps.map((step) => (
+              <div className="research-plan-row" key={step.stepId}>
+                <div>
+                  <strong>{step.title}</strong>
+                  <span>{step.executor || '系统任务'}</span>
+                  {(step.outputSummary || step.errorMessage || step.fallbackReason) && (
+                    <small>{step.errorMessage || step.fallbackReason || step.outputSummary}</small>
+                  )}
+                </div>
+                <div className="research-plan-meta">
+                  <span>{presentRunStatus(step.status)}</span>
+                  <small>{step.attempt ?? 0}/{step.maxAttempts ?? 1} 次尝试</small>
+                </div>
+              </div>
+            )) : <p className="empty-state compact">本次运行没有步骤快照</p>}
+          </div>
+        </section>
+
+        <section className="research-diagnostics-section" aria-label="来源快照">
+          <header><strong>来源快照</strong><span>仅展示前 4 个</span></header>
+          <div className="research-source-preview">
+            {visibleSources.length ? visibleSources.map((source) => (
+              <div className="planned-source-row" data-testid="planned-source" key={`${source.sourceId}-${source.sourceName}`}>
+                <strong>{source.sourceName}</strong>
+                <span>{presentSourceTier(source.sourceTier)} · 可信度 {source.credibility ?? '-'}{source.enabled === false ? ' · 已停用' : ''}</span>
+              </div>
+            )) : <p className="empty-state compact">本次运行没有来源快照</p>}
+          </div>
+          {remainingSources > 0 && <p className="research-source-remainder">另有 {remainingSources} 个来源未展开</p>}
+        </section>
+
+        <section className="research-diagnostics-section" aria-label="智能处理记录">
+          <header><strong>智能处理记录</strong><span>{detail.agentRuns.length} 个节点</span></header>
+          <div className="agent-trace-list">
+            {detail.agentRuns.length ? detail.agentRuns.map((run) => {
+              const presented = presentAgentRun(run);
+              return (
+                <div className="trace-row" key={run.id}>
+                  <div>
+                    <strong>{presented.label}</strong>
+                    <span>{presentRunStatus(run.status)}</span>
+                    <small>{presented.summary}</small>
+                    {(run.output || run.errorType || run.terminationReason) && (
+                      <details className="trace-diagnostic">
+                        <summary>诊断信息</summary>
+                        <pre>{formatAgentDiagnostic(run)}</pre>
+                      </details>
+                    )}
+                  </div>
+                  <small>{presentDuration(run.durationMs)}</small>
+                </div>
+              );
+            }) : <p className="empty-state compact">本次运行没有智能处理记录</p>}
+          </div>
+        </section>
+      </div>
+    </details>
+  );
+}
+
+function presentSourceTier(value?: string) {
+  const labels: Record<string, string> = {
+    REGULATOR: '监管机构',
+    COMPANY: '公司来源',
+    MEDIA: '媒体来源',
+    CURATED_AI: '精选研究',
+    RESEARCH: '研究机构'
+  };
+  return value ? labels[value] || value : '未分类来源';
 }

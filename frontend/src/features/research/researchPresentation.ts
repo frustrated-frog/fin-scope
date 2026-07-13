@@ -1,4 +1,10 @@
-import { AgentRun, ResearchRunDetail, ResearchRunPlanStep } from '../../shared/types';
+import {
+  AgentRun,
+  ResearchRunDetail,
+  ResearchRunPlanStep,
+  ResearchThesis,
+  ThesisFinding
+} from '../../shared/types';
 
 const STEP_PRESENTATION: Record<string, { label: string; active: string }> = {
   plan_sources: { label: '规划资料范围', active: '正在规划资料范围' },
@@ -36,6 +42,66 @@ export type PresentedResearchProgress = {
   metrics: string;
   stages: PresentedResearchStage[];
 };
+
+export type PresentedThesisStage = {
+  label: string;
+  tone: 'pending' | 'active' | 'settled';
+  description: string;
+};
+
+export type PresentedFindingLane = {
+  items: ThesisFinding[];
+  total: number;
+  remaining: number;
+};
+
+export type PresentedFindingGroups = Record<ThesisFinding['stance'], PresentedFindingLane>;
+
+export function presentThesisStage(thesis: ResearchThesis, findingCount: number): PresentedThesisStage {
+  if (thesis.status === 'CONCLUDED') {
+    return { label: '已形成结论', tone: 'settled', description: '结论已经归档，可继续跟踪验证' };
+  }
+  if (thesis.conclusion?.trim()) {
+    return { label: '持续验证', tone: 'active', description: '已有阶段性判断，等待新证据复核' };
+  }
+  if (findingCount > 0) {
+    return { label: '证据积累中', tone: 'active', description: '已有初步发现，仍需验证关键变量' };
+  }
+  return { label: '待验证', tone: 'pending', description: '尚未形成有效证据，建议启动一次研究' };
+}
+
+export function presentConfidence(value?: ResearchThesis['confidence']) {
+  if (value === 'HIGH') return '高置信';
+  if (value === 'MEDIUM') return '中等置信';
+  if (value === 'LOW') return '低置信';
+  return '尚未评级';
+}
+
+export function groupThesisFindings(findings: ThesisFinding[], limit = 2): PresentedFindingGroups {
+  return (['SUPPORT', 'COUNTER', 'UNKNOWN'] as const).reduce((groups, stance) => {
+    const all = findings.filter((finding) => finding.stance === stance);
+    groups[stance] = {
+      items: all.slice(0, limit),
+      total: all.length,
+      remaining: Math.max(0, all.length - limit)
+    };
+    return groups;
+  }, {} as PresentedFindingGroups);
+}
+
+export function summarizeResearchDiagnostics(detail: ResearchRunDetail) {
+  const fetchedSources = detail.run.fetchedSourceCount ?? 0;
+  const plannedSources = detail.plannedSources.length || detail.run.sourceCount || 0;
+  const agentRuns = detail.agentRuns.length;
+  return {
+    fetchedSources,
+    plannedSources,
+    agentRuns,
+    label: plannedSources
+      ? `已获取 ${fetchedSources}/${plannedSources} 个来源 · 执行详情默认收起`
+      : '暂无来源快照 · 执行详情默认收起'
+  };
+}
 
 export function presentResearchProgress(detail: ResearchRunDetail, now = Date.now()): PresentedResearchProgress {
   const stages = (detail.planSteps || []).map((step) => ({

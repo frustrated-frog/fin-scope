@@ -2,8 +2,66 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
-import { ResearchReport, ResearchRunDetail } from '../../shared/types';
+import {
+  ResearchReport,
+  ResearchRunDetail,
+  ResearchThesis,
+  ResearchThesisDetail,
+  ThesisFinding
+} from '../../shared/types';
 import { ResearchView } from './ResearchView';
+
+test('keeps breathing room between the archive heading and latest run card', () => {
+  renderView(legacyDetail());
+
+  expect(screen.getByRole('button', { name: /最近一次/ })).toHaveStyle({ marginTop: '12px' });
+});
+
+test('groups the report action inside a responsive research detail header', () => {
+  renderView({ ...legacyDetail(), reportAvailable: true });
+
+  expect(screen.getByRole('button', { name: '阅读研究报告' }).closest('.research-detail-head')).not.toBeNull();
+});
+
+test('prioritizes one thesis decision summary over equal-weight output cards', async () => {
+  stubThesisDetail(thesisDetail());
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getByRole('button', { name: /半导体设备/ }));
+
+  expect(await screen.findByRole('region', { name: '命题决策摘要' })).toBeInTheDocument();
+  expect(screen.getByText('中等置信')).toBeInTheDocument();
+  expect(screen.getByText('下一验证点')).toBeInTheDocument();
+  expect(screen.queryByText('本次研究产物')).not.toBeInTheDocument();
+  expect(screen.getByText('2 次研究')).toBeInTheDocument();
+  expect(screen.getByText('5 项关联产物')).toBeInTheDocument();
+});
+
+test('limits each evidence lane to two findings and reports the remainder', async () => {
+  stubThesisDetail(thesisDetail());
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getByRole('button', { name: /半导体设备/ }));
+  await screen.findByRole('region', { name: '命题决策摘要' });
+
+  expect(screen.getByText('支持一')).toBeInTheDocument();
+  expect(screen.getByText('支持二')).toBeInTheDocument();
+  expect(screen.queryByText('支持三')).not.toBeInTheDocument();
+  expect(screen.getByText('另有 1 条')).toBeInTheDocument();
+});
+
+test('keeps sources and traces collapsed and limits the expanded source preview', async () => {
+  renderView(detailWithSources());
+
+  const diagnostics = screen.getByText('研究过程与来源').closest('details');
+  expect(diagnostics).not.toHaveAttribute('open');
+  expect(screen.getByText('已获取 6/6 个来源 · 执行详情默认收起')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByText('研究过程与来源'));
+
+  expect(screen.getAllByTestId('planned-source')).toHaveLength(4);
+  expect(screen.getByText('另有 2 个来源未展开')).toBeInTheDocument();
+});
 
 test('offers report recovery for a terminal legacy run without promising a missing report', async () => {
   const onRegenerateReport = vi.fn().mockResolvedValue(undefined);
@@ -68,6 +126,27 @@ function legacyDetail(): ResearchRunDetail {
   };
 }
 
+function detailWithSources(): ResearchRunDetail {
+  return {
+    ...legacyDetail(),
+    run: { ...legacyDetail().run, sourceCount: 6, fetchedSourceCount: 6 },
+    plannedSources: Array.from({ length: 6 }, (_, index) => ({
+      sourceId: index + 1,
+      sourceName: `来源 ${index + 1}`,
+      sourceTier: index === 0 ? 'REGULATOR' : 'MEDIA',
+      credibility: 5 - Math.min(index, 2),
+      enabled: true
+    })),
+    agentRuns: [{
+      id: 1,
+      nodeName: 'article-interpret',
+      status: 'COMPLETED',
+      durationMs: 20,
+      output: '已完成文章理解'
+    }]
+  };
+}
+
 function sampleReport(): ResearchReport {
   return {
     id: 4,
@@ -87,4 +166,48 @@ function sampleReport(): ResearchReport {
     sourceCount: 5,
     characterCount: 800
   };
+}
+
+function thesis(): ResearchThesis {
+  return {
+    id: 1,
+    question: '科技板块冲高后近期大跌回落，周期是否还能持续',
+    subjectType: 'INDUSTRY',
+    subjectName: '半导体设备',
+    status: 'OPEN',
+    conclusion: '支持与转弱信号并存，周期仍需后续经营数据确认。',
+    confidence: 'MEDIUM',
+    nextValidation: '下一披露期复核订单、资本开支和产能利用率'
+  };
+}
+
+function thesisDetail(): ResearchThesisDetail {
+  return {
+    thesis: thesis(),
+    findings: [
+      finding(1, 'SUPPORT', '支持一'),
+      finding(2, 'SUPPORT', '支持二'),
+      finding(3, 'SUPPORT', '支持三'),
+      finding(4, 'COUNTER', '反证一'),
+      finding(5, 'UNKNOWN', '未知一')
+    ],
+    runs: [legacyDetail().run, { ...legacyDetail().run, id: 14, runDate: '2026-07-12' }],
+    outputs: Array.from({ length: 5 }, (_, index) => ({
+      id: index + 1,
+      researchRunId: 15,
+      outputType: 'EVIDENCE',
+      outputId: index + 1
+    }))
+  };
+}
+
+function finding(id: number, stance: ThesisFinding['stance'], summary: string): ThesisFinding {
+  return { id, thesisId: 1, stance, summary };
+}
+
+function stubThesisDetail(detail: ResearchThesisDetail) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(detail), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  })));
 }
