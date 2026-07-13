@@ -8,6 +8,7 @@ import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.domain.article.Article;
+import com.finscope.domain.knowledge.KnowledgeEnums;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
@@ -16,6 +17,9 @@ import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,9 +27,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 public class LearningTaskService {
+    private static final int MAX_SUGGESTIONS_PER_UPDATE = 3;
+    private static final Pattern WHITESPACE = Pattern.compile(
+            "\\s+", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Set<String> VALID_STATUSES = new LinkedHashSet<String>(Arrays.asList(
             ResearchEnums.LEARNING_STATUS_TODO,
             ResearchEnums.LEARNING_STATUS_LEARNING,
@@ -46,9 +54,6 @@ public class LearningTaskService {
         if (!meaningfulUpdate || event == null || event.getId() == null) {
             return;
         }
-        if (learningTaskRepository.countByEventId(event.getId()) > 0) {
-            return;
-        }
         List<EvidenceItem> evidenceItems = event.getId() == null
                 ? Collections.<EvidenceItem>emptyList()
                 : evidenceService.listByEventId(event.getId());
@@ -59,13 +64,22 @@ public class LearningTaskService {
             tasks = buildTasks(event, article, evidenceItems);
             status = "FALLBACK";
         }
+        int inserted = 0;
+        int candidateCount = 0;
         for (LearningTask task : tasks) {
-            learningTaskRepository.save(task);
+            if (candidateCount++ >= MAX_SUGGESTIONS_PER_UPDATE) {
+                break;
+            }
+            if (learningTaskRepository.insertSuggestionIfAbsent(task)) {
+                inserted++;
+            }
         }
         agentRunRepository.record(ResearchRunContext.currentRunId(), event.getId(), article == null ? null : article.getId(),
                 "learning-generate", status,
                 "eventId=" + event.getId() + ", theme=" + event.getThemeCode(),
-                "tasks=" + tasks.size(), null, System.currentTimeMillis() - start);
+                "candidates=" + Math.min(tasks.size(), MAX_SUGGESTIONS_PER_UPDATE) +
+                        ", inserted=" + inserted,
+                null, System.currentTimeMillis() - start);
     }
 
     private List<LearningTask> generateWithAgent(EventCluster event,
@@ -127,7 +141,7 @@ public class LearningTaskService {
                     limit(text(node, "concepts", ""), 120),
                     validDifficulty(text(node, "difficulty", ResearchEnums.LEARNING_DIFFICULTY_FOUNDATION)),
                     limit(text(node, "whyNeeded", ""), 180)));
-            if (tasks.size() >= 3) {
+            if (tasks.size() >= MAX_SUGGESTIONS_PER_UPDATE) {
                 break;
             }
         }
@@ -258,9 +272,31 @@ public class LearningTaskService {
         task.setQuestion(question);
         task.setConcepts(concepts);
         task.setDifficulty(difficulty);
-        task.setStatus(ResearchEnums.LEARNING_STATUS_TODO);
+        task.setStatus(KnowledgeEnums.LearningStatus.SUGGESTED.name());
+        task.setOrigin("AGENT");
+        task.setPriority(50);
+        task.setTaskKey(taskKey(question));
         task.setWhyNeeded(whyNeeded);
         return task;
+    }
+
+    private String taskKey(String question) {
+        String canonical = WHITESPACE.matcher(question == null ? "" : question.trim())
+                .replaceAll(" ")
+                .toLowerCase(Locale.ROOT);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                int unsigned = value & 0xff;
+                hex.append(Character.forDigit(unsigned >>> 4, 16));
+                hex.append(Character.forDigit(unsigned & 0x0f, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
     }
 
     private String normalizeStatus(String status) {

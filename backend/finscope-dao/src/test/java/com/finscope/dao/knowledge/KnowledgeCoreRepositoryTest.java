@@ -105,6 +105,21 @@ class KnowledgeCoreRepositoryTest {
         assertEquals("literal under_score signal", underscore.get(0).getQuestion());
     }
 
+    @Test
+    void ignoresDuplicateSuggestionKeysWithinTheSameEvent() {
+        LearningTask first = suggestion(77L, "same-key", "First wording");
+        LearningTask duplicate = suggestion(77L, "same-key", "Duplicate wording");
+        LearningTask anotherEvent = suggestion(78L, "same-key", "Another event");
+
+        assertTrue(tasks.insertSuggestionIfAbsent(first));
+        assertFalse(tasks.insertSuggestionIfAbsent(duplicate));
+        assertTrue(tasks.insertSuggestionIfAbsent(anotherEvent));
+
+        assertEquals(1, tasks.findByEventId(77L).size());
+        assertEquals("First wording", tasks.findByEventId(77L).get(0).getQuestion());
+        assertEquals(1, tasks.findByEventId(78L).size());
+    }
+
     private Topic saveTopic(String name, String slug) {
         Topic topic = new Topic();
         topic.setName(name);
@@ -123,5 +138,18 @@ class KnowledgeCoreRepositoryTest {
         task.setTopicId(topicId);
         task.setPriority(priority);
         return tasks.save(task);
+    }
+
+    private LearningTask suggestion(long eventId, String taskKey, String question) {
+        LearningTask task = new LearningTask();
+        task.setEventId(eventId);
+        task.setThemeCode("AI");
+        task.setQuestion(question);
+        task.setDifficulty("FOUNDATION");
+        task.setStatus("SUGGESTED");
+        task.setOrigin("AGENT");
+        task.setTaskKey(taskKey);
+        task.setPriority(50);
+        return task;
     }
 }

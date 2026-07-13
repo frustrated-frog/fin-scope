@@ -1,6 +1,7 @@
 package com.finscope.dao.research;
 
 import com.finscope.common.util.TimeUtil;
+import com.finscope.domain.knowledge.KnowledgeEnums;
 import com.finscope.domain.research.LearningTask;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -18,6 +19,11 @@ import java.util.Optional;
 
 @Repository
 public class LearningTaskRepository {
+    private static final String INSERT_COLUMNS =
+            "(event_id,topic_id,theme_code,question,concepts,difficulty,status," +
+                    "why_needed,origin,task_key,priority,accepted_at,dismissed_reason,completion_mode," +
+                    "revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+
     @Resource
     private JdbcTemplate jdbcTemplate;
     private final RowMapper<LearningTask> mapper = (rs, rowNum) -> {
@@ -44,48 +50,22 @@ public class LearningTaskRepository {
     };
 
     public LearningTask save(LearningTask task) {
-        LocalDateTime now = LocalDateTime.now();
-        task.setCreatedAt(now);
-        task.setUpdatedAt(now);
-        if (task.getOrigin() == null || task.getOrigin().isEmpty()) {
-            task.setOrigin("AGENT");
-        }
+        prepareForInsert(task);
         KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO learning_task(event_id,topic_id,theme_code,question,concepts,difficulty,status," +
-                            "why_needed,origin,task_key,priority,accepted_at,dismissed_reason,completion_mode," +
-                            "revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    Statement.RETURN_GENERATED_KEYS);
-            if (task.getEventId() == null) {
-                ps.setObject(1, null);
-            } else {
-                ps.setLong(1, task.getEventId());
-            }
-            if (task.getTopicId() == null) {
-                ps.setObject(2, null);
-            } else {
-                ps.setLong(2, task.getTopicId());
-            }
-            ps.setString(3, task.getThemeCode());
-            ps.setString(4, task.getQuestion());
-            ps.setString(5, task.getConcepts());
-            ps.setString(6, task.getDifficulty());
-            ps.setString(7, task.getStatus());
-            ps.setString(8, task.getWhyNeeded());
-            ps.setString(9, task.getOrigin());
-            ps.setString(10, task.getTaskKey());
-            ps.setInt(11, task.getPriority());
-            ps.setString(12, TimeUtil.text(task.getAcceptedAt()));
-            ps.setString(13, task.getDismissedReason());
-            ps.setString(14, task.getCompletionMode());
-            ps.setLong(15, task.getRevision());
-            ps.setString(16, TimeUtil.text(task.getCreatedAt()));
-            ps.setString(17, TimeUtil.text(task.getUpdatedAt()));
-            return ps;
-        }, keyHolder);
+        jdbcTemplate.update(connection -> insertStatement(connection, task, false), keyHolder);
         task.setId(keyHolder.getKey().longValue());
         return task;
+    }
+
+    public boolean insertSuggestionIfAbsent(LearningTask task) {
+        if (task == null || task.getEventId() == null || isBlank(task.getTaskKey())) {
+            throw new IllegalArgumentException("Agent suggestion requires eventId and taskKey");
+        }
+        task.setStatus(KnowledgeEnums.LearningStatus.SUGGESTED.name());
+        task.setOrigin("AGENT");
+        task.setPriority(50);
+        prepareForInsert(task);
+        return jdbcTemplate.update(connection -> insertStatement(connection, task, true)) == 1;
     }
 
     public List<LearningTask> findAll() {
@@ -168,5 +148,54 @@ public class LearningTaskRepository {
         return value.replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_");
+    }
+
+    private void prepareForInsert(LearningTask task) {
+        LocalDateTime now = LocalDateTime.now();
+        task.setCreatedAt(now);
+        task.setUpdatedAt(now);
+        if (isBlank(task.getOrigin())) {
+            task.setOrigin("AGENT");
+        }
+    }
+
+    private PreparedStatement insertStatement(java.sql.Connection connection,
+                                              LearningTask task,
+                                              boolean ignoreConflict) throws java.sql.SQLException {
+        String sql = (ignoreConflict ? "INSERT OR IGNORE INTO learning_task" :
+                "INSERT INTO learning_task") + INSERT_COLUMNS;
+        PreparedStatement statement = ignoreConflict
+                ? connection.prepareStatement(sql)
+                : connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+        if (task.getEventId() == null) {
+            statement.setObject(1, null);
+        } else {
+            statement.setLong(1, task.getEventId());
+        }
+        if (task.getTopicId() == null) {
+            statement.setObject(2, null);
+        } else {
+            statement.setLong(2, task.getTopicId());
+        }
+        statement.setString(3, task.getThemeCode());
+        statement.setString(4, task.getQuestion());
+        statement.setString(5, task.getConcepts());
+        statement.setString(6, task.getDifficulty());
+        statement.setString(7, task.getStatus());
+        statement.setString(8, task.getWhyNeeded());
+        statement.setString(9, task.getOrigin());
+        statement.setString(10, task.getTaskKey());
+        statement.setInt(11, task.getPriority());
+        statement.setString(12, TimeUtil.text(task.getAcceptedAt()));
+        statement.setString(13, task.getDismissedReason());
+        statement.setString(14, task.getCompletionMode());
+        statement.setLong(15, task.getRevision());
+        statement.setString(16, TimeUtil.text(task.getCreatedAt()));
+        statement.setString(17, TimeUtil.text(task.getUpdatedAt()));
+        return statement;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }
