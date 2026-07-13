@@ -175,7 +175,7 @@ public class KnowledgeSchemaMigrator implements InitializingBean {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "topic_id INTEGER NOT NULL," +
                 "entry_id INTEGER," +
-                "status TEXT NOT NULL CHECK(status IN ('PENDING','PROCESSING','COMPLETED','FAILED'))," +
+                "status TEXT NOT NULL CHECK(status IN ('PENDING','RUNNING','COMPLETED','FAILED'))," +
                 "attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0)," +
                 "last_error TEXT," +
                 "created_at TEXT NOT NULL," +
