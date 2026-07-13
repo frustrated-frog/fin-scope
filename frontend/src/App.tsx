@@ -11,6 +11,7 @@ import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { LearningView } from './features/learning/LearningView';
+import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
 import { TopicReaderView } from './features/topics/TopicReaderView';
@@ -50,7 +51,9 @@ function isResearchRunActive(status?: string) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>(() => (
+    new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
+  ));
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
@@ -221,6 +224,8 @@ export default function App() {
         return 'Event Archive';
       case 'evidence':
         return 'Evidence Ledger';
+      case 'knowledge':
+        return '知识工作台';
       case 'topics':
         return 'Topics';
       case 'topicReader':
@@ -539,6 +544,9 @@ export default function App() {
       {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenEvent={(eventId) => {
         openEvent(eventId);
       }} />}
+      {view === 'knowledge' && (
+        <KnowledgeView addToast={addToast} setMessage={setMessage} />
+      )}
       {view === 'topics' && (
         <TopicsView
           topics={topics}

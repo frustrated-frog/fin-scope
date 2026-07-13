@@ -3,22 +3,44 @@ import { ReactNode } from 'react';
 import { ToastHost } from '../shared/components/ToastHost';
 import { ToastItem, View } from '../shared/types';
 
-const navItems: Array<{ id: View; label: string; hint: string; code: string }> = [
-  { id: 'dashboard', label: 'Dashboard', hint: '总览', code: '01' },
-  { id: 'sources', label: 'Sources', hint: '信源', code: '02' },
-  { id: 'intake', label: 'Intake', hint: '候选', code: '03' },
-  { id: 'article', label: 'Article', hint: '文章', code: '04' },
-  { id: 'briefs', label: 'Briefs', hint: '日报', code: '05' },
-  { id: 'research', label: 'Research', hint: '运行', code: '06' },
-  { id: 'events', label: 'Events', hint: '事件', code: '07' },
-  { id: 'evidence', label: 'Evidence', hint: '证据', code: '08' },
-  { id: 'topics', label: 'Topics', hint: '主题', code: '09' },
-  { id: 'learning', label: 'Learning', hint: '学习', code: '10' },
-  { id: 'contentStudio', label: 'Studio', hint: '选题', code: '11' },
-  { id: 'agents', label: 'Agent Runs', hint: 'Trace', code: '12' },
-  { id: 'settings', label: 'Settings', hint: '设置', code: '13' },
-  { id: 'watchlist', label: 'Watchlist', hint: '自选', code: '14' },
-  { id: 'strategy', label: 'Strategy', hint: '策略', code: '15' }
+const navGroups: Array<{
+  label: string;
+  items: Array<{ id: View; label: string; hint: string; code: string }>;
+}> = [
+  {
+    label: '研究流',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', hint: '今日总览', code: 'OV' },
+      { id: 'sources', label: 'Sources', hint: '信源配置', code: 'SO' },
+      { id: 'intake', label: 'Intake', hint: '候选筛选', code: 'IN' },
+      { id: 'article', label: 'Article', hint: '文章研究', code: 'AR' },
+      { id: 'briefs', label: 'Briefs', hint: '每日简报', code: 'BR' },
+      { id: 'research', label: 'Research', hint: '研究运行', code: 'RE' }
+    ]
+  },
+  {
+    label: '知识与判断',
+    items: [
+      { id: 'knowledge', label: 'Knowledge', hint: '知识工作台', code: 'KN' },
+      { id: 'events', label: 'Events', hint: '事件档案', code: 'EV' },
+      { id: 'evidence', label: 'Evidence', hint: '证据账本', code: 'ED' },
+      { id: 'contentStudio', label: 'Studio', hint: '内容输出', code: 'ST' }
+    ]
+  },
+  {
+    label: '决策',
+    items: [
+      { id: 'watchlist', label: 'Watchlist', hint: '自选观察', code: 'WA' },
+      { id: 'strategy', label: 'Strategy', hint: '策略工作台', code: 'SG' }
+    ]
+  },
+  {
+    label: '系统',
+    items: [
+      { id: 'agents', label: 'Agent Runs', hint: '运行追踪', code: 'AG' },
+      { id: 'settings', label: 'Settings', hint: '本地设置', code: 'SE' }
+    ]
+  }
 ];
 
 export function AppShell({
@@ -71,19 +93,24 @@ export function AppShell({
           </div>
         </div>
         <nav aria-label="Workspace">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={view === item.id ? 'nav-item active' : 'nav-item'}
-              aria-label={item.label}
-              onClick={() => onChangeView(item.id)}
-            >
-              <span className="nav-code">{item.code}</span>
-              <span className="nav-copy">
-                <span>{item.label}</span>
-                <small>{item.hint}</small>
-              </span>
-            </button>
+          {navGroups.map((group) => (
+            <section className="nav-group" key={group.label} aria-label={group.label}>
+              <p className="nav-group-label">{group.label}</p>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  className={view === item.id ? 'nav-item active' : 'nav-item'}
+                  aria-label={item.label}
+                  onClick={() => onChangeView(item.id)}
+                >
+                  <span className="nav-code">{item.code}</span>
+                  <span className="nav-copy">
+                    <span>{item.label}</span>
+                    <small>{item.hint}</small>
+                  </span>
+                </button>
+              ))}
+            </section>
           ))}
         </nav>
       </aside>

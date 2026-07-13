@@ -9,6 +9,7 @@ export type View =
   | 'events'
   | 'eventDetail'
   | 'evidence'
+  | 'knowledge'
   | 'topics'
   | 'topicReader'
   | 'learning'
