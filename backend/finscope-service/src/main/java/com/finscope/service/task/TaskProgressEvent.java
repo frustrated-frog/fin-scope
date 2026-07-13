@@ -1,10 +1,14 @@
 package com.finscope.service.task;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** 与传输层无关的异步任务进度事件。数据库 TaskView 始终是最终事实来源。 */
+@Data
 public final class TaskProgressEvent {
+
     private static final AtomicLong SEQUENCE = new AtomicLong();
 
     private final String eventId;
@@ -29,18 +33,11 @@ public final class TaskProgressEvent {
         this.occurredAt = LocalDateTime.now();
     }
 
-    public static TaskProgressEvent snapshot(TaskView task) { return new TaskProgressEvent("SNAPSHOT", task); }
+    public static TaskProgressEvent snapshot(TaskView task) {
+        return new TaskProgressEvent("SNAPSHOT", task);
+    }
     public static TaskProgressEvent phase(TaskView task) { return new TaskProgressEvent("PHASE", task); }
     public static TaskProgressEvent done(TaskView task) { return new TaskProgressEvent("DONE", task); }
     public static TaskProgressEvent error(TaskView task) { return new TaskProgressEvent("ERROR", task); }
 
-    public String getEventId() { return eventId; }
-    public String getTaskId() { return taskId; }
-    public String getType() { return type; }
-    public String getStatus() { return status; }
-    public String getPhase() { return phase; }
-    public String getMessage() { return message; }
-    public String getErrorMessage() { return errorMessage; }
-    public Long getArticleId() { return articleId; }
-    public LocalDateTime getOccurredAt() { return occurredAt; }
 }

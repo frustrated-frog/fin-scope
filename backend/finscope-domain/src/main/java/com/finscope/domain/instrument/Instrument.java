@@ -1,10 +1,13 @@
 package com.finscope.domain.instrument;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
  * 标的实体：股票 / 基金 / 板块，作为标的视角的一等公民。
  */
+@Data
 public class Instrument {
     private Long id;
     /** 标的代码：600519 / 000001 / BK0477 */
@@ -22,84 +25,4 @@ public class Instrument {
     private String chainTags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public void setCode(String code) {
-        this.code = code;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getMarket() {
-        return market;
-    }
-
-    public void setMarket(String market) {
-        this.market = market;
-    }
-
-    public String getAliases() {
-        return aliases;
-    }
-
-    public void setAliases(String aliases) {
-        this.aliases = aliases;
-    }
-
-    public String getSectorCode() {
-        return sectorCode;
-    }
-
-    public void setSectorCode(String sectorCode) {
-        this.sectorCode = sectorCode;
-    }
-
-    public String getChainTags() {
-        return chainTags;
-    }
-
-    public void setChainTags(String chainTags) {
-        this.chainTags = chainTags;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

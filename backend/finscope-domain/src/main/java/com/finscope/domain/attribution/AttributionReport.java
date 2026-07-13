@@ -1,5 +1,7 @@
 package com.finscope.domain.attribution;
 
+import lombok.Data;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -8,6 +10,7 @@ import java.util.ArrayList;
 /**
  * 归因报告：某标的某日"为什么涨跌"的结构化研究结果。
  */
+@Data
 public class AttributionReport {
     private Long id;
     private String instrumentCode;
