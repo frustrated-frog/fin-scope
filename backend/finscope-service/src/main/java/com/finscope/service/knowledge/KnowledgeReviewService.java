@@ -14,6 +14,7 @@ import com.finscope.domain.knowledge.KnowledgeProjectionJob;
 import com.finscope.domain.knowledge.KnowledgeReviewResult;
 import com.finscope.domain.knowledge.TopicReviewState;
 import com.finscope.domain.research.EvidenceItem;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,7 @@ public class KnowledgeReviewService {
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
+    @Autowired
     public KnowledgeReviewService(TopicRepository topics,
                                   TopicReviewStateRepository reviewStates,
                                   KnowledgeEntryRepository entries,

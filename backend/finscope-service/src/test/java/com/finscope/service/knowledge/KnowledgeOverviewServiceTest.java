@@ -5,6 +5,7 @@ import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.domain.topic.Topic;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -23,6 +25,21 @@ class KnowledgeOverviewServiceTest {
             Instant.parse("2026-07-13T06:00:00Z"), ZoneOffset.UTC);
     private final KnowledgeOverviewService service = new KnowledgeOverviewService(
             queries, mock(KnowledgeActionPlanner.class), clock);
+
+    @Test
+    void springContainerSelectsTheProductionConstructor() {
+        try (AnnotationConfigApplicationContext context =
+                     new AnnotationConfigApplicationContext()) {
+            context.registerBean(KnowledgeQueryRepository.class, () -> queries);
+            context.registerBean(KnowledgeActionPlanner.class,
+                    () -> mock(KnowledgeActionPlanner.class));
+            context.register(KnowledgeOverviewService.class);
+
+            context.refresh();
+
+            assertNotNull(context.getBean(KnowledgeOverviewService.class));
+        }
+    }
 
     @Test
     void delegatesBoundedTopicAndTaskPagesToReadModel() {

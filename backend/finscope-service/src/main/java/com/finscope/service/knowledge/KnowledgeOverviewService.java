@@ -5,6 +5,7 @@ import com.finscope.domain.knowledge.KnowledgeOverview;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.domain.topic.Topic;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -16,6 +17,7 @@ public class KnowledgeOverviewService {
     private final KnowledgeActionPlanner planner;
     private final Clock clock;
 
+    @Autowired
     public KnowledgeOverviewService(KnowledgeQueryRepository queries,
                                     KnowledgeActionPlanner planner) {
         this(queries, planner, Clock.systemDefaultZone());

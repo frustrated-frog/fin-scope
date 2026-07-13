@@ -15,6 +15,7 @@ import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.topic.Topic;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +25,7 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -42,6 +44,27 @@ class KnowledgeReviewServiceTest {
     private final KnowledgeReviewService service = new KnowledgeReviewService(
             topics, reviewStates, entries, evidence, topicEvents,
             projectionJobs, publisher, clock);
+
+    @Test
+    void springContainerSelectsTheProductionConstructor() {
+        try (AnnotationConfigApplicationContext context =
+                     new AnnotationConfigApplicationContext()) {
+            context.getBeanFactory().registerSingleton("topicRepository", topics);
+            context.getBeanFactory().registerSingleton(
+                    "topicReviewStateRepository", reviewStates);
+            context.getBeanFactory().registerSingleton(
+                    "knowledgeEntryRepository", entries);
+            context.getBeanFactory().registerSingleton("evidenceItemRepository", evidence);
+            context.getBeanFactory().registerSingleton("topicEventRepository", topicEvents);
+            context.getBeanFactory().registerSingleton(
+                    "knowledgeProjectionJobRepository", projectionJobs);
+            context.register(KnowledgeReviewService.class);
+
+            context.refresh();
+
+            assertNotNull(context.getBean(KnowledgeReviewService.class));
+        }
+    }
 
     @Test
     void recordsAReviewEntryAndSchedulesTheNextReviewAtomically() {
