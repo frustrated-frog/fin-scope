@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { KnowledgeEntryInput, KnowledgeEvidence, KnowledgeTask, KnowledgeTopic } from '../knowledgeTypes';
+import { KnowledgeEntry, KnowledgeEntryInput, KnowledgeEvidence, KnowledgeTask, KnowledgeTopic } from '../knowledgeTypes';
 import { LearningAnswerEditor } from './LearningAnswerEditor';
 import { LearningTaskCard } from './LearningTaskCard';
 import { SuggestionInbox } from './SuggestionInbox';
@@ -10,6 +10,7 @@ export function LearningWorkspace({
   topics,
   selectedTaskId,
   evidence,
+  draft,
   onSelectTask,
   onAccept,
   onStart,
@@ -22,11 +23,12 @@ export function LearningWorkspace({
   topics: KnowledgeTopic[];
   selectedTaskId?: number;
   evidence: KnowledgeEvidence[];
+  draft?: KnowledgeEntry;
   onSelectTask: (taskId: number) => void;
   onAccept: (taskId: number, topicId: number, revision: number) => Promise<void>;
   onStart: (taskId: number, revision: number) => Promise<void>;
-  onSaveDraft: (taskId: number, input: KnowledgeEntryInput) => Promise<void>;
-  onComplete: (taskId: number, input: KnowledgeEntryInput) => Promise<void>;
+  onSaveDraft: (taskId: number, input: KnowledgeEntryInput) => Promise<KnowledgeEntry | void>;
+  onComplete: (taskId: number, input: KnowledgeEntryInput) => Promise<KnowledgeEntry | void>;
   onDismiss: (taskId: number, reason: string, revision: number) => Promise<void>;
   onOpenEvent: (eventId: number) => void;
 }) {
@@ -68,7 +70,7 @@ export function LearningWorkspace({
             )}
             {activeTask.status === 'IN_PROGRESS' && (
               <>
-                <LearningAnswerEditor task={activeTask} evidence={evidence} onSaveDraft={onSaveDraft} onComplete={onComplete} />
+                <LearningAnswerEditor task={activeTask} draft={draft} evidence={evidence} onSaveDraft={onSaveDraft} onComplete={onComplete} />
                 <details className="learning-dismiss">
                   <summary>暂时放弃这个问题</summary>
                   <label>说明原因<textarea rows={2} value={dismissReason} onChange={(event) => setDismissReason(event.target.value)} /></label>

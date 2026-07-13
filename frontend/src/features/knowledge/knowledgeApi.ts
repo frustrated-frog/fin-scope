@@ -47,7 +47,11 @@ export const knowledgeApi = {
     `/api/knowledge/reviews/due?${queryString({ page, size })}`
   ),
   taskEvidence: (taskId: number) => api<KnowledgeEvidence[]>(`/api/knowledge/tasks/${taskId}/evidence`),
+  taskDraft: (taskId: number) => api<KnowledgeEntry | undefined>(`/api/knowledge/tasks/${taskId}/draft`),
   topicWorkspace: (topicId: number) => api<KnowledgeTopicWorkspace>(`/api/knowledge/topics/${topicId}`),
+  createTopic: (input: { name: string; description: string }) => api<KnowledgeTopic>('/api/knowledge/topics', {
+    method: 'POST', body: JSON.stringify(input)
+  }),
   reviewTopic: (topicId: number, input: KnowledgeReviewInput) =>
     api<KnowledgeReviewResult>(`/api/knowledge/topics/${topicId}/reviews`, {
       method: 'POST', body: JSON.stringify(input)

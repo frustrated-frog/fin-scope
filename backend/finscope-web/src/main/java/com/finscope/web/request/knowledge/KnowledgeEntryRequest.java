@@ -7,7 +7,8 @@ public class KnowledgeEntryRequest {
     private String markdown;
     private String confidence;
     private List<Long> evidenceIds;
-    private Long expectedRevision;
+    private Long expectedTaskRevision;
+    private Long expectedEntryRevision;
 
     public Long getTopicId() {
         return topicId;
@@ -41,11 +42,19 @@ public class KnowledgeEntryRequest {
         this.evidenceIds = evidenceIds;
     }
 
-    public Long getExpectedRevision() {
-        return expectedRevision;
+    public Long getExpectedTaskRevision() {
+        return expectedTaskRevision;
     }
 
-    public void setExpectedRevision(Long expectedRevision) {
-        this.expectedRevision = expectedRevision;
+    public void setExpectedTaskRevision(Long expectedTaskRevision) {
+        this.expectedTaskRevision = expectedTaskRevision;
+    }
+
+    public Long getExpectedEntryRevision() {
+        return expectedEntryRevision;
+    }
+
+    public void setExpectedEntryRevision(Long expectedEntryRevision) {
+        this.expectedEntryRevision = expectedEntryRevision;
     }
 }

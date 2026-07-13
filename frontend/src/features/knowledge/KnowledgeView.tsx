@@ -5,6 +5,7 @@ import { KnowledgeHome } from './KnowledgeHome';
 import { knowledgeApi } from './knowledgeApi';
 import {
   KnowledgeEntryInput,
+  KnowledgeEntry,
   KnowledgeEvidence,
   KnowledgeOverview,
   KnowledgeReviewInput,
@@ -51,8 +52,18 @@ export function KnowledgeView({
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<KnowledgeTask[]>([]);
   const [evidence, setEvidence] = useState<KnowledgeEvidence[]>([]);
+  const [draft, setDraft] = useState<KnowledgeEntry | undefined>();
   const [topicWorkspace, setTopicWorkspace] = useState<KnowledgeTopicWorkspace | null>(null);
   const [dueTopics, setDueTopics] = useState<KnowledgeTopic[]>([]);
+
+  const restoreLocation = useCallback(() => {
+    const next = locationState();
+    setSection(next.section);
+    setTopicId(next.topicId);
+    setSelectedTaskId(next.taskId);
+    setTaskStatus(next.taskStatus);
+    setTopicWorkspace(null);
+  }, []);
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) || tasks[0],
@@ -74,6 +85,11 @@ export function KnowledgeView({
       ? current
       : nextTasks[0]?.id);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('popstate', restoreLocation);
+    return () => window.removeEventListener('popstate', restoreLocation);
+  }, [restoreLocation]);
 
   useEffect(() => {
     setLoading(true);
@@ -107,19 +123,31 @@ export function KnowledgeView({
   useEffect(() => {
     if (section !== 'learning' || !selectedTask?.eventId) {
       setEvidence([]);
+      setDraft(undefined);
       return;
     }
-    knowledgeApi.taskEvidence(selectedTask.id)
-      .then(setEvidence)
-      .catch(() => setEvidence([]));
+    Promise.all([knowledgeApi.taskEvidence(selectedTask.id), knowledgeApi.taskDraft(selectedTask.id)])
+      .then(([nextEvidence, nextDraft]) => {
+        setEvidence(nextEvidence);
+        setDraft(nextDraft);
+      })
+      .catch(() => {
+        setEvidence([]);
+        setDraft(undefined);
+      });
   }, [section, selectedTask?.id, selectedTask?.eventId]);
 
   function navigate(next: KnowledgeSection) {
     const params = new URLSearchParams(window.location.search);
     params.set('section', next);
-    if (next !== 'topics') params.delete('topic');
-    if (next !== 'learning') params.delete('task');
+    params.delete('topic');
+    params.delete('task');
+    params.delete('status');
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+    setTopicId(undefined);
+    setSelectedTaskId(undefined);
+    setTaskStatus(undefined);
+    setTopicWorkspace(null);
     setSection(next);
   }
 
@@ -147,6 +175,12 @@ export function KnowledgeView({
     }
   }, []);
 
+  async function createTopic(input: { name: string; description: string }) {
+    const created = await knowledgeApi.createTopic(input);
+    addToast('主题档案已建立', 'success');
+    navigateTarget(`?section=topics&topic=${created.id}`);
+  }
+
   function selectTask(id: number) {
     const params = new URLSearchParams(window.location.search);
     params.set('section', 'learning');
@@ -170,14 +204,18 @@ export function KnowledgeView({
   }
 
   async function saveDraft(taskId: number, input: KnowledgeEntryInput) {
-    await knowledgeApi.saveDraft(taskId, input);
+    const saved = await knowledgeApi.saveDraft(taskId, input);
+    setDraft(saved);
     addToast('草稿已保存', 'success');
+    return saved;
   }
 
   async function completeTask(taskId: number, input: KnowledgeEntryInput) {
-    await knowledgeApi.completeTask(taskId, input);
+    const completed = await knowledgeApi.completeTask(taskId, input);
+    setDraft(undefined);
     await loadLearning(null);
     addToast('答案已沉淀到主题档案', 'success');
+    return completed;
   }
 
   async function dismissTask(taskId: number, reason: string, revision: number) {
@@ -210,12 +248,13 @@ export function KnowledgeView({
         : <section className="knowledge-loading" aria-label="正在加载知识首页"><span /></section>)}
       {section === 'topics' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
-        : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
+        : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
       {section === 'learning' && <LearningWorkspace
         tasks={tasks}
         topics={topics}
         selectedTaskId={selectedTaskId}
         evidence={evidence}
+        draft={draft}
         onSelectTask={selectTask}
         onAccept={acceptTask}
         onStart={startTask}

@@ -1,7 +1,7 @@
 import { KnowledgeTopic } from '../knowledgeTypes';
 
 const masteryLabels: Record<string, string> = {
-  EXPLORING: '探索中', BUILDING: '构建中', STABLE: '已稳定', MASTERED: '已掌握'
+  EXPLORING: '探索中', BUILDING: '构建中', REVIEWING: '复习中', MATURE: '已成熟'
 };
 
 export function TopicCard({ topic, onOpen }: { topic: KnowledgeTopic; onOpen: () => void }) {

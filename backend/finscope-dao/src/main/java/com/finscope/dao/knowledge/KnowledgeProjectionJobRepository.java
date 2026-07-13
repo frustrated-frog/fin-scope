@@ -12,6 +12,7 @@ import java.util.Optional;
 
 @Repository
 public class KnowledgeProjectionJobRepository {
+    private static final int LEASE_MINUTES = 10;
     private final JdbcTemplate jdbcTemplate;
 
     private final RowMapper<KnowledgeProjectionJob> mapper = (resultSet, rowNumber) -> {
@@ -60,19 +61,24 @@ public class KnowledgeProjectionJobRepository {
         if (limit < 1 || limit > 200) {
             throw new IllegalArgumentException("Invalid projection recovery batch size");
         }
+        String leaseExpiredBefore = TimeUtil.text(LocalDateTime.now().minusMinutes(LEASE_MINUTES));
         return jdbcTemplate.query(
                 "SELECT * FROM knowledge_projection_job WHERE status IN ('PENDING','FAILED') " +
+                        "OR (status='RUNNING' AND updated_at<?) " +
                         "ORDER BY updated_at ASC,id ASC LIMIT ?",
-                mapper, limit
+                mapper, leaseExpiredBefore, limit
         );
     }
 
     public boolean claim(Long id) {
+        String now = TimeUtil.text(LocalDateTime.now());
+        String leaseExpiredBefore = TimeUtil.text(LocalDateTime.now().minusMinutes(LEASE_MINUTES));
         return jdbcTemplate.update(
                 "UPDATE knowledge_projection_job SET status='RUNNING'," +
                         "attempt_count=attempt_count+1,updated_at=? " +
-                        "WHERE id=? AND status IN ('PENDING','FAILED')",
-                TimeUtil.text(LocalDateTime.now()), id
+                        "WHERE id=? AND (status IN ('PENDING','FAILED') " +
+                        "OR (status='RUNNING' AND updated_at<?))",
+                now, id, leaseExpiredBefore
         ) == 1;
     }
 

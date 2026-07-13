@@ -76,7 +76,8 @@ export type KnowledgeEntryInput = {
   markdown: string;
   confidence: KnowledgeEntry['confidence'];
   evidenceIds: number[];
-  expectedRevision: number;
+  expectedTaskRevision: number;
+  expectedEntryRevision?: number;
 };
 
 export type KnowledgeEvidence = {

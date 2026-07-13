@@ -53,3 +53,28 @@ test('rejects unknown sections and keeps navigation state in the URL', async () 
     expect(new URLSearchParams(window.location.search).get('section')).toBe('learning');
   });
 });
+
+test('restores the workbench when browser history changes', async () => {
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+  expect(await screen.findByRole('heading', { name: 'Agent 工程化' })).toBeInTheDocument();
+
+  window.history.replaceState({}, '', '/?section=home');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+
+  expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
+  expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
+});
+
+test('top-level navigation clears stale topic and task selection', async () => {
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+  expect(await screen.findByRole('heading', { name: 'Agent 工程化' })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '学习队列' }));
+
+  await waitFor(() => {
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('topic')).toBeNull();
+    expect(params.get('task')).toBeNull();
+    expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
+  });
+});

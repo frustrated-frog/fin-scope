@@ -2,8 +2,6 @@ package com.finscope.service.research;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.LearningTaskRepository;
@@ -23,7 +21,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -34,11 +31,6 @@ public class LearningTaskService {
     private static final int MAX_SUGGESTIONS_PER_UPDATE = 3;
     private static final Pattern WHITESPACE = Pattern.compile(
             "\\s+", Pattern.UNICODE_CHARACTER_CLASS);
-    private static final Set<String> VALID_STATUSES = new LinkedHashSet<String>(Arrays.asList(
-            ResearchEnums.LEARNING_STATUS_TODO,
-            ResearchEnums.LEARNING_STATUS_LEARNING,
-            ResearchEnums.LEARNING_STATUS_REVIEWING,
-            ResearchEnums.LEARNING_STATUS_DONE));
 
     @Resource
     private LearningTaskRepository learningTaskRepository;
@@ -112,16 +104,6 @@ public class LearningTaskService {
 
     public List<LearningTask> listByEventId(Long eventId) {
         return learningTaskRepository.findByEventId(eventId);
-    }
-
-    public LearningTask updateStatus(Long id, String status) {
-        LearningTask existing = learningTaskRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Learning task not found: " + id));
-        String normalizedStatus = normalizeStatus(status);
-        if (!VALID_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported learning task status: " + status);
-        }
-        return learningTaskRepository.updateStatus(existing.getId(), normalizedStatus);
     }
 
     private List<LearningTask> parseTasks(String raw, EventCluster event) throws Exception {

@@ -117,12 +117,6 @@ public class LearningTaskRepository {
         return count == null ? 0 : count;
     }
 
-    public LearningTask updateStatus(Long id, String status) {
-        jdbcTemplate.update("UPDATE learning_task SET status=?, revision=revision+1, updated_at=? WHERE id=?",
-                status, TimeUtil.text(LocalDateTime.now()), id);
-        return findById(id).orElseThrow(() -> new IllegalArgumentException("Learning task not found: " + id));
-    }
-
     public boolean transition(Long id, String expectedStatus, String targetStatus, Long topicId,
                               LocalDateTime acceptedAt, String dismissedReason,
                               String completionMode, long expectedRevision) {

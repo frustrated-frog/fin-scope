@@ -84,7 +84,7 @@ class KnowledgeLearningServiceTest {
         when(tasks.findById(1L)).thenReturn(Optional.of(task("IN_PROGRESS", 4L)));
 
         BusinessException error = assertThrows(BusinessException.class,
-                () -> service.completeTask(1L, 2L, "  ", "MEDIUM", Collections.emptyList(), 4L));
+                () -> service.completeTask(1L, 2L, "  ", "MEDIUM", Collections.emptyList(), 4L, null));
         assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
         verify(entries, never()).saveDraft(any());
     }
@@ -95,7 +95,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
-                        1L, 2L, "answer", "CERTAIN", Collections.emptyList(), 4L));
+                        1L, 2L, "answer", "CERTAIN", Collections.emptyList(), 4L, null));
         assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
     }
 
@@ -110,7 +110,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
-                        1L, 2L, "answer", "MEDIUM", Arrays.asList(8L), 4L));
+                        1L, 2L, "answer", "MEDIUM", Arrays.asList(8L), 4L, null));
         assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
         verify(entries, never()).saveDraft(any());
     }
@@ -141,7 +141,7 @@ class KnowledgeLearningServiceTest {
         when(projectionJobs.enqueue(2L, 100L)).thenReturn(job);
 
         KnowledgeEntry result = service.completeTask(
-                1L, 2L, "answer", "HIGH", Arrays.asList(8L), 4L);
+                1L, 2L, "answer", "HIGH", Arrays.asList(8L), 4L, null);
 
         assertEquals("FINAL", result.getEntryStatus());
         verify(entries).linkEvidence(100L, Arrays.asList(8L));
@@ -163,10 +163,29 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
-                        1L, 2L, "answer", "HIGH", Collections.emptyList(), 4L));
+                        1L, 2L, "answer", "HIGH", Collections.emptyList(), 4L, null));
         assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
         verify(projectionJobs, never()).enqueue(anyLong(), anyLong());
         verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void saveDraftUsesIndependentTaskAndEntryRevisions() {
+        LearningTask task = task("IN_PROGRESS", 4L);
+        when(tasks.findById(1L)).thenReturn(Optional.of(task));
+        KnowledgeEntry draft = entry("DRAFT", 2L);
+        draft.setId(100L);
+        KnowledgeEntry updated = entry("DRAFT", 3L);
+        updated.setId(100L);
+        when(entries.findDraftByTaskId(1L)).thenReturn(Optional.of(draft));
+        when(entries.updateDraft(100L, "revised answer", "HIGH", 2L)).thenReturn(true);
+        when(entries.findById(100L)).thenReturn(Optional.of(updated));
+
+        KnowledgeEntry result = service.saveDraft(
+                1L, 2L, "revised answer", "HIGH", Collections.emptyList(), 4L, 2L);
+
+        assertEquals(3L, result.getRevision());
+        verify(entries).updateDraft(100L, "revised answer", "HIGH", 2L);
     }
 
     @Test

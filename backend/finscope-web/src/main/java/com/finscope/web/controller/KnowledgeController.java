@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 
@@ -102,9 +103,16 @@ public class KnowledgeController {
         return topicService.load(topicId);
     }
 
+    @PostMapping("/topics")
+    public Topic createTopic(@RequestBody Topic request) {
+        require(request, "request");
+        return topicService.create(request.getName(), request.getDescription());
+    }
+
     @PostMapping("/topics/{topicId}/reviews")
     public KnowledgeReviewResult review(@PathVariable long topicId,
                                         @RequestBody KnowledgeReviewRequest request) {
+        require(request, "request");
         require(request.getConclusion(), "conclusion");
         require(request.getConfidence(), "confidence");
         require(request.getIntervalDays(), "intervalDays");
@@ -116,6 +124,7 @@ public class KnowledgeController {
     @PostMapping("/tasks/{taskId}/accept")
     public LearningTask accept(@PathVariable long taskId,
                                @RequestBody AcceptKnowledgeTaskRequest request) {
+        require(request, "request");
         require(request.getTopicId(), "topicId");
         require(request.getExpectedRevision(), "expectedRevision");
         return learningService.acceptSuggestion(
@@ -125,6 +134,7 @@ public class KnowledgeController {
     @PostMapping("/tasks/{taskId}/start")
     public LearningTask start(@PathVariable long taskId,
                               @RequestBody KnowledgeRevisionRequest request) {
+        require(request, "request");
         require(request.getExpectedRevision(), "expectedRevision");
         return learningService.startTask(taskId, request.getExpectedRevision());
     }
@@ -135,7 +145,15 @@ public class KnowledgeController {
         validateEntryRequest(request);
         return learningService.saveDraft(taskId, request.getTopicId(),
                 request.getMarkdown(), request.getConfidence(),
-                request.getEvidenceIds(), request.getExpectedRevision());
+                request.getEvidenceIds(), request.getExpectedTaskRevision(),
+                request.getExpectedEntryRevision());
+    }
+
+    @GetMapping("/tasks/{taskId}/draft")
+    public ResponseEntity<KnowledgeEntry> draft(@PathVariable long taskId) {
+        return learningService.findDraft(taskId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PostMapping("/tasks/{taskId}/complete")
@@ -144,22 +162,25 @@ public class KnowledgeController {
         validateEntryRequest(request);
         return learningService.completeTask(taskId, request.getTopicId(),
                 request.getMarkdown(), request.getConfidence(),
-                request.getEvidenceIds(), request.getExpectedRevision());
+                request.getEvidenceIds(), request.getExpectedTaskRevision(),
+                request.getExpectedEntryRevision());
     }
 
     @PostMapping("/tasks/{taskId}/dismiss")
     public LearningTask dismiss(@PathVariable long taskId,
                                 @RequestBody DismissKnowledgeTaskRequest request) {
+        require(request, "request");
         require(request.getExpectedRevision(), "expectedRevision");
         return learningService.dismissTask(
                 taskId, request.getReason(), request.getExpectedRevision());
     }
 
     private void validateEntryRequest(KnowledgeEntryRequest request) {
+        require(request, "request");
         require(request.getTopicId(), "topicId");
         require(request.getMarkdown(), "markdown");
         require(request.getConfidence(), "confidence");
-        require(request.getExpectedRevision(), "expectedRevision");
+        require(request.getExpectedTaskRevision(), "expectedTaskRevision");
     }
 
     private void require(Object value, String field) {

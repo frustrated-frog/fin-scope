@@ -102,7 +102,6 @@ export default function App() {
       api<EventCluster[]>('/api/events'),
       api<EvidenceItem[]>('/api/evidence'),
       api<Topic[]>('/api/topics'),
-      api<LearningTask[]>('/api/learning-tasks'),
       api<ContentIdea[]>('/api/content-ideas'),
       api<ResearchRun[]>('/api/research/runs'),
       api<ResearchThesis[]>('/api/research/theses'),
@@ -121,13 +120,12 @@ export default function App() {
     const eventData = value<EventCluster[]>(4); if (eventData) setEvents(eventData);
     const evidenceData = value<EvidenceItem[]>(5); if (evidenceData) setEvidenceItems(evidenceData);
     const topicData = value<Topic[]>(6); if (topicData) setTopics(topicData);
-    const learningTaskData = value<LearningTask[]>(7); if (learningTaskData) setLearningTasks(learningTaskData);
-    const contentIdeaData = value<ContentIdea[]>(8); if (contentIdeaData) setContentIdeas(contentIdeaData);
-    const researchRunData = value<ResearchRun[]>(9); if (researchRunData) setResearchRuns(researchRunData);
-    const researchThesisData = value<ResearchThesis[]>(10); if (researchThesisData) setResearchTheses(researchThesisData);
-    const agentData = value<AgentRun[]>(11); if (agentData) setAgentRuns(agentData);
-    const fetchBatchData = value<FetchBatch[]>(12); if (fetchBatchData) setFetchBatches(fetchBatchData);
-    const intakeCandidateData = value<IntakeCandidate[]>(13); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
+    const contentIdeaData = value<ContentIdea[]>(7); if (contentIdeaData) setContentIdeas(contentIdeaData);
+    const researchRunData = value<ResearchRun[]>(8); if (researchRunData) setResearchRuns(researchRunData);
+    const researchThesisData = value<ResearchThesis[]>(9); if (researchThesisData) setResearchTheses(researchThesisData);
+    const agentData = value<AgentRun[]>(10); if (agentData) setAgentRuns(agentData);
+    const fetchBatchData = value<FetchBatch[]>(11); if (fetchBatchData) setFetchBatches(fetchBatchData);
+    const intakeCandidateData = value<IntakeCandidate[]>(12); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
     const failureCount = results.filter((result) => result.status === 'rejected').length;
     if (failureCount) {
       setMessage(`部分工作区数据刷新失败（${failureCount} 项），已保留已加载内容`);
@@ -483,7 +481,7 @@ export default function App() {
           onChanged={refresh}
           setMessage={setMessage}
           onOpenBrief={openBrief}
-          onAfterCompound={() => setView('topics')}
+          onAfterCompound={() => setView('knowledge')}
         />
       )}
       {view === 'briefReader' && (
@@ -514,7 +512,6 @@ export default function App() {
           onOpenEvent={openEvent}
           learningTasks={learningTasks}
           contentIdeas={contentIdeas}
-          onLearningTaskStatusChange={updateLearningTaskStatus}
           onContentIdeaStatusChange={updateContentIdeaStatus}
           onEventStatusChange={updateEventStatus}
           onMergeEvent={mergeEvent}
@@ -532,7 +529,6 @@ export default function App() {
           onBack={() => setView('events')}
           learningTasks={learningTasks}
           contentIdeas={contentIdeas}
-          onLearningTaskStatusChange={updateLearningTaskStatus}
           onContentIdeaStatusChange={updateContentIdeaStatus}
           onEventStatusChange={updateEventStatus}
           onMergeEvent={mergeEvent}

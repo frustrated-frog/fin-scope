@@ -12,6 +12,7 @@ import com.finscope.dao.topic.TopicRepository;
 import com.finscope.domain.knowledge.KnowledgeTopicWorkspace;
 import com.finscope.domain.topic.Topic;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,5 +63,22 @@ public class KnowledgeTopicService {
         workspace.setEvents(events.findByIds(eventIds, EVENT_LIMIT));
         workspace.setEvidence(evidence.findByEventIds(eventIds, EVIDENCE_LIMIT));
         return workspace;
+    }
+
+    @Transactional
+    public Topic create(String name, String description) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "主题名称不能为空");
+        }
+        Topic topic = new Topic();
+        topic.setName(name.trim());
+        topic.setDescription(description == null ? null : description.trim());
+        String baseSlug = name.trim().toLowerCase().replaceAll("\\s+", "-");
+        topic.setSlug(topics.findBySlug(baseSlug).isPresent()
+                ? baseSlug + "-" + Long.toString(System.currentTimeMillis(), 36)
+                : baseSlug);
+        topic.setLifecycleStatus("ACTIVE");
+        topic.setMasteryStatus("EXPLORING");
+        return topics.save(topic);
     }
 }

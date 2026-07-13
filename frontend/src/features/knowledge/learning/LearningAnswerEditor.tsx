@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 
-import { KnowledgeEntryInput, KnowledgeEvidence, KnowledgeTask } from '../knowledgeTypes';
+import { KnowledgeEntry, KnowledgeEntryInput, KnowledgeEvidence, KnowledgeTask } from '../knowledgeTypes';
 
 export function LearningAnswerEditor({
   task,
+  draft,
   evidence,
   onSaveDraft,
   onComplete
 }: {
   task: KnowledgeTask;
+  draft?: KnowledgeEntry;
   evidence: KnowledgeEvidence[];
-  onSaveDraft: (taskId: number, input: KnowledgeEntryInput) => Promise<void>;
-  onComplete: (taskId: number, input: KnowledgeEntryInput) => Promise<void>;
+  onSaveDraft: (taskId: number, input: KnowledgeEntryInput) => Promise<KnowledgeEntry | void>;
+  onComplete: (taskId: number, input: KnowledgeEntryInput) => Promise<KnowledgeEntry | void>;
 }) {
   const [markdown, setMarkdown] = useState('');
   const [confidence, setConfidence] = useState<KnowledgeEntryInput['confidence']>('MEDIUM');
@@ -20,11 +22,11 @@ export function LearningAnswerEditor({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setMarkdown('');
-    setConfidence('MEDIUM');
+    setMarkdown(draft?.contentMarkdown || '');
+    setConfidence(draft?.confidence || 'MEDIUM');
     setEvidenceIds([]);
     setError('');
-  }, [task.id]);
+  }, [task.id, draft?.id, draft?.revision]);
 
   function input(): KnowledgeEntryInput {
     return {
@@ -32,7 +34,8 @@ export function LearningAnswerEditor({
       markdown: markdown.trim(),
       confidence,
       evidenceIds,
-      expectedRevision: task.revision
+      expectedTaskRevision: task.revision,
+      expectedEntryRevision: draft?.revision
     };
   }
 

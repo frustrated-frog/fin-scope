@@ -118,6 +118,7 @@ public class KnowledgeEntryRepository {
     }
 
     public void linkEvidence(Long entryId, List<Long> evidenceIds) {
+        jdbcTemplate.update("DELETE FROM knowledge_entry_evidence WHERE knowledge_entry_id=?", entryId);
         if (evidenceIds == null) {
             return;
         }

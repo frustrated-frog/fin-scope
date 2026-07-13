@@ -100,8 +100,9 @@ public class KnowledgeLearningService {
     @Transactional
     public KnowledgeEntry saveDraft(long taskId, long topicId, String markdown,
                                     String confidence, List<Long> evidenceIds,
-                                    long expectedRevision) {
+                                    long expectedTaskRevision, Long expectedEntryRevision) {
         LearningTask task = requireEditableTask(taskId, topicId);
+        requireRevision(task, expectedTaskRevision);
         requireContent(markdown);
         String parsedConfidence = parseConfidence(confidence);
         List<Long> selectedEvidence = safeEvidenceIds(evidenceIds);
@@ -111,13 +112,16 @@ public class KnowledgeLearningService {
         KnowledgeEntry draft;
         if (existing.isPresent()) {
             draft = existing.get();
-            if (!entries.updateDraft(draft.getId(), markdown, parsedConfidence, expectedRevision)) {
+            requireEntryRevision(draft, expectedEntryRevision);
+            if (!entries.updateDraft(draft.getId(), markdown, parsedConfidence, expectedEntryRevision)) {
                 throw conflict();
             }
             draft = entries.findById(draft.getId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "知识草稿不存在"));
         } else {
-            requireRevision(task, expectedRevision);
+            if (expectedEntryRevision != null) {
+                throw conflict();
+            }
             draft = entries.saveDraft(newDraft(task, topicId, markdown, parsedConfidence));
         }
         entries.linkEvidence(draft.getId(), selectedEvidence);
@@ -127,16 +131,17 @@ public class KnowledgeLearningService {
     @Transactional
     public KnowledgeEntry completeTask(long taskId, long topicId, String markdown,
                                        String confidence, List<Long> evidenceIds,
-                                       long expectedRevision) {
+                                       long expectedTaskRevision, Long expectedEntryRevision) {
         LearningTask task = requireEditableTask(taskId, topicId);
-        requireRevision(task, expectedRevision);
+        requireRevision(task, expectedTaskRevision);
         requireContent(markdown);
         requireTransition(task.getStatus(), "DONE");
         String parsedConfidence = parseConfidence(confidence);
         List<Long> selectedEvidence = safeEvidenceIds(evidenceIds);
         validateEvidence(task, topicId, selectedEvidence);
 
-        KnowledgeEntry draft = prepareCompletionDraft(task, topicId, markdown, parsedConfidence);
+        KnowledgeEntry draft = prepareCompletionDraft(
+                task, topicId, markdown, parsedConfidence, expectedEntryRevision);
         entries.linkEvidence(draft.getId(), selectedEvidence);
         try {
             if (!entries.finalizeDraft(draft.getId(), draft.getRevision())) {
@@ -147,7 +152,7 @@ public class KnowledgeLearningService {
         }
 
         if (!tasks.transition(taskId, task.getStatus(), "DONE", topicId,
-                task.getAcceptedAt(), null, "RECORDED", expectedRevision)) {
+                task.getAcceptedAt(), null, "RECORDED", expectedTaskRevision)) {
             throw conflict();
         }
         if (task.getEventId() != null) {
@@ -177,13 +182,18 @@ public class KnowledgeLearningService {
     }
 
     private KnowledgeEntry prepareCompletionDraft(LearningTask task, long topicId,
-                                                   String markdown, String confidence) {
+                                                   String markdown, String confidence,
+                                                   Long expectedEntryRevision) {
         Optional<KnowledgeEntry> existing = entries.findDraftByTaskId(task.getId());
         if (!existing.isPresent()) {
+            if (expectedEntryRevision != null) {
+                throw conflict();
+            }
             return entries.saveDraft(newDraft(task, topicId, markdown, confidence));
         }
         KnowledgeEntry draft = existing.get();
-        if (!entries.updateDraft(draft.getId(), markdown, confidence, draft.getRevision())) {
+        requireEntryRevision(draft, expectedEntryRevision);
+        if (!entries.updateDraft(draft.getId(), markdown, confidence, expectedEntryRevision)) {
             throw conflict();
         }
         return entries.findById(draft.getId())
@@ -242,6 +252,18 @@ public class KnowledgeLearningService {
         if (task.getRevision() != expectedRevision) {
             throw conflict();
         }
+    }
+
+    private void requireEntryRevision(KnowledgeEntry entry, Long expectedRevision) {
+        if (expectedRevision == null || entry.getRevision() != expectedRevision.longValue()) {
+            throw conflict();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<KnowledgeEntry> findDraft(long taskId) {
+        requireTask(taskId);
+        return entries.findDraftByTaskId(taskId);
     }
 
     private void requireTransition(String from, String to) {

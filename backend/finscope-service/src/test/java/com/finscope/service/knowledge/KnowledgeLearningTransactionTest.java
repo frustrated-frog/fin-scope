@@ -79,7 +79,7 @@ class KnowledgeLearningTransactionTest {
     void completionRollsBackEveryWriteBeforeTaskTransitionThenCommitsNormally() {
         assertThrows(InjectedCompletionFailure.class, () -> failingService.completeTask(
                 TASK_ID, TOPIC_ID, "transactional answer", "HIGH",
-                Collections.singletonList(EVIDENCE_ID), 0L
+                Collections.singletonList(EVIDENCE_ID), 0L, null
         ));
 
         assertEquals(0, count("knowledge_entry"));
@@ -91,7 +91,7 @@ class KnowledgeLearningTransactionTest {
 
         KnowledgeEntry completed = normalService.completeTask(
                 TASK_ID, TOPIC_ID, "transactional answer", "HIGH",
-                Collections.singletonList(EVIDENCE_ID), 0L
+                Collections.singletonList(EVIDENCE_ID), 0L, null
         );
 
         assertEquals("FINAL", completed.getEntryStatus());

@@ -11,7 +11,6 @@ import {
 } from '../../shared/types';
 
 const eventStatuses = ['ACTIVE', 'COOLING', 'ARCHIVED'];
-const learningStatuses = ['TODO', 'LEARNING', 'REVIEWING', 'DONE'];
 const contentStatuses = ['IDEA', 'DRAFTING', 'READY', 'PUBLISHED', 'ARCHIVED'];
 
 export function EventsView({
@@ -22,7 +21,6 @@ export function EventsView({
   onBack,
   learningTasks,
   contentIdeas,
-  onLearningTaskStatusChange,
   onContentIdeaStatusChange,
   onEventStatusChange,
   onMergeEvent,
@@ -37,7 +35,6 @@ export function EventsView({
   onBack?: () => void;
   learningTasks: LearningTask[];
   contentIdeas: ContentIdea[];
-  onLearningTaskStatusChange: (taskId: number, status: string) => Promise<void>;
   onContentIdeaStatusChange: (ideaId: number, status: string) => Promise<void>;
   onEventStatusChange: (eventId: number, status: string) => Promise<void>;
   onMergeEvent: (sourceEventId: number, targetEventId: number) => Promise<void>;
@@ -62,7 +59,6 @@ export function EventsView({
   const [eventStatusDrafts, setEventStatusDrafts] = useState<Record<number, string>>({});
   const [mergeTargetId, setMergeTargetId] = useState('');
   const [articleMoveTargets, setArticleMoveTargets] = useState<Record<number, string>>({});
-  const [taskStatusDrafts, setTaskStatusDrafts] = useState<Record<number, string>>({});
   const [ideaStatusDrafts, setIdeaStatusDrafts] = useState<Record<number, string>>({});
   const [mutationPending, setMutationPending] = useState(false);
   const detailRequestGeneration = useRef(0);
@@ -214,10 +210,6 @@ export function EventsView({
     } else {
       await runGovernanceAction(() => onMoveEventArticle(selectedEvent.id, article.articleId, { targetEventId: Number(target) }));
     }
-  }
-
-  async function saveTaskStatus(task: LearningTask) {
-    await runGovernanceAction(() => onLearningTaskStatusChange(task.id, taskStatusDrafts[task.id] || task.status));
   }
 
   async function saveIdeaStatus(idea: ContentIdea) {
@@ -503,26 +495,7 @@ export function EventsView({
                     <span className="badge">{task.status}</span>
                     <strong>{task.question}</strong>
                     {task.whyNeeded && <p>{task.whyNeeded}</p>}
-                    <div className="task-status-row">
-                      <label className="inline-select">
-                        <span>任务状态</span>
-                        <select
-                          aria-label={`学习任务状态-${task.id}`}
-                          value={taskStatusDrafts[task.id] || task.status}
-                          onChange={(event) => setTaskStatusDrafts((current) => ({
-                            ...current,
-                            [task.id]: event.target.value
-                          }))}
-                        >
-                          {learningStatuses.map((status) => (
-                            <option key={status} value={status}>{status}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <button className="compact-button" type="button" disabled={mutationPending} onClick={() => saveTaskStatus(task)}>
-                        保存任务状态
-                      </button>
-                    </div>
+                    <p className="muted">请在知识工作台中接受、作答或完成此任务。</p>
                   </article>
                 )) : (
                   <p className="muted">暂无学习任务。事件仍可先用于观察证据和新变量。</p>

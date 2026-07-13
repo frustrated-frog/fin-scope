@@ -143,9 +143,9 @@ class KnowledgeControllerTest {
         when(learningService.acceptSuggestion(7L, 2L, 3L)).thenReturn(task);
         when(learningService.startTask(7L, 4L)).thenReturn(task);
         when(learningService.saveDraft(eq(7L), eq(2L), anyString(), eq("HIGH"),
-                anyList(), eq(5L))).thenReturn(entry);
+                anyList(), eq(5L), eq(null))).thenReturn(entry);
         when(learningService.completeTask(eq(7L), eq(2L), anyString(), eq("HIGH"),
-                anyList(), eq(5L))).thenReturn(entry);
+                anyList(), eq(5L), eq(null))).thenReturn(entry);
         when(learningService.dismissTask(7L, "later", 6L)).thenReturn(task);
 
         mockMvc.perform(post("/api/knowledge/tasks/7/accept")
@@ -196,6 +196,6 @@ class KnowledgeControllerTest {
 
     private String entryBody(long revision) {
         return "{\"topicId\":2,\"markdown\":\"answer\",\"confidence\":\"HIGH\"," +
-                "\"evidenceIds\":[11],\"expectedRevision\":" + revision + "}";
+                "\"evidenceIds\":[11],\"expectedTaskRevision\":" + revision + "}";
     }
 }

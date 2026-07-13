@@ -90,7 +90,7 @@ test('starts a task and writes an evidence-linked answer', async () => {
   expect(onSaveDraft).toHaveBeenCalledWith(7, expect.objectContaining({
     topicId: 2,
     evidenceIds: [21],
-    expectedRevision: 5
+    expectedTaskRevision: 5
   }));
   await userEvent.click(within(editor).getByRole('button', { name: '完成并沉淀' }));
   expect(onComplete).toHaveBeenCalled();

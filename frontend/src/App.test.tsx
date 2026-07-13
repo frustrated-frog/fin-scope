@@ -13,6 +13,14 @@ const responses: Record<string, unknown> = {
   '/api/strategy/stock-theses': [],
   '/api/strategy/reviews': [],
   '/api/dashboard': { sourceCount: 2, articleCount: 3, briefCount: 1, latestFetchRuns: [] },
+  '/api/knowledge/overview': {
+    actions: [],
+    activeTopics: [],
+    recentEntries: [],
+    suggestionCount: 0,
+    inProgressCount: 0,
+    dueReviewCount: 0
+  },
   '/api/sources': [
     {
       id: 1,
@@ -725,6 +733,16 @@ test('renders the FinScope workspace shell and dashboard metrics', async () => {
   expect(screen.getByText('简报')).toBeInTheDocument();
 });
 
+test('opens the unified knowledge workbench without globally loading learning tasks', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Knowledge' }));
+
+  expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledWith('/api/knowledge/overview', expect.any(Object));
+  expect(fetch).not.toHaveBeenCalledWith('/api/learning-tasks', expect.anything());
+});
+
 test('topbar status controls use matching pills and icon theme toggle', async () => {
   render(<App />);
 
@@ -1173,175 +1191,6 @@ test('research workbench runs a full research job and shows agent trace', async 
   expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
 });
 
-test('topics show learning metadata and vault path', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
-
-  expect(await screen.findByText('降息交易')).toBeInTheDocument();
-  expect(screen.getByText('关联文章 2')).toBeInTheDocument();
-  expect(screen.getByText('关联简报 1')).toBeInTheDocument();
-  expect(screen.getByText('美联储,降息,黄金')).toBeInTheDocument();
-  expect(screen.getByText('data/vault/topics/jiang-xi-jiao-yi.md')).toBeInTheDocument();
-});
-
-test('topics keep detail action on the left and learning status on the right', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
-
-  const topicCard = (await screen.findByText('降息交易')).closest('article');
-  expect(topicCard).toBeTruthy();
-
-  const actionRow = within(topicCard as HTMLElement).getByRole('group', { name: '主题操作' });
-  const detailButton = within(actionRow).getByRole('button', { name: '查看详情' });
-  const deleteButton = within(actionRow).getByRole('button', { name: '删除主题' });
-  const statusBadge = within(actionRow).getByText('LEARNING');
-
-  expect(actionRow).toHaveClass('topic-card-actions');
-  expect(deleteButton).toHaveClass('compact-button');
-  expect(deleteButton).toHaveClass('topic-delete-button');
-  expect(detailButton.compareDocumentPosition(statusBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-});
-
-test('topics delete with an in-app confirmation dialog', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
-
-  const topicCard = (await screen.findByText('降息交易')).closest('article');
-  expect(topicCard).toBeTruthy();
-  await userEvent.click(within(topicCard as HTMLElement).getByRole('button', { name: '删除主题' }));
-
-  expect(confirm).not.toHaveBeenCalled();
-  expect(fetch).not.toHaveBeenCalledWith('/api/topics/1', expect.objectContaining({ method: 'DELETE' }));
-  const dialog = await screen.findByRole('dialog', { name: '删除主题' });
-  expect(within(dialog).getByText('降息交易')).toBeInTheDocument();
-  expect(within(dialog).getByText('关联文章、简报和原始内容不会被删除。')).toBeInTheDocument();
-
-  await userEvent.click(screen.getByRole('button', { name: '确认删除' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.objectContaining({ method: 'DELETE' }));
-  expect(await screen.findByText('0 topics')).toBeInTheDocument();
-  expect(screen.queryByText('降息交易')).not.toBeInTheDocument();
-});
-
-test('topics open a full-width markdown topic reader', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
-  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.anything());
-  expect(await screen.findByText('Topic Reader')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '返回主题库' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '记录理解' })).toBeInTheDocument();
-  expect(screen.getByRole('region', { name: '主题详情正文' })).toHaveClass('topic-reader-document');
-  expect(screen.getByRole('complementary', { name: '主题上下文' })).toHaveClass('topic-reader-context');
-  expect(screen.getAllByText('关键术语').length).toBeGreaterThan(0);
-  expect(screen.getByText('文章解读')).toBeInTheDocument();
-  expect(screen.queryByText((content, element) => (
-    element?.tagName === 'PRE' && content.includes('# 降息交易')
-  ))).not.toBeInTheDocument();
-});
-
-test('topic reader can jump to the learning note form for the same topic', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Topics' }));
-  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
-  await userEvent.click(await screen.findByRole('button', { name: '记录理解' }));
-
-  expect(await screen.findByRole('heading', { name: 'Learning', level: 2 })).toBeInTheDocument();
-  expect(screen.getByLabelText('个人理解')).toBeInTheDocument();
-  expect(screen.queryByRole('region', { name: '主题详情正文' })).not.toBeInTheDocument();
-});
-
-test('learning view opens a topic and appends personal understanding', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-  await userEvent.click(await screen.findByRole('button', { name: '记录理解' }));
-  await screen.findByText('为什么降息会影响黄金？');
-  await userEvent.selectOptions(screen.getByLabelText('学习状态'), 'REVIEWING');
-  await userEvent.type(screen.getByLabelText('个人理解'), '我理解的核心变量是利率预期。');
-  await userEvent.click(screen.getByRole('button', { name: '保存理解' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/topics/1/notes', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ status: 'REVIEWING', note: '我理解的核心变量是利率预期。' })
-  }));
-});
-
-test('learning queue action buttons keep a fixed single-line size', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-
-  const noteButtons = await screen.findAllByRole('button', { name: '记录理解' });
-
-  expect(noteButtons.length).toBeGreaterThan(0);
-  noteButtons.forEach((button) => {
-    expect(button).toHaveClass('learning-action-button');
-  });
-});
-
-test('learning queue filter has its own row above task cards', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-
-  const filter = await screen.findByLabelText('学习主题筛选');
-  const heading = filter.closest('.learning-queue-heading');
-  expect(heading).toBeTruthy();
-  expect(filter.closest('label')).toHaveClass('learning-queue-filter');
-});
-
-test('learning task actions keep status update, note entry and event jump in one row', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-
-  const taskCard = (await screen.findByText('为什么实际利率下行会推升黄金配置需求？')).closest('article');
-  expect(taskCard).toBeTruthy();
-
-  const actionRow = within(taskCard as HTMLElement).getByRole('group', { name: '学习任务操作-1' });
-
-  expect(actionRow).toHaveClass('learning-task-actions');
-  expect(within(actionRow).getByRole('button', { name: '更新任务状态-1' })).toBeInTheDocument();
-  expect(within(actionRow).getByRole('button', { name: '记录学习-1' })).toBeInTheDocument();
-  expect(within(actionRow).getByRole('button', { name: '查看关联事件-1' })).toBeInTheDocument();
-});
-
-test('learning task note action opens the right-side note form from the current page', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-  await userEvent.click(await screen.findByRole('button', { name: '记录学习-1' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/topics/1', expect.anything());
-  expect(await screen.findByRole('heading', { name: '降息交易' })).toBeInTheDocument();
-  expect(screen.getByLabelText('个人理解')).toBeInTheDocument();
-});
-
-test('learning view can filter tasks by theme and jump to the related event', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-  await screen.findByText('为什么实际利率下行会推升黄金配置需求？');
-  await screen.findByText('这个 agent workflow 更依赖模型能力还是开发者生态？');
-
-  await userEvent.selectOptions(screen.getByLabelText('学习主题筛选'), 'china_macro');
-
-  expect(screen.getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
-  expect(screen.queryByText('这个 agent workflow 更依赖模型能力还是开发者生态？')).not.toBeInTheDocument();
-
-  await userEvent.click(screen.getByRole('button', { name: '查看关联事件-1' }));
-
-  expect(await screen.findByText('事件记忆')).toBeInTheDocument();
-  expect(screen.getAllByText('美联储降息预期升温，黄金ETF出现增量资金').length).toBeGreaterThan(0);
-});
-
 test('events view presents the selected event as a structured detail panel', async () => {
   render(<App />);
 
@@ -1419,22 +1268,6 @@ test('events governance panel updates status, merges events and moves articles',
     method: 'POST',
     body: JSON.stringify({ createNewEvent: true })
   }));
-});
-
-test('learning view updates research task status through the typed endpoint', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Learning' }));
-  await screen.findByText('为什么实际利率下行会推升黄金配置需求？');
-
-  await userEvent.selectOptions(screen.getByLabelText('学习任务状态-1'), 'LEARNING');
-  await userEvent.click(screen.getByRole('button', { name: '更新任务状态-1' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/learning-tasks/1/status', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ status: 'LEARNING' })
-  }));
-  expect(await screen.findByText('学习任务状态已更新')).toBeInTheDocument();
 });
 
 test('content studio updates idea status through the typed endpoint', async () => {
