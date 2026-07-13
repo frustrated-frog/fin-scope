@@ -14,6 +14,11 @@ public class DashboardController {
     @Resource
     private DashboardService dashboardService;
 
+    /**
+     * 查询首页仪表盘汇总数据。
+     *
+     * @return 仪表盘汇总 Map，包含文章、事件、任务等首页展示指标。
+     */
     @GetMapping
     public Map<String, Object> summary() {
         return dashboardService.summary();

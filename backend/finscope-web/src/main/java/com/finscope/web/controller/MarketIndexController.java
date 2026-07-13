@@ -18,6 +18,12 @@ public class MarketIndexController {
     @Resource
     private MarketIndexService marketIndexService;
 
+    /**
+     * 查询市场指数行情列表。
+     *
+     * @param refresh 是否强制刷新行情数据。
+     * @return 市场指数行情响应列表，包含指数基础信息和最新报价。
+     */
     @GetMapping
     public List<MarketIndexQuoteResponse> list(@RequestParam(defaultValue = "false") boolean refresh) {
         return (refresh ? marketIndexService.list(true) : marketIndexService.list()).stream()

@@ -23,12 +23,27 @@ public class EvidenceController {
     @Resource
     private EvidenceService evidenceService;
 
+    /**
+     * 查询指定事件的证据列表。
+     *
+     * @param eventId 事件聚类 ID。
+     * @return 该事件下的证据条目列表。
+     */
     @GetMapping("/events/{eventId}/evidence")
     public List<EvidenceItem> list(@PathVariable Long eventId) {
         eventClusterService.detail(eventId);
         return evidenceService.listByEventId(eventId);
     }
 
+    /**
+     * 查询证据列表。
+     *
+     * @param eventId 事件聚类 ID 过滤条件，可为空。
+     * @param sourceTier 来源层级过滤条件，可为空。
+     * @param evidenceType 证据类型过滤条件，可为空。
+     * @param minConfidence 最低置信度过滤条件，可为空。
+     * @return 符合过滤条件的证据条目列表。
+     */
     @GetMapping("/evidence")
     public List<EvidenceItem> listAll(@RequestParam(required = false) Long eventId,
                                       @RequestParam(required = false) String sourceTier,
@@ -40,6 +55,17 @@ public class EvidenceController {
         return evidenceService.listAll(eventId, sourceTier, evidenceType, minConfidence);
     }
 
+    /**
+     * 分页查询证据列表。
+     *
+     * @param eventId 事件聚类 ID 过滤条件，可为空。
+     * @param sourceTier 来源层级过滤条件，可为空。
+     * @param evidenceType 证据类型过滤条件，可为空。
+     * @param minConfidence 最低置信度过滤条件，可为空。
+     * @param page 页码，从 0 开始。
+     * @param pageSize 每页条数，范围为 1 到 200。
+     * @return 分页后的证据条目结果，包含记录列表和分页元数据。
+     */
     @GetMapping("/evidence/paged")
     public PageResponse<EvidenceItem> listPaged(@RequestParam(required = false) Long eventId,
                                                 @RequestParam(required = false) String sourceTier,
@@ -57,6 +83,12 @@ public class EvidenceController {
         return evidenceService.listPaged(eventId, sourceTier, evidenceType, minConfidence, page, pageSize);
     }
 
+    /**
+     * 查询证据详情。
+     *
+     * @param id 证据条目 ID。
+     * @return 指定证据条目详情。
+     */
     @GetMapping("/evidence/{id}")
     public EvidenceItem detail(@PathVariable Long id) {
         return evidenceService.detail(id);

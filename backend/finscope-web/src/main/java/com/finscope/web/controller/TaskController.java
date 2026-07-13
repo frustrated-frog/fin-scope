@@ -19,11 +19,23 @@ public class TaskController {
     @Resource
     private TaskSseRegistry taskSseRegistry;
 
+    /**
+     * 查询异步任务状态。
+     *
+     * @param taskId 异步任务 ID。
+     * @return 任务视图，包含任务状态、进度和结果摘要。
+     */
     @GetMapping("/{taskId}")
     public TaskView get(@PathVariable String taskId) {
         return urlIngestTaskService.get(taskId);
     }
 
+    /**
+     * 订阅异步任务进度。
+     *
+     * @param taskId 异步任务 ID。
+     * @return SSE 连接，用于持续推送任务进度事件。
+     */
     @GetMapping("/{taskId}/stream")
     public SseEmitter stream(@PathVariable String taskId) {
         return taskSseRegistry.subscribe(taskId, urlIngestTaskService.get(taskId));

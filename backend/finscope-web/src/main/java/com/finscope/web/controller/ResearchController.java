@@ -28,6 +28,12 @@ public class ResearchController {
     @Resource
     private ResearchRunPlanService researchRunPlanService;
 
+    /**
+     * 创建研究运行计划。
+     *
+     * @param request 研究运行创建请求，包含命题 ID、运行日期、主题编码、每主题来源上限和是否包含禁用来源。
+     * @return 创建后的研究运行响应，包含运行计划摘要。
+     */
     @PostMapping
     public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {
         ResearchRunPlan plan = researchService.createRun(
@@ -39,11 +45,22 @@ public class ResearchController {
         return ResearchRunResponse.of(plan);
     }
 
+    /**
+     * 查询研究运行列表。
+     *
+     * @return 研究运行列表。
+     */
     @GetMapping
     public List<ResearchRun> list() {
         return researchService.listRuns();
     }
 
+    /**
+     * 查询研究运行详情。
+     *
+     * @param id 研究运行 ID。
+     * @return 研究运行详情，包含运行记录、计划来源、计划步骤和关联 Agent 运行。
+     */
     @GetMapping("/{id}")
     public ResearchRunDetailResponse detail(@PathVariable Long id) {
         return new ResearchRunDetailResponse(

@@ -15,6 +15,11 @@ public class AgentRunController {
     @Resource
     private AgentRunService agentRunService;
 
+    /**
+     * 查询最近的 Agent 运行记录。
+     *
+     * @return 最近 50 条 AgentRun 记录，按服务层默认顺序返回。
+     */
     @GetMapping
     public List<AgentRun> list() {
         return agentRunService.latest(50);

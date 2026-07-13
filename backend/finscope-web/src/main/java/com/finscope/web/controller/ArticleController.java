@@ -30,11 +30,23 @@ public class ArticleController {
     @Resource
     private ArticleDeletionService articleDeletionService;
 
+    /**
+     * 查询全部文章卡片列表。
+     *
+     * @return 文章卡片视图列表，包含文章基础信息和摘要展示字段。
+     */
     @GetMapping
     public List<ArticleCardView> list() {
         return articleQueryService.list();
     }
 
+    /**
+     * 分页查询文章卡片列表。
+     *
+     * @param page 页码，从 0 开始。
+     * @param pageSize 每页条数。
+     * @return 分页后的文章卡片结果，包含记录列表和分页元数据。
+     */
     @GetMapping("/paged")
     public PageResponse<ArticleCardView> listPaged(
             @RequestParam(defaultValue = "0") int page,
@@ -42,21 +54,44 @@ public class ArticleController {
         return articleQueryService.listPaged(page, pageSize);
     }
 
+    /**
+     * 查询单篇文章详情。
+     *
+     * @param id 文章主键 ID。
+     * @return 指定文章的卡片详情视图。
+     */
     @GetMapping("/{id}")
     public ArticleCardView detail(@PathVariable Long id) {
         return articleQueryService.detail(id);
     }
 
+    /**
+     * 删除单篇文章。
+     *
+     * @param id 文章主键 ID。
+     */
     @DeleteMapping("/{id}")
     public void delete(@PathVariable Long id) {
         articleDeletionService.deleteById(id);
     }
 
+    /**
+     * 批量删除文章。
+     *
+     * @param request 批量删除请求，包含待删除文章 ID 列表。
+     * @return 实际删除的文章数量。
+     */
     @DeleteMapping("/batch")
     public int deleteBatch(@RequestBody DeleteArticlesRequest request) {
         return articleDeletionService.deleteByIds(request.getIds());
     }
 
+    /**
+     * 提交 URL 入库抓取任务。
+     *
+     * @param request URL 入库请求，包含待抓取地址及相关参数。
+     * @return 已创建的异步任务视图，用于查询任务状态和进度。
+     */
     @PostMapping("/ingest-url")
     public TaskView ingestUrl(@RequestBody IngestUrlRequest request) {
         return urlIngestTaskService.submit(request);

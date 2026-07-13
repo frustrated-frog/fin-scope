@@ -29,7 +29,12 @@ public class AttributionController {
     @Resource
     private AttributionSseRegistry sseRegistry;
 
-    /** 触发深度归因，返回 taskId 和已创建的报告 id。 */
+    /**
+     * 触发标的深度归因研究。
+     *
+     * @param request 归因启动请求，包含标的代码、类型、名称、涨跌幅和行情日期。
+     * @return 包含 taskId 和 reportId 的结果；taskId 用于订阅进度，reportId 用于读取报告。
+     */
     @PostMapping("/start")
     public Map<String, String> start(@RequestBody StartAttributionRequest request) {
         AttributionService.AttributionStartResult started = attributionService.startAttribution(
@@ -40,31 +45,59 @@ public class AttributionController {
         return result;
     }
 
-    /** 订阅归因研究进度（SSE 流式）。 */
+    /**
+     * 订阅归因研究进度。
+     *
+     * @param taskId 归因任务 ID。
+     * @return SSE 连接，用于持续推送归因研究进度事件。
+     */
     @GetMapping("/stream/{taskId}")
     public SseEmitter stream(@PathVariable String taskId) {
         return sseRegistry.subscribe(taskId);
     }
 
-    /** 查询归因报告详情。 */
+    /**
+     * 查询归因报告详情。
+     *
+     * @param reportId 归因报告 ID。
+     * @return 归因报告详情，包含驱动因素、证据和结论。
+     */
     @GetMapping("/reports/{reportId}")
     public AttributionReport report(@PathVariable Long reportId) {
         return attributionService.getReport(reportId);
     }
 
-    /** 查询 Harness 运行状态及各研究轨道步骤。 */
+    /**
+     * 查询归因 Harness 运行状态。
+     *
+     * @param reportId 归因报告 ID。
+     * @return 归因研究运行视图，包含整体状态和各研究轨道步骤。
+     */
     @GetMapping("/reports/{reportId}/run")
     public AttributionService.AttributionResearchRunView researchRun(@PathVariable Long reportId) {
         return attributionService.getResearchRun(reportId);
     }
 
-    /** 查询某标的最新归因（卡片摘要徽标用），无则返回空对象。 */
+    /**
+     * 查询某标的最新归因报告。
+     *
+     * @param code 标的代码。
+     * @param type 标的类型。
+     * @return 最新归因报告；若不存在则由服务层返回空结果。
+     */
     @GetMapping("/latest")
     public AttributionReport latest(@RequestParam String code, @RequestParam String type) {
         return attributionService.getLatestByIdentity(code, type);
     }
 
-    /** 查询某标的归因历史。 */
+    /**
+     * 查询某标的归因历史。
+     *
+     * @param code 标的代码。
+     * @param type 标的类型。
+     * @param limit 返回条数上限。
+     * @return 归因报告历史列表；服务层无结果时返回空列表。
+     */
     @GetMapping("/history")
     public List<AttributionReport> history(@RequestParam String code,
                                            @RequestParam String type,

@@ -17,7 +17,19 @@ import java.util.List;
 public class QuantFactorController {
     @Resource private FactorRegistry registry;
     @Resource private DatasetFactorAnalysisService analysis;
+    /**
+     * 查询可用因子定义列表。
+     *
+     * @return 因子定义列表，包含因子编码、名称和计算说明。
+     */
     @GetMapping public List<FactorDefinition> list() { return registry.list(); }
+    /**
+     * 分析指定数据集上的因子表现。
+     *
+     * @param code 因子编码。
+     * @param datasetId 数据集 ID。
+     * @return 因子分析结果，包含覆盖度、分布和表现指标。
+     */
     @GetMapping("/{code}/analysis") public FactorAnalysis analyze(@PathVariable String code, @RequestParam Long datasetId) {
         return analysis.analyze(datasetId, code);
     }
