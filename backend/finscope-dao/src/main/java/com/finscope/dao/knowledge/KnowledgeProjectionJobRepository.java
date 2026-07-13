@@ -56,6 +56,17 @@ public class KnowledgeProjectionJobRepository {
         return jobs.isEmpty() ? Optional.empty() : Optional.of(jobs.get(0));
     }
 
+    public List<KnowledgeProjectionJob> findRecoverable(int limit) {
+        if (limit < 1 || limit > 200) {
+            throw new IllegalArgumentException("Invalid projection recovery batch size");
+        }
+        return jdbcTemplate.query(
+                "SELECT * FROM knowledge_projection_job WHERE status IN ('PENDING','FAILED') " +
+                        "ORDER BY updated_at ASC,id ASC LIMIT ?",
+                mapper, limit
+        );
+    }
+
     public boolean claim(Long id) {
         return jdbcTemplate.update(
                 "UPDATE knowledge_projection_job SET status='RUNNING'," +
