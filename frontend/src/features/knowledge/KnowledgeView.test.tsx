@@ -1,5 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { KnowledgeView } from './KnowledgeView';
@@ -77,4 +79,20 @@ test('top-level navigation clears stale topic and task selection', async () => {
     expect(params.get('task')).toBeNull();
     expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
   });
+});
+
+test('centers and scales the four knowledge navigation labels', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\.knowledge-nav-item\s*{[^}]*align-items:\s*center;/s);
+  expect(styles).toMatch(/\.knowledge-nav-item\s*{[^}]*justify-content:\s*center;/s);
+  expect(styles).toMatch(/\.knowledge-nav-item\s*{[^}]*gap:\s*8px;/s);
+  expect(styles).toMatch(/\.knowledge-nav-item\s*{[^}]*white-space:\s*nowrap;/s);
+  expect(styles).toMatch(
+    /\.knowledge-nav-item span\s*{[^}]*font-size:\s*15px;[^}]*font-weight:\s*650;[^}]*line-height:\s*1\.2;/s
+  );
+  expect(styles).toMatch(
+    /\.knowledge-nav-item small\s*{[^}]*font-size:\s*11px;[^}]*font-weight:\s*500;[^}]*line-height:\s*1\.2;/s
+  );
 });

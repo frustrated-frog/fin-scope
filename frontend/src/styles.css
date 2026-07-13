@@ -365,23 +365,27 @@ a:focus-visible {
 
 .knowledge-nav-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 8px;
   min-height: 54px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--knowledge-slate);
+  white-space: nowrap;
 }
 
 .knowledge-nav-item span {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .knowledge-nav-item small {
   font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .knowledge-nav-item:hover,
