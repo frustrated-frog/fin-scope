@@ -32,6 +32,9 @@ public class TopicRepository {
         topic.setMarkdownPath(rs.getString("markdown_path"));
         topic.setTerms(rs.getString("terms"));
         topic.setLearningQuestions(rs.getString("learning_questions"));
+        topic.setLifecycleStatus(rs.getString("lifecycle_status"));
+        topic.setMasteryStatus(rs.getString("mastery_status"));
+        topic.setRevision(rs.getLong("revision"));
         topic.setArticleCount(readInt(rs, "article_count"));
         topic.setBriefCount(readInt(rs, "brief_count"));
         topic.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
@@ -72,11 +75,18 @@ public class TopicRepository {
         if (topic.getStatus() == null || topic.getStatus().isEmpty()) {
             topic.setStatus("LEARNING");
         }
+        if (topic.getLifecycleStatus() == null || topic.getLifecycleStatus().isEmpty()) {
+            topic.setLifecycleStatus("ACTIVE");
+        }
+        if (topic.getMasteryStatus() == null || topic.getMasteryStatus().isEmpty()) {
+            topic.setMasteryStatus("EXPLORING");
+        }
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO topic(name,slug,description,status,markdown_path,terms,learning_questions,created_at,updated_at) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO topic(name,slug,description,status,markdown_path,terms,learning_questions," +
+                            "lifecycle_status,mastery_status,revision,created_at,updated_at) " +
+                            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, topic.getName());
             ps.setString(2, topic.getSlug());
@@ -85,8 +95,11 @@ public class TopicRepository {
             ps.setString(5, topic.getMarkdownPath());
             ps.setString(6, topic.getTerms());
             ps.setString(7, topic.getLearningQuestions());
-            ps.setString(8, TimeUtil.text(topic.getCreatedAt()));
-            ps.setString(9, TimeUtil.text(topic.getUpdatedAt()));
+            ps.setString(8, topic.getLifecycleStatus());
+            ps.setString(9, topic.getMasteryStatus());
+            ps.setLong(10, topic.getRevision());
+            ps.setString(11, TimeUtil.text(topic.getCreatedAt()));
+            ps.setString(12, TimeUtil.text(topic.getUpdatedAt()));
             return ps;
         }, keyHolder);
         topic.setId(keyHolder.getKey().longValue());
@@ -110,10 +123,20 @@ public class TopicRepository {
     public Topic update(Topic topic) {
         topic.setUpdatedAt(LocalDateTime.now());
         jdbcTemplate.update("UPDATE topic SET name=?, slug=?, description=?, status=?, markdown_path=?, terms=?, "
-                        + "learning_questions=?, updated_at=? WHERE id=?",
+                        + "learning_questions=?, lifecycle_status=?, mastery_status=?, revision=revision+1, "
+                        + "updated_at=? WHERE id=?",
                 topic.getName(), topic.getSlug(), topic.getDescription(), topic.getStatus(), topic.getMarkdownPath(),
-                topic.getTerms(), topic.getLearningQuestions(), TimeUtil.text(topic.getUpdatedAt()), topic.getId());
+                topic.getTerms(), topic.getLearningQuestions(), topic.getLifecycleStatus(), topic.getMasteryStatus(),
+                TimeUtil.text(topic.getUpdatedAt()), topic.getId());
         return findById(topic.getId()).orElse(topic);
+    }
+
+    public boolean updateKnowledgeState(Long id, String lifecycleStatus,
+                                        String masteryStatus, long expectedRevision) {
+        int updated = jdbcTemplate.update("UPDATE topic SET lifecycle_status=?, mastery_status=?, " +
+                        "revision=revision+1, updated_at=? WHERE id=? AND revision=?",
+                lifecycleStatus, masteryStatus, TimeUtil.text(LocalDateTime.now()), id, expectedRevision);
+        return updated == 1;
     }
 
     public List<Topic> findAll() {

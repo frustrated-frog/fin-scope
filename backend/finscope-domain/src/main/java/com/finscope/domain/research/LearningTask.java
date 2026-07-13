@@ -1,16 +1,27 @@
 package com.finscope.domain.research;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
+@Data
 public class LearningTask {
     private Long id;
     private Long eventId;
+    private Long topicId;
     private String themeCode;
     private String question;
     private String concepts;
     private String difficulty;
     private String status;
     private String whyNeeded;
+    private String origin = "AGENT";
+    private String taskKey;
+    private int priority = 50;
+    private LocalDateTime acceptedAt;
+    private String dismissedReason;
+    private String completionMode;
+    private long revision;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

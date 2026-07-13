@@ -14,6 +14,9 @@ public class Topic {
     private String markdownPath;
     private String terms;
     private String learningQuestions;
+    private String lifecycleStatus = "ACTIVE";
+    private String masteryStatus = "EXPLORING";
+    private long revision;
     private int articleCount;
     private int briefCount;
     private LocalDateTime createdAt;
