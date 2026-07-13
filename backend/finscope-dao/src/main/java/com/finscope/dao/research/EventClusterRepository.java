@@ -104,6 +104,20 @@ public class EventClusterRepository {
         return events.isEmpty() ? Optional.empty() : Optional.of(events.get(0));
     }
 
+    public List<EventCluster> findByIds(List<Long> ids, int limit) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("Invalid event context limit");
+        }
+        List<Object> arguments = new ArrayList<Object>(ids);
+        arguments.add(limit);
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        return jdbcTemplate.query("SELECT * FROM event_cluster WHERE id IN (" + placeholders + ") " +
+                "ORDER BY last_meaningful_update_at DESC,id DESC LIMIT ?", eventMapper, arguments.toArray());
+    }
+
     public List<EventCluster> findAll() {
         return jdbcTemplate.query("SELECT * FROM event_cluster ORDER BY last_seen_at DESC, id DESC", eventMapper);
     }

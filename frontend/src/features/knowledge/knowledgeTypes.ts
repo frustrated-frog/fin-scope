@@ -19,7 +19,7 @@ export type KnowledgeTopic = {
   description?: string;
   status?: string;
   lifecycleStatus: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
-  masteryStatus: 'EXPLORING' | 'BUILDING' | 'STABLE' | 'MASTERED';
+  masteryStatus: 'EXPLORING' | 'BUILDING' | 'REVIEWING' | 'MATURE';
   revision: number;
   articleCount?: number;
   briefCount?: number;
@@ -89,4 +89,48 @@ export type KnowledgeEvidence = {
   confidence: number;
   articleTitle?: string;
   articleUrl?: string;
+};
+
+export type KnowledgeEvent = {
+  id: number;
+  canonicalTitle: string;
+  summary?: string;
+  importanceScore?: number;
+  noveltyState?: string;
+  lastMeaningfulUpdateAt?: string;
+};
+
+export type TopicReviewState = {
+  topicId: number;
+  lastReviewedAt?: string;
+  nextReviewAt?: string;
+  intervalDays: number;
+  reviewCount: number;
+  revision: number;
+};
+
+export type KnowledgeTopicWorkspace = {
+  topic: KnowledgeTopic;
+  reviewState?: TopicReviewState;
+  events: KnowledgeEvent[];
+  evidence: KnowledgeEvidence[];
+  tasks: KnowledgeTask[];
+  entries: KnowledgeEntry[];
+};
+
+export type KnowledgeReviewInput = {
+  conclusion: string;
+  confidence: KnowledgeEntry['confidence'];
+  evidenceIds: number[];
+  intervalDays: 7 | 14 | 30 | 90;
+  expectedRevision: number;
+};
+
+export type KnowledgeReviewResult = {
+  entry: KnowledgeEntry;
+  reviewedAt: string;
+  nextReviewAt: string;
+  intervalDays: number;
+  reviewCount: number;
+  revision: number;
 };

@@ -4,6 +4,8 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.knowledge.KnowledgeEntry;
 import com.finscope.domain.knowledge.KnowledgeOverview;
+import com.finscope.domain.knowledge.KnowledgeReviewResult;
+import com.finscope.domain.knowledge.KnowledgeTopicWorkspace;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.domain.research.EvidenceItem;
@@ -11,10 +13,13 @@ import com.finscope.domain.topic.Topic;
 import com.finscope.service.knowledge.KnowledgeLearningService;
 import com.finscope.service.knowledge.KnowledgeContextService;
 import com.finscope.service.knowledge.KnowledgeOverviewService;
+import com.finscope.service.knowledge.KnowledgeReviewService;
+import com.finscope.service.knowledge.KnowledgeTopicService;
 import com.finscope.web.request.knowledge.AcceptKnowledgeTaskRequest;
 import com.finscope.web.request.knowledge.DismissKnowledgeTaskRequest;
 import com.finscope.web.request.knowledge.KnowledgeEntryRequest;
 import com.finscope.web.request.knowledge.KnowledgeRevisionRequest;
+import com.finscope.web.request.knowledge.KnowledgeReviewRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,13 +43,19 @@ public class KnowledgeController {
     private final KnowledgeOverviewService overviewService;
     private final KnowledgeLearningService learningService;
     private final KnowledgeContextService contextService;
+    private final KnowledgeTopicService topicService;
+    private final KnowledgeReviewService reviewService;
 
     public KnowledgeController(KnowledgeOverviewService overviewService,
                                KnowledgeLearningService learningService,
-                               KnowledgeContextService contextService) {
+                               KnowledgeContextService contextService,
+                               KnowledgeTopicService topicService,
+                               KnowledgeReviewService reviewService) {
         this.overviewService = overviewService;
         this.learningService = learningService;
         this.contextService = contextService;
+        this.topicService = topicService;
+        this.reviewService = reviewService;
     }
 
     @GetMapping("/overview")
@@ -84,6 +95,22 @@ public class KnowledgeController {
     @GetMapping("/tasks/{taskId}/evidence")
     public List<EvidenceItem> taskEvidence(@PathVariable long taskId) {
         return contextService.evidenceForTask(taskId);
+    }
+
+    @GetMapping("/topics/{topicId}")
+    public KnowledgeTopicWorkspace topicWorkspace(@PathVariable long topicId) {
+        return topicService.load(topicId);
+    }
+
+    @PostMapping("/topics/{topicId}/reviews")
+    public KnowledgeReviewResult review(@PathVariable long topicId,
+                                        @RequestBody KnowledgeReviewRequest request) {
+        require(request.getConclusion(), "conclusion");
+        require(request.getConfidence(), "confidence");
+        require(request.getIntervalDays(), "intervalDays");
+        require(request.getExpectedRevision(), "expectedRevision");
+        return reviewService.review(topicId, request.getConclusion(), request.getConfidence(),
+                request.getEvidenceIds(), request.getIntervalDays(), request.getExpectedRevision());
     }
 
     @PostMapping("/tasks/{taskId}/accept")

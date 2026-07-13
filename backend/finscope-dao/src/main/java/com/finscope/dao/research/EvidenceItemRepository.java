@@ -62,6 +62,20 @@ public class EvidenceItemRepository {
                 mapper, eventId);
     }
 
+    public List<EvidenceItem> findByEventIds(List<Long> eventIds, int limit) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (limit < 1 || limit > 200) {
+            throw new IllegalArgumentException("Invalid evidence context limit");
+        }
+        List<Object> arguments = new ArrayList<Object>(eventIds);
+        arguments.add(limit);
+        String placeholders = String.join(",", Collections.nCopies(eventIds.size(), "?"));
+        return jdbcTemplate.query("SELECT * FROM evidence_item WHERE event_id IN (" + placeholders + ") " +
+                "ORDER BY created_at DESC,id DESC LIMIT ?", mapper, arguments.toArray());
+    }
+
     public java.util.Optional<EvidenceItem> findById(Long id) {
         List<EvidenceItem> items = jdbcTemplate.query("SELECT * FROM evidence_item WHERE id = ?", mapper, id);
         return items.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(items.get(0));

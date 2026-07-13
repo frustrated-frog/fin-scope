@@ -5,8 +5,11 @@ import {
   KnowledgeEvidence,
   KnowledgeOverview,
   KnowledgePage,
+  KnowledgeReviewInput,
+  KnowledgeReviewResult,
   KnowledgeTask,
-  KnowledgeTopic
+  KnowledgeTopic,
+  KnowledgeTopicWorkspace
 } from './knowledgeTypes';
 
 function queryString(values: Record<string, string | number | boolean | null | undefined>) {
@@ -44,6 +47,11 @@ export const knowledgeApi = {
     `/api/knowledge/reviews/due?${queryString({ page, size })}`
   ),
   taskEvidence: (taskId: number) => api<KnowledgeEvidence[]>(`/api/knowledge/tasks/${taskId}/evidence`),
+  topicWorkspace: (topicId: number) => api<KnowledgeTopicWorkspace>(`/api/knowledge/topics/${topicId}`),
+  reviewTopic: (topicId: number, input: KnowledgeReviewInput) =>
+    api<KnowledgeReviewResult>(`/api/knowledge/topics/${topicId}/reviews`, {
+      method: 'POST', body: JSON.stringify(input)
+    }),
   acceptTask: (taskId: number, topicId: number, expectedRevision: number) =>
     api<KnowledgeTask>(`/api/knowledge/tasks/${taskId}/accept`, {
       method: 'POST', body: JSON.stringify({ topicId, expectedRevision })

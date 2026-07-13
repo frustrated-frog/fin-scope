@@ -4,12 +4,16 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.knowledge.KnowledgeEntry;
 import com.finscope.domain.knowledge.KnowledgeOverview;
+import com.finscope.domain.knowledge.KnowledgeReviewResult;
+import com.finscope.domain.knowledge.KnowledgeTopicWorkspace;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.topic.Topic;
 import com.finscope.service.knowledge.KnowledgeLearningService;
 import com.finscope.service.knowledge.KnowledgeContextService;
+import com.finscope.service.knowledge.KnowledgeReviewService;
+import com.finscope.service.knowledge.KnowledgeTopicService;
 import com.finscope.service.knowledge.KnowledgeOverviewService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -46,6 +50,10 @@ class KnowledgeControllerTest {
     private KnowledgeLearningService learningService;
     @MockBean
     private KnowledgeContextService contextService;
+    @MockBean
+    private KnowledgeTopicService topicService;
+    @MockBean
+    private KnowledgeReviewService reviewService;
 
     @Test
     void exposesOverviewAndBoundedPages() throws Exception {
@@ -94,6 +102,34 @@ class KnowledgeControllerTest {
         mockMvc.perform(get("/api/knowledge/tasks/7/evidence"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(11));
+    }
+
+    @Test
+    void exposesTopicWorkspaceAndRecordsReview() throws Exception {
+        KnowledgeTopicWorkspace workspace = new KnowledgeTopicWorkspace();
+        Topic topic = new Topic();
+        topic.setId(2L);
+        topic.setName("Agent 工程化");
+        workspace.setTopic(topic);
+        workspace.setEntries(Collections.emptyList());
+        workspace.setTasks(Collections.emptyList());
+        workspace.setEvents(Collections.emptyList());
+        workspace.setEvidence(Collections.emptyList());
+        when(topicService.load(2L)).thenReturn(workspace);
+        KnowledgeReviewResult result = new KnowledgeReviewResult();
+        result.setIntervalDays(30);
+        when(reviewService.review(eq(2L), eq("结论更新"), eq("HIGH"),
+                anyList(), eq(30), eq(4L))).thenReturn(result);
+
+        mockMvc.perform(get("/api/knowledge/topics/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.topic.name").value("Agent 工程化"));
+        mockMvc.perform(post("/api/knowledge/topics/2/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conclusion\":\"结论更新\",\"confidence\":\"HIGH\"," +
+                                "\"evidenceIds\":[11],\"intervalDays\":30,\"expectedRevision\":4}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intervalDays").value(30));
     }
 
     @Test

@@ -7,12 +7,16 @@ import {
   KnowledgeEntryInput,
   KnowledgeEvidence,
   KnowledgeOverview,
+  KnowledgeReviewInput,
   KnowledgeSection,
   KnowledgeTask,
-  KnowledgeTopic
+  KnowledgeTopic,
+  KnowledgeTopicWorkspace
 } from './knowledgeTypes';
 import { TopicLibrary } from './topics/TopicLibrary';
 import { LearningWorkspace } from './learning/LearningWorkspace';
+import { TopicWorkspace } from './topics/TopicWorkspace';
+import { ReviewQueue } from './review/ReviewQueue';
 
 const validSections = new Set<KnowledgeSection>(['home', 'topics', 'learning', 'review']);
 
@@ -38,7 +42,7 @@ export function KnowledgeView({
 }) {
   const initial = locationState();
   const [section, setSection] = useState<KnowledgeSection>(initial.section);
-  const [topicId] = useState<number | undefined>(initial.topicId);
+  const [topicId, setTopicId] = useState<number | undefined>(initial.topicId);
   const [selectedTaskId, setSelectedTaskId] = useState<number | undefined>(initial.taskId);
   const [taskStatus, setTaskStatus] = useState<string | undefined>(initial.taskStatus);
   const [overview, setOverview] = useState<KnowledgeOverview | null>(null);
@@ -47,6 +51,8 @@ export function KnowledgeView({
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<KnowledgeTask[]>([]);
   const [evidence, setEvidence] = useState<KnowledgeEvidence[]>([]);
+  const [topicWorkspace, setTopicWorkspace] = useState<KnowledgeTopicWorkspace | null>(null);
+  const [dueTopics, setDueTopics] = useState<KnowledgeTopic[]>([]);
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) || tasks[0],
@@ -74,19 +80,29 @@ export function KnowledgeView({
     const load = section === 'home'
       ? knowledgeApi.overview().then(setOverview)
       : section === 'topics'
-        ? knowledgeApi.topics().then((page) => {
-          setTopics(page.items);
-          setTopicCount(page.totalCount);
-        })
+        ? topicId
+          ? knowledgeApi.topicWorkspace(topicId).then(setTopicWorkspace)
+          : knowledgeApi.topics().then((page) => {
+            setTopicWorkspace(null);
+            setTopics(page.items);
+            setTopicCount(page.totalCount);
+          })
         : section === 'learning'
           ? loadLearning(taskStatus)
-          : Promise.resolve();
+          : section === 'review'
+            ? topicId
+              ? knowledgeApi.topicWorkspace(topicId).then(setTopicWorkspace)
+              : knowledgeApi.dueReviews().then((page) => {
+                setTopicWorkspace(null);
+                setDueTopics(page.items);
+              })
+            : Promise.resolve();
     load.catch((error) => {
       const message = error instanceof Error ? error.message : '知识工作台加载失败';
       setMessage(message);
       addToast(message, 'error');
     }).finally(() => setLoading(false));
-  }, [section, loadLearning]);
+  }, [section, topicId, taskStatus, loadLearning]);
 
   useEffect(() => {
     if (section !== 'learning' || !selectedTask?.eventId) {
@@ -113,7 +129,9 @@ export function KnowledgeView({
     if (!next || !validSections.has(next)) return;
     window.history.pushState({}, '', `${window.location.pathname}?${targetParams.toString()}`);
     const task = Number(targetParams.get('task'));
+    const nextTopic = Number(targetParams.get('topic'));
     setSelectedTaskId(Number.isSafeInteger(task) && task > 0 ? task : undefined);
+    setTopicId(Number.isSafeInteger(nextTopic) && nextTopic > 0 ? nextTopic : undefined);
     setTaskStatus(targetParams.get('status') || undefined);
     setSection(next);
   }
@@ -168,6 +186,14 @@ export function KnowledgeView({
     addToast('任务已移出队列', 'info');
   }
 
+  async function reviewTopic(input: KnowledgeReviewInput) {
+    if (!topicId) return;
+    await knowledgeApi.reviewTopic(topicId, input);
+    const refreshed = await knowledgeApi.topicWorkspace(topicId);
+    setTopicWorkspace(refreshed);
+    addToast('复习完成，下一次日期已更新', 'success');
+  }
+
   return (
     <section className="knowledge-workbench" data-testid="knowledge-view" data-topic-id={topicId}>
       <header className="knowledge-header">
@@ -182,13 +208,9 @@ export function KnowledgeView({
       {section === 'home' && (overview
         ? <KnowledgeHome overview={overview} onNavigate={navigateTarget} />
         : <section className="knowledge-loading" aria-label="正在加载知识首页"><span /></section>)}
-      {section === 'topics' && <TopicLibrary
-        topics={topics}
-        totalCount={topicCount}
-        loading={loading}
-        onSearch={searchTopics}
-        onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)}
-      />}
+      {section === 'topics' && (topicWorkspace
+        ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
+        : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
       {section === 'learning' && <LearningWorkspace
         tasks={tasks}
         topics={topics}
@@ -202,7 +224,9 @@ export function KnowledgeView({
         onDismiss={dismissTask}
         onOpenEvent={() => addToast('请从事件档案查看完整来源', 'info')}
       />}
-      {section === 'review' && <section className="knowledge-placeholder"><h2>到期复习</h2></section>}
+      {section === 'review' && (topicWorkspace
+        ? <TopicWorkspace workspace={topicWorkspace} reviewMode onBack={() => navigateTarget('?section=review')} onReview={reviewTopic} />
+        : <ReviewQueue topics={dueTopics} onOpen={(id) => navigateTarget(`?section=review&topic=${id}`)} />)}
     </section>
   );
 }
