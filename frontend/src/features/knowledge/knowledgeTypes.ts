@@ -6,7 +6,7 @@ export type KnowledgeAction = {
   type: 'CONTINUE_TASK' | 'REVIEW_TOPIC' | 'START_TASK' | 'CHECK_NEW_EVIDENCE';
   title: string;
   reason: string;
-  route: string;
+  routeTarget: string;
   sourceLabel?: string;
   topicId?: number;
   taskId?: number;
