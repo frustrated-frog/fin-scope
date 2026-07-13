@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { KnowledgeNavigation } from './KnowledgeNavigation';
 import { KnowledgeHome } from './KnowledgeHome';
 import { knowledgeApi } from './knowledgeApi';
-import { KnowledgeOverview, KnowledgeSection, KnowledgeTopic } from './knowledgeTypes';
+import {
+  KnowledgeEntryInput,
+  KnowledgeEvidence,
+  KnowledgeOverview,
+  KnowledgeSection,
+  KnowledgeTask,
+  KnowledgeTopic
+} from './knowledgeTypes';
 import { TopicLibrary } from './topics/TopicLibrary';
+import { LearningWorkspace } from './learning/LearningWorkspace';
 
 const validSections = new Set<KnowledgeSection>(['home', 'topics', 'learning', 'review']);
 
@@ -12,9 +20,12 @@ function locationState() {
   const params = new URLSearchParams(window.location.search);
   const candidate = params.get('section') as KnowledgeSection | null;
   const topic = Number(params.get('topic'));
+  const task = Number(params.get('task'));
   return {
     section: candidate && validSections.has(candidate) ? candidate : 'home' as KnowledgeSection,
-    topicId: Number.isSafeInteger(topic) && topic > 0 ? topic : undefined
+    topicId: Number.isSafeInteger(topic) && topic > 0 ? topic : undefined,
+    taskId: Number.isSafeInteger(task) && task > 0 ? task : undefined,
+    taskStatus: params.get('status') || undefined
   };
 }
 
@@ -28,10 +39,35 @@ export function KnowledgeView({
   const initial = locationState();
   const [section, setSection] = useState<KnowledgeSection>(initial.section);
   const [topicId] = useState<number | undefined>(initial.topicId);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | undefined>(initial.taskId);
+  const [taskStatus, setTaskStatus] = useState<string | undefined>(initial.taskStatus);
   const [overview, setOverview] = useState<KnowledgeOverview | null>(null);
   const [topics, setTopics] = useState<KnowledgeTopic[]>([]);
   const [topicCount, setTopicCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<KnowledgeTask[]>([]);
+  const [evidence, setEvidence] = useState<KnowledgeEvidence[]>([]);
+
+  const selectedTask = useMemo(
+    () => tasks.find((task) => task.id === selectedTaskId) || tasks[0],
+    [tasks, selectedTaskId]
+  );
+
+  const loadLearning = useCallback(async (status?: string | null) => {
+    const taskPages = status === 'SUGGESTED'
+      ? [await knowledgeApi.tasks({ status: 'SUGGESTED' })]
+      : await Promise.all([
+        knowledgeApi.tasks({ status: 'IN_PROGRESS' }),
+        knowledgeApi.tasks({ status: 'TODO' })
+      ]);
+    const topicPage = await knowledgeApi.topics({ lifecycle: 'ACTIVE', size: 100 });
+    const nextTasks = taskPages.flatMap((page) => page.items || []);
+    setTasks(nextTasks);
+    setTopics(topicPage.items);
+    setSelectedTaskId((current) => nextTasks.some((task) => task.id === current)
+      ? current
+      : nextTasks[0]?.id);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -42,13 +78,25 @@ export function KnowledgeView({
           setTopics(page.items);
           setTopicCount(page.totalCount);
         })
-        : Promise.resolve();
+        : section === 'learning'
+          ? loadLearning(taskStatus)
+          : Promise.resolve();
     load.catch((error) => {
       const message = error instanceof Error ? error.message : '知识工作台加载失败';
       setMessage(message);
       addToast(message, 'error');
     }).finally(() => setLoading(false));
-  }, [section]);
+  }, [section, loadLearning]);
+
+  useEffect(() => {
+    if (section !== 'learning' || !selectedTask?.eventId) {
+      setEvidence([]);
+      return;
+    }
+    knowledgeApi.taskEvidence(selectedTask.id)
+      .then(setEvidence)
+      .catch(() => setEvidence([]));
+  }, [section, selectedTask?.id, selectedTask?.eventId]);
 
   function navigate(next: KnowledgeSection) {
     const params = new URLSearchParams(window.location.search);
@@ -64,10 +112,13 @@ export function KnowledgeView({
     const next = targetParams.get('section') as KnowledgeSection | null;
     if (!next || !validSections.has(next)) return;
     window.history.pushState({}, '', `${window.location.pathname}?${targetParams.toString()}`);
+    const task = Number(targetParams.get('task'));
+    setSelectedTaskId(Number.isSafeInteger(task) && task > 0 ? task : undefined);
+    setTaskStatus(targetParams.get('status') || undefined);
     setSection(next);
   }
 
-  async function searchTopics(query: string) {
+  const searchTopics = useCallback(async (query: string) => {
     setLoading(true);
     try {
       const page = await knowledgeApi.topics({ query });
@@ -76,6 +127,45 @@ export function KnowledgeView({
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  function selectTask(id: number) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('section', 'learning');
+    params.set('task', String(id));
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    setSelectedTaskId(id);
+  }
+
+  async function acceptTask(taskId: number, acceptedTopicId: number, revision: number) {
+    await knowledgeApi.acceptTask(taskId, acceptedTopicId, revision);
+    setTaskStatus(undefined);
+    navigateTarget(`?section=learning&task=${taskId}`);
+    await loadLearning(null);
+    addToast('建议已加入学习队列', 'success');
+  }
+
+  async function startTask(taskId: number, revision: number) {
+    await knowledgeApi.startTask(taskId, revision);
+    await loadLearning(null);
+    addToast('任务已开始', 'success');
+  }
+
+  async function saveDraft(taskId: number, input: KnowledgeEntryInput) {
+    await knowledgeApi.saveDraft(taskId, input);
+    addToast('草稿已保存', 'success');
+  }
+
+  async function completeTask(taskId: number, input: KnowledgeEntryInput) {
+    await knowledgeApi.completeTask(taskId, input);
+    await loadLearning(null);
+    addToast('答案已沉淀到主题档案', 'success');
+  }
+
+  async function dismissTask(taskId: number, reason: string, revision: number) {
+    await knowledgeApi.dismissTask(taskId, reason, revision);
+    await loadLearning(taskStatus);
+    addToast('任务已移出队列', 'info');
   }
 
   return (
@@ -99,7 +189,19 @@ export function KnowledgeView({
         onSearch={searchTopics}
         onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)}
       />}
-      {section === 'learning' && <section className="knowledge-placeholder"><h2>学习队列</h2></section>}
+      {section === 'learning' && <LearningWorkspace
+        tasks={tasks}
+        topics={topics}
+        selectedTaskId={selectedTaskId}
+        evidence={evidence}
+        onSelectTask={selectTask}
+        onAccept={acceptTask}
+        onStart={startTask}
+        onSaveDraft={saveDraft}
+        onComplete={completeTask}
+        onDismiss={dismissTask}
+        onOpenEvent={() => addToast('请从事件档案查看完整来源', 'info')}
+      />}
       {section === 'review' && <section className="knowledge-placeholder"><h2>到期复习</h2></section>}
     </section>
   );

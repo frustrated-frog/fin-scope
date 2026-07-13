@@ -1,21 +1,37 @@
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
     ...options
   });
   if (!response.ok) {
-    const errorText = typeof response.text === 'function' ? await response.text() : null;
+    let errorBody: { message?: string; error?: string; code?: string } = {};
     try {
-      const errorBody = errorText === null
-        ? await response.json() as { message?: string; error?: string }
-        : JSON.parse(errorText) as { message?: string; error?: string };
-      throw new Error(errorBody.message || errorBody.error || `Request failed: ${response.status}`);
-    } catch (error) {
-      if (error instanceof Error && !error.message.startsWith('Unexpected')) {
-        throw error;
+      if (typeof response.text === 'function') {
+        const errorText = await response.text();
+        if (errorText.trim()) errorBody = JSON.parse(errorText) as typeof errorBody;
+      } else {
+        errorBody = await response.json() as typeof errorBody;
       }
-      throw new Error(`Request failed: ${response.status}`);
+    } catch {
+      // Invalid or empty error bodies still retain the HTTP status for callers.
     }
+    throw new ApiError(
+      response.status,
+      errorBody.message || errorBody.error || `Request failed: ${response.status}`,
+      errorBody.code
+    );
   }
   if (response.status === 204) {
     return undefined as T;

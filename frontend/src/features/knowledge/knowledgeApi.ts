@@ -2,6 +2,7 @@ import { api } from '../../shared/api/client';
 import {
   KnowledgeEntry,
   KnowledgeEntryInput,
+  KnowledgeEvidence,
   KnowledgeOverview,
   KnowledgePage,
   KnowledgeTask,
@@ -42,6 +43,7 @@ export const knowledgeApi = {
   dueReviews: (page = 0, size = 20) => api<KnowledgePage<KnowledgeTopic>>(
     `/api/knowledge/reviews/due?${queryString({ page, size })}`
   ),
+  taskEvidence: (taskId: number) => api<KnowledgeEvidence[]>(`/api/knowledge/tasks/${taskId}/evidence`),
   acceptTask: (taskId: number, topicId: number, expectedRevision: number) =>
     api<KnowledgeTask>(`/api/knowledge/tasks/${taskId}/accept`, {
       method: 'POST', body: JSON.stringify({ topicId, expectedRevision })

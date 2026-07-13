@@ -817,6 +817,289 @@ a:focus-visible {
   .knowledge-loading span { animation: none; }
 }
 
+.learning-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.45fr);
+  min-height: 650px;
+}
+
+.learning-queue-panel {
+  border-right: 1px solid var(--knowledge-rule);
+  padding: 30px 22px 40px 38px;
+}
+
+.learning-queue-panel .knowledge-section-heading {
+  margin-bottom: 22px;
+}
+
+.learning-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.learning-task-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 8px;
+  background: var(--knowledge-paper);
+  color: var(--knowledge-ink);
+  padding: 15px;
+  text-align: left;
+}
+
+.learning-task-card:hover,
+.learning-task-card.active {
+  border-color: var(--knowledge-pine);
+  background: color-mix(in srgb, var(--knowledge-pine) 6%, var(--knowledge-paper));
+}
+
+.learning-task-card strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.learning-task-card > small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--knowledge-slate);
+  font-size: 11px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.knowledge-task-status {
+  width: fit-content;
+  color: var(--knowledge-pine);
+  font-family: SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .05em;
+}
+
+.status-suggested { color: var(--knowledge-amber); }
+
+.learning-task-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--knowledge-slate);
+  font-family: SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+.learning-task-workspace {
+  padding: 34px 38px 48px;
+}
+
+.learning-task-workspace > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--knowledge-rule);
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+}
+
+.learning-task-workspace > header h2 {
+  max-width: 760px;
+  margin: 0;
+  color: var(--knowledge-ink);
+  font-family: "Iowan Old Style", "Songti SC", STSong, serif;
+  font-size: clamp(24px, 2.6vw, 36px);
+  line-height: 1.25;
+}
+
+.learning-task-workspace > header p:not(.knowledge-kicker) {
+  max-width: 720px;
+  color: var(--knowledge-slate);
+  font-size: 13px;
+}
+
+.learning-task-workspace > header > button {
+  flex: 0 0 auto;
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--knowledge-slate);
+  padding: 8px 11px;
+  font-size: 11px;
+}
+
+.suggestion-decision,
+.learning-start-panel {
+  display: grid;
+  gap: 18px;
+  max-width: 620px;
+}
+
+.knowledge-callout {
+  border-left: 3px solid var(--knowledge-amber);
+  background: color-mix(in srgb, var(--knowledge-amber) 7%, var(--knowledge-paper));
+  padding: 16px 18px;
+}
+
+.knowledge-callout p,
+.learning-start-panel p {
+  margin: 5px 0 0;
+  color: var(--knowledge-slate);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.suggestion-decision > label,
+.suggestion-decision details label,
+.learning-dismiss label {
+  display: grid;
+  gap: 6px;
+  color: var(--knowledge-slate);
+  font-size: 11px;
+}
+
+.suggestion-decision select,
+.suggestion-decision textarea,
+.learning-dismiss textarea,
+.learning-editor-heading select,
+.learning-answer-field textarea {
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 8px;
+  background: var(--knowledge-paper);
+  color: var(--knowledge-ink);
+  padding: 10px 12px;
+}
+
+.suggestion-decision > .knowledge-primary-button,
+.learning-start-panel > .knowledge-primary-button {
+  width: fit-content;
+}
+
+.suggestion-decision details,
+.learning-dismiss {
+  border-top: 1px solid var(--knowledge-rule);
+  padding-top: 14px;
+  color: var(--knowledge-slate);
+  font-size: 11px;
+}
+
+.suggestion-decision details > *,
+.learning-dismiss > * { margin-top: 10px; }
+
+.learning-answer-editor {
+  display: grid;
+  gap: 20px;
+}
+
+.learning-editor-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.learning-editor-heading h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Songti SC", STSong, serif;
+  font-size: 22px;
+}
+
+.learning-editor-heading label,
+.learning-answer-field {
+  display: grid;
+  gap: 6px;
+  color: var(--knowledge-slate);
+  font-size: 11px;
+}
+
+.learning-answer-field textarea {
+  min-height: 220px;
+  resize: vertical;
+  color: var(--knowledge-ink);
+  font-family: Inter, "PingFang SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.learning-evidence-picker {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 8px;
+  margin: 0;
+  padding: 14px;
+}
+
+.learning-evidence-picker legend {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.learning-evidence-picker legend small,
+.learning-evidence-picker > p {
+  color: var(--knowledge-slate);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.learning-evidence-picker label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px;
+  border-top: 1px solid var(--knowledge-rule);
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.learning-evidence-picker label span {
+  display: grid;
+  gap: 3px;
+}
+
+.learning-evidence-picker label small {
+  color: var(--knowledge-slate);
+  font-family: SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+.knowledge-inline-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--knowledge-rule));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--knowledge-paper));
+  color: var(--danger);
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+}
+
+.learning-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.learning-editor-actions > button:not(.knowledge-primary-button),
+.learning-dismiss button,
+.suggestion-decision details button {
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--knowledge-ink);
+  padding: 10px 14px;
+}
+
+.learning-dismiss { margin-top: 28px; }
+.learning-no-selection { color: var(--knowledge-slate); padding: 60px 20px; text-align: center; }
+
+@media (max-width: 860px) {
+  .learning-workspace { grid-template-columns: 1fr; }
+  .learning-queue-panel { border-right: 0; border-bottom: 1px solid var(--knowledge-rule); padding: 26px 20px; }
+  .learning-task-workspace { padding: 28px 20px 40px; }
+  .learning-task-workspace > header,
+  .learning-editor-heading { align-items: stretch; flex-direction: column; }
+}
+
 .sidebar > nav::-webkit-scrollbar {
   width: 6px;
 }

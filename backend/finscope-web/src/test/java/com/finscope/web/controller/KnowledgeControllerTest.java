@@ -6,8 +6,10 @@ import com.finscope.domain.knowledge.KnowledgeEntry;
 import com.finscope.domain.knowledge.KnowledgeOverview;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
+import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.topic.Topic;
 import com.finscope.service.knowledge.KnowledgeLearningService;
+import com.finscope.service.knowledge.KnowledgeContextService;
 import com.finscope.service.knowledge.KnowledgeOverviewService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -42,6 +44,8 @@ class KnowledgeControllerTest {
     private KnowledgeOverviewService overviewService;
     @MockBean
     private KnowledgeLearningService learningService;
+    @MockBean
+    private KnowledgeContextService contextService;
 
     @Test
     void exposesOverviewAndBoundedPages() throws Exception {
@@ -78,6 +82,18 @@ class KnowledgeControllerTest {
         mockMvc.perform(get("/api/knowledge/reviews/due"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isArray());
+    }
+
+    @Test
+    void exposesEvidenceBoundToTheSelectedTask() throws Exception {
+        EvidenceItem item = new EvidenceItem();
+        item.setId(11L);
+        item.setClaim("一手回放显示任务可以稳定恢复");
+        when(contextService.evidenceForTask(7L)).thenReturn(Collections.singletonList(item));
+
+        mockMvc.perform(get("/api/knowledge/tasks/7/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(11));
     }
 
     @Test

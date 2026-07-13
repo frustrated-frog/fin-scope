@@ -6,8 +6,10 @@ import com.finscope.domain.knowledge.KnowledgeEntry;
 import com.finscope.domain.knowledge.KnowledgeOverview;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.LearningTask;
+import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.topic.Topic;
 import com.finscope.service.knowledge.KnowledgeLearningService;
+import com.finscope.service.knowledge.KnowledgeContextService;
 import com.finscope.service.knowledge.KnowledgeOverviewService;
 import com.finscope.web.request.knowledge.AcceptKnowledgeTaskRequest;
 import com.finscope.web.request.knowledge.DismissKnowledgeTaskRequest;
@@ -22,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * HTTP boundary for the knowledge workbench.
  *
@@ -33,11 +37,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeController {
     private final KnowledgeOverviewService overviewService;
     private final KnowledgeLearningService learningService;
+    private final KnowledgeContextService contextService;
 
     public KnowledgeController(KnowledgeOverviewService overviewService,
-                               KnowledgeLearningService learningService) {
+                               KnowledgeLearningService learningService,
+                               KnowledgeContextService contextService) {
         this.overviewService = overviewService;
         this.learningService = learningService;
+        this.contextService = contextService;
     }
 
     @GetMapping("/overview")
@@ -72,6 +79,11 @@ public class KnowledgeController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return overviewService.dueReviews(page, size);
+    }
+
+    @GetMapping("/tasks/{taskId}/evidence")
+    public List<EvidenceItem> taskEvidence(@PathVariable long taskId) {
+        return contextService.evidenceForTask(taskId);
     }
 
     @PostMapping("/tasks/{taskId}/accept")

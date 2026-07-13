@@ -78,3 +78,15 @@ export type KnowledgeEntryInput = {
   evidenceIds: number[];
   expectedRevision: number;
 };
+
+export type KnowledgeEvidence = {
+  id: number;
+  eventId: number;
+  articleId?: number;
+  claim: string;
+  sourceTier: string;
+  evidenceType?: string;
+  confidence: number;
+  articleTitle?: string;
+  articleUrl?: string;
+};

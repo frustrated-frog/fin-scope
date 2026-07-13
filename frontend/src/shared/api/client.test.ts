@@ -31,4 +31,17 @@ describe('api business errors', () => {
 
     await expect(api('/api/strategy/holdings')).rejects.toThrow('记录已被更新，请刷新后再试');
   });
+
+  it('preserves status and code for recoverable optimistic-lock conflicts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      code: 'CONFLICT',
+      message: '记录已被更新，请刷新后再试'
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+
+    await expect(api('/api/knowledge/tasks/7/complete')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 409,
+      code: 'CONFLICT'
+    });
+  });
 });
