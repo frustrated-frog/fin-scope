@@ -2,6 +2,9 @@ package com.finscope.service.knowledge;
 
 import com.finscope.dao.knowledge.KnowledgeQueryRepository;
 import com.finscope.domain.knowledge.KnowledgeOverview;
+import com.finscope.domain.response.PageResponse;
+import com.finscope.domain.research.LearningTask;
+import com.finscope.domain.topic.Topic;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -38,5 +41,23 @@ public class KnowledgeOverviewService {
         overview.setRecentEntries(snapshot.getRecentEntries());
         overview.setActions(planner.plan(snapshot.getActionCandidates()));
         return overview;
+    }
+
+    public PageResponse<Topic> topicsPage(String lifecycle, String mastery,
+                                          boolean dueOnly, String query,
+                                          int page, int pageSize) {
+        return queries.findTopicsPage(lifecycle, mastery, dueOnly, query,
+                page, pageSize, LocalDateTime.now(clock));
+    }
+
+    public PageResponse<LearningTask> tasksPage(String status, Long topicId,
+                                                String query, int page,
+                                                int pageSize) {
+        return queries.findLearningTasksPage(status, topicId, query, page, pageSize);
+    }
+
+    public PageResponse<Topic> dueReviews(int page, int pageSize) {
+        return queries.findTopicsPage("ACTIVE", null, true, null,
+                page, pageSize, LocalDateTime.now(clock));
     }
 }
