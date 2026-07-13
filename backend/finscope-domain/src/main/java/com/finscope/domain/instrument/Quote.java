@@ -1,10 +1,13 @@
 package com.finscope.domain.instrument;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
  * 行情快照：某标的在某个时刻的价格与涨跌。
  */
+@Data
 public class Quote {
     private String instrumentCode;
     private String name;
@@ -39,131 +42,4 @@ public class Quote {
     private boolean valid = true;
     /** 取数失败或估值等提示信息 */
     private String note;
-
-    public String getInstrumentCode() {
-        return instrumentCode;
-    }
-
-    public void setInstrumentCode(String instrumentCode) {
-        this.instrumentCode = instrumentCode;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Double getPrice() {
-        return price;
-    }
-
-    public void setPrice(Double price) {
-        this.price = price;
-    }
-
-    public Double getConfirmedNav() { return confirmedNav; }
-    public void setConfirmedNav(Double confirmedNav) { this.confirmedNav = confirmedNav; }
-    public String getConfirmedNavDate() { return confirmedNavDate; }
-    public void setConfirmedNavDate(String confirmedNavDate) { this.confirmedNavDate = confirmedNavDate; }
-    public Double getConfirmedNavChangePct() { return confirmedNavChangePct; }
-    public void setConfirmedNavChangePct(Double confirmedNavChangePct) { this.confirmedNavChangePct = confirmedNavChangePct; }
-
-    public Double getPreviousClose() {
-        return previousClose;
-    }
-
-    public void setPreviousClose(Double previousClose) {
-        this.previousClose = previousClose;
-    }
-
-    public Double getChangePct() {
-        return changePct;
-    }
-
-    public void setChangePct(Double changePct) {
-        this.changePct = changePct;
-    }
-
-    public Double getChangeAmount() {
-        return changeAmount;
-    }
-
-    public void setChangeAmount(Double changeAmount) {
-        this.changeAmount = changeAmount;
-    }
-
-    public Double getTurnover() {
-        return turnover;
-    }
-
-    public void setTurnover(Double turnover) {
-        this.turnover = turnover;
-    }
-
-    public Double getVolume() {
-        return volume;
-    }
-
-    public void setVolume(Double volume) {
-        this.volume = volume;
-    }
-
-    public Double getOpen() {
-        return open;
-    }
-
-    public void setOpen(Double open) {
-        this.open = open;
-    }
-
-    public Double getHigh() {
-        return high;
-    }
-
-    public void setHigh(Double high) {
-        this.high = high;
-    }
-
-    public Double getLow() {
-        return low;
-    }
-
-    public void setLow(Double low) {
-        this.low = low;
-    }
-
-    public Double getAmplitude() {
-        return amplitude;
-    }
-
-    public void setAmplitude(Double amplitude) {
-        this.amplitude = amplitude;
-    }
-
-    public LocalDateTime getQuoteTime() {
-        return quoteTime;
-    }
-
-    public void setQuoteTime(LocalDateTime quoteTime) {
-        this.quoteTime = quoteTime;
-    }
-
-    public boolean isValid() {
-        return valid;
-    }
-
-    public void setValid(boolean valid) {
-        this.valid = valid;
-    }
-
-    public String getNote() {
-        return note;
-    }
-
-    public void setNote(String note) {
-        this.note = note;
-    }
 }
