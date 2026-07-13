@@ -78,7 +78,7 @@ public class LearningTaskService {
                                                  Article article,
                                                  List<EvidenceItem> evidenceItems,
                                                  long start) {
-        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+        if (ResearchRunContext.isBatchResearch() || llmChatClient == null || !llmChatClient.isConfigured()) {
             return Collections.emptyList();
         }
         String prompt = learningPrompt(event, article, evidenceItems);

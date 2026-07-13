@@ -80,6 +80,9 @@ public class RssSourceAdapter implements SourceAdapter {
         InputStream inputStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
         byte[] bytes = readAll(inputStream);
         String xml = new String(bytes, StandardCharsets.UTF_8).trim();
+        if (!xml.isEmpty() && xml.charAt(0) == '\uFEFF') {
+            xml = xml.substring(1).trim();
+        }
         if (xml.isEmpty()) {
             throw new IllegalStateException("RSS 返回空内容，无法解析：" + url);
         }

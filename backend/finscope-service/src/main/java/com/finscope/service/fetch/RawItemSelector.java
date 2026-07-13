@@ -48,6 +48,11 @@ public class RawItemSelector {
                 .thenComparing(Comparator.comparingInt(this::contentLength).reversed())
                 .thenComparing(RawItem::getPublishedAt, Comparator.nullsLast(Comparator.reverseOrder())));
 
+        int maxItems = source == null ? 0 : source.getMaxItemsPerRun();
+        if (maxItems > 0 && selected.size() > maxItems) {
+            selected = new ArrayList<>(selected.subList(0, maxItems));
+        }
+
         for (int i = 0; i < selected.size(); i++) {
             selected.get(i).setSourceRank(i + 1);
         }

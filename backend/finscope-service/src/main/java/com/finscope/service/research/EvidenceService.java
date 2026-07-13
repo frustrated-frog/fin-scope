@@ -82,7 +82,7 @@ public class EvidenceService {
     }
 
     private List<EvidenceItem> extractWithAgent(EventCluster event, Article article, long start) {
-        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+        if (ResearchRunContext.isBatchResearch() || llmChatClient == null || !llmChatClient.isConfigured()) {
             return java.util.Collections.emptyList();
         }
         String input = evidencePrompt(event, article);

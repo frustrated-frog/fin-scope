@@ -73,7 +73,7 @@ public class ContentIdeaService {
                                                 Article article,
                                                 List<EvidenceItem> evidenceItems,
                                                 long start) {
-        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+        if (ResearchRunContext.isBatchResearch() || llmChatClient == null || !llmChatClient.isConfigured()) {
             return Collections.emptyList();
         }
         String prompt = contentPrompt(event, article, evidenceItems);

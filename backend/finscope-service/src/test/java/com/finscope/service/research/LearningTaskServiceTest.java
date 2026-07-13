@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,6 +76,23 @@ class LearningTaskServiceTest {
                 generated.get(0).getTaskKey());
         assertEquals(generated.get(0).getTaskKey(), generated.get(1).getTaskKey());
         assertNotEquals(generated.get(0).getTaskKey(), generated.get(2).getTaskKey());
+    }
+
+    @Test
+    void batchResearchBuildsDeterministicSuggestionsWithoutPerArticleLlmCall() throws Exception {
+        EventCluster event = event();
+        when(evidence.listByEventId(event.getId())).thenReturn(Collections.emptyList());
+        when(llm.isConfigured()).thenReturn(true);
+        when(tasks.insertSuggestionIfAbsent(any(LearningTask.class))).thenReturn(true);
+        ResearchRunContext.setCurrentRunId(79L);
+        try {
+            service.generateIfAbsent(event, null, true);
+
+            verify(llm, never()).complete(anyString(), anyString());
+            verify(tasks, atLeastOnce()).insertSuggestionIfAbsent(any(LearningTask.class));
+        } finally {
+            ResearchRunContext.clear();
+        }
     }
 
     private EventCluster event() {

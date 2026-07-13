@@ -45,6 +45,26 @@ class RawItemSelectorTest {
         assertEquals("有价值内容", selected.get(0).getTitle());
     }
 
+    @Test
+    void limitsSelectedItemsToSourceBudgetAfterRanking() {
+        Source source = source();
+        source.setMaxItemsPerRun(2);
+        RawItem strongest = item("最重要", "https://example.com/strongest",
+                "摘要", repeat("高价值正文。", 40), 95, 1);
+        RawItem second = item("次重要", "https://example.com/second",
+                "摘要", repeat("次高价值正文。", 30), 85, 1);
+        RawItem third = item("第三条", "https://example.com/third",
+                "摘要", repeat("普通正文。", 25), 70, 1);
+
+        List<RawItem> selected = selector.select(source, Arrays.asList(third, second, strongest));
+
+        assertEquals(2, selected.size());
+        assertEquals("最重要", selected.get(0).getTitle());
+        assertEquals("次重要", selected.get(1).getTitle());
+        assertEquals(1, selected.get(0).getSourceRank());
+        assertEquals(2, selected.get(1).getSourceRank());
+    }
+
     private Source source() {
         Source source = new Source();
         source.setType("RSS");

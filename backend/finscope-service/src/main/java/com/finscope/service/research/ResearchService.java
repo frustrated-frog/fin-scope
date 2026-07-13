@@ -212,6 +212,7 @@ public class ResearchService {
                 }
                 agentTraceService.recordNode(null, null, context, fingerprint, nodeResult,
                         System.currentTimeMillis() - sourceStart, sourceFetchMetadata(sourceId));
+                persistRunningProgress(run, fetchedSources);
             }
 
             completeStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES,
@@ -231,9 +232,7 @@ public class ResearchService {
                     "briefDate=" + brief.getBriefDate(), 1);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN);
             run.setFetchedSourceCount(fetchedSources);
-            run.setArticleCount(outputCount(run.getId(), ResearchRunOutputService.ARTICLE));
-            run.setEventCount(outputCount(run.getId(), ResearchRunOutputService.EVENT));
-            run.setEvidenceCount(outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
+            refreshOutputCounts(run);
             run.setLearningTaskCount(delta(learningBefore, learningTaskRepository.countAll()));
             run.setContentIdeaCount(delta(ideaBefore, contentIdeaRepository.countAll()));
             run.setBriefDate(brief.getBriefDate());
@@ -250,6 +249,7 @@ public class ResearchService {
             return updated;
         } catch (Exception ex) {
             run.setFetchedSourceCount(fetchedSources);
+            refreshOutputCounts(run);
             run.setStatus(ResearchEnums.RUN_STATUS_FAILED);
             run.setSummary(resultSummary(run));
             run.setErrorMessage(ex.getMessage());
@@ -276,6 +276,19 @@ public class ResearchService {
 
     private int outputCount(Long runId, String outputType) {
         return researchRunOutputService == null ? 0 : researchRunOutputService.count(runId, outputType);
+    }
+
+    private void persistRunningProgress(ResearchRun run, int fetchedSources) {
+        run.setFetchedSourceCount(fetchedSources);
+        refreshOutputCounts(run);
+        run.setSummary(resultSummary(run));
+        researchRunRepository.updateResult(run);
+    }
+
+    private void refreshOutputCounts(ResearchRun run) {
+        run.setArticleCount(outputCount(run.getId(), ResearchRunOutputService.ARTICLE));
+        run.setEventCount(outputCount(run.getId(), ResearchRunOutputService.EVENT));
+        run.setEvidenceCount(outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
     }
 
     private List<String> extractCodes(List<ThemeProfile> themes) {

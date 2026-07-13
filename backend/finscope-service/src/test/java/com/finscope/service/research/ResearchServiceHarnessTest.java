@@ -7,6 +7,7 @@ import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.dao.research.ResearchRunRepository;
+import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.brief.Brief;
@@ -27,10 +28,12 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,6 +67,7 @@ class ResearchServiceHarnessTest {
         ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+        ResearchRunOutputService researchRunOutputService = mock(ResearchRunOutputService.class);
         CapturingExecutor researchTaskExecutor = new CapturingExecutor();
 
         ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
@@ -82,6 +86,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", researchRunOutputService);
         ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
 
         LocalDate runDate = LocalDate.of(2026, 7, 9);
@@ -125,7 +130,7 @@ class ResearchServiceHarnessTest {
         researchTaskExecutor.runCaptured();
 
         verify(fetchService).fetch(12L);
-        verify(researchRunRepository).updateResult(any(ResearchRun.class));
+        verify(researchRunRepository, atLeastOnce()).updateResult(any(ResearchRun.class));
     }
 
     @Test
@@ -144,6 +149,7 @@ class ResearchServiceHarnessTest {
         ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+        ResearchRunOutputService researchRunOutputService = mock(ResearchRunOutputService.class);
         CapturingExecutor researchTaskExecutor = new CapturingExecutor();
 
         ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
@@ -162,6 +168,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", researchRunOutputService);
         ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
 
         LocalDate runDate = LocalDate.of(2026, 7, 3);
@@ -211,6 +218,94 @@ class ResearchServiceHarnessTest {
         assertEquals("REPEATED_ACTION", skipped.getErrorType());
         assertEquals(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS, plan.getRun().getStatus());
         assertTrue(plan.getRun().getErrorMessage().contains("Repeated action reached hard threshold"));
+    }
+
+    @Test
+    void persistsRunningProgressAfterEachFetchedSource() {
+        ResearchService service = new ResearchService();
+        ThemeProfileService themeProfileService = mock(ThemeProfileService.class);
+        SourcePlanner sourcePlanner = mock(SourcePlanner.class);
+        SourceRepository sourceRepository = mock(SourceRepository.class);
+        ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
+        FetchService fetchService = mock(FetchService.class);
+        BriefService briefService = mock(BriefService.class);
+        ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
+        ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
+        CapturingExecutor executor = new CapturingExecutor();
+        AtomicInteger completedFetches = new AtomicInteger();
+        List<String> snapshots = new ArrayList<String>();
+
+        ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
+        ReflectionTestUtils.setField(service, "sourcePlanner", sourcePlanner);
+        ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
+        ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
+        ReflectionTestUtils.setField(service, "researchThesisRepository", mock(ResearchThesisRepository.class));
+        ReflectionTestUtils.setField(service, "fetchService", fetchService);
+        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "articleRepository", mock(ArticleRepository.class));
+        ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
+        ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
+        ReflectionTestUtils.setField(service, "learningTaskRepository", mock(LearningTaskRepository.class));
+        ReflectionTestUtils.setField(service, "contentIdeaRepository", mock(ContentIdeaRepository.class));
+        ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
+        ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
+        ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
+        ReflectionTestUtils.setField(service, "agentTraceService", mock(AgentTraceService.class));
+        ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
+        ReflectionTestUtils.setField(service, "researchTaskExecutor", executor);
+
+        LocalDate runDate = LocalDate.of(2026, 7, 13);
+        List<ResearchRunPlanStep> steps = defaultSteps();
+        when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
+        when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+                .thenReturn(Arrays.asList(source(21L), source(22L)));
+        when(researchRunPlanService.initializeDefaultPlan(501L, 2)).thenReturn(steps);
+        when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
+            String stepId = invocation.getArgument(1);
+            for (ResearchRunPlanStep step : steps) {
+                if (stepId.equals(step.getStepId())) {
+                    return step;
+                }
+            }
+            return steps.get(0);
+        });
+        when(researchRunPlanService.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunPlanService.complete(any(ResearchRunPlanStep.class), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(researchRunRepository.save(any(ResearchRun.class))).thenAnswer(invocation -> {
+            ResearchRun run = invocation.getArgument(0);
+            run.setId(501L);
+            return run;
+        });
+        when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> {
+            ResearchRun run = invocation.getArgument(0);
+            snapshots.add(run.getStatus() + "|" + run.getFetchedSourceCount() + "|" + run.getArticleCount()
+                    + "|" + run.getEventCount() + "|" + run.getEvidenceCount());
+            return run;
+        });
+        when(fetchService.fetch(anyLong())).thenAnswer(invocation -> {
+            completedFetches.incrementAndGet();
+            FetchRun run = fetchRun();
+            run.setSourceId(invocation.getArgument(0));
+            run.setSourceName("Source " + invocation.getArgument(0));
+            return run;
+        });
+        when(outputService.count(501L, ResearchRunOutputService.ARTICLE))
+                .thenAnswer(invocation -> completedFetches.get() * 2);
+        when(outputService.count(501L, ResearchRunOutputService.EVENT))
+                .thenAnswer(invocation -> completedFetches.get());
+        when(outputService.count(501L, ResearchRunOutputService.EVIDENCE))
+                .thenAnswer(invocation -> completedFetches.get() * 2);
+        when(briefService.generate(runDate)).thenReturn(brief(runDate));
+
+        service.createRun(runDate, Collections.singletonList(ResearchEnums.THEME_MARKET), 2, true);
+        executor.runCaptured();
+
+        assertTrue(snapshots.contains("RUNNING|1|2|1|2"), "progress snapshots=" + snapshots);
+        assertTrue(snapshots.contains("RUNNING|2|4|2|4"), "progress snapshots=" + snapshots);
+        assertTrue(snapshots.contains("COMPLETED|2|4|2|4"), "progress snapshots=" + snapshots);
     }
 
     @Test

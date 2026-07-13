@@ -18,6 +18,10 @@ public final class ResearchRunContext {
         return CURRENT_CONTEXT.get();
     }
 
+    public static boolean isBatchResearch() {
+        return currentRunId() != null;
+    }
+
     public static void setCurrentRunId(Long runId) {
         CURRENT_CONTEXT.set(AgentRunContext.start(runId, AgentBudgetPolicy.defaults()));
     }

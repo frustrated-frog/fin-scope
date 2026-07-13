@@ -52,6 +52,16 @@ public class SourceController {
     }
 
     /**
+     * 幂等安装一组无需密钥的推荐新闻源。
+     *
+     * @return 本次安装或更新后的新闻源。
+     */
+    @PostMapping("/recommended-news")
+    public List<Source> installRecommendedNewsSources() {
+        return sourceService.installRecommendedNewsSources();
+    }
+
+    /**
      * 更新信息源。
      *
      * @param id 信息源 ID。

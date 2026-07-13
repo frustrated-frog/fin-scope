@@ -49,7 +49,7 @@ public class ArticleInterpretationAgent {
         long start = System.currentTimeMillis();
         ArticleInterpretationInput input = ArticleInterpretationInput.from(article);
         String userPrompt = buildUserPrompt(input);
-        if (!isConfigured()) {
+        if (!isConfigured() || ResearchRunContext.isBatchResearch()) {
             ArticleInterpretation fallback = fallback(article);
             record(input, "FALLBACK", traceInput(input, userPrompt), traceOutput(fallback), null, start);
             return fallback;

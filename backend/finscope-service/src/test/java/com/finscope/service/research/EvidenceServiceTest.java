@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class EvidenceServiceTest {
@@ -39,6 +41,26 @@ class EvidenceServiceTest {
         EvidenceItem saved = captor.getValue();
         assertFalse(saved.getClaim().contains("990 亿美元虚构营收"));
         assertTrue(saved.getClaim().contains("单周净流入12亿美元"));
+    }
+
+    @Test
+    void batchResearchPersistsDeterministicEvidenceWithoutPerArticleLlmCall() throws Exception {
+        EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
+        AgentRunRepository agentRunRepository = mock(AgentRunRepository.class);
+        LlmChatClient llmChatClient = mock(LlmChatClient.class);
+        when(llmChatClient.isConfigured()).thenReturn(true);
+        EvidenceService service = service(evidenceItemRepository, agentRunRepository, llmChatClient);
+        when(evidenceItemRepository.save(any(EvidenceItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(evidenceItemRepository.countByEventId(anyLong())).thenReturn(1);
+        ResearchRunContext.setCurrentRunId(78L);
+        try {
+            service.capture(event(), article());
+
+            verify(llmChatClient, never()).complete(any(), any());
+            verify(evidenceItemRepository).save(any(EvidenceItem.class));
+        } finally {
+            ResearchRunContext.clear();
+        }
     }
 
     private EvidenceService service(EvidenceItemRepository evidenceItemRepository,

@@ -16,7 +16,6 @@ import com.finscope.service.research.EventClusterService;
 import com.finscope.service.research.ResearchRunOutputService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.function.Consumer;
@@ -39,17 +38,14 @@ public class ArticleIngestCoordinator {
     @Resource
     private ResearchRunOutputService researchRunOutputService;
 
-    @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item) {
         return ingestInternal(source, item, null, null);
     }
 
-    @Transactional
     public ArticleIngestResult ingest(Source source, RawItem item, Consumer<TaskPhase> phaseConsumer) {
         return ingestInternal(source, item, null, phaseConsumer);
     }
 
-    @Transactional
     public ArticleIngestResult ingest(Source source,
                                       RawItem item,
                                       String category,

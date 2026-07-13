@@ -26,10 +26,10 @@ class RssSourceAdapterTest {
     }
 
     @Test
-    void parsesArxivRssIntoCleanArticleContent() throws Exception {
+    void parsesBomPrefixedRssIntoCleanArticleContent() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
-            byte[] bytes = arxivRss().getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = ("\uFEFF" + arxivRss()).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/rss+xml; charset=utf-8");
             exchange.sendResponseHeaders(200, bytes.length);
             try (OutputStream body = exchange.getResponseBody()) {

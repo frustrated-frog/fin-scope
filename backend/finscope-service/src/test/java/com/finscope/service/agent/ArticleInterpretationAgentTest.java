@@ -3,6 +3,7 @@ package com.finscope.service.agent;
 import com.finscope.domain.article.Article;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.insight.InsightCardGenerator;
+import com.finscope.service.research.ResearchRunContext;
 import com.finscope.service.topic.TopicExtractor;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -50,6 +51,21 @@ class ArticleInterpretationAgentTest {
         assertTrue(interpretation.getLearningQuestions().stream().noneMatch(question -> question.contains("资产定价")));
         assertTrue(llmClient.userPrompt.contains("Cloudflare"));
         assertTrue(llmClient.userPrompt.contains("Workers"));
+    }
+
+    @Test
+    void batchResearchUsesDeterministicInterpretationWithoutPerArticleLlmCall() {
+        CapturingLlmClient llmClient = new CapturingLlmClient(validQuantInterpretationJson());
+        ArticleInterpretationAgent agent = agent(llmClient);
+        ResearchRunContext.setCurrentRunId(77L);
+        try {
+            ArticleInterpretation interpretation = agent.interpret(quantLoopArticle());
+
+            assertEquals("FALLBACK", interpretation.getSource());
+            assertEquals(null, llmClient.userPrompt);
+        } finally {
+            ResearchRunContext.clear();
+        }
     }
 
     @Test

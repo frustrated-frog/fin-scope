@@ -891,6 +891,25 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void recommendedNewsSourcesCanBeInstalledIdempotently() throws Exception {
+        mvc.perform(post("/api/sources/recommended-news"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[*].name").value(hasItem("BBC Business")))
+                .andExpect(jsonPath("$[*].name").value(hasItem("Federal Reserve Press Releases")))
+                .andExpect(jsonPath("$[*].name").value(hasItem("TechCrunch")))
+                .andExpect(jsonPath("$[*].name").value(hasItem("Google News 中文科技与半导体")));
+
+        mvc.perform(post("/api/sources/recommended-news"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4));
+
+        mvc.perform(get("/api/sources"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4));
+    }
+
+    @Test
     void deletingArticleCleansResearchArtifactsAndCounts() throws Exception {
         seedResearchArtifacts();
 
