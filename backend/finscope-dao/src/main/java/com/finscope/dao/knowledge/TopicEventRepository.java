@@ -29,4 +29,11 @@ public class TopicEventRepository {
                 topicId
         );
     }
+
+    public boolean isLinked(Long topicId, Long eventId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM topic_event WHERE topic_id=? AND event_id=?",
+                Integer.class, topicId, eventId);
+        return count != null && count > 0;
+    }
 }
