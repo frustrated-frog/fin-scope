@@ -91,14 +91,20 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     @Override
     public String complete(String systemPrompt, String userPrompt) throws Exception {
+        return complete(systemPrompt, userPrompt, timeoutMs);
+    }
+
+    @Override
+    public String complete(String systemPrompt, String userPrompt, int requestedTimeoutMs) throws Exception {
         if (!isConfigured()) {
             throw new IllegalStateException("LLM is not configured");
         }
+        int actualTimeoutMs = requestedTimeoutMs <= 0 ? timeoutMs : Math.min(timeoutMs, requestedTimeoutMs);
         byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt));
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
         connection.setRequestMethod("POST");
-        connection.setConnectTimeout(timeoutMs);
-        connection.setReadTimeout(timeoutMs);
+        connection.setConnectTimeout(actualTimeoutMs);
+        connection.setReadTimeout(actualTimeoutMs);
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
         connection.setRequestProperty("Accept", "application/json");

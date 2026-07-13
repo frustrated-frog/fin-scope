@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 
 @Component
 public class ResearchReportSynthesisAgent {
+    private static final int REPORT_LLM_TIMEOUT_MS = 20_000;
     private static final String[] REQUIRED_HEADINGS = {
             "## 核心结论", "## 执行摘要", "## 命题拆解", "## 关键证据",
             "## 反方证据与风险", "## 结论边界与后续验证", "## 来源"
@@ -28,8 +29,12 @@ public class ResearchReportSynthesisAgent {
         if (llmChatClient == null || !llmChatClient.isConfigured()) {
             return fallback;
         }
+        if (!EvidenceSufficiency.assess(evidence).isSufficient()) {
+            return fallback;
+        }
         try {
-            String raw = llmChatClient.complete(systemPrompt(), userPrompt(thesis, evidence, fallback));
+            String raw = llmChatClient.complete(systemPrompt(), userPrompt(thesis, evidence, fallback),
+                    REPORT_LLM_TIMEOUT_MS);
             String markdown = stripFence(raw);
             if (!isValid(markdown, evidence)) {
                 return fallback;

@@ -9,10 +9,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenAiCompatibleLlmClientTest {
@@ -56,6 +58,36 @@ class OpenAiCompatibleLlmClientTest {
         assertTrue(requestBody.get().contains("system prompt"));
         assertTrue(requestBody.get().contains("user prompt"));
         assertEquals("{\"topicName\":\"Cloudflare 免费基础设施实践\"}", content);
+    }
+
+    @Test
+    void appliesThePerRequestTimeoutWhenItIsLowerThanTheGlobalTimeout() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            byte[] body = "{\"choices\":[{\"message\":{\"content\":\"late\"}}]}".getBytes(StandardCharsets.UTF_8);
+            try {
+                exchange.sendResponseHeaders(200, body.length);
+                try (OutputStream output = exchange.getResponseBody()) {
+                    output.write(body);
+                }
+            } catch (IOException ignored) {
+                // 客户端按单次预算断开后，服务端写响应会失败。
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(true, baseUrl, "test-key", "test-model", 3000, 0.2);
+
+        long startedAt = System.currentTimeMillis();
+        assertThrows(SocketTimeoutException.class, () -> client.complete("system", "user", 50));
+
+        assertTrue(System.currentTimeMillis() - startedAt < 1000L);
     }
 
     private byte[] readAll(InputStream inputStream) throws IOException {

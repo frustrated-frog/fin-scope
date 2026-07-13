@@ -76,6 +76,7 @@ export default function App() {
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
   const [researchReport, setResearchReport] = useState<ResearchReport | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
+  const [researchReportBusy, setResearchReportBusy] = useState(false);
   const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
   const [topicDeleteTarget, setTopicDeleteTarget] = useState<Topic | null>(null);
   const [deletingTopicId, setDeletingTopicId] = useState<number | null>(null);
@@ -326,6 +327,7 @@ export default function App() {
   }
 
   async function openResearchReport(id: number) {
+    setResearchReportBusy(true);
     setMessage('正在打开研究报告');
     try {
       const report = await api<ResearchReport>(`/api/research/runs/${id}/report`);
@@ -335,6 +337,26 @@ export default function App() {
       const message = error instanceof Error ? error.message : '研究报告打开失败';
       setMessage(message);
       addToast(message, 'error');
+    } finally {
+      setResearchReportBusy(false);
+    }
+  }
+
+  async function regenerateResearchReport(id: number) {
+    setResearchReportBusy(true);
+    setMessage('正在补建研究报告');
+    try {
+      const report = await api<ResearchReport>(`/api/research/runs/${id}/report/regenerate`, { method: 'POST' });
+      setResearchReport(report);
+      await loadResearchRunProgress(id);
+      setMessage('研究报告已补建并打开');
+      addToast('研究报告已补建完成', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '研究报告补建失败';
+      setMessage(message);
+      addToast(message, 'error');
+    } finally {
+      setResearchReportBusy(false);
     }
   }
 
@@ -515,10 +537,13 @@ export default function App() {
           detail={researchRunDetail}
           report={researchReport}
           busy={researchBusy}
+          reportBusy={researchReportBusy}
           onRun={runResearch}
           onCreateThesis={createResearchThesis}
           onOpenRun={openResearchRun}
           onOpenReport={openResearchReport}
+          onRegenerateReport={regenerateResearchReport}
+          onCloseReport={() => setResearchReport(null)}
         />
       )}
       {view === 'events' && (

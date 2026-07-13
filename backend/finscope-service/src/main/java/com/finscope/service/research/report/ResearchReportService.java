@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Optional;
 
 @Service
 public class ResearchReportService {
@@ -101,6 +102,10 @@ public class ResearchReportService {
     public ResearchReport detailByRunId(Long runId) {
         return reportRepository.findByRunId(runId)
                 .orElseThrow(() -> new IllegalArgumentException("Research report not found for run: " + runId));
+    }
+
+    public Optional<ResearchReport> findByRunId(Long runId) {
+        return reportRepository.findByRunId(runId);
     }
 
     public EvidenceSufficiency assessSufficiency(Long runId) {

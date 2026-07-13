@@ -6,4 +6,8 @@ public interface LlmChatClient {
     String modelName();
 
     String complete(String systemPrompt, String userPrompt) throws Exception;
+
+    default String complete(String systemPrompt, String userPrompt, int timeoutMs) throws Exception {
+        return complete(systemPrompt, userPrompt);
+    }
 }

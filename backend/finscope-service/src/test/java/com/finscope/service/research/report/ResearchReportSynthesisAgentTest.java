@@ -1,15 +1,21 @@
 package com.finscope.service.research.report;
 
+import com.finscope.domain.article.Article;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchReportSynthesisAgentTest {
@@ -17,15 +23,29 @@ class ResearchReportSynthesisAgentTest {
     void rejectsUnstructuredOrOversizedModelOutputAndUsesBoundedFallback() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString())).thenReturn("无结构结果" + String.join("", Collections.nCopies(13000, "字")));
+        when(llm.complete(anyString(), anyString(), eq(20000)))
+                .thenReturn("无结构结果" + String.join("", Collections.nCopies(13000, "字")));
         ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent();
         ReflectionTestUtils.setField(agent, "llmChatClient", llm);
         GeneratedResearchReport fallback = fallback();
 
-        GeneratedResearchReport result = agent.refine(new ResearchThesis(), Collections.emptyList(), fallback);
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback);
 
         assertEquals("DETERMINISTIC", result.getGenerationMode());
         assertEquals(fallback.getMarkdown(), result.getMarkdown());
+    }
+
+    @Test
+    void skipsModelRefinementWhenEvidenceIsInsufficient() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent();
+        ReflectionTestUtils.setField(agent, "llmChatClient", llm);
+
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), Collections.emptyList(), fallback());
+
+        assertEquals("DETERMINISTIC", result.getGenerationMode());
+        verify(llm, never()).complete(anyString(), anyString());
     }
 
     private GeneratedResearchReport fallback() {
@@ -33,5 +53,18 @@ class ResearchReportSynthesisAgentTest {
                 "# 标题\n\n## 核心结论\n\n阶段性结论\n\n## 执行摘要\n\n摘要\n\n## 命题拆解\n\n- A\n\n"
                         + "## 关键证据\n\n- A\n\n## 反方证据与风险\n\n- A\n\n## 结论边界与后续验证\n\n- A\n\n## 来源\n\n- A",
                 "DETERMINISTIC");
+    }
+
+    private List<ResearchEvidenceCard> sufficientEvidence() {
+        List<ResearchEvidenceCard> cards = new ArrayList<ResearchEvidenceCard>();
+        for (int index = 0; index < 6; index++) {
+            Article article = new Article();
+            article.setId((long) index + 1);
+            article.setSourceName(index % 2 == 0 ? "来源甲" : "来源乙");
+            article.setTitle("半导体设备经营证据 " + index);
+            article.setUrl("https://example.com/" + index);
+            cards.add(new ResearchEvidenceCard(article, null, index == 5 ? "COUNTER" : "SUPPORT", 80, "证据 " + index));
+        }
+        return cards;
     }
 }

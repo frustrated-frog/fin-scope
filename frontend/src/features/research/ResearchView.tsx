@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
 import { Table } from '../../shared/components/Table';
 import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
+import { ResearchProgressPanel } from './ResearchProgressPanel';
+import { ResearchReportReader } from './ResearchReportReader';
+import { presentAgentRun } from './researchPresentation';
 
 export function ResearchView({
   runs,
@@ -12,16 +12,20 @@ export function ResearchView({
   detail,
   report,
   busy,
+  reportBusy,
   onRun,
   onCreateThesis,
   onOpenRun,
-  onOpenReport
+  onOpenReport,
+  onRegenerateReport,
+  onCloseReport
 }: {
   runs: ResearchRun[];
   theses: ResearchThesis[];
   detail: ResearchRunDetail | null;
   report: ResearchReport | null;
   busy: boolean;
+  reportBusy: boolean;
   onRun: (input: {
     thesisId?: number;
     runDate: string;
@@ -32,6 +36,8 @@ export function ResearchView({
   onCreateThesis: (input: Omit<ResearchThesis, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => Promise<ResearchThesis>;
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
   onOpenReport: (runId: number) => Promise<void>;
+  onRegenerateReport: (runId: number) => Promise<void>;
+  onCloseReport: () => void;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [runDate, setRunDate] = useState(today);
@@ -65,6 +71,10 @@ export function ResearchView({
     setQuestion('');
     setSubjectName('');
     setSubjectCode('');
+  }
+
+  if (report) {
+    return <ResearchReportReader report={report} onBack={onCloseReport} />;
   }
 
   return (
@@ -208,38 +218,47 @@ export function ResearchView({
               <p className="eyebrow">Trace</p>
               <h3>运行细节</h3>
             </div>
-            {detail?.run && !['RUNNING', 'FAILED'].includes(detail.run.status) && (
-              <button className="ghost-button" type="button" onClick={() => onOpenReport(detail.run.id)}>
-                打开研究报告
+            {detail?.reportAvailable && (
+              <button className="primary-button compact" type="button" disabled={reportBusy} onClick={() => onOpenReport(detail.run.id)}>
+                {reportBusy ? '正在打开' : '阅读研究报告'}
               </button>
+            )}
+            {detail?.canRegenerateReport && !detail.reportAvailable && (
+              <button className="secondary-button compact" type="button" disabled={reportBusy} onClick={() => onRegenerateReport(detail.run.id)}>
+                {reportBusy ? '正在补建报告' : '补建研究报告'}
+              </button>
+            )}
+            {detail?.run.status === 'RUNNING' && !detail.reportAvailable && (
+              <span className="research-report-pending">报告将在研究完成后提供</span>
             )}
           </div>
           {detail ? (
             <>
+              <ResearchProgressPanel detail={detail} />
               <div className="run-summary">
-                <strong>{detail.run.status}</strong>
+                <strong>{presentRunStatus(detail.run.status)}</strong>
                 <span>{detail.run.summary || '-'}</span>
               </div>
-              <div className="research-plan-list">
-                <div className="section-kicker">Plan steps</div>
-                {(detail.planSteps || []).length ? detail.planSteps.map((step) => (
-                  <div className="research-plan-row" key={step.stepId}>
-                    <div>
-                      <strong>{step.title}</strong>
-                      <span>{step.stepId} · {step.executor || 'system'}</span>
-                      {(step.outputSummary || step.errorMessage || step.fallbackReason) && (
-                        <small>{step.errorMessage || step.fallbackReason || step.outputSummary}</small>
-                      )}
+              <details className="research-diagnostic-section">
+                <summary>查看执行步骤诊断</summary>
+                <div className="research-plan-list">
+                  {(detail.planSteps || []).length ? detail.planSteps.map((step) => (
+                    <div className="research-plan-row" key={step.stepId}>
+                      <div>
+                        <strong>{step.title}</strong>
+                        <span>{step.stepId} · {step.executor || 'system'}</span>
+                        {(step.outputSummary || step.errorMessage || step.fallbackReason) && (
+                          <small>{step.errorMessage || step.fallbackReason || step.outputSummary}</small>
+                        )}
+                      </div>
+                      <div className="research-plan-meta">
+                        <span>{presentRunStatus(step.status)}</span>
+                        <small>{step.attempt ?? 0}/{step.maxAttempts ?? 1} · Δ{step.progressDelta ?? 0}</small>
+                      </div>
                     </div>
-                    <div className="research-plan-meta">
-                      <span>{step.status}</span>
-                      <small>{step.attempt ?? 0}/{step.maxAttempts ?? 1} · Δ{step.progressDelta ?? 0}</small>
-                    </div>
-                  </div>
-                )) : (
-                  <p className="empty-state compact">没有计划步骤</p>
-                )}
-              </div>
+                  )) : <p className="empty-state compact">没有计划步骤</p>}
+                </div>
+              </details>
               <div className="planned-source-list">
                 <div className="section-kicker">计划来源</div>
                 {(detail.plannedSources || []).length ? detail.plannedSources.map((source) => (
@@ -252,27 +271,26 @@ export function ResearchView({
                 )}
               </div>
               <div className="agent-trace-list">
-                {detail.agentRuns.map((run) => (
+                <div className="section-kicker">智能处理记录</div>
+                {detail.agentRuns.length ? detail.agentRuns.map((run) => {
+                  const presented = presentAgentRun(run);
+                  return (
                   <div className="trace-row" key={run.id}>
                     <div>
-                      <strong>{run.nodeName}</strong>
-                      <span>{run.status}</span>
-                      {(run.output || run.errorMessage) && (
-                        <small>{run.errorMessage || run.output}</small>
-                      )}
-                      {run.fallbackReason && (
-                        <small>fallback: {run.fallbackReason}</small>
-                      )}
-                      {run.errorType && (
-                        <small>error: {run.errorType}</small>
-                      )}
-                      {run.terminationReason && (
-                        <small>stop: {run.terminationReason}</small>
+                      <strong>{presented.label}</strong>
+                      <span>{presentRunStatus(run.status)}</span>
+                      <small>{presented.summary}</small>
+                      {(run.output || run.errorType || run.terminationReason) && (
+                        <details className="trace-diagnostic">
+                          <summary>诊断信息</summary>
+                          <pre>{formatAgentDiagnostic(run)}</pre>
+                        </details>
                       )}
                     </div>
-                    <small>{run.durationMs}ms</small>
+                    <small>{presentDuration(run.durationMs)}</small>
                   </div>
-                ))}
+                  );
+                }) : <p className="empty-state compact">暂无智能处理记录</p>}
               </div>
             </>
           ) : (
@@ -280,27 +298,30 @@ export function ResearchView({
           )}
         </aside>
       </div>
-      {report && (
-        <article className="research-report-reader" aria-label="研究报告">
-          <header className="research-report-hero">
-            <div>
-              <p className="eyebrow">Research report · Run #{report.researchRunId}</p>
-              <h2>{report.title}</h2>
-              <p>{report.conclusion}</p>
-            </div>
-            <div className="research-report-metrics">
-              <span>置信度 {report.confidence}</span>
-              <span>{report.evidenceCount} 条证据</span>
-              <span>{report.sourceCount} 个来源</span>
-              <span>{report.characterCount} 字</span>
-            </div>
-          </header>
-          {report.warningMessage && <div className="research-report-warning">证据边界：{report.warningMessage}</div>}
-          <section className="research-report-document">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.contentMarkdown}</ReactMarkdown>
-          </section>
-        </article>
-      )}
     </section>
   );
+}
+
+function presentRunStatus(status: string) {
+  const labels: Record<string, string> = {
+    RUNNING: '运行中', COMPLETED: '已完成', PARTIAL_SUCCESS: '部分完成', FAILED: '失败',
+    PENDING: '等待中', SKIPPED: '已跳过', FALLBACK: '保底完成'
+  };
+  return labels[status] || status;
+}
+
+function presentDuration(durationMs: number) {
+  if (durationMs < 1000) return `${durationMs} 毫秒`;
+  return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)} 秒`;
+}
+
+function formatAgentDiagnostic(run: ResearchRunDetail['agentRuns'][number]) {
+  return [
+    `节点：${run.nodeName}`,
+    `状态：${run.status}`,
+    run.errorType ? `错误类型：${run.errorType}` : '',
+    run.fallbackReason ? `保底原因：${run.fallbackReason}` : '',
+    run.terminationReason ? `停止原因：${run.terminationReason}` : '',
+    run.output ? `原始输出：\n${run.output}` : ''
+  ].filter(Boolean).join('\n');
 }

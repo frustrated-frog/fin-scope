@@ -71,7 +71,8 @@ public class ResearchController {
                 researchService.detail(id),
                 researchService.plannedSources(id),
                 researchRunPlanService.findByRunId(id),
-                agentRunService.findByResearchRunId(id));
+                agentRunService.findByResearchRunId(id),
+                researchReportService.findByRunId(id).orElse(null));
     }
 
     @GetMapping("/{id}/report")

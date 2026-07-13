@@ -16,6 +16,7 @@ import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.ResearchReport;
+import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.service.agent.ActionFingerprintService;
@@ -23,6 +24,7 @@ import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
+import com.finscope.service.research.report.EvidenceSufficiency;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -384,6 +386,41 @@ class ResearchServiceHarnessTest {
         verify(researchRunPlanService, atLeastOnce()).skip(any(ResearchRunPlanStep.class), any());
     }
 
+    @Test
+    void regeneratingLegacyRunDetachesItsBriefOutputAfterReportIsPersisted() {
+        ResearchService service = new ResearchService();
+        ResearchRunRepository runRepository = mock(ResearchRunRepository.class);
+        ResearchThesisRepository thesisRepository = mock(ResearchThesisRepository.class);
+        ResearchReportService reportService = mock(ResearchReportService.class);
+        ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
+        EvidenceSufficiency sufficiency = mock(EvidenceSufficiency.class);
+        ResearchRun run = new ResearchRun();
+        run.setId(15L);
+        run.setThesisId(1L);
+        run.setStatus(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS);
+        run.setBriefDate(LocalDate.of(2026, 7, 13));
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(1L);
+
+        ReflectionTestUtils.setField(service, "researchRunRepository", runRepository);
+        ReflectionTestUtils.setField(service, "researchThesisRepository", thesisRepository);
+        ReflectionTestUtils.setField(service, "researchReportService", reportService);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
+        when(runRepository.findById(15L)).thenReturn(java.util.Optional.of(run));
+        when(thesisRepository.findById(1L)).thenReturn(java.util.Optional.of(thesis));
+        when(reportService.assessSufficiency(15L)).thenReturn(sufficiency);
+        when(sufficiency.isSufficient()).thenReturn(true);
+        when(reportService.generate(15L)).thenReturn(report(15L));
+        when(runRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.regenerateReport(15L);
+
+        verify(outputService).deleteByType(15L, ResearchRunOutputService.BRIEF);
+        assertEquals(null, run.getBriefDate());
+        assertTrue(run.getSummary().contains("研究报告已补建"));
+        assertTrue(!run.getSummary().contains("briefDate"));
+    }
+
     private ThemeProfile theme() {
         ThemeProfile theme = new ThemeProfile();
         theme.setCode(ResearchEnums.THEME_MARKET);
@@ -417,7 +454,9 @@ class ResearchServiceHarnessTest {
         report.setId(91L);
         report.setResearchRunId(runId);
         report.setEvidenceCount(4);
+        report.setSourceCount(3);
         report.setCharacterCount(4000);
+        report.setGenerationMode("DETERMINISTIC");
         return report;
     }
 

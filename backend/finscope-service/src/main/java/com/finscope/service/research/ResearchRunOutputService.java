@@ -23,4 +23,7 @@ public class ResearchRunOutputService {
     }
     public int count(Long runId, String type) { return repository.countByRunIdAndType(runId, type); }
     public List<ResearchRunOutput> list(Long runId) { return repository.findByRunId(runId); }
+    public int deleteByType(Long runId, String type) {
+        return repository.deleteByRunIdAndType(runId, type);
+    }
 }

@@ -24,4 +24,9 @@ public class ResearchRunOutputRepository {
             ResearchRunOutput item = new ResearchRunOutput(); item.setId(rs.getLong("id")); item.setResearchRunId(rs.getLong("research_run_id")); item.setOutputType(rs.getString("output_type")); item.setOutputId(rs.getLong("output_id")); item.setCreatedAt(TimeUtil.localDateTime(rs, "created_at")); return item;
         }, runId);
     }
+
+    public int deleteByRunIdAndType(Long runId, String type) {
+        return jdbcTemplate.update("DELETE FROM research_run_output WHERE research_run_id=? AND output_type=?",
+                runId, type);
+    }
 }

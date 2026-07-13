@@ -364,6 +364,10 @@ export type ResearchRunDetail = {
   plannedSources: SourceProfile[];
   planSteps: ResearchRunPlanStep[];
   agentRuns: AgentRun[];
+  reportAvailable: boolean;
+  reportStatus?: string;
+  reportGenerationMode?: string;
+  canRegenerateReport: boolean;
 };
 
 export type Topic = {

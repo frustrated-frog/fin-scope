@@ -181,9 +181,14 @@ public class ResearchService {
                 }
             }
             refreshOutputCounts(run);
+            ResearchReport report = researchReportService.generate(runId);
+            researchRunOutputService.deleteByType(runId, ResearchRunOutputService.BRIEF);
             run.setBriefDate(null);
+            run.setSummary("研究报告已补建：有效证据=" + value(report.getEvidenceCount())
+                    + "，独立来源=" + value(report.getSourceCount())
+                    + "，生成方式=" + report.getGenerationMode());
             researchRunRepository.updateResult(run);
-            return researchReportService.generate(runId);
+            return report;
         } finally {
             ResearchRunContext.clear();
         }
