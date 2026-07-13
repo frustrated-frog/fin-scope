@@ -3,6 +3,7 @@ package com.finscope.web.response;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
+import com.finscope.dao.attribution.AttributionRepository;
 
 /**
  * 自选面板响应：标的元信息 + 行情扁平化，方便前端直接渲染。
@@ -28,7 +29,11 @@ public class WatchlistItemResponse {
     private Double amplitude;
     private boolean quoteValid;
     private String quoteNote;
+    private String quoteDate;
     private String attributionSummary;
+    private Long attributionReportId;
+    private String attributionReportDate;
+    private Double attributionChangePct;
 
     public static WatchlistItemResponse of(WatchlistItemView view) {
         WatchlistItem item = view.getItem();
@@ -41,6 +46,12 @@ public class WatchlistItemResponse {
         response.market = item.getMarket();
         response.groupName = item.getGroupName();
         response.attributionSummary = view.getAttributionSummary();
+        AttributionRepository.AttributionSummaryView attribution = view.getAttribution();
+        if (attribution != null) {
+            response.attributionReportId = attribution.getReportId();
+            response.attributionReportDate = attribution.getReportDate() == null ? null : attribution.getReportDate().toString();
+            response.attributionChangePct = attribution.getChangePct();
+        }
         if (quote != null) {
             response.price = quote.getPrice();
             response.confirmedNav = quote.getConfirmedNav();
@@ -55,6 +66,9 @@ public class WatchlistItemResponse {
             response.amplitude = quote.getAmplitude();
             response.quoteValid = quote.isValid();
             response.quoteNote = quote.getNote();
+            response.quoteDate = "FUND".equals(item.getType()) && quote.getConfirmedNavDate() != null
+                    ? quote.getConfirmedNavDate()
+                    : quote.getQuoteTime() == null ? null : quote.getQuoteTime().toLocalDate().toString();
         } else {
             response.quoteValid = false;
             response.quoteNote = "暂无行情";
@@ -133,4 +147,9 @@ public class WatchlistItemResponse {
     public String getAttributionSummary() {
         return attributionSummary;
     }
+
+    public String getQuoteDate() { return quoteDate; }
+    public Long getAttributionReportId() { return attributionReportId; }
+    public String getAttributionReportDate() { return attributionReportDate; }
+    public Double getAttributionChangePct() { return attributionChangePct; }
 }

@@ -71,6 +71,10 @@ public class WatchlistService {
 
     /** 列表：带实时行情，按标的类型批量拉取。 */
     public List<WatchlistItemView> listWithQuotes() {
+        return listWithQuotes(false);
+    }
+
+    public List<WatchlistItemView> listWithQuotes(boolean forceRefresh) {
         List<WatchlistItem> items = watchlistRepository.findAll();
         if (items.isEmpty()) {
             return new ArrayList<>();
@@ -82,12 +86,13 @@ public class WatchlistService {
         }
         Map<String, Quote> quoteByKey = new LinkedHashMap<>();
         for (Map.Entry<String, List<String>> entry : codesByType.entrySet()) {
-            List<Quote> quotes = quoteService.fetch(entry.getKey(), entry.getValue());
+            List<Quote> quotes = quoteService.fetch(entry.getKey(), entry.getValue(), forceRefresh);
             for (Quote quote : quotes) {
                 quoteByKey.put(quoteKey(entry.getKey(), quote.getInstrumentCode()), quote);
             }
         }
-        Map<String, String> summaryByKey = attributionRepository.findLatestCompletedSummaries();
+        Map<String, AttributionRepository.AttributionSummaryView> summaryByKey =
+                attributionRepository.findLatestCompletedSummaryViews();
         List<WatchlistItemView> views = new ArrayList<>();
         for (WatchlistItem item : items) {
             Quote quote = quoteByKey.get(quoteKey(item.getType(), item.getCode()));

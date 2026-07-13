@@ -30,6 +30,13 @@ public class QuoteService {
      * @param instrumentType STOCK | FUND | SECTOR
      */
     public List<Quote> fetch(String instrumentType, List<String> codes) {
+        return fetch(instrumentType, codes, false);
+    }
+
+    /**
+     * @param forceRefresh true 时跳过本地快照，必须访问真实行情适配器。
+     */
+    public List<Quote> fetch(String instrumentType, List<String> codes, boolean forceRefresh) {
         if (codes == null || codes.isEmpty()) {
             return new ArrayList<>();
         }
@@ -44,7 +51,7 @@ public class QuoteService {
         for (String code : codes) {
             String key = cacheKey(instrumentType, code);
             CachedQuote cached = cache.get(key);
-            if (cached != null && cached.expiresAt > now) {
+            if (!forceRefresh && cached != null && cached.expiresAt > now) {
                 quotesByCode.put(code, cached.quote);
             } else {
                 cache.remove(key);

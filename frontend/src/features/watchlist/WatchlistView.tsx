@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { MarketIndexQuote, WatchlistItem } from '../../shared/types';
 import { AttributionReaderView } from './AttributionReaderView';
 
 type AttributionTarget = {
-  taskId: string;
+  taskId?: string;
   reportId: number;
   code: string;
+  type: WatchlistItem['type'];
   name?: string;
   changePct?: number;
 };
@@ -74,6 +75,41 @@ function isAbnormal(value?: number) {
   return value !== undefined && value !== null && Math.abs(value) >= 5;
 }
 
+function quoteFingerprint(items: WatchlistItem[], indices: MarketIndexQuote[]) {
+  return JSON.stringify({
+    items: items.map((item) => [item.code, item.price, item.confirmedNav, item.changePct, item.confirmedNavChangePct, item.quoteValid]),
+    indices: indices.map((item) => [item.code, item.price, item.changeAmount, item.changePct, item.quoteValid])
+  });
+}
+
+function preserveValidWatchlistQuotes(next: WatchlistItem[], previous: WatchlistItem[]) {
+  const previousByKey = new Map(previous.map((item) => [`${item.type}:${item.code}`, item]));
+  let degradedCount = 0;
+  const items = next.map((item) => {
+    const prior = previousByKey.get(`${item.type}:${item.code}`);
+    if (!item.quoteValid && prior?.quoteValid) {
+      degradedCount++;
+      return prior;
+    }
+    return item;
+  });
+  return { items, degradedCount };
+}
+
+function preserveValidIndexQuotes(next: MarketIndexQuote[], previous: MarketIndexQuote[]) {
+  const previousByCode = new Map(previous.map((item) => [item.code, item]));
+  let degradedCount = 0;
+  const indices = next.map((item) => {
+    const prior = previousByCode.get(item.code);
+    if (!item.quoteValid && prior?.quoteValid) {
+      degradedCount++;
+      return prior;
+    }
+    return item;
+  });
+  return { indices, degradedCount };
+}
+
 const DEFAULT_GROUP_LABEL = '未分组';
 const COLLAPSE_STORAGE_KEY = 'watchlist.collapsedGroups';
 
@@ -107,6 +143,9 @@ export function WatchlistView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
+  const refreshSequenceRef = useRef(0);
 
   async function load() {
     setLoading(true);
@@ -123,17 +162,55 @@ export function WatchlistView({
     }
   }
 
-  async function loadMarketIndices() {
-    try {
-      const data = await api<MarketIndexQuote[]>('/api/market-indices');
-      setMarketIndices(data);
-    } catch {
-      setMarketIndices([]);
+  async function refreshQuotes(forceRefresh = false, interactive = false) {
+    if (interactive && refreshing) return;
+    const sequence = ++refreshSequenceRef.current;
+    const previousFingerprint = quoteFingerprint(items, marketIndices);
+    if (interactive) {
+      setRefreshing(true);
+      setRefreshStatus('正在从行情源获取最新数据…');
     }
-  }
+    if (!interactive) setLoading(true);
+    const suffix = forceRefresh ? '?refresh=true' : '';
+    const results = await Promise.allSettled([
+      api<WatchlistItem[]>(`/api/watchlist${suffix}`),
+      api<MarketIndexQuote[]>(`/api/market-indices${suffix}`)
+    ]);
+    if (sequence !== refreshSequenceRef.current) return;
 
-  async function refreshQuotes() {
-    await Promise.all([load(), loadMarketIndices()]);
+    const watchlistResult = results[0];
+    const indexResult = results[1];
+    const watchlistMerge = watchlistResult.status === 'fulfilled'
+      ? preserveValidWatchlistQuotes(watchlistResult.value, items)
+      : { items, degradedCount: 0 };
+    const indexMerge = indexResult.status === 'fulfilled'
+      ? preserveValidIndexQuotes(indexResult.value, marketIndices)
+      : { indices: marketIndices, degradedCount: 0 };
+    const nextItems = watchlistMerge.items;
+    const nextIndices = indexMerge.indices;
+    if (watchlistResult.status === 'fulfilled') {
+      setItems(nextItems);
+      setLoadError(null);
+    } else {
+      const message = watchlistResult.reason instanceof Error ? watchlistResult.reason.message : '自选列表加载失败';
+      setLoadError(message);
+      setMessage(message);
+    }
+    if (indexResult.status === 'fulfilled') setMarketIndices(nextIndices);
+
+    if (interactive) {
+      const failedCount = results.filter((result) => result.status === 'rejected').length
+        + watchlistMerge.degradedCount + indexMerge.degradedCount;
+      const changed = previousFingerprint !== quoteFingerprint(nextItems, nextIndices);
+      const time = new Intl.DateTimeFormat('zh-CN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      }).format(new Date());
+      setRefreshStatus(failedCount > 0
+        ? `部分行情刷新失败，已保留原数据 · ${time}`
+        : changed ? `行情已刷新 · ${time}` : `已刷新，行情暂无变化 · ${time}`);
+      setRefreshing(false);
+    }
+    setLoading(false);
   }
 
   async function startAttribution(item: WatchlistItem) {
@@ -141,12 +218,19 @@ export function WatchlistView({
     try {
       const res = await api<{ taskId: string; reportId: string | number }>('/api/attribution/start', {
         method: 'POST',
-        body: JSON.stringify({ code: item.code, type: item.type, name: item.name, changePct: item.changePct })
+        body: JSON.stringify({
+          code: item.code,
+          type: item.type,
+          name: item.name,
+          changePct: item.changePct,
+          quoteDate: item.quoteDate
+        })
       });
       setAttribution({
         taskId: res.taskId,
         reportId: Number(res.reportId),
         code: item.code,
+        type: item.type,
         name: item.name,
         changePct: item.changePct
       });
@@ -160,6 +244,21 @@ export function WatchlistView({
   function closeAttribution() {
     setAttribution(null);
     refreshQuotes();
+  }
+
+  function openAttribution(item: WatchlistItem) {
+    if (!item.attributionReportId) return;
+    setAttribution({
+      reportId: item.attributionReportId,
+      code: item.code,
+      type: item.type,
+      name: item.name,
+      changePct: item.attributionChangePct
+    });
+  }
+
+  function hasCurrentAttribution(item: WatchlistItem) {
+    return Boolean(item.quoteDate && item.attributionReportDate && item.quoteDate === item.attributionReportDate);
   }
 
   useEffect(() => {
@@ -297,6 +396,7 @@ export function WatchlistView({
         taskId={attribution.taskId}
         reportId={attribution.reportId}
         code={attribution.code}
+        type={attribution.type}
         name={attribution.name}
         changePct={attribution.changePct}
         onBack={closeAttribution}
@@ -397,7 +497,15 @@ export function WatchlistView({
         <button className="primary-button" type="button" disabled={submitting} onClick={addItem}>
           {submitting ? '添加中…' : '加入自选'}
         </button>
-        <button className="ghost-button" type="button" onClick={refreshQuotes}>刷新行情</button>
+        <button
+          className={`ghost-button watchlist-refresh-button${refreshing ? ' is-refreshing' : ''}`}
+          type="button"
+          disabled={refreshing}
+          onClick={() => refreshQuotes(true, true)}
+        >
+          <span className="watchlist-refresh-icon" aria-hidden="true">↻</span>
+          {refreshing ? '刷新中…' : '刷新行情'}
+        </button>
         <label className="watchlist-sort">
           <input
             className="watchlist-toggle-input"
@@ -411,6 +519,13 @@ export function WatchlistView({
           <span className="watchlist-toggle-label">按涨跌幅排序</span>
         </label>
       </div>
+
+      {refreshStatus && (
+        <div className={`watchlist-refresh-status${refreshing ? ' is-refreshing' : ''}`} role="status" aria-live="polite">
+          <span aria-hidden="true">{refreshing ? '◌' : refreshStatus.startsWith('部分') ? '!' : '✓'}</span>
+          {refreshStatus}
+        </div>
+      )}
 
       {loadError && (
         <p className="watchlist-load-error" role="alert">
@@ -501,10 +616,21 @@ export function WatchlistView({
                           ) : (
                             <p className="muted watchlist-note">{item.quoteNote || '暂无行情'}</p>
                           )}
-                          {item.attributionSummary && (
-                            <p className="watchlist-attr-summary" title={item.attributionSummary}>
-                              {item.attributionSummary}
-                            </p>
+                          {item.attributionSummary && item.attributionReportId && (
+                            <button
+                              className="watchlist-attr-summary"
+                              type="button"
+                              aria-label={`查看${item.name || item.code}的完整归因报告`}
+                              onClick={() => openAttribution(item)}
+                            >
+                              <span className="watchlist-attr-summary-head">
+                                <strong>{hasCurrentAttribution(item) ? '今日归因' : '最近归因'}</strong>
+                                <time>{item.attributionReportDate}</time>
+                                <i aria-hidden="true">›</i>
+                              </span>
+                              <span className="watchlist-attr-summary-copy" title={item.attributionSummary}>{item.attributionSummary}</span>
+                              <span className="watchlist-attr-summary-link">查看完整报告</span>
+                            </button>
                           )}
                           <div className="watchlist-card-actions">
                             <label className="watchlist-move" title="移动到分组">
@@ -530,7 +656,7 @@ export function WatchlistView({
                               disabled={attributing === item.code}
                               onClick={() => startAttribution(item)}
                             >
-                              {attributing === item.code ? '启动中…' : '🔬 深度归因'}
+                              {attributing === item.code ? '启动中…' : `🔬 ${hasCurrentAttribution(item) ? '重新归因' : '深度归因'}`}
                             </button>
                           </div>
                         </article>

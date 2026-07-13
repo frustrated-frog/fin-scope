@@ -2,6 +2,7 @@ package com.finscope.service.instrument;
 
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.WatchlistItem;
+import com.finscope.dao.attribution.AttributionRepository;
 
 /**
  * 自选面板展示视图：标的元信息 + 当前行情。
@@ -9,12 +10,12 @@ import com.finscope.domain.instrument.WatchlistItem;
 public class WatchlistItemView {
     private final WatchlistItem item;
     private final Quote quote;
-    private final String attributionSummary;
+    private final AttributionRepository.AttributionSummaryView attribution;
 
-    public WatchlistItemView(WatchlistItem item, Quote quote, String attributionSummary) {
+    public WatchlistItemView(WatchlistItem item, Quote quote, AttributionRepository.AttributionSummaryView attribution) {
         this.item = item;
         this.quote = quote;
-        this.attributionSummary = attributionSummary;
+        this.attribution = attribution;
     }
 
     public WatchlistItem getItem() {
@@ -26,6 +27,8 @@ public class WatchlistItemView {
     }
 
     public String getAttributionSummary() {
-        return attributionSummary;
+        return attribution == null ? null : attribution.getSummary();
     }
+
+    public AttributionRepository.AttributionSummaryView getAttribution() { return attribution; }
 }

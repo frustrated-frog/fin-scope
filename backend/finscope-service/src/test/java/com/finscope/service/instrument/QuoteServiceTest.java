@@ -27,6 +27,18 @@ public class QuoteServiceTest {
     }
 
     @Test
+    public void forceRefreshBypassesFreshCacheAndCallsAdapterAgain() {
+        CountingAdapter adapter = new CountingAdapter();
+        QuoteService service = new QuoteService();
+        ReflectionTestUtils.setField(service, "adapters", Collections.<QuoteAdapter>singletonList(adapter));
+
+        service.fetch("STOCK", Collections.singletonList("600519"));
+        service.fetch("STOCK", Collections.singletonList("600519"), true);
+
+        assertEquals(2, adapter.callCount);
+    }
+
+    @Test
     public void routesSectorCodesToSectorAdapter() {
         CountingAdapter adapter = new CountingAdapter();
         adapter.supportedType = "SECTOR";

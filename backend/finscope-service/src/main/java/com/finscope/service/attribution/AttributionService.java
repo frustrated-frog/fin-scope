@@ -44,7 +44,7 @@ public class AttributionService {
     /**
      * 触发一次归因研究，返回 taskId（前端据此订阅 SSE 进度）。
      */
-    public AttributionStartResult startAttribution(String code, String type, String name, Double changePct) {
+    public AttributionStartResult startAttribution(String code, String type, String name, Double changePct, String quoteDate) {
         if (StringUtils.isBlank(code)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码不能为空");
         }
@@ -57,7 +57,7 @@ public class AttributionService {
         report.setInstrumentCode(instrument.getCode());
         report.setInstrumentName(StringUtils.firstNonBlank(instrument.getName(), name, instrument.getCode()));
         report.setInstrumentType(instrument.getType());
-        report.setReportDate(LocalDate.now());
+        report.setReportDate(parseReportDate(quoteDate));
         report.setChangePct(changePct);
         report.setStatus("GENERATING");
         AttributionReport saved = attributionRepository.createReport(report);
@@ -130,7 +130,8 @@ public class AttributionService {
     }
 
     public List<AttributionReport> getHistory(String code, String type, int limit) {
-        return attributionRepository.findHistoryByIdentity(normalizeCode(code), normalizeType(type), limit <= 0 ? 10 : limit);
+        int safeLimit = limit <= 0 ? 10 : Math.min(limit, 50);
+        return attributionRepository.findHistoryByIdentity(normalizeCode(code), normalizeType(type), safeLimit);
     }
 
     private void reportSubmissionFailed(AttributionReport report, RuntimeException ex) {
@@ -146,6 +147,16 @@ public class AttributionService {
 
     private String normalizeCode(String code) {
         return code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private LocalDate parseReportDate(String quoteDate) {
+        if (StringUtils.isBlank(quoteDate)) return LocalDate.now();
+        try {
+            return LocalDate.parse(quoteDate.trim());
+        } catch (RuntimeException ex) {
+            log.warn("行情交易日格式无效 quoteDate={}，回退当前日期", quoteDate);
+            return LocalDate.now();
+        }
     }
 
     private Instrument transientInstrument(String code, String type, String name) {

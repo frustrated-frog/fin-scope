@@ -24,12 +24,16 @@ public class MarketIndexService {
     private QuoteService quoteService;
 
     public List<MarketIndexView> list() {
+        return list(false);
+    }
+
+    public List<MarketIndexView> list(boolean forceRefresh) {
         List<String> codes = new ArrayList<String>();
         for (IndexDefinition index : INDICES) {
             codes.add(index.code);
         }
         Map<String, Quote> quoteByCode = new LinkedHashMap<String, Quote>();
-        for (Quote quote : quoteService.fetch("INDEX", codes)) {
+        for (Quote quote : quoteService.fetch("INDEX", codes, forceRefresh)) {
             if (quote != null && quote.getInstrumentCode() != null) {
                 quoteByCode.put(quote.getInstrumentCode(), quote);
             }

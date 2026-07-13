@@ -15,6 +15,7 @@ import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -146,23 +147,56 @@ public class AttributionRepository {
 
     public List<AttributionReport> findHistoryByIdentity(String instrumentCode, String instrumentType, int limit) {
         return jdbcTemplate.query(
-                "SELECT * FROM attribution_report WHERE instrument_code = ? AND instrument_type = ? ORDER BY id DESC LIMIT ?",
+                "SELECT * FROM attribution_report WHERE instrument_code = ? AND instrument_type = ? AND status = 'COMPLETED' "
+                        + "ORDER BY report_date DESC, created_at DESC, id DESC LIMIT ?",
                 reportMapper, instrumentCode, instrumentType, limit);
     }
 
     /** 每个 (code,type) 只取最新一条已完成报告，供自选列表一次性读取。 */
     public Map<String, String> findLatestCompletedSummaries() {
+        Map<String, AttributionSummaryView> views = findLatestCompletedSummaryViews();
+        Map<String, String> summaries = new LinkedHashMap<>();
+        for (Map.Entry<String, AttributionSummaryView> entry : views.entrySet()) {
+            summaries.put(entry.getKey(), entry.getValue().getSummary());
+        }
+        return summaries;
+    }
+
+    /** 批量返回每个标的最新已完成归因，供自选卡片建立可回看入口。 */
+    public Map<String, AttributionSummaryView> findLatestCompletedSummaryViews() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT r.instrument_code, r.instrument_type, r.summary FROM attribution_report r "
+                "SELECT r.id, r.instrument_code, r.instrument_type, r.report_date, r.summary, r.change_pct "
+                        + "FROM attribution_report r "
                         + "JOIN (SELECT instrument_code, instrument_type, MAX(id) AS latest_id "
                         + "FROM attribution_report WHERE status = 'COMPLETED' GROUP BY instrument_code, instrument_type) latest "
                         + "ON r.id = latest.latest_id WHERE r.summary IS NOT NULL AND TRIM(r.summary) <> ''");
-        Map<String, String> summaries = new LinkedHashMap<>();
+        Map<String, AttributionSummaryView> summaries = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
             summaries.put(identityKey((String) row.get("instrument_type"), (String) row.get("instrument_code")),
-                    (String) row.get("summary"));
+                    new AttributionSummaryView(((Number) row.get("id")).longValue(),
+                            LocalDate.parse((String) row.get("report_date")), (String) row.get("summary"),
+                            row.get("change_pct") == null ? null : ((Number) row.get("change_pct")).doubleValue()));
         }
         return summaries;
+    }
+
+    public static class AttributionSummaryView {
+        private final Long reportId;
+        private final LocalDate reportDate;
+        private final String summary;
+        private final Double changePct;
+
+        public AttributionSummaryView(Long reportId, LocalDate reportDate, String summary, Double changePct) {
+            this.reportId = reportId;
+            this.reportDate = reportDate;
+            this.summary = summary;
+            this.changePct = changePct;
+        }
+
+        public Long getReportId() { return reportId; }
+        public LocalDate getReportDate() { return reportDate; }
+        public String getSummary() { return summary; }
+        public Double getChangePct() { return changePct; }
     }
 
     private String identityKey(String type, String code) {

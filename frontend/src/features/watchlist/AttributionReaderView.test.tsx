@@ -170,3 +170,22 @@ test('treats pending tracks as an unstarted plan instead of zero progress', asyn
   expect(screen.queryByText('0/5')).not.toBeInTheDocument();
   expect(screen.queryByText('等待中')).not.toBeInTheDocument();
 });
+
+test('loads a persisted report and history without opening an event stream', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path.includes('/history') ? [{
+      id: 201, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-13', createdAt: '2026-07-13T15:20:00', summary: '收盘归因', changePct: 2.1
+    }] : {
+      id: 201, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-13', createdAt: '2026-07-13T15:20:00', summary: '收盘归因', drivers: []
+    }
+  ) as never);
+
+  render(<AttributionReaderView reportId={201} code="600519" type="STOCK" onBack={vi.fn()} />);
+
+  expect(await screen.findByText('历史归因')).toBeInTheDocument();
+  expect(screen.getAllByText('收盘归因')).toHaveLength(2);
+  expect(EventSource).not.toHaveBeenCalled();
+  expect(api).toHaveBeenCalledWith('/api/attribution/history?code=600519&type=STOCK&limit=50');
+});

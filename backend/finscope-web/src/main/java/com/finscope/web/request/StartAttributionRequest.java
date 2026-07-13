@@ -5,6 +5,8 @@ public class StartAttributionRequest {
     private String type;
     private String name;
     private Double changePct;
+    /** 归因对应的行情交易日，yyyy-MM-dd。 */
+    private String quoteDate;
 
     public String getCode() {
         return code;
@@ -37,4 +39,7 @@ public class StartAttributionRequest {
     public void setChangePct(Double changePct) {
         this.changePct = changePct;
     }
+
+    public String getQuoteDate() { return quoteDate; }
+    public void setQuoteDate(String quoteDate) { this.quoteDate = quoteDate; }
 }

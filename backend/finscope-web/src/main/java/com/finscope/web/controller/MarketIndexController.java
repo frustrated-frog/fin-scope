@@ -5,6 +5,7 @@ import com.finscope.web.response.MarketIndexQuoteResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.annotation.Resource;
 import java.util.List;
@@ -18,8 +19,8 @@ public class MarketIndexController {
     private MarketIndexService marketIndexService;
 
     @GetMapping
-    public List<MarketIndexQuoteResponse> list() {
-        return marketIndexService.list().stream()
+    public List<MarketIndexQuoteResponse> list(@RequestParam(defaultValue = "false") boolean refresh) {
+        return (refresh ? marketIndexService.list(true) : marketIndexService.list()).stream()
                 .map(MarketIndexQuoteResponse::of)
                 .collect(Collectors.toList());
     }

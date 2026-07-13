@@ -33,7 +33,7 @@ public class AttributionController {
     @PostMapping("/start")
     public Map<String, String> start(@RequestBody StartAttributionRequest request) {
         AttributionService.AttributionStartResult started = attributionService.startAttribution(
-                request.getCode(), request.getType(), request.getName(), request.getChangePct());
+                request.getCode(), request.getType(), request.getName(), request.getChangePct(), request.getQuoteDate());
         Map<String, String> result = new HashMap<>();
         result.put("taskId", started.getTaskId());
         result.put("reportId", String.valueOf(started.getReportId()));

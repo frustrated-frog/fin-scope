@@ -463,6 +463,7 @@ export type AttributionReport = {
   errorMessage?: string;
   warningMessage?: string;
   durationMs?: number;
+  createdAt?: string;
 };
 
 export type AttributionProgress = {
@@ -525,7 +526,11 @@ export type WatchlistItem = {
   amplitude?: number;
   quoteValid: boolean;
   quoteNote?: string;
+  quoteDate?: string;
   attributionSummary?: string;
+  attributionReportId?: number;
+  attributionReportDate?: string;
+  attributionChangePct?: number;
 };
 
 export type MarketIndexQuote = {

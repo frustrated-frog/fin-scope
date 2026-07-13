@@ -39,13 +39,15 @@ export function AttributionReaderView({
   taskId,
   reportId,
   code,
+  type,
   name,
   changePct,
   onBack
 }: {
-  taskId: string;
+  taskId?: string;
   reportId: number;
   code: string;
+  type?: 'STOCK' | 'FUND' | 'SECTOR';
   name?: string;
   changePct?: number;
   onBack: () => void;
@@ -57,6 +59,7 @@ export function AttributionReaderView({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [researchRun, setResearchRun] = useState<AttributionResearchRunView | null>(null);
+  const [history, setHistory] = useState<AttributionReport[]>([]);
   const esRef = useRef<EventSource | null>(null);
 
   const reachStage = (stage?: string) => {
@@ -103,6 +106,13 @@ export function AttributionReaderView({
         setDone(true);
       }
     };
+    if (!taskId) {
+      resolveReport();
+      return () => {
+        disposed = true;
+        if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+      };
+    }
     const es = new EventSource(`/api/attribution/stream/${taskId}`);
     esRef.current = es;
     es.addEventListener('progress', (event) => {
@@ -138,6 +148,32 @@ export function AttributionReaderView({
       es.close();
     };
   }, [taskId, reportId]);
+
+  useEffect(() => {
+    if (taskId) return undefined;
+    let disposed = false;
+    Promise.resolve(api<AttributionReport[]>(`/api/attribution/history?code=${encodeURIComponent(code)}&type=${type || 'STOCK'}&limit=50`))
+      .then((items) => { if (!disposed) setHistory(Array.isArray(items) ? items : []); })
+      .catch(() => { if (!disposed) setHistory([]); });
+    return () => { disposed = true; };
+  }, [code, type, taskId]);
+
+  async function selectHistory(nextReportId: number) {
+    if (nextReportId === report?.id) return;
+    try {
+      setError(null);
+      const next = await api<AttributionReport>(`/api/attribution/reports/${nextReportId}`);
+      setReport(next);
+    } catch (historyError) {
+      setError(historyError instanceof Error ? historyError.message : '历史归因读取失败');
+    }
+  }
+
+  const historyGroups = history.reduce<Record<string, AttributionReport[]>>((groups, item) => {
+    const day = item.reportDate || '日期未知';
+    (groups[day] ||= []).push(item);
+    return groups;
+  }, {});
 
   const changeText = changePct === undefined || changePct === null
     ? ''
@@ -274,6 +310,7 @@ export function AttributionReaderView({
       )}
 
       {report && (
+        <div className="attribution-reader-grid">
         <div className="attribution-report">
           <div className="attribution-report-layout">
             <div className="attribution-report-main">
@@ -356,6 +393,35 @@ export function AttributionReaderView({
               </div>
             </div>
           </div>
+        </div>
+        <aside className="attribution-history" aria-label="历史归因">
+          <div className="attribution-history-head">
+            <span className="watchlist-meta">RESEARCH ARCHIVE</span>
+            <h4>历史归因</h4>
+            <p>每次研究都是独立快照，新报告不覆盖旧结论。</p>
+          </div>
+          <div className="attribution-history-groups">
+            {Object.entries(historyGroups).map(([day, versions]) => (
+              <section className="attribution-history-day" key={day}>
+                <div><time>{day}</time><span>{versions.length} 个版本</span></div>
+                {versions.map((item, index) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    aria-current={item.id === report.id ? 'true' : undefined}
+                    onClick={() => selectHistory(item.id)}
+                  >
+                    <span>{item.createdAt ? item.createdAt.slice(11, 16) : `版本 ${versions.length - index}`}</span>
+                    <strong className={(item.changePct ?? 0) > 0 ? 'watchlist-up' : (item.changePct ?? 0) < 0 ? 'watchlist-down' : ''}>
+                      {item.changePct == null ? '--' : `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
+                    </strong>
+                    <small>{item.summary}</small>
+                  </button>
+                ))}
+              </section>
+            ))}
+          </div>
+        </aside>
         </div>
       )}
     </section>

@@ -63,8 +63,36 @@ test('refreshes market indices and watchlist together', async () => {
 
   await user.click(screen.getByRole('button', { name: '刷新行情' }));
 
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/market-indices'));
-  expect(api).toHaveBeenCalledWith('/api/watchlist');
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/market-indices?refresh=true'));
+  expect(api).toHaveBeenCalledWith('/api/watchlist?refresh=true');
+});
+
+test('shows a perceptible refresh state and reports unchanged fresh data', async () => {
+  const user = userEvent.setup();
+  const item = { id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2 };
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(path === '/api/watchlist' ? [item] : []) as never);
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('贵州茅台');
+
+  let resolveWatchlist: (value: unknown) => void = () => undefined;
+  let resolveIndices: (value: unknown) => void = () => undefined;
+  vi.mocked(api).mockImplementation((path: string) => new Promise((resolve) => {
+    if (path.startsWith('/api/watchlist')) resolveWatchlist = resolve;
+    if (path.startsWith('/api/market-indices')) resolveIndices = resolve;
+  }) as never);
+
+  await user.click(screen.getByRole('button', { name: '刷新行情' }));
+
+  expect(screen.getByRole('button', { name: /刷新中/ })).toBeDisabled();
+  expect(screen.getByRole('status')).toHaveTextContent('正在从行情源获取最新数据');
+  expect(api).toHaveBeenCalledWith('/api/watchlist?refresh=true');
+  expect(api).toHaveBeenCalledWith('/api/market-indices?refresh=true');
+
+  resolveWatchlist([item]);
+  resolveIndices([]);
+
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('已刷新，行情暂无变化'));
+  expect(screen.getByRole('button', { name: '刷新行情' })).toBeEnabled();
 });
 
 test('does not present a failed watchlist request as an empty watchlist', async () => {
@@ -80,4 +108,41 @@ test('does not present a failed watchlist request as an empty watchlist', async 
   expect(await screen.findByRole('alert')).toHaveTextContent('自选列表加载失败');
   expect(screen.getByText('加载失败')).toBeInTheDocument();
   expect(screen.queryByText('0 标的')).not.toBeInTheDocument();
+});
+
+test('opens a persisted attribution report from the clickable card summary', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true,
+      quoteDate: '2026-07-13', attributionReportId: 88, attributionReportDate: '2026-07-13',
+      attributionSummary: '白酒板块与业绩预期共同驱动'
+    }] : path === '/api/market-indices' ? [] : {
+      id: 88, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-13', summary: '白酒板块与业绩预期共同驱动', drivers: []
+    }
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('今日归因')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /重新归因/ })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /查看贵州茅台的完整归因报告/ }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/attribution/reports/88'));
+  expect(screen.getByRole('button', { name: '← 返回自选' })).toBeInTheDocument();
+});
+
+test('uses deep attribution when the latest report belongs to an older quote date', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1, code: '021894', type: 'FUND', name: '半导体基金', quoteValid: true,
+      quoteDate: '2026-07-13', attributionReportId: 77, attributionReportDate: '2026-07-12',
+      attributionSummary: '半导体板块回调'
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('最近归因')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /深度归因/ })).toBeInTheDocument();
 });
