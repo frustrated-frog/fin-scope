@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class ThesisFinding {
     private Long id;
     private Long thesisId;
+    private Long researchRunId;
     private String stance;
     private String summary;
     private Long evidenceId;
@@ -18,6 +19,8 @@ public class ThesisFinding {
     public void setId(Long id) { this.id = id; }
     public Long getThesisId() { return thesisId; }
     public void setThesisId(Long thesisId) { this.thesisId = thesisId; }
+    public Long getResearchRunId() { return researchRunId; }
+    public void setResearchRunId(Long researchRunId) { this.researchRunId = researchRunId; }
     public String getStance() { return stance; }
     public void setStance(String stance) { this.stance = stance; }
     public String getSummary() { return summary; }

@@ -6263,6 +6263,21 @@ input[type="checkbox"] {
   }
 }
 
+/* Research report: independent from the daily brief reader. */
+.research-report-reader { margin-top: 22px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.research-report-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding: 26px; border-bottom: 1px solid var(--line); background: linear-gradient(125deg, rgba(53, 208, 176, .09), transparent 65%); }
+.research-report-hero h2 { margin: 5px 0 10px; font-size: clamp(24px, 3vw, 38px); }
+.research-report-hero p { max-width: 850px; margin: 0; color: var(--muted); line-height: 1.7; }
+.research-report-metrics { display: grid; min-width: 150px; gap: 7px; color: var(--muted); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.research-report-warning { margin: 20px 26px 0; padding: 12px 14px; border-left: 3px solid #d8a84f; background: rgba(216, 168, 79, .08); color: var(--muted); line-height: 1.6; }
+.research-report-document { max-width: 920px; margin: 0 auto; padding: 30px 34px 52px; line-height: 1.8; }
+.research-report-document h1 { display: none; }
+.research-report-document h2 { margin: 34px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.research-report-document h3 { margin-top: 26px; }
+.research-report-document li { margin: 8px 0; }
+.research-report-document a { color: var(--accent); overflow-wrap: anywhere; }
+@media (max-width: 760px) { .research-report-hero { flex-direction: column; padding: 20px; } .research-report-document { padding: 22px 20px 36px; } }
+
 /* ===== Strategy workbench / 复利轨道 ===== */
 .strategy-workspace { --tide:#36c5b2; --amber:#e7b65a; --coral:#f07d6a; display:grid; gap:22px; padding-bottom:40px; }
 .strategy-hero { position:relative; overflow:hidden; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; padding:30px; border:1px solid rgba(54,197,178,.22); border-radius:20px; background:linear-gradient(135deg,rgba(54,197,178,.1),rgba(231,182,90,.035) 55%,rgba(16,25,35,.1)); }

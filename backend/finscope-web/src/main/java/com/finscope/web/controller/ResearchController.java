@@ -1,10 +1,12 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.service.agent.AgentRunService;
 import com.finscope.service.research.ResearchRunPlanService;
 import com.finscope.service.research.ResearchService;
+import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.web.request.CreateResearchRunRequest;
 import com.finscope.web.response.ResearchRunDetailResponse;
 import com.finscope.web.response.ResearchRunResponse;
@@ -27,6 +29,8 @@ public class ResearchController {
     private AgentRunService agentRunService;
     @Resource
     private ResearchRunPlanService researchRunPlanService;
+    @Resource
+    private ResearchReportService researchReportService;
 
     /**
      * 创建研究运行计划。
@@ -68,5 +72,15 @@ public class ResearchController {
                 researchService.plannedSources(id),
                 researchRunPlanService.findByRunId(id),
                 agentRunService.findByResearchRunId(id));
+    }
+
+    @GetMapping("/{id}/report")
+    public ResearchReport report(@PathVariable Long id) {
+        return researchReportService.detailByRunId(id);
+    }
+
+    @PostMapping("/{id}/report/regenerate")
+    public ResearchReport regenerateReport(@PathVariable Long id) {
+        return researchService.regenerateReport(id);
     }
 }

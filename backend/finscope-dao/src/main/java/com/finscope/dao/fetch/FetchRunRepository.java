@@ -44,7 +44,11 @@ public class FetchRunRepository {
                     "INSERT INTO fetch_run(source_id,source_name,status,started_at,success_count,duplicate_count) "
                             + "VALUES(?,?,?,?,0,0)",
                     Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, sourceId);
+            if (sourceId == null) {
+                ps.setObject(1, null);
+            } else {
+                ps.setLong(1, sourceId);
+            }
             ps.setString(2, sourceName);
             ps.setString(3, run.getStatus());
             ps.setString(4, TimeUtil.text(run.getStartedAt()));

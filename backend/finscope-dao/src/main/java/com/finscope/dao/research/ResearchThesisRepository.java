@@ -48,6 +48,8 @@ public class ResearchThesisRepository {
         ThesisFinding finding = new ThesisFinding();
         finding.setId(rs.getLong("id"));
         finding.setThesisId(rs.getLong("thesis_id"));
+        long researchRunId = rs.getLong("research_run_id");
+        finding.setResearchRunId(rs.wasNull() ? null : researchRunId);
         finding.setStance(rs.getString("stance"));
         finding.setSummary(rs.getString("summary"));
         long evidenceId = rs.getLong("evidence_id");
@@ -110,18 +112,24 @@ public class ResearchThesisRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO thesis_finding(thesis_id,stance,summary,evidence_id,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO thesis_finding(thesis_id,research_run_id,stance,summary,evidence_id,created_at,updated_at) "
+                            + "VALUES(?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, finding.getThesisId());
-            ps.setString(2, finding.getStance());
-            ps.setString(3, finding.getSummary());
-            if (finding.getEvidenceId() == null) {
-                ps.setObject(4, null);
+            if (finding.getResearchRunId() == null) {
+                ps.setObject(2, null);
             } else {
-                ps.setLong(4, finding.getEvidenceId());
+                ps.setLong(2, finding.getResearchRunId());
             }
-            ps.setString(5, TimeUtil.text(finding.getCreatedAt()));
-            ps.setString(6, TimeUtil.text(finding.getUpdatedAt()));
+            ps.setString(3, finding.getStance());
+            ps.setString(4, finding.getSummary());
+            if (finding.getEvidenceId() == null) {
+                ps.setObject(5, null);
+            } else {
+                ps.setLong(5, finding.getEvidenceId());
+            }
+            ps.setString(6, TimeUtil.text(finding.getCreatedAt()));
+            ps.setString(7, TimeUtil.text(finding.getUpdatedAt()));
             return ps;
         }, keyHolder);
         finding.setId(keyHolder.getKey().longValue());
@@ -131,5 +139,14 @@ public class ResearchThesisRepository {
     public List<ThesisFinding> findFindingsByThesisId(Long thesisId) {
         return jdbcTemplate.query("SELECT * FROM thesis_finding WHERE thesis_id = ? ORDER BY created_at ASC, id ASC",
                 findingMapper, thesisId);
+    }
+
+    public List<ThesisFinding> findFindingsByRunId(Long runId) {
+        return jdbcTemplate.query("SELECT * FROM thesis_finding WHERE research_run_id = ? ORDER BY created_at ASC, id ASC",
+                findingMapper, runId);
+    }
+
+    public int deleteFindingsByRunId(Long runId) {
+        return jdbcTemplate.update("DELETE FROM thesis_finding WHERE research_run_id = ?", runId);
     }
 }

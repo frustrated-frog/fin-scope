@@ -308,13 +308,37 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS thesis_finding ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "thesis_id INTEGER NOT NULL,"
+                + "research_run_id INTEGER,"
                 + "stance TEXT NOT NULL,"
                 + "summary TEXT NOT NULL,"
                 + "evidence_id INTEGER,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
+        ensureColumn("thesis_finding", "research_run_id", "INTEGER");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thesis_finding_thesis ON thesis_finding(thesis_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thesis_finding_run ON thesis_finding(research_run_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thesis_finding_stance ON thesis_finding(stance)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_report ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "research_run_id INTEGER NOT NULL UNIQUE,"
+                + "thesis_id INTEGER,"
+                + "report_type TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "title TEXT NOT NULL,"
+                + "conclusion TEXT NOT NULL,"
+                + "conclusion_direction TEXT NOT NULL,"
+                + "confidence TEXT NOT NULL,"
+                + "executive_summary TEXT NOT NULL,"
+                + "content_markdown TEXT NOT NULL,"
+                + "markdown_path TEXT NOT NULL,"
+                + "generation_mode TEXT NOT NULL,"
+                + "warning_message TEXT,"
+                + "evidence_count INTEGER NOT NULL DEFAULT 0,"
+                + "source_count INTEGER NOT NULL DEFAULT 0,"
+                + "character_count INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_report_thesis ON research_report(thesis_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_source ("
                 + "run_id INTEGER NOT NULL,"
                 + "source_id INTEGER,"

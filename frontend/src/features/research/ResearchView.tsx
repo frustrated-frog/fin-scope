@@ -1,22 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Table } from '../../shared/components/Table';
-import { ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
+import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
 
 export function ResearchView({
   runs,
   theses,
   detail,
+  report,
   busy,
   onRun,
   onCreateThesis,
   onOpenRun,
-  onOpenBrief
+  onOpenReport
 }: {
   runs: ResearchRun[];
   theses: ResearchThesis[];
   detail: ResearchRunDetail | null;
+  report: ResearchReport | null;
   busy: boolean;
   onRun: (input: {
     thesisId?: number;
@@ -27,7 +31,7 @@ export function ResearchView({
   }) => Promise<void>;
   onCreateThesis: (input: Omit<ResearchThesis, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => Promise<ResearchThesis>;
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
-  onOpenBrief: (date: string) => void;
+  onOpenReport: (runId: number) => Promise<void>;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [runDate, setRunDate] = useState(today);
@@ -204,9 +208,9 @@ export function ResearchView({
               <p className="eyebrow">Trace</p>
               <h3>运行细节</h3>
             </div>
-            {detail?.run?.briefDate && (
-              <button className="ghost-button" type="button" onClick={() => onOpenBrief(detail.run.briefDate as string)}>
-                打开简报
+            {detail?.run && !['RUNNING', 'FAILED'].includes(detail.run.status) && (
+              <button className="ghost-button" type="button" onClick={() => onOpenReport(detail.run.id)}>
+                打开研究报告
               </button>
             )}
           </div>
@@ -276,6 +280,27 @@ export function ResearchView({
           )}
         </aside>
       </div>
+      {report && (
+        <article className="research-report-reader" aria-label="研究报告">
+          <header className="research-report-hero">
+            <div>
+              <p className="eyebrow">Research report · Run #{report.researchRunId}</p>
+              <h2>{report.title}</h2>
+              <p>{report.conclusion}</p>
+            </div>
+            <div className="research-report-metrics">
+              <span>置信度 {report.confidence}</span>
+              <span>{report.evidenceCount} 条证据</span>
+              <span>{report.sourceCount} 个来源</span>
+              <span>{report.characterCount} 字</span>
+            </div>
+          </header>
+          {report.warningMessage && <div className="research-report-warning">证据边界：{report.warningMessage}</div>}
+          <section className="research-report-document">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.contentMarkdown}</ReactMarkdown>
+          </section>
+        </article>
+      )}
     </section>
   );
 }

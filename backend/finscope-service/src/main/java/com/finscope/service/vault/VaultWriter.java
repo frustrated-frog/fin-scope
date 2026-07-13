@@ -27,6 +27,28 @@ public class VaultWriter {
         return target;
     }
 
+    public Path writeResearchReport(Long thesisId, Long researchRunId, String markdown) throws IOException {
+        if (researchRunId == null) {
+            throw new IllegalArgumentException("Research run id is required");
+        }
+        String thesisDirectory = thesisId == null ? "standalone" : "thesis-" + thesisId;
+        Path directory = vaultRoot.resolve("research-reports").resolve(thesisDirectory);
+        Files.createDirectories(directory);
+        Path target = directory.resolve("run-" + researchRunId + ".md");
+        Path temporary = Files.createTempFile(directory, "run-" + researchRunId + "-", ".tmp");
+        try {
+            Files.write(temporary, (markdown == null ? "" : markdown).getBytes(StandardCharsets.UTF_8));
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+        return target;
+    }
+
     public List<Path> listDailyBriefs() throws IOException {
         Path directory = vaultRoot.resolve("daily-briefs");
         if (!Files.exists(directory)) {

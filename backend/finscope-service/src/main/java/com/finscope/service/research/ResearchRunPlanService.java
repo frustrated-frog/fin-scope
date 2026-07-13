@@ -15,7 +15,7 @@ public class ResearchRunPlanService {
     public static final String STEP_FETCH_SOURCES = "fetch_sources";
     public static final String STEP_CLASSIFY_EVENTS = "classify_events";
     public static final String STEP_EXTRACT_EVIDENCE = "extract_evidence";
-    public static final String STEP_COMPOSE_BRIEF = "compose_brief";
+    public static final String STEP_COMPOSE_REPORT = "compose_report";
     public static final String STEP_SUMMARIZE_RUN = "summarize_run";
 
     private final ResearchRunPlanRepository repository;
@@ -34,10 +34,10 @@ public class ResearchRunPlanService {
                 Collections.singletonList(STEP_FETCH_SOURCES), ""));
         steps.add(step(researchRunId, STEP_EXTRACT_EVIDENCE, "抽取证据", "EVIDENCE", "EvidenceService",
                 Collections.singletonList(STEP_CLASSIFY_EVENTS), ""));
-        steps.add(step(researchRunId, STEP_COMPOSE_BRIEF, "生成简报", "BRIEF", "BriefService",
+        steps.add(step(researchRunId, STEP_COMPOSE_REPORT, "生成研究报告", "REPORT", "ResearchReportService",
                 Collections.singletonList(STEP_EXTRACT_EVIDENCE), ""));
         steps.add(step(researchRunId, STEP_SUMMARIZE_RUN, "汇总运行", "SUMMARY", "ResearchService",
-                Collections.singletonList(STEP_COMPOSE_BRIEF), ""));
+                Collections.singletonList(STEP_COMPOSE_REPORT), ""));
         return repository.replaceForRun(researchRunId, steps);
     }
 

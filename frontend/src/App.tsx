@@ -34,6 +34,7 @@ import {
   LearningTask,
   ResearchRun,
   ResearchRunDetail,
+  ResearchReport,
   ResearchThesis,
   Source,
   ToastItem,
@@ -73,6 +74,7 @@ export default function App() {
   const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
   const [researchTheses, setResearchTheses] = useState<ResearchThesis[]>([]);
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
+  const [researchReport, setResearchReport] = useState<ResearchReport | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
   const [topicDeleteTarget, setTopicDeleteTarget] = useState<Topic | null>(null);
@@ -122,7 +124,7 @@ export default function App() {
     const topicData = value<Topic[]>(6); if (topicData) setTopics(topicData);
     const contentIdeaData = value<ContentIdea[]>(7); if (contentIdeaData) setContentIdeas(contentIdeaData);
     const researchRunData = value<ResearchRun[]>(8); if (researchRunData) setResearchRuns(researchRunData);
-    const researchThesisData = value<ResearchThesis[]>(9); if (researchThesisData) setResearchTheses(researchThesisData);
+    const researchThesisData = value<ResearchThesis[]>(9); if (Array.isArray(researchThesisData)) setResearchTheses(researchThesisData);
     const agentData = value<AgentRun[]>(10); if (agentData) setAgentRuns(agentData);
     const fetchBatchData = value<FetchBatch[]>(11); if (fetchBatchData) setFetchBatches(fetchBatchData);
     const intakeCandidateData = value<IntakeCandidate[]>(12); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
@@ -315,11 +317,25 @@ export default function App() {
   }
 
   async function openResearchRun(id: number) {
+    setResearchReport(null);
     const detail = await loadResearchRunProgress(id);
     if (isResearchRunActive(detail.run.status)) {
       setMessage('研究运行已启动，正在同步进度');
     }
     return detail;
+  }
+
+  async function openResearchReport(id: number) {
+    setMessage('正在打开研究报告');
+    try {
+      const report = await api<ResearchReport>(`/api/research/runs/${id}/report`);
+      setResearchReport(report);
+      setMessage('研究报告已打开');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '研究报告打开失败';
+      setMessage(message);
+      addToast(message, 'error');
+    }
   }
 
   async function runResearch(input: {
@@ -497,11 +513,12 @@ export default function App() {
           runs={researchRuns}
           theses={researchTheses}
           detail={researchRunDetail}
+          report={researchReport}
           busy={researchBusy}
           onRun={runResearch}
           onCreateThesis={createResearchThesis}
           onOpenRun={openResearchRun}
-          onOpenBrief={openBrief}
+          onOpenReport={openResearchReport}
         />
       )}
       {view === 'events' && (

@@ -34,6 +34,16 @@ public class FetchService {
     public FetchRun fetch(Long sourceId) {
         Source source = sourceRepository.findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        return fetch(source);
+    }
+
+    /**
+     * Fetches a run-scoped transient source without persisting it as user configuration.
+     */
+    public FetchRun fetch(Source source) {
+        if (source == null || source.getName() == null || source.getUrl() == null) {
+            throw new IllegalArgumentException("Transient source name and url are required");
+        }
         long start = System.currentTimeMillis();
         log.info("信息源抓取开始 sourceId={} sourceName={} type={}", source.getId(), source.getName(), source.getType());
         FetchRun run = fetchRunRepository.start(source.getId(), source.getName());

@@ -312,6 +312,28 @@ export type ResearchRun = {
   plannedSources?: SourceProfile[];
 };
 
+export type ResearchReport = {
+  id: number;
+  researchRunId: number;
+  thesisId?: number;
+  reportType: string;
+  status: string;
+  title: string;
+  conclusion: string;
+  conclusionDirection: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  executiveSummary: string;
+  contentMarkdown: string;
+  markdownPath: string;
+  generationMode: string;
+  warningMessage?: string;
+  evidenceCount: number;
+  sourceCount: number;
+  characterCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type ResearchThesis = {
   id: number;
   question: string;

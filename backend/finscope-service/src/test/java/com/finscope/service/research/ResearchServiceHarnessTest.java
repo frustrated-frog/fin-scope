@@ -10,19 +10,19 @@ import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentNodeResult;
-import com.finscope.domain.brief.Brief;
 import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
+import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.service.agent.ActionFingerprintService;
 import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
-import com.finscope.service.brief.BriefService;
 import com.finscope.service.fetch.FetchService;
+import com.finscope.service.research.report.ResearchReportService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -59,7 +59,7 @@ class ResearchServiceHarnessTest {
         SourceRepository sourceRepository = mock(SourceRepository.class);
         ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
         FetchService fetchService = mock(FetchService.class);
-        BriefService briefService = mock(BriefService.class);
+        ResearchReportService reportService = mock(ResearchReportService.class);
         ArticleRepository articleRepository = mock(ArticleRepository.class);
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
@@ -75,7 +75,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
         ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
         ReflectionTestUtils.setField(service, "fetchService", fetchService);
-        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
@@ -118,7 +118,7 @@ class ResearchServiceHarnessTest {
         });
         when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(fetchService.fetch(12L)).thenReturn(fetchRun());
-        when(briefService.generate(runDate)).thenReturn(brief(runDate));
+        when(reportService.generate(501L)).thenReturn(report(501L));
 
         ResearchRunPlan plan = service.createRun(runDate,
                 Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
@@ -141,7 +141,7 @@ class ResearchServiceHarnessTest {
         SourceRepository sourceRepository = mock(SourceRepository.class);
         ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
         FetchService fetchService = mock(FetchService.class);
-        BriefService briefService = mock(BriefService.class);
+        ResearchReportService reportService = mock(ResearchReportService.class);
         ArticleRepository articleRepository = mock(ArticleRepository.class);
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
@@ -157,7 +157,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
         ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
         ReflectionTestUtils.setField(service, "fetchService", fetchService);
-        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
@@ -200,7 +200,7 @@ class ResearchServiceHarnessTest {
         });
         when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(fetchService.fetch(12L)).thenReturn(fetchRun());
-        when(briefService.generate(runDate)).thenReturn(brief(runDate));
+        when(reportService.generate(501L)).thenReturn(report(501L));
 
         ResearchRunPlan plan = service.createRun(runDate,
                 Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
@@ -228,7 +228,7 @@ class ResearchServiceHarnessTest {
         SourceRepository sourceRepository = mock(SourceRepository.class);
         ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
         FetchService fetchService = mock(FetchService.class);
-        BriefService briefService = mock(BriefService.class);
+        ResearchReportService reportService = mock(ResearchReportService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
         ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
         CapturingExecutor executor = new CapturingExecutor();
@@ -241,7 +241,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
         ReflectionTestUtils.setField(service, "researchThesisRepository", mock(ResearchThesisRepository.class));
         ReflectionTestUtils.setField(service, "fetchService", fetchService);
-        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "articleRepository", mock(ArticleRepository.class));
         ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
         ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
@@ -298,7 +298,7 @@ class ResearchServiceHarnessTest {
                 .thenAnswer(invocation -> completedFetches.get());
         when(outputService.count(501L, ResearchRunOutputService.EVIDENCE))
                 .thenAnswer(invocation -> completedFetches.get() * 2);
-        when(briefService.generate(runDate)).thenReturn(brief(runDate));
+        when(reportService.generate(501L)).thenReturn(report(501L));
 
         service.createRun(runDate, Collections.singletonList(ResearchEnums.THEME_MARKET), 2, true);
         executor.runCaptured();
@@ -316,7 +316,7 @@ class ResearchServiceHarnessTest {
         SourceRepository sourceRepository = mock(SourceRepository.class);
         ResearchRunRepository researchRunRepository = mock(ResearchRunRepository.class);
         FetchService fetchService = mock(FetchService.class);
-        BriefService briefService = mock(BriefService.class);
+        ResearchReportService reportService = mock(ResearchReportService.class);
         ArticleRepository articleRepository = mock(ArticleRepository.class);
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
@@ -330,7 +330,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "sourceRepository", sourceRepository);
         ReflectionTestUtils.setField(service, "researchRunRepository", researchRunRepository);
         ReflectionTestUtils.setField(service, "fetchService", fetchService);
-        ReflectionTestUtils.setField(service, "briefService", briefService);
+        ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
@@ -379,7 +379,7 @@ class ResearchServiceHarnessTest {
         assertEquals(6, plan.getPlanSteps().size());
         assertEquals(ResearchEnums.RUN_STATUS_FAILED, plan.getRun().getStatus());
         assertTrue(plan.getRun().getErrorMessage().contains("No planned sources"));
-        verify(briefService, never()).generate(any(LocalDate.class));
+        verify(reportService, never()).generate(anyLong());
         verify(researchRunPlanService).fail(any(ResearchRunPlanStep.class), any(), any());
         verify(researchRunPlanService, atLeastOnce()).skip(any(ResearchRunPlanStep.class), any());
     }
@@ -412,13 +412,13 @@ class ResearchServiceHarnessTest {
         return run;
     }
 
-    private Brief brief(LocalDate date) {
-        Brief brief = new Brief();
-        brief.setBriefDate(date);
-        brief.setTitle("Daily Brief");
-        brief.setContent("content");
-        brief.setMarkdownPath("daily.md");
-        return brief;
+    private ResearchReport report(Long runId) {
+        ResearchReport report = new ResearchReport();
+        report.setId(91L);
+        report.setResearchRunId(runId);
+        report.setEvidenceCount(4);
+        report.setCharacterCount(4000);
+        return report;
     }
 
     private List<ResearchRunPlanStep> defaultSteps() {
@@ -427,7 +427,7 @@ class ResearchServiceHarnessTest {
                 step(ResearchRunPlanService.STEP_FETCH_SOURCES),
                 step(ResearchRunPlanService.STEP_CLASSIFY_EVENTS),
                 step(ResearchRunPlanService.STEP_EXTRACT_EVIDENCE),
-                step(ResearchRunPlanService.STEP_COMPOSE_BRIEF),
+                step(ResearchRunPlanService.STEP_COMPOSE_REPORT),
                 step(ResearchRunPlanService.STEP_SUMMARIZE_RUN));
     }
 

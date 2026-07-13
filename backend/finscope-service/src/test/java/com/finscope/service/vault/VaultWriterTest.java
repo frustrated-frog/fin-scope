@@ -25,4 +25,15 @@ class VaultWriterTest {
         assertTrue(written.toString().endsWith("daily-briefs/2026-06-23.md"));
         assertEquals("# Brief", new String(Files.readAllBytes(written), "UTF-8"));
     }
+
+    @Test
+    void writesResearchReportOutsideDailyBriefDirectory() throws Exception {
+        VaultWriter writer = new VaultWriter(tempDir);
+
+        Path written = writer.writeResearchReport(3L, 14L, "# Research Report");
+
+        assertTrue(written.toString().endsWith("research-reports/thesis-3/run-14.md"));
+        assertEquals("# Research Report", new String(Files.readAllBytes(written), "UTF-8"));
+        assertTrue(Files.notExists(tempDir.resolve("daily-briefs/2026-07-13.md")));
+    }
 }

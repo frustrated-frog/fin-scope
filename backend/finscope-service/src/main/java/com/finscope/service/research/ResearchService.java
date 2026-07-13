@@ -12,20 +12,21 @@ import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentActionFingerprint;
 import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.agent.AgentRunContext;
-import com.finscope.domain.brief.Brief;
 import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
+import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.domain.source.Source;
 import com.finscope.service.agent.ActionFingerprintService;
 import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
-import com.finscope.service.brief.BriefService;
 import com.finscope.service.fetch.FetchService;
+import com.finscope.service.research.report.ResearchReportService;
+import com.finscope.service.research.report.ThesisQueryExpansionService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -49,7 +50,9 @@ public class ResearchService {
     @Resource
     private FetchService fetchService;
     @Resource
-    private BriefService briefService;
+    private ResearchReportService researchReportService;
+    @Resource
+    private ThesisQueryExpansionService thesisQueryExpansionService;
     @Resource
     private ArticleRepository articleRepository;
     @Resource
@@ -122,6 +125,16 @@ public class ResearchService {
         List<ResearchRunPlanStep> planSteps = researchRunPlanService.initializeDefaultPlan(saved.getId(), plannedSources.size());
         startStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES);
         if (plannedSources.isEmpty()) {
+            if (thesisId != null) {
+                completeStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES,
+                        "configuredSources=0, dynamicThesisSearch=enabled", 1);
+                scheduleExecution(saved, plannedSources, planSteps);
+                ResearchRunPlan plan = new ResearchRunPlan();
+                plan.setRun(saved);
+                plan.setPlannedSources(plannedSources);
+                plan.setPlanSteps(planSteps);
+                return plan;
+            }
             saved = failWithoutPlannedSources(saved, planSteps);
             ResearchRunPlan plan = new ResearchRunPlan();
             plan.setRun(saved);
@@ -153,6 +166,29 @@ public class ResearchService {
         return researchRunRepository.findSourcesByRunId(id);
     }
 
+    public ResearchReport regenerateReport(Long runId) {
+        ResearchRun run = detail(runId);
+        if (run.getThesisId() == null) {
+            throw new IllegalStateException("A thesis is required to regenerate a research report");
+        }
+        com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
+                .orElseThrow(() -> new IllegalStateException("Research thesis not found: " + run.getThesisId()));
+        try {
+            ResearchRunContext.setCurrentRunId(runId);
+            for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(runId).isSufficient(); round++) {
+                for (Source querySource : thesisQueryExpansionService.queries(thesis, round)) {
+                    fetchService.fetch(querySource);
+                }
+            }
+            refreshOutputCounts(run);
+            run.setBriefDate(null);
+            researchRunRepository.updateResult(run);
+            return researchReportService.generate(runId);
+        } finally {
+            ResearchRunContext.clear();
+        }
+    }
+
     private void scheduleExecution(ResearchRun run, List<SourceProfile> plannedSources, List<ResearchRunPlanStep> planSteps) {
         try {
             researchTaskExecutor.execute(() -> execute(run, plannedSources, planSteps));
@@ -181,6 +217,7 @@ public class ResearchService {
         int learningBefore = learningTaskRepository.countAll();
         int ideaBefore = contentIdeaRepository.countAll();
         int fetchedSources = 0;
+        int dynamicQueries = 0;
         List<String> errors = new ArrayList<String>();
         ResearchRunPlanStep currentStep = null;
         try {
@@ -215,8 +252,24 @@ public class ResearchService {
                 persistRunningProgress(run, fetchedSources);
             }
 
+            if (run.getThesisId() != null) {
+                com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
+                        .orElseThrow(() -> new IllegalStateException("Research thesis not found: " + run.getThesisId()));
+                for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(run.getId()).isSufficient(); round++) {
+                    for (Source querySource : thesisQueryExpansionService.queries(thesis, round)) {
+                        FetchRun queryRun = fetchService.fetch(querySource);
+                        dynamicQueries++;
+                        if (!"SUCCESS".equals(queryRun.getStatus())) {
+                            errors.add(querySource.getName() + ": " + queryRun.getErrorMessage());
+                        }
+                        persistRunningProgress(run, fetchedSources);
+                    }
+                }
+            }
+
             completeStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES,
-                    "fetchedSources=" + fetchedSources + ", errors=" + errors.size(), fetchedSources);
+                    "fetchedSources=" + fetchedSources + ", dynamicQueries=" + dynamicQueries
+                            + ", errors=" + errors.size(), fetchedSources + dynamicQueries);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS);
             completeStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS,
                     "events=" + outputCount(run.getId(), ResearchRunOutputService.EVENT),
@@ -225,17 +278,17 @@ public class ResearchService {
             completeStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE,
                     "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
                     outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
-            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF);
-            Brief brief = briefService.generate(run.getRunDate());
-            researchRunOutputService.recordCurrentRun(ResearchRunOutputService.BRIEF, brief.getId());
-            completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF,
-                    "briefDate=" + brief.getBriefDate(), 1);
+            currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT);
+            ResearchReport report = researchReportService.generate(run.getId());
+            completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT,
+                    "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount()
+                            + ", chars=" + report.getCharacterCount(), 1);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN);
             run.setFetchedSourceCount(fetchedSources);
             refreshOutputCounts(run);
             run.setLearningTaskCount(delta(learningBefore, learningTaskRepository.countAll()));
             run.setContentIdeaCount(delta(ideaBefore, contentIdeaRepository.countAll()));
-            run.setBriefDate(brief.getBriefDate());
+            run.setBriefDate(null);
             run.setStatus(errors.isEmpty()
                     ? ResearchEnums.RUN_STATUS_COMPLETED
                     : ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS);
@@ -319,7 +372,7 @@ public class ResearchService {
                 + ", evidence=" + value(run.getEvidenceCount())
                 + ", learningTasks=" + value(run.getLearningTaskCount())
                 + ", contentIdeas=" + value(run.getContentIdeaCount())
-                + ", briefDate=" + (run.getBriefDate() == null ? "-" : run.getBriefDate());
+                + ", report=" + outputCount(run.getId(), ResearchRunOutputService.REPORT);
     }
 
     private int value(Integer value) {
@@ -346,7 +399,7 @@ public class ResearchService {
         skipStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES, "NO_PLANNED_SOURCES");
         skipStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS, "NO_PLANNED_SOURCES");
         skipStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE, "NO_PLANNED_SOURCES");
-        skipStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_BRIEF, "NO_PLANNED_SOURCES");
+        skipStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT, "NO_PLANNED_SOURCES");
         skipStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN, "NO_PLANNED_SOURCES");
         run.setFetchedSourceCount(0);
         run.setArticleCount(0);
