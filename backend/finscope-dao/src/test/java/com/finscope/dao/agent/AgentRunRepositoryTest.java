@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.sqlite.SQLiteDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
@@ -32,6 +33,8 @@ class AgentRunRepositoryTest {
         ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbcTemplate);
         ReflectionTestUtils.setField(initializer, "dataRoot", dataRoot.toString());
         initializer.afterPropertiesSet();
+
+        new AgentTraceSchemaMigrator(jdbcTemplate, new DataSourceTransactionManager(dataSource)).migrate();
 
         repository = new AgentRunRepository(jdbcTemplate);
     }

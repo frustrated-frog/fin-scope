@@ -5,6 +5,7 @@ import com.finscope.domain.agent.AgentActionFingerprint;
 import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.agent.AgentRunContext;
+import com.finscope.domain.agent.AgentTraceSubject;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -25,10 +26,33 @@ public class AgentTraceService {
                            AgentNodeResult<?> result,
                            long durationMs,
                            String metadataJson) {
+        recordNode(eventId == null && articleId == null ? null : AgentTraceSubject.of("RESEARCH", eventId),
+                eventId, articleId, context, fingerprint, result, durationMs, metadataJson);
+    }
+
+    public void recordNode(AgentTraceSubject subject,
+                           AgentRunContext context,
+                           AgentActionFingerprint fingerprint,
+                           AgentNodeResult<?> result,
+                           long durationMs,
+                           String metadataJson) {
+        recordNode(subject, null, null, context, fingerprint, result, durationMs, metadataJson);
+    }
+
+    private void recordNode(AgentTraceSubject subject,
+                            Long eventId,
+                            Long articleId,
+                            AgentRunContext context,
+                            AgentActionFingerprint fingerprint,
+                            AgentNodeResult<?> result,
+                            long durationMs,
+                            String metadataJson) {
         AgentRun run = new AgentRun();
         run.setResearchRunId(context == null ? null : context.getResearchRunId());
         run.setEventId(eventId);
         run.setArticleId(articleId);
+        run.setSubjectType(subject == null ? null : subject.getType());
+        run.setSubjectId(subject == null ? null : subject.getId());
         run.setNodeName(nodeName(context, fingerprint));
         run.setStatus(result == null ? "UNKNOWN" : result.getStatus());
         run.setInput(result == null ? "" : result.getInputSummary());

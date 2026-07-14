@@ -26,6 +26,8 @@ public class AgentRun {
     private int progressDelta;
     private String budgetSnapshot;
     private String metadataJson;
+    private String subjectType;
+    private Long subjectId;
 
     public Long getId() {
         return id;
@@ -210,4 +212,9 @@ public class AgentRun {
     public void setMetadataJson(String metadataJson) {
         this.metadataJson = metadataJson;
     }
+
+    public String getSubjectType() { return subjectType; }
+    public void setSubjectType(String subjectType) { this.subjectType = subjectType; }
+    public Long getSubjectId() { return subjectId; }
+    public void setSubjectId(Long subjectId) { this.subjectId = subjectId; }
 }

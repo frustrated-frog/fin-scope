@@ -43,6 +43,8 @@ public class AgentRunRepository {
         run.setProgressDelta(rs.getInt("progress_delta"));
         run.setBudgetSnapshot(rs.getString("budget_snapshot"));
         run.setMetadataJson(rs.getString("metadata_json"));
+        run.setSubjectType(rs.getString("subject_type"));
+        run.setSubjectId(readLong(rs, "subject_id"));
         return run;
     };
 
@@ -72,13 +74,13 @@ public class AgentRunRepository {
         jdbcTemplate.update("INSERT INTO agent_run(research_run_id,event_id,article_id,node_name,status,input,output,"
                         + "error_message,duration_ms,created_at,step_id,attempt,action_fingerprint,input_hash,"
                         + "output_hash,error_type,fallback_used,fallback_reason,termination_reason,progress_delta,"
-                        + "budget_snapshot,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        + "budget_snapshot,metadata_json,subject_type,subject_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 run.getResearchRunId(), run.getEventId(), run.getArticleId(), run.getNodeName(), run.getStatus(),
                 run.getInput(), run.getOutput(), run.getErrorMessage(), run.getDurationMs(),
                 TimeUtil.text(createdAt), run.getStepId(), run.getAttempt(), run.getActionFingerprint(),
                 run.getInputHash(), run.getOutputHash(), run.getErrorType(), run.isFallbackUsed() ? 1 : 0,
                 run.getFallbackReason(), run.getTerminationReason(), run.getProgressDelta(),
-                run.getBudgetSnapshot(), run.getMetadataJson());
+                run.getBudgetSnapshot(), run.getMetadataJson(), run.getSubjectType(), run.getSubjectId());
     }
 
     public List<AgentRun> latest(int limit) {
@@ -88,6 +90,11 @@ public class AgentRunRepository {
     public List<AgentRun> findByResearchRunId(Long researchRunId) {
         return jdbcTemplate.query("SELECT * FROM agent_run WHERE research_run_id = ? ORDER BY id ASC",
                 mapper, researchRunId);
+    }
+
+    public List<AgentRun> findBySubject(String subjectType, Long subjectId) {
+        return jdbcTemplate.query("SELECT * FROM agent_run WHERE subject_type=? AND subject_id=? ORDER BY id ASC",
+                mapper, subjectType, subjectId);
     }
 
     private Long readLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
