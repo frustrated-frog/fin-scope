@@ -4,6 +4,7 @@ import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.WatchlistItem;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.service.instrument.SectorMarketOverview;
 import com.finscope.service.instrument.SectorMarketQualityStatus;
 import com.finscope.service.instrument.SectorMarketSearchResult;
@@ -75,6 +76,10 @@ class SectorMarketControllerTest {
         quote.setPrice(1234.5);
         quote.setChangePct(2.6);
         quote.setValid(true);
+        quote.setQualityStatus(MarketDataQualityStatus.FRESH_FALLBACK);
+        quote.setSourceCode("EASTMONEY_SECTOR_QUOTE");
+        quote.setWarning("已自动切换备用数据源");
+        quote.setRefreshId("r-sector");
         when(watchlistService.followSector("BK1036")).thenReturn(item);
         when(watchlistService.followedSectorWithQuote("BK1036"))
                 .thenReturn(new WatchlistItemView(item, quote, null));
@@ -82,7 +87,10 @@ class SectorMarketControllerTest {
         mockMvc.perform(put("/api/sector-market/follows/BK1036"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("BK1036"))
-                .andExpect(jsonPath("$.quoteValid").value(true));
+                .andExpect(jsonPath("$.quoteValid").value(true))
+                .andExpect(jsonPath("$.qualityStatus").value("FRESH_FALLBACK"))
+                .andExpect(jsonPath("$.sourceCode").value("EASTMONEY_SECTOR_QUOTE"))
+                .andExpect(jsonPath("$.refreshId").value("r-sector"));
         mockMvc.perform(delete("/api/sector-market/follows/bk1036"))
                 .andExpect(status().isNoContent());
 

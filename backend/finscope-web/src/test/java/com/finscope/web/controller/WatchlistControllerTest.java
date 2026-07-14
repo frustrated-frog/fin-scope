@@ -2,6 +2,10 @@ package com.finscope.web.controller;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.instrument.WatchlistItem;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
+import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.service.instrument.WatchlistService;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
@@ -32,11 +36,29 @@ class WatchlistControllerTest {
 
     @Test
     void listsOnlyInvestmentItemsThroughTypedService() throws Exception {
-        when(watchlistService.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.emptyList());
+        WatchlistItem item = new WatchlistItem();
+        item.setId(1L);
+        item.setCode("600519");
+        item.setType("STOCK");
+        item.setName("贵州茅台");
+        Quote quote = new Quote();
+        quote.setInstrumentCode("600519");
+        quote.setPrice(1500.0);
+        quote.setValid(true);
+        quote.setQualityStatus(MarketDataQualityStatus.FRESH_FALLBACK);
+        quote.setSourceCode("SINA_STOCK");
+        quote.setWarning("腾讯行情暂不可用，已自动切换至新浪。");
+        quote.setRefreshId("r-watchlist");
+        when(watchlistService.listInvestmentItemsWithQuotes(false)).thenReturn(
+                Collections.singletonList(new WatchlistItemView(item, quote, null)));
 
         mockMvc.perform(get("/api/watchlist"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].qualityStatus").value("FRESH_FALLBACK"))
+                .andExpect(jsonPath("$[0].sourceCode").value("SINA_STOCK"))
+                .andExpect(jsonPath("$[0].warning").value("腾讯行情暂不可用，已自动切换至新浪。"))
+                .andExpect(jsonPath("$[0].refreshId").value("r-watchlist"));
 
         verify(watchlistService).listInvestmentItemsWithQuotes(false);
     }

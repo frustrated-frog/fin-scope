@@ -8,7 +8,7 @@ import com.finscope.dao.attribution.AttributionRepository;
 /**
  * 自选面板响应：标的元信息 + 行情扁平化，方便前端直接渲染。
  */
-public class WatchlistItemResponse {
+public class WatchlistItemResponse extends MarketDataQualityResponse {
     private Long id;
     private String code;
     private String type;
@@ -53,6 +53,7 @@ public class WatchlistItemResponse {
             response.attributionChangePct = attribution.getChangePct();
         }
         if (quote != null) {
+            response.copyQuality(quote);
             response.price = quote.getPrice();
             response.confirmedNav = quote.getConfirmedNav();
             response.confirmedNavDate = quote.getConfirmedNavDate();

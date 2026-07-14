@@ -6,7 +6,7 @@ import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
 
 /** 用户关注板块及其单标的行情、归因摘要。 */
-public final class FollowedSectorResponse {
+public final class FollowedSectorResponse extends MarketDataQualityResponse {
     private Long id;
     private String code;
     private String name;
@@ -42,6 +42,7 @@ public final class FollowedSectorResponse {
             response.quoteNote = "暂无行情";
             return response;
         }
+        response.copyQuality(quote);
         response.price = quote.getPrice();
         response.changePct = quote.getChangePct();
         response.changeAmount = quote.getChangeAmount();

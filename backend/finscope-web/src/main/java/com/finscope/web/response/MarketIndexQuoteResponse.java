@@ -4,7 +4,7 @@ import com.finscope.domain.instrument.Quote;
 import com.finscope.service.instrument.MarketIndexView;
 
 /** 市场指数卡片的只读响应契约。 */
-public class MarketIndexQuoteResponse {
+public class MarketIndexQuoteResponse extends MarketDataQualityResponse {
     private String code;
     private String name;
     private Double price;
@@ -23,6 +23,7 @@ public class MarketIndexQuoteResponse {
             response.quoteNote = "暂无行情";
             return response;
         }
+        response.copyQuality(quote);
         response.price = quote.getPrice();
         response.changeAmount = quote.getChangeAmount();
         response.changePct = quote.getChangePct();
