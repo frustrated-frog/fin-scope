@@ -3,9 +3,46 @@ package com.finscope.domain.quant.strategy;
 import java.time.LocalDateTime;
 
 public class QuantStrategyVersion {
-    private Long id; private String name; private Long datasetId; private int version;
-    private String specJson; private String strategyFingerprint; private String datasetFingerprint;
-    private String engineVersion; private String source; private LocalDateTime createdAt;
+    /**
+     * 主键 ID。
+     */
+    private Long id;
+    /**
+     * 名称。
+     */
+    private String name;
+    /**
+     * 数据集 ID。
+     */
+    private Long datasetId;
+    /**
+     * 版本。
+     */
+    private int version;
+    /**
+     * 策略规格 JSON。
+     */
+    private String specJson;
+    /**
+     * 策略内容指纹。
+     */
+    private String strategyFingerprint;
+    /**
+     * 数据集指纹。
+     */
+    private String datasetFingerprint;
+    /**
+     * 引擎版本。
+     */
+    private String engineVersion;
+    /**
+     * 来源说明。
+     */
+    private String source;
+    /**
+     * 创建时间。
+     */
+    private LocalDateTime createdAt;
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }

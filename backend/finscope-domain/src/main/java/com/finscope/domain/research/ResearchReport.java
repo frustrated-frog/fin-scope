@@ -3,27 +3,84 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 /**
- * A bounded, thesis-driven report produced by exactly one research run.
+ * 由单次研究运行产出的、有边界的命题驱动型研究报告。
  */
 public class ResearchReport {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 研究运行 ID。
+     */
     private Long researchRunId;
+    /**
+     * 研究命题 ID。
+     */
     private Long thesisId;
+    /**
+     * 报告类型。
+     */
     private String reportType;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 研究结论。
+     */
     private String conclusion;
+    /**
+     * 结论方向。
+     */
     private String conclusionDirection;
+    /**
+     * 置信度。
+     */
     private String confidence;
+    /**
+     * 执行摘要。
+     */
     private String executiveSummary;
+    /**
+     * 内容 Markdown。
+     */
     private String contentMarkdown;
+    /**
+     * Markdown 文件路径。
+     */
     private String markdownPath;
+    /**
+     * 生成方式。
+     */
     private String generationMode;
+    /**
+     * 警告信息。
+     */
     private String warningMessage;
+    /**
+     * 证据数量。
+     */
     private int evidenceCount;
+    /**
+     * 来源数量。
+     */
     private int sourceCount;
+    /**
+     * 字符数。
+     */
     private int characterCount;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() { return id; }

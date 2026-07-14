@@ -4,15 +4,45 @@ import java.time.LocalDateTime;
 
 /** 可跨进程重启使用的最后成功市场数据快照。 */
 public final class MarketDataSnapshot {
+    /**
+     * 市场数据能力类型。
+     */
     private final MarketDataCapability capability;
+    /**
+     * 数据作用域键。
+     */
     private final String scopeKey;
+    /**
+     * 数据提供方编码。
+     */
     private final String providerCode;
+    /**
+     * 数据提供方家族。
+     */
     private final String providerFamily;
+    /**
+     * 数据对应时间。
+     */
     private final LocalDateTime asOf;
+    /**
+     * 数据拉取时间。
+     */
     private final LocalDateTime retrievedAt;
+    /**
+     * 原始载荷 JSON。
+     */
     private final String payloadJson;
+    /**
+     * 原始载荷哈希。
+     */
     private final String payloadHash;
+    /**
+     * 数据结构版本。
+     */
     private final int schemaVersion;
+    /**
+     * 最近更新时间。
+     */
     private final LocalDateTime updatedAt;
 
     public MarketDataSnapshot(MarketDataCapability capability, String scopeKey,

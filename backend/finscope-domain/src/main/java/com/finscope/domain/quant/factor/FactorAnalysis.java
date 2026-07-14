@@ -1,13 +1,37 @@
 package com.finscope.domain.quant.factor;
 
 public class FactorAnalysis {
+    /**
+     * 因子编码。
+     */
     private String factorCode;
+    /**
+     * 样本数量。
+     */
     private int sampleCount;
+    /**
+     * IC 均值。
+     */
     private double icMean;
+    /**
+     * IC 标准差。
+     */
     private double icStd;
+    /**
+     * IC 信息比率。
+     */
     private double icIr;
+    /**
+     * 正 IC 占比。
+     */
     private double positiveIcRatio;
+    /**
+     * 数据集 ID。
+     */
     private Long datasetId;
+    /**
+     * 数据集指纹。
+     */
     private String datasetFingerprint;
 
     public String getFactorCode() { return factorCode; }

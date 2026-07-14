@@ -10,51 +10,104 @@ import java.time.LocalDateTime;
  */
 @Data
 public class Quote {
+    /**
+     * 标的代码。
+     */
     private String instrumentCode;
+    /**
+     * 名称。
+     */
     private String name;
-    /** 最新价 / 基金估值净值 */
+    /**
+     * 最新价格。
+     */
     private Double price;
-    /** 基金最近确认的单位净值 */
+    /**
+     * 基金最近确认的单位净值。
+     */
     private Double confirmedNav;
-    /** 确认净值对应日期，格式 yyyy-MM-dd */
+    /**
+     * 确认净值对应日期。
+     */
     private String confirmedNavDate;
+    /**
+     * 确认净值涨跌幅百分比。
+     */
     private Double confirmedNavChangePct;
-    /** 昨收 */
+    /**
+     * 昨收价。
+     */
     private Double previousClose;
-    /** 涨跌幅（百分比，如 -3.1 表示 -3.1%） */
+    /**
+     * 涨跌幅百分比。
+     */
     private Double changePct;
-    /** 涨跌额 */
+    /**
+     * 涨跌额。
+     */
     private Double changeAmount;
-    /** 成交额（元） */
+    /**
+     * 换手率或成交额。
+     */
     private Double turnover;
-    /** 成交量 */
+    /**
+     * 成交量。
+     */
     private Double volume;
-    /** 今开 */
+    /**
+     * 开盘价。
+     */
     private Double open;
-    /** 当日最高 */
+    /**
+     * 最高价。
+     */
     private Double high;
-    /** 当日最低 */
+    /**
+     * 最低价。
+     */
     private Double low;
-    /** 振幅（百分比，(最高-最低)/昨收*100） */
+    /**
+     * 振幅。
+     */
     private Double amplitude;
-    /** 行情时间 */
+    /**
+     * 行情时间。
+     */
     private LocalDateTime quoteTime;
-    /** 是否取到有效行情 */
+    /**
+     * 是否取到有效行情。
+     */
     private boolean valid = true;
-    /** 取数失败或估值等提示信息 */
+    /**
+     * 备注信息。
+     */
     private String note;
-    /** 网关判定的数据质量。 */
+    /**
+     * 数据质量状态。
+     */
     private MarketDataQualityStatus qualityStatus;
-    /** 实际返回该条数据的 Provider。 */
+    /**
+     * 实际返回该条数据的数据提供方编码。
+     */
     private String sourceCode;
-    /** 行情事实对应的市场时间。 */
+    /**
+     * 数据对应时间。
+     */
     private LocalDateTime asOf;
-    /** Provider 完成拉取的时间。 */
+    /**
+     * 数据拉取时间。
+     */
     private LocalDateTime retrievedAt;
-    /** 使用旧快照时距当前的秒数。 */
+    /**
+     * 使用旧快照时距当前的秒数。
+     */
     private Long staleAgeSeconds;
-    /** 面向用户的降级说明。 */
+    /**
+     * 面向用户的降级说明。
+     */
     private String warning;
-    /** 本次刷新链路标识。 */
+    /**
+     * 本次刷新链路标识。
+     */
     private String refreshId;
 }

@@ -5,10 +5,25 @@ import java.util.Collections;
 import java.util.List;
 
 public class BriefResearchContext {
+    /**
+     * 简报日期。
+     */
     private LocalDate briefDate;
+    /**
+     * 事件列表。
+     */
     private List<EventCluster> events = Collections.emptyList();
+    /**
+     * 证据条目列表。
+     */
     private List<EvidenceItem> evidenceItems = Collections.emptyList();
+    /**
+     * 学习任务列表。
+     */
     private List<LearningTask> learningTasks = Collections.emptyList();
+    /**
+     * 内容选题列表。
+     */
     private List<ContentIdea> contentIdeas = Collections.emptyList();
 
     public LocalDate getBriefDate() {

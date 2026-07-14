@@ -3,19 +3,58 @@ package com.finscope.domain.strategy;
 import java.time.LocalDateTime;
 
 public class StrategyHolding {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 标的 ID。
+     */
     private Long instrumentId;
+    /**
+     * 角色。
+     */
     private String role;
+    /**
+     * 目标权重。
+     */
     private double targetWeight;
+    /**
+     * 当前权重。
+     */
     private double currentWeight;
+    /**
+     * 备注信息。
+     */
     private String note;
+    /**
+     * 排序序号。
+     */
     private int sortOrder;
+    /**
+     * 数据版本号，用于并发更新校验。
+     */
     private long revision;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
+    /**
+     * 业务编码。
+     */
     private String code;
+    /**
+     * 类型。
+     */
     private String type;
+    /**
+     * 名称。
+     */
     private String name;
 
     public Long getId() { return id; }

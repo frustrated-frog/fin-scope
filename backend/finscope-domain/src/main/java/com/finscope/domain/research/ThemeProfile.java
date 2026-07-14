@@ -5,14 +5,41 @@ import java.util.Collections;
 import java.util.List;
 
 public class ThemeProfile {
+    /**
+     * 业务编码。
+     */
     private String code;
+    /**
+     * 名称。
+     */
     private String name;
+    /**
+     * 描述信息。
+     */
     private String description;
+    /**
+     * 简报栏目分段。
+     */
     private String briefSection;
+    /**
+     * 必需来源层级列表。
+     */
     private List<String> requiredTiers = Collections.emptyList();
+    /**
+     * 优先来源层级列表。
+     */
     private List<String> preferredTiers = Collections.emptyList();
+    /**
+     * 禁用来源层级列表。
+     */
     private List<String> disallowedTiers = Collections.emptyList();
+    /**
+     * 是否启用创作策略。
+     */
     private boolean creatorEnabled;
+    /**
+     * 偏好的内容形式列表。
+     */
     private List<String> preferredFormats = Collections.emptyList();
 
     public String getCode() {

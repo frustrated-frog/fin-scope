@@ -3,20 +3,65 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 public class EventCluster {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 规范化事件标题。
+     */
     private String canonicalTitle;
+    /**
+     * 规范化事件键。
+     */
     private String canonicalEventKey;
+    /**
+     * 主题编码。
+     */
     private String themeCode;
+    /**
+     * 摘要。
+     */
     private String summary;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 首次发现时间。
+     */
     private LocalDateTime firstSeenAt;
+    /**
+     * 最近发现时间。
+     */
     private LocalDateTime lastSeenAt;
+    /**
+     * 最近有意义更新时间。
+     */
     private LocalDateTime lastMeaningfulUpdateAt;
+    /**
+     * 重要性评分。
+     */
     private Integer importanceScore;
+    /**
+     * 新意状态。
+     */
     private String noveltyState;
+    /**
+     * 证据数量。
+     */
     private Integer evidenceCount;
+    /**
+     * 文章数量。
+     */
     private Integer articleCount;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() {

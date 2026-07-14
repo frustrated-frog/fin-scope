@@ -8,6 +8,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class InsightSection {
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 正文内容。
+     */
     private String content;
 }

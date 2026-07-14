@@ -43,9 +43,18 @@ public enum SourceType {
     WEB("WEB", "网页", 3, "通用"),
     MANUAL("MANUAL", "手动研究", 3, "通用");
 
+    /**
+     * 业务编码。
+     */
     private final String code;
+    /**
+     * 信息源类型展示名称。
+     */
     private final String displayName;
     private final int credibility; // 1-5 可信度
+    /**
+     * 内容分类。
+     */
     private final String category;
 
     SourceType(String code, String displayName, int credibility, String category) {

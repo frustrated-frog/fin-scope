@@ -81,6 +81,8 @@ function streakText(streak: CapitalFlowStreak) {
 
 export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapitalOverview }) {
   const intradayMax = Math.max(0, ...overview.intradayTimeline.map((point) => Math.abs(point.intervalTradeAmount ?? 0)));
+  const displayedIntradayTimeline = [...overview.intradayTimeline]
+    .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
   const dailyMax = Math.max(0, ...overview.dailyTrend.map((point) => Math.abs(point.intervalTradeAmount ?? 0)));
   const latest = overview.dailyTrend[overview.dailyTrend.length - 1]
     ?? overview.intradayTimeline[overview.intradayTimeline.length - 1];
@@ -137,7 +139,7 @@ export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapita
         </header>
         {overview.intradayTimeline.length ? (
           <ol className="market-intel-evidence-list">
-            {overview.intradayTimeline.map((point) => (
+            {displayedIntradayTimeline.map((point) => (
               <EvidenceRow key={point.id} point={point} maxAmount={intradayMax} />
             ))}
           </ol>

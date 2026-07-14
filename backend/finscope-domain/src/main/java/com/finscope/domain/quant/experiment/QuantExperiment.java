@@ -4,11 +4,66 @@ import com.finscope.domain.quant.backtest.BacktestResult;
 import java.time.LocalDateTime;
 
 public class QuantExperiment {
-    private Long id; private Long strategyVersionId; private String requestFingerprint;
-    private String datasetFingerprint; private String engineVersion; private String status; private String errorMessage;
-    private LocalDateTime createdAt; private LocalDateTime startedAt; private LocalDateTime completedAt;
-    private BacktestResult result; private String interpretation;
-    private Long datasetId; private String datasetName; private String dataKind;
+    /**
+     * 主键 ID。
+     */
+    private Long id;
+    /**
+     * 策略版本 ID。
+     */
+    private Long strategyVersionId;
+    /**
+     * 请求指纹。
+     */
+    private String requestFingerprint;
+    /**
+     * 数据集指纹。
+     */
+    private String datasetFingerprint;
+    /**
+     * 引擎版本。
+     */
+    private String engineVersion;
+    /**
+     * 当前状态。
+     */
+    private String status;
+    /**
+     * 错误信息。
+     */
+    private String errorMessage;
+    /**
+     * 创建时间。
+     */
+    private LocalDateTime createdAt;
+    /**
+     * 开始时间。
+     */
+    private LocalDateTime startedAt;
+    /**
+     * 完成时间。
+     */
+    private LocalDateTime completedAt;
+    /**
+     * 结果对象。
+     */
+    private BacktestResult result;
+    /**
+     * 解读内容。
+     */
+    private String interpretation;
+    /**
+     * 数据集 ID。
+     */
+    private Long datasetId;
+    /**
+     * 数据集名称。
+     */
+    private String datasetName;
+    /**
+     * 数据类型。
+     */
+    private String dataKind;
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Long getStrategyVersionId() { return strategyVersionId; }

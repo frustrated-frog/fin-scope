@@ -8,11 +8,29 @@ import java.util.List;
 import java.util.Locale;
 
 public class SourceProfile {
+    /**
+     * 信息源 ID。
+     */
     private Long sourceId;
+    /**
+     * 信息源名称。
+     */
     private String sourceName;
+    /**
+     * 来源层级。
+     */
     private String sourceTier;
+    /**
+     * 主题编码列表。
+     */
     private List<String> themeCodes = Collections.emptyList();
+    /**
+     * 可信度。
+     */
     private Integer credibility;
+    /**
+     * 是否启用。
+     */
     private boolean enabled;
 
     public static SourceProfile from(Source source) {

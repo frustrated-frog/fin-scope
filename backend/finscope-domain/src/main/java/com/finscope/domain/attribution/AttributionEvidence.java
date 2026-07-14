@@ -9,32 +9,70 @@ import java.time.LocalDateTime;
  */
 @Data
 public class AttributionEvidence {
+    /**
+     * 主键 ID。
+     */
     private Long id;
 
+    /**
+     * 归因报告 ID。
+     */
     private Long reportId;
-    /** 证据来源：WEB_SEARCH | LOCAL_NEWS | QUOTE */
+    /**
+     * 来源。
+     */
     private String origin;
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 资源 URL。
+     */
     private String url;
-    /** 摘要/关键陈述 */
+    /**
+     * 摘要片段。
+     */
     private String snippet;
+    /**
+     * 来源域名。
+     */
     private String sourceDomain;
-    /** 来源可信度：T1 | T2 | T3 */
+    /**
+     * 来源层级。
+     */
     private String sourceTier;
-    /** 相关度 0~100 */
+    /**
+     * 相关度。
+     */
     private Integer relevance;
-    /** COMPANY | INDUSTRY | MACRO | MARKET | COUNTER 等研究事件类别。 */
+    /**
+     * 事件类型。
+     */
     private String eventType;
-    /** SUPPORT | COUNTER | BACKGROUND。 */
+    /**
+     * 立场。
+     */
     private String stance;
-    /** DIRECT | INDIRECT | BACKGROUND。 */
+    /**
+     * 直接程度。
+     */
     private String directness;
-    /** 来源给出的发布时间原文，避免不同来源格式导致反序列化失败。 */
+    /**
+     * 发布时间。
+     */
     private String publishedAt;
-    /** 归一化后的事件聚合键。 */
+    /**
+     * 事件键。
+     */
     private String eventKey;
-    /** 是否为历史报告带入的背景，不计入当日证据质量。 */
+    /**
+     * 是否为历史背景信息。
+     */
     private boolean historicalContext;
 
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 }

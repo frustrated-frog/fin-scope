@@ -3,19 +3,52 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 /**
- * A long-lived research question owned by the research workspace.
+ * 研究工作区中的长期研究问题。
  */
 public class ResearchThesis {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 研究问题。
+     */
     private String question;
+    /**
+     * 研究对象类型。
+     */
     private String subjectType;
+    /**
+     * 研究对象名称。
+     */
     private String subjectName;
+    /**
+     * 研究对象编码。
+     */
     private String subjectCode;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 研究结论。
+     */
     private String conclusion;
+    /**
+     * 置信度。
+     */
     private String confidence;
+    /**
+     * 下一步验证事项。
+     */
     private String nextValidation;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() { return id; }

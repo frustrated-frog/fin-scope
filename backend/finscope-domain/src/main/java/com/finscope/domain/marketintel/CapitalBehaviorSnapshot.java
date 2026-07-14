@@ -6,14 +6,41 @@ import java.util.Collections;
 import java.util.List;
 
 public class CapitalBehaviorSnapshot {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 标的 ID。
+     */
     private Long instrumentId;
+    /**
+     * 数据对应时间。
+     */
     private LocalDateTime asOf;
+    /**
+     * 事实记录。
+     */
     private List<CapitalFlowPoint> facts = Collections.emptyList();
+    /**
+     * 信号列表。
+     */
     private List<CapitalBehaviorSignal> signals = Collections.emptyList();
+    /**
+     * 内容指纹。
+     */
     private String fingerprint;
+    /**
+     * 数据质量状态。
+     */
     private String qualityStatus;
+    /**
+     * 警告列表。
+     */
     private List<String> warnings = Collections.emptyList();
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 
     public static CapitalBehaviorSnapshot of(Long instrumentId, LocalDateTime asOf,

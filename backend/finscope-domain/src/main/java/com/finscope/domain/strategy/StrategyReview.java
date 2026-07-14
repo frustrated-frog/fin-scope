@@ -4,11 +4,29 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class StrategyReview {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 复盘日期。
+     */
     private LocalDate reviewDate;
+    /**
+     * 事实记录。
+     */
     private String facts;
+    /**
+     * 推理过程。
+     */
     private String reasoning;
+    /**
+     * 下一步行动。
+     */
     private String nextAction;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 
     public Long getId() { return id; }

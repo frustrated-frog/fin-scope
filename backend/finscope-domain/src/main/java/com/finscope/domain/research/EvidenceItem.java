@@ -3,17 +3,53 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 public class EvidenceItem {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 事件 ID。
+     */
     private Long eventId;
+    /**
+     * 文章 ID。
+     */
     private Long articleId;
+    /**
+     * 来源层级。
+     */
     private String sourceTier;
+    /**
+     * 证据类型。
+     */
     private String evidenceType;
+    /**
+     * 归因或证据主张。
+     */
     private String claim;
+    /**
+     * 主张键。
+     */
     private String claimKey;
+    /**
+     * 置信度。
+     */
     private Integer confidence;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 文章标题。
+     */
     private String articleTitle;
+    /**
+     * 文章 URL。
+     */
     private String articleUrl;
+    /**
+     * 文章发布时间。
+     */
     private LocalDateTime articlePublishedAt;
 
     public Long getId() {

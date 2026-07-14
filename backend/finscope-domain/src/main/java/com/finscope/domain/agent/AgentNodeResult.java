@@ -1,14 +1,41 @@
 package com.finscope.domain.agent;
 
 public class AgentNodeResult<T> {
+    /**
+     * 当前状态。
+     */
     private final String status;
+    /**
+     * 数值。
+     */
     private final T value;
+    /**
+     * 输入摘要。
+     */
     private final String inputSummary;
+    /**
+     * 输出摘要。
+     */
     private final String outputSummary;
+    /**
+     * 错误类型。
+     */
     private final String errorType;
+    /**
+     * 错误信息。
+     */
     private final String errorMessage;
+    /**
+     * 是否使用兜底结果。
+     */
     private final boolean fallbackUsed;
+    /**
+     * 兜底原因。
+     */
     private final String fallbackReason;
+    /**
+     * 进度增量。
+     */
     private final int progressDelta;
 
     private AgentNodeResult(String status,

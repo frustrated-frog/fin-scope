@@ -4,11 +4,29 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class Brief {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 简报日期。
+     */
     private LocalDate briefDate;
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 正文内容。
+     */
     private String content;
+    /**
+     * Markdown 文件路径。
+     */
     private String markdownPath;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 
     public Long getId() {

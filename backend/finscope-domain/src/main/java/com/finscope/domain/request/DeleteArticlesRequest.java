@@ -5,5 +5,8 @@ import java.util.List;
 
 @Data
 public class DeleteArticlesRequest {
+    /**
+     * ID 列表。
+     */
     private List<Long> ids;
 }

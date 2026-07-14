@@ -3,18 +3,57 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 public class ContentIdea {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 事件 ID。
+     */
     private Long eventId;
+    /**
+     * 主题编码。
+     */
     private String themeCode;
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 内容选题角度。
+     */
     private String angle;
+    /**
+     * 内容呈现形式。
+     */
     private String format;
+    /**
+     * 目标受众。
+     */
     private String audience;
+    /**
+     * 评分。
+     */
     private Integer score;
+    /**
+     * 评分原因。
+     */
     private String scoreReason;
+    /**
+     * 内容大纲。
+     */
     private String outline;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() {

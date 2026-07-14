@@ -10,23 +10,41 @@ import java.util.List;
  */
 @Data
 public class AttributionDriver {
-    /** 原因描述 */
+    /**
+     * 归因或证据主张。
+     */
     private String claim;
-    /** 影响力：HIGH | MID | LOW */
+    /**
+     * 影响力等级。
+     */
     private String impactLevel;
-    /** 置信度：HIGH | MID | LOW */
+    /**
+     * 置信度。
+     */
     private String confidence;
-    /** 支撑说明 */
+    /**
+     * 详细说明。
+     */
     private String detail;
-    /** 关联证据的 url 列表（指向 AttributionEvidence） */
+    /**
+     * 支撑证据 URL 列表。
+     */
     private List<String> evidenceUrls;
-    /** 支撑该驱动的可核验事实。 */
+    /**
+     * 事实记录。
+     */
     private List<String> facts;
-    /** 事件如何传导到预期、资金或估值，再影响价格。 */
+    /**
+     * 影响传导路径。
+     */
     private String transmissionPath;
-    /** 与该驱动相冲突或限制其解释力的信息。 */
+    /**
+     * 反向证据或相反解释。
+     */
     private String counterEvidence;
-    /** 后续验证该驱动的观察窗口。 */
+    /**
+     * 后续观察窗口。
+     */
     private String observationWindow;
 
 }

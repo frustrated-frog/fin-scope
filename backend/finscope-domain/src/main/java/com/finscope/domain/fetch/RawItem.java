@@ -3,17 +3,53 @@ package com.finscope.domain.fetch;
 import java.time.LocalDateTime;
 
 public class RawItem {
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 资源 URL。
+     */
     private String url;
+    /**
+     * 发布时间。
+     */
     private LocalDateTime publishedAt;
+    /**
+     * 摘要。
+     */
     private String summary;
+    /**
+     * 正文内容。
+     */
     private String body;
+    /**
+     * 内容类型。
+     */
     private String contentType;
+    /**
+     * 抽取方式。
+     */
     private String extractionMethod;
+    /**
+     * 抽取备注。
+     */
     private String extractionNote;
+    /**
+     * 质量评分。
+     */
     private int qualityScore;
+    /**
+     * 来源信号评分。
+     */
     private int sourceSignalScore;
+    /**
+     * 来源信号原因。
+     */
     private String sourceSignalReason;
+    /**
+     * 来源排序。
+     */
     private int sourceRank;
 
     public RawItem() {

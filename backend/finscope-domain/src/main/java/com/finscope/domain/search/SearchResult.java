@@ -4,17 +4,33 @@ package com.finscope.domain.search;
  * 联网搜索单条结果，来源于 WebSearchClient（如 Tavily）。
  */
 public class SearchResult {
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 资源 URL。
+     */
     private String url;
-    /** 摘要/正文片段 */
+    /**
+     * 正文内容。
+     */
     private String content;
-    /** 来源域名，如 caixin.com */
+    /**
+     * 来源域名。
+     */
     private String sourceDomain;
-    /** 来源可信度分级 T1/T2/T3 */
+    /**
+     * 来源层级。
+     */
     private String sourceTier;
-    /** 相关度评分 0~1 */
+    /**
+     * 搜索相关性评分。
+     */
     private Double score;
-    /** 发布时间文本（原样保留） */
+    /**
+     * 发布时间。
+     */
     private String publishedAt;
 
     public String getTitle() {

@@ -5,13 +5,37 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class AgentRunContext {
+    /**
+     * 研究运行 ID。
+     */
     private final Long researchRunId;
+    /**
+     * 预算策略。
+     */
     private final AgentBudgetPolicy budgetPolicy;
+    /**
+     * 开始时间。
+     */
     private final LocalDateTime startedAt;
+    /**
+     * 动作指纹计数。
+     */
     private final Map<String, Integer> actionCounts = new HashMap<String, Integer>();
+    /**
+     * 当前节点名称。
+     */
     private String currentNodeName;
+    /**
+     * 节点执行次数。
+     */
     private int nodeCount;
+    /**
+     * 大模型调用次数。
+     */
     private int llmCallCount;
+    /**
+     * 警告次数。
+     */
     private int warningCount;
 
     private AgentRunContext(Long researchRunId, AgentBudgetPolicy budgetPolicy) {
@@ -89,9 +113,21 @@ public class AgentRunContext {
     }
 
     public static class ActionRecord {
+        /**
+         * 内容指纹。
+         */
         private final String fingerprint;
+        /**
+         * 计数。
+         */
         private final int count;
+        /**
+         * 是否达到告警阈值。
+         */
         private final boolean warnThresholdReached;
+        /**
+         * 是否达到硬停止阈值。
+         */
         private final boolean hardThresholdReached;
 
         private ActionRecord(String fingerprint, int count, boolean warnThresholdReached, boolean hardThresholdReached) {

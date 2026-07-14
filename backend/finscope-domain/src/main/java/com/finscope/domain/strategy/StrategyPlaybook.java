@@ -3,12 +3,33 @@ package com.finscope.domain.strategy;
 import java.time.LocalDateTime;
 
 public class StrategyPlaybook {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 业务编码。
+     */
     private String code;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 备注信息。
+     */
     private String note;
+    /**
+     * 数据版本号，用于并发更新校验。
+     */
     private long revision;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() { return id; }

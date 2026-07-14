@@ -4,8 +4,42 @@ import java.time.LocalDateTime;
 
 /** A reviewable event-level judgement, distinct from long-lived ResearchThesis. */
 public class EventEvidenceThesis {
-    private Long id; private Long eventId; private String statement; private String kind; private String status;
-    private String rationale; private String evidenceGap; private LocalDateTime createdAt; private LocalDateTime updatedAt;
+    /**
+     * 主键 ID。
+     */
+    private Long id;
+    /**
+     * 事件 ID。
+     */
+    private Long eventId;
+    /**
+     * 命题陈述。
+     */
+    private String statement;
+    /**
+     * 种类。
+     */
+    private String kind;
+    /**
+     * 当前状态。
+     */
+    private String status;
+    /**
+     * 理由说明。
+     */
+    private String rationale;
+    /**
+     * 证据缺口。
+     */
+    private String evidenceGap;
+    /**
+     * 创建时间。
+     */
+    private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
+    private LocalDateTime updatedAt;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
     public Long getEventId() { return eventId; } public void setEventId(Long eventId) { this.eventId = eventId; }
     public String getStatement() { return statement; } public void setStatement(String statement) { this.statement = statement; }

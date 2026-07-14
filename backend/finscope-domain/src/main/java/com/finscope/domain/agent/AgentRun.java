@@ -3,30 +3,105 @@ package com.finscope.domain.agent;
 import java.time.LocalDateTime;
 
 public class AgentRun {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 研究运行 ID。
+     */
     private Long researchRunId;
+    /**
+     * 事件 ID。
+     */
     private Long eventId;
+    /**
+     * 文章 ID。
+     */
     private Long articleId;
+    /**
+     * 节点名称。
+     */
     private String nodeName;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 输入内容。
+     */
     private String input;
+    /**
+     * 输出内容。
+     */
     private String output;
+    /**
+     * 错误信息。
+     */
     private String errorMessage;
+    /**
+     * 耗时毫秒数。
+     */
     private long durationMs;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 步骤 ID。
+     */
     private String stepId;
+    /**
+     * 尝试次数。
+     */
     private int attempt = 1;
+    /**
+     * 动作指纹。
+     */
     private String actionFingerprint;
+    /**
+     * 输入内容哈希。
+     */
     private String inputHash;
+    /**
+     * 输出内容哈希。
+     */
     private String outputHash;
+    /**
+     * 错误类型。
+     */
     private String errorType;
+    /**
+     * 是否使用兜底结果。
+     */
     private boolean fallbackUsed;
+    /**
+     * 兜底原因。
+     */
     private String fallbackReason;
+    /**
+     * 终止原因。
+     */
     private String terminationReason;
+    /**
+     * 进度增量。
+     */
     private int progressDelta;
+    /**
+     * 预算快照。
+     */
     private String budgetSnapshot;
+    /**
+     * 扩展元数据 JSON。
+     */
     private String metadataJson;
+    /**
+     * 研究对象类型。
+     */
     private String subjectType;
+    /**
+     * 对象 ID。
+     */
     private Long subjectId;
 
     public Long getId() {

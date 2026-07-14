@@ -5,14 +5,41 @@ import java.util.Collections;
 import java.util.List;
 
 public class CandidateReview {
+    /**
+     * 中文标题。
+     */
     private String chineseTitle;
+    /**
+     * 审核决策摘要。
+     */
     private String decisionSummary;
+    /**
+     * 关键事实列表。
+     */
     private List<String> keyFacts = Collections.emptyList();
+    /**
+     * 重要性说明。
+     */
     private String whyItMatters;
+    /**
+     * 新意判断。
+     */
     private String noveltyJudgment;
+    /**
+     * 风险提示列表。
+     */
     private List<String> riskFlags = Collections.emptyList();
+    /**
+     * 评分。
+     */
     private int score;
+    /**
+     * 推荐结论。
+     */
     private String recommendation;
+    /**
+     * 原因说明。
+     */
     private String reason;
 
     public String getChineseTitle() {

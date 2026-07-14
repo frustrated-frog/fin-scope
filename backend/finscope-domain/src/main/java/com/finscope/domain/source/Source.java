@@ -3,18 +3,57 @@ package com.finscope.domain.source;
 import java.time.LocalDateTime;
 
 public class Source {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 名称。
+     */
     private String name;
+    /**
+     * 类型。
+     */
     private String type;
+    /**
+     * 资源 URL。
+     */
     private String url;
+    /**
+     * 是否启用。
+     */
     private boolean enabled = true;
+    /**
+     * 抓取频率分钟数。
+     */
     private int fetchFrequencyMinutes = 60;
+    /**
+     * 是否启用定时抓取。
+     */
     private boolean scheduledEnabled = false;
+    /**
+     * 定时抓取时间列表。
+     */
     private String scheduleTimes;
+    /**
+     * 单次运行最大条目数。
+     */
     private int maxItemsPerRun = 10;
+    /**
+     * 可信度。
+     */
     private int credibility = 3;
+    /**
+     * 标签集合或标签字符串。
+     */
     private String tags;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() {

@@ -5,8 +5,17 @@ import java.util.Collections;
 import java.util.List;
 
 public class ResearchRunPlan {
+    /**
+     * 研究运行对象。
+     */
     private ResearchRun run;
+    /**
+     * 计划来源列表。
+     */
     private List<SourceProfile> plannedSources = Collections.emptyList();
+    /**
+     * 计划步骤列表。
+     */
     private List<ResearchRunPlanStep> planSteps = Collections.emptyList();
 
     public ResearchRun getRun() {

@@ -6,28 +6,97 @@ import java.util.Collections;
 import java.util.List;
 
 public class ResearchRunPlanStep {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 研究运行 ID。
+     */
     private Long researchRunId;
+    /**
+     * 步骤 ID。
+     */
     private String stepId;
+    /**
+     * 标题。
+     */
     private String title;
+    /**
+     * 步骤类型。
+     */
     private String stepType;
+    /**
+     * 执行器名称。
+     */
     private String executor;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 依赖步骤列表。
+     */
     private List<String> dependencies = Collections.emptyList();
+    /**
+     * 输入摘要。
+     */
     private String inputSummary;
+    /**
+     * 输出摘要。
+     */
     private String outputSummary;
+    /**
+     * 错误类型。
+     */
     private String errorType;
+    /**
+     * 错误信息。
+     */
     private String errorMessage;
+    /**
+     * 是否使用兜底结果。
+     */
     private boolean fallbackUsed;
+    /**
+     * 兜底原因。
+     */
     private String fallbackReason;
+    /**
+     * 终止原因。
+     */
     private String terminationReason;
+    /**
+     * 尝试次数。
+     */
     private int attempt;
+    /**
+     * 最大尝试次数。
+     */
     private int maxAttempts = 1;
+    /**
+     * 进度增量。
+     */
     private int progressDelta;
+    /**
+     * 开始时间。
+     */
     private LocalDateTime startedAt;
+    /**
+     * 结束时间。
+     */
     private LocalDateTime endedAt;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
+    /**
+     * 扩展元数据 JSON。
+     */
     private String metadataJson;
 
     public Long getId() {

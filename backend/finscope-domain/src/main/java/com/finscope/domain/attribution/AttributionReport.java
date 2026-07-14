@@ -12,32 +12,81 @@ import java.util.ArrayList;
  */
 @Data
 public class AttributionReport {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 标的代码。
+     */
     private String instrumentCode;
+    /**
+     * 标的名称。
+     */
     private String instrumentName;
+    /**
+     * 标的类型。
+     */
     private String instrumentType;
+    /**
+     * 报告日期。
+     */
     private LocalDate reportDate;
-    /** 归因时的涨跌幅快照 */
+    /**
+     * 涨跌幅百分比。
+     */
     private Double changePct;
-    /** 状态：GENERATING | COMPLETED | FAILED */
+    /**
+     * 当前状态。
+     */
     private String status;
-    /** 一句话归因（同时用于卡片摘要徽标） */
+    /**
+     * 摘要。
+     */
     private String summary;
-    /** 驱动因素（持久化为 JSON） */
+    /**
+     * 归因驱动因素列表。
+     */
     private List<AttributionDriver> drivers;
+    /**
+     * 首要归因驱动因素。
+     */
     private AttributionDriver primaryDriver;
+    /**
+     * 不确定因素列表。
+     */
     private List<String> uncertainties = new ArrayList<String>();
+    /**
+     * 后续观察窗口列表。
+     */
     private List<String> observationWindows = new ArrayList<String>();
-    /** 诚实说明/免责 */
+    /**
+     * 免责声明或诚实说明。
+     */
     private String disclaimer;
-    /** 关联证据（非持久化列，查询时组装） */
+    /**
+     * 证据列表。
+     */
     private List<AttributionEvidence> evidences;
+    /**
+     * 错误信息。
+     */
     private String errorMessage;
-    /** 可完成但需向用户披露的降级信息，例如全网搜索暂不可用。 */
+    /**
+     * 警告信息。
+     */
     private String warningMessage;
-    /** 研究耗时毫秒 */
+    /**
+     * 耗时毫秒数。
+     */
     private Long durationMs;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() {

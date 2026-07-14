@@ -3,14 +3,41 @@ package com.finscope.domain.research;
 import java.time.LocalDateTime;
 
 public class EventArticleLink {
+    /**
+     * 事件 ID。
+     */
     private Long eventId;
+    /**
+     * 文章 ID。
+     */
     private Long articleId;
+    /**
+     * 文章标题。
+     */
     private String articleTitle;
+    /**
+     * 文章 URL。
+     */
     private String articleUrl;
+    /**
+     * 关联类型。
+     */
     private String relationType;
+    /**
+     * 匹配分数。
+     */
     private Double matchScore;
+    /**
+     * 新意类型。
+     */
     private String noveltyType;
+    /**
+     * 新意判断原因。
+     */
     private String noveltyReason;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 
     public Long getEventId() {

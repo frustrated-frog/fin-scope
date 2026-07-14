@@ -6,18 +6,47 @@ import java.time.LocalDateTime;
  * 自选面板条目：把一个标的加入用户关注列表。
  */
 public class WatchlistItem {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 标的 ID。
+     */
     private Long instrumentId;
-    /** 分组，如 "白酒""半导体"，可空表示默认组 */
+    /**
+     * 分组名称。
+     */
     private String groupName;
+    /**
+     * 排序序号。
+     */
     private int sortOrder;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
 
     // 关联展示字段（来自 instrument join，非持久化列）
+    /**
+     * 业务编码。
+     */
     private String code;
+    /**
+     * 类型。
+     */
     private String type;
+    /**
+     * 名称。
+     */
     private String name;
+    /**
+     * 交易市场。
+     */
     private String market;
+    /**
+     * 所属板块编码。
+     */
     private String sectorCode;
 
     public Long getId() {

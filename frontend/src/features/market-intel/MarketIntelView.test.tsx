@@ -13,7 +13,9 @@ const overview = {
   instrument: { id: 7, code: '600519', type: 'STOCK', name: '贵州茅台', market: 'SH' },
   snapshot: { id: 12, instrumentId: 7, asOf: '2026-07-14T15:00:00', fingerprint: 'snapshot-12', signals: [] },
   intradayTimeline: [
-    { id: 101, observedAt: '2026-07-14T10:30:00', price: 1501, tradeVolume: 81000, intervalTradeAmount: 120000000, mainNetInflow: 18000000, mainNetInflowSharePct: 15, turnoverRate: 3.21, volumeRatio: 1.67 }
+    { id: 99, observedAt: '2026-07-14T09:30:00', price: 1498, tradeVolume: 61000, intervalTradeAmount: 90000000, mainNetInflow: 12000000, mainNetInflowSharePct: 13.33, turnoverRate: 2.61, volumeRatio: 1.35 },
+    { id: 100, observedAt: '2026-07-14T09:35:00', price: 1499, tradeVolume: 71000, intervalTradeAmount: 105000000, mainNetInflow: 15000000, mainNetInflowSharePct: 14.29, turnoverRate: 2.88, volumeRatio: 1.48 },
+    { id: 101, observedAt: '2026-07-14T10:10:00', price: 1501, tradeVolume: 81000, intervalTradeAmount: 120000000, mainNetInflow: 18000000, mainNetInflowSharePct: 15, turnoverRate: 3.21, volumeRatio: 1.67 }
   ],
   dailyTrend: [
     { id: 98, observedAt: '2026-07-13T15:00:00', price: 1488, intervalTradeAmount: 100000000, mainNetInflow: 20000000, turnoverRate: 2.8 },
@@ -90,6 +92,17 @@ test('shows deterministic explanation before the user requests agent analysis', 
   expect(screen.getByText('连续净流出 2 个交易日')).toBeInTheDocument();
   expect(screen.getByText('放量净流出')).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('capital-interpretations'), expect.anything());
+});
+
+test('shows the newest capital evidence first', async () => {
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const heading = await screen.findByRole('heading', { name: '资金证据带' });
+  const evidenceTape = heading.closest('section');
+  const displayedTimes = Array.from(evidenceTape?.querySelectorAll('ol time') ?? [])
+    .map((time) => time.textContent);
+
+  expect(displayedTimes).toEqual(['10:10', '09:35', '09:30']);
 });
 
 test('runs agent analysis only after click and labels constrained hypotheses', async () => {

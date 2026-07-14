@@ -4,18 +4,57 @@ import java.time.LocalDateTime;
 
 /** 一次网关刷新审计摘要；不保存逐标的明细。 */
 public final class MarketDataRefreshRun {
+    /**
+     * 主键 ID。
+     */
     private final long id;
+    /**
+     * 市场数据能力类型。
+     */
     private final MarketDataCapability capability;
+    /**
+     * 数据作用域摘要。
+     */
     private final String scopeSummary;
+    /**
+     * 触发类型。
+     */
     private final String triggerType;
+    /**
+     * 当前状态。
+     */
     private final String status;
+    /**
+     * 开始时间。
+     */
     private final LocalDateTime startedAt;
+    /**
+     * 完成时间。
+     */
     private final LocalDateTime finishedAt;
+    /**
+     * 请求数量。
+     */
     private final int requestedCount;
+    /**
+     * 新鲜数据数量。
+     */
     private final int freshCount;
+    /**
+     * 过期数据数量。
+     */
     private final int staleCount;
+    /**
+     * 失败数量。
+     */
     private final int failedCount;
+    /**
+     * 本次选中的数据源。
+     */
     private final String selectedSources;
+    /**
+     * 警告信息。
+     */
     private final String warningMessage;
 
     public MarketDataRefreshRun(long id, MarketDataCapability capability, String scopeSummary,

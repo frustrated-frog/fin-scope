@@ -6,9 +6,21 @@ import com.finscope.domain.brief.Brief;
 import java.util.List;
 
 public class TopicDetail {
+    /**
+     * 主题对象。
+     */
     private Topic topic;
+    /**
+     * 关联文章列表。
+     */
     private List<Article> linkedArticles;
+    /**
+     * 关联简报列表。
+     */
     private List<Brief> linkedBriefs;
+    /**
+     * Markdown 内容。
+     */
     private String markdown;
 
     public TopicDetail(Topic topic, List<Article> linkedArticles, List<Brief> linkedBriefs, String markdown) {

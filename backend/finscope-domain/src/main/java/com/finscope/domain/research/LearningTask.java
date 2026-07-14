@@ -6,23 +6,77 @@ import java.time.LocalDateTime;
 
 @Data
 public class LearningTask {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 事件 ID。
+     */
     private Long eventId;
+    /**
+     * 主题 ID。
+     */
     private Long topicId;
+    /**
+     * 主题编码。
+     */
     private String themeCode;
+    /**
+     * 研究问题。
+     */
     private String question;
+    /**
+     * 概念列表。
+     */
     private String concepts;
+    /**
+     * 难度。
+     */
     private String difficulty;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 学习必要性。
+     */
     private String whyNeeded;
+    /**
+     * 来源。
+     */
     private String origin = "AGENT";
+    /**
+     * 任务键。
+     */
     private String taskKey;
+    /**
+     * 优先级。
+     */
     private int priority = 50;
+    /**
+     * 接收时间。
+     */
     private LocalDateTime acceptedAt;
+    /**
+     * 忽略原因。
+     */
     private String dismissedReason;
+    /**
+     * 完成方式。
+     */
     private String completionMode;
+    /**
+     * 数据版本号，用于并发更新校验。
+     */
     private long revision;
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
+    /**
+     * 最近更新时间。
+     */
     private LocalDateTime updatedAt;
 
     public Long getId() {

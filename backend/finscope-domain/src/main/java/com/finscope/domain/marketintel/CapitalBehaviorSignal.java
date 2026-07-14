@@ -11,11 +11,29 @@ import java.util.Map;
 
 @Data
 public class CapitalBehaviorSignal {
+    /**
+     * 类型。
+     */
     private String type;
+    /**
+     * 版本。
+     */
     private String version;
+    /**
+     * 观察窗口。
+     */
     private String window;
+    /**
+     * 指标引用列表。
+     */
     private List<String> metricRefs = Collections.emptyList();
+    /**
+     * 实际指标值。
+     */
     private Map<String, BigDecimal> actualValues = Collections.emptyMap();
+    /**
+     * 阈值集合。
+     */
     private Map<String, BigDecimal> thresholds = Collections.emptyMap();
 
     public static CapitalBehaviorSignal of(String type, String version, List<String> metricRefs) {

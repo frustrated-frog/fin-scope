@@ -1,11 +1,11 @@
 package com.finscope.domain.knowledge;
 
 /**
- * Canonical persisted vocabulary for the knowledge domain.
+ * 知识域持久化枚举词表。
  *
- * <p>Persistence values are intentionally parsed strictly. A value that is not
- * declared here represents schema or data drift and must not silently fall back
- * to a default state.</p>
+ * <p>持久化取值会被严格解析。未在这里声明的值
+ * 表示结构或数据漂移，不能静默回退
+ * 到默认状态。</p>
  */
 public final class KnowledgeEnums {
     private KnowledgeEnums() {

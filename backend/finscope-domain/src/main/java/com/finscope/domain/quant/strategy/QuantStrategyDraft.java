@@ -5,16 +5,49 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class QuantStrategyDraft {
+    /**
+     * 主键 ID。
+     */
     private Long id;
+    /**
+     * 数据集 ID。
+     */
     private Long datasetId;
+    /**
+     * 策略生成提示词。
+     */
     private String prompt;
+    /**
+     * 原始响应。
+     */
     private String rawResponse;
+    /**
+     * 标准化策略规格。
+     */
     private String normalizedSpec;
+    /**
+     * 当前状态。
+     */
     private String status;
+    /**
+     * 模型名称。
+     */
     private String model;
+    /**
+     * 已校验数据集指纹。
+     */
     private String validatedDatasetFingerprint;
+    /**
+     * 策略规格。
+     */
     private QuantStrategySpec spec;
+    /**
+     * 校验问题列表。
+     */
     private List<String> validationIssues = new ArrayList<String>();
+    /**
+     * 创建时间。
+     */
     private LocalDateTime createdAt;
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
