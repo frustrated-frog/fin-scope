@@ -12,7 +12,9 @@ import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class WatchlistRepository {
@@ -62,6 +64,27 @@ public class WatchlistRepository {
         return jdbcTemplate.query(SELECT_WITH_INSTRUMENT + "ORDER BY w.sort_order ASC, w.id DESC", mapper);
     }
 
+    public List<WatchlistItem> findByTypes(List<String> types) {
+        if (types == null || types.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String placeholders = String.join(",", Collections.nCopies(types.size(), "?"));
+        return jdbcTemplate.query(SELECT_WITH_INSTRUMENT + "WHERE i.type IN (" + placeholders + ") "
+                + "ORDER BY w.sort_order ASC, w.id DESC", mapper, types.toArray());
+    }
+
+    public Optional<WatchlistItem> findById(Long id) {
+        List<WatchlistItem> items = jdbcTemplate.query(
+                SELECT_WITH_INSTRUMENT + "WHERE w.id = ?", mapper, id);
+        return items.isEmpty() ? Optional.empty() : Optional.of(items.get(0));
+    }
+
+    public Optional<WatchlistItem> findByCodeAndType(String code, String type) {
+        List<WatchlistItem> items = jdbcTemplate.query(
+                SELECT_WITH_INSTRUMENT + "WHERE i.code = ? AND i.type = ?", mapper, code, type);
+        return items.isEmpty() ? Optional.empty() : Optional.of(items.get(0));
+    }
+
     public boolean existsByInstrumentId(Long instrumentId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM watchlist_item WHERE instrument_id = ?", Integer.class, instrumentId);
@@ -70,6 +93,11 @@ public class WatchlistRepository {
 
     public void delete(Long id) {
         jdbcTemplate.update("DELETE FROM watchlist_item WHERE id = ?", id);
+    }
+
+    public int deleteByCodeAndType(String code, String type) {
+        return jdbcTemplate.update("DELETE FROM watchlist_item WHERE instrument_id IN "
+                + "(SELECT id FROM instrument WHERE code = ? AND type = ?)", code, type);
     }
 
     /** 更新分组名（null/空表示移出分组，归入默认组）。 */
