@@ -105,6 +105,17 @@ test('shows the newest capital evidence first', async () => {
   expect(displayedTimes).toEqual(['10:10', '09:35', '09:30']);
 });
 
+test('shows the newest daily capital trend first', async () => {
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const heading = await screen.findByRole('heading', { name: '日线资金趋势' });
+  const dailyTrend = heading.closest('section');
+  const displayedDates = Array.from(dailyTrend?.querySelectorAll('ol time') ?? [])
+    .map((time) => time.getAttribute('datetime'));
+
+  expect(displayedDates).toEqual(['2026-07-14T15:00:00', '2026-07-13T15:00:00']);
+});
+
 test('runs agent analysis only after click and labels constrained hypotheses', async () => {
   const user = userEvent.setup();
   render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);

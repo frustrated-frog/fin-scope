@@ -46,6 +46,10 @@ function flowTone(value?: number) {
   return value > 0 ? 'in' : 'out';
 }
 
+function newestFirst(points: CapitalFlowPoint[]) {
+  return [...points].sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
+}
+
 function EvidenceRow({ point, daily = false, maxAmount }: { point: CapitalFlowPoint; daily?: boolean; maxAmount: number }) {
   const amount = Math.abs(point.intervalTradeAmount ?? 0);
   const width = maxAmount ? Math.max(8, amount / maxAmount * 100) : 8;
@@ -81,8 +85,8 @@ function streakText(streak: CapitalFlowStreak) {
 
 export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapitalOverview }) {
   const intradayMax = Math.max(0, ...overview.intradayTimeline.map((point) => Math.abs(point.intervalTradeAmount ?? 0)));
-  const displayedIntradayTimeline = [...overview.intradayTimeline]
-    .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
+  const displayedIntradayTimeline = newestFirst(overview.intradayTimeline);
+  const displayedDailyTrend = newestFirst(overview.dailyTrend);
   const dailyMax = Math.max(0, ...overview.dailyTrend.map((point) => Math.abs(point.intervalTradeAmount ?? 0)));
   const latest = overview.dailyTrend[overview.dailyTrend.length - 1]
     ?? overview.intradayTimeline[overview.intradayTimeline.length - 1];
@@ -160,7 +164,7 @@ export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapita
           )}
         </header>
         <ol className="market-intel-evidence-list daily">
-          {overview.dailyTrend.map((point) => (
+          {displayedDailyTrend.map((point) => (
             <EvidenceRow key={point.id} point={point} daily maxAmount={dailyMax} />
           ))}
         </ol>
