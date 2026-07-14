@@ -52,7 +52,9 @@ class MarketIntelApiIntegrationTest {
     }
 
     @Test void refreshThenQueryReturnsRuleExplanationWithoutCallingLlm() throws Exception{
-        mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("PENDING"));
+        MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("PENDING")).andReturn();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
+        mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCEEDED"));
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v1"))
                 .andExpect(jsonPath("$.intradayTimeline").isArray()).andExpect(jsonPath("$.health.status").value("FRESH"));

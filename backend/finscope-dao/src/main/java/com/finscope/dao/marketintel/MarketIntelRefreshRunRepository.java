@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Repository
 public class MarketIntelRefreshRunRepository {
@@ -38,5 +39,13 @@ public class MarketIntelRefreshRunRepository {
     public void finishRun(Long id,MarketIntelRefreshRun.Status status,int success,int failure){
         jdbc.update("UPDATE market_intel_refresh_run SET status=?,success_count=?,failure_count=?,finished_at=? WHERE id=?",
                 status.name(),success,failure,LocalDateTime.now().toString(),id);
+    }
+    public Optional<MarketIntelRefreshRun> findRunById(Long id){
+        return jdbc.query("SELECT * FROM market_intel_refresh_run WHERE id=?",(rs,rowNum)->{
+            MarketIntelRefreshRun run=new MarketIntelRefreshRun();run.setId(rs.getLong("id"));run.setInstrumentId(rs.getLong("instrument_id"));
+            run.setTriggerType(rs.getString("trigger_type"));run.setStatus(MarketIntelRefreshRun.Status.valueOf(rs.getString("status")));
+            run.setSuccessCount(rs.getInt("success_count"));run.setFailureCount(rs.getInt("failure_count"));run.setStartedAt(LocalDateTime.parse(rs.getString("started_at")));
+            String finished=rs.getString("finished_at");run.setFinishedAt(finished==null?null:LocalDateTime.parse(finished));return run;
+        },id).stream().findFirst();
     }
 }
