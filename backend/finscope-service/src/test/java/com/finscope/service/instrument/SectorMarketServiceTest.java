@@ -71,6 +71,20 @@ class SectorMarketServiceTest {
                 codes(service.search("半导体", SectorCategory.INDUSTRY, 10).getItems()));
     }
 
+    @Test
+    void marksCrossCategorySearchPartialWhenFreshAndStaleCatalogsAreMixed() {
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY,
+                entry("BK1036", "半导体", 2.0, 100.0)));
+        when(gateway.fetchSectorCatalog(SectorCategory.CONCEPT, false)).thenReturn(result(
+                MarketDataQualityStatus.STALE_FALLBACK,
+                entry("BK2000", "半导体设备", 3.0, 80.0)));
+
+        SectorMarketSearchResult search = service.search("半导体", null, 10);
+
+        assertEquals(MarketDataQualityStatus.PARTIAL_FRESH, search.getQualityStatus());
+    }
+
     private SectorCatalogGatewayResult result(MarketDataQualityStatus status, SectorMarketEntry... entries) {
         LocalDateTime retrievedAt = LocalDateTime.of(2026, 7, 14, 10, 0);
         return new SectorCatalogGatewayResult(snapshot(entries), status, "EASTMONEY_SECTOR",

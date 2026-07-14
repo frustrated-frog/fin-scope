@@ -38,9 +38,8 @@ public final class SectorMarketSearchResult {
     static SectorMarketSearchResult of(List<SectorCatalogGatewayResult> results,
                                        List<SectorMarketEntry> items) {
         int available = 0;
-        boolean stale = false;
-        boolean fallback = false;
-        boolean unavailable = false;
+        int stale = 0;
+        int fallback = 0;
         LocalDateTime asOf = null;
         LocalDateTime retrievedAt = null;
         Long staleAge = null;
@@ -48,10 +47,11 @@ public final class SectorMarketSearchResult {
         Set<String> warnings = new LinkedHashSet<String>();
         Set<String> refreshIds = new LinkedHashSet<String>();
         for (SectorCatalogGatewayResult result : results) {
-            if (result.getSnapshot() == null) unavailable = true;
-            else available++;
-            stale |= result.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK;
-            fallback |= result.getQualityStatus() == MarketDataQualityStatus.FRESH_FALLBACK;
+            if (result.getSnapshot() != null) {
+                available++;
+                if (result.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK) stale++;
+                if (result.getQualityStatus() == MarketDataQualityStatus.FRESH_FALLBACK) fallback++;
+            }
             if (result.getSourceCode() != null) sources.add(result.getSourceCode());
             if (result.getWarning() != null) warnings.add(result.getWarning());
             if (result.getRefreshId() != null) refreshIds.add(result.getRefreshId());
@@ -63,9 +63,10 @@ public final class SectorMarketSearchResult {
             }
         }
         MarketDataQualityStatus status = available == 0 ? MarketDataQualityStatus.UNAVAILABLE
-                : stale ? MarketDataQualityStatus.STALE_FALLBACK
-                : unavailable ? MarketDataQualityStatus.PARTIAL_FRESH
-                : fallback ? MarketDataQualityStatus.FRESH_FALLBACK
+                : available < results.size() ? MarketDataQualityStatus.PARTIAL_FRESH
+                : stale == available ? MarketDataQualityStatus.STALE_FALLBACK
+                : stale > 0 ? MarketDataQualityStatus.PARTIAL_FRESH
+                : fallback > 0 ? MarketDataQualityStatus.FRESH_FALLBACK
                 : MarketDataQualityStatus.FRESH_PRIMARY;
         return new SectorMarketSearchResult(status, join(sources), asOf, retrievedAt, staleAge,
                 join(warnings), join(refreshIds), items);
