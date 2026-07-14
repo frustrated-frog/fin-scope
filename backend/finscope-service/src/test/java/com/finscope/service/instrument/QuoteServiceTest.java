@@ -56,6 +56,19 @@ public class QuoteServiceTest {
         private int callCount;
         private String supportedType = "STOCK";
 
+        @Override public String providerCode() { return "TEST_QUOTE"; }
+        @Override public String providerFamily() { return "TEST"; }
+        @Override public java.util.Set<com.finscope.domain.marketdata.MarketDataCapability> capabilities() {
+            com.finscope.domain.marketdata.MarketDataCapability capability = "SECTOR".equals(supportedType)
+                    ? com.finscope.domain.marketdata.MarketDataCapability.REALTIME_SECTOR_QUOTE
+                    : com.finscope.domain.marketdata.MarketDataCapability.REALTIME_STOCK_QUOTE;
+            return java.util.Collections.singleton(capability);
+        }
+        @Override public int priority() { return 1; }
+        @Override public int batchLimit() { return 100; }
+        @Override public java.time.Duration minimumInterval() { return java.time.Duration.ZERO; }
+        @Override public java.time.Duration timeout() { return java.time.Duration.ofSeconds(1); }
+
         @Override
         public boolean supports(String instrumentType) {
             return supportedType.equals(instrumentType);

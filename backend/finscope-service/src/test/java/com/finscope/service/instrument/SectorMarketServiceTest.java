@@ -185,6 +185,14 @@ class SectorMarketServiceTest {
 
         private MutableProvider(List<SectorMarketEntry> entries) { this.entries = entries; }
         @Override public String providerCode() { return "TEST"; }
+        @Override public String providerFamily() { return "TEST"; }
+        @Override public java.util.Set<com.finscope.domain.marketdata.MarketDataCapability> capabilities() {
+            return java.util.Collections.singleton(com.finscope.domain.marketdata.MarketDataCapability.SECTOR_CATALOG);
+        }
+        @Override public int priority() { return 1; }
+        @Override public int batchLimit() { return 1; }
+        @Override public Duration minimumInterval() { return Duration.ZERO; }
+        @Override public Duration timeout() { return Duration.ofSeconds(1); }
         @Override public boolean supports(SectorCategory category) { return true; }
         @Override public SectorMarketSnapshot fetch(SectorCategory category) {
             callCount.incrementAndGet();

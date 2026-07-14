@@ -1,5 +1,8 @@
 package com.finscope.rpc.marketintel;
 
+import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.quote.EastmoneySectorMarketProvider;
+import com.finscope.rpc.quote.SinaStockQuoteAdapter;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -9,7 +12,9 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProviderRequestGuardTest {
     @Test
@@ -51,5 +56,50 @@ class ProviderRequestGuardTest {
         ProviderContractException error = assertThrows(ProviderContractException.class,
                 () -> guard.execute("EASTMONEY", () -> "never"));
         assertEquals("CIRCUIT_OPEN", error.getErrorType());
+    }
+
+    @Test
+    void endpointFailureDoesNotBlockAnotherFamilyAndFamilyFailureSpansCapabilities() {
+        ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                millis -> { }, Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+        SinaStockQuoteAdapter sina = new SinaStockQuoteAdapter();
+        EastmoneySectorMarketProvider sector = new EastmoneySectorMarketProvider(null);
+        TestProvider flow = new TestProvider("EASTMONEY_CAPITAL_FLOW", "EASTMONEY",
+                MarketDataCapability.CAPITAL_FLOW_5M);
+
+        for (int i = 0; i < 3; i++) {
+            assertThrows(ProviderContractException.class, () -> guard.execute(sector,
+                    MarketDataCapability.SECTOR_CATALOG,
+                    () -> { throw new ProviderContractException("HTTP_503", "busy", true); }));
+        }
+        assertFalse(guard.isAvailable(sector, MarketDataCapability.SECTOR_CATALOG));
+        assertTrue(guard.isAvailable(sina, MarketDataCapability.REALTIME_STOCK_QUOTE));
+
+        assertThrows(ProviderContractException.class, () -> guard.execute(flow,
+                MarketDataCapability.CAPITAL_FLOW_5M,
+                () -> { throw new ProviderContractException("HTTP_503", "busy", true); }));
+        assertFalse(guard.isFamilyAvailable("EASTMONEY"));
+    }
+
+    private static final class TestProvider implements com.finscope.rpc.marketdata.MarketDataProvider {
+        private final String code;
+        private final String family;
+        private final MarketDataCapability capability;
+
+        private TestProvider(String code, String family, MarketDataCapability capability) {
+            this.code = code;
+            this.family = family;
+            this.capability = capability;
+        }
+
+        public String providerCode() { return code; }
+        public String providerFamily() { return family; }
+        public java.util.Set<MarketDataCapability> capabilities() {
+            return java.util.Collections.singleton(capability);
+        }
+        public int priority() { return 10; }
+        public int batchLimit() { return 1; }
+        public Duration minimumInterval() { return Duration.ZERO; }
+        public Duration timeout() { return Duration.ofSeconds(1); }
     }
 }
