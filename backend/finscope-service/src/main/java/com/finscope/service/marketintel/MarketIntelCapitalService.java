@@ -89,7 +89,7 @@ public class MarketIntelCapitalService {
         view.setInstrument(instrument);
 
         MarketIntelCapitalView.Health health = new MarketIntelCapitalView.Health();
-        health.setStatus("EMPTY");
+        health.setStatus("UNAVAILABLE");
         health.setProviderCode("");
         health.setWarnings(Collections.singletonList("尚未生成资金快照"));
         view.setHealth(health);
@@ -119,8 +119,11 @@ public class MarketIntelCapitalService {
             warnings.add("成交额、成交量、换手率或量比尚未补齐");
         }
         boolean stale=snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36));
-        if(stale)warnings.add("资金快照已超过 36 小时，请刷新后再判断");
-        health.setStatus(warnings.isEmpty()?"FRESH":"INCOMPLETE");
+        if(stale && !warnings.contains("资金快照已超过 36 小时，请刷新后再判断")) {
+            warnings.add("资金快照已超过 36 小时，请刷新后再判断");
+        }
+        health.setStatus(stale ? "STALE_FALLBACK"
+                : warnings.isEmpty() ? "FRESH_PRIMARY" : "PARTIAL_FRESH");
         health.setWarnings(warnings);
         return health;
     }

@@ -3,6 +3,7 @@ package com.finscope.service.marketdata;
 import com.finscope.dao.marketdata.MarketDataRefreshRunRepository;
 import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.SectorMarketSnapshot;
@@ -11,6 +12,8 @@ import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
+import com.finscope.rpc.marketintel.CapitalFlowData;
+import com.finscope.rpc.marketintel.CapitalFlowProvider;
 import com.finscope.rpc.quote.QuoteAdapter;
 import com.finscope.rpc.quote.SectorMarketProvider;
 import org.slf4j.Logger;
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,6 +50,7 @@ public class MarketDataGateway {
 
     private final List<QuoteAdapter> quoteAdapters;
     private final List<SectorMarketProvider> sectorProviders;
+    private final List<CapitalFlowProvider> capitalFlowProviders;
     private final ProviderRoutePolicy routePolicy;
     private final ProviderRequestGuard guard;
     private final MarketDataSnapshotRepository snapshots;
@@ -64,6 +69,7 @@ public class MarketDataGateway {
     @Autowired
     public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
                              List<SectorMarketProvider> sectorProviders,
+                             List<CapitalFlowProvider> capitalFlowProviders,
                              ProviderRoutePolicy routePolicy,
                              ProviderRequestGuard guard,
                              MarketDataSnapshotRepository snapshots,
@@ -73,7 +79,8 @@ public class MarketDataGateway {
                              MarketDataSingleFlight singleFlight,
                              MarketDataGatewayProperties properties,
                              @Qualifier("marketDataGatewayExecutor") Executor executor) {
-        this(quoteAdapters, sectorProviders, routePolicy, guard, snapshots, refreshRuns, codec, validator,
+        this(quoteAdapters, sectorProviders, capitalFlowProviders, routePolicy, guard, snapshots,
+                refreshRuns, codec, validator,
                 singleFlight, properties, executor, Clock.systemDefaultZone());
     }
 
@@ -105,8 +112,26 @@ public class MarketDataGateway {
                              MarketDataGatewayProperties properties,
                              Executor executor,
                              Clock clock) {
+        this(quoteAdapters, sectorProviders, Collections.<CapitalFlowProvider>emptyList(), routePolicy,
+                guard, snapshots, refreshRuns, codec, validator, singleFlight, properties, executor, clock);
+    }
+
+    public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             List<SectorMarketProvider> sectorProviders,
+                             List<CapitalFlowProvider> capitalFlowProviders,
+                             ProviderRoutePolicy routePolicy,
+                             ProviderRequestGuard guard,
+                             MarketDataSnapshotRepository snapshots,
+                             MarketDataRefreshRunRepository refreshRuns,
+                             MarketDataSnapshotCodec codec,
+                             QuoteQualityValidator validator,
+                             MarketDataSingleFlight singleFlight,
+                             MarketDataGatewayProperties properties,
+                             Executor executor,
+                             Clock clock) {
         this.quoteAdapters = new ArrayList<QuoteAdapter>(quoteAdapters);
         this.sectorProviders = new ArrayList<SectorMarketProvider>(sectorProviders);
+        this.capitalFlowProviders = new ArrayList<CapitalFlowProvider>(capitalFlowProviders);
         this.routePolicy = routePolicy;
         this.guard = guard;
         this.snapshots = snapshots;
@@ -117,6 +142,85 @@ public class MarketDataGateway {
         this.properties = properties;
         this.executor = executor;
         this.clock = clock;
+    }
+
+    public CapitalFlowGatewayResult fetchCapitalFlow(Instrument instrument, LocalDate asOfDate) {
+        if (instrument == null || instrument.getId() == null) {
+            throw new IllegalArgumentException("instrument is required");
+        }
+        if (asOfDate == null) throw new IllegalArgumentException("capital flow date is required");
+        String flightKey = MarketDataCapability.CAPITAL_FLOW_5M.name() + ":" + instrument.getId()
+                + ":" + asOfDate;
+        return singleFlight.execute(flightKey, () -> routeCapitalFlow(instrument, asOfDate));
+    }
+
+    private CapitalFlowGatewayResult routeCapitalFlow(Instrument instrument, LocalDate asOfDate) {
+        MarketDataCapability capability = MarketDataCapability.CAPITAL_FLOW_5M;
+        String refreshId = UUID.randomUUID().toString();
+        LocalDateTime startedAt = LocalDateTime.now(clock);
+        Long runId = createAudit(capability, instrument.getId() + ":" + asOfDate, startedAt);
+        List<CapitalFlowProvider> candidates = new ArrayList<CapitalFlowProvider>();
+        for (CapitalFlowProvider provider : capitalFlowProviders) {
+            if (provider.supports(instrument)) candidates.add(provider);
+        }
+        List<CapitalFlowProvider> ordered = routePolicy.order(candidates, capability);
+        String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
+        List<String> attempts = new ArrayList<String>();
+        String lastErrorType = MarketDataQualityStatus.UNAVAILABLE.name();
+        String lastErrorMessage = null;
+        Set<String> attemptedSources = new LinkedHashSet<String>();
+        for (CapitalFlowProvider provider : ordered) {
+            attemptedSources.add(provider.providerCode());
+            try {
+                ProviderResult<CapitalFlowData> fetched = guard.execute(provider, capability, () -> {
+                    CapitalFlowData data = provider.fetch(instrument, asOfDate);
+                    if (data == null || data.getMinutePoints().isEmpty()) {
+                        throw new com.finscope.rpc.marketintel.ProviderContractException(
+                                "EMPTY_CAPITAL_FLOW", "资金流数据缺少 5 分钟明细", true);
+                    }
+                    return ProviderResult.of(data, LocalDateTime.now(clock),
+                            ProviderResult.hashOf(data.allPoints()), data.getWarnings());
+                });
+                boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
+                MarketDataQualityStatus status = fallback
+                        ? MarketDataQualityStatus.FRESH_FALLBACK : MarketDataQualityStatus.FRESH_PRIMARY;
+                String warning = joinWarnings(fetched.getWarnings());
+                if (fallback) warning = appendWarning(
+                        "主资金流数据源不可用，系统已自动切换备用数据源。", warning);
+                CapitalFlowGatewayResult result = new CapitalFlowGatewayResult(fetched.getData(), status,
+                        provider.providerCode(), fetched.getRetrievedAt(), warning, null, refreshId);
+                finishCapitalAudit(runId, result, attemptedSources, fetched.getData().allPoints().size());
+                return result;
+            } catch (RuntimeException error) {
+                lastErrorMessage = message(error);
+                if (error instanceof com.finscope.rpc.marketintel.ProviderContractException) {
+                    lastErrorType = ((com.finscope.rpc.marketintel.ProviderContractException) error).getErrorType();
+                }
+                attempts.add(provider.providerCode() + "：" + lastErrorMessage);
+            }
+        }
+        String source = attemptedSources.isEmpty() ? null : String.join(",", attemptedSources);
+        String reason = attempts.isEmpty() ? "没有健康且支持该标的的数据源" : String.join("；", attempts);
+        String warning = attempts.size() == 1 ? lastErrorMessage
+                : "资金流在线数据源均不可用；如存在历史快照，系统将保留旧事实。原因：" + reason;
+        CapitalFlowGatewayResult result = new CapitalFlowGatewayResult(null,
+                MarketDataQualityStatus.UNAVAILABLE, source, startedAt,
+                warning, lastErrorType, refreshId);
+        finishCapitalAudit(runId, result, attemptedSources, 0);
+        return result;
+    }
+
+    private void finishCapitalAudit(Long runId, CapitalFlowGatewayResult result,
+                                    Set<String> selectedSources, int outputCount) {
+        if (runId == null) return;
+        boolean fresh = result.getData() != null;
+        try {
+            refreshRuns.finish(runId, result.getQualityStatus().name(), 1, fresh ? 1 : 0,
+                    0, fresh ? 0 : 1, String.join(",", selectedSources),
+                    appendWarning(result.getWarning(), "资金流条目数：" + outputCount), LocalDateTime.now(clock));
+        } catch (RuntimeException error) {
+            log.warn("Failed to finish capital flow refresh audit {}", runId, error);
+        }
     }
 
     public SectorCatalogGatewayResult fetchSectorCatalog(SectorCategory category, boolean forceRefresh) {

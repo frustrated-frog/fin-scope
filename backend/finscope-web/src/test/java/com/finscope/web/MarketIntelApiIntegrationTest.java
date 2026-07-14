@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.Executor;
+import java.time.Duration;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -50,7 +51,12 @@ class MarketIntelApiIntegrationTest {
         jdbc.update("INSERT INTO instrument(id,code,type,name,market,created_at,updated_at) VALUES(7,'600519','STOCK','贵州茅台','SH',?,?)",LocalDateTime.now().toString(),LocalDateTime.now().toString());
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(refreshExecutor).execute(any(Runnable.class));
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(agentExecutor).execute(any(Runnable.class));
-        when(provider.providerCode()).thenReturn("TEST");when(provider.supports(any(Instrument.class))).thenReturn(true);when(provider.fetch(any(),any())).thenReturn(fixture());
+        when(provider.providerCode()).thenReturn("TEST");when(provider.providerFamily()).thenReturn("TEST_FAMILY");
+        when(provider.capabilities()).thenReturn(Collections.singleton(com.finscope.domain.marketdata.MarketDataCapability.CAPITAL_FLOW_5M));
+        when(provider.supports(com.finscope.domain.marketdata.MarketDataCapability.CAPITAL_FLOW_5M)).thenReturn(true);
+        when(provider.priority()).thenReturn(10);when(provider.batchLimit()).thenReturn(1);
+        when(provider.minimumInterval()).thenReturn(Duration.ZERO);when(provider.timeout()).thenReturn(Duration.ofSeconds(1));
+        when(provider.supports(any(Instrument.class))).thenReturn(true);when(provider.fetch(any(),any())).thenReturn(fixture());
     }
 
     @Test void refreshThenQueryReturnsRuleExplanationWithoutCallingLlm() throws Exception{
@@ -66,7 +72,7 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(jsonPath("$.metrics.intradayStreak.direction").value("INFLOW"))
                 .andExpect(jsonPath("$.metrics.dailyStreak.direction").value("OUTFLOW"))
                 .andExpect(jsonPath("$.metrics.objectiveTags[0].code").value("AMOUNT_EXPANSION_WITH_OUTFLOW"))
-                .andExpect(jsonPath("$.intradayTimeline").isArray()).andExpect(jsonPath("$.health.status").value("FRESH"));
+                .andExpect(jsonPath("$.intradayTimeline").isArray()).andExpect(jsonPath("$.health.status").value("FRESH_PRIMARY"));
         verifyNoInteractions(llm);
     }
 
@@ -74,7 +80,7 @@ class MarketIntelApiIntegrationTest {
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.instrument.id").value(7))
-                .andExpect(jsonPath("$.health.status").value("EMPTY"))
+                .andExpect(jsonPath("$.health.status").value("UNAVAILABLE"))
                 .andExpect(jsonPath("$.snapshot").doesNotExist())
                 .andExpect(jsonPath("$.intradayTimeline").isEmpty())
                 .andExpect(jsonPath("$.dailyTrend").isEmpty());
@@ -111,7 +117,7 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.snapshot.qualityStatus").value("PARTIAL"))
                 .andExpect(jsonPath("$.snapshot.warnings[0]").value("实时行情接口暂不可用"))
-                .andExpect(jsonPath("$.health.status").value("INCOMPLETE"))
+                .andExpect(jsonPath("$.health.status").value("PARTIAL_FRESH"))
                 .andExpect(jsonPath("$.health.warnings[0]").value("实时行情接口暂不可用"));
     }
 
