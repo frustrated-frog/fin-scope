@@ -18,7 +18,9 @@
 6. **允许部分成功**：刷新运行与每个维度都有独立状态；资金流失败不影响龙虎榜或解禁查询。
 7. **不静默降级**：备用源、过期缓存、字段缺失和口径冲突都写入运行记录并传给前端。
 8. **Agent 不直连第三方数据源**：Agent 只通过受控服务读取已保存快照或明确的刷新工具，所有输入有来源、时间、质量与指纹。
-9. **资金行为优先但不做暗盘推断**：第一阶段优先保存大笔资金、成交金额、换手率和时间线；不根据公开聚合数据推断拆单、隐藏账户或所谓暗盘资金。
+9. **事实层不做暗盘断言**：第一阶段优先保存大笔资金、成交金额、换手率和时间线；规则层不根据公开聚合数据断言拆单、隐藏账户或所谓暗盘资金。
+10. **规则解释常驻、Agent 按需运行**：确定性规则负责默认通俗说明；Agent 仅在用户点击后基于不可变快照生成深度假设，并接受置信度门和 Trace 审计。
+11. **模式服务于边界**：Provider 使用 Adapter/Strategy，解读流程使用 Facade/Policy，持久化使用 Repository；不为追求模式数量增加无业务价值的抽象层。
 
 ## 3. 现有基础与复用边界
 
@@ -28,7 +30,8 @@
 - `QuoteService` 和已有 `QuoteAdapter` 作为页面顶部基础行情摘要；
 - `ArticleIngestCoordinator` 、`Article` 、新意判断、事件和证据服务作为个股新闻入库主链路；
 - `AttributionHarness` 、`AttributionEvidenceGate` 和研究轨道作为第四阶段消费方；
-- `agent_run` 的 Trace 语义可用于后续 Agent 工具记录，但外部数据刷新自己使用独立运行表；
+- `AgentHarness`、`AgentRunContext`、`AgentTraceService`、`LlmChatClient` 和结构化 JSON 解析模式用于第一阶段资金解读；
+- `agent_run` 的 Trace 语义复用于资金 Agent，但外部数据刷新继续使用独立运行表；
 - 前端 `AppShell` 的「投资工作台」导航组。
 
 ### 3.2 必须保持隔离
@@ -37,6 +40,7 @@
 - 标的研究数据不写入 `watchlist_item`；
 - 个股新闻复用 `article`，但资金流、解禁和龙虎榜不伪装成文章；
 - 平台提供的文本“Signal”、看多/看空标签和 Agent 报告不进入原始数据模型。
+- 规则解释、Agent 假设和原始资金事实分别存储；模型输出不能回写或覆盖原始快照。
 
 ## 4. 目标架构
 
@@ -44,6 +48,14 @@
 frontend/features/market-intel
   -> MarketIntelController
   -> MarketIntelQueryService
+  -> CapitalInterpretationFacade
+       -> CapitalRuleExplanationEngine
+       -> CapitalFactAssembler
+       -> CapitalBehaviorSnapshotService
+       -> AgentHarness
+       -> CapitalInterpretationAgent
+       -> CapitalHypothesisGate
+       -> AgentTraceService
   -> MarketIntelRefreshService
        -> MarketIntelRefreshCoordinator
        -> CapitalFlowProvider
@@ -82,6 +94,10 @@ com.finscope.domain.marketintel
   ProviderMetadata
   CapitalFlowSnapshot
   CapitalBehaviorSignal
+  CapitalBehaviorSnapshot
+  CapitalExplanation
+  CapitalInterpretation
+  CapitalHypothesis
   DragonTigerRecord
   DragonTigerSeat
   LockupEvent
@@ -149,6 +165,12 @@ com.finscope.service.marketintel
   MarketIntelDataHealthService
   MarketIntelStalenessPolicy
   MarketIntelProviderRouter
+  CapitalRuleExplanationEngine
+  CapitalFactAssembler
+  CapitalBehaviorSnapshotService
+  CapitalInterpretationFacade
+  CapitalInterpretationAgent
+  CapitalHypothesisGate
   StockNewsIngestBridge
   StockResearchSnapshotService
 ```
@@ -160,6 +182,8 @@ com.finscope.dao.marketintel
   MarketIntelRefreshRunRepository
   CapitalFlowRepository
   CapitalBehaviorSignalRepository
+  CapitalBehaviorSnapshotRepository
+  CapitalInterpretationRepository
   DragonTigerRepository
   LockupRepository
   InstrumentClassificationRepository
@@ -318,23 +342,45 @@ UNIQUE(run_id, dimension, provider_code, attempt)
    - 信号只描述可复算现象，不含 bullish/bearish、吸筹、出货或暗盘语义；
    - 唯一约束：`instrument_id + signal_type + window_start + window_end + algorithm_version + input_hash`。
 
-3. `market_dragon_tiger_record`
+3. `market_capital_behavior_snapshot`
+   - 保存 Agent 可消费的规范化 JSON、资金记录 ID、信号 ID、数据质量摘要、`as_of` 和 SHA-256 指纹；
+   - 快照不可变，且只引用 `retrieved_at <= as_of` 的记录；
+   - 唯一约束：`instrument_id + as_of + fingerprint`。
+
+4. `market_capital_interpretation`
+   - 类型 `RULE/AGENT`，状态 `PENDING/RUNNING/SUCCEEDED/FALLBACK/FAILED`；
+   - 保存 `snapshot_id`、通俗摘要、事实 JSON、假设 JSON、反证 JSON、数据缺口 JSON 和观察点 JSON；
+   - `RULE` 保存 `rule_version`，`AGENT` 保存 `model_name`、`prompt_version`、输入/输出指纹和 Trace subject；
+   - 同一 snapshot + rule version 的规则解释幂等；同一 snapshot + model + prompt version 的 Agent 解读默认复用，显式重新运行才创建新版本。
+
+5. `market_dragon_tiger_record`
    - 上榜日期、原因、成交额、买入、卖出、净买入、换手率；
    - 唯一约束：`instrument_id + provider_code + trade_date + reason_code/explanation`。
 
-4. `market_dragon_tiger_seat`
+6. `market_dragon_tiger_seat`
    - `record_id`、席位名称、席位代码、买入、卖出、净额、方向、排名、机构标记；
    - 外键 `record_id` 使用 `ON DELETE RESTRICT`，不覆盖历史记录。
 
-5. `market_lockup_event`
+7. `market_lockup_event`
    - 解禁日期、类型、股数、占总股本/流通股比例、当前状态；
    - 唯一约束：`instrument_id + provider_code + effective_date + lockup_type + external_id`。
 
-6. `instrument_classification`
+8. `instrument_classification`
    - 类型 `INDUSTRY/CONCEPT/REGION`、名称、外部代码、生效日期和当日表现；
    - 用快照记录变化，不直接覆盖 `Instrument.sectorCode/chainTags`。
 
-### 8.4 第二阶段新闻关联
+### 8.4 Agent Trace 通用主题
+
+为避免资金 Agent 再建一套 Trace 表，在 `agent_run` 增加可复用的：
+
+```text
+subject_type          CAPITAL_INTERPRETATION/ATTRIBUTION/RESEARCH/...
+subject_id
+```
+
+`AgentTraceService` 增加接收 `AgentTraceSubject` 的重载，现有 `eventId/articleId/researchRunId` 签名委托给新实现，保持兼容。查询索引为 `subject_type + subject_id + id`。该通用迁移由独立 `AgentTraceSchemaMigrator` 管理，不放入 `MarketIntelSchemaMigrator`。
+
+### 8.5 第二阶段新闻关联
 
 `instrument_article`：
 
@@ -353,12 +399,12 @@ PRIMARY KEY(instrument_id, article_id, relation_type)
 
 文章内容仍以 `article` 为唯一事实源。关联被修正时更新 link 状态，不删除 Article。
 
-### 8.5 第三、四阶段表
+### 8.6 第三、四阶段表
 
 - `market_fundamental_snapshot`：报告期、披露日期、估值、财务摘要、预期口径和元数据；
 - `stock_research_snapshot`：`instrument_id`、`as_of`、规范化 JSON、指纹、所引用的业务记录 ID 和质量摘要。
 
-### 8.6 迁移方式
+### 8.7 迁移方式
 
 延续当前 SQLite `CREATE TABLE IF NOT EXISTS` 与增量补列风格，但将 `marketintel` 建表收口独立为 `MarketIntelSchemaMigrator`，避免继续扩大通用 `DatabaseInitializer`。
 
@@ -375,6 +421,8 @@ POST refresh
   -> execute provider calls outside database transactions
   -> normalize provider result
   -> transactionally insert one dimension's immutable records
+  -> rebuild CapitalBehaviorSnapshot when capital data changed
+  -> run deterministic CapitalRuleExplanationEngine
   -> complete dimension step
   -> aggregate run status
   -> expose persisted result to query API
@@ -383,6 +431,7 @@ POST refresh
 ### 9.2 并发原则
 
 - 同一标的同一时间只允许一个活跃手动刷新运行；重复请求返回已有 run id。
+- 同一资金快照、模型和 Prompt 版本同一时间只允许一个活跃 Agent 解读；重复点击返回已有 interpretation id。
 - 不同维度可以并行，但实际外部请求受 provider 限流器约束。
 - 首期复用 Spring `TaskExecutor`，不引入 MQ。
 - SQLite 写入按维度短事务串行完成，不使用长事务等待网络。
@@ -459,7 +508,65 @@ newsType
 - 行业或政策资讯默认为 `BACKGROUND`，不因为包含公司名称就变成公司直接证据；
 - 同源转载不计为多个独立来源。
 
-## 12. `StockResearchSnapshot` 与 Agent 边界
+## 12. 资金解读与 Agent 边界
+
+### 12.1 第一阶段资金解读
+
+默认查询链路不调用 LLM：
+
+```text
+GET capital-behavior
+  -> load latest CapitalBehaviorSnapshot
+  -> load persisted RULE interpretation
+  -> if missing, compute deterministic response without database mutation
+  -> return data + signals + plain-language explanation
+```
+
+用户点击后的 Agent 链路：
+
+```text
+POST capital-interpretations
+  -> resolve immutable CapitalBehaviorSnapshot
+  -> return cached result or create interpretation run
+  -> AgentHarness checks budget and repeated fingerprint
+  -> CapitalFactAssembler produces server-trusted facts and metric references
+  -> CapitalInterpretationAgent calls LlmChatClient with structured JSON only
+  -> parse strict output contract
+  -> CapitalHypothesisGate validates hypotheses and caps confidence
+  -> merge trusted facts with accepted Agent hypotheses
+  -> persist interpretation and Agent Trace
+```
+
+最终输出合同如下。`facts` 由服务端确定性组装，不接受模型新增或改写；模型只生成通俗摘要、假设、反证、缺口和观察点，并通过 metric reference 引用事实。
+
+```json
+{
+  "plainSummary": "通俗总结",
+  "facts": [{"claim": "确定性事实", "metricRefs": ["record:101"]}],
+  "hypotheses": [{
+    "type": "ACCUMULATION|DISTRIBUTION|ORDER_SPLITTING|HIDDEN_FLOW|OTHER",
+    "claim": "可能存在的资金行为",
+    "confidence": "LOW|MID|HIGH",
+    "supportingMetricRefs": ["signal:41"],
+    "counterEvidence": ["尚无逐笔委托数据"]
+  }],
+  "dataGaps": ["缺少 Level-2 逐笔委托/成交"],
+  "observationPoints": ["未来 3 个交易日观察成交额和主力净流入是否延续"],
+  "disclaimer": "模型假设，不构成投资建议"
+}
+```
+
+`CapitalHypothesisGate` 使用确定性 Policy 下调而不提高模型置信度：
+
+- 无 Level-2 逐笔数据时，`ORDER_SPLITTING/HIDDEN_FLOW` 最高为 `LOW`；
+- 只有单日信号时，`ACCUMULATION/DISTRIBUTION` 最高为 `LOW`；
+- 具有多个交易日、价格、成交金额、换手率和资金方向交叉支持时，最高可为 `MID`；
+- 第一阶段任何资金意图假设都不得达到 `HIGH`；
+- 缺少 metric reference、反证或数据缺口的假设直接丢弃。
+
+LLM 未配置、超时、JSON 非法或被 Gate 全部拒绝时，Agent 运行记录为 `FALLBACK/FAILED`，页面继续展示规则解释，不用模型文本覆盖规则结果。
+
+### 12.2 跨领域研究快照
 
 第四阶段由 `StockResearchSnapshotService` 在明确 `asOf` 时点组装：
 
@@ -497,6 +604,7 @@ newsType
 GET /api/market-intel/instruments
 GET /api/market-intel/instruments/{instrumentId}/overview
 GET /api/market-intel/instruments/{instrumentId}/capital-behavior?range=20d&granularity=5m
+GET /api/market-intel/capital-interpretations/{interpretationId}
 GET /api/market-intel/instruments/{instrumentId}/dragon-tiger
 GET /api/market-intel/instruments/{instrumentId}/lockups
 GET /api/market-intel/instruments/{instrumentId}/classifications
@@ -508,13 +616,14 @@ GET /api/market-intel/refresh-runs/{runId}
 
 `overview` 返回页面首屏所需的已保存摘要、每个维度的健康状态和最后刷新时间，不在 GET 请求中隐式访问外部网络。
 
-`capital-behavior` 返回 `summary`、`intradayTimeline`、`multiDayTrend`、`signals` 和 `health`。一分钟记录是保存的规范化数据，五分钟记录由服务端按版本化规则聚合；前端不自行重算资金指标。
+`capital-behavior` 返回 `summary`、`intradayTimeline`、`multiDayTrend`、`signals`、`ruleExplanation` 和 `health`。一分钟记录是保存的规范化数据，五分钟记录由服务端按版本化规则聚合；前端不自行重算资金指标。
 
 ### 13.2 命令
 
 ```text
 POST /api/market-intel/instruments/{instrumentId}/refresh
 POST /api/market-intel/instruments/{instrumentId}/snapshots
+POST /api/market-intel/instruments/{instrumentId}/capital-interpretations
 ```
 
 refresh 请求：
@@ -526,6 +635,10 @@ refresh 请求：
 ```
 
 返回 `202 Accepted` 和 refresh run；重复活跃请求返回现有 run，不重复调用上游。
+
+`capital-interpretations` 默认接收最新资金快照并返回 `202 Accepted + interpretationId`；相同快照、模型和 Prompt 版本已有成功结果时返回 `200 OK` 与缓存结果。请求体只有显式 `force=true` 才重新运行。
+
+LLM 超时、解析失败或 Gate 拒绝通过 interpretation 状态返回，不把可预期的模型失败升级为整个 Market Intel 的 HTTP 500。
 
 ### 13.3 错误合同
 
@@ -561,6 +674,8 @@ MarketIntelView
     IntradayCapitalTimeline
     MultiDayCapitalTrend
     CapitalBehaviorSignals
+    CapitalRuleExplanationCard
+    CapitalAgentInterpretationPanel
   DragonTigerPanel
   LockupPanel
   ClassificationPanel
@@ -575,6 +690,8 @@ MarketIntelView
 - 详细面板可延迟加载；
 - 手动刷新后轮询 refresh run，终止状态后重新加载 overview 和受影响面板；
 - 页面重新打开时读取后端 run，不依赖浏览器内存恢复状态；
+- 规则解释随 `capital-behavior` 自动展示；Agent 面板仅在用户点击后发起 POST 并轮询 interpretation；
+- Agent 面板分别展示“确定性事实”和“模型假设”，置信度、反证、数据缺口和输入快照始终可见；
 - `FRESH/STALE/PARTIAL/UNAVAILABLE` 不只用颜色区分，同时显示文字和时间。
 
 ## 15. 配置
@@ -590,6 +707,10 @@ finscope.market-intel.providers.eastmoney.enabled=true
 finscope.market-intel.providers.eastmoney.min-interval-ms=1000
 finscope.market-intel.providers.sina.enabled=true
 finscope.market-intel.providers.baidu.enabled=true
+finscope.market-intel.interpretation.rule-version=capital-rules-v1
+finscope.market-intel.interpretation.agent-enabled=true
+finscope.market-intel.interpretation.prompt-version=capital-agent-v1
+finscope.market-intel.interpretation.timeout-ms=20000
 ```
 
 配置仅控制提供方和技术参数，不在配置文件保存 cookie、用户名、付费凭证或私有端点数据。
@@ -601,6 +722,7 @@ finscope.market-intel.providers.baidu.enabled=true
 3. 不记录完整响应体；记录负载大小、指纹和解析摘要。
 4. 数据健康页面可查看最近失败、最近成功、连续失败数、熔断状态和最新 Schema 错误。
 5. 上游字段结构变化使用 `SCHEMA_DRIFT`，不归类为泛化 `UNKNOWN`。
+6. 资金 Agent 记录 snapshot fingerprint、rule/prompt/model version、Gate 下调原因、缓存命中和 LLM 耗时，不记录完整敏感配置。
 
 ## 17. 安全、合规与许可证
 
@@ -608,8 +730,9 @@ finscope.market-intel.providers.baidu.enabled=true
 2. 对外请求只允许 Provider 代码内的固定 host，不接受前端传入任意 URL，避免 SSRF。
 3. 所有 instrument code 先通过市场和格式验证，不将用户输入直接拼接到路径或过滤表达式。
 4. 源站网页内容视为不可信输入；不执行脚本，限制响应大小，对入库 HTML 继续使用现有清洗链路。
-5. 如直接翻译或复制 TradingAgents-astock 的实现代码，必须遵守 Apache 2.0，保留 LICENSE/NOTICE 与修改说明；首选根据公开数据合同独立实现。
-6. 页面持续展示“用于投资研究与学习，不构成投资建议”。
+5. 资金 Agent Prompt 只接收白名单结构化字段，不接收源站 HTML、上游 Signal 文本或用户提供的任意指令，降低 Prompt Injection 风险。
+6. 如直接翻译或复制 TradingAgents-astock 的实现代码，必须遵守 Apache 2.0，保留 LICENSE/NOTICE 与修改说明；首选根据公开数据合同独立实现。
+7. 页面持续展示“用于投资研究与学习，不构成投资建议”。
 
 ## 18. 测试策略
 
@@ -632,6 +755,11 @@ finscope.market-intel.providers.baidu.enabled=true
 - 跨来源时间点在容差内正确对齐，超出容差产生 `TIMELINE_ALIGNMENT_GAP`；
 - 5/10/20 日窗口、连续流入/流出天数和净流入成交额占比可由固定样本复算；
 - 客观异常标签在相同输入和算法版本下结果稳定，不生成暗盘、吸筹或出货语义；
+- 规则解释在相同 snapshot/rule version 下确定性相同，每句话包含有效 metric reference；
+- AgentHarness 对相同动作指纹执行重复保护并记录 LLM 调用预算；
+- Agent JSON 缺字段、引用不存在、混淆事实与假设时被 Gate 修正或拒绝；
+- 无 Level-2 时拆单/隐藏资金假设最高 `LOW`，第一阶段任何资金意图假设最高 `MID`；
+- LLM 未配置、超时或非法输出时返回规则解释并记录明确降级原因；
 - `pointInTimeSafe=false` 的数据不能被量化数据集服务直接消费。
 
 ### 18.3 Repository 测试
@@ -639,6 +767,8 @@ finscope.market-intel.providers.baidu.enabled=true
 - 唯一约束与幂等插入；
 - 按 instrument/asOf 查询不返回未来记录；
 - 资金时间线与异常标签保持输入记录引用和算法版本；
+- 资金快照不可变，同 snapshot/rule version 规则解释幂等；
+- Agent 解读保存 model/prompt/input/output 指纹并可按 subject 查询完整 Trace；
 - 龙虎榜主记录和席位关系完整；
 - Article 关联的确认、拒绝和重新评估不删除文章；
 - 服务重启恢复未完成运行状态。
@@ -649,6 +779,9 @@ finscope.market-intel.providers.baidu.enabled=true
 - refresh 返回 202 和可查询 run；
 - 部分成功、过期、空集和不支持状态正确展示；
 - 资金摘要、1/5 分钟切换、5/10/20 日趋势与异常标签展示正确；
+- 页面进入时只自动加载规则解释，不自动触发 LLM；
+- 点击 Agent 解读后显示进度，完成后事实/假设分区展示；
+- LLM 失败时保留规则解释和图表，不显示伪成功结果；
 - 切换标的不残留上一标的数据；
 - 刷新期间页面重载可恢复运行进度；
 - 键盘操作、窄屏和非颜色状态提示可用。
@@ -660,11 +793,13 @@ finscope.market-intel.providers.baidu.enabled=true
 1. 增加 `marketintel` 领域对象、SchemaMigrator 和 Repository。
 2. 实现 `FinanceHttpClient`、限流器、基础 ProviderResult 和错误分类。
 3. 首先实现东财资金流与行情上下文合并：成交金额、换手率、量比、1/5 分钟时间线和 5/10/20 日趋势。
-4. 实现版本化的客观资金异常标签，明确排除暗盘、拆单、吸筹和出货推断。
-5. 实现龙虎榜、解禁、行业排名以及一个概念/行业归属 Provider。
-6. 实现刷新 run/step、查询 Service、REST API 和重启失败恢复。
-7. 增加 Market Intel Tab、选择器、健康条、刷新进度和四类主面板，资金行为面板默认位于首屏。
-8. 完成 fixture、时间对齐/聚合、Repository、Service、Controller、前端测试和构建。
+4. 实现版本化的客观资金异常标签；规则层排除暗盘、拆单、吸筹和出货意图判断。
+5. 实现 `CapitalBehaviorSnapshot`、确定性规则解释和 metric reference。
+6. 泛化 Agent Trace subject，复用 `AgentHarness/LlmChatClient` 实现点击触发的资金解读 Agent 与置信度 Gate。
+7. 实现龙虎榜、解禁、行业排名以及一个概念/行业归属 Provider。
+8. 实现刷新 run/step、查询 Service、REST API 和重启失败恢复。
+9. 增加 Market Intel Tab、选择器、健康条、刷新进度和四类主面板，资金行为与规则解释默认位于首屏。
+10. 完成 fixture、时间对齐/聚合、规则/Agent/Trace、Repository、Service、Controller、前端测试和构建。
 
 ### 19.2 第二阶段：新闻公告与文章链路
 
@@ -682,7 +817,7 @@ finscope.market-intel.providers.baidu.enabled=true
 
 ### 19.4 第四阶段：研究快照与 Agent 整合
 
-1. 实现 `StockResearchSnapshotService` 和不可变指纹。
+1. 将第一阶段 `CapitalBehaviorSnapshot` 作为组成部分，实现跨领域 `StockResearchSnapshotService` 和不可变指纹。
 2. 向归因 Harness 提供市场数据上下文，不改变其证据门和预算主导权。
 3. 将 snapshot id/fingerprint 写入 Agent Trace 和研究报告元数据。
 4. 打通股票命题、复盘与标的研究数据的关联。
