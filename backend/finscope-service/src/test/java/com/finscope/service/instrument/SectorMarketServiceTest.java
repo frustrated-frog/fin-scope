@@ -3,172 +3,87 @@ package com.finscope.service.instrument;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.SectorMarketSnapshot;
-import com.finscope.rpc.marketintel.ProviderContractException;
-import com.finscope.rpc.quote.SectorMarketProvider;
-import org.junit.jupiter.api.AfterEach;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
+import com.finscope.service.marketdata.MarketDataGateway;
+import com.finscope.service.marketdata.SectorCatalogGatewayResult;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class SectorMarketServiceTest {
-    private final List<ExecutorService> executors = new ArrayList<ExecutorService>();
-
-    @AfterEach
-    void tearDown() {
-        for (ExecutorService executor : executors) executor.shutdownNow();
-    }
+    private final MarketDataGateway gateway = mock(MarketDataGateway.class);
+    private final SectorMarketService service = new SectorMarketService(gateway);
 
     @Test
-    void ranksOneSnapshotDeterministicallyWithoutOverlap() {
-        MutableProvider provider = new MutableProvider(entries(
+    void ranksOneGatewaySnapshotDeterministicallyWithoutOverlap() {
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, true)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY,
                 entry("BK0001", "甲", 4.0, 100.0),
                 entry("BK0002", "乙", -3.0, 90.0),
                 entry("BK0003", "丙", 4.0, 120.0),
                 entry("BK0004", "丁", -2.0, 80.0)));
-        SectorMarketService service = service(provider, new MutableClock(Instant.parse("2026-07-14T02:00:00Z")));
 
-        SectorMarketOverview result = service.overview(SectorCategory.INDUSTRY, 2, false);
+        SectorMarketOverview overview = service.overview(SectorCategory.INDUSTRY, 2, true);
 
-        assertEquals(Arrays.asList("BK0003", "BK0001"), codes(result.getLeaders()));
-        assertEquals(Arrays.asList("BK0002", "BK0004"), codes(result.getLaggards()));
-        assertEquals(SectorMarketQualityStatus.FRESH, result.getQualityStatus());
+        assertEquals(Arrays.asList("BK0003", "BK0001"), codes(overview.getLeaders()));
+        assertEquals(Arrays.asList("BK0002", "BK0004"), codes(overview.getLaggards()));
+        assertEquals(MarketDataQualityStatus.FRESH_PRIMARY, overview.getQualityStatus());
+        verify(gateway).fetchSectorCatalog(SectorCategory.INDUSTRY, true);
     }
 
     @Test
-    void reusesFreshSnapshotUntilForced() {
-        MutableProvider provider = new MutableProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
-        SectorMarketService service = service(provider, new MutableClock(Instant.parse("2026-07-14T02:00:00Z")));
+    void preservesGatewayDegradationMetadata() {
+        SectorCatalogGatewayResult gatewayResult = new SectorCatalogGatewayResult(
+                snapshot(entry("BK0001", "甲", 1.0, 100.0)),
+                MarketDataQualityStatus.STALE_FALLBACK, "EASTMONEY_SECTOR",
+                LocalDateTime.of(2026, 7, 14, 9, 58), LocalDateTime.of(2026, 7, 14, 9, 58, 5),
+                125L, "正在显示最近一次成功目录", "refresh-sector");
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(gatewayResult);
 
-        service.overview(SectorCategory.INDUSTRY, 5, false);
-        service.overview(SectorCategory.INDUSTRY, 5, false);
-        service.overview(SectorCategory.INDUSTRY, 5, true);
+        SectorMarketOverview overview = service.overview(SectorCategory.INDUSTRY, 5, false);
 
-        assertEquals(2, provider.callCount.get());
-    }
-
-    @Test
-    void returnsStaleSnapshotWhenRefreshFailsInsideStaleWindow() {
-        MutableProvider provider = new MutableProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
-        MutableClock clock = new MutableClock(Instant.parse("2026-07-14T02:00:00Z"));
-        SectorMarketService service = service(provider, clock);
-        service.overview(SectorCategory.INDUSTRY, 5, false);
-        clock.advance(Duration.ofMinutes(1));
-        provider.failure = new ProviderContractException("HTTP_503", "down", true);
-
-        SectorMarketOverview result = service.overview(SectorCategory.INDUSTRY, 5, true);
-
-        assertEquals(SectorMarketQualityStatus.STALE, result.getQualityStatus());
-        assertTrue(result.getWarning().contains("down"));
-        assertEquals("BK0001", result.getLeaders().get(0).getCode());
-    }
-
-    @Test
-    void becomesUnavailableAfterStaleWindowExpires() {
-        MutableProvider provider = new MutableProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
-        MutableClock clock = new MutableClock(Instant.parse("2026-07-14T02:00:00Z"));
-        SectorMarketService service = service(provider, clock);
-        service.overview(SectorCategory.INDUSTRY, 5, false);
-        clock.advance(Duration.ofMinutes(16));
-        provider.failure = new ProviderContractException("HTTP_503", "down", true);
-
-        SectorMarketOverview result = service.overview(SectorCategory.INDUSTRY, 5, true);
-
-        assertEquals(SectorMarketQualityStatus.UNAVAILABLE, result.getQualityStatus());
-        assertTrue(result.getLeaders().isEmpty());
+        assertEquals(MarketDataQualityStatus.STALE_FALLBACK, overview.getQualityStatus());
+        assertEquals("EASTMONEY_SECTOR", overview.getSourceCode());
+        assertEquals(125L, overview.getStaleAgeSeconds());
+        assertEquals("refresh-sector", overview.getRefreshId());
     }
 
     @Test
     void searchesExactCodeAndNameMatchesInPriorityOrder() {
-        MutableProvider provider = new MutableProvider(entries(
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY,
                 entry("BK1036", "半导体", 2.0, 100.0),
                 entry("BK2000", "半导体设备", 3.0, 80.0),
                 entry("BK3000", "先进半导体材料", 4.0, 70.0)));
-        SectorMarketService service = service(provider, new MutableClock(Instant.parse("2026-07-14T02:00:00Z")));
 
-        SectorMarketSearchResult byCode = service.search("bk1036", SectorCategory.INDUSTRY, 10);
-        SectorMarketSearchResult byName = service.search("半导体", SectorCategory.INDUSTRY, 10);
-
-        assertEquals(Collections.singletonList("BK1036"), codes(byCode.getItems()));
-        assertEquals(Arrays.asList("BK1036", "BK2000", "BK3000"), codes(byName.getItems()));
+        assertEquals(Collections.singletonList("BK1036"),
+                codes(service.search("bk1036", SectorCategory.INDUSTRY, 10).getItems()));
+        assertEquals(Arrays.asList("BK1036", "BK2000", "BK3000"),
+                codes(service.search("半导体", SectorCategory.INDUSTRY, 10).getItems()));
     }
 
-    @Test
-    void mergesConcurrentRefreshesIntoOneProviderCall() throws Exception {
-        BlockingProvider provider = new BlockingProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
-        MutableClock clock = new MutableClock(Instant.parse("2026-07-14T02:00:00Z"));
-        ExecutorService refreshExecutor = executor(Executors.newFixedThreadPool(2));
-        SectorMarketService service = service(provider, clock, refreshExecutor);
-        ExecutorService callers = executor(Executors.newFixedThreadPool(2));
-
-        CompletableFuture<SectorMarketOverview> first = CompletableFuture.supplyAsync(
-                () -> service.overview(SectorCategory.INDUSTRY, 5, true), callers);
-        assertTrue(provider.started.await(2, TimeUnit.SECONDS));
-        CompletableFuture<SectorMarketOverview> second = CompletableFuture.supplyAsync(
-                () -> service.overview(SectorCategory.INDUSTRY, 5, true), callers);
-        provider.release.countDown();
-
-        first.get(2, TimeUnit.SECONDS);
-        second.get(2, TimeUnit.SECONDS);
-        assertEquals(1, provider.callCount.get());
+    private SectorCatalogGatewayResult result(MarketDataQualityStatus status, SectorMarketEntry... entries) {
+        LocalDateTime retrievedAt = LocalDateTime.of(2026, 7, 14, 10, 0);
+        return new SectorCatalogGatewayResult(snapshot(entries), status, "EASTMONEY_SECTOR",
+                retrievedAt, retrievedAt, null, null, "refresh-sector");
     }
 
-    @Test
-    void reportsUnavailableWhenRefreshExecutorRejectsTask() {
-        MutableProvider provider = new MutableProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
-        SectorMarketService service = service(provider, new MutableClock(Instant.parse("2026-07-14T02:00:00Z")),
-                command -> { throw new java.util.concurrent.RejectedExecutionException("executor saturated"); });
-
-        SectorMarketOverview result = service.overview(SectorCategory.INDUSTRY, 5, false);
-
-        assertEquals(SectorMarketQualityStatus.UNAVAILABLE, result.getQualityStatus());
-        assertTrue(result.getWarning().contains("executor saturated"));
-        assertEquals(0, provider.callCount.get());
+    private SectorMarketSnapshot snapshot(SectorMarketEntry... entries) {
+        return new SectorMarketSnapshot(SectorCategory.INDUSTRY, "EASTMONEY_SECTOR",
+                LocalDateTime.of(2026, 7, 14, 10, 0), "hash", Arrays.asList(entries),
+                Collections.<String>emptyList());
     }
 
-    private SectorMarketService service(SectorMarketProvider provider, Clock clock) {
-        return service(provider, clock, Runnable::run);
-    }
-
-    private SectorMarketService service(SectorMarketProvider provider, Clock clock, java.util.concurrent.Executor executor) {
-        SectorMarketService service = new SectorMarketService(clock);
-        ReflectionTestUtils.setField(service, "providers", Collections.singletonList(provider));
-        ReflectionTestUtils.setField(service, "executor", executor);
-        return service;
-    }
-
-    private ExecutorService executor(ExecutorService executor) {
-        executors.add(executor);
-        return executor;
-    }
-
-    private static List<String> codes(List<SectorMarketEntry> values) {
-        return values.stream().map(SectorMarketEntry::getCode).collect(Collectors.toList());
-    }
-
-    private static List<SectorMarketEntry> entries(SectorMarketEntry... values) {
-        return Arrays.asList(values);
-    }
-
-    private static SectorMarketEntry entry(String code, String name, double changePct, double turnover) {
+    private SectorMarketEntry entry(String code, String name, double changePct, double turnover) {
         SectorMarketEntry value = new SectorMarketEntry();
         value.setCode(code);
         value.setName(name);
@@ -178,50 +93,7 @@ class SectorMarketServiceTest {
         return value;
     }
 
-    private static class MutableProvider implements SectorMarketProvider {
-        protected final AtomicInteger callCount = new AtomicInteger();
-        private final List<SectorMarketEntry> entries;
-        private RuntimeException failure;
-
-        private MutableProvider(List<SectorMarketEntry> entries) { this.entries = entries; }
-        @Override public String providerCode() { return "TEST"; }
-        @Override public String providerFamily() { return "TEST"; }
-        @Override public java.util.Set<com.finscope.domain.marketdata.MarketDataCapability> capabilities() {
-            return java.util.Collections.singleton(com.finscope.domain.marketdata.MarketDataCapability.SECTOR_CATALOG);
-        }
-        @Override public int priority() { return 1; }
-        @Override public int batchLimit() { return 1; }
-        @Override public Duration minimumInterval() { return Duration.ZERO; }
-        @Override public Duration timeout() { return Duration.ofSeconds(1); }
-        @Override public boolean supports(SectorCategory category) { return true; }
-        @Override public SectorMarketSnapshot fetch(SectorCategory category) {
-            callCount.incrementAndGet();
-            if (failure != null) throw failure;
-            return new SectorMarketSnapshot(category, providerCode(),
-                    java.time.LocalDateTime.ofInstant(Instant.parse("2026-07-14T02:00:00Z"), ZoneOffset.UTC),
-                    "hash", entries, Collections.<String>emptyList());
-        }
-    }
-
-    private static class BlockingProvider extends MutableProvider {
-        private final CountDownLatch started = new CountDownLatch(1);
-        private final CountDownLatch release = new CountDownLatch(1);
-
-        private BlockingProvider(List<SectorMarketEntry> entries) { super(entries); }
-        @Override public SectorMarketSnapshot fetch(SectorCategory category) {
-            started.countDown();
-            try { release.await(2, TimeUnit.SECONDS); }
-            catch (InterruptedException error) { Thread.currentThread().interrupt(); }
-            return super.fetch(category);
-        }
-    }
-
-    private static class MutableClock extends Clock {
-        private Instant instant;
-        private MutableClock(Instant instant) { this.instant = instant; }
-        void advance(Duration duration) { instant = instant.plus(duration); }
-        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
-        @Override public Clock withZone(ZoneId zone) { return this; }
-        @Override public Instant instant() { return instant; }
+    private List<String> codes(List<SectorMarketEntry> values) {
+        return values.stream().map(SectorMarketEntry::getCode).collect(Collectors.toList());
     }
 }

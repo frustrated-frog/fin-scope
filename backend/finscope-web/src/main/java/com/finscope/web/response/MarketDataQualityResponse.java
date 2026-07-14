@@ -1,6 +1,7 @@
 package com.finscope.web.response;
 
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 
 import java.time.LocalDateTime;
 
@@ -16,13 +17,20 @@ abstract class MarketDataQualityResponse {
 
     protected final void copyQuality(Quote quote) {
         if (quote == null) return;
-        qualityStatus = quote.getQualityStatus() == null ? null : quote.getQualityStatus().name();
-        sourceCode = quote.getSourceCode();
-        asOf = quote.getAsOf();
-        retrievedAt = quote.getRetrievedAt();
-        staleAgeSeconds = quote.getStaleAgeSeconds();
-        warning = quote.getWarning();
-        refreshId = quote.getRefreshId();
+        copyQuality(quote.getQualityStatus(), quote.getSourceCode(), quote.getAsOf(),
+                quote.getRetrievedAt(), quote.getStaleAgeSeconds(), quote.getWarning(), quote.getRefreshId());
+    }
+
+    protected final void copyQuality(MarketDataQualityStatus status, String source,
+                                     LocalDateTime dataAsOf, LocalDateTime fetchedAt, Long staleAge,
+                                     String qualityWarning, String dataRefreshId) {
+        qualityStatus = status == null ? null : status.name();
+        sourceCode = source;
+        asOf = dataAsOf;
+        retrievedAt = fetchedAt;
+        staleAgeSeconds = staleAge;
+        warning = qualityWarning;
+        refreshId = dataRefreshId;
     }
 
     public String getQualityStatus() { return qualityStatus; }

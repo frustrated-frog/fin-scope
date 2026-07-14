@@ -3,12 +3,16 @@ package com.finscope.service.marketdata;
 import com.finscope.dao.marketdata.MarketDataRefreshRunRepository;
 import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.instrument.SectorCategory;
+import com.finscope.domain.instrument.SectorMarketEntry;
+import com.finscope.domain.instrument.SectorMarketSnapshot;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
 import com.finscope.rpc.quote.QuoteAdapter;
+import com.finscope.rpc.quote.SectorMarketProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +45,7 @@ public class MarketDataGateway {
     private static final Logger log = LoggerFactory.getLogger(MarketDataGateway.class);
 
     private final List<QuoteAdapter> quoteAdapters;
+    private final List<SectorMarketProvider> sectorProviders;
     private final ProviderRoutePolicy routePolicy;
     private final ProviderRequestGuard guard;
     private final MarketDataSnapshotRepository snapshots;
@@ -53,9 +58,12 @@ public class MarketDataGateway {
     private final Clock clock;
     private final Map<String, CacheEntry> freshCache =
             new java.util.concurrent.ConcurrentHashMap<String, CacheEntry>();
+    private final Map<String, SectorCacheEntry> sectorFreshCache =
+            new java.util.concurrent.ConcurrentHashMap<String, SectorCacheEntry>();
 
     @Autowired
     public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             List<SectorMarketProvider> sectorProviders,
                              ProviderRoutePolicy routePolicy,
                              ProviderRequestGuard guard,
                              MarketDataSnapshotRepository snapshots,
@@ -65,10 +73,11 @@ public class MarketDataGateway {
                              MarketDataSingleFlight singleFlight,
                              MarketDataGatewayProperties properties,
                              @Qualifier("marketDataGatewayExecutor") Executor executor) {
-        this(quoteAdapters, routePolicy, guard, snapshots, refreshRuns, codec, validator,
+        this(quoteAdapters, sectorProviders, routePolicy, guard, snapshots, refreshRuns, codec, validator,
                 singleFlight, properties, executor, Clock.systemDefaultZone());
     }
 
+    /** 保留给聚焦行情测试和非 Spring 调用方的兼容构造器。 */
     public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
                              ProviderRoutePolicy routePolicy,
                              ProviderRequestGuard guard,
@@ -80,7 +89,24 @@ public class MarketDataGateway {
                              MarketDataGatewayProperties properties,
                              Executor executor,
                              Clock clock) {
+        this(quoteAdapters, Collections.<SectorMarketProvider>emptyList(), routePolicy, guard, snapshots,
+                refreshRuns, codec, validator, singleFlight, properties, executor, clock);
+    }
+
+    public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             List<SectorMarketProvider> sectorProviders,
+                             ProviderRoutePolicy routePolicy,
+                             ProviderRequestGuard guard,
+                             MarketDataSnapshotRepository snapshots,
+                             MarketDataRefreshRunRepository refreshRuns,
+                             MarketDataSnapshotCodec codec,
+                             QuoteQualityValidator validator,
+                             MarketDataSingleFlight singleFlight,
+                             MarketDataGatewayProperties properties,
+                             Executor executor,
+                             Clock clock) {
         this.quoteAdapters = new ArrayList<QuoteAdapter>(quoteAdapters);
+        this.sectorProviders = new ArrayList<SectorMarketProvider>(sectorProviders);
         this.routePolicy = routePolicy;
         this.guard = guard;
         this.snapshots = snapshots;
@@ -91,6 +117,159 @@ public class MarketDataGateway {
         this.properties = properties;
         this.executor = executor;
         this.clock = clock;
+    }
+
+    public SectorCatalogGatewayResult fetchSectorCatalog(SectorCategory category, boolean forceRefresh) {
+        if (category == null) throw new IllegalArgumentException("sector category is required");
+        String key = sectorScopeKey(category);
+        if (!forceRefresh) {
+            SectorCacheEntry cached = sectorFreshCache.get(key);
+            if (cached != null && clock.millis() - cached.createdAtMillis <= properties.getFreshCacheMs()) {
+                return cached.result;
+            }
+        }
+        return singleFlight.execute(key, () -> {
+            SectorCatalogGatewayResult result = routeSectorCatalog(category);
+            if (result.getQualityStatus() != MarketDataQualityStatus.UNAVAILABLE) {
+                sectorFreshCache.put(key, new SectorCacheEntry(result, clock.millis()));
+            }
+            return result;
+        });
+    }
+
+    private SectorCatalogGatewayResult routeSectorCatalog(SectorCategory category) {
+        MarketDataCapability capability = MarketDataCapability.SECTOR_CATALOG;
+        String scopeKey = sectorScopeKey(category);
+        String refreshId = UUID.randomUUID().toString();
+        LocalDateTime startedAt = LocalDateTime.now(clock);
+        Long runId = createAudit(capability, category.name(), startedAt);
+        Optional<MarketDataSnapshot> stored = findSnapshot(capability, scopeKey);
+        Optional<SectorMarketSnapshot> lastGood = stored.flatMap(codec::decodeSectorCatalog);
+        List<SectorMarketProvider> candidates = new ArrayList<SectorMarketProvider>();
+        for (SectorMarketProvider provider : sectorProviders) {
+            if (provider.supports(category)) candidates.add(provider);
+        }
+        List<SectorMarketProvider> ordered = routePolicy.order(candidates, capability);
+        String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
+        List<String> failures = new ArrayList<String>();
+
+        for (SectorMarketProvider provider : ordered) {
+            try {
+                ProviderResult<SectorMarketSnapshot> fetched = guard.execute(provider, capability,
+                        () -> validateSectorCatalog(provider.fetchResult(category), category, lastGood));
+                SectorMarketSnapshot fresh = fetched.getData();
+                boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
+                MarketDataQualityStatus status = fallback
+                        ? MarketDataQualityStatus.FRESH_FALLBACK : MarketDataQualityStatus.FRESH_PRIMARY;
+                String warning = joinWarnings(fetched.getWarnings());
+                try {
+                    snapshots.upsert(codec.sectorCatalogSnapshot(scopeKey, provider.providerCode(),
+                            provider.providerFamily(), fresh, LocalDateTime.now(clock)));
+                } catch (RuntimeException persistenceError) {
+                    warning = appendWarning(warning, "本地板块目录兜底快照保存失败");
+                    log.warn("Failed to persist sector catalog snapshot for {}", category, persistenceError);
+                }
+                if (fallback) warning = appendWarning(
+                        "主数据源响应失败或目录不完整，系统已自动切换备用数据源。", warning);
+                SectorCatalogGatewayResult result = new SectorCatalogGatewayResult(fresh, status,
+                        provider.providerCode(), fresh.getRetrievedAt(), fetched.getRetrievedAt(),
+                        null, warning, refreshId);
+                finishSectorAudit(runId, result, provider.providerCode(), fresh.getEntries().size());
+                return result;
+            } catch (RuntimeException error) {
+                failures.add(message(error));
+            }
+        }
+
+        if (lastGood.isPresent() && stored.isPresent()) {
+            SectorMarketSnapshot stale = lastGood.get();
+            long age = Math.max(0L, Duration.between(stored.get().getRetrievedAt(),
+                    LocalDateTime.now(clock)).getSeconds());
+            String reason = failures.isEmpty() ? "没有健康的数据源" : String.join("；", failures);
+            String warning = "板块目录刷新失败，正在显示最近一次成功数据（已过期 " + age
+                    + " 秒）。原因：" + reason;
+            SectorCatalogGatewayResult result = new SectorCatalogGatewayResult(stale,
+                    MarketDataQualityStatus.STALE_FALLBACK, stored.get().getProviderCode(),
+                    stale.getRetrievedAt(), stored.get().getRetrievedAt(), age, warning, refreshId);
+            finishSectorAudit(runId, result, stored.get().getProviderCode(), stale.getEntries().size());
+            return result;
+        }
+
+        String reason = failures.isEmpty() ? "没有可用的板块目录数据源" : String.join("；", failures);
+        SectorCatalogGatewayResult result = new SectorCatalogGatewayResult(null,
+                MarketDataQualityStatus.UNAVAILABLE, null, null, startedAt, null,
+                "板块目录刷新失败，且没有可用的历史快照。原因：" + reason, refreshId);
+        finishSectorAudit(runId, result, null, 0);
+        return result;
+    }
+
+    private ProviderResult<SectorMarketSnapshot> validateSectorCatalog(
+            ProviderResult<SectorMarketSnapshot> result, SectorCategory category,
+            Optional<SectorMarketSnapshot> lastGood) {
+        if (result == null || result.getData() == null) {
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "EMPTY_SECTOR_CATALOG", "板块目录为空", true);
+        }
+        List<SectorMarketEntry> valid = new ArrayList<SectorMarketEntry>();
+        for (SectorMarketEntry entry : result.getData().getEntries()) {
+            if (entry != null && entry.getCode() != null && entry.getCode().matches("BK\\d{4}")
+                    && entry.getName() != null && !entry.getName().trim().isEmpty()
+                    && (entry.getCategory() == null || entry.getCategory() == category)) {
+                if (entry.getCategory() == null) entry.setCategory(category);
+                valid.add(entry);
+            }
+        }
+        if (valid.isEmpty()) {
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "EMPTY_SECTOR_CATALOG", "板块目录没有有效条目", true);
+        }
+        int previousCount = lastGood.map(value -> value.getEntries().size()).orElse(0);
+        int minimumAccepted = (int) Math.ceil(previousCount * 0.70d);
+        if (previousCount > 0 && valid.size() < minimumAccepted) {
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "SUSPICIOUS_SECTOR_COVERAGE",
+                    "板块目录数量异常下降：本次 " + valid.size() + " 条，上次 " + previousCount + " 条",
+                    true);
+        }
+        SectorMarketSnapshot original = result.getData();
+        SectorMarketSnapshot normalized = new SectorMarketSnapshot(category, original.getProviderCode(),
+                original.getRetrievedAt(), original.getPayloadFingerprint(), valid, original.getWarnings());
+        return ProviderResult.of(normalized, result.getRetrievedAt(), result.getPayloadHash(),
+                result.getWarnings());
+    }
+
+    private String sectorScopeKey(SectorCategory category) {
+        return MarketDataCapability.SECTOR_CATALOG.name() + ":" + category.name();
+    }
+
+    private void finishSectorAudit(Long runId, SectorCatalogGatewayResult result,
+                                   String selectedSource, int itemCount) {
+        if (runId == null) return;
+        boolean fresh = result.getQualityStatus() == MarketDataQualityStatus.FRESH_PRIMARY
+                || result.getQualityStatus() == MarketDataQualityStatus.FRESH_FALLBACK;
+        boolean stale = result.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK;
+        try {
+            refreshRuns.finish(runId, result.getQualityStatus().name(), 1, fresh ? 1 : 0,
+                    stale ? 1 : 0, result.getQualityStatus() == MarketDataQualityStatus.UNAVAILABLE ? 1 : 0,
+                    selectedSource, appendWarning(result.getWarning(), "目录条目数：" + itemCount),
+                    LocalDateTime.now(clock));
+        } catch (RuntimeException error) {
+            log.warn("Failed to finish sector catalog refresh audit {}", runId, error);
+        }
+    }
+
+    private String message(Throwable error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
+    private String joinWarnings(List<String> warnings) {
+        return warnings == null || warnings.isEmpty() ? null : String.join("；", warnings);
+    }
+
+    private String appendWarning(String first, String second) {
+        if (first == null || first.trim().isEmpty()) return second;
+        if (second == null || second.trim().isEmpty()) return first;
+        return first + " " + second;
     }
 
     public QuoteGatewayResult fetchQuotes(String type, List<String> codes, boolean forceRefresh) {
@@ -520,6 +699,15 @@ public class MarketDataGateway {
         private final QuoteGatewayResult result;
         private final long createdAtMillis;
         private CacheEntry(QuoteGatewayResult result, long createdAtMillis) {
+            this.result = result;
+            this.createdAtMillis = createdAtMillis;
+        }
+    }
+
+    private static final class SectorCacheEntry {
+        private final SectorCatalogGatewayResult result;
+        private final long createdAtMillis;
+        private SectorCacheEntry(SectorCatalogGatewayResult result, long createdAtMillis) {
             this.result = result;
             this.createdAtMillis = createdAtMillis;
         }

@@ -5,37 +5,27 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.SectorMarketSnapshot;
-import com.finscope.rpc.marketintel.ProviderContractException;
-import com.finscope.rpc.quote.SectorMarketProvider;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
+import com.finscope.service.marketdata.MarketDataGateway;
+import com.finscope.service.marketdata.SectorCatalogGatewayResult;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
-/** 板块目录缓存、确定性排行与本地搜索服务。 */
+/** 板块目录排行与搜索服务；刷新、路由、缓存和兜底统一委托给市场数据网关。 */
 @Service
 public class SectorMarketService {
-    private static final Duration FRESH_TTL = Duration.ofSeconds(30);
-    private static final Duration STALE_TTL = Duration.ofMinutes(15);
-
     private static final Comparator<SectorMarketEntry> LEADER_ORDER = Comparator
             .comparing(SectorMarketEntry::getChangePct, Comparator.nullsLast(Comparator.reverseOrder()))
             .thenComparing(SectorMarketEntry::getTurnover, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -45,40 +35,29 @@ public class SectorMarketService {
             .thenComparing(SectorMarketEntry::getTurnover, Comparator.nullsLast(Comparator.reverseOrder()))
             .thenComparing(SectorMarketEntry::getCode);
 
-    @Resource
-    private List<SectorMarketProvider> providers;
-    @Resource(name = "quoteTaskExecutor")
-    private Executor executor;
+    private final MarketDataGateway gateway;
 
-    private final Clock clock;
-    private final ConcurrentMap<SectorCategory, CacheState> cache = new ConcurrentHashMap<SectorCategory, CacheState>();
-    private final ConcurrentMap<SectorCategory, CompletableFuture<SectorMarketSnapshot>> inFlight =
-            new ConcurrentHashMap<SectorCategory, CompletableFuture<SectorMarketSnapshot>>();
-
-    public SectorMarketService() {
-        this(Clock.systemDefaultZone());
-    }
-
-    SectorMarketService(Clock clock) {
-        this.clock = clock;
+    public SectorMarketService(MarketDataGateway gateway) {
+        this.gateway = gateway;
     }
 
     public SectorMarketOverview overview(SectorCategory category, int limit, boolean forceRefresh) {
         requireCategory(category);
         validateLimit(limit, 10);
-        SnapshotResult snapshot = snapshot(category, forceRefresh);
-        if (snapshot.snapshot == null) {
-            return new SectorMarketOverview(category, SectorMarketQualityStatus.UNAVAILABLE, null,
-                    snapshot.warning, Collections.<SectorMarketEntry>emptyList(), Collections.<SectorMarketEntry>emptyList());
+        SectorCatalogGatewayResult result = gateway.fetchSectorCatalog(category, forceRefresh);
+        SectorMarketSnapshot snapshot = result.getSnapshot();
+        if (snapshot == null) {
+            return SectorMarketOverview.of(category, result, Collections.<SectorMarketEntry>emptyList(),
+                    Collections.<SectorMarketEntry>emptyList(), result.getWarning());
         }
-        List<SectorMarketEntry> valid = snapshot.snapshot.getEntries().stream()
+        List<SectorMarketEntry> valid = snapshot.getEntries().stream()
                 .filter(value -> value.getChangePct() != null)
                 .collect(Collectors.toList());
         List<SectorMarketEntry> leaders = take(valid, LEADER_ORDER, limit, Collections.<String>emptySet());
         Set<String> leaderCodes = leaders.stream().map(SectorMarketEntry::getCode).collect(Collectors.toSet());
         List<SectorMarketEntry> laggards = take(valid, LAGGARD_ORDER, limit, leaderCodes);
-        return new SectorMarketOverview(category, snapshot.qualityStatus, snapshot.snapshot.getRetrievedAt(),
-                mergeWarnings(snapshot.warning, snapshot.snapshot.getWarnings()), leaders, laggards);
+        return SectorMarketOverview.of(category, result, leaders, laggards,
+                mergeWarnings(result.getWarning(), snapshot.getWarnings()));
     }
 
     public SectorMarketSearchResult search(String query, SectorCategory category, int limit) {
@@ -91,23 +70,14 @@ public class SectorMarketService {
                 ? Arrays.asList(SectorCategory.INDUSTRY, SectorCategory.CONCEPT)
                 : Collections.singletonList(category);
         Map<String, SectorMarketEntry> unique = new LinkedHashMap<String, SectorMarketEntry>();
-        List<String> warnings = new ArrayList<String>();
-        LocalDateTime retrievedAt = null;
-        boolean degraded = false;
-        boolean available = false;
+        List<SectorCatalogGatewayResult> results = new ArrayList<SectorCatalogGatewayResult>();
         for (SectorCategory value : categories) {
-            SnapshotResult result = snapshot(value, false);
-            if (result.warning != null) warnings.add(result.warning);
-            if (result.snapshot == null) {
-                degraded = true;
-                continue;
+            SectorCatalogGatewayResult result = gateway.fetchSectorCatalog(value, false);
+            results.add(result);
+            if (result.getSnapshot() == null) continue;
+            for (SectorMarketEntry entry : result.getSnapshot().getEntries()) {
+                unique.putIfAbsent(entry.getCode(), entry);
             }
-            available = true;
-            degraded = degraded || result.qualityStatus != SectorMarketQualityStatus.FRESH;
-            if (retrievedAt == null || result.snapshot.getRetrievedAt().isBefore(retrievedAt)) {
-                retrievedAt = result.snapshot.getRetrievedAt();
-            }
-            for (SectorMarketEntry entry : result.snapshot.getEntries()) unique.putIfAbsent(entry.getCode(), entry);
         }
         String upper = normalized.toUpperCase(Locale.ROOT);
         List<SectorMarketEntry> matched = unique.values().stream()
@@ -115,65 +85,7 @@ public class SectorMarketService {
                 .sorted(searchOrder(upper))
                 .limit(limit)
                 .collect(Collectors.toList());
-        SectorMarketQualityStatus quality = !available ? SectorMarketQualityStatus.UNAVAILABLE
-                : degraded ? SectorMarketQualityStatus.STALE : SectorMarketQualityStatus.FRESH;
-        return new SectorMarketSearchResult(quality, retrievedAt, join(warnings), matched);
-    }
-
-    private SnapshotResult snapshot(SectorCategory category, boolean forceRefresh) {
-        CacheState current = cache.get(category);
-        Instant now = clock.instant();
-        if (!forceRefresh && current != null && Duration.between(current.cachedAt, now).compareTo(FRESH_TTL) <= 0) {
-            return SnapshotResult.available(current.snapshot, SectorMarketQualityStatus.FRESH, null);
-        }
-        try {
-            SectorMarketSnapshot refreshed = refresh(category).join();
-            return SnapshotResult.available(refreshed, SectorMarketQualityStatus.FRESH, null);
-        } catch (CompletionException error) {
-            Throwable cause = unwrap(error);
-            current = cache.get(category);
-            String warning = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-            if (current != null && Duration.between(current.cachedAt, now).compareTo(STALE_TTL) <= 0) {
-                return SnapshotResult.available(current.snapshot, SectorMarketQualityStatus.STALE, warning);
-            }
-            return SnapshotResult.unavailable(warning);
-        }
-    }
-
-    private CompletableFuture<SectorMarketSnapshot> refresh(SectorCategory category) {
-        while (true) {
-            CompletableFuture<SectorMarketSnapshot> existing = inFlight.get(category);
-            if (existing != null) return existing;
-            CompletableFuture<SectorMarketSnapshot> created = new CompletableFuture<SectorMarketSnapshot>();
-            if (inFlight.putIfAbsent(category, created) != null) continue;
-            try {
-                executor.execute(() -> {
-                    try {
-                        SectorMarketSnapshot value = provider(category).fetch(category);
-                        if (value == null || value.getEntries().isEmpty()) {
-                            throw new ProviderContractException("EMPTY_SECTOR_CATALOG", "板块目录为空", true);
-                        }
-                        cache.put(category, new CacheState(value, clock.instant()));
-                        created.complete(value);
-                    } catch (Throwable error) {
-                        created.completeExceptionally(error);
-                    } finally {
-                        inFlight.remove(category, created);
-                    }
-                });
-            } catch (Throwable error) {
-                inFlight.remove(category, created);
-                created.completeExceptionally(error);
-            }
-            return created;
-        }
-    }
-
-    private SectorMarketProvider provider(SectorCategory category) {
-        if (providers != null) {
-            for (SectorMarketProvider provider : providers) if (provider.supports(category)) return provider;
-        }
-        throw new ProviderContractException("SECTOR_PROVIDER_MISSING", "没有可用的板块目录 Provider", false);
+        return SectorMarketSearchResult.of(results, matched);
     }
 
     private List<SectorMarketEntry> take(List<SectorMarketEntry> values, Comparator<SectorMarketEntry> order,
@@ -213,50 +125,12 @@ public class SectorMarketService {
         if (category == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "板块分类不能为空");
     }
 
-    private Throwable unwrap(Throwable error) {
-        Throwable current = error;
-        while ((current instanceof CompletionException) && current.getCause() != null) current = current.getCause();
-        return current;
-    }
-
     private String mergeWarnings(String primary, List<String> secondary) {
-        List<String> values = new ArrayList<String>();
+        Set<String> values = new LinkedHashSet<String>();
         if (primary != null && !primary.trim().isEmpty()) values.add(primary);
-        if (secondary != null) values.addAll(secondary);
-        return join(values);
-    }
-
-    private String join(List<String> values) {
-        return values == null || values.isEmpty() ? null : String.join("；", values);
-    }
-
-    private static final class CacheState {
-        private final SectorMarketSnapshot snapshot;
-        private final Instant cachedAt;
-        private CacheState(SectorMarketSnapshot snapshot, Instant cachedAt) {
-            this.snapshot = snapshot;
-            this.cachedAt = cachedAt;
+        if (secondary != null) {
+            for (String value : secondary) if (value != null && !value.trim().isEmpty()) values.add(value);
         }
-    }
-
-    private static final class SnapshotResult {
-        private final SectorMarketSnapshot snapshot;
-        private final SectorMarketQualityStatus qualityStatus;
-        private final String warning;
-
-        private SnapshotResult(SectorMarketSnapshot snapshot, SectorMarketQualityStatus qualityStatus, String warning) {
-            this.snapshot = snapshot;
-            this.qualityStatus = qualityStatus;
-            this.warning = warning;
-        }
-
-        private static SnapshotResult available(SectorMarketSnapshot snapshot,
-                                                SectorMarketQualityStatus qualityStatus, String warning) {
-            return new SnapshotResult(snapshot, qualityStatus, warning);
-        }
-
-        private static SnapshotResult unavailable(String warning) {
-            return new SnapshotResult(null, SectorMarketQualityStatus.UNAVAILABLE, warning);
-        }
+        return values.isEmpty() ? null : String.join("；", values);
     }
 }
