@@ -36,13 +36,13 @@ export type MarketIntelCapitalOverview = {
     instrumentId: number;
     asOf: string;
     fingerprint: string;
-  };
+  } | null;
   intradayTimeline: CapitalFlowPoint[];
   dailyTrend: CapitalFlowPoint[];
-  ruleExplanation: CapitalRuleExplanation;
+  ruleExplanation: CapitalRuleExplanation | null;
   health: {
-    status: 'FRESH' | 'STALE';
-    asOf: string;
+    status: 'EMPTY' | 'FRESH' | 'STALE';
+    asOf: string | null;
     providerCode: string;
     warnings: string[];
   };

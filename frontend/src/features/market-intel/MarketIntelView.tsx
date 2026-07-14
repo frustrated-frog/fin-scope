@@ -137,6 +137,20 @@ export function MarketIntelView({
     }
   }
 
+  async function retryOverview() {
+    if (!instrumentId) return;
+    setLoading(true);
+    try {
+      const value = await fetchOverview(instrumentId);
+      setOverview(value);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '资金数据读取失败');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (!instruments.length && !loading) {
     return <section className="panel wide market-intel-empty-page"><h3>还没有可分析的 A 股标的</h3><p>先在自选页添加股票，再回到这里刷新资金数据。</p></section>;
   }
@@ -164,10 +178,10 @@ export function MarketIntelView({
         </div>
         {overview && (
           <div className="market-intel-health">
-            <span className={overview.health.status === 'FRESH' ? 'fresh' : 'stale'}>{overview.health.status}</span>
+            <span className={overview.health.status === 'FRESH' ? 'fresh' : overview.health.status === 'EMPTY' ? 'empty' : 'stale'}>{overview.health.status}</span>
             <dl>
-              <div><dt>数据源</dt><dd>{overview.health.providerCode}</dd></div>
-              <div><dt>快照时点</dt><dd>{new Date(overview.health.asOf).toLocaleString('zh-CN', { hour12: false })}</dd></div>
+              <div><dt>数据源</dt><dd>{overview.health.providerCode || '等待首次刷新'}</dd></div>
+              <div><dt>快照时点</dt><dd>{overview.health.asOf ? new Date(overview.health.asOf).toLocaleString('zh-CN', { hour12: false }) : '--'}</dd></div>
             </dl>
           </div>
         )}
@@ -176,11 +190,17 @@ export function MarketIntelView({
       {loading && <p className="market-intel-loading" role="status">正在读取资金快照…</p>}
       {!loading && loadError && !overview && (
         <section className="market-intel-first-run" role="alert">
-          <div><strong>这个标的还没有资金快照</strong><p>{loadError}</p></div>
+          <div><strong>资金数据读取失败</strong><p>{loadError}</p></div>
+          <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
+        </section>
+      )}
+      {!loading && overview && !overview.snapshot && (
+        <section className="market-intel-first-run">
+          <div><strong>这个标的还没有资金快照</strong><p>首次刷新后会保存成交额、换手率与资金时间线，后续解读都基于这份可追溯事实。</p></div>
           <button className="primary-button" type="button" onClick={refreshCapitalData}>生成第一份资金快照</button>
         </section>
       )}
-      {overview && (
+      {overview?.snapshot && overview.ruleExplanation && (
         <div className="market-intel-grid">
           <div className="market-intel-primary">
             <CapitalBehaviorPanel overview={overview} />

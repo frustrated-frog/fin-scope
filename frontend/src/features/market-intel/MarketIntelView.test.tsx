@@ -71,7 +71,7 @@ test('shows deterministic explanation before the user requests agent analysis', 
   render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByRole('heading', { name: '贵州茅台' })).toBeInTheDocument();
-  expect(screen.getByText('成交额明显放大，但主力净流向转负，短线承接需要继续观察。')).toBeInTheDocument();
+  expect(await screen.findByText('成交额明显放大，但主力净流向转负，短线承接需要继续观察。')).toBeInTheDocument();
   expect(screen.getByText('量能放大但资金转弱')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '资金证据带' })).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('capital-interpretations'), expect.anything());
@@ -103,4 +103,27 @@ test('polls the refresh run before reloading the capital snapshot', async () => 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith('资金数据已刷新', 'success'));
   const overviewCalls = vi.mocked(api).mock.calls.filter(([path]) => String(path).includes('/capital-behavior'));
   expect(overviewCalls.length).toBeGreaterThanOrEqual(2);
+});
+
+test('treats an instrument without a snapshot as a first-run state instead of an error', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) {
+      return Promise.resolve({
+        instrument: overview.instrument,
+        snapshot: null,
+        intradayTimeline: [],
+        dailyTrend: [],
+        ruleExplanation: null,
+        health: { status: 'EMPTY', asOf: null, providerCode: '', warnings: [] }
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('button', { name: '生成第一份资金快照' })).toBeInTheDocument();
+  expect(screen.getByText('这个标的还没有资金快照')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

@@ -151,6 +151,7 @@
 
 .market-intel-health > span.fresh { color: var(--mi-out); }
 .market-intel-health > span.stale { color: var(--mi-amber); }
+.market-intel-health > span.empty { color: var(--muted); }
 .market-intel-health dl { display: grid; gap: 8px; margin: 0; }
 .market-intel-health dl div { display: grid; gap: 2px; }
 .market-intel-health dt { color: var(--faint); font-size: 10px; }

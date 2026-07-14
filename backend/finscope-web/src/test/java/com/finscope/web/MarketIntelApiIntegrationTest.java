@@ -61,6 +61,17 @@ class MarketIntelApiIntegrationTest {
         verifyNoInteractions(llm);
     }
 
+    @Test void instrumentWithoutSnapshotReturnsNormalEmptyState() throws Exception{
+        mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.instrument.id").value(7))
+                .andExpect(jsonPath("$.health.status").value("EMPTY"))
+                .andExpect(jsonPath("$.snapshot").doesNotExist())
+                .andExpect(jsonPath("$.intradayTimeline").isEmpty())
+                .andExpect(jsonPath("$.dailyTrend").isEmpty());
+        verifyNoInteractions(provider,llm);
+    }
+
     @Test void clickInterpretationRunsAgentAndReturnsGuardedHypothesis() throws Exception{
         mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted());
         Long evidenceId=jdbc.queryForObject("SELECT id FROM market_capital_flow_snapshot WHERE instrument_id=7 ORDER BY observed_at DESC LIMIT 1",Long.class);
