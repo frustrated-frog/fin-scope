@@ -1,5 +1,6 @@
 package com.finscope.web;
 
+import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.marketintel.CapitalFlowData;
@@ -49,7 +50,7 @@ class MarketIntelApiIntegrationTest {
         jdbc.update("INSERT INTO instrument(id,code,type,name,market,created_at,updated_at) VALUES(7,'600519','STOCK','贵州茅台','SH',?,?)",LocalDateTime.now().toString(),LocalDateTime.now().toString());
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(refreshExecutor).execute(any(Runnable.class));
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(agentExecutor).execute(any(Runnable.class));
-        when(provider.providerCode()).thenReturn("TEST");when(provider.supports(any())).thenReturn(true);when(provider.fetch(any(),any())).thenReturn(fixture());
+        when(provider.providerCode()).thenReturn("TEST");when(provider.supports(any(Instrument.class))).thenReturn(true);when(provider.fetch(any(),any())).thenReturn(fixture());
     }
 
     @Test void refreshThenQueryReturnsRuleExplanationWithoutCallingLlm() throws Exception{

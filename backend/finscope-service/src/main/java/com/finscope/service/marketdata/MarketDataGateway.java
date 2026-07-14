@@ -1,0 +1,527 @@
+package com.finscope.service.marketdata;
+
+import com.finscope.dao.marketdata.MarketDataRefreshRunRepository;
+import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
+import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
+import com.finscope.domain.marketdata.MarketDataSnapshot;
+import com.finscope.rpc.marketdata.ProviderResult;
+import com.finscope.rpc.marketintel.ProviderRequestGuard;
+import com.finscope.rpc.quote.QuoteAdapter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+/** 现有页面访问外部行情的统一高可用入口。 */
+@Service
+public class MarketDataGateway {
+    private static final Logger log = LoggerFactory.getLogger(MarketDataGateway.class);
+
+    private final List<QuoteAdapter> quoteAdapters;
+    private final ProviderRoutePolicy routePolicy;
+    private final ProviderRequestGuard guard;
+    private final MarketDataSnapshotRepository snapshots;
+    private final MarketDataRefreshRunRepository refreshRuns;
+    private final MarketDataSnapshotCodec codec;
+    private final QuoteQualityValidator validator;
+    private final MarketDataSingleFlight singleFlight;
+    private final MarketDataGatewayProperties properties;
+    private final Executor executor;
+    private final Clock clock;
+    private final Map<String, CacheEntry> freshCache =
+            new java.util.concurrent.ConcurrentHashMap<String, CacheEntry>();
+
+    @Autowired
+    public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             ProviderRoutePolicy routePolicy,
+                             ProviderRequestGuard guard,
+                             MarketDataSnapshotRepository snapshots,
+                             MarketDataRefreshRunRepository refreshRuns,
+                             MarketDataSnapshotCodec codec,
+                             QuoteQualityValidator validator,
+                             MarketDataSingleFlight singleFlight,
+                             MarketDataGatewayProperties properties,
+                             @Qualifier("marketDataGatewayExecutor") Executor executor) {
+        this(quoteAdapters, routePolicy, guard, snapshots, refreshRuns, codec, validator,
+                singleFlight, properties, executor, Clock.systemDefaultZone());
+    }
+
+    public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             ProviderRoutePolicy routePolicy,
+                             ProviderRequestGuard guard,
+                             MarketDataSnapshotRepository snapshots,
+                             MarketDataRefreshRunRepository refreshRuns,
+                             MarketDataSnapshotCodec codec,
+                             QuoteQualityValidator validator,
+                             MarketDataSingleFlight singleFlight,
+                             MarketDataGatewayProperties properties,
+                             Executor executor,
+                             Clock clock) {
+        this.quoteAdapters = new ArrayList<QuoteAdapter>(quoteAdapters);
+        this.routePolicy = routePolicy;
+        this.guard = guard;
+        this.snapshots = snapshots;
+        this.refreshRuns = refreshRuns;
+        this.codec = codec;
+        this.validator = validator;
+        this.singleFlight = singleFlight;
+        this.properties = properties;
+        this.executor = executor;
+        this.clock = clock;
+    }
+
+    public QuoteGatewayResult fetchQuotes(String type, List<String> codes, boolean forceRefresh) {
+        String normalizedType = normalizeType(type);
+        MarketDataCapability capability = quoteCapability(normalizedType);
+        List<String> normalizedCodes = normalizeCodes(codes);
+        String flightKey = capability.name() + ":" + String.join(",", normalizedCodes);
+        if (!forceRefresh) {
+            CacheEntry cached = freshCache.get(flightKey);
+            if (cached != null && clock.millis() - cached.createdAtMillis <= properties.getFreshCacheMs()) {
+                return cached.result;
+            }
+        }
+        return singleFlight.execute(flightKey, () -> {
+            QuoteGatewayResult result = routeQuotes(capability, normalizedType, normalizedCodes);
+            if (result.getQualityStatus() != MarketDataQualityStatus.UNAVAILABLE) {
+                freshCache.put(flightKey, new CacheEntry(result, clock.millis()));
+            }
+            return result;
+        });
+    }
+
+    private QuoteGatewayResult routeQuotes(MarketDataCapability capability, String type,
+                                           List<String> codes) {
+        String refreshId = UUID.randomUUID().toString();
+        LocalDateTime startedAt = LocalDateTime.now(clock);
+        Long runId = createAudit(capability, type + ":" + codes.size(), startedAt);
+        List<QuoteAdapter> candidates = new ArrayList<QuoteAdapter>();
+        for (QuoteAdapter adapter : quoteAdapters) {
+            if (adapter.supports(type)) candidates.add(adapter);
+        }
+        List<QuoteAdapter> ordered = routePolicy.order(candidates, capability);
+        List<ProviderAttempt> attempts = fetchWithHedge(ordered, capability, codes);
+        QuoteGatewayResult result = composeResult(
+                capability, type, codes, ordered, attempts, refreshId, startedAt);
+        finishAudit(runId, result, attempts, codes.size());
+        return result;
+    }
+
+    private List<ProviderAttempt> fetchWithHedge(List<QuoteAdapter> ordered,
+                                                 MarketDataCapability capability,
+                                                 List<String> codes) {
+        if (ordered.isEmpty() || codes.isEmpty()) return Collections.emptyList();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(properties.getRequestBudgetMs());
+        List<ProviderAttempt> completed = new ArrayList<ProviderAttempt>();
+        List<PendingAttempt> pending = new ArrayList<PendingAttempt>();
+        int next = 0;
+        pending.add(start(ordered.get(next), next++, capability, codes));
+
+        ProviderAttempt early = await(pending.get(0).future,
+                Math.min(properties.getHedgeDelayMs(), remainingMillis(deadline)));
+        if (early != null) {
+            completed.add(early);
+            pending.clear();
+        }
+        if (!coversAll(completed, codes) && next < ordered.size()) {
+            pending.add(start(ordered.get(next), next++, capability, codes));
+        }
+
+        while (!coversAll(completed, codes) && remainingMillis(deadline) > 0L) {
+            drainCompleted(pending, completed);
+            if (coversAll(completed, codes)) break;
+            if (pending.isEmpty()) {
+                if (next >= ordered.size()) break;
+                pending.add(start(ordered.get(next), next++, capability, codes));
+            }
+            ProviderAttempt done = awaitAny(pending, remainingMillis(deadline));
+            if (done == null) break;
+            drainCompleted(pending, completed);
+            if (!coversAll(completed, codes) && next < ordered.size() && pending.isEmpty()) {
+                pending.add(start(ordered.get(next), next++, capability, codes));
+            }
+        }
+        drainCompleted(pending, completed);
+        return completed;
+    }
+
+    private PendingAttempt start(QuoteAdapter adapter, int order,
+                                 MarketDataCapability capability, List<String> codes) {
+        CompletableFuture<ProviderAttempt> future = CompletableFuture.supplyAsync(
+                () -> fetchProvider(adapter, order, capability, codes), executor);
+        return new PendingAttempt(future);
+    }
+
+    private ProviderAttempt fetchProvider(QuoteAdapter adapter, int order,
+                                          MarketDataCapability capability, List<String> codes) {
+        List<Quote> quotes = new ArrayList<Quote>();
+        List<String> warnings = new ArrayList<String>();
+        LocalDateTime retrievedAt = null;
+        try {
+            int batchSize = Math.max(1, adapter.batchLimit());
+            for (int start = 0; start < codes.size(); start += batchSize) {
+                List<String> batch = new ArrayList<String>(
+                        codes.subList(start, Math.min(codes.size(), start + batchSize)));
+                ProviderResult<List<Quote>> result = guard.execute(adapter, capability,
+                        () -> adapter.fetchResult(batch));
+                if (result.getData() != null) quotes.addAll(result.getData());
+                warnings.addAll(result.getWarnings());
+                if (retrievedAt == null || result.getRetrievedAt().isAfter(retrievedAt)) {
+                    retrievedAt = result.getRetrievedAt();
+                }
+            }
+            return ProviderAttempt.success(adapter, order, quotes,
+                    retrievedAt == null ? LocalDateTime.now(clock) : retrievedAt, warnings);
+        } catch (RuntimeException error) {
+            return ProviderAttempt.failure(adapter, order, error);
+        } catch (Exception error) {
+            return ProviderAttempt.failure(adapter, order, error);
+        }
+    }
+
+    private QuoteGatewayResult composeResult(MarketDataCapability capability, String type,
+                                             List<String> codes, List<QuoteAdapter> ordered,
+                                             List<ProviderAttempt> attempts, String refreshId,
+                                             LocalDateTime startedAt) {
+        Map<String, AcceptedQuote> fresh = acceptedQuotes(attempts, codes);
+        List<Quote> output = new ArrayList<Quote>();
+        Set<String> sources = new LinkedHashSet<String>();
+        List<String> internalWarnings = new ArrayList<String>();
+        int freshCount = 0;
+        int staleCount = 0;
+        int failedCount = 0;
+        boolean usedFallback = false;
+        long maxStaleAge = 0L;
+        String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
+
+        for (String code : codes) {
+            AcceptedQuote accepted = fresh.get(code);
+            if (accepted != null) {
+                Quote quote = accepted.quote;
+                quote.setSourceCode(accepted.provider.providerCode());
+                quote.setRetrievedAt(accepted.retrievedAt);
+                quote.setRefreshId(refreshId);
+                boolean fallback = primaryCode != null && !primaryCode.equals(accepted.provider.providerCode());
+                quote.setQualityStatus(fallback
+                        ? MarketDataQualityStatus.FRESH_FALLBACK : MarketDataQualityStatus.FRESH_PRIMARY);
+                if (fallback) {
+                    quote.setWarning("主数据源响应失败或不完整，已自动切换备用数据源。");
+                    usedFallback = true;
+                }
+                output.add(quote);
+                sources.add(accepted.provider.providerCode());
+                freshCount++;
+                try {
+                    snapshots.upsert(codec.quoteSnapshot(capability, scopeKey(type, code),
+                            accepted.provider.providerCode(), accepted.provider.providerFamily(), quote,
+                            accepted.retrievedAt, LocalDateTime.now(clock)));
+                } catch (RuntimeException error) {
+                    internalWarnings.add("本地兜底快照保存失败");
+                    log.warn("Failed to persist market data snapshot for {}", code, error);
+                }
+                continue;
+            }
+
+            Optional<MarketDataSnapshot> stored = findSnapshot(capability, scopeKey(type, code));
+            Optional<Quote> stale = stored.flatMap(codec::decodeQuote)
+                    .flatMap(quote -> validator.accept(code, quote));
+            if (stale.isPresent()) {
+                MarketDataSnapshot snapshot = stored.get();
+                Quote quote = stale.get();
+                long age = Math.max(0L, Duration.between(snapshot.getRetrievedAt(),
+                        LocalDateTime.now(clock)).getSeconds());
+                quote.setSourceCode(snapshot.getProviderCode());
+                quote.setRetrievedAt(snapshot.getRetrievedAt());
+                quote.setQualityStatus(MarketDataQualityStatus.STALE_FALLBACK);
+                quote.setStaleAgeSeconds(age);
+                quote.setRefreshId(refreshId);
+                quote.setWarning("实时数据源暂不可用，正在显示最近一次成功数据（已过期 " + age + " 秒）。");
+                output.add(quote);
+                sources.add(snapshot.getProviderCode());
+                staleCount++;
+                maxStaleAge = Math.max(maxStaleAge, age);
+            } else {
+                Quote unavailable = new Quote();
+                unavailable.setInstrumentCode(code);
+                unavailable.setValid(false);
+                unavailable.setQualityStatus(MarketDataQualityStatus.UNAVAILABLE);
+                unavailable.setRefreshId(refreshId);
+                unavailable.setWarning("行情刷新失败，且没有可用的历史快照。");
+                unavailable.setNote(unavailable.getWarning());
+                output.add(unavailable);
+                failedCount++;
+            }
+        }
+
+        MarketDataQualityStatus status = aggregate(codes.size(), freshCount, staleCount, usedFallback);
+        String warning = aggregateWarning(status, internalWarnings);
+        LocalDateTime asOf = latestAsOf(output);
+        LocalDateTime retrievedAt = latestRetrievedAt(output, startedAt);
+        return new QuoteGatewayResult(output, status, String.join(",", sources), asOf, retrievedAt,
+                staleCount > 0 ? maxStaleAge : null, warning, refreshId);
+    }
+
+    private Map<String, AcceptedQuote> acceptedQuotes(List<ProviderAttempt> attempts, List<String> codes) {
+        List<ProviderAttempt> orderedAttempts = new ArrayList<ProviderAttempt>(attempts);
+        orderedAttempts.sort(Comparator.comparingInt(value -> value.order));
+        Set<String> requested = new LinkedHashSet<String>(codes);
+        Map<String, AcceptedQuote> accepted = new LinkedHashMap<String, AcceptedQuote>();
+        for (ProviderAttempt attempt : orderedAttempts) {
+            if (attempt.error != null) continue;
+            for (Quote quote : attempt.quotes) {
+                String code = quote == null || quote.getInstrumentCode() == null
+                        ? "" : quote.getInstrumentCode().trim().toUpperCase(Locale.ROOT);
+                if (!requested.contains(code) || accepted.containsKey(code)) continue;
+                validator.accept(code, quote).ifPresent(value -> accepted.put(code,
+                        new AcceptedQuote(value, attempt.provider, attempt.retrievedAt)));
+            }
+        }
+        return accepted;
+    }
+
+    private boolean coversAll(List<ProviderAttempt> attempts, List<String> codes) {
+        return acceptedQuotes(attempts, codes).size() == codes.size();
+    }
+
+    private Optional<MarketDataSnapshot> findSnapshot(MarketDataCapability capability, String scopeKey) {
+        try {
+            return snapshots.find(capability, scopeKey);
+        } catch (RuntimeException error) {
+            log.warn("Failed to read market data snapshot for {}", scopeKey, error);
+            return Optional.empty();
+        }
+    }
+
+    private MarketDataQualityStatus aggregate(int requested, int fresh, int stale, boolean usedFallback) {
+        if (fresh == requested && requested > 0) {
+            return usedFallback ? MarketDataQualityStatus.FRESH_FALLBACK
+                    : MarketDataQualityStatus.FRESH_PRIMARY;
+        }
+        if (fresh > 0) return MarketDataQualityStatus.PARTIAL_FRESH;
+        if (stale > 0) return MarketDataQualityStatus.STALE_FALLBACK;
+        return MarketDataQualityStatus.UNAVAILABLE;
+    }
+
+    private String aggregateWarning(MarketDataQualityStatus status, List<String> internalWarnings) {
+        String warning;
+        switch (status) {
+            case FRESH_FALLBACK:
+                warning = "主数据源响应失败或不完整，系统已自动切换备用数据源。";
+                break;
+            case PARTIAL_FRESH:
+                warning = "本次刷新仅部分成功，缺失标的已尽可能使用最近成功数据补齐。";
+                break;
+            case STALE_FALLBACK:
+                warning = "实时数据源暂不可用，当前显示最近一次成功数据。";
+                break;
+            case UNAVAILABLE:
+                warning = "行情刷新失败，当前没有可用数据。";
+                break;
+            default:
+                warning = null;
+        }
+        if (!internalWarnings.isEmpty()) {
+            String detail = String.join("；", new LinkedHashSet<String>(internalWarnings));
+            warning = warning == null ? detail : warning + " " + detail + "。";
+        }
+        return warning;
+    }
+
+    private Long createAudit(MarketDataCapability capability, String scope, LocalDateTime startedAt) {
+        try {
+            return refreshRuns.create(capability, scope, "MANUAL", startedAt);
+        } catch (RuntimeException error) {
+            log.warn("Failed to create market data refresh audit", error);
+            return null;
+        }
+    }
+
+    private void finishAudit(Long runId, QuoteGatewayResult result,
+                             List<ProviderAttempt> attempts, int requestedCount) {
+        if (runId == null) return;
+        int fresh = 0;
+        int stale = 0;
+        int failed = 0;
+        for (Quote quote : result.getQuotes()) {
+            if (quote.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK) stale++;
+            else if (quote.getQualityStatus() == MarketDataQualityStatus.UNAVAILABLE) failed++;
+            else fresh++;
+        }
+        Set<String> selected = new LinkedHashSet<String>();
+        for (ProviderAttempt attempt : attempts) selected.add(attempt.provider.providerCode());
+        try {
+            refreshRuns.finish(runId, result.getQualityStatus().name(), requestedCount, fresh, stale, failed,
+                    String.join(",", selected), result.getWarning(), LocalDateTime.now(clock));
+        } catch (RuntimeException error) {
+            log.warn("Failed to finish market data refresh audit {}", runId, error);
+        }
+    }
+
+    private ProviderAttempt await(CompletableFuture<ProviderAttempt> future, long timeoutMillis) {
+        if (timeoutMillis <= 0L) return null;
+        try {
+            return future.get(timeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException error) {
+            return null;
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    private ProviderAttempt awaitAny(List<PendingAttempt> pending, long timeoutMillis) {
+        if (pending.isEmpty() || timeoutMillis <= 0L) return null;
+        CompletableFuture<?>[] values = pending.stream()
+                .map(value -> value.future).toArray(CompletableFuture[]::new);
+        try {
+            return (ProviderAttempt) CompletableFuture.anyOf(values)
+                    .get(timeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    private void drainCompleted(List<PendingAttempt> pending, List<ProviderAttempt> completed) {
+        Iterator<PendingAttempt> iterator = pending.iterator();
+        while (iterator.hasNext()) {
+            PendingAttempt value = iterator.next();
+            if (value.future.isDone()) {
+                ProviderAttempt attempt = value.future.getNow(null);
+                if (attempt != null) completed.add(attempt);
+                iterator.remove();
+            }
+        }
+    }
+
+    private long remainingMillis(long deadlineNanos) {
+        return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+    }
+
+    private String normalizeType(String type) {
+        if (type == null || type.trim().isEmpty()) {
+            throw new IllegalArgumentException("instrument type is required");
+        }
+        return type.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private List<String> normalizeCodes(List<String> codes) {
+        if (codes == null) return Collections.emptyList();
+        Set<String> normalized = new LinkedHashSet<String>();
+        for (String code : codes) {
+            if (code != null && !code.trim().isEmpty()) {
+                normalized.add(code.trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        return new ArrayList<String>(normalized);
+    }
+
+    private MarketDataCapability quoteCapability(String type) {
+        switch (type) {
+            case "STOCK": return MarketDataCapability.REALTIME_STOCK_QUOTE;
+            case "INDEX": return MarketDataCapability.REALTIME_INDEX_QUOTE;
+            case "FUND": return MarketDataCapability.REALTIME_FUND_ESTIMATE;
+            case "SECTOR": return MarketDataCapability.REALTIME_SECTOR_QUOTE;
+            default: throw new IllegalArgumentException("unsupported instrument type: " + type);
+        }
+    }
+
+    private String scopeKey(String type, String code) { return type + ":" + code; }
+
+    private LocalDateTime latestAsOf(List<Quote> quotes) {
+        LocalDateTime latest = null;
+        for (Quote quote : quotes) {
+            if (quote.getAsOf() != null && (latest == null || quote.getAsOf().isAfter(latest))) {
+                latest = quote.getAsOf();
+            }
+        }
+        return latest;
+    }
+
+    private LocalDateTime latestRetrievedAt(List<Quote> quotes, LocalDateTime fallback) {
+        LocalDateTime latest = null;
+        for (Quote quote : quotes) {
+            if (quote.getRetrievedAt() != null
+                    && (latest == null || quote.getRetrievedAt().isAfter(latest))) {
+                latest = quote.getRetrievedAt();
+            }
+        }
+        return latest == null ? fallback : latest;
+    }
+
+    private static final class PendingAttempt {
+        private final CompletableFuture<ProviderAttempt> future;
+        private PendingAttempt(CompletableFuture<ProviderAttempt> future) { this.future = future; }
+    }
+
+    private static final class ProviderAttempt {
+        private final QuoteAdapter provider;
+        private final int order;
+        private final List<Quote> quotes;
+        private final LocalDateTime retrievedAt;
+        private final List<String> warnings;
+        private final Throwable error;
+
+        private ProviderAttempt(QuoteAdapter provider, int order, List<Quote> quotes,
+                                LocalDateTime retrievedAt, List<String> warnings, Throwable error) {
+            this.provider = provider;
+            this.order = order;
+            this.quotes = quotes;
+            this.retrievedAt = retrievedAt;
+            this.warnings = warnings;
+            this.error = error;
+        }
+
+        static ProviderAttempt success(QuoteAdapter provider, int order, List<Quote> quotes,
+                                       LocalDateTime retrievedAt, List<String> warnings) {
+            return new ProviderAttempt(provider, order, quotes, retrievedAt, warnings, null);
+        }
+
+        static ProviderAttempt failure(QuoteAdapter provider, int order, Throwable error) {
+            return new ProviderAttempt(provider, order, Collections.<Quote>emptyList(),
+                    null, Collections.<String>emptyList(), error);
+        }
+    }
+
+    private static final class AcceptedQuote {
+        private final Quote quote;
+        private final QuoteAdapter provider;
+        private final LocalDateTime retrievedAt;
+
+        private AcceptedQuote(Quote quote, QuoteAdapter provider, LocalDateTime retrievedAt) {
+            this.quote = quote;
+            this.provider = provider;
+            this.retrievedAt = retrievedAt;
+        }
+    }
+
+    private static final class CacheEntry {
+        private final QuoteGatewayResult result;
+        private final long createdAtMillis;
+        private CacheEntry(QuoteGatewayResult result, long createdAtMillis) {
+            this.result = result;
+            this.createdAtMillis = createdAtMillis;
+        }
+    }
+}

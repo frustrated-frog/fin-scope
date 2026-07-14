@@ -81,6 +81,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "marketDataGatewayExecutor")
+    public Executor marketDataGatewayExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("market-data-gateway-");
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(32);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "attributionTaskExecutor")
     public Executor attributionTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
