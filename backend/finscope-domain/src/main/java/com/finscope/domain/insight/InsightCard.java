@@ -1,9 +1,12 @@
 package com.finscope.domain.insight;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Data
 public class InsightCard {
     private Long id;
     private Long articleId;
@@ -38,217 +41,7 @@ public class InsightCard {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    public Long getId() {
-        return id;
-    }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getArticleId() {
-        return articleId;
-    }
-
-    public void setArticleId(Long articleId) {
-        this.articleId = articleId;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public String getSourceName() {
-        return sourceName;
-    }
-
-    public void setSourceName(String sourceName) {
-        this.sourceName = sourceName;
-    }
-
-    public String getSourceUrl() {
-        return sourceUrl;
-    }
-
-    public void setSourceUrl(String sourceUrl) {
-        this.sourceUrl = sourceUrl;
-    }
-
-    public LocalDateTime getPublishedAt() {
-        return publishedAt;
-    }
-
-    public void setPublishedAt(LocalDateTime publishedAt) {
-        this.publishedAt = publishedAt;
-    }
-
-    public String getOneSentenceSummary() {
-        return oneSentenceSummary;
-    }
-
-    public void setOneSentenceSummary(String oneSentenceSummary) {
-        this.oneSentenceSummary = oneSentenceSummary;
-    }
-
-    public String getCoreEvent() {
-        return coreEvent;
-    }
-
-    public void setCoreEvent(String coreEvent) {
-        this.coreEvent = coreEvent;
-    }
-
-    public String getImportance() {
-        return importance;
-    }
-
-    public void setImportance(String importance) {
-        this.importance = importance;
-    }
-
-    public String getImpactTargets() {
-        return impactTargets;
-    }
-
-    public void setImpactTargets(String impactTargets) {
-        this.impactTargets = impactTargets;
-    }
-
-    public String getNoveltyType() {
-        return noveltyType;
-    }
-
-    public void setNoveltyType(String noveltyType) {
-        this.noveltyType = noveltyType;
-    }
-
-    public String getNoveltyReason() {
-        return noveltyReason;
-    }
-
-    public void setNoveltyReason(String noveltyReason) {
-        this.noveltyReason = noveltyReason;
-    }
-
-    public String getFollowUpQuestions() {
-        return followUpQuestions;
-    }
-
-    public void setFollowUpQuestions(String followUpQuestions) {
-        this.followUpQuestions = followUpQuestions;
-    }
-
-    public String getCardMarkdown() {
-        return cardMarkdown;
-    }
-
-    public void setCardMarkdown(String cardMarkdown) {
-        this.cardMarkdown = cardMarkdown;
-    }
-
-    public String getBackground() {
-        return background;
-    }
-
-    public void setBackground(String background) {
-        this.background = background;
-    }
-
-    public String getKeyData() {
-        return keyData;
-    }
-
-    public void setKeyData(String keyData) {
-        this.keyData = keyData;
-    }
-
-    public String getTimeline() {
-        return timeline;
-    }
-
-    public void setTimeline(String timeline) {
-        this.timeline = timeline;
-    }
-
-    public String getRelatedParties() {
-        return relatedParties;
-    }
-
-    public void setRelatedParties(String relatedParties) {
-        this.relatedParties = relatedParties;
-    }
-
-    public String getRiskFactors() {
-        return riskFactors;
-    }
-
-    public void setRiskFactors(String riskFactors) {
-        this.riskFactors = riskFactors;
-    }
-
-    public String getFutureOutlook() {
-        return futureOutlook;
-    }
-
-    public void setFutureOutlook(String futureOutlook) {
-        this.futureOutlook = futureOutlook;
-    }
-
-    public String getImpactOnInvestment() {
-        return impactOnInvestment;
-    }
-
-    public void setImpactOnInvestment(String impactOnInvestment) {
-        this.impactOnInvestment = impactOnInvestment;
-    }
-
-    public String getImpactOnStartup() {
-        return impactOnStartup;
-    }
-
-    public void setImpactOnStartup(String impactOnStartup) {
-        this.impactOnStartup = impactOnStartup;
-    }
-
-    public String getProfessionalInsight() {
-        return professionalInsight;
-    }
-
-    public void setProfessionalInsight(String professionalInsight) {
-        this.professionalInsight = professionalInsight;
-    }
-
-    public String getFacts() {
-        return facts;
-    }
-
-    public void setFacts(String facts) {
-        this.facts = facts;
-    }
-
-    public String getReasoning() {
-        return reasoning;
-    }
-
-    public void setReasoning(String reasoning) {
-        this.reasoning = reasoning;
-    }
-
-    public String getOpinions() {
-        return opinions;
-    }
-
-    public void setOpinions(String opinions) {
-        this.opinions = opinions;
-    }
-
-    public List<InsightSection> getAnalysisSections() {
-        return analysisSections;
-    }
 
     public void setAnalysisSections(List<InsightSection> analysisSections) {
         this.analysisSections = analysisSections == null
@@ -256,19 +49,4 @@ public class InsightCard {
                 : new ArrayList<InsightSection>(analysisSections);
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }
