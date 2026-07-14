@@ -37,9 +37,7 @@ public class WatchlistController {
      */
     @GetMapping
     public List<WatchlistItemResponse> list(@RequestParam(defaultValue = "false") boolean refresh) {
-        List<WatchlistItemView> views = refresh
-                ? watchlistService.listWithQuotes(true)
-                : watchlistService.listWithQuotes();
+        List<WatchlistItemView> views = watchlistService.listInvestmentItemsWithQuotes(refresh);
         return views.stream().map(WatchlistItemResponse::of).collect(Collectors.toList());
     }
 
@@ -52,7 +50,7 @@ public class WatchlistController {
     @PostMapping
     public WatchlistItem add(@RequestBody AddWatchlistItemRequest request) {
         log.info("添加自选 code={} type={}", request.getCode(), request.getType());
-        return watchlistService.add(request.getCode(), request.getType(), request.getGroupName());
+        return watchlistService.addInvestment(request.getCode(), request.getType(), request.getGroupName());
     }
 
     /**
@@ -63,7 +61,7 @@ public class WatchlistController {
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> remove(@PathVariable Long id) {
-        watchlistService.remove(id);
+        watchlistService.removeInvestment(id);
         return ResponseEntity.noContent().build();
     }
 
