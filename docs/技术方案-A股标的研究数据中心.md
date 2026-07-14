@@ -18,6 +18,7 @@
 6. **允许部分成功**：刷新运行与每个维度都有独立状态；资金流失败不影响龙虎榜或解禁查询。
 7. **不静默降级**：备用源、过期缓存、字段缺失和口径冲突都写入运行记录并传给前端。
 8. **Agent 不直连第三方数据源**：Agent 只通过受控服务读取已保存快照或明确的刷新工具，所有输入有来源、时间、质量与指纹。
+9. **资金行为优先但不做暗盘推断**：第一阶段优先保存大笔资金、成交金额、换手率和时间线；不根据公开聚合数据推断拆单、隐藏账户或所谓暗盘资金。
 
 ## 3. 现有基础与复用边界
 
@@ -80,6 +81,7 @@ com.finscope.domain.marketintel
   MarketIntelRefreshStep
   ProviderMetadata
   CapitalFlowSnapshot
+  CapitalBehaviorSignal
   DragonTigerRecord
   DragonTigerSeat
   LockupEvent
@@ -157,6 +159,7 @@ com.finscope.service.marketintel
 com.finscope.dao.marketintel
   MarketIntelRefreshRunRepository
   CapitalFlowRepository
+  CapitalBehaviorSignalRepository
   DragonTigerRepository
   LockupRepository
   InstrumentClassificationRepository
@@ -179,7 +182,9 @@ frontend/src/features/market-intel/*
 
 | 能力 | 主源候选 | 备用/补充候选 | 首期决策 |
 | --- | --- | --- | --- |
-| 个股资金流 | 东财 push2/push2his | 暂无 | 第一阶段实现 |
+| 大笔资金分档 | 东财 push2/push2his 资金流 | 暂无 | 第一阶段最高优先级；保存平台口径 |
+| 成交价格/金额/量 | 东财行情与分钟 K 线 | 现有 `QuoteService` 仅补摘要 | 与资金时间线按业务时间对齐 |
+| 换手率/量比 | 东财行情快照 | 现有报价字段 | 不构造上游未提供的分钟换手率 |
 | 龙虎榜 | 东财 datacenter | 后续评估一手披露 | 第一阶段实现 |
 | 限售解禁 | 东财 datacenter | 公司/交易所公告作事件印证 | 第一阶段实现 |
 | 行业表现 | 东财 push2 | 现有板块行情 | 第一阶段实现 |
@@ -200,6 +205,7 @@ frontend/src/features/market-intel/*
 3. 主源网络错误、结构错误或数据空结果的含义分开；“未上龙虎榜”是成功空集，不是数据源失败。
 4. 使用备用源时设置 `fallbackUsed=true` 和 `fallbackReason`。
 5. 不同数据源口径冲突时不自动拼成单一值；保留主源结果并生成 `PROVIDER_CONFLICT` 告警。
+6. 资金流和行情来自不同响应时，按交易所时区与显式容差对齐；超出容差的记录分开保存并产生质量告警。
 
 ## 7. 统一 HTTP 与外部访问治理
 
@@ -298,22 +304,33 @@ UNIQUE(run_id, dimension, provider_code, attempt)
 ### 8.3 首批业务表
 
 1. `market_capital_flow_snapshot`
-   - 时间点/交易日、主力、超大单、大单、中单、小单净流入；
+   - `granularity`：`MINUTE_1/MINUTE_5/DAY`，其中 5 分钟记录由本地基于 1 分钟记录确定性聚合；
+   - 时间点/交易日、价格、成交量、区间/累计成交金额、换手率和量比；
+   - 主力、超大单、大单、中单、小单的流入、流出、净流入及净流入成交额占比；
+   - 上游未提供的流入/流出字段保存为 `NULL`，不根据净额反向构造；
+   - `observed_at` 必填；日线使用对应交易日的市场收盘时间，避免 SQLite 的 `NULL` 唯一约束产生重复记录；
+   - 本地 5 分钟记录保存输入指纹和聚合算法版本，区间成交金额与累计成交金额不得混用；
    - 唯一约束：`instrument_id + provider_code + data_date + observed_at + payload_hash`。
 
-2. `market_dragon_tiger_record`
+2. `market_capital_behavior_signal`
+   - 类型包括 `AMOUNT_EXPANSION_WITH_OUTFLOW`、`LOW_AMOUNT_INFLOW`、`PRICE_FLOW_DIVERGENCE`、`LATE_SESSION_FLOW_SHIFT`；
+   - 保存观察窗口、输入记录 ID、阈值、实际值、`algorithm_version` 和生成时间；
+   - 信号只描述可复算现象，不含 bullish/bearish、吸筹、出货或暗盘语义；
+   - 唯一约束：`instrument_id + signal_type + window_start + window_end + algorithm_version + input_hash`。
+
+3. `market_dragon_tiger_record`
    - 上榜日期、原因、成交额、买入、卖出、净买入、换手率；
    - 唯一约束：`instrument_id + provider_code + trade_date + reason_code/explanation`。
 
-3. `market_dragon_tiger_seat`
+4. `market_dragon_tiger_seat`
    - `record_id`、席位名称、席位代码、买入、卖出、净额、方向、排名、机构标记；
    - 外键 `record_id` 使用 `ON DELETE RESTRICT`，不覆盖历史记录。
 
-4. `market_lockup_event`
+5. `market_lockup_event`
    - 解禁日期、类型、股数、占总股本/流通股比例、当前状态；
    - 唯一约束：`instrument_id + provider_code + effective_date + lockup_type + external_id`。
 
-5. `instrument_classification`
+6. `instrument_classification`
    - 类型 `INDUSTRY/CONCEPT/REGION`、名称、外部代码、生效日期和当日表现；
    - 用快照记录变化，不直接覆盖 `Instrument.sectorCode/chainTags`。
 
@@ -385,6 +402,7 @@ POST refresh
 | --- | --- | --- |
 | 资金流实时快照 | 15 分钟 | 当交易日收盘后稳定 |
 | 资金流日线 | 1 交易日 | 1 交易日 |
+| 成交金额/换手率摘要 | 与资金流实时快照一致 | 当交易日收盘后稳定 |
 | 龙虎榜 | 当日收盘前可标记未完整 | 1 交易日 |
 | 解禁日历 | 24 小时 | 24 小时 |
 | 行业表现 | 15 分钟 | 当交易日收盘后稳定 |
@@ -401,6 +419,9 @@ TTL 是前端与服务的时效标识，不是删除数据的生命周期。
 - 标的代码与请求标的一致；
 - 日期可解析且不超过合理的未来边界；
 - 金额和比例字段可解析，单位转换明确；
+- 资金流与行情时间点使用同一交易所时区；无法在容差窗口内对齐时保留各自记录并生成 `TIMELINE_ALIGNMENT_GAP`，不强行拼接；
+- `主力净流入占比 = 主力净流入 / 同口径同窗口成交金额` 的分母必须大于零，并保存计算版本；
+- 1 分钟到 5 分钟只对区间成交金额与资金净流入求和，累计成交金额取窗口末值，价格字段按明确的 OHLC/末值规则聚合；
 - 响应核心字段不存在时返回 `SCHEMA_DRIFT`；
 - 返回数据业务日期与 `asOfDate` 的关系可说明；
 - 空数组、数据空对象和请求失败分类处理；
@@ -475,7 +496,7 @@ newsType
 ```text
 GET /api/market-intel/instruments
 GET /api/market-intel/instruments/{instrumentId}/overview
-GET /api/market-intel/instruments/{instrumentId}/capital-flows
+GET /api/market-intel/instruments/{instrumentId}/capital-behavior?range=20d&granularity=5m
 GET /api/market-intel/instruments/{instrumentId}/dragon-tiger
 GET /api/market-intel/instruments/{instrumentId}/lockups
 GET /api/market-intel/instruments/{instrumentId}/classifications
@@ -486,6 +507,8 @@ GET /api/market-intel/refresh-runs/{runId}
 ```
 
 `overview` 返回页面首屏所需的已保存摘要、每个维度的健康状态和最后刷新时间，不在 GET 请求中隐式访问外部网络。
+
+`capital-behavior` 返回 `summary`、`intradayTimeline`、`multiDayTrend`、`signals` 和 `health`。一分钟记录是保存的规范化数据，五分钟记录由服务端按版本化规则聚合；前端不自行重算资金指标。
 
 ### 13.2 命令
 
@@ -533,7 +556,11 @@ MarketIntelView
   InstrumentResearchSelector
   MarketIntelHealthBar
   MarketIntelRefreshProgress
-  CapitalFlowPanel
+  CapitalBehaviorPanel
+    CapitalBehaviorSummary
+    IntradayCapitalTimeline
+    MultiDayCapitalTrend
+    CapitalBehaviorSignals
   DragonTigerPanel
   LockupPanel
   ClassificationPanel
@@ -601,12 +628,17 @@ finscope.market-intel.providers.baidu.enabled=true
 - 同标的重复刷新返回同一活跃 run；
 - 外部请求失败不回滚其他已完成维度；
 - 快照去重、指纹和时效判断正确；
+- 1 分钟到 5 分钟聚合对成交金额和资金净额求和，价格按约定规则取值；
+- 跨来源时间点在容差内正确对齐，超出容差产生 `TIMELINE_ALIGNMENT_GAP`；
+- 5/10/20 日窗口、连续流入/流出天数和净流入成交额占比可由固定样本复算；
+- 客观异常标签在相同输入和算法版本下结果稳定，不生成暗盘、吸筹或出货语义；
 - `pointInTimeSafe=false` 的数据不能被量化数据集服务直接消费。
 
 ### 18.3 Repository 测试
 
 - 唯一约束与幂等插入；
 - 按 instrument/asOf 查询不返回未来记录；
+- 资金时间线与异常标签保持输入记录引用和算法版本；
 - 龙虎榜主记录和席位关系完整；
 - Article 关联的确认、拒绝和重新评估不删除文章；
 - 服务重启恢复未完成运行状态。
@@ -616,6 +648,7 @@ finscope.market-intel.providers.baidu.enabled=true
 - overview 不隐式访问外部网络；
 - refresh 返回 202 和可查询 run；
 - 部分成功、过期、空集和不支持状态正确展示；
+- 资金摘要、1/5 分钟切换、5/10/20 日趋势与异常标签展示正确；
 - 切换标的不残留上一标的数据；
 - 刷新期间页面重载可恢复运行进度；
 - 键盘操作、窄屏和非颜色状态提示可用。
@@ -626,10 +659,12 @@ finscope.market-intel.providers.baidu.enabled=true
 
 1. 增加 `marketintel` 领域对象、SchemaMigrator 和 Repository。
 2. 实现 `FinanceHttpClient`、限流器、基础 ProviderResult 和错误分类。
-3. 实现东财资金流、龙虎榜、解禁、行业排名以及一个概念/行业归属 Provider。
-4. 实现刷新 run/step、查询 Service、REST API 和重启失败恢复。
-5. 增加 Market Intel Tab、选择器、健康条、刷新进度和四类主面板。
-6. 完成 fixture、Repository、Service、Controller、前端测试和构建。
+3. 首先实现东财资金流与行情上下文合并：成交金额、换手率、量比、1/5 分钟时间线和 5/10/20 日趋势。
+4. 实现版本化的客观资金异常标签，明确排除暗盘、拆单、吸筹和出货推断。
+5. 实现龙虎榜、解禁、行业排名以及一个概念/行业归属 Provider。
+6. 实现刷新 run/step、查询 Service、REST API 和重启失败恢复。
+7. 增加 Market Intel Tab、选择器、健康条、刷新进度和四类主面板，资金行为面板默认位于首屏。
+8. 完成 fixture、时间对齐/聚合、Repository、Service、Controller、前端测试和构建。
 
 ### 19.2 第二阶段：新闻公告与文章链路
 
