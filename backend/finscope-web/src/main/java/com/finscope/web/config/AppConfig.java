@@ -113,4 +113,26 @@ public class AppConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "marketIntelRefreshExecutor")
+    public Executor marketIntelRefreshExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("market-intel-refresh-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(20);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "marketIntelAgentExecutor")
+    public Executor marketIntelAgentExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("market-intel-agent-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(20);
+        executor.initialize();
+        return executor;
+    }
 }

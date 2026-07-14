@@ -12,6 +12,7 @@ public class FinScopeProperties {
     private String corsOrigin = "http://localhost:*";
     private LlmProperties llm = new LlmProperties();
     private SearchProperties search = new SearchProperties();
+    private MarketIntelProperties marketIntel = new MarketIntelProperties();
 
     @Data
     public static class LlmProperties {
@@ -28,5 +29,18 @@ public class FinScopeProperties {
         private boolean enabled = false;
         private String provider = "tavily";
         private String apiKey = "";
+    }
+
+    @Data
+    public static class MarketIntelProperties {
+        private boolean enabled = true;
+        private int connectTimeoutMs = 5000;
+        private int readTimeoutMs = 10000;
+        private int maxResponseBytes = 2097152;
+        private int eastmoneyMinIntervalMs = 1000;
+        private String ruleVersion = "capital-rules-v1";
+        private boolean agentEnabled = true;
+        private int agentTimeoutMs = 15000;
+        private String promptVersion = "capital-interpret-v1";
     }
 }
