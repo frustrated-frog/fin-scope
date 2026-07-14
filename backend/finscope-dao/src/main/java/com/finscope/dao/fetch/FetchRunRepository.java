@@ -18,6 +18,7 @@ import java.util.List;
 public class FetchRunRepository {
     @Resource
     private JdbcTemplate jdbcTemplate;
+
     private final RowMapper<FetchRun> mapper = (rs, rowNum) -> {
         FetchRun run = new FetchRun();
         run.setId(rs.getLong("id"));
