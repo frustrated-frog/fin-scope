@@ -26,6 +26,21 @@ class ProviderRequestGuardTest {
     }
 
     @Test
+    void retriesOneConnectionFailure() {
+        AtomicInteger calls = new AtomicInteger();
+        ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                millis -> { }, Duration.ZERO, 1, 3, Duration.ofSeconds(60));
+
+        String result = guard.execute("EASTMONEY", () -> {
+            if (calls.getAndIncrement() == 0) throw new java.net.SocketException("unexpected end of file");
+            return "ok";
+        });
+
+        assertEquals("ok", result);
+        assertEquals(2, calls.get());
+    }
+
+    @Test
     void opensCircuitAfterThreeRetryableOperationsFail() {
         ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 millis -> { }, Duration.ZERO, 0, 3, Duration.ofSeconds(60));

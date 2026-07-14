@@ -17,7 +17,7 @@ public class ProviderRequestGuard {
     private final int maxRetries; private final int failureThreshold; private final Duration openDuration;
     private final Map<String,State> states=new HashMap<String,State>();
 
-    public ProviderRequestGuard(){this(Clock.systemUTC(),Thread::sleep,Duration.ofSeconds(1),1,3,Duration.ofSeconds(60));}
+    public ProviderRequestGuard(){this(Clock.systemUTC(),Thread::sleep,Duration.ofSeconds(1),2,3,Duration.ofSeconds(60));}
     public ProviderRequestGuard(Clock clock,Sleeper sleeper,Duration minInterval,int maxRetries,int failureThreshold,Duration openDuration){
         this.clock=clock;this.sleeper=sleeper;this.minInterval=minInterval;this.maxRetries=maxRetries;
         this.failureThreshold=failureThreshold;this.openDuration=openDuration;
@@ -33,6 +33,7 @@ public class ProviderRequestGuard {
                 if(attempt<maxRetries)continue;
                 state.consecutiveFailures++;if(state.consecutiveFailures>=failureThreshold)state.openUntil=clock.instant().plus(openDuration);throw e;
             }catch(Exception e){
+                if(attempt<maxRetries)continue;
                 state.consecutiveFailures++;if(state.consecutiveFailures>=failureThreshold)state.openUntil=clock.instant().plus(openDuration);
                 throw new ProviderContractException("CONNECTION_ERROR",e.getMessage(),true,e);
             }

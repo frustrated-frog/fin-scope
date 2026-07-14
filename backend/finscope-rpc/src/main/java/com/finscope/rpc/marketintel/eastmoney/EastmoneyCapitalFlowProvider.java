@@ -32,6 +32,7 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     private static final String REALTIME_HOST = "https://push2.eastmoney.com/api/qt/stock/";
     private static final String HISTORY_HOST = "https://push2his.eastmoney.com/api/qt/stock/";
     private static final String EASTMONEY_UT = "7eea3edcaed734bea9cbfc24409ed989";
+    private static final String FUND_FLOW_UT = "b2884a393a59ad64002292a3e90d46a5";
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
@@ -144,7 +145,8 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     }
 
     private FinanceHttpResponse getDailyFundFlow(String secid) throws Exception {
-        return request(HISTORY_HOST, "fflow/daykline/get", "secid=" + secid + "&lmt=20&klt=101&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57");
+        return request(HISTORY_HOST, "fflow/daykline/get", "secid=" + secid + "&lmt=20&klt=101&fields1=f1,f2,f3,f7"
+                + "&fields2=f51,f52,f53,f54,f55,f56,f57&ut=" + FUND_FLOW_UT);
     }
 
     private FinanceHttpResponse getQuote(String secid) throws Exception {
@@ -156,8 +158,9 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     }
 
     private FinanceHttpResponse getDailyMarket(String secid) throws Exception {
-        return request(HISTORY_HOST, "kline/get", "secid=" + secid + "&beg=0&end=20500000&klt=101&fqt=1&ut=" + EASTMONEY_UT
-                + "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61");
+        return request(HISTORY_HOST, "kline/get", "fields1=f1,f2,f3,f4,f5,f6"
+                + "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116"
+                + "&ut=" + EASTMONEY_UT + "&klt=101&fqt=1&secid=" + secid + "&lmt=21&end=20500101");
     }
 
     private FinanceHttpResponse request(String host, String path, String query) throws Exception {
@@ -201,7 +204,7 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
                     mergeProvenance(point, context);
                 } else {
                     point.setQualityStatus("PARTIAL");
-                    addWarningOnce(warnings, "TIMELINE_ALIGNMENT_GAP");
+                    if (!market.isEmpty()) addWarningOnce(warnings, "TIMELINE_ALIGNMENT_GAP");
                 }
                 result.add(point);
                 if (!daily) { previousCumulativeFlow = rawFlow; previousDate = observed.toLocalDate(); }
