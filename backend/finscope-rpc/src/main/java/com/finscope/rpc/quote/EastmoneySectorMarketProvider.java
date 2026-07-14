@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.SectorMarketSnapshot;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /** 东方财富行业与概念板块完整目录适配器。 */
@@ -33,6 +36,8 @@ public class EastmoneySectorMarketProvider implements SectorMarketProvider {
 
     private final FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
+    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
+            MarketDataCapability.SECTOR_CATALOG);
 
     @Autowired
     public EastmoneySectorMarketProvider(FinanceHttpClient http) {
@@ -41,8 +46,26 @@ public class EastmoneySectorMarketProvider implements SectorMarketProvider {
 
     @Override
     public String providerCode() {
-        return "EASTMONEY";
+        return "EASTMONEY_SECTOR_CATALOG";
     }
+
+    @Override
+    public String providerFamily() { return "EASTMONEY"; }
+
+    @Override
+    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+
+    @Override
+    public int priority() { return 10; }
+
+    @Override
+    public int batchLimit() { return 1; }
+
+    @Override
+    public Duration minimumInterval() { return Duration.ofMillis(800); }
+
+    @Override
+    public Duration timeout() { return Duration.ofSeconds(10); }
 
     @Override
     public boolean supports(SectorCategory category) {

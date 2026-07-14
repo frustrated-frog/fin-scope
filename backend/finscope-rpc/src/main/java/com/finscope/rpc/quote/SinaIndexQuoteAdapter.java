@@ -1,6 +1,7 @@
 package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
@@ -10,8 +11,11 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.time.Duration;
 
 /**
  * 新浪财经指数行情适配器。
@@ -23,6 +27,29 @@ public class SinaIndexQuoteAdapter implements QuoteAdapter {
     private static final String BASE_URL = "https://hq.sinajs.cn/list=";
     private static final Charset GBK = Charset.forName("GBK");
     private static final int TIMEOUT_MS = 8000;
+    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
+            MarketDataCapability.REALTIME_INDEX_QUOTE);
+
+    @Override
+    public String providerCode() { return "SINA_INDEX"; }
+
+    @Override
+    public String providerFamily() { return "SINA"; }
+
+    @Override
+    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+
+    @Override
+    public int priority() { return 20; }
+
+    @Override
+    public int batchLimit() { return 100; }
+
+    @Override
+    public Duration minimumInterval() { return Duration.ofMillis(200); }
+
+    @Override
+    public Duration timeout() { return Duration.ofMillis(TIMEOUT_MS); }
 
     @Override
     public boolean supports(String instrumentType) {

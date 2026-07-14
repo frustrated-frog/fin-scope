@@ -28,7 +28,7 @@ class EastmoneySectorMarketProviderTest {
 
         SectorMarketSnapshot snapshot = provider.fetch(SectorCategory.INDUSTRY);
 
-        assertEquals("EASTMONEY", snapshot.getProviderCode());
+        assertEquals("EASTMONEY_SECTOR_CATALOG", snapshot.getProviderCode());
         assertEquals(SectorCategory.INDUSTRY, snapshot.getCategory());
         assertEquals("fixture-hash", snapshot.getPayloadFingerprint());
         assertEquals(2, snapshot.getEntries().size());

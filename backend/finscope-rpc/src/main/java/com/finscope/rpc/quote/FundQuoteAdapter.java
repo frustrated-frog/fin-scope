@@ -3,6 +3,7 @@ package com.finscope.rpc.quote;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 
@@ -14,8 +15,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -30,9 +34,32 @@ public class FundQuoteAdapter implements QuoteAdapter {
     private static final String BASE_URL = "https://fundgz.1234567.com.cn/js/";
     private static final String NAV_HISTORY_URL = "https://fund.eastmoney.com/pingzhongdata/";
     private static final int TIMEOUT_MS = 8000;
+    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
+            MarketDataCapability.REALTIME_FUND_ESTIMATE);
     private final ObjectMapper objectMapper = new ObjectMapper();
     @Resource(name = "quoteTaskExecutor")
     private Executor quoteTaskExecutor;
+
+    @Override
+    public String providerCode() { return "EASTMONEY_FUND_ESTIMATE"; }
+
+    @Override
+    public String providerFamily() { return "EASTMONEY"; }
+
+    @Override
+    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+
+    @Override
+    public int priority() { return 10; }
+
+    @Override
+    public int batchLimit() { return 50; }
+
+    @Override
+    public Duration minimumInterval() { return Duration.ofMillis(100); }
+
+    @Override
+    public Duration timeout() { return Duration.ofMillis(TIMEOUT_MS); }
 
     @Override
     public boolean supports(String instrumentType) {

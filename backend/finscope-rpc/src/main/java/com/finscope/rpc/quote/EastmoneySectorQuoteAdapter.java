@@ -3,6 +3,7 @@ package com.finscope.rpc.quote;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -12,9 +13,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -24,9 +28,32 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
     private static final String BASE_URL = "https://push2.eastmoney.com/api/qt/stock/get?secid=90.";
     private static final String FIELDS = "&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f170";
     private static final int TIMEOUT_MS = 8000;
+    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
+            MarketDataCapability.REALTIME_SECTOR_QUOTE);
     private final ObjectMapper objectMapper = new ObjectMapper();
     @Resource(name = "quoteTaskExecutor")
     private Executor quoteTaskExecutor;
+
+    @Override
+    public String providerCode() { return "EASTMONEY_SECTOR_QUOTE"; }
+
+    @Override
+    public String providerFamily() { return "EASTMONEY"; }
+
+    @Override
+    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+
+    @Override
+    public int priority() { return 10; }
+
+    @Override
+    public int batchLimit() { return 50; }
+
+    @Override
+    public Duration minimumInterval() { return Duration.ofMillis(200); }
+
+    @Override
+    public Duration timeout() { return Duration.ofMillis(TIMEOUT_MS); }
 
     @Override
     public boolean supports(String instrumentType) {

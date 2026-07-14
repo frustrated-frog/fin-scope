@@ -1,5 +1,6 @@
 package com.finscope.domain.instrument;
 
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -42,4 +43,18 @@ public class Quote {
     private boolean valid = true;
     /** 取数失败或估值等提示信息 */
     private String note;
+    /** 网关判定的数据质量。 */
+    private MarketDataQualityStatus qualityStatus;
+    /** 实际返回该条数据的 Provider。 */
+    private String sourceCode;
+    /** 行情事实对应的市场时间。 */
+    private LocalDateTime asOf;
+    /** Provider 完成拉取的时间。 */
+    private LocalDateTime retrievedAt;
+    /** 使用旧快照时距当前的秒数。 */
+    private Long staleAgeSeconds;
+    /** 面向用户的降级说明。 */
+    private String warning;
+    /** 本次刷新链路标识。 */
+    private String refreshId;
 }

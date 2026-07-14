@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -26,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
@@ -36,6 +39,8 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
+    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
+            MarketDataCapability.CAPITAL_FLOW_5M);
 
     @Autowired
     public EastmoneyCapitalFlowProvider(FinanceHttpClient http) {
@@ -43,7 +48,25 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     }
 
     @Override
-    public String providerCode() { return "EASTMONEY"; }
+    public String providerCode() { return "EASTMONEY_CAPITAL_FLOW"; }
+
+    @Override
+    public String providerFamily() { return "EASTMONEY"; }
+
+    @Override
+    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+
+    @Override
+    public int priority() { return 10; }
+
+    @Override
+    public int batchLimit() { return 1; }
+
+    @Override
+    public Duration minimumInterval() { return Duration.ofMillis(800); }
+
+    @Override
+    public Duration timeout() { return Duration.ofSeconds(12); }
 
     @Override
     public boolean supports(Instrument instrument) {
