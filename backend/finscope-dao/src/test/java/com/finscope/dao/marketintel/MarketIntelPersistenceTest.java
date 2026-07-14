@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -49,6 +50,7 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=100"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=101"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=102"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=103"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
         assertEquals(1, tableCount("market_capital_flow_snapshot"));
         assertEquals(1, tableCount("market_capital_behavior_snapshot"));
@@ -75,6 +77,30 @@ class MarketIntelPersistenceTest {
         CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
         assertEquals(new BigDecimal("18000000"), restored.getFacts().get(0).getMainNetInflow());
         assertEquals("fingerprint-1", restored.getFingerprint());
+    }
+
+    @Test
+    void latestSnapshotUsesRefreshCreationTimeAndPreservesWarnings() {
+        CapitalFlowPoint futureMarketPoint = point("future-market-time");
+        futureMarketPoint.setObservedAt(LocalDateTime.of(2026, 7, 14, 15, 0));
+        CapitalBehaviorSnapshot olderRefresh = CapitalBehaviorSnapshot.of(7L, futureMarketPoint.getObservedAt(),
+                Collections.singletonList(futureMarketPoint), Collections.emptyList(), "older-refresh");
+        olderRefresh.setCreatedAt(LocalDateTime.of(2026, 7, 14, 10, 0));
+        snapshots.save(olderRefresh);
+
+        CapitalFlowPoint currentMarketPoint = point("current-market-time");
+        currentMarketPoint.setObservedAt(LocalDateTime.of(2026, 7, 14, 10, 30));
+        CapitalBehaviorSnapshot newerRefresh = CapitalBehaviorSnapshot.of(7L, currentMarketPoint.getObservedAt(),
+                Collections.singletonList(currentMarketPoint), Collections.emptyList(), "newer-refresh");
+        newerRefresh.setCreatedAt(LocalDateTime.of(2026, 7, 14, 10, 31));
+        newerRefresh.setQualityStatus("PARTIAL");
+        newerRefresh.setWarnings(Arrays.asList("实时行情接口暂不可用", "换手率尚未补齐"));
+        snapshots.save(newerRefresh);
+
+        CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
+        assertEquals("newer-refresh", restored.getFingerprint());
+        assertEquals("PARTIAL", restored.getQualityStatus());
+        assertEquals(Arrays.asList("实时行情接口暂不可用", "换手率尚未补齐"), restored.getWarnings());
     }
 
     @Test

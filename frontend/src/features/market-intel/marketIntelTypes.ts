@@ -70,13 +70,15 @@ export type MarketIntelCapitalOverview = {
     instrumentId: number;
     asOf: string;
     fingerprint: string;
+    qualityStatus: 'COMPLETE' | 'PARTIAL';
+    warnings: string[];
   } | null;
   intradayTimeline: CapitalFlowPoint[];
   dailyTrend: CapitalFlowPoint[];
   metrics: CapitalBehaviorMetrics | null;
   ruleExplanation: CapitalRuleExplanation | null;
   health: {
-    status: 'EMPTY' | 'FRESH' | 'STALE';
+    status: 'EMPTY' | 'FRESH' | 'STALE' | 'INCOMPLETE';
     asOf: string | null;
     providerCode: string;
     warnings: string[];
@@ -113,5 +115,7 @@ export type MarketIntelRefreshRun = {
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED';
   successCount: number;
   failureCount: number;
+  errorType?: string;
+  errorMessage?: string;
   finishedAt?: string;
 };

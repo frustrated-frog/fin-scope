@@ -156,6 +156,7 @@
 .market-intel-health dl div { display: grid; gap: 2px; }
 .market-intel-health dt { color: var(--faint); font-size: 10px; }
 .market-intel-health dd { margin: 0; color: var(--ink); font: 650 11px/1.4 ui-monospace, monospace; }
+.market-intel-health-warnings { margin: 0; padding-left: 16px; color: var(--mi-amber); font-size: 11px; line-height: 1.5; }
 
 .market-intel-grid {
   display: grid;

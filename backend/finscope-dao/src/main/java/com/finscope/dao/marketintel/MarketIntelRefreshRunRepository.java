@@ -41,10 +41,13 @@ public class MarketIntelRefreshRunRepository {
                 status.name(),success,failure,LocalDateTime.now().toString(),id);
     }
     public Optional<MarketIntelRefreshRun> findRunById(Long id){
-        return jdbc.query("SELECT * FROM market_intel_refresh_run WHERE id=?",(rs,rowNum)->{
+        return jdbc.query("SELECT r.*,s.error_type AS step_error_type,s.error_message AS step_error_message " +
+                "FROM market_intel_refresh_run r LEFT JOIN market_intel_refresh_step s ON s.id=(" +
+                "SELECT id FROM market_intel_refresh_step WHERE run_id=r.id ORDER BY id DESC LIMIT 1) WHERE r.id=?",(rs,rowNum)->{
             MarketIntelRefreshRun run=new MarketIntelRefreshRun();run.setId(rs.getLong("id"));run.setInstrumentId(rs.getLong("instrument_id"));
             run.setTriggerType(rs.getString("trigger_type"));run.setStatus(MarketIntelRefreshRun.Status.valueOf(rs.getString("status")));
             run.setSuccessCount(rs.getInt("success_count"));run.setFailureCount(rs.getInt("failure_count"));run.setStartedAt(LocalDateTime.parse(rs.getString("started_at")));
+            run.setErrorType(rs.getString("step_error_type"));run.setErrorMessage(rs.getString("step_error_message"));
             String finished=rs.getString("finished_at");run.setFinishedAt(finished==null?null:LocalDateTime.parse(finished));return run;
         },id).stream().findFirst();
     }

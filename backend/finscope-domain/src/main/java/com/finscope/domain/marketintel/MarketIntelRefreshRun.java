@@ -16,6 +16,8 @@ public class MarketIntelRefreshRun {
     private Status status;
     private int successCount;
     private int failureCount;
+    private String errorType;
+    private String errorMessage;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
 }

@@ -28,16 +28,18 @@ public class CapitalBehaviorSnapshotRepository {
         try {
             final String factsJson = mapper.writeValueAsString(snapshot.getFacts());
             final String signalsJson = mapper.writeValueAsString(snapshot.getSignals());
+            final String warningsJson = mapper.writeValueAsString(snapshot.getWarnings());
             KeyHolder keys = new GeneratedKeyHolder();
             jdbc.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement("INSERT OR IGNORE INTO " +
                         "market_capital_behavior_snapshot(instrument_id,as_of,fingerprint,quality_status," +
-                        "facts_json,signals_json,created_at) VALUES(?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                        "facts_json,signals_json,warnings_json,created_at) VALUES(?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
                 ps.setLong(1, snapshot.getInstrumentId()); ps.setString(2, snapshot.getAsOf().toString());
                 ps.setString(3, snapshot.getFingerprint()); ps.setString(4, snapshot.getQualityStatus());
                 ps.setString(5, factsJson);
                 ps.setString(6, signalsJson);
-                ps.setString(7, snapshot.getCreatedAt().toString()); return ps;
+                ps.setString(7, warningsJson);
+                ps.setString(8, snapshot.getCreatedAt().toString()); return ps;
             }, keys);
             Long id = keys.getKey() == null ? jdbc.queryForObject("SELECT id FROM market_capital_behavior_snapshot " +
                             "WHERE instrument_id=? AND as_of=? AND fingerprint=?", Long.class,
@@ -49,13 +51,14 @@ public class CapitalBehaviorSnapshotRepository {
 
     public Optional<CapitalBehaviorSnapshot> findLatest(Long instrumentId) {
         List<CapitalBehaviorSnapshot> values = jdbc.query("SELECT * FROM market_capital_behavior_snapshot " +
-                "WHERE instrument_id=? ORDER BY as_of DESC,id DESC LIMIT 1", (rs, row) -> {
+                "WHERE instrument_id=? ORDER BY created_at DESC,id DESC LIMIT 1", (rs, row) -> {
             try {
                 CapitalBehaviorSnapshot s = new CapitalBehaviorSnapshot(); s.setId(rs.getLong("id"));
                 s.setInstrumentId(rs.getLong("instrument_id")); s.setAsOf(LocalDateTime.parse(rs.getString("as_of")));
                 s.setFingerprint(rs.getString("fingerprint")); s.setQualityStatus(rs.getString("quality_status"));
                 s.setFacts(mapper.readValue(rs.getString("facts_json"), new TypeReference<List<CapitalFlowPoint>>() {}));
                 s.setSignals(mapper.readValue(rs.getString("signals_json"), new TypeReference<List<CapitalBehaviorSignal>>() {}));
+                s.setWarnings(mapper.readValue(rs.getString("warnings_json"), new TypeReference<List<String>>() {}));
                 s.setCreatedAt(LocalDateTime.parse(rs.getString("created_at"))); return s;
             } catch (Exception e) { throw new IllegalStateException("cannot read capital snapshot id=" + rs.getLong("id"), e); }
         }, instrumentId);

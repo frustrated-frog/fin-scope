@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class MarketIntelSchemaMigrator implements InitializingBean {
     private static final int INITIAL_VERSION = 100;
     private static final int CALCULATION_IDENTITY_VERSION = 102;
+    private static final int SNAPSHOT_WARNING_VERSION = 103;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -44,6 +45,16 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
                     "instrument_id,provider_code,granularity,observed_at,payload_hash,calculation_version)");
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     CALCULATION_IDENTITY_VERSION, "资金事实按计算版本保留", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, SNAPSHOT_WARNING_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("ALTER TABLE market_capital_behavior_snapshot ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_capital_snapshot_created_latest ON " +
+                    "market_capital_behavior_snapshot(instrument_id,created_at DESC,id DESC)");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    SNAPSHOT_WARNING_VERSION, "资金快照保存降级原因并按刷新时间读取", LocalDateTime.now().toString());
         });
     }
 

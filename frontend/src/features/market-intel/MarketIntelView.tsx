@@ -94,13 +94,14 @@ export function MarketIntelView({
         await delay(POLL_DELAY_MS);
         run = await api<MarketIntelRefreshRun>(`/api/market-intel/refresh-runs/${run.id}`);
       }
-      if (run.status === 'FAILED') throw new Error('资金源刷新失败，原有快照已保留');
+      if (run.status === 'FAILED') throw new Error(run.errorMessage || '资金源刷新失败，原有快照已保留');
       if (!['SUCCEEDED', 'PARTIAL'].includes(run.status)) throw new Error('刷新任务仍在运行，可稍后再查看');
       const latest = await fetchOverview(instrumentId);
       setOverview(latest);
       setLoadError(null);
-      setMessage('资金数据已刷新');
-      addToast('资金数据已刷新', 'success');
+      const message = run.status === 'PARTIAL' ? (run.errorMessage || '资金流已刷新，部分辅助行情暂不可用') : '资金数据已刷新';
+      setMessage(message);
+      addToast(message, run.status === 'PARTIAL' ? 'info' : 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : '资金数据刷新失败';
       setMessage(message);
@@ -183,6 +184,11 @@ export function MarketIntelView({
               <div><dt>数据源</dt><dd>{overview.health.providerCode || '等待首次刷新'}</dd></div>
               <div><dt>快照时点</dt><dd>{overview.health.asOf ? new Date(overview.health.asOf).toLocaleString('zh-CN', { hour12: false }) : '--'}</dd></div>
             </dl>
+            {overview.health.warnings.length > 0 && (
+              <ul className="market-intel-health-warnings">
+                {overview.health.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
           </div>
         )}
       </section>

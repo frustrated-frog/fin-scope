@@ -13,6 +13,7 @@ public class CapitalBehaviorSnapshot {
     private List<CapitalBehaviorSignal> signals = Collections.emptyList();
     private String fingerprint;
     private String qualityStatus;
+    private List<String> warnings = Collections.emptyList();
     private LocalDateTime createdAt;
 
     public static CapitalBehaviorSnapshot of(Long instrumentId, LocalDateTime asOf,
@@ -47,6 +48,8 @@ public class CapitalBehaviorSnapshot {
     public void setFingerprint(String fingerprint) { this.fingerprint = fingerprint; }
     public String getQualityStatus() { return qualityStatus; }
     public void setQualityStatus(String qualityStatus) { this.qualityStatus = qualityStatus; }
+    public List<String> getWarnings() { return warnings; }
+    public void setWarnings(List<String> warnings) { this.warnings = immutable(warnings); }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

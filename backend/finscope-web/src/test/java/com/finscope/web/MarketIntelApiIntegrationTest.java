@@ -4,6 +4,7 @@ import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -77,6 +78,40 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(jsonPath("$.intradayTimeline").isEmpty())
                 .andExpect(jsonPath("$.dailyTrend").isEmpty());
         verifyNoInteractions(provider,llm);
+    }
+
+    @Test void failedRefreshReturnsProviderErrorDetails() throws Exception{
+        when(provider.fetch(any(),any())).thenThrow(new ProviderContractException(
+                "ALL_FUND_FLOW_SOURCES_FAILED", "东财资金流接口暂不可用，请稍后重试", true));
+        MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh"))
+                .andExpect(status().isAccepted()).andReturn();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
+
+        mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.errorType").value("ALL_FUND_FLOW_SOURCES_FAILED"))
+                .andExpect(jsonPath("$.errorMessage").value("东财资金流接口暂不可用，请稍后重试"));
+    }
+
+    @Test void partialRefreshPersistsAndReturnsProviderWarnings() throws Exception{
+        CapitalFlowData complete=fixture();
+        when(provider.fetch(any(),any())).thenReturn(new CapitalFlowData(
+                complete.getMinutePoints(), complete.getDailyPoints(), complete.getTurnoverRate(),
+                complete.getVolumeRatio(), Collections.singletonList("实时行情接口暂不可用"), "TEST"));
+        MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh"))
+                .andExpect(status().isAccepted()).andReturn();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
+
+        mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PARTIAL"))
+                .andExpect(jsonPath("$.errorType").value("PARTIAL_DATA"))
+                .andExpect(jsonPath("$.errorMessage").value("实时行情接口暂不可用"));
+        mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshot.qualityStatus").value("PARTIAL"))
+                .andExpect(jsonPath("$.snapshot.warnings[0]").value("实时行情接口暂不可用"))
+                .andExpect(jsonPath("$.health.status").value("INCOMPLETE"))
+                .andExpect(jsonPath("$.health.warnings[0]").value("实时行情接口暂不可用"));
     }
 
     @Test void clickInterpretationRunsAgentAndReturnsGuardedHypothesis() throws Exception{

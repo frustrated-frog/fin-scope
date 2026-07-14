@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -55,7 +57,12 @@ public class MarketIntelCapitalService {
                 : minutePoints;
         List<CapitalFlowPoint> dailyTrend = snapshot.getFacts().stream()
                 .filter(value -> "DAY_1".equals(value.getGranularity()))
+                .sorted(Comparator.comparing(CapitalFlowPoint::getObservedAt))
                 .collect(Collectors.toList());
+        int dayWindow = tradingDayWindow(range);
+        if (dailyTrend.size() > dayWindow) {
+            dailyTrend = new ArrayList<CapitalFlowPoint>(dailyTrend.subList(dailyTrend.size() - dayWindow, dailyTrend.size()));
+        }
 
         MarketIntelCapitalView view = new MarketIntelCapitalView();
         view.setInstrument(instrument);
@@ -92,11 +99,39 @@ public class MarketIntelCapitalService {
     private MarketIntelCapitalView.Health health(CapitalBehaviorSnapshot snapshot) {
         MarketIntelCapitalView.Health health = new MarketIntelCapitalView.Health();
         health.setAsOf(snapshot.getAsOf());
-        health.setStatus(snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36)) ? "STALE" : "FRESH");
         health.setProviderCode(snapshot.getFacts().isEmpty() ? "" : snapshot.getFacts().get(0).getProviderCode());
-        health.setWarnings(snapshot.getFacts().stream().anyMatch(value -> !"COMPLETE".equals(value.getQualityStatus()))
-                ? Collections.singletonList("部分时间点数据不完整")
-                : Collections.emptyList());
+        List<String> warnings = new ArrayList<String>();
+        warnings.addAll(snapshot.getWarnings());
+        if (snapshot.getFacts().stream().anyMatch(value -> !"COMPLETE".equals(value.getQualityStatus()))) {
+            if(!warnings.contains("部分时间点行情未与资金流对齐"))warnings.add("部分时间点行情未与资金流对齐");
+        }
+        CapitalFlowPoint latestDaily = snapshot.getFacts().stream()
+                .filter(value -> "DAY_1".equals(value.getGranularity()))
+                .max(Comparator.comparing(CapitalFlowPoint::getObservedAt)).orElse(null);
+        CapitalFlowPoint latestMinute = snapshot.getFacts().stream()
+                .filter(value -> value.getGranularity() != null && value.getGranularity().startsWith("MINUTE_"))
+                .max(Comparator.comparing(CapitalFlowPoint::getObservedAt)).orElse(null);
+        CapitalFlowPoint currentContext = latestMinute != null && (latestDaily == null
+                || latestMinute.getDataDate().isAfter(latestDaily.getDataDate())) ? latestMinute : latestDaily;
+        if (currentContext == null || currentContext.getIntervalTradeAmount() == null
+                || currentContext.getTradeVolume() == null || currentContext.getTurnoverRate() == null
+                || currentContext.getVolumeRatio() == null) {
+            warnings.add("成交额、成交量、换手率或量比尚未补齐");
+        }
+        boolean stale=snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36));
+        if(stale)warnings.add("资金快照已超过 36 小时，请刷新后再判断");
+        health.setStatus(warnings.isEmpty()?"FRESH":"INCOMPLETE");
+        health.setWarnings(warnings);
         return health;
+    }
+
+    private int tradingDayWindow(String range) {
+        if (range == null || !range.matches("\\d+d")) return 20;
+        try {
+            int requested = Integer.parseInt(range.substring(0, range.length() - 1));
+            return Math.max(1, Math.min(requested, 120));
+        } catch (NumberFormatException ignored) {
+            return 20;
+        }
     }
 }

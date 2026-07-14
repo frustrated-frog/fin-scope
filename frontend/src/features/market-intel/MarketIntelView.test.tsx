@@ -120,6 +120,82 @@ test('polls the refresh run before reloading the capital snapshot', async () => 
   expect(overviewCalls.length).toBeGreaterThanOrEqual(2);
 });
 
+test('shows the provider error when refresh fails', async () => {
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.endsWith('/refresh') && options?.method === 'POST') {
+      return Promise.resolve({ id: 56, instrumentId: 7, status: 'PENDING', successCount: 0, failureCount: 0 }) as never;
+    }
+    if (path === '/api/market-intel/refresh-runs/56') {
+      return Promise.resolve({
+        id: 56,
+        instrumentId: 7,
+        status: 'FAILED',
+        successCount: 0,
+        failureCount: 1,
+        errorType: 'ALL_FUND_FLOW_SOURCES_FAILED',
+        errorMessage: '东财资金流接口暂不可用，请稍后重试'
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+  const user = userEvent.setup();
+  const addToast = vi.fn();
+  render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByRole('button', { name: '刷新资金数据' }));
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('东财资金流接口暂不可用，请稍后重试', 'error'));
+});
+
+test('shows the concrete provider warning when refresh is partial', async () => {
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.endsWith('/refresh') && options?.method === 'POST') {
+      return Promise.resolve({ id: 57, instrumentId: 7, status: 'PENDING', successCount: 0, failureCount: 0 }) as never;
+    }
+    if (path === '/api/market-intel/refresh-runs/57') {
+      return Promise.resolve({
+        id: 57,
+        instrumentId: 7,
+        status: 'PARTIAL',
+        successCount: 1,
+        failureCount: 0,
+        errorType: 'PARTIAL_DATA',
+        errorMessage: '实时行情接口暂不可用'
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+  const user = userEvent.setup();
+  const addToast = vi.fn();
+  render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByRole('button', { name: '刷新资金数据' }));
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('实时行情接口暂不可用', 'info'));
+});
+
+test('surfaces incomplete snapshot warnings in the health summary', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) {
+      return Promise.resolve({
+        ...overview,
+        health: { status: 'INCOMPLETE', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: ['成交额、成交量、换手率或量比尚未补齐'] }
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('成交额、成交量、换手率或量比尚未补齐')).toBeInTheDocument();
+  expect(screen.getByText('INCOMPLETE')).toBeInTheDocument();
+});
+
 test('treats an instrument without a snapshot as a first-run state instead of an error', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
