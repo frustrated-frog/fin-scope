@@ -50,10 +50,10 @@ public class CapitalInterpretationRepository {
             value.setUpdatedAt(LocalDateTime.now());
             jdbc.update("UPDATE market_capital_interpretation SET status=?,plain_summary=?,facts_json=?," +
                             "hypotheses_json=?,data_gaps_json=?,observation_points_json=?,disclaimer=?,fallback_reason=?," +
-                            "output_hash=?,updated_at=? WHERE id=?", value.getStatus(), value.getPlainSummary(),
+                            "output_hash=?,rule_version=?,model_name=?,prompt_version=?,updated_at=? WHERE id=?", value.getStatus(), value.getPlainSummary(),
                     json.writeValueAsString(value.getFacts()), json.writeValueAsString(value.getHypotheses()),
                     json.writeValueAsString(value.getDataGaps()), json.writeValueAsString(value.getObservationPoints()),
-                    value.getDisclaimer(), value.getFallbackReason(), value.getOutputHash(), value.getUpdatedAt().toString(), value.getId());
+                    value.getDisclaimer(), value.getFallbackReason(), value.getOutputHash(), value.getRuleVersion(), value.getModelName(), value.getPromptVersion(), value.getUpdatedAt().toString(), value.getId());
         } catch (Exception e) { throw new IllegalStateException("cannot update capital interpretation id=" + value.getId(), e); }
     }
     public Optional<CapitalInterpretation> findById(Long id) {
