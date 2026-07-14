@@ -102,7 +102,7 @@ public class WatchlistService {
                     .orElseThrow(() -> error);
         }
         enrich(saved, instrument);
-        log.info("关注添加成功 code={} type={} instrumentId={}", normalizedCode, normalizedType, instrument.getId());
+        log.info("自选关系添加成功 code={} type={} instrumentId={}", normalizedCode, normalizedType, instrument.getId());
         return saved;
     }
 

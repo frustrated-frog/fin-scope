@@ -131,6 +131,19 @@ class SectorMarketServiceTest {
         assertEquals(1, provider.callCount.get());
     }
 
+    @Test
+    void reportsUnavailableWhenRefreshExecutorRejectsTask() {
+        MutableProvider provider = new MutableProvider(entries(entry("BK0001", "甲", 1.0, 100.0)));
+        SectorMarketService service = service(provider, new MutableClock(Instant.parse("2026-07-14T02:00:00Z")),
+                command -> { throw new java.util.concurrent.RejectedExecutionException("executor saturated"); });
+
+        SectorMarketOverview result = service.overview(SectorCategory.INDUSTRY, 5, false);
+
+        assertEquals(SectorMarketQualityStatus.UNAVAILABLE, result.getQualityStatus());
+        assertTrue(result.getWarning().contains("executor saturated"));
+        assertEquals(0, provider.callCount.get());
+    }
+
     private SectorMarketService service(SectorMarketProvider provider, Clock clock) {
         return service(provider, clock, Runnable::run);
     }

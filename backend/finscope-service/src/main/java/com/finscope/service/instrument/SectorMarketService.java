@@ -146,20 +146,25 @@ public class SectorMarketService {
             if (existing != null) return existing;
             CompletableFuture<SectorMarketSnapshot> created = new CompletableFuture<SectorMarketSnapshot>();
             if (inFlight.putIfAbsent(category, created) != null) continue;
-            executor.execute(() -> {
-                try {
-                    SectorMarketSnapshot value = provider(category).fetch(category);
-                    if (value == null || value.getEntries().isEmpty()) {
-                        throw new ProviderContractException("EMPTY_SECTOR_CATALOG", "板块目录为空", true);
+            try {
+                executor.execute(() -> {
+                    try {
+                        SectorMarketSnapshot value = provider(category).fetch(category);
+                        if (value == null || value.getEntries().isEmpty()) {
+                            throw new ProviderContractException("EMPTY_SECTOR_CATALOG", "板块目录为空", true);
+                        }
+                        cache.put(category, new CacheState(value, clock.instant()));
+                        created.complete(value);
+                    } catch (Throwable error) {
+                        created.completeExceptionally(error);
+                    } finally {
+                        inFlight.remove(category, created);
                     }
-                    cache.put(category, new CacheState(value, clock.instant()));
-                    created.complete(value);
-                } catch (Throwable error) {
-                    created.completeExceptionally(error);
-                } finally {
-                    inFlight.remove(category, created);
-                }
-            });
+                });
+            } catch (Throwable error) {
+                inFlight.remove(category, created);
+                created.completeExceptionally(error);
+            }
             return created;
         }
     }
