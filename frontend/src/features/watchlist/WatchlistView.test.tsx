@@ -16,6 +16,12 @@ const indexQuotes = [
   { code: '000688', name: '科创50', quoteValid: false, quoteNote: '行情抓取失败' }
 ];
 
+const industryOverview = {
+  category: 'INDUSTRY', qualityStatus: 'FRESH', retrievedAt: '2026-07-14T10:00:00',
+  leaders: [{ code: 'BK1036', name: '半导体', category: 'INDUSTRY', price: 1234.5, changePct: 2.6, turnover: 12000000000, leaderStockName: '中芯国际' }],
+  laggards: [{ code: 'BK0420', name: '旅游酒店', category: 'INDUSTRY', price: 876.5, changePct: -1.8, turnover: 3200000000 }]
+};
+
 beforeEach(() => {
   vi.mocked(api).mockReset();
 });
@@ -65,6 +71,8 @@ test('refreshes market indices and watchlist together', async () => {
 
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/market-indices?refresh=true'));
   expect(api).toHaveBeenCalledWith('/api/watchlist?refresh=true');
+  expect(api).toHaveBeenCalledWith('/api/sector-market/overview?category=INDUSTRY&limit=5&refresh=true');
+  expect(api).toHaveBeenCalledWith('/api/sector-market/follows?refresh=true');
 });
 
 test('shows a perceptible refresh state and reports unchanged fresh data', async () => {
@@ -79,6 +87,10 @@ test('shows a perceptible refresh state and reports unchanged fresh data', async
   vi.mocked(api).mockImplementation((path: string) => new Promise((resolve) => {
     if (path.startsWith('/api/watchlist')) resolveWatchlist = resolve;
     if (path.startsWith('/api/market-indices')) resolveIndices = resolve;
+    if (path.startsWith('/api/sector-market/overview')) resolve({
+      ...industryOverview, leaders: [], laggards: []
+    });
+    if (path.startsWith('/api/sector-market/follows')) resolve([]);
   }) as never);
 
   await user.click(screen.getByRole('button', { name: '刷新行情' }));
@@ -105,7 +117,7 @@ test('does not present a failed watchlist request as an empty watchlist', async 
 
   render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('自选列表加载失败');
+  expect(await screen.findByText(/自选列表加载失败：Internal server error/)).toBeInTheDocument();
   expect(screen.getByText('加载失败')).toBeInTheDocument();
   expect(screen.queryByText('0 标的')).not.toBeInTheDocument();
 });
@@ -145,4 +157,67 @@ test('uses deep attribution when the latest report belongs to an older quote dat
 
   expect(await screen.findByText('最近归因')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /深度归因/ })).toBeInTheDocument();
+});
+
+test('places a separate sector market panel between indices and investment watchlist', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-indices') return Promise.resolve(indexQuotes) as never;
+    if (path.startsWith('/api/sector-market/overview')) return Promise.resolve(industryOverview) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const indexSection = (await screen.findByRole('heading', { name: '市场指数' })).closest('section');
+  const sectorSection = screen.getByRole('heading', { name: '板块行情' }).closest('section');
+  const investmentSection = screen.getByRole('heading', { name: '我的自选' }).closest('section');
+  expect(indexSection?.nextElementSibling).toBe(sectorSection);
+  expect(sectorSection?.nextElementSibling).toBe(investmentSection);
+  expect(screen.getByText('半导体')).toBeInTheDocument();
+  expect(screen.getByText('旅游酒店')).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: '板块' })).not.toBeInTheDocument();
+});
+
+test('follows a ranked sector and shows it only in the sector workspace', async () => {
+  const user = userEvent.setup();
+  let followed = false;
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/sector-market/overview')) return Promise.resolve(industryOverview) as never;
+    if (path === '/api/sector-market/follows/BK1036' && options?.method === 'PUT') {
+      followed = true;
+      return Promise.resolve({}) as never;
+    }
+    if (path === '/api/sector-market/follows') return Promise.resolve(followed ? [{
+      id: 3, code: 'BK1036', name: '半导体', price: 1234.5, changePct: 2.6, quoteValid: true
+    }] : []) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.click(await screen.findByRole('button', { name: '关注-半导体' }));
+
+  expect(await screen.findByTestId('followed-sector-BK1036')).toBeInTheDocument();
+  expect(screen.queryByText('BK1036 · 板块')).not.toBeInTheDocument();
+});
+
+test('switches ranking category and searches sectors outside the current ranking', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path.includes('category=CONCEPT') && path.startsWith('/api/sector-market/overview')) {
+      return Promise.resolve({ ...industryOverview, category: 'CONCEPT', leaders: [], laggards: [] }) as never;
+    }
+    if (path.startsWith('/api/sector-market/overview')) return Promise.resolve(industryOverview) as never;
+    if (path.startsWith('/api/sector-market/search')) return Promise.resolve({
+      qualityStatus: 'FRESH', items: [{ code: 'BK0987', name: '人形机器人', category: 'CONCEPT', changePct: 1.4 }]
+    }) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.click(await screen.findByRole('button', { name: '概念板块' }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/sector-market/overview?category=CONCEPT&limit=5'));
+
+  await user.type(screen.getByRole('textbox', { name: '搜索板块' }), '机器人');
+  expect(await screen.findByRole('option', { name: /人形机器人/ })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/sector-market/search?q=%E6%9C%BA%E5%99%A8%E4%BA%BA&category=ALL&limit=10');
 });

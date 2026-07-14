@@ -1,59 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { MarketIndexQuote, WatchlistItem } from '../../shared/types';
+import { FollowedSector, WatchlistItem } from '../../shared/types';
 import { AttributionReaderView } from './AttributionReaderView';
+import { SectorMarketPanel } from './SectorMarketPanel';
+import { useWatchlistDashboardData } from './useWatchlistDashboardData';
+import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
+
+type AttributionInstrument = {
+  code: string;
+  type: 'STOCK' | 'FUND' | 'SECTOR';
+  name?: string;
+  changePct?: number;
+  quoteDate?: string;
+  attributionReportId?: number;
+  attributionReportDate?: string;
+  attributionChangePct?: number;
+};
 
 type AttributionTarget = {
   taskId?: string;
   reportId: number;
   code: string;
-  type: WatchlistItem['type'];
+  type: AttributionInstrument['type'];
   name?: string;
   changePct?: number;
 };
 
 const typeLabels: Record<string, string> = {
   STOCK: '股票',
-  FUND: '基金',
-  SECTOR: '板块'
+  FUND: '基金'
 };
-
-function formatPct(value?: number) {
-  if (value === undefined || value === null) {
-    return '--';
-  }
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
-}
-
-function formatPrice(value?: number, type?: WatchlistItem['type']) {
-  if (value === undefined || value === null) {
-    return '--';
-  }
-  return value.toFixed(type === 'FUND' ? 4 : 2);
-}
-
-function changeClass(value?: number) {
-  if (value === undefined || value === null || value === 0) {
-    return 'watchlist-flat';
-  }
-  return value > 0 ? 'watchlist-up' : 'watchlist-down';
-}
-
-// 成交额（元）格式化为"亿/万"
-function formatTurnover(value?: number) {
-  if (value === undefined || value === null || value <= 0) {
-    return null;
-  }
-  if (value >= 1e8) {
-    return `${(value / 1e8).toFixed(2)}亿`;
-  }
-  if (value >= 1e4) {
-    return `${(value / 1e4).toFixed(0)}万`;
-  }
-  return `${value.toFixed(0)}`;
-}
 
 function formatNum(value?: number) {
   if (value === undefined || value === null) {
@@ -75,41 +52,6 @@ function isAbnormal(value?: number) {
   return value !== undefined && value !== null && Math.abs(value) >= 5;
 }
 
-function quoteFingerprint(items: WatchlistItem[], indices: MarketIndexQuote[]) {
-  return JSON.stringify({
-    items: items.map((item) => [item.code, item.price, item.confirmedNav, item.changePct, item.confirmedNavChangePct, item.quoteValid]),
-    indices: indices.map((item) => [item.code, item.price, item.changeAmount, item.changePct, item.quoteValid])
-  });
-}
-
-function preserveValidWatchlistQuotes(next: WatchlistItem[], previous: WatchlistItem[]) {
-  const previousByKey = new Map(previous.map((item) => [`${item.type}:${item.code}`, item]));
-  let degradedCount = 0;
-  const items = next.map((item) => {
-    const prior = previousByKey.get(`${item.type}:${item.code}`);
-    if (!item.quoteValid && prior?.quoteValid) {
-      degradedCount++;
-      return prior;
-    }
-    return item;
-  });
-  return { items, degradedCount };
-}
-
-function preserveValidIndexQuotes(next: MarketIndexQuote[], previous: MarketIndexQuote[]) {
-  const previousByCode = new Map(previous.map((item) => [item.code, item]));
-  let degradedCount = 0;
-  const indices = next.map((item) => {
-    const prior = previousByCode.get(item.code);
-    if (!item.quoteValid && prior?.quoteValid) {
-      degradedCount++;
-      return prior;
-    }
-    return item;
-  });
-  return { indices, degradedCount };
-}
-
 const DEFAULT_GROUP_LABEL = '未分组';
 const COLLAPSE_STORAGE_KEY = 'watchlist.collapsedGroups';
 
@@ -129,12 +71,15 @@ export function WatchlistView({
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
 }) {
-  const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [marketIndices, setMarketIndices] = useState<MarketIndexQuote[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const dashboard = useWatchlistDashboardData();
+  const items = dashboard.investments.data;
+  const marketIndices = dashboard.indices.data;
+  const loading = dashboard.investments.phase === 'loading';
+  const loadError = dashboard.investments.error || null;
+  const refreshing = dashboard.refreshing;
+  const refreshStatus = dashboard.refreshStatus || null;
   const [code, setCode] = useState('');
-  const [type, setType] = useState<'STOCK' | 'FUND' | 'SECTOR'>('STOCK');
+  const [type, setType] = useState<'STOCK' | 'FUND'>('STOCK');
   const [group, setGroup] = useState('');
   const [sortByChange, setSortByChange] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -143,77 +88,17 @@ export function WatchlistView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
-  const refreshSequenceRef = useRef(0);
 
   async function load() {
-    setLoading(true);
-    try {
-      const data = await api<WatchlistItem[]>('/api/watchlist');
-      setItems(data);
-      setLoadError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '自选列表加载失败';
-      setLoadError(message);
-      setMessage(message);
-    } finally {
-      setLoading(false);
-    }
+    const result = await dashboard.loadInvestments();
+    if (result.failed) setMessage('自选列表加载失败');
   }
 
-  async function refreshQuotes(forceRefresh = false, interactive = false) {
-    if (interactive && refreshing) return;
-    const sequence = ++refreshSequenceRef.current;
-    const previousFingerprint = quoteFingerprint(items, marketIndices);
-    if (interactive) {
-      setRefreshing(true);
-      setRefreshStatus('正在从行情源获取最新数据…');
-    }
-    if (!interactive) setLoading(true);
-    const suffix = forceRefresh ? '?refresh=true' : '';
-    const results = await Promise.allSettled([
-      api<WatchlistItem[]>(`/api/watchlist${suffix}`),
-      api<MarketIndexQuote[]>(`/api/market-indices${suffix}`)
-    ]);
-    if (sequence !== refreshSequenceRef.current) return;
-
-    const watchlistResult = results[0];
-    const indexResult = results[1];
-    const watchlistMerge = watchlistResult.status === 'fulfilled'
-      ? preserveValidWatchlistQuotes(watchlistResult.value, items)
-      : { items, degradedCount: 0 };
-    const indexMerge = indexResult.status === 'fulfilled'
-      ? preserveValidIndexQuotes(indexResult.value, marketIndices)
-      : { indices: marketIndices, degradedCount: 0 };
-    const nextItems = watchlistMerge.items;
-    const nextIndices = indexMerge.indices;
-    if (watchlistResult.status === 'fulfilled') {
-      setItems(nextItems);
-      setLoadError(null);
-    } else {
-      const message = watchlistResult.reason instanceof Error ? watchlistResult.reason.message : '自选列表加载失败';
-      setLoadError(message);
-      setMessage(message);
-    }
-    if (indexResult.status === 'fulfilled') setMarketIndices(nextIndices);
-
-    if (interactive) {
-      const failedCount = results.filter((result) => result.status === 'rejected').length
-        + watchlistMerge.degradedCount + indexMerge.degradedCount;
-      const changed = previousFingerprint !== quoteFingerprint(nextItems, nextIndices);
-      const time = new Intl.DateTimeFormat('zh-CN', {
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-      }).format(new Date());
-      setRefreshStatus(failedCount > 0
-        ? `部分行情刷新失败，已保留原数据 · ${time}`
-        : changed ? `行情已刷新 · ${time}` : `已刷新，行情暂无变化 · ${time}`);
-      setRefreshing(false);
-    }
-    setLoading(false);
+  async function refreshQuotes() {
+    await dashboard.refreshAll();
   }
 
-  async function startAttribution(item: WatchlistItem) {
+  async function startAttribution(item: AttributionInstrument) {
     setAttributing(item.code);
     try {
       const res = await api<{ taskId: string; reportId: string | number }>('/api/attribution/start', {
@@ -246,7 +131,7 @@ export function WatchlistView({
     refreshQuotes();
   }
 
-  function openAttribution(item: WatchlistItem) {
+  function openAttribution(item: AttributionInstrument) {
     if (!item.attributionReportId) return;
     setAttribution({
       reportId: item.attributionReportId,
@@ -257,13 +142,9 @@ export function WatchlistView({
     });
   }
 
-  function hasCurrentAttribution(item: WatchlistItem) {
+  function hasCurrentAttribution(item: AttributionInstrument) {
     return Boolean(item.quoteDate && item.attributionReportDate && item.quoteDate === item.attributionReportDate);
   }
-
-  useEffect(() => {
-    refreshQuotes();
-  }, []);
 
   const sortedItems = useMemo(() => {
     const clone = [...items];
@@ -428,6 +309,18 @@ export function WatchlistView({
         </div>
       </section>
 
+      <SectorMarketPanel
+        overview={dashboard.sectorOverview}
+        follows={dashboard.followedSectors}
+        category={dashboard.sectorCategory}
+        setCategory={dashboard.setSectorCategory}
+        reloadFollows={() => dashboard.loadFollowedSectors()}
+        retryOverview={() => dashboard.loadSectorOverview(dashboard.sectorCategory)}
+        addToast={addToast}
+        onStartAttribution={(sector: FollowedSector) => startAttribution({ ...sector, type: 'SECTOR' })}
+        onOpenAttribution={(sector: FollowedSector) => openAttribution({ ...sector, type: 'SECTOR' })}
+      />
+
       <section className="panel wide">
         <div className="panel-heading">
           <h3>我的自选</h3>
@@ -459,11 +352,10 @@ export function WatchlistView({
           className="watchlist-input"
           aria-label="标的类型"
           value={type}
-          onChange={(event) => setType(event.target.value as 'STOCK' | 'FUND' | 'SECTOR')}
+          onChange={(event) => setType(event.target.value as 'STOCK' | 'FUND')}
         >
           <option value="STOCK">股票</option>
           <option value="FUND">基金</option>
-          <option value="SECTOR">板块</option>
         </select>
         <div className="watchlist-group-field">
           <input
@@ -501,7 +393,7 @@ export function WatchlistView({
           className={`ghost-button watchlist-refresh-button${refreshing ? ' is-refreshing' : ''}`}
           type="button"
           disabled={refreshing}
-          onClick={() => refreshQuotes(true, true)}
+          onClick={() => refreshQuotes()}
         >
           <span className="watchlist-refresh-icon" aria-hidden="true">↻</span>
           {refreshing ? '刷新中…' : '刷新行情'}
@@ -594,10 +486,10 @@ export function WatchlistView({
                               <div className={`watchlist-quote ${changeClass(item.changePct)}`}>
                                 {item.type === 'FUND' ? (
                                   <div className="fund-quote-values">
-                                    <span><small>确认净值</small><strong>{formatPrice(item.confirmedNav, item.type)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong></span>
-                                    <span><small>盘中估值</small><strong>{formatPrice(item.price, item.type)} <em>{formatPct(item.changePct)}</em></strong></span>
+                                    <span><small>确认净值</small><strong>{formatPrice(item.confirmedNav, 4)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong></span>
+                                    <span><small>盘中估值</small><strong>{formatPrice(item.price, 4)} <em>{formatPct(item.changePct)}</em></strong></span>
                                   </div>
-                                ) : <><span className="watchlist-price">{formatPrice(item.price, item.type)}</span><span className="watchlist-change">{formatPct(item.changePct)}</span></>}
+                                ) : <><span className="watchlist-price">{formatPrice(item.price)}</span><span className="watchlist-change">{formatPct(item.changePct)}</span></>}
                               </div>
                               {item.type === 'STOCK' ? (
                                 <div className="watchlist-stats">

@@ -570,3 +570,61 @@ export type MarketIndexQuote = {
   quoteValid: boolean;
   quoteNote?: string;
 };
+
+export type SectorCategory = 'INDUSTRY' | 'CONCEPT';
+export type SectorMarketQualityStatus = 'FRESH' | 'STALE' | 'UNAVAILABLE';
+
+export type SectorMarketEntry = {
+  code: string;
+  name: string;
+  category: SectorCategory;
+  price?: number;
+  changeAmount?: number;
+  changePct?: number;
+  turnover?: number;
+  leaderStockCode?: string;
+  leaderStockName?: string;
+  leaderStockChangePct?: number;
+  quoteTime?: string;
+};
+
+export type SectorMarketOverview = {
+  category: SectorCategory;
+  qualityStatus: SectorMarketQualityStatus;
+  retrievedAt?: string;
+  warning?: string;
+  leaders: SectorMarketEntry[];
+  laggards: SectorMarketEntry[];
+};
+
+export type SectorMarketSearchResult = {
+  qualityStatus: SectorMarketQualityStatus;
+  retrievedAt?: string;
+  warning?: string;
+  items: SectorMarketEntry[];
+};
+
+export type FollowedSector = {
+  id: number;
+  code: string;
+  name?: string;
+  price?: number;
+  changePct?: number;
+  changeAmount?: number;
+  turnover?: number;
+  quoteValid: boolean;
+  quoteNote?: string;
+  quoteDate?: string;
+  attributionSummary?: string;
+  attributionReportId?: number;
+  attributionReportDate?: string;
+  attributionChangePct?: number;
+};
+
+export type ResourceState<T> = {
+  data: T;
+  phase: 'idle' | 'loading' | 'ready' | 'refreshing' | 'error';
+  error?: string;
+  warning?: string;
+  updatedAt?: string;
+};
