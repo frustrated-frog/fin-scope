@@ -28,7 +28,7 @@ public class EastmoneySectorMarketProvider implements SectorMarketProvider {
     private static final String ENDPOINT = "https://push2.eastmoney.com/api/qt/clist/get";
     private static final String INDUSTRY_FILTER = "m%3A90%2Bt%3A2%2Bf%3A%2150";
     private static final String CONCEPT_FILTER = "m%3A90%2Bt%3A3%2Bf%3A%2150";
-    private static final String FIELDS = "f2%2Cf3%2Cf4%2Cf12%2Cf14%2Cf62%2Cf128%2Cf140%2Cf136%2Cf124";
+    private static final String FIELDS = "f2%2Cf3%2Cf4%2Cf6%2Cf12%2Cf14%2Cf128%2Cf140%2Cf136%2Cf124";
     private static final Pattern CODE = Pattern.compile("BK\\d{4}");
 
     private final FinanceHttpClient http;
@@ -114,7 +114,7 @@ public class EastmoneySectorMarketProvider implements SectorMarketProvider {
         entry.setPrice(number(row, "f2"));
         entry.setChangePct(number(row, "f3"));
         entry.setChangeAmount(number(row, "f4"));
-        entry.setTurnover(number(row, "f62"));
+        entry.setTurnover(number(row, "f6"));
         entry.setLeaderStockName(text(row, "f128"));
         entry.setLeaderStockCode(text(row, "f140"));
         entry.setLeaderStockChangePct(number(row, "f136"));

@@ -45,6 +45,7 @@ class EastmoneySectorMarketProviderTest {
         assertEquals(1, snapshot.getWarnings().size());
         assertTrue(snapshot.getWarnings().get(0).contains("invalid sector code"));
         assertTrue(http.request.getRawQuery().contains("fs=m%3A90%2Bt%3A2%2Bf%3A%2150"));
+        assertTrue(http.request.getRawQuery().contains("f6"));
     }
 
     @Test
