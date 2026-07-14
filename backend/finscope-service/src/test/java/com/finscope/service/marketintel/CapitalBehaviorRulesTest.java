@@ -26,6 +26,7 @@ class CapitalBehaviorRulesTest {
         assertEquals(new BigDecimal("330"), result.get(0).getIntervalTradeAmount());
         assertEquals(new BigDecimal("37"), result.get(0).getMainNetInflow());
         assertEquals(new BigDecimal("25"), result.get(0).getPrice());
+        assertEquals(new BigDecimal("120"), result.get(0).getCumulativeTradeAmount());
         assertEquals("AGGREGATED_5M", result.get(0).getCalculationVersion());
     }
 
@@ -52,6 +53,7 @@ class CapitalBehaviorRulesTest {
     private CapitalFlowPoint point(long id,String granularity,int hour,int minute,String amount,String flow,String price) {
         CapitalFlowPoint p=new CapitalFlowPoint();p.setId(id);p.setInstrumentId(7L);p.setGranularity(granularity);
         p.setObservedAt(LocalDateTime.of(2026,7,14,hour,minute));p.setIntervalTradeAmount(new BigDecimal(amount));
+        p.setCumulativeTradeAmount(new BigDecimal(amount));
         p.setMainNetInflow(new BigDecimal(flow));p.setPrice(new BigDecimal(price));p.setQualityStatus("COMPLETE");return p;
     }
 }

@@ -19,15 +19,18 @@ public class MarketIntelCapitalService {
     private final CapitalBehaviorSnapshotRepository snapshots;
     private final CapitalFlowAggregationService aggregation;
     private final CapitalRuleExplanationService rules;
+    private final CapitalBehaviorMetricsService metrics;
 
     public MarketIntelCapitalService(InstrumentRepository instruments,
                                      CapitalBehaviorSnapshotRepository snapshots,
                                      CapitalFlowAggregationService aggregation,
-                                     CapitalRuleExplanationService rules) {
+                                     CapitalRuleExplanationService rules,
+                                     CapitalBehaviorMetricsService metrics) {
         this.instruments = instruments;
         this.snapshots = snapshots;
         this.aggregation = aggregation;
         this.rules = rules;
+        this.metrics = metrics;
     }
 
     public List<Instrument> listStockInstruments() {
@@ -59,6 +62,7 @@ public class MarketIntelCapitalService {
         view.setSnapshot(snapshot);
         view.setIntradayTimeline(timeline);
         view.setDailyTrend(dailyTrend);
+        view.setMetrics(metrics.derive(timeline, dailyTrend, snapshot.getSignals()));
         view.setRuleExplanation(rules.explain(snapshot.getFacts(), snapshot.getSignals()));
         view.setHealth(health(snapshot));
         return view;

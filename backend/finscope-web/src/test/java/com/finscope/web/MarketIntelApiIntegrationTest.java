@@ -57,6 +57,13 @@ class MarketIntelApiIntegrationTest {
         mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCEEDED"));
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v1"))
+                .andExpect(jsonPath("$.metrics.latest.tradeAmount").value(180000000))
+                .andExpect(jsonPath("$.metrics.latest.tradeVolume").value(1210000))
+                .andExpect(jsonPath("$.metrics.latest.volumeRatio").value(1.67))
+                .andExpect(jsonPath("$.metrics.latest.mainNetInflowSharePct").value(-16.666667))
+                .andExpect(jsonPath("$.metrics.intradayStreak.direction").value("INFLOW"))
+                .andExpect(jsonPath("$.metrics.dailyStreak.direction").value("OUTFLOW"))
+                .andExpect(jsonPath("$.metrics.objectiveTags[0].code").value("AMOUNT_EXPANSION_WITH_OUTFLOW"))
                 .andExpect(jsonPath("$.intradayTimeline").isArray()).andExpect(jsonPath("$.health.status").value("FRESH"));
         verifyNoInteractions(llm);
     }
@@ -82,9 +89,9 @@ class MarketIntelApiIntegrationTest {
         mvc.perform(get("/api/market-intel/capital-interpretations/"+id)).andExpect(status().isOk()).andExpect(jsonPath("$.facts").isArray()).andExpect(jsonPath("$.hypotheses[0].confidence").value("LOW"));
     }
 
-    private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");
+    private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));
         CapitalFlowPoint previous=point("DAY_1",today.minusDays(1).atTime(15,0),new BigDecimal("100000000"),new BigDecimal("20000000"),"daily-1");
-        CapitalFlowPoint latest=point("DAY_1",today.atTime(15,0),new BigDecimal("180000000"),new BigDecimal("-30000000"),"daily-2");
+        CapitalFlowPoint latest=point("DAY_1",today.atTime(15,0),new BigDecimal("180000000"),new BigDecimal("-30000000"),"daily-2");latest.setTradeVolume(new BigDecimal("1210000"));
         return new CapitalFlowData(Collections.singletonList(minute),Arrays.asList(previous,latest),new BigDecimal("3.21"),new BigDecimal("1.67"),Collections.emptyList(),"TEST");}
     private CapitalFlowPoint point(String granularity,LocalDateTime at,BigDecimal amount,BigDecimal flow,String hash){CapitalFlowPoint p=new CapitalFlowPoint();p.setInstrumentId(7L);p.setProviderCode("TEST");p.setGranularity(granularity);p.setDataDate(at.toLocalDate());p.setObservedAt(at);p.setPrice(new BigDecimal("100"));p.setIntervalTradeAmount(amount);p.setMainNetInflow(flow);p.setTurnoverRate(new BigDecimal("3.21"));p.setVolumeRatio(new BigDecimal("1.67"));p.setCalculationVersion("test-v1");p.setRetrievedAt(LocalDateTime.now());p.setPayloadHash(hash);p.setQualityStatus("COMPLETE");return p;}
 }

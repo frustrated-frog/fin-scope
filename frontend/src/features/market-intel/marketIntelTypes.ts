@@ -10,12 +10,46 @@ export type CapitalFlowPoint = {
   id: number;
   observedAt: string;
   price?: number;
+  tradeVolume?: number;
   intervalTradeAmount?: number;
   cumulativeTradeAmount?: number;
   mainNetInflow?: number;
+  mainNetInflowSharePct?: number;
   turnoverRate?: number;
   volumeRatio?: number;
   qualityStatus?: string;
+};
+
+export type CapitalFlowStreak = {
+  direction: 'INFLOW' | 'OUTFLOW' | 'FLAT';
+  periods: number;
+  granularity: string;
+  since?: string;
+  through?: string;
+};
+
+export type CapitalBehaviorMetrics = {
+  latest: {
+    tradeAmount?: number;
+    tradeVolume?: number;
+    turnoverRate?: number;
+    volumeRatio?: number;
+    mainNetInflow?: number;
+    mainNetInflowSharePct?: number;
+    observedAt?: string;
+  } | null;
+  intradayStreak: CapitalFlowStreak;
+  dailyStreak: CapitalFlowStreak;
+  objectiveTags: Array<{
+    code: string;
+    label: string;
+    explanation: string;
+    window: string;
+    version: string;
+    metricRefs: string[];
+    actualValues?: Record<string, number>;
+    thresholds?: Record<string, number>;
+  }>;
 };
 
 export type CapitalRuleExplanation = {
@@ -39,6 +73,7 @@ export type MarketIntelCapitalOverview = {
   } | null;
   intradayTimeline: CapitalFlowPoint[];
   dailyTrend: CapitalFlowPoint[];
+  metrics: CapitalBehaviorMetrics | null;
   ruleExplanation: CapitalRuleExplanation | null;
   health: {
     status: 'EMPTY' | 'FRESH' | 'STALE';

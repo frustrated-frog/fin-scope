@@ -23,6 +23,7 @@ public class CapitalFlowAggregationService {
             aggregate.setInstrumentId(first.getInstrumentId());aggregate.setProviderCode(first.getProviderCode());aggregate.setGranularity("MINUTE_"+windowMinutes);
             aggregate.setDataDate(entry.getKey().toLocalDate());aggregate.setObservedAt(entry.getKey());aggregate.setPrice(last.getPrice());
             aggregate.setTradeVolume(sum(values,"volume"));aggregate.setIntervalTradeAmount(sum(values,"amount"));aggregate.setMainNetInflow(sum(values,"main"));
+            aggregate.setCumulativeTradeAmount(last.getCumulativeTradeAmount());
             aggregate.setSuperLargeNetInflow(sum(values,"super"));aggregate.setLargeNetInflow(sum(values,"large"));aggregate.setMediumNetInflow(sum(values,"medium"));aggregate.setSmallNetInflow(sum(values,"small"));
             aggregate.setTurnoverRate(last.getTurnoverRate());aggregate.setVolumeRatio(last.getVolumeRatio());aggregate.setRetrievedAt(last.getRetrievedAt());
             aggregate.setPayloadHash(last.getPayloadHash());aggregate.setQualityStatus(values.stream().allMatch(v->"COMPLETE".equals(v.getQualityStatus()))?"COMPLETE":"PARTIAL");

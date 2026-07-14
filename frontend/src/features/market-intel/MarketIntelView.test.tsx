@@ -13,12 +13,18 @@ const overview = {
   instrument: { id: 7, code: '600519', type: 'STOCK', name: '贵州茅台', market: 'SH' },
   snapshot: { id: 12, instrumentId: 7, asOf: '2026-07-14T15:00:00', fingerprint: 'snapshot-12', signals: [] },
   intradayTimeline: [
-    { id: 101, observedAt: '2026-07-14T10:30:00', price: 1501, intervalTradeAmount: 120000000, mainNetInflow: 18000000, turnoverRate: 3.21 }
+    { id: 101, observedAt: '2026-07-14T10:30:00', price: 1501, tradeVolume: 81000, intervalTradeAmount: 120000000, mainNetInflow: 18000000, mainNetInflowSharePct: 15, turnoverRate: 3.21, volumeRatio: 1.67 }
   ],
   dailyTrend: [
     { id: 98, observedAt: '2026-07-13T15:00:00', price: 1488, intervalTradeAmount: 100000000, mainNetInflow: 20000000, turnoverRate: 2.8 },
-    { id: 102, observedAt: '2026-07-14T15:00:00', price: 1501, intervalTradeAmount: 180000000, mainNetInflow: -30000000, turnoverRate: 3.21 }
+    { id: 102, observedAt: '2026-07-14T15:00:00', price: 1501, tradeVolume: 1210000, intervalTradeAmount: 180000000, mainNetInflow: -30000000, mainNetInflowSharePct: -16.67, turnoverRate: 3.21, volumeRatio: 1.67 }
   ],
+  metrics: {
+    latest: { tradeAmount: 180000000, tradeVolume: 1210000, turnoverRate: 3.21, volumeRatio: 1.67, mainNetInflow: -30000000, mainNetInflowSharePct: -16.67 },
+    intradayStreak: { direction: 'INFLOW', periods: 3, granularity: 'MINUTE_5', since: '2026-07-14T10:20:00', through: '2026-07-14T10:30:00' },
+    dailyStreak: { direction: 'OUTFLOW', periods: 2, granularity: 'DAY_1', since: '2026-07-13T15:00:00', through: '2026-07-14T15:00:00' },
+    objectiveTags: [{ code: 'AMOUNT_EXPANSION_WITH_OUTFLOW', label: '放量净流出', explanation: '成交额明显放大，同时主力净流向为负。', window: '2d', version: 'capital-signal-v1', metricRefs: ['flow:102:intervalTradeAmount', 'flow:102:mainNetInflow'] }]
+  },
   ruleExplanation: {
     summary: '成交额明显放大，但主力净流向转负，短线承接需要继续观察。',
     ruleVersion: 'capital-rules-v1',
@@ -74,6 +80,15 @@ test('shows deterministic explanation before the user requests agent analysis', 
   expect(await screen.findByText('成交额明显放大，但主力净流向转负，短线承接需要继续观察。')).toBeInTheDocument();
   expect(screen.getByText('量能放大但资金转弱')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '资金证据带' })).toBeInTheDocument();
+  expect(screen.getByText('成交量')).toBeInTheDocument();
+  expect(screen.getByText('121.00 万手')).toBeInTheDocument();
+  expect(screen.getByText('量比')).toBeInTheDocument();
+  expect(screen.getByText('1.67')).toBeInTheDocument();
+  expect(screen.getByText('主力净额占比')).toBeInTheDocument();
+  expect(screen.getAllByText('-16.67%').length).toBeGreaterThan(0);
+  expect(screen.getByText('连续净流入 3 个 5 分钟区间')).toBeInTheDocument();
+  expect(screen.getByText('连续净流出 2 个交易日')).toBeInTheDocument();
+  expect(screen.getByText('放量净流出')).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('capital-interpretations'), expect.anything());
 });
 

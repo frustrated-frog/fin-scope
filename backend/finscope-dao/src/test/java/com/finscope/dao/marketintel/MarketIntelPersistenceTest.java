@@ -1,6 +1,7 @@
 package com.finscope.dao.marketintel;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.dao.agent.AgentTraceSchemaMigrator;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ class MarketIntelPersistenceTest {
     private JdbcTemplate jdbc;
     private CapitalFlowRepository flows;
     private CapitalBehaviorSnapshotRepository snapshots;
+    private MarketIntelSchemaMigrator migrator;
 
     @BeforeEach
     void setUp() {
@@ -31,11 +33,13 @@ class MarketIntelPersistenceTest {
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("market-intel.db") + "?foreign_keys=on");
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("CREATE TABLE instrument(id INTEGER PRIMARY KEY,code TEXT,type TEXT,name TEXT)");
+        jdbc.execute("CREATE TABLE agent_run(id INTEGER PRIMARY KEY)");
         jdbc.update("INSERT INTO instrument VALUES(7,'600519','STOCK','贵州茅台')");
-        MarketIntelSchemaMigrator migrator = new MarketIntelSchemaMigrator(jdbc,
+        migrator = new MarketIntelSchemaMigrator(jdbc,
                 new DataSourceTransactionManager(dataSource));
         migrator.migrate();
         migrator.migrate();
+        new AgentTraceSchemaMigrator(jdbc, new DataSourceTransactionManager(dataSource)).migrate();
         flows = new CapitalFlowRepository(jdbc);
         snapshots = new CapitalBehaviorSnapshotRepository(jdbc, new ObjectMapper().findAndRegisterModules());
     }
@@ -43,6 +47,9 @@ class MarketIntelPersistenceTest {
     @Test
     void migrationIsIdempotentAndFlowPayloadIsDeduplicated() {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=100"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=101"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=102"));
+        assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
         assertEquals(1, tableCount("market_capital_flow_snapshot"));
         assertEquals(1, tableCount("market_capital_behavior_snapshot"));
         assertEquals(1, tableCount("market_capital_interpretation"));
@@ -68,6 +75,43 @@ class MarketIntelPersistenceTest {
         CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
         assertEquals(new BigDecimal("18000000"), restored.getFacts().get(0).getMainNetInflow());
         assertEquals("fingerprint-1", restored.getFingerprint());
+    }
+
+    @Test
+    void preservesRecomputedFactsWhenCalculationVersionChanges() {
+        CapitalFlowPoint first = point("same-payload");
+        first.setCalculationVersion("eastmoney-v1");
+        CapitalFlowPoint recomputed = point("same-payload");
+        recomputed.setCalculationVersion("eastmoney-v2");
+        recomputed.setTradeVolume(new BigDecimal("81000"));
+
+        flows.saveAll(Collections.singletonList(first));
+        flows.saveAll(Collections.singletonList(recomputed));
+
+        assertEquals(2, flows.findRange(7L, first.getObservedAt().minusMinutes(1),
+                first.getObservedAt().plusMinutes(1)).size());
+        assertNotNull(recomputed.getId());
+    }
+
+    @Test
+    void upgradesExistingVersion100DatabaseWithoutLosingHistoricalFacts() {
+        CapitalFlowPoint historical = point("same-payload");
+        flows.saveAll(Collections.singletonList(historical));
+        jdbc.update("DELETE FROM schema_migration WHERE version=102");
+        jdbc.execute("DROP INDEX idx_capital_flow_identity");
+        jdbc.execute("CREATE UNIQUE INDEX idx_capital_flow_identity ON market_capital_flow_snapshot(" +
+                "instrument_id,provider_code,granularity,observed_at,payload_hash)");
+
+        migrator.migrate();
+
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=102"));
+        assertEquals(1, flows.findRange(7L, historical.getObservedAt().minusMinutes(1),
+                historical.getObservedAt().plusMinutes(1)).size());
+        CapitalFlowPoint recomputed = point("same-payload");
+        recomputed.setCalculationVersion("eastmoney-v2");
+        flows.saveAll(Collections.singletonList(recomputed));
+        assertEquals(2, flows.findRange(7L, historical.getObservedAt().minusMinutes(1),
+                historical.getObservedAt().plusMinutes(1)).size());
     }
 
     private CapitalFlowPoint point(String hash) {

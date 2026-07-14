@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 @Component
 @DependsOn("databaseInitializer")
 public class MarketIntelSchemaMigrator implements InitializingBean {
-    private static final int VERSION = 100;
+    private static final int INITIAL_VERSION = 100;
+    private static final int CALCULATION_IDENTITY_VERSION = 102;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -28,11 +29,21 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
                 "description TEXT NOT NULL,applied_at TEXT NOT NULL)");
         transaction.executeWithoutResult(status -> {
             Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
-                    Integer.class, VERSION);
+                    Integer.class, INITIAL_VERSION);
             if (count != null && count > 0) return;
             createTables();
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
-                    VERSION, "market intel capital behavior phase 1a", LocalDateTime.now().toString());
+                    INITIAL_VERSION, "market intel capital behavior phase 1a", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, CALCULATION_IDENTITY_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("DROP INDEX IF EXISTS idx_capital_flow_identity");
+            jdbc.execute("CREATE UNIQUE INDEX idx_capital_flow_identity ON market_capital_flow_snapshot(" +
+                    "instrument_id,provider_code,granularity,observed_at,payload_hash,calculation_version)");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    CALCULATION_IDENTITY_VERSION, "资金事实按计算版本保留", LocalDateTime.now().toString());
         });
     }
 

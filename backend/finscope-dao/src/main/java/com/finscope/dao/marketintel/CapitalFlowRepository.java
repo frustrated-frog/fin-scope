@@ -32,9 +32,10 @@ public class CapitalFlowRepository {
                     text(p.getMediumNetInflow()), text(p.getSmallNetInflow()), p.getCalculationVersion(),
                     text(p.getRetrievedAt()), p.getPayloadHash(), p.getQualityStatus());
             Long id = jdbc.queryForObject("SELECT id FROM market_capital_flow_snapshot WHERE " +
-                            "instrument_id=? AND provider_code=? AND granularity=? AND observed_at=? AND payload_hash=?",
+                            "instrument_id=? AND provider_code=? AND granularity=? AND observed_at=? AND payload_hash=? " +
+                            "AND calculation_version=?",
                     Long.class, p.getInstrumentId(), p.getProviderCode(), p.getGranularity(),
-                    text(p.getObservedAt()), p.getPayloadHash());
+                    text(p.getObservedAt()), p.getPayloadHash(), p.getCalculationVersion());
             p.setId(id);
         }
         return inserted;

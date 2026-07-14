@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -34,12 +35,24 @@ class EastmoneyCapitalFlowProviderTest {
         assertEquals("MINUTE_1", minute.getGranularity());
         assertEquals(new BigDecimal("18000000"), minute.getMainNetInflow());
         assertEquals(new BigDecimal("120000000"), minute.getIntervalTradeAmount());
+        assertEquals(new BigDecimal("81000"), minute.getTradeVolume());
+        assertEquals(new BigDecimal("120000000"), minute.getCumulativeTradeAmount());
         assertEquals(new BigDecimal("1480.50"), minute.getPrice());
+        assertNotEquals("eastmoney-fund-flow-minute.json", minute.getPayloadHash());
+        CapitalFlowPoint secondMinute = data.getMinutePoints().get(1);
+        assertEquals(new BigDecimal("30000000"), secondMinute.getIntervalTradeAmount());
+        assertEquals(new BigDecimal("10000"), secondMinute.getTradeVolume());
+        assertEquals(new BigDecimal("150000000"), secondMinute.getCumulativeTradeAmount());
         assertNull(minute.getMainInflow());
         assertNull(minute.getMainOutflow());
         assertEquals(new BigDecimal("3.21"), data.getTurnoverRate());
         assertEquals(new BigDecimal("1.67"), data.getVolumeRatio());
         assertEquals(2, data.getDailyPoints().size());
+        CapitalFlowPoint latestDaily = data.getDailyPoints().get(1);
+        assertEquals(new BigDecimal("1800000000"), latestDaily.getIntervalTradeAmount());
+        assertEquals(new BigDecimal("1210000"), latestDaily.getTradeVolume());
+        assertEquals(new BigDecimal("1481.50"), latestDaily.getPrice());
+        assertNotEquals("eastmoney-fund-flow-daily.json", latestDaily.getPayloadHash());
     }
 
     @Test
@@ -64,6 +77,7 @@ class EastmoneyCapitalFlowProviderTest {
             if (path.contains("fflow/daykline")) fixture = "eastmoney-fund-flow-daily.json";
             else if (path.contains("fflow/kline")) fixture = "eastmoney-fund-flow-minute.json";
             else if (path.contains("trends2")) fixture = "eastmoney-stock-trends.json";
+            else if (path.contains("stock/kline")) fixture = "eastmoney-stock-daily.json";
             else fixture = "eastmoney-stock-quote.json";
             byte[] bytes = Files.readAllBytes(Paths.get(getClass().getClassLoader()
                     .getResource("marketintel/" + fixture).toURI()));

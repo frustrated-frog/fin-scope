@@ -16,6 +16,7 @@ public class MarketIntelCapitalView {
     private CapitalBehaviorSnapshot snapshot;
     private List<CapitalFlowPoint> intradayTimeline= Collections.emptyList();
     private List<CapitalFlowPoint> dailyTrend=Collections.emptyList();
+    private CapitalBehaviorMetrics metrics;
     private CapitalRuleExplanation ruleExplanation;
     private Health health;
     @Data public static class Health{private String status;private LocalDateTime asOf;private String providerCode;private List<String> warnings=Collections.emptyList();}
