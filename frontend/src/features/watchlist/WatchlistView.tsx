@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FollowedSector, WatchlistItem } from '../../shared/types';
 import { AttributionReaderView } from './AttributionReaderView';
+import { DataQualityNotice } from './DataQualityNotice';
 import { SectorMarketPanel } from './SectorMarketPanel';
 import { useWatchlistDashboardData } from './useWatchlistDashboardData';
 import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
@@ -293,6 +294,8 @@ export function WatchlistView({
           {marketIndices.map((index) => (
             <article className="market-index-card" data-testid="market-index-card" key={index.code}>
               <span className="market-index-name">{index.name}</span>
+              {['STALE_FALLBACK', 'UNAVAILABLE'].includes(index.qualityStatus || '')
+                && <span className="market-data-old-badge">旧数据</span>}
               {index.quoteValid ? (
                 <div className="market-index-values">
                   <strong className={changeClass(index.changePct)}>{formatNum(index.price)}</strong>
@@ -419,6 +422,8 @@ export function WatchlistView({
         </div>
       )}
 
+      <DataQualityNotice quality={dashboard.marketDataQuality} />
+
       {loadError && (
         <p className="watchlist-load-error" role="alert">
           自选列表加载失败：{loadError}。请点击“刷新行情”重试。
@@ -476,6 +481,8 @@ export function WatchlistView({
                             <strong className="watchlist-name">
                               {item.name || item.code}
                               {isAbnormal(item.changePct) && <span className="watchlist-abnormal-tag">异动</span>}
+                              {['STALE_FALLBACK', 'UNAVAILABLE'].includes(item.qualityStatus || '')
+                                && <span className="market-data-old-badge">旧数据</span>}
                             </strong>
                             <span className="watchlist-meta">
                               {item.code} · {typeLabels[item.type] || item.type}

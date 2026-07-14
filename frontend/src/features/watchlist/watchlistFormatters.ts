@@ -1,4 +1,6 @@
-type QuoteLike = { quoteValid: boolean };
+import type { MarketDataQuality } from '../../shared/types';
+
+type QuoteLike = MarketDataQuality & { quoteValid: boolean; quoteNote?: string };
 
 export function preserveValidQuotes<T extends QuoteLike>(
   next: T[],
@@ -11,7 +13,17 @@ export function preserveValidQuotes<T extends QuoteLike>(
     const prior = previousByKey.get(keyOf(item));
     if (!item.quoteValid && prior?.quoteValid) {
       degradedCount += 1;
-      return prior;
+      return {
+        ...prior,
+        quoteNote: item.quoteNote ?? prior.quoteNote,
+        qualityStatus: item.qualityStatus,
+        sourceCode: item.sourceCode,
+        asOf: item.asOf,
+        retrievedAt: item.retrievedAt,
+        staleAgeSeconds: item.staleAgeSeconds,
+        warning: item.warning,
+        refreshId: item.refreshId
+      } as T;
     }
     return item;
   });

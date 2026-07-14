@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { DataQualityNotice } from '../../shared/components/DataQualityNotice';
 import { CapitalAgentInterpretationPanel } from './CapitalAgentInterpretationPanel';
 import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
@@ -179,7 +180,8 @@ export function MarketIntelView({
         </div>
         {overview && (
           <div className="market-intel-health">
-            <span className={overview.health.status === 'FRESH' ? 'fresh' : overview.health.status === 'EMPTY' ? 'empty' : 'stale'}>{overview.health.status}</span>
+            <span className={overview.health.status === 'FRESH_PRIMARY' ? 'fresh'
+              : overview.health.status === 'UNAVAILABLE' ? 'empty' : 'stale'}>{overview.health.status}</span>
             <dl>
               <div><dt>数据源</dt><dd>{overview.health.providerCode || '等待首次刷新'}</dd></div>
               <div><dt>快照时点</dt><dd>{overview.health.asOf ? new Date(overview.health.asOf).toLocaleString('zh-CN', { hour12: false }) : '--'}</dd></div>
@@ -190,6 +192,13 @@ export function MarketIntelView({
               </ul>
             )}
           </div>
+        )}
+        {overview?.snapshot && (
+          <DataQualityNotice quality={{
+            status: overview.health.status,
+            sourceCode: overview.health.providerCode,
+            warning: overview.health.warnings.join('；') || undefined
+          }} />
         )}
       </section>
 

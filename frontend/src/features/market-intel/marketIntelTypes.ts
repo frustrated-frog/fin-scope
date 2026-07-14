@@ -1,3 +1,5 @@
+import type { MarketDataQualityStatus } from '../../shared/types';
+
 export type MarketIntelInstrument = {
   id: number;
   code: string;
@@ -78,7 +80,7 @@ export type MarketIntelCapitalOverview = {
   metrics: CapitalBehaviorMetrics | null;
   ruleExplanation: CapitalRuleExplanation | null;
   health: {
-    status: 'EMPTY' | 'FRESH' | 'STALE' | 'INCOMPLETE';
+    status: MarketDataQualityStatus;
     asOf: string | null;
     providerCode: string;
     warnings: string[];

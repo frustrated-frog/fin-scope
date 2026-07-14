@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import {
@@ -10,6 +10,7 @@ import {
   WatchlistItem
 } from '../../shared/types';
 import { preserveValidQuotes } from './watchlistFormatters';
+import { aggregateMarketDataQuality, AggregatedMarketDataQuality } from './marketDataQuality';
 
 type LoadResult = { failed: boolean; degradedCount: number };
 
@@ -39,6 +40,7 @@ export function useWatchlistDashboardData() {
   const [followedSectors, setFollowedSectors] = useState<ResourceState<FollowedSector[]>>({ data: [], phase: 'idle' });
   const [refreshing, setRefreshing] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<string>();
+  const [refreshQuality, setRefreshQuality] = useState<AggregatedMarketDataQuality>();
   const investmentsRef = useRef(investments);
   const indicesRef = useRef(indices);
   const followsRef = useRef(followedSectors);
@@ -106,10 +108,14 @@ export function useWatchlistDashboardData() {
         data: value,
         phase: value.qualityStatus === 'UNAVAILABLE' ? 'error' : 'ready',
         error: value.qualityStatus === 'UNAVAILABLE' ? (value.warning || '板块排行暂不可用') : undefined,
-        warning: value.qualityStatus === 'STALE' ? (value.warning || '当前展示最近一次可用数据') : value.warning,
+        warning: value.qualityStatus === 'STALE_FALLBACK'
+          ? (value.warning || '当前展示最近一次可用数据') : value.warning,
         updatedAt: value.retrievedAt
       });
-      return { failed: value.qualityStatus === 'UNAVAILABLE', degradedCount: value.qualityStatus === 'STALE' ? 1 : 0 };
+      return {
+        failed: value.qualityStatus === 'UNAVAILABLE',
+        degradedCount: ['STALE_FALLBACK', 'PARTIAL_FRESH'].includes(value.qualityStatus) ? 1 : 0
+      };
     } catch (error) {
       if (sequence !== overviewSequence.current) return { failed: false, degradedCount: 0 };
       const message = messageOf(error, '板块排行加载失败');
@@ -166,8 +172,26 @@ export function useWatchlistDashboardData() {
     setRefreshStatus(failedCount
       ? `部分行情刷新失败，已保留可用数据 · ${time}`
       : before === after ? `已刷新，行情暂无变化 · ${time}` : `行情已刷新 · ${time}`);
+    setRefreshQuality(failedCount ? {
+      status: 'PARTIAL_FRESH',
+      warning: '部分行情请求失败，页面已保留仍然可用的数据。',
+      degradedCount: failedCount
+    } : undefined);
     setRefreshing(false);
   }, [loadFollowedSectors, loadIndices, loadInvestments, loadSectorOverview, refreshing, sectorCategory]);
+
+  const marketDataQuality = useMemo(() => aggregateMarketDataQuality([
+    ...investments.data,
+    ...indices.data,
+    ...(['ready', 'error'].includes(sectorOverview.phase) ? [sectorOverview.data] : []),
+    ...followedSectors.data,
+    ...(refreshQuality ? [{
+      qualityStatus: refreshQuality.status,
+      warning: refreshQuality.warning,
+      staleAgeSeconds: refreshQuality.staleAgeSeconds,
+      sourceCode: refreshQuality.sourceCode
+    }] : [])
+  ]), [followedSectors.data, indices.data, investments.data, refreshQuality, sectorOverview.data]);
 
   return {
     investments,
@@ -181,6 +205,7 @@ export function useWatchlistDashboardData() {
     loadFollowedSectors,
     refreshAll,
     refreshing,
-    refreshStatus
+    refreshStatus,
+    marketDataQuality
   };
 }

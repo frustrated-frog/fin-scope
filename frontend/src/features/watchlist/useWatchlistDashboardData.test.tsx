@@ -8,7 +8,7 @@ vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 
 const overview = {
   category: 'INDUSTRY' as const,
-  qualityStatus: 'FRESH' as const,
+  qualityStatus: 'FRESH_PRIMARY' as const,
   retrievedAt: '2026-07-14T10:00:00',
   leaders: [],
   laggards: []
@@ -97,4 +97,29 @@ test('keeps the last ranking visible when a later refresh fails', async () => {
   expect(result.current.sectorOverview.phase).toBe('ready');
   expect(result.current.sectorOverview.data.leaders[0].code).toBe('BK1036');
   expect(result.current.sectorOverview.warning).toContain('upstream timeout');
+});
+
+test('aggregates mixed source results into one partial-refresh warning', async () => {
+  vi.mocked(api).mockImplementation((path?: string) => {
+    if (path === '/api/watchlist') return Promise.resolve([{
+      id: 1, code: '600519', type: 'STOCK', quoteValid: true,
+      qualityStatus: 'FRESH_PRIMARY', sourceCode: 'EASTMONEY'
+    }]) as never;
+    if (path === '/api/market-indices') return Promise.resolve([{
+      code: '000001', name: '上证指数', quoteValid: true,
+      qualityStatus: 'STALE_FALLBACK', sourceCode: 'LAST_GOOD_SNAPSHOT', staleAgeSeconds: 600,
+      warning: '实时源不可用'
+    }]) as never;
+    if (path?.startsWith('/api/sector-market/overview')) return Promise.resolve(overview) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  const { result } = renderHook(() => useWatchlistDashboardData());
+
+  await waitFor(() => expect(result.current.indices.phase).toBe('ready'));
+  expect(result.current.marketDataQuality).toMatchObject({
+    status: 'PARTIAL_FRESH',
+    staleAgeSeconds: 600,
+    warning: '实时源不可用'
+  });
 });

@@ -534,7 +534,24 @@ export type AttributionResearchRunView = {
   };
 };
 
-export type WatchlistItem = {
+export type MarketDataQualityStatus =
+  | 'FRESH_PRIMARY'
+  | 'FRESH_FALLBACK'
+  | 'PARTIAL_FRESH'
+  | 'STALE_FALLBACK'
+  | 'UNAVAILABLE';
+
+export type MarketDataQuality = {
+  qualityStatus?: MarketDataQualityStatus;
+  sourceCode?: string;
+  asOf?: string;
+  retrievedAt?: string;
+  staleAgeSeconds?: number;
+  warning?: string;
+  refreshId?: string;
+};
+
+export type WatchlistItem = MarketDataQuality & {
   id: number;
   code: string;
   type: 'STOCK' | 'FUND' | 'SECTOR';
@@ -561,7 +578,7 @@ export type WatchlistItem = {
   attributionChangePct?: number;
 };
 
-export type MarketIndexQuote = {
+export type MarketIndexQuote = MarketDataQuality & {
   code: string;
   name: string;
   price?: number;
@@ -572,7 +589,6 @@ export type MarketIndexQuote = {
 };
 
 export type SectorCategory = 'INDUSTRY' | 'CONCEPT';
-export type SectorMarketQualityStatus = 'FRESH' | 'STALE' | 'UNAVAILABLE';
 
 export type SectorMarketEntry = {
   code: string;
@@ -588,23 +604,19 @@ export type SectorMarketEntry = {
   quoteTime?: string;
 };
 
-export type SectorMarketOverview = {
+export type SectorMarketOverview = MarketDataQuality & {
   category: SectorCategory;
-  qualityStatus: SectorMarketQualityStatus;
-  retrievedAt?: string;
-  warning?: string;
+  qualityStatus: MarketDataQualityStatus;
   leaders: SectorMarketEntry[];
   laggards: SectorMarketEntry[];
 };
 
-export type SectorMarketSearchResult = {
-  qualityStatus: SectorMarketQualityStatus;
-  retrievedAt?: string;
-  warning?: string;
+export type SectorMarketSearchResult = MarketDataQuality & {
+  qualityStatus: MarketDataQualityStatus;
   items: SectorMarketEntry[];
 };
 
-export type FollowedSector = {
+export type FollowedSector = MarketDataQuality & {
   id: number;
   code: string;
   name?: string;

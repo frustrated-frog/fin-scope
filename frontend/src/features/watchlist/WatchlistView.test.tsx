@@ -17,7 +17,7 @@ const indexQuotes = [
 ];
 
 const industryOverview = {
-  category: 'INDUSTRY', qualityStatus: 'FRESH', retrievedAt: '2026-07-14T10:00:00',
+  category: 'INDUSTRY', qualityStatus: 'FRESH_PRIMARY', retrievedAt: '2026-07-14T10:00:00',
   leaders: [{ code: 'BK1036', name: '半导体', category: 'INDUSTRY', price: 1234.5, changePct: 2.6, turnover: 12000000000, leaderStockName: '中芯国际' }],
   laggards: [{ code: 'BK0420', name: '旅游酒店', category: 'INDUSTRY', price: 876.5, changePct: -1.8, turnover: 3200000000 }]
 };
@@ -208,7 +208,7 @@ test('switches ranking category and searches sectors outside the current ranking
     }
     if (path.startsWith('/api/sector-market/overview')) return Promise.resolve(industryOverview) as never;
     if (path.startsWith('/api/sector-market/search')) return Promise.resolve({
-      qualityStatus: 'FRESH', items: [{ code: 'BK0987', name: '人形机器人', category: 'CONCEPT', changePct: 1.4 }]
+      qualityStatus: 'FRESH_PRIMARY', items: [{ code: 'BK0987', name: '人形机器人', category: 'CONCEPT', changePct: 1.4 }]
     }) as never;
     return Promise.resolve([]) as never;
   });
@@ -220,4 +220,32 @@ test('switches ranking category and searches sectors outside the current ranking
   await user.type(screen.getByRole('textbox', { name: '搜索板块' }), '机器人');
   expect(await screen.findByRole('option', { name: /人形机器人/ })).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/sector-market/search?q=%E6%9C%BA%E5%99%A8%E4%BA%BA&category=ALL&limit=10');
+});
+
+test('clearly marks stale quotes and explains that they are not real-time data', async () => {
+  const staleQuality = {
+    qualityStatus: 'STALE_FALLBACK', sourceCode: 'LAST_GOOD_SNAPSHOT', staleAgeSeconds: 1620,
+    warning: '实时行情源暂不可用，已回退到最近一次成功快照'
+  };
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-indices') return Promise.resolve([{
+      ...indexQuotes[0], ...staleQuality
+    }]) as never;
+    if (path === '/api/watchlist') return Promise.resolve([{
+      id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', price: 1500,
+      changePct: 1.2, quoteValid: true, ...staleQuality
+    }]) as never;
+    if (path.startsWith('/api/sector-market/overview')) return Promise.resolve({
+      ...industryOverview, ...staleQuality
+    }) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const alerts = await screen.findAllByRole('alert');
+  expect(alerts[0]).toHaveTextContent('当前展示的是旧数据');
+  expect(alerts[0]).toHaveTextContent('27 分钟前');
+  expect(alerts[0]).toHaveTextContent('请勿视为实时行情');
+  expect(screen.getAllByText('旧数据').length).toBeGreaterThanOrEqual(3);
 });

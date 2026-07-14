@@ -31,7 +31,7 @@ const overview = {
     items: [{ level: 'WATCH', text: '量能放大但资金转弱', metricRefs: ['flow:102:mainNetInflow'] }],
     dataGaps: ['缺少逐笔成交和委托队列，不能确认拆单。']
   },
-  health: { status: 'FRESH', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: [] }
+  health: { status: 'FRESH_PRIMARY', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: [] }
 };
 
 beforeEach(() => {
@@ -184,7 +184,7 @@ test('surfaces incomplete snapshot warnings in the health summary', async () => 
     if (path.includes('/capital-behavior')) {
       return Promise.resolve({
         ...overview,
-        health: { status: 'INCOMPLETE', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: ['成交额、成交量、换手率或量比尚未补齐'] }
+        health: { status: 'PARTIAL_FRESH', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: ['成交额、成交量、换手率或量比尚未补齐'] }
       }) as never;
     }
     return Promise.reject(new Error(`unexpected api call: ${path}`));
@@ -193,7 +193,7 @@ test('surfaces incomplete snapshot warnings in the health summary', async () => 
   render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByText('成交额、成交量、换手率或量比尚未补齐')).toBeInTheDocument();
-  expect(screen.getByText('INCOMPLETE')).toBeInTheDocument();
+  expect(screen.getByText('PARTIAL_FRESH')).toBeInTheDocument();
 });
 
 test('treats an instrument without a snapshot as a first-run state instead of an error', async () => {
@@ -206,7 +206,7 @@ test('treats an instrument without a snapshot as a first-run state instead of an
         intradayTimeline: [],
         dailyTrend: [],
         ruleExplanation: null,
-        health: { status: 'EMPTY', asOf: null, providerCode: '', warnings: [] }
+        health: { status: 'UNAVAILABLE', asOf: null, providerCode: '', warnings: [] }
       }) as never;
     }
     return Promise.reject(new Error(`unexpected api call: ${path}`));
@@ -217,4 +217,27 @@ test('treats an instrument without a snapshot as a first-run state instead of an
   expect(await screen.findByRole('button', { name: '生成第一份资金快照' })).toBeInTheDocument();
   expect(screen.getByText('这个标的还没有资金快照')).toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('shows an explicit alert when capital analysis uses a stale snapshot', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve({
+      ...overview,
+      health: {
+        status: 'STALE_FALLBACK',
+        asOf: '2026-07-14T14:33:00',
+        providerCode: 'LAST_GOOD_SNAPSHOT',
+        warnings: ['在线资金源均不可用，当前展示最近一次成功快照']
+      }
+    }) as never;
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('当前展示的是旧数据');
+  expect(alert).toHaveTextContent('在线资金源均不可用');
+  expect(alert).toHaveTextContent('请勿视为实时行情');
 });

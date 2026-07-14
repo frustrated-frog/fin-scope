@@ -10,6 +10,8 @@ import {
   SectorMarketSearchResult
 } from '../../shared/types';
 import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
+import { DataQualityNotice } from './DataQualityNotice';
+import { aggregateMarketDataQuality } from './marketDataQuality';
 
 type Props = {
   overview: ResourceState<SectorMarketOverview>;
@@ -134,6 +136,7 @@ export function SectorMarketPanel({
   }
 
   const overviewEmpty = overview.data.leaders.length === 0 && overview.data.laggards.length === 0;
+  const overviewQuality = aggregateMarketDataQuality([overview.data]);
 
   return (
     <section className="panel wide sector-market-panel" aria-labelledby="sector-market-title">
@@ -164,7 +167,7 @@ export function SectorMarketPanel({
             <strong>全市场扫描</strong>
             <span>{categoryLabel(category)}板块 · 同一行情快照</span>
           </div>
-          {overview.data.qualityStatus === 'STALE' && <span className="sector-quality is-stale">最近可用数据</span>}
+          {overview.data.qualityStatus === 'STALE_FALLBACK' && <span className="sector-quality is-stale">旧数据</span>}
           {overview.phase === 'refreshing' && <span className="sector-quality">更新中</span>}
         </div>
         {overview.error && overviewEmpty ? (
@@ -174,7 +177,9 @@ export function SectorMarketPanel({
           </div>
         ) : (
           <>
-            {overview.warning && <p className="sector-quality-warning">{overview.warning}</p>}
+            <DataQualityNotice quality={overview.phase === 'ready' ? overviewQuality : undefined} />
+            {overview.warning && overviewQuality.status === 'FRESH_PRIMARY'
+              && <p className="sector-quality-warning">{overview.warning}</p>}
             <div className="sector-rank-grid">
               {renderRanking('领涨方向', 'leader', overview.data.leaders)}
               {renderRanking('承压方向', 'laggard', overview.data.laggards)}
