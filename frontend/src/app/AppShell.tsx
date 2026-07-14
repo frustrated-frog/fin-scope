@@ -31,6 +31,7 @@ const navGroups: Array<{
     label: '决策',
     items: [
       { id: 'watchlist', label: 'Watchlist', hint: '自选观察', code: 'WA' },
+      { id: 'marketIntel', label: 'Market Intel', hint: '资金行为', code: 'MI' },
       { id: 'strategy', label: 'Strategy', hint: '策略工作台', code: 'SG' }
     ]
   },

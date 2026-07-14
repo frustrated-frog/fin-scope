@@ -11,6 +11,7 @@ import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { LearningView } from './features/learning/LearningView';
+import { MarketIntelView } from './features/market-intel/MarketIntelView';
 import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -241,6 +242,8 @@ export default function App() {
         return 'Settings';
       case 'watchlist':
         return 'Watchlist';
+      case 'marketIntel':
+        return 'Market Intel · 资金行为';
       case 'strategy':
         return 'Strategy Workbench';
       default:
@@ -625,6 +628,7 @@ export default function App() {
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
+      {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} />}
       {topicDeleteTarget && (
         <div className="modal-overlay">

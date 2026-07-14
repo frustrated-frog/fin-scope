@@ -17,6 +17,7 @@ export type View =
   | 'agents'
   | 'settings'
   | 'watchlist'
+  | 'marketIntel'
   | 'strategy';
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; note?: string; revision: number; updatedAt?: string };
