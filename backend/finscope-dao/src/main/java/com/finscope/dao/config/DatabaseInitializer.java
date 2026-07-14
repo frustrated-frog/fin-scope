@@ -622,7 +622,39 @@ public class DatabaseInitializer implements InitializingBean {
                 + "ended_at TEXT,"
                 + "UNIQUE(run_id, step_id))");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_step_run ON attribution_research_step(run_id)");
+        initializeMarketDataSchema();
         initializeQuantSchema();
+    }
+
+    private void initializeMarketDataSchema() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS market_data_snapshot ("
+                + "capability TEXT NOT NULL,"
+                + "scope_key TEXT NOT NULL,"
+                + "provider_code TEXT NOT NULL,"
+                + "provider_family TEXT NOT NULL,"
+                + "as_of TEXT,"
+                + "retrieved_at TEXT NOT NULL,"
+                + "payload_json TEXT NOT NULL,"
+                + "payload_hash TEXT NOT NULL,"
+                + "schema_version INTEGER NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "PRIMARY KEY(capability,scope_key))");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS market_data_refresh_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "capability TEXT NOT NULL,"
+                + "scope_summary TEXT NOT NULL,"
+                + "trigger_type TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "started_at TEXT NOT NULL,"
+                + "finished_at TEXT,"
+                + "requested_count INTEGER NOT NULL DEFAULT 0,"
+                + "fresh_count INTEGER NOT NULL DEFAULT 0,"
+                + "stale_count INTEGER NOT NULL DEFAULT 0,"
+                + "failed_count INTEGER NOT NULL DEFAULT 0,"
+                + "selected_sources TEXT,"
+                + "warning_message TEXT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_market_data_refresh_started "
+                + "ON market_data_refresh_run(started_at)");
     }
 
     private void initializeQuantSchema() {
