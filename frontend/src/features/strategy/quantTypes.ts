@@ -3,11 +3,48 @@ export interface QuantDataset {
   startDate?: string; endDate?: string; status: string; fingerprint?: string; qualitySummary?: string;
 }
 
+export interface QuantDatasetQuality {
+  datasetId: number;
+  status: string;
+  summary?: string;
+  fingerprint?: string;
+  availableFactors: string[];
+}
+
 export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;
 }
 export interface QuantFactorAnalysis { datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
+
+export type FactorLifecycleStatus =
+  | 'CANDIDATE' | 'DEFINITION_REVIEWED' | 'IMPLEMENTED' | 'CALCULATION_VERIFIED'
+  | 'EXPLORATORY' | 'VALIDATED' | 'PRODUCTION_ELIGIBLE' | 'INVALIDATED' | 'RETIRED';
+
+export type FactorResearchDirection = 'POSITIVE_HYPOTHESIS' | 'NEGATIVE_HYPOTHESIS';
+
+export interface ResearchFactorDefinition {
+  identity: { namespace: string; code: string; version: string };
+  name: string;
+  category: string;
+  frequency: string;
+  expectedDirection: FactorResearchDirection;
+  plainMeaning: string;
+  hypothesis: string;
+  economicRationale: string;
+  interpretationBoundary: string;
+  requiredFields: string[];
+  availableAtRule: string;
+  missingPolicy: string;
+  calculationKey: string;
+  calculationVersion: string;
+  sourceType: string;
+  sourceRef: string;
+  evaluationPolicyCode: string;
+  evaluationPolicyVersion: string;
+  status: FactorLifecycleStatus;
+  validationEvidenceRef?: string;
+}
 
 export interface QuantStrategySpec {
   name: string; datasetId: number; benchmark: string; investmentHypothesis: string; riskBoundary: string;
