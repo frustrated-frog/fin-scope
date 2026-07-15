@@ -359,8 +359,11 @@ test('does not treat a polling timeout as successful without a completed task co
   await act(async () => {
     await vi.advanceTimersByTimeAsync(60 * 800 + 1);
   });
+  await act(async () => {
+    await Promise.resolve();
+  });
 
-  expect(await screen.findByText('生成失败')).toBeInTheDocument();
+  expect(screen.getByText('生成失败')).toBeInTheDocument();
   expect(screen.getByText('生成任务超时，请稍后重试')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
   expect(screen.queryByText('新生成的情报卡片')).not.toBeInTheDocument();

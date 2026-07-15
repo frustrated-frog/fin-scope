@@ -13,7 +13,16 @@ import {
 } from './marketIntelTypes';
 
 const POLL_DELAY_MS = 650;
-const TERMINAL_AGENT_STATUSES = new Set(['SUCCEEDED', 'FALLBACK', 'FAILED']);
+const TERMINAL_AGENT_STATUSES = new Set(['SUCCEEDED', 'FALLBACK', 'INSUFFICIENT_DATA', 'FAILED']);
+const AGENT_STATUS_MESSAGES: Record<string, string> = {
+  LLM_NOT_CONFIGURED: '模型尚未配置，已自动展示规则解读。',
+  LLM_TIMEOUT: '模型响应超时，已自动展示规则解读。',
+  INVALID_MODEL_OUTPUT: '模型输出格式无效，已自动展示规则解读。',
+  OUTPUT_REJECTED_BY_GATE: '模型结论未通过证据门禁，已自动展示规则解读。',
+  INSUFFICIENT_FACTOR_COVERAGE: '有效因子维度不足，未调用模型。',
+  EXECUTOR_REJECTED: '分析任务暂未被执行，请稍后重试。',
+  UNKNOWN: 'Agent 执行异常，本次未生成模型解读，请稍后重试。'
+};
 
 function delay(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
@@ -128,8 +137,22 @@ export function MarketIntelView({
         setInterpretation(value);
       }
       if (!TERMINAL_AGENT_STATUSES.has(value.status)) throw new Error('Agent 仍在运行，可稍后重新打开查看');
-      setMessage(value.status === 'FAILED' ? 'Agent 解读失败' : 'Agent 解读完成');
-      if (value.status === 'FAILED') addToast(value.fallbackReason || 'Agent 解读失败', 'error');
+      const explicitMessage = value.fallbackReason
+        ? AGENT_STATUS_MESSAGES[value.fallbackReason] ?? value.fallbackReason
+        : null;
+      if (value.status === 'FAILED') {
+        const message = explicitMessage || 'Agent 解读失败';
+        setMessage(message);
+        addToast(message, 'error');
+      } else if (value.status === 'FALLBACK' || value.status === 'INSUFFICIENT_DATA') {
+        const message = explicitMessage || (value.status === 'FALLBACK'
+          ? '模型不可用，已自动展示规则解读。'
+          : '有效数据不足，未调用模型。');
+        setMessage(message);
+        addToast(message, 'info');
+      } else {
+        setMessage('Agent 解读完成');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Agent 解读失败';
       setMessage(message);
@@ -222,7 +245,13 @@ export function MarketIntelView({
           </div>
           <aside className="market-intel-interpretation">
             <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />
-            <CapitalAgentInterpretationPanel interpretation={interpretation} busy={agentBusy} onRun={runAgent} />
+            <CapitalAgentInterpretationPanel
+              interpretation={interpretation}
+              factorObservations={overview.factorObservations ?? []}
+              watchConditions={overview.watchConditions ?? []}
+              busy={agentBusy}
+              onRun={runAgent}
+            />
           </aside>
         </div>
       )}

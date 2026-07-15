@@ -65,6 +65,34 @@ export type CapitalRuleExplanation = {
   dataGaps: string[];
 };
 
+export type CapitalFactorObservation = {
+  factorRef?: string;
+  factorCode: string;
+  label: string;
+  category: string;
+  observedAt: string;
+  window: string;
+  value: number;
+  baseline?: number;
+  percentile?: number;
+  zscore?: number;
+  state?: string;
+  sampleCount: number;
+  metricRefs: string[];
+  qualityStatus: string;
+  calculationVersion: string;
+  interpretationBoundary: string;
+};
+
+export type CapitalWatchCondition = {
+  id: string;
+  label: string;
+  factorRef: string;
+  operator: string;
+  threshold: number;
+  unit: string;
+};
+
 export type MarketIntelCapitalOverview = {
   instrument: MarketIntelInstrument;
   snapshot: {
@@ -79,6 +107,10 @@ export type MarketIntelCapitalOverview = {
   dailyTrend: CapitalFlowPoint[];
   metrics: CapitalBehaviorMetrics | null;
   ruleExplanation: CapitalRuleExplanation | null;
+  factorObservations: CapitalFactorObservation[];
+  watchConditions: CapitalWatchCondition[];
+  factorVersion?: string;
+  signalVersion?: string;
   health: {
     status: MarketDataQualityStatus;
     asOf: string | null;
@@ -98,13 +130,36 @@ export type CapitalHypothesis = {
 
 export type CapitalInterpretation = {
   id: number;
-  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FALLBACK' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FALLBACK' | 'INSUFFICIENT_DATA' | 'FAILED';
   interpretationType: 'AGENT';
   plainSummary: string;
+  marketState?: string;
+  executiveSummary?: string;
   facts: string[];
   hypotheses: CapitalHypothesis[];
   dataGaps: string[];
   observationPoints: string[];
+  observations: Array<{
+    dimension: string;
+    claim: string;
+    factorRefs: string[];
+    metricRefs: string[];
+  }>;
+  counterEvidence: string[];
+  watchConditionRefs: string[];
+  confidence?: 'LOW' | 'MID';
+  factorVersion?: string;
+  signalVersion?: string;
+  evidenceRefs: Array<{
+    ref: string;
+    label: string;
+    category: string;
+    value: number;
+    unit: string;
+    observedAt: string;
+  }>;
+  rejectedOutputCount: number;
+  rejectionReasons: string[];
   disclaimer: string;
   fallbackReason?: string;
   modelName?: string;

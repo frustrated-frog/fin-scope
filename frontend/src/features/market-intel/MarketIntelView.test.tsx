@@ -33,6 +33,31 @@ const overview = {
     items: [{ level: 'WATCH', text: '量能放大但资金转弱', metricRefs: ['flow:102:mainNetInflow'] }],
     dataGaps: ['缺少逐笔成交和委托队列，不能确认拆单。']
   },
+  factorObservations: [{
+    factorRef: 'factor:PRICE_FLOW_ALIGNMENT:2026-07-14T15:00',
+    factorCode: 'PRICE_FLOW_ALIGNMENT',
+    label: '价格与资金协同',
+    category: 'FLOW',
+    observedAt: '2026-07-14T15:00:00',
+    window: '2d',
+    value: -1,
+    state: 'DIVERGENT',
+    sampleCount: 2,
+    metricRefs: ['flow:102:mainNetInflow'],
+    qualityStatus: 'COMPLETE',
+    calculationVersion: 'capital-factor-v1',
+    interpretationBoundary: '只描述价格和公开资金净额的方向关系。'
+  }],
+  watchConditions: [{
+    id: 'watch:MAIN_FLOW_SHARE',
+    label: '主力净额占比转正',
+    factorRef: 'factor:MAIN_FLOW_SHARE:2026-07-14T15:00',
+    operator: '>',
+    threshold: 0,
+    unit: '比例'
+  }],
+  factorVersion: 'capital-factor-v1',
+  signalVersion: 'capital-signal-v2',
   health: { status: 'FRESH_PRIMARY', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: [] }
 };
 
@@ -56,6 +81,8 @@ beforeEach(() => {
         id: 33,
         status: 'SUCCEEDED',
         interpretationType: 'AGENT',
+        marketState: 'PRICE_FLOW_DIVERGENCE',
+        executiveSummary: '目前只能确认量价资金出现背离，拆单仍是假设。',
         plainSummary: '目前只能确认量价资金出现背离，拆单仍是假设。',
         facts: ['当日成交额 1.80 亿', '主力净流出 3000 万'],
         hypotheses: [{
@@ -68,6 +95,27 @@ beforeEach(() => {
         }],
         dataGaps: ['缺少 Level-2'],
         observationPoints: ['观察尾盘资金是否继续流出'],
+        observations: [{
+          dimension: 'FLOW',
+          claim: '价格上涨但主力净额转负，形成价格与资金背离。',
+          factorRefs: ['factor:PRICE_FLOW_ALIGNMENT:2026-07-14T15:00'],
+          metricRefs: ['flow:102:mainNetInflow']
+        }],
+        counterEvidence: ['日内早盘曾连续净流入'],
+        watchConditionRefs: ['watch:MAIN_FLOW_SHARE'],
+        confidence: 'MID',
+        factorVersion: 'capital-factor-v1',
+        signalVersion: 'capital-signal-v2',
+        evidenceRefs: [{
+          ref: 'flow:102:mainNetInflow',
+          label: '主力净额',
+          category: 'FLOW',
+          value: -30000000,
+          unit: '元',
+          observedAt: '2026-07-14T15:00:00'
+        }],
+        rejectedOutputCount: 1,
+        rejectionReasons: ['观察项引用了未知因子'],
         disclaimer: '不构成投资建议'
       }) as never;
     }
@@ -127,8 +175,93 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
     { method: 'POST' }
   ));
   expect(await screen.findByText('目前只能确认量价资金出现背离，拆单仍是假设。')).toBeInTheDocument();
+  expect(screen.getByText('模型解读')).toBeInTheDocument();
+  expect(screen.getByText('价格与资金背离')).toBeInTheDocument();
+  expect(screen.getByText('资金方向')).toBeInTheDocument();
+  expect(screen.getByText('价格与资金协同')).toBeInTheDocument();
+  expect(screen.getAllByText(/主力净额/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/-3000.00 万元/).length).toBeGreaterThan(0);
+  expect(screen.getByText('主力净额占比转正')).toBeInTheDocument();
+  expect(screen.getByText('1 项模型输出未通过证据门禁')).toBeInTheDocument();
   expect(screen.getByText('低置信度')).toBeInTheDocument();
   expect(screen.getByText('缺少逐笔明细')).toBeInTheDocument();
+});
+
+test('clearly labels rule fallback instead of presenting it as model analysis', async () => {
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/capital-interpretations') && options?.method === 'POST') {
+      return Promise.resolve({
+        id: 34,
+        status: 'FALLBACK',
+        interpretationType: 'AGENT',
+        marketState: 'NEUTRAL',
+        plainSummary: '模型超时，当前展示规则结果。',
+        executiveSummary: '模型超时，当前展示规则结果。',
+        facts: [],
+        hypotheses: [],
+        observations: [],
+        counterEvidence: [],
+        dataGaps: ['缺少 Level-2'],
+        observationPoints: [],
+        watchConditionRefs: [],
+        evidenceRefs: [],
+        rejectedOutputCount: 0,
+        rejectionReasons: [],
+        fallbackReason: 'LLM_TIMEOUT',
+        disclaimer: '不构成投资建议'
+      }) as never;
+    }
+    return Promise.reject(new Error('unexpected api call: ' + path));
+  });
+  const user = userEvent.setup();
+  const addToast = vi.fn();
+  render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
+
+  expect(await screen.findByText('规则兜底')).toBeInTheDocument();
+  expect(screen.getByText('模型响应超时，已自动展示规则解读。')).toBeInTheDocument();
+  expect(addToast).toHaveBeenCalledWith('模型响应超时，已自动展示规则解读。', 'info');
+});
+
+test('clearly explains when factor coverage is insufficient', async () => {
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/capital-interpretations') && options?.method === 'POST') {
+      return Promise.resolve({
+        id: 35,
+        status: 'INSUFFICIENT_DATA',
+        interpretationType: 'AGENT',
+        marketState: 'INSUFFICIENT_DATA',
+        plainSummary: '有效因子维度不足。',
+        executiveSummary: '有效因子维度不足。',
+        facts: [],
+        hypotheses: [],
+        observations: [],
+        counterEvidence: [],
+        dataGaps: ['日线样本不足'],
+        observationPoints: [],
+        watchConditionRefs: [],
+        evidenceRefs: [],
+        rejectedOutputCount: 0,
+        rejectionReasons: [],
+        fallbackReason: 'INSUFFICIENT_FACTOR_COVERAGE',
+        disclaimer: '不构成投资建议'
+      }) as never;
+    }
+    return Promise.reject(new Error('unexpected api call: ' + path));
+  });
+  const user = userEvent.setup();
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
+
+  expect(await screen.findByText('数据不足')).toBeInTheDocument();
+  expect(screen.getByText('有效因子维度不足，未调用模型。')).toBeInTheDocument();
+  expect(screen.getByText('日线样本不足')).toBeInTheDocument();
 });
 
 test('polls the refresh run before reloading the capital snapshot', async () => {

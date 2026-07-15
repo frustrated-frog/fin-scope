@@ -19,6 +19,7 @@ import java.util.Map;
 @Service
 public class CapitalInterpretationAgent {
     private static final int TIMEOUT_MS = 15000;
+    private static final int MINIMUM_OUTPUT_DIMENSIONS = 3;
     private final LlmChatClient llm;
     private final ObjectMapper json;
     private final CapitalAgentResponseParser parser;
@@ -50,8 +51,16 @@ public class CapitalInterpretationAgent {
                 root = parser.parse(output);
             }
             CapitalInterpretationGate.Result accepted = gate.apply(root, packet);
-            if (!root.path("observations").isEmpty() && accepted.observations.isEmpty()) {
-                return fallback(packet, rules, "FALLBACK", "OUTPUT_REJECTED_BY_GATE");
+            long acceptedDimensions = accepted.observations.stream()
+                    .map(item -> item.getDimension()).distinct().count();
+            if (acceptedDimensions < MINIMUM_OUTPUT_DIMENSIONS) {
+                List<String> reasons = new ArrayList<String>(accepted.rejectionReasons);
+                reasons.add("模型输出未覆盖至少三个分析维度");
+                CapitalInterpretation rejected = fallback(packet, rules, "FALLBACK", "OUTPUT_REJECTED_BY_GATE");
+                rejected.setRejectedOutputCount(reasons.size());
+                rejected.setRejectionReasons(reasons);
+                rejected.setOutputHash(JdkFinanceHttpClient.sha256(output));
+                return rejected;
             }
             CapitalInterpretation result = base(packet, rules);
             result.setStatus("SUCCEEDED");
@@ -120,8 +129,9 @@ public class CapitalInterpretationAgent {
         return "你是A股资金行为研究Agent。只能使用输入中的factorRef、metricRef和watch id；"
                 + "输出单个JSON对象，字段必须为marketState、executiveSummary、observations、hypotheses、"
                 + "counterEvidence、watchConditionRefs、dataGaps、confidence、disclaimer。"
-                + "observations每项必须含dimension、claim、factorRefs、metricRefs。"
-                + "不得创造数值、不得输出买卖建议；拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
+                + "observations每项必须含dimension、claim、factorRefs、metricRefs，并覆盖至少三个不同维度。"
+                + "文本只能复述证据包已有数字，不得自行计算或创造数值，不得输出买卖建议；"
+                + "拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
     }
 
     private String repairPrompt() {

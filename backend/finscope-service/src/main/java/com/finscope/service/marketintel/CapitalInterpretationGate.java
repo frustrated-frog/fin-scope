@@ -2,8 +2,12 @@ package com.finscope.service.marketintel;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
+import com.finscope.domain.marketintel.CapitalBehaviorSignal;
+import com.finscope.domain.marketintel.CapitalEvidenceRef;
+import com.finscope.domain.marketintel.CapitalFactorObservation;
 import com.finscope.domain.marketintel.CapitalHypothesis;
 import com.finscope.domain.marketintel.CapitalInterpretationObservation;
+import com.finscope.domain.marketintel.CapitalWatchCondition;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -11,7 +15,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** 服务端证据门禁：模型只能组织已计算证据，不能创造因子、指标或观察条件。 */
@@ -21,18 +28,28 @@ public class CapitalInterpretationGate {
             "VOLUME_EXPANSION_OUTFLOW", "VOLUME_EXPANSION_INFLOW", "PRICE_FLOW_DIVERGENCE",
             "MIXED", "NEUTRAL", "INTRADAY_REVERSAL", "INSUFFICIENT_DATA"));
     private static final Set<String> DIMENSIONS = new HashSet<String>(Arrays.asList(
-            "VOLUME", "TURNOVER", "FLOW", "ORDER_STRUCTURE", "ALIGNMENT", "INTRADAY"));
+            "VOLUME", "TURNOVER", "FLOW", "ORDER_STRUCTURE", "INTRADAY", "MULTI_PERIOD"));
+    private static final Pattern NUMBER = Pattern.compile("(?<![A-Za-z0-9_])[+-]?\\d+(?:\\.\\d+)?%?");
 
     public Result apply(JsonNode root, CapitalAgentEvidencePacket packet) {
         requireObject(root);
         String marketState = required(root, "marketState");
         if (!STATES.contains(marketState)) throw new IllegalArgumentException("unknown market state");
         String summary = required(root, "executiveSummary");
+        Set<String> allowedNumbers = allowedNumbers(packet);
+        if (containsExternalNumber(summary, allowedNumbers)) {
+            throw new IllegalArgumentException("executive summary contains number outside evidence packet");
+        }
         String confidence = required(root, "confidence").toUpperCase();
         if (!Arrays.asList("LOW", "MID").contains(confidence)) confidence = "MID";
         String disclaimer = required(root, "disclaimer");
+        if (containsExternalNumber(disclaimer, allowedNumbers)) {
+            throw new IllegalArgumentException("disclaimer contains number outside evidence packet");
+        }
         Set<String> factorRefs = packet.getFactorObservations().stream()
                 .map(item -> item.factorRef()).collect(Collectors.toSet());
+        Map<String, String> factorDimensions = packet.getFactorObservations().stream()
+                .collect(Collectors.toMap(item -> item.factorRef(), item -> item.getCategory()));
         Set<String> metricRefs = packet.getRawMetrics().stream()
                 .map(item -> item.getRef()).collect(Collectors.toSet());
         Set<String> watchRefs = packet.getWatchConditions().stream()
@@ -43,16 +60,24 @@ public class CapitalInterpretationGate {
         JsonNode observationNodes = array(root, "observations");
         for (JsonNode node : observationNodes) {
             String dimension = required(node, "dimension");
+            String claim = required(node, "claim");
             List<String> nodeFactors = strings(node.path("factorRefs"));
             List<String> nodeMetrics = strings(node.path("metricRefs"));
+            boolean dimensionMatches = nodeFactors.stream()
+                    .anyMatch(ref -> dimension.equals(factorDimensions.get(ref)));
             if (!DIMENSIONS.contains(dimension) || nodeFactors.isEmpty()
-                    || !factorRefs.containsAll(nodeFactors) || !metricRefs.containsAll(nodeMetrics)) {
-                rejections.add("观察项引用了未知维度、因子或指标");
+                    || !factorRefs.containsAll(nodeFactors) || !metricRefs.containsAll(nodeMetrics)
+                    || !dimensionMatches) {
+                rejections.add("观察项引用了未知或不匹配的维度、因子或指标");
+                continue;
+            }
+            if (containsExternalNumber(claim, allowedNumbers)) {
+                rejections.add("观察项包含证据包之外的数字");
                 continue;
             }
             CapitalInterpretationObservation value = new CapitalInterpretationObservation();
             value.setDimension(dimension);
-            value.setClaim(required(node, "claim"));
+            value.setClaim(claim);
             value.setFactorRefs(nodeFactors);
             value.setMetricRefs(nodeMetrics);
             observations.add(value);
@@ -61,31 +86,39 @@ public class CapitalInterpretationGate {
                 .filter(watchRefs::contains).collect(Collectors.toList());
         int rejectedWatchRefs = strings(array(root, "watchConditionRefs")).size() - acceptedWatchRefs.size();
         for (int i = 0; i < rejectedWatchRefs; i++) rejections.add("观察条件引用不存在");
-        List<CapitalHypothesis> hypotheses = hypotheses(array(root, "hypotheses"), packet, metricRefs, rejections);
+        List<CapitalHypothesis> hypotheses = hypotheses(array(root, "hypotheses"), packet, metricRefs,
+                allowedNumbers, rejections);
         return new Result(marketState, summary, observations, hypotheses,
-                strings(array(root, "counterEvidence")), acceptedWatchRefs,
-                strings(array(root, "dataGaps")), confidence, disclaimer, rejections);
+                validatedTexts(array(root, "counterEvidence"), allowedNumbers, rejections), acceptedWatchRefs,
+                validatedTexts(array(root, "dataGaps"), allowedNumbers, rejections),
+                confidence, disclaimer, rejections);
     }
 
     private List<CapitalHypothesis> hypotheses(JsonNode nodes, CapitalAgentEvidencePacket packet,
-                                                Set<String> metricRefs, List<String> rejections) {
+                                                Set<String> metricRefs, Set<String> allowedNumbers,
+                                                List<String> rejections) {
         List<CapitalHypothesis> result = new ArrayList<CapitalHypothesis>();
         for (JsonNode node : nodes) {
             String type = required(node, "type");
+            String claim = required(node, "claim");
             List<String> refs = strings(node.path("supportingMetricRefs"));
             if (!packet.getAllowedHypotheses().contains(type) || refs.isEmpty() || !metricRefs.containsAll(refs)) {
                 rejections.add("假设类型或证据引用不在允许范围内");
                 continue;
             }
+            if (containsExternalNumber(claim, allowedNumbers)) {
+                rejections.add("假设包含证据包之外的数字");
+                continue;
+            }
             CapitalHypothesis value = new CapitalHypothesis();
             value.setType(type);
-            value.setClaim(required(node, "claim"));
+            value.setClaim(claim);
             String requested = required(node, "confidence");
             value.setConfidence(("ORDER_SPLITTING".equals(type) || "HIDDEN_FLOW".equals(type))
                     ? "LOW" : ("LOW".equalsIgnoreCase(requested) ? "LOW" : "MID"));
             value.setSupportingMetricRefs(refs);
-            value.setCounterEvidence(strings(node.path("counterEvidence")));
-            value.setDataGaps(strings(node.path("dataGaps")));
+            value.setCounterEvidence(validatedTexts(node.path("counterEvidence"), allowedNumbers, rejections));
+            value.setDataGaps(validatedTexts(node.path("dataGaps"), allowedNumbers, rejections));
             if ("ORDER_SPLITTING".equals(type) || "HIDDEN_FLOW".equals(type)) {
                 List<String> counter = new ArrayList<String>(value.getCounterEvidence());
                 counter.add("缺少 Level-2 逐笔委托/成交，只能保留为低置信度行为假设。");
@@ -94,6 +127,95 @@ public class CapitalInterpretationGate {
             result.add(value);
         }
         return result;
+    }
+
+    private List<String> validatedTexts(JsonNode nodes, Set<String> allowedNumbers,
+                                        List<String> rejections) {
+        List<String> result = new ArrayList<String>();
+        for (String value : strings(nodes)) {
+            if (containsExternalNumber(value, allowedNumbers)) {
+                rejections.add("文本包含证据包之外的数字");
+            } else {
+                result.add(value);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 允许集合严格来自实际发送给模型的证据包字段。文本可以复述已有数字，不能自行计算或补值。
+     */
+    private Set<String> allowedNumbers(CapitalAgentEvidencePacket packet) {
+        Set<String> result = new HashSet<String>();
+        collectNumbers(result, packet.getSnapshotId());
+        collectNumbers(result, packet.getAsOf());
+        for (CapitalFactorObservation item : packet.getFactorObservations()) {
+            collectNumbers(result, item.getFactorRef());
+            collectNumbers(result, item.getFactorCode());
+            collectNumbers(result, item.getLabel());
+            collectNumbers(result, item.getWindow());
+            collectNumbers(result, item.getValue());
+            collectNumbers(result, item.getBaseline());
+            collectNumbers(result, item.getPercentile());
+            collectNumbers(result, item.getZScore());
+            collectNumbers(result, item.getState());
+            collectNumbers(result, item.getMetricRefs());
+        }
+        for (CapitalBehaviorSignal item : packet.getSignals()) {
+            collectNumbers(result, item.getType());
+            collectNumbers(result, item.getLabel());
+            collectNumbers(result, item.getWindow());
+            collectNumbers(result, item.getFactorRefs());
+            collectNumbers(result, item.getMetricRefs());
+            collectNumbers(result, item.getActualValues());
+            collectNumbers(result, item.getThresholds());
+        }
+        for (CapitalEvidenceRef item : packet.getRawMetrics()) {
+            collectNumbers(result, item.getRef());
+            collectNumbers(result, item.getLabel());
+            collectNumbers(result, item.getValue());
+            collectNumbers(result, item.getUnit());
+            collectNumbers(result, item.getObservedAt());
+        }
+        for (CapitalWatchCondition item : packet.getWatchConditions()) {
+            collectNumbers(result, item.getId());
+            collectNumbers(result, item.getLabel());
+            collectNumbers(result, item.getFactorRef());
+            collectNumbers(result, item.getThreshold());
+            collectNumbers(result, item.getUnit());
+        }
+        collectNumbers(result, packet.getDataGaps());
+        return result;
+    }
+
+    private void collectNumbers(Set<String> destination, Object value) {
+        if (value == null) return;
+        if (value instanceof Iterable) {
+            for (Object item : (Iterable<?>) value) collectNumbers(destination, item);
+            return;
+        }
+        if (value instanceof Map) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                collectNumbers(destination, entry.getKey());
+                collectNumbers(destination, entry.getValue());
+            }
+            return;
+        }
+        Matcher matcher = NUMBER.matcher(String.valueOf(value));
+        while (matcher.find()) destination.add(normalizeNumber(matcher.group()));
+    }
+
+    private boolean containsExternalNumber(String value, Set<String> allowedNumbers) {
+        Matcher matcher = NUMBER.matcher(value == null ? "" : value);
+        while (matcher.find()) {
+            if (!allowedNumbers.contains(normalizeNumber(matcher.group()))) return true;
+        }
+        return false;
+    }
+
+    private String normalizeNumber(String value) {
+        String numeric = value.endsWith("%") ? value.substring(0, value.length() - 1) : value;
+        return new java.math.BigDecimal(numeric).stripTrailingZeros().toPlainString();
     }
 
     private void requireObject(JsonNode root) {

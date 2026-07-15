@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class CapitalBehaviorMetricsService {
-    private static final String OBJECTIVE_TAG_VERSION = "capital-signal-v1";
+    private static final String LEGACY_OBJECTIVE_TAG_VERSION = "capital-signal-v1";
 
     public CapitalBehaviorMetrics derive(List<CapitalFlowPoint> intraday,
                                          List<CapitalFlowPoint> daily,
@@ -135,7 +135,7 @@ public class CapitalBehaviorMetricsService {
         List<CapitalBehaviorMetrics.ObjectiveTag> result = new ArrayList<CapitalBehaviorMetrics.ObjectiveTag>();
         if (signals == null) return result;
         for (CapitalBehaviorSignal signal : signals) {
-            if (!OBJECTIVE_TAG_VERSION.equals(signal.getVersion())) continue;
+            if (!supportsObjectiveTagVersion(signal.getVersion())) continue;
             CapitalBehaviorMetrics.ObjectiveTag tag = new CapitalBehaviorMetrics.ObjectiveTag();
             tag.setCode(signal.getType());
             tag.setLabel(label(signal.getType()));
@@ -150,12 +150,23 @@ public class CapitalBehaviorMetricsService {
         return result;
     }
 
+    private boolean supportsObjectiveTagVersion(String version) {
+        return LEGACY_OBJECTIVE_TAG_VERSION.equals(version)
+                || CapitalBehaviorSignalService.VERSION.equals(version);
+    }
+
     private String label(String type) {
         switch (type) {
             case "AMOUNT_EXPANSION_WITH_OUTFLOW": return "放量净流出";
             case "LOW_AMOUNT_INFLOW": return "缩量净流入";
+            case "LOW_AMOUNT_OUTFLOW": return "缩量净流出";
             case "PRICE_FLOW_DIVERGENCE": return "量价资金背离";
-            case "LATE_SESSION_FLOW_SHIFT": return "尾盘资金反转";
+            case "BIG_SMALL_ORDER_DIVERGENCE": return "大单与中小单背离";
+            case "INTRADAY_FLOW_REVERSAL": return "日内资金方向反转";
+            case "LATE_SESSION_INFLOW": return "尾盘流入增强";
+            case "LATE_SESSION_OUTFLOW": return "尾盘流出增强";
+            case "INTRADAY_ACCELERATING_INFLOW": return "日内资金加速流入";
+            case "INTRADAY_ACCELERATING_OUTFLOW": return "日内资金加速流出";
             default: return "资金行为异常";
         }
     }
@@ -164,8 +175,14 @@ public class CapitalBehaviorMetricsService {
         switch (type) {
             case "AMOUNT_EXPANSION_WITH_OUTFLOW": return "成交额明显放大，同时主力净流向为负。";
             case "LOW_AMOUNT_INFLOW": return "成交额相对收缩，但主力净流向为正。";
+            case "LOW_AMOUNT_OUTFLOW": return "成交额相对收缩，主力净流向为负。";
             case "PRICE_FLOW_DIVERGENCE": return "价格变化方向与主力净流向相反。";
-            case "LATE_SESSION_FLOW_SHIFT": return "尾盘资金方向相较盘中发生反转。";
+            case "BIG_SMALL_ORDER_DIVERGENCE": return "公开大单与中小单资金方向相反。";
+            case "INTRADAY_FLOW_REVERSAL": return "日内公开资金净额出现方向反转。";
+            case "LATE_SESSION_INFLOW": return "尾盘流入在当日资金中占比较高。";
+            case "LATE_SESSION_OUTFLOW": return "尾盘流出在当日资金中占比较高。";
+            case "INTRADAY_ACCELERATING_INFLOW": return "最近日内资金净额呈加速流入。";
+            case "INTRADAY_ACCELERATING_OUTFLOW": return "最近日内资金净额呈加速流出。";
             default: return "检测到可复算的资金行为变化。";
         }
     }

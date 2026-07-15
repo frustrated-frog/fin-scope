@@ -64,7 +64,10 @@ class MarketIntelApiIntegrationTest {
         long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
         mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCEEDED"));
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v1"))
+                .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v2"))
+                .andExpect(jsonPath("$.factorVersion").value("capital-factor-v1"))
+                .andExpect(jsonPath("$.signalVersion").value("capital-signal-v2"))
+                .andExpect(jsonPath("$.factorObservations").isArray())
                 .andExpect(jsonPath("$.metrics.latest.tradeAmount").value(180000000))
                 .andExpect(jsonPath("$.metrics.latest.tradeVolume").value(1210000))
                 .andExpect(jsonPath("$.metrics.latest.volumeRatio").value(1.67))
@@ -125,10 +128,20 @@ class MarketIntelApiIntegrationTest {
         mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted());
         Long evidenceId=jdbc.queryForObject("SELECT id FROM market_capital_flow_snapshot WHERE instrument_id=7 ORDER BY observed_at DESC LIMIT 1",Long.class);
         when(llm.isConfigured()).thenReturn(true);when(llm.modelName()).thenReturn("test-model");
-        when(llm.complete(anyString(),anyString(),anyInt())).thenReturn("{\"plainSummary\":\"可能存在拆单\",\"hypotheses\":[{\"type\":\"ORDER_SPLITTING\",\"claim\":\"连续小额成交可能对应拆单\",\"confidence\":\"HIGH\",\"supportingMetricRefs\":[\"flow:"+evidenceId+":mainNetInflow\"],\"counterEvidence\":[],\"dataGaps\":[]}],\"dataGaps\":[\"缺少逐笔\"],\"observationPoints\":[\"观察尾盘\"],\"disclaimer\":\"不构成投资建议\"}");
+        String latestDaily=LocalDate.now().atTime(15,0).toString();
+        String metricRef="flow:"+evidenceId+":mainNetInflow";
+        String observations="{\"dimension\":\"VOLUME\",\"claim\":\"量能有所放大\",\"factorRefs\":[\"factor:AMOUNT_RATIO_5D:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]},"
+                +"{\"dimension\":\"FLOW\",\"claim\":\"资金方向偏弱\",\"factorRefs\":[\"factor:MAIN_FLOW_SHARE:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]},"
+                +"{\"dimension\":\"MULTI_PERIOD\",\"claim\":\"多周期资金表现分化\",\"factorRefs\":[\"factor:MAIN_FLOW_SUM_5D:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]}";
+        when(llm.complete(anyString(),anyString(),anyInt())).thenReturn("{\"marketState\":\"MIXED\",\"executiveSummary\":\"可能存在拆单\",\"observations\":["+observations+"],\"hypotheses\":[{\"type\":\"ORDER_SPLITTING\",\"claim\":\"连续小额成交可能对应拆单\",\"confidence\":\"HIGH\",\"supportingMetricRefs\":[\""+metricRef+"\"],\"counterEvidence\":[],\"dataGaps\":[]}],\"counterEvidence\":[],\"watchConditionRefs\":[],\"dataGaps\":[\"缺少逐笔\"],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}");
         MvcResult created=mvc.perform(post("/api/market-intel/instruments/7/capital-interpretations")).andExpect(status().isAccepted()).andExpect(jsonPath("$.id").isNumber()).andReturn();
         long id=new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString()).path("id").asLong();
-        mvc.perform(get("/api/market-intel/capital-interpretations/"+id)).andExpect(status().isOk()).andExpect(jsonPath("$.facts").isArray()).andExpect(jsonPath("$.hypotheses[0].confidence").value("LOW"));
+        mvc.perform(get("/api/market-intel/capital-interpretations/"+id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.facts").isArray())
+                .andExpect(jsonPath("$.factorVersion").value("capital-factor-v1"))
+                .andExpect(jsonPath("$.signalVersion").value("capital-signal-v2"))
+                .andExpect(jsonPath("$.hypotheses[0].confidence").value("LOW"));
     }
 
     private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));

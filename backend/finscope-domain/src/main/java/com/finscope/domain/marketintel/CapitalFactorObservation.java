@@ -30,6 +30,11 @@ public class CapitalFactorObservation {
         return "factor:" + factorCode + ":" + observedAt;
     }
 
+    /** JSON/API 使用的稳定引用字段。 */
+    public String getFactorRef() {
+        return factorRef();
+    }
+
     public void setMetricRefs(List<String> values) {
         metricRefs = Collections.unmodifiableList(new ArrayList<String>(values == null
                 ? Collections.<String>emptyList() : values));

@@ -1,5 +1,7 @@
 package com.finscope.service.quant.factor;
 
+import org.springframework.stereotype.Component;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -10,6 +12,7 @@ import java.util.Optional;
 /**
  * 无市场语义的确定性时间序列算子。所有无定义结果都返回 empty，禁止用 NaN 进入因子链路。
  */
+@Component
 public class TimeSeriesFactorOperators {
     public static final int SCALE = 6;
     private static final RoundingMode ROUNDING = RoundingMode.HALF_UP;

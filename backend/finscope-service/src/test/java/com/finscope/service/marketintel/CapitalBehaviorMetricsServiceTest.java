@@ -131,7 +131,7 @@ class CapitalBehaviorMetricsServiceTest {
     @Test
     void ignoresObjectiveTagsFromUnsupportedRuleVersions() {
         CapitalBehaviorSignal signal = CapitalBehaviorSignal.of(
-                "AMOUNT_EXPANSION_WITH_OUTFLOW", "capital-signal-v2", Collections.emptyList());
+                "AMOUNT_EXPANSION_WITH_OUTFLOW", "capital-signal-v999", Collections.emptyList());
 
         CapitalBehaviorMetrics metrics = service.derive(Collections.emptyList(), Collections.emptyList(), Collections.singletonList(signal));
 

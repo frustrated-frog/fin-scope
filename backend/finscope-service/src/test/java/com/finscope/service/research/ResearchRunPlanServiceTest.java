@@ -26,8 +26,12 @@ class ResearchRunPlanServiceTest {
 
         List<ResearchRunPlanStep> steps = service.initializeDefaultPlan(501L, 3);
 
-        assertEquals(Arrays.asList("plan_sources", "fetch_sources", "classify_events", "extract_evidence",
-                        "compose_brief", "summarize_run"),
+        assertEquals(Arrays.asList(ResearchRunPlanService.STEP_PLAN_SOURCES,
+                        ResearchRunPlanService.STEP_FETCH_SOURCES,
+                        ResearchRunPlanService.STEP_CLASSIFY_EVENTS,
+                        ResearchRunPlanService.STEP_EXTRACT_EVIDENCE,
+                        ResearchRunPlanService.STEP_COMPOSE_REPORT,
+                        ResearchRunPlanService.STEP_SUMMARIZE_RUN),
                 steps.stream().map(ResearchRunPlanStep::getStepId).collect(Collectors.toList()));
         assertEquals("PENDING", steps.get(0).getStatus());
         assertEquals(1, steps.get(0).getMaxAttempts());
@@ -46,8 +50,8 @@ class ResearchRunPlanServiceTest {
         ResearchRunPlanService service = new ResearchRunPlanService(repository);
         ResearchRunPlanStep step = new ResearchRunPlanStep();
         step.setResearchRunId(501L);
-        step.setStepId("compose_brief");
-        step.setTitle("生成简报");
+        step.setStepId(ResearchRunPlanService.STEP_COMPOSE_REPORT);
+        step.setTitle("生成研究报告");
         step.setStatus("RUNNING");
 
         ResearchRunPlanStep failed = service.fail(step, "BRIEF_GENERATION_FAILED", "brief render failed");

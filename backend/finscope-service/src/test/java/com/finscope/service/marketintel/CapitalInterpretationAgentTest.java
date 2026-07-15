@@ -40,11 +40,10 @@ class CapitalInterpretationAgentTest {
     @Test
     void parsesJsonInsideMarkdownAndRejectsUntraceableObservation() {
         CapitalAgentEvidencePacket packet = packet(richSnapshot());
-        String factorRef = packet.getFactorObservations().get(0).factorRef();
         String metricRef = packet.getRawMetrics().get(0).getRef();
         String output = "分析如下：\n```json\n{" +
                 "\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
-                "\"observations\":[" + observation("VOLUME", "量能活跃", factorRef, metricRef) + "," +
+                "\"observations\":[" + validObservations(packet) + "," +
                 observation("FLOW", "引用不存在", "factor:unknown", metricRef) + "]," +
                 "\"hypotheses\":[],\"counterEvidence\":[\"缺少逐笔成交\"]," +
                 "\"watchConditionRefs\":[\"" + packet.getWatchConditions().get(0).getId() + "\"]," +
@@ -53,11 +52,61 @@ class CapitalInterpretationAgentTest {
 
         assertEquals("SUCCEEDED", result.getStatus());
         assertEquals("MIXED", result.getMarketState());
-        assertEquals(1, result.getObservations().size());
+        assertEquals(3, result.getObservations().size());
         assertEquals(1, result.getRejectedOutputCount());
         assertFalse(result.getEvidenceRefs().isEmpty());
         assertEquals("capital-factor-v1", result.getFactorVersion());
         assertEquals("capital-signal-v2", result.getSignalVersion());
+    }
+
+    @Test
+    void rejectsObservationContainingNumberOutsideEvidencePacket() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String factorRef = packet.getFactorObservations().get(0).factorRef();
+        String metricRef = packet.getRawMetrics().get(0).getRef();
+        String traceableValue = packet.getFactorObservations().get(0).getValue().stripTrailingZeros().toPlainString();
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
+                "\"observations\":[" + observation("VOLUME", "量能因子值为" + traceableValue, factorRef, metricRef) + "," +
+                observationForCategory(packet, "FLOW", "资金方向反复") + "," +
+                observationForCategory(packet, "ORDER_STRUCTURE", "订单结构分化") + "," +
+                observationForCategory(packet, "INTRADAY", "主力净流入达到999.99亿元") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(3, result.getObservations().size());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("数字")));
+    }
+
+    @Test
+    void fallsBackWhenAllObservationsContainNumbersOutsideEvidencePacket() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
+                "\"observations\":[" + observationForCategory(packet, "FLOW", "主力净流入达到999.99亿元") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("FALLBACK", result.getStatus());
+        assertEquals("OUTPUT_REJECTED_BY_GATE", result.getFallbackReason());
+    }
+
+    @Test
+    void fallsBackWhenModelReturnsFewerThanThreeEvidenceDimensions() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
+                "\"observations\":[" + observationForCategory(packet, "FLOW", "资金方向反复") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("FALLBACK", result.getStatus());
+        assertEquals("OUTPUT_REJECTED_BY_GATE", result.getFallbackReason());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("三个分析维度")));
     }
 
     @Test
@@ -122,10 +171,23 @@ class CapitalInterpretationAgentTest {
 
     private String validOutput(CapitalAgentEvidencePacket packet) {
         return "{\"marketState\":\"MIXED\",\"executiveSummary\":\"资金分化\"," +
-                "\"observations\":[" + observation("FLOW", "资金方向反复",
-                packet.getFactorObservations().get(0).factorRef(), packet.getRawMetrics().get(0).getRef()) + "]," +
+                "\"observations\":[" + validObservations(packet) + "]," +
                 "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
                 "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+    }
+
+    private String validObservations(CapitalAgentEvidencePacket packet) {
+        return observationForCategory(packet, "VOLUME", "量能活跃") + "," +
+                observationForCategory(packet, "FLOW", "资金方向反复") + "," +
+                observationForCategory(packet, "ORDER_STRUCTURE", "订单结构分化");
+    }
+
+    private String observationForCategory(CapitalAgentEvidencePacket packet, String category, String claim) {
+        String factorRef = packet.getFactorObservations().stream()
+                .filter(item -> category.equals(item.getCategory()))
+                .findFirst().orElseThrow(() -> new AssertionError("missing factor category " + category))
+                .factorRef();
+        return observation(category, claim, factorRef, packet.getRawMetrics().get(0).getRef());
     }
 
     private String observation(String dimension, String claim, String factorRef, String metricRef) {

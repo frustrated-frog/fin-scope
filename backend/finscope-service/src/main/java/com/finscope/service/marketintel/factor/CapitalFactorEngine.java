@@ -262,12 +262,17 @@ public class CapitalFactorEngine {
                 direction(value), valid.size(), refs(valid, "mainNetInflow"));
     }
 
-    private Optional<CapitalFactorObservation> peak(CapitalFactorDefinition definition, List<CapitalFlowPoint> minute, boolean max) {
+    private Optional<CapitalFactorObservation> peak(CapitalFactorDefinition definition, List<CapitalFlowPoint> minute, boolean inflow) {
         List<CapitalFlowPoint> valid = minute.stream().filter(item -> item.getMainNetInflow() != null).collect(Collectors.toList());
         if (valid.isEmpty()) return Optional.empty();
-        CapitalFlowPoint peak = valid.stream().max(max
-                ? Comparator.comparing(CapitalFlowPoint::getMainNetInflow)
-                : Comparator.comparing(CapitalFlowPoint::getMainNetInflow).reversed()).get();
+        Comparator<CapitalFlowPoint> byFlow = Comparator.comparing(CapitalFlowPoint::getMainNetInflow);
+        CapitalFlowPoint peak = inflow
+                ? valid.stream().max(byFlow).get()
+                : valid.stream().min(byFlow).get();
+        if ((inflow && peak.getMainNetInflow().signum() <= 0)
+                || (!inflow && peak.getMainNetInflow().signum() >= 0)) {
+            return Optional.empty();
+        }
         String state = peak.getObservedAt().toLocalTime().toString();
         return observation(definition, peak, peak.getMainNetInflow(), null, null, null, state, valid.size(),
                 refs(peak, "mainNetInflow"));

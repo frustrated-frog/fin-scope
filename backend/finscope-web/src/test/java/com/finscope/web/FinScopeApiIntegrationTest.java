@@ -71,8 +71,12 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("evidence_item");
         deleteIfExists("event_article_link");
         deleteIfExists("event_cluster");
+        deleteIfExists("research_run_output");
+        deleteIfExists("research_report");
+        deleteIfExists("thesis_finding");
         deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
+        deleteIfExists("research_thesis");
         deleteIfExists("intake_candidate");
         deleteIfExists("fetch_batch");
         deleteIfExists("insight_card");
@@ -86,6 +90,7 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
                 + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
                 + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan',"
+                + "'research_run_output','research_report','thesis_finding','research_thesis',"
                 + "'fetch_batch','intake_candidate')");
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
@@ -718,7 +723,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$[0].eventId").value(1))
                 .andExpect(jsonPath("$[0].themeCode").value("china_macro"))
                 .andExpect(jsonPath("$[0].question").isNotEmpty())
-                .andExpect(jsonPath("$[0].status").value("TODO"));
+                .andExpect(jsonPath("$[0].status").value("SUGGESTED"));
 
         mvc.perform(get("/api/content-ideas"))
                 .andExpect(status().isOk())
@@ -757,27 +762,47 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void learningTaskStatusUpdateIsValidated() throws Exception {
+    void learningTaskLifecycleCommandsAreValidated() throws Exception {
         seedResearchArtifacts();
 
-        mvc.perform(post("/api/learning-tasks/1/status")
+        mvc.perform(post("/api/knowledge/topics")
                         .contentType("application/json")
-                        .content("{\"status\":\"LEARNING\"}"))
+                        .content("{\"name\":\"宏观政策\",\"description\":\"用于学习任务集成测试\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        mvc.perform(post("/api/knowledge/tasks/1/accept")
+                        .contentType("application/json")
+                        .content("{\"topicId\":1,\"expectedRevision\":0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.status").value("LEARNING"));
+                .andExpect(jsonPath("$.topicId").value(1))
+                .andExpect(jsonPath("$.status").value("TODO"))
+                .andExpect(jsonPath("$.revision").value(1));
 
-        mvc.perform(post("/api/learning-tasks/1/status")
+        mvc.perform(post("/api/knowledge/tasks/1/start")
                         .contentType("application/json")
-                        .content("{\"status\":\"broken\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", containsString("Unsupported learning task status: broken")));
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.revision").value(2));
 
-        mvc.perform(post("/api/learning-tasks/999/status")
+        mvc.perform(post("/api/knowledge/tasks/1/start")
                         .contentType("application/json")
-                        .content("{\"status\":\"DONE\"}"))
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isConflict());
+
+        mvc.perform(post("/api/knowledge/tasks/999/start")
+                        .contentType("application/json")
+                        .content("{\"expectedRevision\":0}"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error", containsString("Learning task not found: 999")));
+                .andExpect(jsonPath("$.error", containsString("学习任务不存在")));
+
+        mvc.perform(post("/api/knowledge/tasks/1/accept")
+                        .contentType("application/json")
+                        .content("{\"expectedRevision\":2}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("topicId")));
     }
 
     @Test
@@ -843,9 +868,16 @@ class FinScopeApiIntegrationTest {
         mvc.perform(post("/api/sources").contentType("application/json").content(macroSource))
                 .andExpect(status().isOk());
 
+        mvc.perform(post("/api/research/theses")
+                        .contentType("application/json")
+                        .content("{\"question\":\"宏观政策变化如何影响黄金？\",\"subjectType\":\"INDUSTRY\","
+                                + "\"subjectName\":\"黄金\",\"subjectCode\":\"GOLD\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
         mvc.perform(post("/api/research/runs")
                         .contentType("application/json")
-                        .content("{\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
+                        .content("{\"thesisId\":1,\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
                                 + "\"maxSourcesPerTheme\":1,\"includeDisabled\":false}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RUNNING"))
@@ -874,6 +906,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.planSteps.length()").value(6))
                 .andExpect(jsonPath("$.planSteps[*].stepId").value(hasItem("plan_sources")))
                 .andExpect(jsonPath("$.planSteps[*].stepId").value(hasItem("fetch_sources")))
+                .andExpect(jsonPath("$.planSteps[*].stepId").value(hasItem("compose_report")))
                 .andExpect(jsonPath("$.planSteps[*].status").value(hasItem("COMPLETED")))
                 .andExpect(jsonPath("$.agentRuns.length()").value(greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("research-orchestrate")))
@@ -881,13 +914,18 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("evidence-extract")))
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("learning-generate")))
                 .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("content-idea-generate")))
-                .andExpect(jsonPath("$.agentRuns[*].nodeName").value(hasItem("brief-synthesize")))
-                .andExpect(jsonPath("$.agentRuns[*].researchRunId").value(hasItem(1)));
+                .andExpect(jsonPath("$.agentRuns[*].researchRunId").value(hasItem(1)))
+                .andExpect(jsonPath("$.reportAvailable").value(true))
+                .andExpect(jsonPath("$.reportStatus", containsString("COMPLETED")));
 
-        mvc.perform(get("/api/briefs/" + LocalDate.now()))
+        mvc.perform(get("/api/research/runs/1/report"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", containsString("## 今日新变量")))
-                .andExpect(jsonPath("$.content", containsString("美联储释放降息信号")));
+                .andExpect(jsonPath("$.researchRunId").value(1))
+                .andExpect(jsonPath("$.thesisId").value(1))
+                .andExpect(jsonPath("$.status", containsString("COMPLETED")))
+                .andExpect(jsonPath("$.title").isNotEmpty())
+                .andExpect(jsonPath("$.contentMarkdown").isNotEmpty())
+                .andExpect(jsonPath("$.evidenceCount").value(greaterThanOrEqualTo(1)));
     }
 
     @Test

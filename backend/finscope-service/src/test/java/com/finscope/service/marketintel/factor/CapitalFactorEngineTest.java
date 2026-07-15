@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -54,6 +55,23 @@ class CapitalFactorEngineTest {
         assertFalse(result.find("MAIN_FLOW_SHARE").isPresent());
         assertTrue(result.getDataGaps().stream().anyMatch(gap -> gap.contains("主力净额占比")));
         assertTrue(result.getDataGaps().stream().anyMatch(gap -> gap.contains("换手率历史分位")));
+    }
+
+    @Test
+    void omitsDirectionalPeakWhenIntradayFlowNeverMovesInThatDirection() {
+        CapitalFactorResult onlyInflows = engine.calculate(Arrays.asList(
+                minute(101, 9, 30, "10"),
+                minute(102, 9, 35, "20")
+        ));
+        CapitalFactorResult onlyOutflows = engine.calculate(Arrays.asList(
+                minute(103, 9, 40, "-10"),
+                minute(104, 9, 45, "-20")
+        ));
+
+        assertTrue(onlyInflows.find("PEAK_INFLOW_BUCKET").isPresent());
+        assertFalse(onlyInflows.find("PEAK_OUTFLOW_BUCKET").isPresent());
+        assertFalse(onlyOutflows.find("PEAK_INFLOW_BUCKET").isPresent());
+        assertTrue(onlyOutflows.find("PEAK_OUTFLOW_BUCKET").isPresent());
     }
 
     private List<String> signature(CapitalFactorResult result) {
