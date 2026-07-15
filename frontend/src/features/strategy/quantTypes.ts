@@ -18,10 +18,14 @@ export interface QuantFactor {
 export interface QuantFactorAnalysis {
   datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number;
   icMean: number; icStd: number; icIr: number; positiveIcRatio: number;
+  negativeIcRatio?: number; zeroIcRatio?: number; icMeanCiLower?: number; icMeanCiUpper?: number;
   evaluationMode?: 'CROSS_SECTIONAL_FACTOR_STUDY';
   researchDirection?: FactorResearchDirection;
   directionAdjustedIcMean?: number;
   favorableIcRatio?: number;
+  directionAdjustedCiLower?: number; directionAdjustedCiUpper?: number;
+  totalEligibleDays?: number; minCrossSectionSize?: number; coverageRatio?: number;
+  validationEligible?: boolean; evaluationPolicyVersion?: string; blockingReasons?: string[];
   sampleEvidence?: 'INSUFFICIENT_SAMPLE' | 'DIRECTIONALLY_ALIGNED' | 'OPPOSED' | 'UNSTABLE';
   conclusion?: 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
   caveats?: string[];

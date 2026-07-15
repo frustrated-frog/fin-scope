@@ -49,21 +49,31 @@ export function explainFactorAnalysis(
   const sign = direction === 'NEGATIVE_HYPOTHESIS' ? -1 : 1;
   const directionAdjustedIcMean = analysis.directionAdjustedIcMean ?? analysis.icMean * sign;
   const favorableIcRatio = analysis.favorableIcRatio ?? (direction === 'NEGATIVE_HYPOTHESIS'
-    ? 1 - analysis.positiveIcRatio
+    ? (analysis.negativeIcRatio ?? 1 - analysis.positiveIcRatio)
     : analysis.positiveIcRatio);
   const directionText = direction === 'NEGATIVE_HYPOTHESIS' ? '低值方向' : '高值方向';
   const commonBoundary = `本结果评价同日股票池的横截面排序，不是个股涨跌预测。${datasetEvidenceNotice(dataKind)}`;
 
-  if (analysis.sampleCount < 20) {
+  if (analysis.sampleEvidence === 'INSUFFICIENT_SAMPLE' || analysis.sampleCount < 60) {
     return {
       headline: '当前样本不足，暂时不能判断方向',
-      detail: `只有 ${analysis.sampleCount} 个有效日度 IC 样本，容易被少数交易日影响。${commonBoundary}`,
+      detail: `只有 ${analysis.sampleCount} 个有效日度 IC 样本，未达到版本化门禁要求，容易被少数交易日影响。${commonBoundary}`,
       directionAdjustedIcMean,
       favorableIcRatio,
       evidenceLevel: 'INSUFFICIENT'
     };
   }
-  if (directionAdjustedIcMean < 0.02 || favorableIcRatio < 0.55) {
+  if (analysis.sampleEvidence === 'OPPOSED') {
+    return {
+      headline: '当前证据与预设方向相反',
+      detail: `${directionText}在当前样本中被确定性门禁反驳，但仍需在独立样本复核。${commonBoundary}`,
+      directionAdjustedIcMean,
+      favorableIcRatio,
+      evidenceLevel: 'UNSTABLE'
+    };
+  }
+  if (analysis.sampleEvidence === 'UNSTABLE'
+      || directionAdjustedIcMean < 0.02 || favorableIcRatio < 0.55) {
     return {
       headline: '当前样本中的方向不稳定',
       detail: `${directionText}与未来收益排序的一致性不足，不能据此称因子有效。${commonBoundary}`,

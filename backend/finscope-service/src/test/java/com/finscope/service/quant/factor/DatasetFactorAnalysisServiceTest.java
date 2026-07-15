@@ -31,9 +31,9 @@ class DatasetFactorAnalysisServiceTest {
         QuantDatasetService datasets = mock(QuantDatasetService.class); QuantMarketDataRepository market = mock(QuantMarketDataRepository.class);
         QuantDataset dataset = new QuantDataset(); dataset.setId(1L); dataset.setStatus("READY"); dataset.setFingerprint("dataset-sha");
         when(datasets.get(1L)).thenReturn(dataset); when(datasets.availableFactorCodes(1L)).thenReturn(Collections.singleton("MOMENTUM_20D")); List<QuantDailyBar> bars = new ArrayList<QuantDailyBar>();
-        for (int day = 0; day < 22; day++) for (int instrument = 1; instrument <= 3; instrument++) {
+        for (int day = 0; day < 22; day++) for (int instrument = 1; instrument <= 10; instrument++) {
             double close = 100 + day * instrument; QuantDailyBar bar = new QuantDailyBar();
-            bar.setInstrumentCode(String.format("60000%d.SH", instrument));
+            bar.setInstrumentCode(String.format("%06d.SH", 600000 + instrument));
             bar.setTradeDate(LocalDate.of(2024,1,1).plusDays(day)); bar.setAdjustedClose(BigDecimal.valueOf(close));
             bar.setOpen(BigDecimal.valueOf(close * (day == 21 ? 0.99 : 1))); bar.setClose(BigDecimal.valueOf(close));
             bar.setVolume(BigDecimal.valueOf(1000)); bar.setAmount(BigDecimal.valueOf(10000)); bars.add(bar);
@@ -56,16 +56,18 @@ class DatasetFactorAnalysisServiceTest {
         when(datasets.availableFactorCodes(1L)).thenReturn(Collections.singleton("MAIN_FLOW_SHARE"));
 
         LocalDate date = LocalDate.of(2024, 1, 2);
-        List<QuantDailyBar> bars = Arrays.asList(
-                bar("600001.SH", date, "10", "10"), bar("600002.SH", date, "20", "20"),
-                bar("600001.SH", date.plusDays(1), "10", "11"),
-                bar("600002.SH", date.plusDays(1), "20", "19"));
+        List<QuantDailyBar> bars = new ArrayList<QuantDailyBar>();
+        List<QuantCapitalFlowDaily> rows = new ArrayList<QuantCapitalFlowDaily>();
+        for (int instrument = 1; instrument <= 10; instrument++) {
+            String code = String.format("600%03d.SH", instrument);
+            bars.add(bar(code, date, "10", "10"));
+            bars.add(bar(code, date.plusDays(1), "10", String.valueOf(10 + instrument / 10d)));
+            rows.add(capital(1L, code, date, String.valueOf(instrument * 10), "1000"));
+        }
         when(market.findBars(1L)).thenReturn(bars);
         when(market.findFundamentals(1L)).thenReturn(Collections.emptyList());
         when(market.findUniverseMembers(1L)).thenReturn(Collections.emptyList());
-        when(capital.findByDatasetId(1L)).thenReturn(Arrays.asList(
-                capital(1L, "600001.SH", date, "200", "1000"),
-                capital(1L, "600002.SH", date, "100", "1000")));
+        when(capital.findByDatasetId(1L)).thenReturn(rows);
 
         DatasetFactorAnalysisService service = new DatasetFactorAnalysisService();
         ReflectionTestUtils.setField(service, "datasets", datasets);

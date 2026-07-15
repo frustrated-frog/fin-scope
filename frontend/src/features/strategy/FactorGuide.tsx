@@ -158,7 +158,12 @@ export function FactorGuide({
             <div><dt>方向一致日占比</dt><dd>{percent(explanation.favorableIcRatio)}</dd></div>
             <div><dt>原始 ICIR</dt><dd>{analysis.icIr.toFixed(2)}</dd></div>
             <div><dt>有效交易日</dt><dd>{analysis.sampleCount}</dd></div>
+            {analysis.directionAdjustedCiLower !== undefined && analysis.directionAdjustedCiUpper !== undefined
+              ? <div><dt>95% HAC 区间</dt><dd>[{analysis.directionAdjustedCiLower.toFixed(3)}, {analysis.directionAdjustedCiUpper.toFixed(3)}]</dd></div> : null}
+            {analysis.minCrossSectionSize !== undefined ? <div><dt>最小横截面</dt><dd>{analysis.minCrossSectionSize} 只</dd></div> : null}
+            {analysis.coverageRatio !== undefined ? <div><dt>有效日期覆盖</dt><dd>{percent(analysis.coverageRatio)}</dd></div> : null}
           </dl>
+          {analysis.evaluationPolicyVersion && <p className="quant-factor-conclusion">评价门禁：{analysis.evaluationPolicyVersion} · {analysis.validationEligible ? '具备结论资格' : '未通过准入'}</p>}
           {analysis.conclusion && <p className="quant-factor-conclusion">研究结论：{analysis.conclusion === 'INCONCLUSIVE' ? '证据不足' : analysis.conclusion === 'SUPPORTED' ? '支持假设' : '反驳假设'}。生命周期不会由本次诊断自动升级。</p>}
           {analysis.caveats?.length ? <ul className="quant-factor-caveats">{analysis.caveats.map(item => <li key={item}>{item}</li>)}</ul> : null}
           <small>数据集指纹 {analysis.datasetFingerprint.slice(0, 16)}</small>

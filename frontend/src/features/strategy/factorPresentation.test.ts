@@ -28,11 +28,14 @@ describe('factor presentation', () => {
       icMean: -0.06,
       icStd: 0.12,
       icIr: -0.5,
-      positiveIcRatio: 0.28
+      positiveIcRatio: 0.28,
+      negativeIcRatio: 0.70,
+      favorableIcRatio: 0.70,
+      sampleEvidence: 'DIRECTIONALLY_ALIGNED'
     }, 'NEGATIVE_HYPOTHESIS', 'REAL');
 
     expect(explanation.directionAdjustedIcMean).toBeCloseTo(0.06);
-    expect(explanation.favorableIcRatio).toBeCloseTo(0.72);
+    expect(explanation.favorableIcRatio).toBeCloseTo(0.70);
     expect(explanation.headline).toContain('预设方向较一致');
     expect(explanation.detail).toContain('低值方向');
     expect(explanation.detail).not.toContain('有效');

@@ -134,7 +134,46 @@ public class ResearchFactorCatalog {
                 .status(FactorLifecycleStatus.EXPLORATORY)
                 .build();
         add(values, mainFlowShare);
+        add(values, capitalShareFactor(CapitalFlowFactorProvider.SUPER_LARGE_FLOW_SHARE,
+                "超大单流入强度", "超大单净流入占当日成交额的比例",
+                "superLargeNetInflow / amount",
+                Arrays.asList("superLargeNetInflow", "amount"),
+                "该口径只表示供应商分类下的超大单成交净额，不能据此识别机构、主力或具体交易主体"));
+        add(values, capitalShareFactor(CapitalFlowFactorProvider.BIG_ORDER_FLOW_SHARE,
+                "大单合计流入强度", "超大单与大单净流入之和占当日成交额的比例",
+                "(superLargeNetInflow + largeNetInflow) / amount",
+                Arrays.asList("superLargeNetInflow", "largeNetInflow", "amount"),
+                "这是两个订单规模桶的合计统计；任一桶缺失即拒绝计算，不把缺失值当作零，也不等同于真实机构净买入"));
         this.definitions = Collections.unmodifiableMap(values);
+    }
+
+    private static ResearchFactorDefinition capitalShareFactor(FactorIdentity identity, String name,
+                                                                 String meaning, String formula,
+                                                                 List<String> sourceFields, String boundary) {
+        List<String> fields = new java.util.ArrayList<String>(Arrays.asList(
+                "datasetId", "tradeDate", "instrumentCode", "availableAt", "qualityStatus"));
+        fields.addAll(sourceFields);
+        return ResearchFactorDefinition.builder()
+                .identity(identity)
+                .name(name)
+                .category("资金行为")
+                .frequency("DAILY")
+                .expectedDirection("POSITIVE_HYPOTHESIS")
+                .plainMeaning(meaning)
+                .hypothesis("在严格控制可得时间和成交规模后，该流入强度与下一交易日横截面收益可能同向；它仍是待检验的研究假设")
+                .economicRationale("用成交额归一化可以减少股票体量对绝对净额的机械影响，并允许在同一交易日做初步横截面比较")
+                .interpretationBoundary(boundary + "；单日数值噪声较高，当前仅为探索性因子，不构成投资建议")
+                .requiredFields(fields)
+                .availableAtRule("只使用冻结行真实 availableAt 不晚于本次信号 executionCutoff 的数据")
+                .missingPolicy("质量非 COMPLETE、分母非正、必需订单桶缺失或尚未到可见时点时返回 MISSING_INPUT")
+                .calculationKey(formula + "，保留 10 位小数并采用 HALF_UP")
+                .calculationVersion("capital-flow-share-v1")
+                .sourceType("FROZEN_CAPITAL_FLOW")
+                .sourceRef("market_capital_flow_snapshot.DAY_1 -> quant_capital_flow_daily")
+                .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN")
+                .evaluationPolicyVersion("cross-sectional-evidence-v1")
+                .status(FactorLifecycleStatus.EXPLORATORY)
+                .build();
     }
 
     private static ResearchFactorDefinition marketFactor(String code, String name, String category,

@@ -18,7 +18,8 @@ class FactorEvidenceAssessmentServiceTest {
         assertEquals(0.06, analysis.getDirectionAdjustedIcMean(), 0.000001);
         assertEquals(0.70, analysis.getFavorableIcRatio(), 0.000001);
         assertEquals("DIRECTIONALLY_ALIGNED", analysis.getSampleEvidence());
-        assertEquals("INCONCLUSIVE", analysis.getConclusion());
+        assertEquals("SUPPORTED", analysis.getConclusion());
+        assertTrue(analysis.isValidationEligible());
         assertTrue(analysis.getCaveats().stream().anyMatch(value -> value.contains("样本外")));
     }
 
@@ -41,7 +42,9 @@ class FactorEvidenceAssessmentServiceTest {
     private FactorAnalysis analysis(double mean, double std, double positiveRatio, int samples) {
         FactorAnalysis value = new FactorAnalysis();
         value.setIcMean(mean); value.setIcStd(std); value.setIcIr(std == 0 ? 0 : mean / std);
-        value.setPositiveIcRatio(positiveRatio); value.setSampleCount(samples);
+        value.setPositiveIcRatio(positiveRatio); value.setNegativeIcRatio(1d - positiveRatio);
+        value.setSampleCount(samples); value.setMinCrossSectionSize(20);
+        value.setIcMeanCiLower(mean - 0.01); value.setIcMeanCiUpper(mean + 0.01);
         return value;
     }
 }

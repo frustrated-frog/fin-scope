@@ -77,16 +77,27 @@ public class QuantDatasetService {
                 .anyMatch(value -> "CAPITAL_FLOW_DAILY".equals(value.getPartitionType())
                         && "COMPLETE".equals(value.getQualityStatus())
                         && value.getRowCount() == frozenCapital.size() && value.getRowCount() > 0);
-        boolean computableCapitalRows = !frozenCapital.isEmpty()
-                && frozenCapital.stream().allMatch(value -> "COMPLETE".equals(value.getQualityStatus())
-                        && value.getMainNetInflow() != null && value.getAmount() != null
-                        && value.getAmount().signum() > 0 && value.getAvailableAt() != null
-                        && !value.getAvailableAt().toLocalDate().isAfter(value.getTradeDate()));
-        if ("READY".equals(dataset.getStatus()) && "quant-dataset-v2".equals(dataset.getFingerprintVersion())
-                && completeCapitalPartition && computableCapitalRows) {
-            result.add("MAIN_FLOW_SHARE");
+        boolean capitalGate = "READY".equals(dataset.getStatus())
+                && "quant-dataset-v2".equals(dataset.getFingerprintVersion())
+                && completeCapitalPartition && !frozenCapital.isEmpty();
+        if (capitalGate) {
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE")) result.add("MAIN_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "SUPER_LARGE_FLOW_SHARE")) result.add("SUPER_LARGE_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "BIG_ORDER_FLOW_SHARE")) result.add("BIG_ORDER_FLOW_SHARE");
         }
         return result;
+    }
+
+    private boolean computableCapitalRows(List<QuantCapitalFlowDaily> rows, String factorCode) {
+        return rows.stream().allMatch(value -> {
+            boolean common = "COMPLETE".equals(value.getQualityStatus())
+                    && value.getAmount() != null && value.getAmount().signum() > 0
+                    && value.getAvailableAt() != null;
+            if (!common) return false;
+            if ("MAIN_FLOW_SHARE".equals(factorCode)) return value.getMainNetInflow() != null;
+            if ("SUPER_LARGE_FLOW_SHARE".equals(factorCode)) return value.getSuperLargeNetInflow() != null;
+            return value.getSuperLargeNetInflow() != null && value.getLargeNetInflow() != null;
+        });
     }
 
     public QuantDataset create(String name, String dataKind) {

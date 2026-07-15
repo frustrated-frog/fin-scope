@@ -23,4 +23,15 @@ class FactorAnalysisServiceTest {
         assertTrue(Double.isFinite(result.getIcIr()));
         assertEquals(0.75, result.getPositiveIcRatio(), 0.000001);
     }
+
+    @Test
+    void rejectsConstantCrossSectionsAndSeparatesNegativeFromZeroDays() {
+        FactorAnalysisService service = new FactorAnalysisService();
+        assertTrue(Double.isNaN(service.rankIc(Arrays.asList(1d, 1d, 1d), Arrays.asList(1d, 2d, 3d))));
+        com.finscope.domain.quant.factor.FactorAnalysis result = service
+                .summarize("X", Arrays.asList(-0.1, 0d, 0.2));
+        assertEquals(1d / 3d, result.getNegativeIcRatio(), 0.000001);
+        assertEquals(1d / 3d, result.getZeroIcRatio(), 0.000001);
+        assertTrue(result.getIcMeanCiLower() <= result.getIcMeanCiUpper());
+    }
 }

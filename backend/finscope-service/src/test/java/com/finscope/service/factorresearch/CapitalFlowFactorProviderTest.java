@@ -27,6 +27,30 @@ class CapitalFlowFactorProviderTest {
     }
 
     @Test
+    void calculatesComparableLargeOrderSharesFromTheSameFrozenRow() {
+        QuantCapitalFlowDaily source = source(new BigDecimal("120"), new BigDecimal("1000"));
+        source.setSuperLargeNetInflow(new BigDecimal("80"));
+        source.setLargeNetInflow(new BigDecimal("40"));
+
+        assertEquals(new BigDecimal("0.0800000000"), provider.calculate(
+                context(source), CapitalFlowFactorProvider.SUPER_LARGE_FLOW_SHARE).getProcessedValue());
+        assertEquals(new BigDecimal("0.1200000000"), provider.calculate(
+                context(source), CapitalFlowFactorProvider.BIG_ORDER_FLOW_SHARE).getProcessedValue());
+    }
+
+    @Test
+    void doesNotPartiallyCalculateBigOrderShareWhenARequiredBucketIsMissing() {
+        QuantCapitalFlowDaily source = source(new BigDecimal("120"), new BigDecimal("1000"));
+        source.setSuperLargeNetInflow(new BigDecimal("80"));
+
+        FactorObservation result = provider.calculate(
+                context(source), CapitalFlowFactorProvider.BIG_ORDER_FLOW_SHARE);
+
+        assertEquals(ObservationQuality.MISSING_INPUT, result.getQualityStatus());
+        assertNull(result.getProcessedValue());
+    }
+
+    @Test
     void refusesZeroOrMissingAmount() {
         FactorObservation zero = provider.calculate(
                 context(source(BigDecimal.TEN, BigDecimal.ZERO)), CapitalFlowFactorProvider.MAIN_FLOW_SHARE);

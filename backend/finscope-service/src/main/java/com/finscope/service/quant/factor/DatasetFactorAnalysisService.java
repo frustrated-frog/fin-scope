@@ -15,6 +15,7 @@ import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.factorresearch.FactorCalculationContext;
 import com.finscope.service.factorresearch.FactorProviderRegistry;
 import com.finscope.service.factorresearch.FactorEvidenceAssessmentService;
+import com.finscope.service.factorresearch.ResearchFactorCatalog;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -28,6 +29,7 @@ public class DatasetFactorAnalysisService {
     @Resource private FactorRegistry registry;
     @Resource private FactorProviderRegistry providers;
     @Resource private QuantCapitalFlowRepository capitalFlows;
+    @Resource private ResearchFactorCatalog researchCatalog;
     private final FactorAnalysisService analysis = new FactorAnalysisService();
     private final FactorEvidenceAssessmentService evidenceAssessment = new FactorEvidenceAssessmentService();
 
@@ -43,6 +45,7 @@ public class DatasetFactorAnalysisService {
         for (QuantDailyBar bar : bars) byDate.computeIfAbsent(bar.getTradeDate(), key -> new LinkedHashMap<String, QuantDailyBar>()).put(bar.getInstrumentCode(), bar);
         List<LocalDate> dates = new ArrayList<LocalDate>(byDate.keySet()); Map<String,List<QuantDailyBar>> histories = new LinkedHashMap<String,List<QuantDailyBar>>();
         Set<String> active = new LinkedHashSet<String>(); int eventCursor = 0; List<Double> dailyIc = new ArrayList<Double>();
+        int candidateDays = 0, minCrossSection = Integer.MAX_VALUE;
         for (int dateIndex = 0; dateIndex + 1 < dates.size(); dateIndex++) {
             LocalDate date = dates.get(dateIndex); while (eventCursor < events.size() && !events.get(eventCursor).getTradeDate().isAfter(date)) {
                 QuantUniverseMember event = events.get(eventCursor++); if (event.isMember()) active.add(event.getInstrumentCode()); else active.remove(event.getInstrumentCode());
@@ -62,11 +65,21 @@ public class DatasetFactorAnalysisService {
                         ? Double.NaN : observation.getProcessedValue().doubleValue();
                 if (Double.isFinite(factor)) { factorValues.add(factor); nextReturns.add(next.getClose().doubleValue() / next.getOpen().doubleValue() - 1d); }
             }
-            if (factorValues.size() >= 2) dailyIc.add(analysis.rankIc(factorValues, nextReturns));
+            candidateDays++;
+            if (factorValues.size() >= com.finscope.service.factorresearch.FactorValidationPolicy.MIN_CROSS_SECTION_SIZE) {
+                double ic = analysis.rankIc(factorValues, nextReturns);
+                if (Double.isFinite(ic)) {
+                    dailyIc.add(ic);
+                    minCrossSection = Math.min(minCrossSection, factorValues.size());
+                }
+            }
         }
         FactorAnalysis result = analysis.summarize(factorCode, dailyIc); result.setDatasetId(datasetId);
         result.setDatasetFingerprint(dataset.getFingerprint());
-        evidenceAssessment.assess(result, researchDirection(factorCode), dataset.getDataKind());
+        result.setTotalEligibleDays(candidateDays);
+        result.setMinCrossSectionSize(minCrossSection == Integer.MAX_VALUE ? 0 : minCrossSection);
+        result.setCoverageRatio(candidateDays == 0 ? 0d : (double) dailyIc.size() / candidateDays);
+        evidenceAssessment.assess(result, researchDirection(factorCode), dataset.getDataKind(), dataset.getDatasetLevel());
         return result;
     }
 
@@ -75,11 +88,13 @@ public class DatasetFactorAnalysisService {
     }
 
     private String researchDirection(String factorCode) {
-        if (registry != null && registry.contains(factorCode)) {
-            return "LOW".equals(registry.get(factorCode).getDirection())
-                    ? "NEGATIVE_HYPOTHESIS" : "POSITIVE_HYPOTHESIS";
+        if (researchCatalog != null) {
+            com.finscope.domain.factorresearch.FactorIdentity identity = providerRegistry().identity(factorCode);
+            return researchCatalog.get(identity.getNamespace(), identity.getCode(), identity.getVersion())
+                    .getExpectedDirection();
         }
-        return "POSITIVE_HYPOTHESIS";
+        return registry != null && registry.contains(factorCode) && "LOW".equals(registry.get(factorCode).getDirection())
+                ? "NEGATIVE_HYPOTHESIS" : "POSITIVE_HYPOTHESIS";
     }
 
     private Map<String, QuantCapitalFlowDaily> capital(Long datasetId) {

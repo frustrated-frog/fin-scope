@@ -28,9 +28,11 @@ class ResearchFactorCatalogTest {
                 .map(value -> value.getCode())
                 .collect(Collectors.toSet());
 
-        assertEquals(14, definitions.size());
+        assertEquals(16, definitions.size());
         assertTrue(codes.containsAll(executableCodes));
         assertTrue(codes.contains("MAIN_FLOW_SHARE"));
+        assertTrue(codes.contains("SUPER_LARGE_FLOW_SHARE"));
+        assertTrue(codes.contains("BIG_ORDER_FLOW_SHARE"));
         assertEquals(definitions.size(), new HashSet<String>(definitions.stream()
                 .map(value -> value.getIdentity().toString())
                 .collect(Collectors.toList())).size());
@@ -53,6 +55,8 @@ class ResearchFactorCatalogTest {
         ResearchFactorDefinition capital = catalog.get("capital", "MAIN_FLOW_SHARE", "1.0.0");
         assertEquals(FactorLifecycleStatus.EXPLORATORY, capital.getStatus());
         assertTrue(capital.getInterpretationBoundary().contains("不构成投资建议"));
+        assertTrue(catalog.get("capital", "BIG_ORDER_FLOW_SHARE", "1.0.0")
+                .getMissingPolicy().contains("必需订单桶缺失"));
     }
 
     private void assertDefinition(ResearchFactorDefinition definition, String formula, String boundaryTerm) {
