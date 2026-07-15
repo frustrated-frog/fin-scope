@@ -15,14 +15,17 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/quant/factors")
 public class QuantFactorController {
-    @Resource private FactorRegistry registry;
-    @Resource private DatasetFactorAnalysisService analysis;
+
+    @Resource
+    private FactorRegistry factorRegistry;
+    @Resource
+    private DatasetFactorAnalysisService datasetFactorAnalysisService;
     /**
      * 查询可用因子定义列表。
      *
      * @return 因子定义列表，包含因子编码、名称和计算说明。
      */
-    @GetMapping public List<FactorDefinition> list() { return registry.list(); }
+    @GetMapping public List<FactorDefinition> list() { return factorRegistry.list(); }
     /**
      * 分析指定数据集上的因子表现。
      *
@@ -31,6 +34,6 @@ public class QuantFactorController {
      * @return 因子分析结果，包含覆盖度、分布和表现指标。
      */
     @GetMapping("/{code}/analysis") public FactorAnalysis analyze(@PathVariable String code, @RequestParam Long datasetId) {
-        return analysis.analyze(datasetId, code);
+        return datasetFactorAnalysisService.analyze(datasetId, code);
     }
 }

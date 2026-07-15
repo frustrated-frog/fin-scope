@@ -27,7 +27,9 @@ import com.finscope.domain.quant.factor.FactorDefinition;
 public class QuantDatasetService {
 
     private final QuantDatasetFingerprint defaultFingerprint = new QuantDatasetFingerprint();
+
     private final QuantDataQualityService defaultQuality = new QuantDataQualityService();
+
     @Resource
     private QuantDatasetRepository datasets;
     @Resource

@@ -21,9 +21,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/intake")
 public class IntakeController {
+
     @Resource
     private IntakeService intakeService;
-    @Resource private IntakePromotionTaskService intakePromotionTaskService;
+    @Resource
+    private IntakePromotionTaskService intakePromotionTaskService;
 
     /**
      * 查询最近的信息源抓取批次。

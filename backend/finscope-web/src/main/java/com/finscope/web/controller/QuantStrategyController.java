@@ -15,8 +15,9 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/quant")
 public class QuantStrategyController {
+
     @Resource
-    private QuantStrategyService service;
+    private QuantStrategyService quantStrategyService;
 
     /**
      * 根据数据集和提示词生成量化策略草稿。
@@ -28,7 +29,7 @@ public class QuantStrategyController {
     public QuantStrategyDraft generate(@RequestBody GenerateQuantStrategyDraftRequest request) {
         if (request == null || request.getDatasetId() == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty())
             throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集和策略描述不能为空");
-        return service.generateDraft(request.getDatasetId(), request.getPrompt());
+        return quantStrategyService.generateDraft(request.getDatasetId(), request.getPrompt());
     }
 
     /**
@@ -39,7 +40,7 @@ public class QuantStrategyController {
      */
     @PostMapping("/strategy-drafts/{id}/confirm")
     public ResponseEntity<QuantStrategyVersion> confirm(@PathVariable Long id) {
-        QuantStrategyVersion value = service.confirm(id);
+        QuantStrategyVersion value = quantStrategyService.confirm(id);
         return ResponseEntity.created(URI.create("/api/quant/strategies/" + value.getId())).body(value);
     }
 
@@ -50,7 +51,7 @@ public class QuantStrategyController {
      */
     @GetMapping("/strategies")
     public List<QuantStrategyVersion> list() {
-        return service.listVersions();
+        return quantStrategyService.listVersions();
     }
 
     /**
@@ -61,6 +62,6 @@ public class QuantStrategyController {
      */
     @GetMapping("/strategies/{id}")
     public QuantStrategyVersion get(@PathVariable Long id) {
-        return service.getVersion(id);
+        return quantStrategyService.getVersion(id);
     }
 }

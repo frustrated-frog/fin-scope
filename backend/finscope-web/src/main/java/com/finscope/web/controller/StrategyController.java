@@ -33,14 +33,15 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/strategy")
 public class StrategyController {
+
     @Resource
-    private StrategyHoldingService holdingService;
+    private StrategyHoldingService strategyHoldingService;
     @Resource
-    private StrategyPlaybookService playbookService;
+    private StrategyPlaybookService strategyPlaybookService;
     @Resource
-    private StrategyStockThesisService thesisService;
+    private StrategyStockThesisService strategyStockThesisService;
     @Resource
-    private StrategyReviewService reviewService;
+    private StrategyReviewService strategyReviewService;
 
     /**
      * 查询长期策略总览。
@@ -49,7 +50,7 @@ public class StrategyController {
      */
     @GetMapping("/overview")
     public StrategyOverviewResponse overview() {
-        return StrategyOverviewResponse.of(holdingService.list());
+        return StrategyOverviewResponse.of(strategyHoldingService.list());
     }
 
     /**
@@ -60,7 +61,7 @@ public class StrategyController {
      */
     @PostMapping("/holdings")
     public StrategyHoldingResponse add(@RequestBody AddStrategyHoldingRequest request) {
-        return StrategyHoldingResponse.of(holdingService.add(request.getCode(), request.getType(),
+        return StrategyHoldingResponse.of(strategyHoldingService.add(request.getCode(), request.getType(),
                 request.getRole(), request.getTargetWeight(), request.getCurrentWeight(), request.getNote()));
     }
 
@@ -74,7 +75,7 @@ public class StrategyController {
     @PatchMapping("/holdings/{id}")
     public StrategyHoldingResponse update(@PathVariable Long id,
                                           @RequestBody UpdateStrategyHoldingRequest request) {
-        return StrategyHoldingResponse.of(holdingService.update(id, request.getRole(),
+        return StrategyHoldingResponse.of(strategyHoldingService.update(id, request.getRole(),
                 request.getTargetWeight(), request.getCurrentWeight(), request.getNote(),
                 request.getRevision()));
     }
@@ -87,7 +88,7 @@ public class StrategyController {
      */
     @DeleteMapping("/holdings/{id}")
     public void delete(@PathVariable Long id, @RequestParam long revision) {
-        holdingService.delete(id, revision);
+        strategyHoldingService.delete(id, revision);
     }
 
     /**
@@ -97,7 +98,7 @@ public class StrategyController {
      */
     @GetMapping("/playbooks")
     public List<StrategyPlaybookView> playbooks() {
-        return playbookService.list();
+        return strategyPlaybookService.list();
     }
 
     /**
@@ -110,7 +111,7 @@ public class StrategyController {
     @PutMapping("/playbooks/{code}/status")
     public StrategyPlaybook updatePlaybook(@PathVariable String code,
                                            @RequestBody UpdateStrategyPlaybookRequest request) {
-        return playbookService.update(code, request.getStatus(), request.getNote(), request.getRevision());
+        return strategyPlaybookService.update(code, request.getStatus(), request.getNote(), request.getRevision());
     }
 
     /**
@@ -120,7 +121,7 @@ public class StrategyController {
      */
     @GetMapping("/stock-theses")
     public List<StrategyStockThesis> theses() {
-        return thesisService.list();
+        return strategyStockThesisService.list();
     }
 
     /**
@@ -131,7 +132,7 @@ public class StrategyController {
      */
     @PostMapping("/stock-theses")
     public StrategyStockThesis createThesis(@RequestBody CreateStrategyStockThesisRequest request) {
-        return thesisService.create(request.getCode(), request.getThesis(), request.getBuyConditions(),
+        return strategyStockThesisService.create(request.getCode(), request.getThesis(), request.getBuyConditions(),
                 request.getInvalidationConditions(), request.getWatchFocus(), request.getNote());
     }
 
@@ -145,7 +146,7 @@ public class StrategyController {
     @PatchMapping("/stock-theses/{id}")
     public StrategyStockThesis updateThesis(@PathVariable Long id,
                                             @RequestBody UpdateStrategyStockThesisRequest request) {
-        return thesisService.update(id, request.getStage(), request.getThesis(),
+        return strategyStockThesisService.update(id, request.getStage(), request.getThesis(),
                 request.getBuyConditions(), request.getInvalidationConditions(),
                 request.getWatchFocus(), request.getNote(), request.getRevision());
     }
@@ -158,7 +159,7 @@ public class StrategyController {
      */
     @DeleteMapping("/stock-theses/{id}")
     public void deleteThesis(@PathVariable Long id, @RequestParam long revision) {
-        thesisService.delete(id, revision);
+        strategyStockThesisService.delete(id, revision);
     }
 
     /**
@@ -168,7 +169,7 @@ public class StrategyController {
      */
     @GetMapping("/reviews")
     public List<StrategyReview> reviews() {
-        return reviewService.list();
+        return strategyReviewService.list();
     }
 
     /**
@@ -179,7 +180,7 @@ public class StrategyController {
      */
     @PostMapping("/reviews")
     public StrategyReview createReview(@RequestBody CreateStrategyReviewRequest request) {
-        return reviewService.create(request.getReviewDate(), request.getFacts(), request.getReasoning(),
+        return strategyReviewService.create(request.getReviewDate(), request.getFacts(), request.getReasoning(),
                 request.getNextAction());
     }
 
@@ -190,6 +191,6 @@ public class StrategyController {
      */
     @DeleteMapping("/reviews/{id}")
     public void deleteReview(@PathVariable Long id) {
-        reviewService.delete(id);
+        strategyReviewService.delete(id);
     }
 }
