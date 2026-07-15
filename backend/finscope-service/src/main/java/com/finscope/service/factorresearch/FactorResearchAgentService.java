@@ -14,6 +14,7 @@ import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.factor.FactorAnalysis;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.quant.factor.DatasetFactorAnalysisService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /** Read-only, explicitly approved agent that can only execute a fixed research plan. */
 @Service
@@ -37,6 +39,7 @@ public class FactorResearchAgentService {
     private final ObjectMapper json;
     private final Clock clock;
 
+    @Autowired
     public FactorResearchAgentService(FactorResearchAgentRunRepository runs, AgentRunRepository traces,
                                       QuantDatasetService datasets, DatasetFactorAnalysisService diagnostics,
                                       ResearchFactorCatalog catalog, ResearchDraftService drafts, ObjectMapper json) {
@@ -80,14 +83,18 @@ public class FactorResearchAgentService {
         if (!runs.transition(id, "APPROVED", "RUNNING", now)) {
             throw new BusinessException(ErrorCode.CONFLICT, "研究 Agent 无法进入运行状态");
         }
-        FactorResearchAgentRun run = require(id); int calls = 0;
+        FactorResearchAgentRun run = require(id); int calls = 0; long startedNanos = System.nanoTime();
         try {
             ObjectNode evidence = json.createObjectNode();
             if (run.getResearchDraftId() != null) {
-                enforceBudget(run, ++calls); evidence.set("researchDraft", json.valueToTree(drafts.get(run.getResearchDraftId())));
+                enforceBudget(run, calls + 1, startedNanos); calls++;
+                evidence.set("researchDraft", json.valueToTree(drafts.get(run.getResearchDraftId())));
+                enforceTimeBudget(run, startedNanos);
                 trace(run, "inspect_research_draft", "研究草稿 " + run.getResearchDraftId(), "来源边界已读取", calls);
             }
-            enforceBudget(run, ++calls); QuantDataset dataset = datasets.get(run.getDatasetId());
+            enforceBudget(run, calls + 1, startedNanos); calls++;
+            QuantDataset dataset = datasets.get(run.getDatasetId());
+            enforceTimeBudget(run, startedNanos);
             ObjectNode datasetEvidence = json.createObjectNode();
             datasetEvidence.put("id", dataset.getId()); datasetEvidence.put("status", dataset.getStatus());
             datasetEvidence.put("dataKind", dataset.getDataKind()); datasetEvidence.put("datasetLevel", dataset.getDatasetLevel());
@@ -96,11 +103,15 @@ public class FactorResearchAgentService {
             evidence.set("dataset", datasetEvidence);
             trace(run, "inspect_dataset", "数据集 " + run.getDatasetId(), "质量、指纹和可用因子已读取", calls);
 
-            enforceBudget(run, ++calls); ResearchFactorDefinition definition = catalog.get(run.getFactor().getNamespace(), run.getFactor().getCode(), run.getFactor().getVersion());
+            enforceBudget(run, calls + 1, startedNanos); calls++;
+            ResearchFactorDefinition definition = catalog.get(run.getFactor().getNamespace(), run.getFactor().getCode(), run.getFactor().getVersion());
+            enforceTimeBudget(run, startedNanos);
             evidence.set("factorDefinition", json.valueToTree(definition));
             trace(run, "inspect_factor_definition", run.getFactor().toString(), "公式、版本与解释边界已核对", calls);
 
-            enforceBudget(run, ++calls); FactorAnalysis analysis = diagnostics.analyze(run.getDatasetId(), run.getFactor().getCode());
+            enforceBudget(run, calls + 1, startedNanos); calls++;
+            FactorAnalysis analysis = diagnostics.analyze(run.getDatasetId(), run.getFactor().getCode());
+            enforceTimeBudget(run, startedNanos);
             evidence.set("diagnostics", json.valueToTree(analysis));
             trace(run, "run_factor_diagnostics", "只读横截面诊断", "确定性评价门禁已完成：" + analysis.getConclusion(), calls);
 
@@ -112,6 +123,8 @@ public class FactorResearchAgentService {
             trace(run, "review_counter_evidence", "确定性证据包", "反证和停止条件已强制写入", calls);
             runs.complete(id, "COMPLETED", calls, evidenceJson, sha256(evidenceJson), findingJson,
                     analysis.isValidationEligible() ? "POLICY_REVIEW_COMPLETE" : "EVIDENCE_GATE_BLOCKED", LocalDateTime.now(clock));
+        } catch (BudgetExceededException ex) {
+            runs.complete(id, "BUDGET_EXHAUSTED", calls, "{}", "", "{}", ex.getMessage(), LocalDateTime.now(clock));
         } catch (Exception ex) {
             runs.complete(id, "FAILED", calls, "{}", "", "{}", safe(ex.getMessage()), LocalDateTime.now(clock));
             if (ex instanceof BusinessException) throw (BusinessException) ex;
@@ -126,7 +139,16 @@ public class FactorResearchAgentService {
     }
 
     private FactorResearchAgentRun require(Long id) { return runs.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "研究 Agent 运行不存在")); }
-    private void enforceBudget(FactorResearchAgentRun run, int used) { if (used > run.getMaxToolCalls()) throw new BusinessException(ErrorCode.CONFLICT, "TOOL_BUDGET_EXHAUSTED"); }
+    private void enforceBudget(FactorResearchAgentRun run, int requestedCalls, long startedNanos) {
+        enforceTimeBudget(run, startedNanos);
+        if (requestedCalls > run.getMaxToolCalls()) throw new BudgetExceededException("TOOL_BUDGET_EXHAUSTED");
+    }
+    private void enforceTimeBudget(FactorResearchAgentRun run, long startedNanos) {
+        if (run.getMaxRunSeconds() <= 0
+                || System.nanoTime() - startedNanos > TimeUnit.SECONDS.toNanos(run.getMaxRunSeconds())) {
+            throw new BudgetExceededException("TIME_BUDGET_EXHAUSTED");
+        }
+    }
     private String summary(FactorAnalysis a) { return "结论为" + a.getConclusion() + "；有效日度 IC " + a.getSampleCount() + " 个，方向对齐 IC " + String.format("%.3f", a.getDirectionAdjustedIcMean()) + "。"; }
     private String safe(String value) { return value == null ? "UNKNOWN_FAILURE" : value.substring(0, Math.min(300, value.length())); }
     private String sha256(String value) throws Exception { byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); StringBuilder out = new StringBuilder(); for (byte b : bytes) out.append(String.format("%02x", b)); return out.toString(); }
@@ -138,5 +160,9 @@ public class FactorResearchAgentService {
         trace.setErrorType(""); trace.setFallbackUsed(false); trace.setFallbackReason(""); trace.setTerminationReason(""); trace.setProgressDelta(1);
         trace.setBudgetSnapshot("{\"toolCallsUsed\":" + calls + ",\"maxToolCalls\":" + run.getMaxToolCalls() + ",\"llmCallsUsed\":0}");
         trace.setMetadataJson("{\"readOnly\":true}"); traces.record(trace);
+    }
+
+    private static final class BudgetExceededException extends RuntimeException {
+        private BudgetExceededException(String reason) { super(reason); }
     }
 }

@@ -5,6 +5,7 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.factorresearch.ResearchDraftRepository;
 import com.finscope.domain.factorresearch.FactorIdentity;
 import com.finscope.domain.factorresearch.ResearchDraft;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ public class ResearchDraftService {
     private final ResearchFactorCatalog catalog;
     private final Clock clock;
 
+    @Autowired
     public ResearchDraftService(ResearchDraftRepository repository, ResearchFactorCatalog catalog) {
         this(repository, catalog, Clock.systemDefaultZone());
     }

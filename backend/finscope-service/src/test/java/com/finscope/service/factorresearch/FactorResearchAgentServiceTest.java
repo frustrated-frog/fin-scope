@@ -50,7 +50,7 @@ class FactorResearchAgentServiceTest {
     void approvedRunUsesOnlyWhitelistedReadsAndPersistsEvidenceHashAndTrace() {
         FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
         run.setDatasetFingerprint("sha"); run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
-        run.setMaxToolCalls(4); run.setMaxLlmCalls(0); run.setStatus("RUNNING");
+        run.setMaxToolCalls(4); run.setMaxLlmCalls(0); run.setMaxRunSeconds(60); run.setStatus("RUNNING");
         when(runs.transition(eq(9L), anyString(), anyString(), any())).thenReturn(true);
         when(runs.findById(9L)).thenReturn(Optional.of(run)); when(traces.findBySubject(anyString(), eq(9L))).thenReturn(Collections.emptyList());
         when(datasets.get(7L)).thenReturn(dataset()); when(datasets.availableFactorCodes(7L)).thenReturn(Collections.singleton("MAIN_FLOW_SHARE"));
@@ -64,6 +64,22 @@ class FactorResearchAgentServiceTest {
         verify(runs).complete(eq(9L), eq("COMPLETED"), eq(3), contains("diagnostics"), argThat(value -> value.length() == 64),
                 contains("SUPPORTED"), eq("POLICY_REVIEW_COMPLETE"), any());
         verify(traces, times(4)).record(any(com.finscope.domain.agent.AgentRun.class));
+    }
+
+    @Test
+    void stopsCleanlyWhenTheApprovedToolBudgetIsExhausted() {
+        FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
+        run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
+        run.setMaxToolCalls(2); run.setMaxRunSeconds(60); run.setStatus("RUNNING");
+        when(runs.transition(eq(9L), anyString(), anyString(), any())).thenReturn(true);
+        when(runs.findById(9L)).thenReturn(Optional.of(run)); when(traces.findBySubject(anyString(), eq(9L))).thenReturn(Collections.emptyList());
+        when(datasets.get(7L)).thenReturn(dataset()); when(datasets.availableFactorCodes(7L)).thenReturn(Collections.singleton("MAIN_FLOW_SHARE"));
+
+        service.approveAndRun(9L);
+
+        verify(diagnostics, never()).analyze(anyLong(), anyString());
+        verify(runs).complete(eq(9L), eq("BUDGET_EXHAUSTED"), eq(2), eq("{}"), eq(""), eq("{}"),
+                eq("TOOL_BUDGET_EXHAUSTED"), any());
     }
 
     private QuantDataset dataset() { QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY"); value.setDataKind("REAL"); value.setDatasetLevel("RESEARCH"); value.setFingerprint("sha"); return value; }
