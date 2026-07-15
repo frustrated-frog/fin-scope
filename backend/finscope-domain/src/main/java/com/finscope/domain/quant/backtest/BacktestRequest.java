@@ -3,6 +3,7 @@ package com.finscope.domain.quant.backtest;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,8 @@ public class BacktestRequest {
      * 股票池成员列表。
      */
     private List<QuantUniverseMember> universe = new ArrayList<QuantUniverseMember>();
+    private List<QuantCapitalFlowDaily> capitalFlows = new ArrayList<QuantCapitalFlowDaily>();
+    private String datasetId = "backtest";
     /**
      * 初始资金。
      */
@@ -40,6 +43,10 @@ public class BacktestRequest {
     public void setFundamentals(List<QuantFundamentalSnapshot> fundamentals) { this.fundamentals = fundamentals; }
     public List<QuantUniverseMember> getUniverse() { return universe; }
     public void setUniverse(List<QuantUniverseMember> universe) { this.universe = universe; }
+    public List<QuantCapitalFlowDaily> getCapitalFlows() { return capitalFlows; }
+    public void setCapitalFlows(List<QuantCapitalFlowDaily> capitalFlows) { this.capitalFlows = capitalFlows; }
+    public String getDatasetId() { return datasetId; }
+    public void setDatasetId(String datasetId) { this.datasetId = datasetId; }
     public double getInitialCapital() { return initialCapital; }
     public void setInitialCapital(double initialCapital) { this.initialCapital = initialCapital; }
     public double getAnnualRiskFreeRate() { return annualRiskFreeRate; }

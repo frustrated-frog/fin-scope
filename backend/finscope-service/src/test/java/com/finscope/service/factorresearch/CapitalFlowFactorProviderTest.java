@@ -1,0 +1,81 @@
+package com.finscope.service.factorresearch;
+
+import com.finscope.domain.factorresearch.FactorObservation;
+import com.finscope.domain.factorresearch.ObservationQuality;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class CapitalFlowFactorProviderTest {
+    private final CapitalFlowFactorProvider provider = new CapitalFlowFactorProvider();
+
+    @Test
+    void calculatesMainFlowShareFromFrozenExactDecimals() {
+        QuantCapitalFlowDaily source = source(new BigDecimal("120000000"), new BigDecimal("800000000"));
+        FactorObservation value = provider.calculate(context(source), CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
+
+        assertEquals(new BigDecimal("0.1500000000"), value.getProcessedValue());
+        assertEquals(source.getAvailableAt(), value.getAvailableAt());
+        assertEquals(source.getSourceFingerprint(), value.getSourceFingerprint());
+        assertEquals(ObservationQuality.COMPLETE, value.getQualityStatus());
+    }
+
+    @Test
+    void refusesZeroOrMissingAmount() {
+        FactorObservation zero = provider.calculate(
+                context(source(BigDecimal.TEN, BigDecimal.ZERO)), CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
+        FactorObservation missing = provider.calculate(
+                context(source(BigDecimal.TEN, null)), CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
+
+        assertEquals(ObservationQuality.MISSING_INPUT, zero.getQualityStatus());
+        assertEquals(ObservationQuality.MISSING_INPUT, missing.getQualityStatus());
+        assertNull(zero.getProcessedValue());
+    }
+
+    @Test
+    void refusesSourceThatArrivedAfterExecutionCutoff() {
+        QuantCapitalFlowDaily source = source(BigDecimal.TEN, new BigDecimal("100"));
+        FactorCalculationContext beforeArrival = new FactorCalculationContext("7", "600519.SH",
+                source.getTradeDate(), source.getAvailableAt().minusSeconds(1), null, null, source);
+
+        FactorObservation value = provider.calculate(beforeArrival, CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
+
+        assertEquals(ObservationQuality.MISSING_INPUT, value.getQualityStatus());
+        assertNull(value.getProcessedValue());
+    }
+
+    @Test
+    void treatsMissingSourceIdentityAsMissingInputInsteadOfThrowing() {
+        QuantCapitalFlowDaily source = source(BigDecimal.TEN, new BigDecimal("100"));
+        source.setTradeDate(null);
+        FactorCalculationContext context = new FactorCalculationContext("7", "600519.SH",
+                LocalDate.of(2026, 7, 14), LocalDateTime.of(2026, 7, 15, 9, 30), null, null, source);
+
+        FactorObservation value = provider.calculate(context, CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
+
+        assertEquals(ObservationQuality.MISSING_INPUT, value.getQualityStatus());
+    }
+
+    private FactorCalculationContext context(QuantCapitalFlowDaily source) {
+        return new FactorCalculationContext("7", "600519.SH", source.getTradeDate(),
+                source.getAvailableAt(), null, null, source);
+    }
+
+    private QuantCapitalFlowDaily source(BigDecimal main, BigDecimal amount) {
+        QuantCapitalFlowDaily value = new QuantCapitalFlowDaily();
+        value.setDatasetId(7L); value.setInstrumentCode("600519.SH");
+        value.setTradeDate(LocalDate.of(2026, 7, 14));
+        value.setAvailableAt(LocalDateTime.of(2026, 7, 14, 18, 0));
+        value.setSourceFlowId(101L); value.setProviderCode("EASTMONEY");
+        value.setMainNetInflow(main); value.setAmount(amount);
+        value.setQualityStatus("COMPLETE"); value.setSourceFingerprint("payload");
+        value.setCalculationVersion("capital-flow-v3");
+        return value;
+    }
+}

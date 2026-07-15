@@ -27,7 +27,8 @@ public final class FactorObservation {
                              BigDecimal rawValue, BigDecimal processedValue, ObservationQuality qualityStatus,
                              String sourceFingerprint, String calculationFingerprint) {
         this.datasetId = required(datasetId, "datasetId");
-        this.instrumentCode = InstrumentCodeCanonicalizer.canonical(instrumentCode, null);
+        this.instrumentCode = learningSampleCode(instrumentCode)
+                ? instrumentCode : InstrumentCodeCanonicalizer.canonical(instrumentCode, null);
         this.tradeDate = required(tradeDate, "tradeDate");
         this.availableAt = required(availableAt, "availableAt");
         this.identity = required(identity, "identity");
@@ -123,5 +124,9 @@ public final class FactorObservation {
             throw new IllegalArgumentException(field + " is required");
         }
         return value;
+    }
+
+    private static boolean learningSampleCode(String value) {
+        return value != null && value.matches("^L[0-9]{5}\\.SIM$");
     }
 }

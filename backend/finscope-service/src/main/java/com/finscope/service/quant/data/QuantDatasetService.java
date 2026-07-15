@@ -4,7 +4,10 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantDatasetRepository;
 import com.finscope.dao.quant.QuantMarketDataRepository;
+import com.finscope.dao.factorresearch.QuantCapitalFlowRepository;
+import com.finscope.dao.factorresearch.QuantDatasetPartitionRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
@@ -37,6 +40,10 @@ public class QuantDatasetService {
     @Resource
     private QuantLearningDatasetFactory learningDatasetFactory;
     @Resource
+    private QuantCapitalFlowRepository capitalFlows;
+    @Resource
+    private QuantDatasetPartitionRepository datasetPartitions;
+    @Resource
     private FactorRegistry factors;
     private QuantDatasetFingerprint fingerprint = defaultFingerprint;
     private QuantDataQualityService quality = defaultQuality;
@@ -63,6 +70,21 @@ public class QuantDatasetService {
         for (FactorDefinition factor : factors.list()) {
             if (factor.isPointInTime() && coverage(bars, fundamentals, universe, factor.getCode()) >= 0.90d)
                 result.add(factor.getCode());
+        }
+        List<QuantCapitalFlowDaily> frozenCapital = capitalFlows == null
+                ? java.util.Collections.<QuantCapitalFlowDaily>emptyList() : capitalFlows.findByDatasetId(datasetId);
+        boolean completeCapitalPartition = datasetPartitions != null && datasetPartitions.findByDatasetId(datasetId).stream()
+                .anyMatch(value -> "CAPITAL_FLOW_DAILY".equals(value.getPartitionType())
+                        && "COMPLETE".equals(value.getQualityStatus())
+                        && value.getRowCount() == frozenCapital.size() && value.getRowCount() > 0);
+        boolean computableCapitalRows = !frozenCapital.isEmpty()
+                && frozenCapital.stream().allMatch(value -> "COMPLETE".equals(value.getQualityStatus())
+                        && value.getMainNetInflow() != null && value.getAmount() != null
+                        && value.getAmount().signum() > 0 && value.getAvailableAt() != null
+                        && !value.getAvailableAt().toLocalDate().isAfter(value.getTradeDate()));
+        if ("READY".equals(dataset.getStatus()) && "quant-dataset-v2".equals(dataset.getFingerprintVersion())
+                && completeCapitalPartition && computableCapitalRows) {
+            result.add("MAIN_FLOW_SHARE");
         }
         return result;
     }

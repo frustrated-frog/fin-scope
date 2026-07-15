@@ -3,6 +3,10 @@ package com.finscope.service.quant.strategy;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.factorresearch.CapitalFlowFactorProvider;
+import com.finscope.service.factorresearch.FactorProvider;
+import com.finscope.service.factorresearch.FactorProviderRegistry;
+import com.finscope.service.factorresearch.LegacyQuantFactorProvider;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,6 +14,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 class QuantStrategyAgentTest {
+    @Test
+    void exposesFrozenCapitalFactorToStrategyAgent() {
+        AtomicReference<String> system = new AtomicReference<String>();
+        String valid = "{\"name\":\"资金强度\",\"datasetId\":7,\"benchmark\":\"EQUAL_WEIGHT\","
+                + "\"investmentHypothesis\":\"资金强度延续\",\"riskBoundary\":\"探索性因子\","
+                + "\"factors\":[{\"code\":\"MAIN_FLOW_SHARE\",\"weight\":1,\"direction\":\"HIGH\"}],"
+                + "\"portfolio\":{\"topN\":10,\"rebalanceEvery\":20,\"weighting\":\"EQUAL\"},"
+                + "\"filters\":{\"excludeSt\":true,\"minTradingDays\":20,\"minAmount\":0},"
+                + "\"execution\":{\"signalPrice\":\"CLOSE\",\"fillPrice\":\"NEXT_OPEN\",\"slippageBps\":10},"
+                + "\"cost\":{\"buyCommission\":0.0003,\"sellCommission\":0.0003,\"stampDuty\":0.001,\"minimumCommission\":5}}";
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; } public String modelName() { return "test-model"; }
+            public String complete(String systemPrompt, String userPrompt) { system.set(systemPrompt); return valid; }
+        };
+        FactorRegistry legacy = new FactorRegistry();
+        FactorProviderRegistry providers = new FactorProviderRegistry(java.util.Arrays.<FactorProvider>asList(
+                new LegacyQuantFactorProvider(), new CapitalFlowFactorProvider()));
+        QuantStrategyAgent agent = new QuantStrategyAgent(llm, legacy,
+                new QuantStrategySpecValidator(legacy, providers));
+
+        QuantStrategyDraft draft = agent.generate(7L, "使用资金行为因子",
+                java.util.Collections.singleton("MAIN_FLOW_SHARE"));
+
+        assertEquals("VALIDATED", draft.getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(system.get().contains("MAIN_FLOW_SHARE(HIGH)"));
+    }
+
     @Test
     void extractsAndValidatesStructuredDraft() {
         LlmChatClient llm = client("```json\n{\"name\":\"质量动量\",\"datasetId\":1,"
