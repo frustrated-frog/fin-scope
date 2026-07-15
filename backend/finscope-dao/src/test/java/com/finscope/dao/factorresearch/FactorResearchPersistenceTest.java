@@ -1,0 +1,269 @@
+package com.finscope.dao.factorresearch;
+
+import com.finscope.dao.config.DatabaseInitializer;
+import com.finscope.dao.quant.QuantDatasetRepository;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
+import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.domain.quant.data.QuantDatasetPartition;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.sqlite.SQLiteDataSource;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class FactorResearchPersistenceTest {
+    @TempDir
+    Path tempDir;
+
+    private JdbcTemplate jdbc;
+    private FactorResearchSchemaMigrator migrator;
+    private QuantDatasetRepository datasets;
+    private QuantCapitalFlowRepository capitalFlows;
+    private QuantDatasetPartitionRepository partitions;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        SQLiteDataSource dataSource = dataSource(tempDir.resolve("factor-research.db"));
+        jdbc = new JdbcTemplate(dataSource);
+
+        DatabaseInitializer initializer = new DatabaseInitializer();
+        ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(initializer, "dataRoot", tempDir.toString());
+        initializer.afterPropertiesSet();
+
+        migrator = new FactorResearchSchemaMigrator(
+                jdbc, new DataSourceTransactionManager(dataSource));
+        migrator.migrate();
+
+        datasets = new QuantDatasetRepository();
+        capitalFlows = new QuantCapitalFlowRepository();
+        partitions = new QuantDatasetPartitionRepository();
+        ReflectionTestUtils.setField(datasets, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(capitalFlows, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(partitions, "jdbcTemplate", jdbc);
+    }
+
+    @Test
+    void migrationIsIdempotentAndRepairsMissingLedgerRows() {
+        migrator.migrate();
+
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=200"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=201"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=202"));
+        assertEquals(1, objectCount("table", "quant_capital_flow_daily"));
+        assertEquals(1, objectCount("table", "quant_dataset_partition"));
+        assertEquals(1, objectCount("index", "idx_quant_capital_flow_code_date"));
+        assertEquals(1, objectCount("index", "idx_quant_capital_flow_date"));
+
+        jdbc.update("DELETE FROM schema_migration WHERE version IN (200,201,202)");
+        migrator.migrate();
+
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=200"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=201"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=202"));
+    }
+
+    @Test
+    void persistsDatasetAndCapitalFlowWithoutDecimalPrecisionLoss() {
+        QuantDataset savedDataset = datasets.save(dataset("REAL"));
+        QuantCapitalFlowDaily expected = capitalFlow(savedDataset.getId());
+
+        capitalFlows.saveAll(Collections.singletonList(expected));
+
+        QuantDataset restoredDataset = datasets.findById(savedDataset.getId())
+                .orElseThrow(AssertionError::new);
+        QuantCapitalFlowDaily restored = capitalFlows.findByDatasetId(savedDataset.getId()).get(0);
+        assertEquals("RESEARCH", restoredDataset.getDatasetLevel());
+        assertEquals(LocalDateTime.of(2026, 7, 15, 15, 30), restoredDataset.getAsOfTime());
+        assertEquals("quant-dataset-v2", restoredDataset.getFingerprintVersion());
+        assertEquals("[{\"type\":\"CAPITAL_FLOW_DAILY\"}]", restoredDataset.getPartitionManifest());
+        assertEquals(expected.getTradeDate(), restored.getTradeDate());
+        assertEquals(expected.getInstrumentCode(), restored.getInstrumentCode());
+        assertEquals(expected.getAvailableAt(), restored.getAvailableAt());
+        assertEquals(expected.getSourceFlowId(), restored.getSourceFlowId());
+        assertEquals(expected.getProviderCode(), restored.getProviderCode());
+        assertDecimalEquals(expected.getMainNetInflow(), restored.getMainNetInflow());
+        assertDecimalEquals(expected.getMainFlowShare(), restored.getMainFlowShare());
+        assertDecimalEquals(expected.getSuperLargeNetInflow(), restored.getSuperLargeNetInflow());
+        assertDecimalEquals(expected.getLargeNetInflow(), restored.getLargeNetInflow());
+        assertDecimalEquals(expected.getMediumNetInflow(), restored.getMediumNetInflow());
+        assertDecimalEquals(expected.getSmallNetInflow(), restored.getSmallNetInflow());
+        assertDecimalEquals(expected.getTurnoverRate(), restored.getTurnoverRate());
+        assertDecimalEquals(expected.getAmount(), restored.getAmount());
+        assertEquals(expected.getMainNetInflow().scale(), restored.getMainNetInflow().scale());
+        assertEquals("12345678901234567890.1200", jdbc.queryForObject(
+                "SELECT main_net_inflow FROM quant_capital_flow_daily WHERE dataset_id=?",
+                String.class, savedDataset.getId()));
+        assertEquals(expected.getQualityStatus(), restored.getQualityStatus());
+        assertEquals(expected.getSourceFingerprint(), restored.getSourceFingerprint());
+        assertEquals(expected.getCalculationVersion(), restored.getCalculationVersion());
+    }
+
+    @Test
+    void duplicateFrozenCapitalFlowKeyFailsLoudly() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        QuantCapitalFlowDaily flow = capitalFlow(datasetId);
+        capitalFlows.saveAll(Collections.singletonList(flow));
+
+        assertThrows(DataAccessException.class,
+                () -> capitalFlows.saveAll(Collections.singletonList(flow)));
+        assertEquals(1, capitalFlows.findByDatasetId(datasetId).size());
+    }
+
+    @Test
+    void partitionsRoundTripInStablePartitionTypeOrder() {
+        Long datasetId = datasets.save(dataset("LEARNING_SAMPLE")).getId();
+        partitions.save(partition(datasetId, "UNIVERSE", 30));
+        partitions.save(partition(datasetId, "CAPITAL_FLOW_DAILY", 240));
+
+        List<QuantDatasetPartition> restored = partitions.findByDatasetId(datasetId);
+
+        assertEquals(Arrays.asList("CAPITAL_FLOW_DAILY", "UNIVERSE"), Arrays.asList(
+                restored.get(0).getPartitionType(), restored.get(1).getPartitionType()));
+        assertEquals(240, restored.get(0).getRowCount());
+        assertEquals(LocalDate.of(2026, 1, 2), restored.get(0).getMinDate());
+        assertEquals(LocalDate.of(2026, 7, 14), restored.get(0).getMaxDate());
+        assertEquals("partition-CAPITAL_FLOW_DAILY", restored.get(0).getPartitionFingerprint());
+        assertEquals("COMPLETE", restored.get(0).getQualityStatus());
+        assertEquals(LocalDateTime.of(2026, 7, 15, 16, 0), restored.get(0).getCreatedAt());
+    }
+
+    @Test
+    void deletingDatasetCascadesFrozenCapitalAndPartitions() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        capitalFlows.saveAll(Collections.singletonList(capitalFlow(datasetId)));
+        partitions.save(partition(datasetId, "CAPITAL_FLOW_DAILY", 1));
+
+        jdbc.update("DELETE FROM quant_dataset WHERE id=?", datasetId);
+
+        assertEquals(0, capitalFlows.findByDatasetId(datasetId).size());
+        assertEquals(0, partitions.findByDatasetId(datasetId).size());
+    }
+
+    @Test
+    void upgradesOldDatasetSchemaWithoutRowLossAndPreservesExplicitLevelOnRepair() {
+        SQLiteDataSource legacyDataSource = dataSource(tempDir.resolve("legacy.db"));
+        JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
+        legacyJdbc.execute("CREATE TABLE quant_dataset ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,market TEXT NOT NULL,"
+                + "universe_type TEXT NOT NULL,source_type TEXT NOT NULL,data_kind TEXT NOT NULL,"
+                + "start_date TEXT,end_date TEXT,status TEXT NOT NULL,fingerprint TEXT,quality_summary TEXT,"
+                + "revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        legacyJdbc.update("INSERT INTO quant_dataset(name,market,universe_type,source_type,data_kind,status,created_at,updated_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?)", "legacy-real", "A_SHARE", "CUSTOM", "IMPORT", "REAL", "READY",
+                "2026-07-15T10:00", "2026-07-15T10:00");
+        FactorResearchSchemaMigrator legacyMigrator = new FactorResearchSchemaMigrator(
+                legacyJdbc, new DataSourceTransactionManager(legacyDataSource));
+
+        legacyMigrator.migrate();
+
+        Map<String, Object> upgraded = legacyJdbc.queryForMap(
+                "SELECT data_kind,dataset_level,fingerprint_version,partition_manifest FROM quant_dataset");
+        assertEquals("REAL", upgraded.get("data_kind"));
+        assertEquals("RESEARCH", upgraded.get("dataset_level"));
+        assertEquals("quant-dataset-v1", upgraded.get("fingerprint_version"));
+        assertEquals("[]", upgraded.get("partition_manifest"));
+        assertEquals(1, legacyJdbc.queryForObject("SELECT COUNT(*) FROM quant_dataset", Integer.class));
+
+        legacyJdbc.update("UPDATE quant_dataset SET dataset_level='ARCHIVE'");
+        legacyJdbc.update("DELETE FROM schema_migration WHERE version=202");
+        legacyMigrator.migrate();
+
+        assertEquals("ARCHIVE", legacyJdbc.queryForObject(
+                "SELECT dataset_level FROM quant_dataset", String.class));
+        assertEquals(1, legacyJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=202", Integer.class));
+        assertFalse(columns(legacyJdbc, "quant_dataset").isEmpty());
+    }
+
+    private SQLiteDataSource dataSource(Path database) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + database + "?foreign_keys=on");
+        return dataSource;
+    }
+
+    private QuantDataset dataset(String dataKind) {
+        QuantDataset value = new QuantDataset();
+        value.setName("资金行为冻结研究集");
+        value.setMarket("A_SHARE");
+        value.setUniverseType("CUSTOM");
+        value.setSourceType("CAPITAL_BEHAVIOR");
+        value.setDataKind(dataKind);
+        value.setStatus("READY");
+        value.setDatasetLevel("REAL".equals(dataKind) ? "RESEARCH" : null);
+        value.setAsOfTime(LocalDateTime.of(2026, 7, 15, 15, 30));
+        value.setFingerprintVersion("quant-dataset-v2");
+        value.setPartitionManifest("[{\"type\":\"CAPITAL_FLOW_DAILY\"}]");
+        return value;
+    }
+
+    private QuantCapitalFlowDaily capitalFlow(Long datasetId) {
+        QuantCapitalFlowDaily value = new QuantCapitalFlowDaily();
+        value.setDatasetId(datasetId);
+        value.setTradeDate(LocalDate.of(2026, 7, 14));
+        value.setInstrumentCode("600519.SH");
+        value.setAvailableAt(LocalDateTime.of(2026, 7, 15, 9, 15, 30));
+        value.setSourceFlowId(998877L);
+        value.setProviderCode("EASTMONEY");
+        value.setMainNetInflow(new BigDecimal("12345678901234567890.1200"));
+        value.setMainFlowShare(new BigDecimal("0.123400"));
+        value.setSuperLargeNetInflow(new BigDecimal("111111111.11"));
+        value.setLargeNetInflow(new BigDecimal("222222222.220"));
+        value.setMediumNetInflow(new BigDecimal("-333333333.3300"));
+        value.setSmallNetInflow(new BigDecimal("0.00000001"));
+        value.setTurnoverRate(new BigDecimal("2.3400"));
+        value.setAmount(new BigDecimal("98765432109876543210.0001"));
+        value.setQualityStatus("COMPLETE");
+        value.setSourceFingerprint("capital-source-sha256");
+        value.setCalculationVersion("capital-factor-v1");
+        return value;
+    }
+
+    private QuantDatasetPartition partition(Long datasetId, String type, long rowCount) {
+        QuantDatasetPartition value = new QuantDatasetPartition();
+        value.setDatasetId(datasetId);
+        value.setPartitionType(type);
+        value.setRowCount(rowCount);
+        value.setMinDate(LocalDate.of(2026, 1, 2));
+        value.setMaxDate(LocalDate.of(2026, 7, 14));
+        value.setPartitionFingerprint("partition-" + type);
+        value.setQualityStatus("COMPLETE");
+        value.setCreatedAt(LocalDateTime.of(2026, 7, 15, 16, 0));
+        return value;
+    }
+
+    private int objectCount(String type, String name) {
+        Integer value = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type=? AND name=?", Integer.class, type, name);
+        return value == null ? 0 : value;
+    }
+
+    private int count(String sql) {
+        Integer value = jdbc.queryForObject(sql, Integer.class);
+        return value == null ? 0 : value;
+    }
+
+    private List<Map<String, Object>> columns(JdbcTemplate template, String table) {
+        return template.queryForList("PRAGMA table_info(" + table + ")");
+    }
+
+    private void assertDecimalEquals(BigDecimal expected, BigDecimal actual) {
+        assertEquals(0, expected.compareTo(actual));
+    }
+}

@@ -28,6 +28,10 @@ public class QuantDatasetRepository {
         value.setUniverseType(rs.getString("universe_type"));
         value.setSourceType(rs.getString("source_type"));
         value.setDataKind(rs.getString("data_kind"));
+        value.setDatasetLevel(rs.getString("dataset_level"));
+        value.setAsOfTime(TimeUtil.localDateTime(rs, "as_of_time"));
+        value.setFingerprintVersion(rs.getString("fingerprint_version"));
+        value.setPartitionManifest(rs.getString("partition_manifest"));
         value.setStartDate(date(rs.getString("start_date")));
         value.setEndDate(date(rs.getString("end_date")));
         value.setStatus(rs.getString("status"));
@@ -41,17 +45,23 @@ public class QuantDatasetRepository {
 
     public QuantDataset save(QuantDataset value) {
         LocalDateTime now = LocalDateTime.now();
+        String datasetLevel = defaultDatasetLevel(value.getDatasetLevel(), value.getDataKind());
+        String fingerprintVersion = defaultText(value.getFingerprintVersion(), "quant-dataset-v1");
+        String partitionManifest = defaultText(value.getPartitionManifest(), "[]");
         KeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("INSERT INTO quant_dataset("
-                    + "name,market,universe_type,source_type,data_kind,start_date,end_date,status,fingerprint,quality_summary,revision,created_at,updated_at) "
-                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                    + "name,market,universe_type,source_type,data_kind,dataset_level,as_of_time,fingerprint_version,"
+                    + "partition_manifest,start_date,end_date,status,fingerprint,quality_summary,revision,created_at,updated_at) "
+                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, value.getName()); ps.setString(2, value.getMarket());
             ps.setString(3, value.getUniverseType()); ps.setString(4, value.getSourceType());
-            ps.setString(5, value.getDataKind()); ps.setString(6, text(value.getStartDate()));
-            ps.setString(7, text(value.getEndDate())); ps.setString(8, value.getStatus());
-            ps.setString(9, value.getFingerprint()); ps.setString(10, value.getQualitySummary());
-            ps.setLong(11, 0); ps.setString(12, TimeUtil.text(now)); ps.setString(13, TimeUtil.text(now));
+            ps.setString(5, value.getDataKind()); ps.setString(6, datasetLevel);
+            ps.setString(7, TimeUtil.text(value.getAsOfTime())); ps.setString(8, fingerprintVersion);
+            ps.setString(9, partitionManifest); ps.setString(10, text(value.getStartDate()));
+            ps.setString(11, text(value.getEndDate())); ps.setString(12, value.getStatus());
+            ps.setString(13, value.getFingerprint()); ps.setString(14, value.getQualitySummary());
+            ps.setLong(15, 0); ps.setString(16, TimeUtil.text(now)); ps.setString(17, TimeUtil.text(now));
             return ps;
         }, keys);
         value.setId(keys.getKey().longValue());
@@ -76,4 +86,11 @@ public class QuantDatasetRepository {
 
     private static String text(LocalDate value) { return value == null ? null : value.toString(); }
     private static LocalDate date(String value) { return value == null ? null : LocalDate.parse(value); }
+    private static String defaultDatasetLevel(String datasetLevel, String dataKind) {
+        if (datasetLevel != null && !datasetLevel.trim().isEmpty()) return datasetLevel;
+        return "REAL".equals(dataKind) ? "RESEARCH" : "LEARNING";
+    }
+    private static String defaultText(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
 }

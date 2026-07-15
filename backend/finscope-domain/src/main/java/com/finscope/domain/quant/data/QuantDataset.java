@@ -32,6 +32,22 @@ public class QuantDataset {
      */
     private String dataKind;
     /**
+     * Dataset usage level, such as RESEARCH or LEARNING.
+     */
+    private String datasetLevel;
+    /**
+     * Latest information time included in the frozen dataset.
+     */
+    private LocalDateTime asOfTime;
+    /**
+     * Version of the dataset fingerprint protocol.
+     */
+    private String fingerprintVersion;
+    /**
+     * Serialized manifest of frozen dataset partitions.
+     */
+    private String partitionManifest;
+    /**
      * 开始日期。
      */
     private LocalDate startDate;

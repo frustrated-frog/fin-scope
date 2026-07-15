@@ -662,6 +662,9 @@ public class DatabaseInitializer implements InitializingBean {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "name TEXT NOT NULL,market TEXT NOT NULL,universe_type TEXT NOT NULL,"
                 + "source_type TEXT NOT NULL,data_kind TEXT NOT NULL CHECK(data_kind IN ('REAL','LEARNING_SAMPLE')),"
+                + "dataset_level TEXT NOT NULL DEFAULT 'LEARNING',as_of_time TEXT,"
+                + "fingerprint_version TEXT NOT NULL DEFAULT 'quant-dataset-v1',"
+                + "partition_manifest TEXT NOT NULL DEFAULT '[]',"
                 + "start_date TEXT,end_date TEXT,status TEXT NOT NULL,fingerprint TEXT,quality_summary TEXT,"
                 + "revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_daily_bar ("
