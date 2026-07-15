@@ -7,6 +7,7 @@ import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.agent.AgentRunContext;
 import com.finscope.domain.agent.AgentTraceSubject;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
+import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
@@ -25,30 +26,39 @@ public class CapitalInterpretationFacade {
     private final CapitalRuleExplanationService rules;
     private final CapitalInterpretationAgent agent;
     private final CapitalFactAssembler facts;
+    private final CapitalAgentEvidenceAssembler evidenceAssembler;
     private final AgentHarness harness;
     private final AgentTraceService traces;
     @Resource(name = "marketIntelAgentExecutor")
     private Executor executor;
 
-    public CapitalInterpretationFacade(CapitalBehaviorSnapshotRepository snapshots, CapitalInterpretationRepository interpretations, CapitalRuleExplanationService rules, CapitalInterpretationAgent agent, CapitalFactAssembler facts, AgentHarness harness, AgentTraceService traces) {
+    public CapitalInterpretationFacade(CapitalBehaviorSnapshotRepository snapshots,
+                                       CapitalInterpretationRepository interpretations,
+                                       CapitalRuleExplanationService rules,
+                                       CapitalInterpretationAgent agent,
+                                       CapitalFactAssembler facts,
+                                       CapitalAgentEvidenceAssembler evidenceAssembler,
+                                       AgentHarness harness, AgentTraceService traces) {
         this.snapshots = snapshots;
         this.interpretations = interpretations;
         this.rules = rules;
         this.agent = agent;
         this.facts = facts;
+        this.evidenceAssembler = evidenceAssembler;
         this.harness = harness;
         this.traces = traces;
     }
 
     public synchronized CapitalInterpretation request(Long instrumentId, boolean force) {
         CapitalBehaviorSnapshot snapshot = snapshots.findLatest(instrumentId).orElseThrow(() -> new IllegalArgumentException("capital snapshot not found for instrument " + instrumentId));
-        String base = JdkFinanceHttpClient.sha256(snapshot.getFingerprint() + "|capital-interpret-v1");
+        CapitalRuleExplanation explanation = rules.explain(snapshot.getFacts(), snapshot.getSignals());
+        CapitalAgentEvidencePacket packet = evidenceAssembler.assemble(snapshot, explanation);
+        String base = packet.getEvidenceFingerprint();
         String inputHash = force ? JdkFinanceHttpClient.sha256(base + "|" + System.nanoTime()) : base;
         if (!force) {
             java.util.Optional<CapitalInterpretation> cached = interpretations.findByAction(snapshot.getId(), "AGENT", inputHash);
             if (cached.isPresent()) return cached.get();
         }
-        CapitalRuleExplanation explanation = rules.explain(snapshot.getFacts(), snapshot.getSignals());
         CapitalInterpretation pending = new CapitalInterpretation();
         pending.setInstrumentId(instrumentId);
         pending.setSnapshotId(snapshot.getId());
@@ -61,11 +71,16 @@ public class CapitalInterpretationFacade {
         pending.setObservationPoints(Collections.emptyList());
         pending.setDisclaimer("模型解读仅用于研究，不构成投资建议。");
         pending.setRuleVersion(explanation.getRuleVersion());
-        pending.setPromptVersion("capital-interpret-v1");
+        pending.setPromptVersion(packet.getPromptVersion());
+        pending.setFactorVersion(packet.getFactorVersion());
+        pending.setSignalVersion(packet.getSignalVersion());
+        pending.setEvidenceRefs(packet.getRawMetrics());
+        pending.setWatchConditionRefs(packet.getWatchConditions().stream()
+                .map(item -> item.getId()).collect(java.util.stream.Collectors.toList()));
         pending.setInputHash(inputHash);
         interpretations.save(pending);
         try {
-            executor.execute(() -> complete(pending, snapshot, explanation, inputHash));
+            executor.execute(() -> complete(pending, snapshot, packet, explanation, inputHash));
         } catch (RuntimeException e) {
             pending.setStatus("FAILED");
             pending.setFallbackReason("EXECUTOR_REJECTED");
@@ -79,13 +94,15 @@ public class CapitalInterpretationFacade {
         return request(instrumentId, force);
     }
 
-    private void complete(CapitalInterpretation pending, CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation explanation, String inputHash) {
+    private void complete(CapitalInterpretation pending, CapitalBehaviorSnapshot snapshot,
+                          CapitalAgentEvidencePacket packet, CapitalRuleExplanation explanation,
+                          String inputHash) {
         AgentRunContext context = AgentRunContext.start(null, null);
         AgentActionFingerprint fp = AgentActionFingerprint.of("capital-interpret", "CAPITAL_SNAPSHOT", String.valueOf(snapshot.getId()), "capital-interpret:" + inputHash, inputHash);
         long started = System.nanoTime();
         AgentNodeResult<CapitalInterpretation> node = harness.runNode(context, fp, ctx -> {
             ctx.recordLlmCall();
-            CapitalInterpretation value = agent.interpret(snapshot, explanation);
+            CapitalInterpretation value = agent.interpret(packet, explanation);
             return AgentNodeResult.success(value, "snapshot=" + snapshot.getId(), "status=" + value.getStatus(), 1);
         });
         CapitalInterpretation value = node.getValue();
@@ -105,6 +122,17 @@ public class CapitalInterpretationFacade {
             pending.setModelName(value.getModelName());
             pending.setPromptVersion(value.getPromptVersion());
             pending.setOutputHash(value.getOutputHash());
+            pending.setMarketState(value.getMarketState());
+            pending.setExecutiveSummary(value.getExecutiveSummary());
+            pending.setObservations(value.getObservations());
+            pending.setCounterEvidence(value.getCounterEvidence());
+            pending.setWatchConditionRefs(value.getWatchConditionRefs());
+            pending.setConfidence(value.getConfidence());
+            pending.setFactorVersion(value.getFactorVersion());
+            pending.setSignalVersion(value.getSignalVersion());
+            pending.setEvidenceRefs(value.getEvidenceRefs());
+            pending.setRejectedOutputCount(value.getRejectedOutputCount());
+            pending.setRejectionReasons(value.getRejectionReasons());
         }
         interpretations.update(pending);
         traces.recordNode(AgentTraceSubject.of("CAPITAL_INTERPRETATION", pending.getId()), context, fp, node, (System.nanoTime() - started) / 1000000, "{\"snapshotId\":" + snapshot.getId() + "}");

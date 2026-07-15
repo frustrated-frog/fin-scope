@@ -11,7 +11,7 @@ public final class CapitalSignalPolicy {
     private final BigDecimal lateSessionShare;
 
     public CapitalSignalPolicy() {
-        this(new BigDecimal("1.50"), new BigDecimal("0.70"), new BigDecimal("0.40"));
+        this(new BigDecimal("1.20"), new BigDecimal("0.80"), new BigDecimal("0.40"));
     }
 
     private CapitalSignalPolicy(BigDecimal amountExpansionRatio, BigDecimal lowAmountRatio, BigDecimal lateSessionShare) {
@@ -22,6 +22,10 @@ public final class CapitalSignalPolicy {
 
     public static CapitalSignalPolicy v1() {
         return new CapitalSignalPolicy(new BigDecimal("1.50"), new BigDecimal("0.70"), new BigDecimal("0.40"));
+    }
+
+    public static CapitalSignalPolicy v2() {
+        return new CapitalSignalPolicy(new BigDecimal("1.20"), new BigDecimal("0.80"), new BigDecimal("0.40"));
     }
 
     public BigDecimal getAmountExpansionRatio() {
@@ -37,6 +41,6 @@ public final class CapitalSignalPolicy {
     }
 
     public String version() {
-        return "capital-signal-v1";
+        return "capital-signal-v2";
     }
 }

@@ -4,6 +4,8 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.CapitalFactorObservation;
+import com.finscope.domain.marketintel.CapitalWatchCondition;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -18,6 +20,10 @@ public class MarketIntelCapitalView {
     private List<CapitalFlowPoint> dailyTrend = Collections.emptyList();
     private CapitalBehaviorMetrics metrics;
     private CapitalRuleExplanation ruleExplanation;
+    private List<CapitalFactorObservation> factorObservations = Collections.emptyList();
+    private List<CapitalWatchCondition> watchConditions = Collections.emptyList();
+    private String factorVersion;
+    private String signalVersion;
     private Health health;
 
     @Data

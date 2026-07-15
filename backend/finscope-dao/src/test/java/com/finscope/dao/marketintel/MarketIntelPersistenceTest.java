@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentTraceSchemaMigrator;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.CapitalEvidenceRef;
+import com.finscope.domain.marketintel.CapitalInterpretation;
+import com.finscope.domain.marketintel.CapitalInterpretationObservation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,6 +54,7 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=101"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=102"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=103"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=104"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
         assertEquals(1, tableCount("market_capital_flow_snapshot"));
         assertEquals(1, tableCount("market_capital_behavior_snapshot"));
@@ -77,6 +81,57 @@ class MarketIntelPersistenceTest {
         CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
         assertEquals(new BigDecimal("18000000"), restored.getFacts().get(0).getMainNetInflow());
         assertEquals("fingerprint-1", restored.getFingerprint());
+    }
+
+    @Test
+    void interpretationRoundTripsAgentV2EvidenceAndGateMetadata() {
+        CapitalFlowPoint point = point("payload-agent-v2");
+        flows.saveAll(Collections.singletonList(point));
+        CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L, point.getObservedAt(),
+                Collections.singletonList(point), Collections.emptyList(), "fingerprint-agent-v2");
+        snapshots.save(snapshot);
+
+        CapitalInterpretationObservation observation = new CapitalInterpretationObservation();
+        observation.setDimension("FLOW");
+        observation.setClaim("主力净额保持为正");
+        observation.setFactorRefs(Collections.singletonList("factor:MAIN_FLOW_SHARE:2026-07-14T10:30"));
+        observation.setMetricRefs(Collections.singletonList(point.metricRef("mainNetInflow")));
+        CapitalInterpretation value = new CapitalInterpretation();
+        value.setInstrumentId(7L);
+        value.setSnapshotId(snapshot.getId());
+        value.setInterpretationType("AGENT");
+        value.setStatus("SUCCEEDED");
+        value.setPlainSummary("资金偏强但仍需确认");
+        value.setFacts(Collections.singletonList("主力资金净额为正"));
+        value.setHypotheses(Collections.emptyList());
+        value.setDataGaps(Collections.singletonList("缺少 Level-2"));
+        value.setObservationPoints(Collections.emptyList());
+        value.setInputHash("input-agent-v2");
+        value.setMarketState("MIXED");
+        value.setExecutiveSummary("资金偏强但仍需确认");
+        value.setObservations(Collections.singletonList(observation));
+        value.setCounterEvidence(Collections.singletonList("量能未持续放大"));
+        value.setWatchConditionRefs(Collections.singletonList("watch:MAIN_FLOW_SHARE"));
+        value.setConfidence("MID");
+        value.setFactorVersion("capital-factor-v1");
+        value.setSignalVersion("capital-signal-v2");
+        value.setEvidenceRefs(Collections.singletonList(new CapitalEvidenceRef(
+                point.metricRef("mainNetInflow"), "主力净额", "FLOW",
+                point.getMainNetInflow(), "元", point.getObservedAt())));
+        value.setRejectedOutputCount(1);
+        value.setRejectionReasons(Collections.singletonList("观察项引用未知因子"));
+
+        CapitalInterpretationRepository repository = new CapitalInterpretationRepository(
+                jdbc, new ObjectMapper().findAndRegisterModules());
+        repository.save(value);
+        CapitalInterpretation restored = repository.findById(value.getId()).orElseThrow(AssertionError::new);
+
+        assertEquals("MIXED", restored.getMarketState());
+        assertEquals("FLOW", restored.getObservations().get(0).getDimension());
+        assertEquals("主力净额", restored.getEvidenceRefs().get(0).getLabel());
+        assertEquals("capital-factor-v1", restored.getFactorVersion());
+        assertEquals(1, restored.getRejectedOutputCount());
+        assertEquals(Collections.singletonList("观察项引用未知因子"), restored.getRejectionReasons());
     }
 
     @Test

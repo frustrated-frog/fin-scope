@@ -15,6 +15,8 @@ public class CapitalBehaviorSignal {
      * 类型。
      */
     private String type;
+    /** 面向用户的稳定标签。 */
+    private String label;
     /**
      * 版本。
      */
@@ -27,6 +29,12 @@ public class CapitalBehaviorSignal {
      * 指标引用列表。
      */
     private List<String> metricRefs = Collections.emptyList();
+    /** 因子观测引用列表。 */
+    private List<String> factorRefs = Collections.emptyList();
+    /** 信号输入质量。 */
+    private String qualityStatus;
+    /** 规则版本。 */
+    private String ruleVersion;
     /**
      * 实际指标值。
      */
@@ -45,6 +53,7 @@ public class CapitalBehaviorSignal {
     }
 
     public void setMetricRefs(List<String> metricRefs) { this.metricRefs = immutable(metricRefs); }
+    public void setFactorRefs(List<String> factorRefs) { this.factorRefs = immutable(factorRefs); }
     public void setActualValues(Map<String, BigDecimal> values) {
         this.actualValues = Collections.unmodifiableMap(new LinkedHashMap<String, BigDecimal>(values));
     }

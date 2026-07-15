@@ -2,132 +2,205 @@ package com.finscope.service.marketintel;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
-import com.finscope.domain.marketintel.CapitalFlowPoint;
-import com.finscope.domain.marketintel.CapitalHypothesis;
+import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
 import org.springframework.stereotype.Service;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class CapitalInterpretationAgent {
-
-    private static final String PROMPT_VERSION = "capital-interpret-v1";
+    private static final int TIMEOUT_MS = 15000;
     private final LlmChatClient llm;
     private final ObjectMapper json;
-    private final CapitalHypothesisGate gate;
-    private final CapitalFactAssembler facts;
+    private final CapitalAgentResponseParser parser;
+    private final CapitalInterpretationGate gate;
 
-    public CapitalInterpretationAgent(LlmChatClient llm, ObjectMapper json, CapitalHypothesisGate gate, CapitalFactAssembler facts) {
+    public CapitalInterpretationAgent(LlmChatClient llm, ObjectMapper json,
+                                      CapitalAgentResponseParser parser,
+                                      CapitalInterpretationGate gate) {
         this.llm = llm;
         this.json = json;
+        this.parser = parser;
         this.gate = gate;
-        this.facts = facts;
     }
 
-    public CapitalInterpretation interpret(CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation rules) {
-        if (!llm.isConfigured()) return fallback(snapshot, rules, "LLM_NOT_CONFIGURED");
+    public CapitalInterpretation interpret(CapitalAgentEvidencePacket packet,
+                                            CapitalRuleExplanation rules) {
+        if (!packet.isSufficientCoverage()) {
+            return fallback(packet, rules, "INSUFFICIENT_DATA", "INSUFFICIENT_FACTOR_COVERAGE");
+        }
+        if (!llm.isConfigured()) return fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED");
+        String output = null;
         try {
-            String output = llm.complete(systemPrompt(), input(snapshot), 15000);
-            JsonNode root = json.readTree(output);
-            validate(root);
-            CapitalInterpretation result = base(snapshot, rules);
+            output = llm.complete(systemPrompt(), input(packet), TIMEOUT_MS);
+            JsonNode root;
+            try {
+                root = parser.parse(output);
+            } catch (Exception firstFailure) {
+                output = llm.complete(repairPrompt(), output == null ? "" : output, TIMEOUT_MS);
+                root = parser.parse(output);
+            }
+            CapitalInterpretationGate.Result accepted = gate.apply(root, packet);
+            if (!root.path("observations").isEmpty() && accepted.observations.isEmpty()) {
+                return fallback(packet, rules, "FALLBACK", "OUTPUT_REJECTED_BY_GATE");
+            }
+            CapitalInterpretation result = base(packet, rules);
             result.setStatus("SUCCEEDED");
-            result.setPlainSummary(requiredText(root, "plainSummary"));
-            result.setHypotheses(gate.apply(snapshot, parseHypotheses(root.path("hypotheses"))));
-            result.setDataGaps(strings(root.path("dataGaps")));
-            result.setObservationPoints(strings(root.path("observationPoints")));
-            result.setDisclaimer(requiredText(root, "disclaimer"));
+            result.setMarketState(accepted.marketState);
+            result.setExecutiveSummary(accepted.executiveSummary);
+            result.setPlainSummary(accepted.executiveSummary);
+            result.setObservations(accepted.observations);
+            result.setHypotheses(accepted.hypotheses);
+            result.setCounterEvidence(accepted.counterEvidence);
+            result.setWatchConditionRefs(accepted.watchConditionRefs);
+            result.setDataGaps(union(packet.getDataGaps(), accepted.dataGaps));
+            result.setConfidence(accepted.confidence);
+            result.setDisclaimer(accepted.disclaimer);
+            result.setRejectedOutputCount(accepted.rejectionReasons.size());
+            result.setRejectionReasons(accepted.rejectionReasons);
             result.setOutputHash(JdkFinanceHttpClient.sha256(output));
             return result;
+        } catch (SocketTimeoutException e) {
+            return fallback(packet, rules, "FALLBACK", "LLM_TIMEOUT");
         } catch (Exception e) {
-            return fallback(snapshot, rules, "INVALID_MODEL_OUTPUT");
+            return fallback(packet, rules, "FALLBACK", "INVALID_MODEL_OUTPUT");
         }
     }
 
-    private CapitalInterpretation base(CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation rules) {
+    private CapitalInterpretation base(CapitalAgentEvidencePacket packet, CapitalRuleExplanation rules) {
         CapitalInterpretation value = new CapitalInterpretation();
+        value.setInstrumentId(packet.getInstrumentId());
+        value.setSnapshotId(packet.getSnapshotId());
         value.setInterpretationType("AGENT");
-        value.setRuleVersion(rules.getRuleVersion());
+        value.setRuleVersion(packet.getRuleVersion());
         value.setModelName(llm.modelName());
-        value.setPromptVersion(PROMPT_VERSION);
-        value.setFacts(facts.assemble(snapshot));
+        value.setPromptVersion(packet.getPromptVersion());
+        value.setInputHash(packet.getEvidenceFingerprint());
+        value.setFactorVersion(packet.getFactorVersion());
+        value.setSignalVersion(packet.getSignalVersion());
+        value.setEvidenceRefs(packet.getRawMetrics());
+        List<String> facts = new ArrayList<String>();
+        packet.getFactorObservations().forEach(item -> facts.add(item.getLabel() + "："
+                + item.getValue() + (item.getState() == null ? "" : "（" + item.getState() + "）")));
+        value.setFacts(facts);
         return value;
     }
 
-    private CapitalInterpretation fallback(CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation rules, String reason) {
-        CapitalInterpretation value = base(snapshot, rules);
-        value.setStatus("FALLBACK");
+    private CapitalInterpretation fallback(CapitalAgentEvidencePacket packet,
+                                           CapitalRuleExplanation rules,
+                                           String status, String reason) {
+        CapitalInterpretation value = base(packet, rules);
+        value.setStatus(status);
+        value.setMarketState("INSUFFICIENT_DATA".equals(status) ? "INSUFFICIENT_DATA" : "NEUTRAL");
+        value.setExecutiveSummary(rules.getSummary());
         value.setPlainSummary(rules.getSummary());
         value.setHypotheses(Collections.emptyList());
-        value.setDataGaps(rules.getDataGaps());
-        value.setObservationPoints(Collections.singletonList("继续观察成交金额、换手率与主力净流向是否保持连续。"));
+        value.setObservations(Collections.emptyList());
+        value.setCounterEvidence(Collections.emptyList());
+        value.setDataGaps(packet.getDataGaps());
+        value.setWatchConditionRefs(packet.getWatchConditions().stream()
+                .map(item -> item.getId()).collect(java.util.stream.Collectors.toList()));
+        value.setObservationPoints(Collections.singletonList("继续观察量能、换手、主力净流向和日内资金方向是否连续。"));
+        value.setConfidence("LOW");
         value.setDisclaimer("规则解释和模型假设仅用于研究，不构成投资建议。");
         value.setFallbackReason(reason);
         return value;
     }
 
     private String systemPrompt() {
-        return "你是A股资金行为研究Agent。只输出JSON；事实不可改写；假设必须引用metricRefs；拆单和隐藏资金在无Level-2时只能LOW；第一阶段不得输出HIGH；不得给出买卖建议。";
+        return "你是A股资金行为研究Agent。只能使用输入中的factorRef、metricRef和watch id；"
+                + "输出单个JSON对象，字段必须为marketState、executiveSummary、observations、hypotheses、"
+                + "counterEvidence、watchConditionRefs、dataGaps、confidence、disclaimer。"
+                + "observations每项必须含dimension、claim、factorRefs、metricRefs。"
+                + "不得创造数值、不得输出买卖建议；拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
     }
 
-    private String input(CapitalBehaviorSnapshot snapshot) {
-        StringBuilder value = new StringBuilder("{\"fingerprint\":\"").append(snapshot.getFingerprint()).append("\",\"metrics\":[");
-        boolean first = true;
-        for (CapitalFlowPoint p : snapshot.getFacts()) {
-            if (!first) value.append(',');
-            first = false;
-            value.append("{\"at\":\"").append(p.getObservedAt()).append("\",\"price\":").append(number(p.getPrice())).append(",\"amount\":").append(number(p.getIntervalTradeAmount())).append(",\"mainNet\":").append(number(p.getMainNetInflow())).append(",\"refs\":[\"").append(p.getId() == null ? "" : p.metricRef("mainNetInflow")).append("\"]}");
-        }
-        return value.append("]}").toString();
+    private String repairPrompt() {
+        return "把输入修复成符合上一个资金行为JSON契约的单个JSON对象。不得补充新事实或新引用，只输出JSON。";
     }
 
-    private String number(Object value) {
-        return value == null ? "null" : value.toString();
+    private String input(CapitalAgentEvidencePacket packet) throws Exception {
+        Map<String, Object> value = new LinkedHashMap<String, Object>();
+        value.put("snapshotId", packet.getSnapshotId());
+        value.put("asOf", packet.getAsOf() == null ? null : packet.getAsOf().toString());
+        value.put("qualityStatus", packet.getQualityStatus());
+        value.put("factorVersion", packet.getFactorVersion());
+        value.put("signalVersion", packet.getSignalVersion());
+        List<Map<String, Object>> factorValues = new ArrayList<Map<String, Object>>();
+        packet.getFactorObservations().forEach(item -> {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("factorRef", item.factorRef());
+            row.put("code", item.getFactorCode());
+            row.put("label", item.getLabel());
+            row.put("category", item.getCategory());
+            row.put("window", item.getWindow());
+            row.put("value", item.getValue());
+            row.put("baseline", item.getBaseline());
+            row.put("percentile", item.getPercentile());
+            row.put("zScore", item.getZScore());
+            row.put("state", item.getState());
+            row.put("qualityStatus", item.getQualityStatus());
+            row.put("metricRefs", item.getMetricRefs());
+            row.put("boundary", item.getInterpretationBoundary());
+            factorValues.add(row);
+        });
+        List<Map<String, Object>> signalValues = new ArrayList<Map<String, Object>>();
+        packet.getSignals().forEach(item -> {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("type", item.getType());
+            row.put("label", item.getLabel());
+            row.put("window", item.getWindow());
+            row.put("factorRefs", item.getFactorRefs());
+            row.put("metricRefs", item.getMetricRefs());
+            row.put("actualValues", item.getActualValues());
+            row.put("thresholds", item.getThresholds());
+            row.put("qualityStatus", item.getQualityStatus());
+            signalValues.add(row);
+        });
+        List<Map<String, Object>> metricValues = new ArrayList<Map<String, Object>>();
+        packet.getRawMetrics().forEach(item -> {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("ref", item.getRef());
+            row.put("label", item.getLabel());
+            row.put("category", item.getCategory());
+            row.put("value", item.getValue());
+            row.put("unit", item.getUnit());
+            row.put("observedAt", item.getObservedAt() == null ? null : item.getObservedAt().toString());
+            metricValues.add(row);
+        });
+        List<Map<String, Object>> watchValues = new ArrayList<Map<String, Object>>();
+        packet.getWatchConditions().forEach(item -> {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("id", item.getId());
+            row.put("label", item.getLabel());
+            row.put("factorRef", item.getFactorRef());
+            row.put("operator", item.getOperator());
+            row.put("threshold", item.getThreshold());
+            row.put("unit", item.getUnit());
+            watchValues.add(row);
+        });
+        value.put("factors", factorValues);
+        value.put("signals", signalValues);
+        value.put("rawMetrics", metricValues);
+        value.put("allowedHypotheses", packet.getAllowedHypotheses());
+        value.put("watchConditions", watchValues);
+        value.put("dataGaps", packet.getDataGaps());
+        return json.writeValueAsString(value);
     }
 
-    private void validate(JsonNode root) {
-        if (!root.isObject() || !root.path("hypotheses").isArray() || !root.path("dataGaps").isArray() || !root.path("observationPoints").isArray())
-            throw new IllegalArgumentException("invalid agent JSON contract");
-        requiredText(root, "plainSummary");
-        requiredText(root, "disclaimer");
-    }
-
-    private String requiredText(JsonNode root, String name) {
-        JsonNode value = root.get(name);
-        if (value == null || !value.isTextual() || value.asText().trim().isEmpty())
-            throw new IllegalArgumentException("missing " + name);
-        return value.asText();
-    }
-
-    private List<CapitalHypothesis> parseHypotheses(JsonNode nodes) {
-        List<CapitalHypothesis> values = new ArrayList<CapitalHypothesis>();
-        for (JsonNode node : nodes) {
-            CapitalHypothesis h = new CapitalHypothesis();
-            h.setType(requiredText(node, "type"));
-            h.setClaim(requiredText(node, "claim"));
-            h.setConfidence(requiredText(node, "confidence"));
-            h.setSupportingMetricRefs(strings(node.path("supportingMetricRefs")));
-            h.setCounterEvidence(strings(node.path("counterEvidence")));
-            h.setDataGaps(strings(node.path("dataGaps")));
-            values.add(h);
-        }
-        return values;
-    }
-
-    private List<String> strings(JsonNode nodes) {
-        if (!nodes.isArray()) throw new IllegalArgumentException("expected array");
-        List<String> values = new ArrayList<String>();
-        for (JsonNode node : nodes) {
-            if (!node.isTextual()) throw new IllegalArgumentException("expected string");
-            values.add(node.asText());
-        }
-        return values;
+    private List<String> union(List<String> first, List<String> second) {
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<String>();
+        result.addAll(first);
+        result.addAll(second);
+        return Collections.unmodifiableList(new ArrayList<String>(result));
     }
 }

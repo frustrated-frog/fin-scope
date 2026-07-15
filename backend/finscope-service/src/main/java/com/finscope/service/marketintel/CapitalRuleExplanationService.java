@@ -13,7 +13,7 @@ import java.util.List;
 public class CapitalRuleExplanationService {
     public CapitalRuleExplanation explain(List<CapitalFlowPoint> facts, List<CapitalBehaviorSignal> signals) {
         CapitalRuleExplanation value = new CapitalRuleExplanation();
-        value.setRuleVersion("capital-rules-v1");
+        value.setRuleVersion("capital-rules-v2");
         List<CapitalRuleExplanation.Item> items = new ArrayList<CapitalRuleExplanation.Item>();
         for (CapitalBehaviorSignal signal : signals) {
             CapitalRuleExplanation.Item item = new CapitalRuleExplanation.Item();
@@ -57,6 +57,10 @@ public class CapitalRuleExplanationService {
                 return "价格变化与主力净流向方向相反，量价资金出现背离。";
             case "LATE_SESSION_FLOW_SHIFT":
                 return "尾盘资金方向相较盘中发生反转，短时行为出现变化。";
+            case "BIG_SMALL_ORDER_DIVERGENCE":
+                return "公开资金口径下大单与中小单方向相反，只能视为订单结构代理信号。";
+            case "INTRADAY_FLOW_REVERSAL":
+                return "日内主力净流向发生有效方向反转，资金节奏并非单边。";
             default:
                 return "检测到资金行为变化。";
         }

@@ -32,14 +32,22 @@ class CapitalBehaviorRulesTest {
 
     @Test
     void explainsAmountExpansionAndOutflowInPlainChineseWithMetricRefs() {
-        CapitalBehaviorSignalService signals = new CapitalBehaviorSignalService(CapitalSignalPolicy.v1());
+        CapitalBehaviorSignalService signals = new CapitalBehaviorSignalService(CapitalSignalPolicy.v2());
         List<CapitalFlowPoint> facts = Arrays.asList(
                 point(11, "DAY_1", 15, 0, "100", "20", "100"),
                 point(12, "DAY_1", 15, 0, "180", "-30", "98"));
         facts.get(0).setObservedAt(LocalDateTime.of(2026, 7, 11, 15, 0));
         facts.get(1).setObservedAt(LocalDateTime.of(2026, 7, 14, 15, 0));
         List<CapitalBehaviorSignal> detected = signals.detect(facts);
-        assertTrue(detected.stream().anyMatch(v -> "AMOUNT_EXPANSION_WITH_OUTFLOW".equals(v.getType())));
+        CapitalBehaviorSignal expansion = detected.stream()
+                .filter(v -> "AMOUNT_EXPANSION_WITH_OUTFLOW".equals(v.getType()))
+                .findFirst().orElseThrow(AssertionError::new);
+        assertEquals("放量净流出", expansion.getLabel());
+        assertEquals("capital-signal-v2", expansion.getVersion());
+        assertEquals("capital-signal-v2", expansion.getRuleVersion());
+        assertFalse(expansion.getFactorRefs().isEmpty());
+        assertFalse(expansion.getMetricRefs().isEmpty());
+        assertEquals("COMPLETE", expansion.getQualityStatus());
 
         CapitalRuleExplanation explanation = new CapitalRuleExplanationService().explain(facts, detected);
         assertTrue(explanation.getSummary().contains("成交明显放大"));
@@ -47,7 +55,7 @@ class CapitalBehaviorRulesTest {
         assertTrue(explanation.getDataGaps().stream().anyMatch(v -> v.contains("Level-2")));
         assertFalse(explanation.getSummary().contains("买入"));
         assertFalse(explanation.getSummary().contains("卖出"));
-        assertEquals("capital-rules-v1", explanation.getRuleVersion());
+        assertEquals("capital-rules-v2", explanation.getRuleVersion());
     }
 
     private CapitalFlowPoint point(long id,String granularity,int hour,int minute,String amount,String flow,String price) {

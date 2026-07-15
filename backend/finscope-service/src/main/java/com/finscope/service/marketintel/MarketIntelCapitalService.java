@@ -5,6 +5,8 @@ import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.CapitalFactorResult;
+import com.finscope.service.marketintel.factor.CapitalFactorEngine;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,17 +25,23 @@ public class MarketIntelCapitalService {
     private final CapitalFlowAggregationService aggregation;
     private final CapitalRuleExplanationService rules;
     private final CapitalBehaviorMetricsService metrics;
+    private final CapitalFactorEngine factors;
+    private final CapitalBehaviorSignalService signals;
 
     public MarketIntelCapitalService(InstrumentRepository instruments,
                                      CapitalBehaviorSnapshotRepository snapshots,
                                      CapitalFlowAggregationService aggregation,
                                      CapitalRuleExplanationService rules,
-                                     CapitalBehaviorMetricsService metrics) {
+                                     CapitalBehaviorMetricsService metrics,
+                                     CapitalFactorEngine factors,
+                                     CapitalBehaviorSignalService signals) {
         this.instruments = instruments;
         this.snapshots = snapshots;
         this.aggregation = aggregation;
         this.rules = rules;
         this.metrics = metrics;
+        this.factors = factors;
+        this.signals = signals;
     }
 
     public List<Instrument> listStockInstruments() {
@@ -66,12 +74,17 @@ public class MarketIntelCapitalService {
         }
 
         MarketIntelCapitalView view = new MarketIntelCapitalView();
+        CapitalFactorResult factorResult = factors.calculate(snapshot.getFacts());
         view.setInstrument(instrument);
         view.setSnapshot(snapshot);
         view.setIntradayTimeline(timeline);
         view.setDailyTrend(dailyTrend);
         view.setMetrics(metrics.derive(timeline, dailyTrend, snapshot.getSignals()));
         view.setRuleExplanation(rules.explain(snapshot.getFacts(), snapshot.getSignals()));
+        view.setFactorObservations(factorResult.getObservations());
+        view.setWatchConditions(signals.watchConditions(factorResult));
+        view.setFactorVersion(factorResult.getFactorVersion());
+        view.setSignalVersion(CapitalBehaviorSignalService.VERSION);
         view.setHealth(health(snapshot));
         return view;
     }

@@ -1,18 +1,26 @@
 package com.finscope.service.marketintel;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalHypothesis;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.marketintel.factor.CapitalFactorEngine;
+import com.finscope.service.marketintel.factor.CapitalFactorRegistry;
+import com.finscope.service.quant.factor.TimeSeriesFactorOperators;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,33 +29,177 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CapitalInterpretationAgentTest {
     @Test
     void capsHiddenFlowAtLowAndDropsUnknownMetricReferences() {
-        CapitalHypothesis hidden=hypothesis("HIDDEN_FLOW","HIGH","flow:101:mainNetInflow");
-        CapitalHypothesis invented=hypothesis("DISTRIBUTION","MID","flow:999:mainNetInflow");
-        assertEquals(1,new CapitalHypothesisGate().apply(snapshot(),Arrays.asList(hidden,invented)).size());
-        CapitalHypothesis accepted=new CapitalHypothesisGate().apply(snapshot(),Arrays.asList(hidden,invented)).get(0);
-        assertEquals("LOW",accepted.getConfidence());
-        assertTrue(accepted.getCounterEvidence().stream().anyMatch(v->v.contains("Level-2")));
+        CapitalHypothesis hidden = hypothesis("HIDDEN_FLOW", "HIGH", "flow:101:mainNetInflow");
+        CapitalHypothesis invented = hypothesis("DISTRIBUTION", "MID", "flow:999:mainNetInflow");
+        assertEquals(1, new CapitalHypothesisGate().apply(snapshot(), Arrays.asList(hidden, invented)).size());
+        CapitalHypothesis accepted = new CapitalHypothesisGate().apply(snapshot(), Arrays.asList(hidden, invented)).get(0);
+        assertEquals("LOW", accepted.getConfidence());
+        assertTrue(accepted.getCounterEvidence().stream().anyMatch(v -> v.contains("Level-2")));
     }
 
     @Test
-    void keepsServerFactsAndReturnsHonestFallbackWhenLlmIsNotConfigured() {
-        LlmChatClient llm=new LlmChatClient(){public boolean isConfigured(){return false;}public String modelName(){return "";}public String complete(String a,String b){throw new AssertionError("must not call LLM");}};
-        CapitalInterpretationAgent agent=new CapitalInterpretationAgent(llm,new ObjectMapper(),new CapitalHypothesisGate(),new CapitalFactAssembler());
-        CapitalInterpretation result=agent.interpret(snapshot(),rules());
-        assertEquals("FALLBACK",result.getStatus());assertEquals("LLM_NOT_CONFIGURED",result.getFallbackReason());
-        assertEquals("capital-rules-v1",result.getRuleVersion());assertFalse(result.getFacts().isEmpty());
+    void parsesJsonInsideMarkdownAndRejectsUntraceableObservation() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String factorRef = packet.getFactorObservations().get(0).factorRef();
+        String metricRef = packet.getRawMetrics().get(0).getRef();
+        String output = "分析如下：\n```json\n{" +
+                "\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
+                "\"observations\":[" + observation("VOLUME", "量能活跃", factorRef, metricRef) + "," +
+                observation("FLOW", "引用不存在", "factor:unknown", metricRef) + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[\"缺少逐笔成交\"]," +
+                "\"watchConditionRefs\":[\"" + packet.getWatchConditions().get(0).getId() + "\"]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}\n```";
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("MIXED", result.getMarketState());
+        assertEquals(1, result.getObservations().size());
+        assertEquals(1, result.getRejectedOutputCount());
+        assertFalse(result.getEvidenceRefs().isEmpty());
+        assertEquals("capital-factor-v1", result.getFactorVersion());
+        assertEquals("capital-signal-v2", result.getSignalVersion());
     }
 
     @Test
-    void parsesStrictModelJsonButDoesNotAcceptModelSuppliedFacts() {
-        LlmChatClient llm=new LlmChatClient(){public boolean isConfigured(){return true;}public String modelName(){return "test-model";}
-            public String complete(String a,String b){return "{\"plainSummary\":\"存在拆单可能\",\"facts\":[\"伪造事实\"],\"hypotheses\":[{\"type\":\"ORDER_SPLITTING\",\"claim\":\"可能存在拆单\",\"confidence\":\"HIGH\",\"supportingMetricRefs\":[\"flow:101:mainNetInflow\"],\"counterEvidence\":[],\"dataGaps\":[]}],\"dataGaps\":[\"缺少逐笔\"],\"observationPoints\":[\"观察尾盘\"],\"disclaimer\":\"不构成投资建议\"}";}};
-        CapitalInterpretation result=new CapitalInterpretationAgent(llm,new ObjectMapper(),new CapitalHypothesisGate(),new CapitalFactAssembler()).interpret(snapshot(),rules());
-        assertEquals("SUCCEEDED",result.getStatus());assertEquals("LOW",result.getHypotheses().get(0).getConfidence());
-        assertFalse(result.getFacts().contains("伪造事实"));assertTrue(result.getFacts().get(0).contains("主力净流入"));
+    void repairsInvalidJsonOnce() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String valid = validOutput(packet);
+        AtomicInteger calls = new AtomicInteger();
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String a, String b) { return calls.incrementAndGet() == 1 ? "not-json" : valid; }
+        };
+        CapitalInterpretation result = agent(llm).interpret(packet, rules());
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(2, calls.get());
     }
 
-    private CapitalBehaviorSnapshot snapshot(){CapitalFlowPoint p=new CapitalFlowPoint();p.setId(101L);p.setInstrumentId(7L);p.setGranularity("MINUTE_1");p.setObservedAt(LocalDateTime.of(2026,7,14,10,30));p.setMainNetInflow(new BigDecimal("18000000"));p.setIntervalTradeAmount(new BigDecimal("120000000"));p.setPrice(new BigDecimal("1480.50"));return CapitalBehaviorSnapshot.of(7L,p.getObservedAt(),Collections.singletonList(p),Collections.emptyList(),"fingerprint");}
-    private CapitalRuleExplanation rules(){CapitalRuleExplanation value=new CapitalRuleExplanation();value.setRuleVersion("capital-rules-v1");value.setSummary("规则摘要");value.setItems(Collections.emptyList());value.setDataGaps(Collections.singletonList("缺少 Level-2"));return value;}
-    private CapitalHypothesis hypothesis(String type,String confidence,String ref){CapitalHypothesis value=new CapitalHypothesis();value.setType(type);value.setClaim(type);value.setConfidence(confidence);value.setSupportingMetricRefs(Collections.singletonList(ref));return value;}
+    @Test
+    void returnsExplicitStatusForInsufficientDataAndTimeout() {
+        CapitalAgentEvidencePacket insufficient = packet(snapshot());
+        LlmChatClient mustNotCall = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String a, String b) { throw new AssertionError("must not call LLM"); }
+        };
+        CapitalInterpretation missing = agent(mustNotCall).interpret(insufficient, rules());
+        assertEquals("INSUFFICIENT_DATA", missing.getStatus());
+        assertEquals("INSUFFICIENT_FACTOR_COVERAGE", missing.getFallbackReason());
+
+        LlmChatClient timeout = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String a, String b) throws Exception { throw new SocketTimeoutException("timeout"); }
+        };
+        CapitalInterpretation timedOut = agent(timeout).interpret(packet(richSnapshot()), rules());
+        assertEquals("FALLBACK", timedOut.getStatus());
+        assertEquals("LLM_TIMEOUT", timedOut.getFallbackReason());
+    }
+
+    @Test
+    void returnsHonestFallbackWhenLlmIsNotConfigured() {
+        LlmChatClient llm = llm(false, "");
+        CapitalInterpretation result = agent(llm).interpret(packet(richSnapshot()), rules());
+        assertEquals("FALLBACK", result.getStatus());
+        assertEquals("LLM_NOT_CONFIGURED", result.getFallbackReason());
+        assertEquals("capital-rules-v2", result.getRuleVersion());
+        assertFalse(result.getFacts().isEmpty());
+    }
+
+    private CapitalInterpretationAgent agent(LlmChatClient llm) {
+        ObjectMapper mapper = new ObjectMapper();
+        return new CapitalInterpretationAgent(llm, mapper, new CapitalAgentResponseParser(mapper),
+                new CapitalInterpretationGate());
+    }
+
+    private CapitalAgentEvidencePacket packet(CapitalBehaviorSnapshot snapshot) {
+        CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
+        return new CapitalAgentEvidenceAssembler(factors,
+                new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors),
+                new CapitalMetricCatalog()).assemble(snapshot, rules());
+    }
+
+    private String validOutput(CapitalAgentEvidencePacket packet) {
+        return "{\"marketState\":\"MIXED\",\"executiveSummary\":\"资金分化\"," +
+                "\"observations\":[" + observation("FLOW", "资金方向反复",
+                packet.getFactorObservations().get(0).factorRef(), packet.getRawMetrics().get(0).getRef()) + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+    }
+
+    private String observation(String dimension, String claim, String factorRef, String metricRef) {
+        return "{\"dimension\":\"" + dimension + "\",\"claim\":\"" + claim +
+                "\",\"factorRefs\":[\"" + factorRef + "\"],\"metricRefs\":[\"" + metricRef + "\"]}";
+    }
+
+    private LlmChatClient llm(boolean configured, String output) {
+        return new LlmChatClient() {
+            public boolean isConfigured() { return configured; }
+            public String modelName() { return configured ? "test-model" : ""; }
+            public String complete(String a, String b) { return output; }
+        };
+    }
+
+    private CapitalBehaviorSnapshot richSnapshot() {
+        List<CapitalFlowPoint> facts = new ArrayList<CapitalFlowPoint>();
+        for (int i = 0; i < 6; i++) {
+            CapitalFlowPoint point = flow(200 + i, "DAY_1", LocalDateTime.of(2026, 7, 7 + i, 15, 0),
+                    String.valueOf(100 + i * 15), String.valueOf(i % 2 == 0 ? 18 : -8));
+            point.setTurnoverRate(new BigDecimal(String.valueOf(i + 1)));
+            point.setVolumeRatio(new BigDecimal("1.5"));
+            point.setSuperLargeNetInflow(new BigDecimal("20"));
+            point.setLargeNetInflow(new BigDecimal("10"));
+            point.setMediumNetInflow(new BigDecimal("-5"));
+            point.setSmallNetInflow(new BigDecimal("-8"));
+            facts.add(point);
+        }
+        facts.add(flow(300, "MINUTE_5", LocalDateTime.of(2026, 7, 14, 9, 30), "30", "8"));
+        facts.add(flow(301, "MINUTE_5", LocalDateTime.of(2026, 7, 14, 10, 0), "50", "-3"));
+        facts.add(flow(302, "MINUTE_5", LocalDateTime.of(2026, 7, 14, 10, 30), "60", "12"));
+        CapitalBehaviorSnapshot value = CapitalBehaviorSnapshot.of(7L, LocalDateTime.of(2026, 7, 14, 10, 30),
+                facts, Collections.emptyList(), "rich-fingerprint");
+        value.setId(77L);
+        value.setQualityStatus("COMPLETE");
+        return value;
+    }
+
+    private CapitalBehaviorSnapshot snapshot() {
+        CapitalFlowPoint p = flow(101, "MINUTE_1", LocalDateTime.of(2026, 7, 14, 10, 30), "120000000", "18000000");
+        return CapitalBehaviorSnapshot.of(7L, p.getObservedAt(), Collections.singletonList(p),
+                Collections.emptyList(), "fingerprint");
+    }
+
+    private CapitalFlowPoint flow(long id, String granularity, LocalDateTime at, String amount, String net) {
+        CapitalFlowPoint p = new CapitalFlowPoint();
+        p.setId(id);
+        p.setInstrumentId(7L);
+        p.setGranularity(granularity);
+        p.setObservedAt(at);
+        p.setDataDate(at.toLocalDate());
+        p.setMainNetInflow(new BigDecimal(net));
+        p.setIntervalTradeAmount(new BigDecimal(amount));
+        p.setTradeVolume(new BigDecimal("1000"));
+        p.setPrice(new BigDecimal("1480.50"));
+        p.setQualityStatus("COMPLETE");
+        return p;
+    }
+
+    private CapitalRuleExplanation rules() {
+        CapitalRuleExplanation value = new CapitalRuleExplanation();
+        value.setRuleVersion("capital-rules-v2");
+        value.setSummary("规则摘要");
+        value.setItems(Collections.emptyList());
+        value.setDataGaps(Collections.singletonList("缺少 Level-2"));
+        return value;
+    }
+
+    private CapitalHypothesis hypothesis(String type, String confidence, String ref) {
+        CapitalHypothesis value = new CapitalHypothesis();
+        value.setType(type);
+        value.setClaim(type);
+        value.setConfidence(confidence);
+        value.setSupportingMetricRefs(Collections.singletonList(ref));
+        return value;
+    }
 }

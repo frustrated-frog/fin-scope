@@ -15,6 +15,7 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
     private static final int INITIAL_VERSION = 100;
     private static final int CALCULATION_IDENTITY_VERSION = 102;
     private static final int SNAPSHOT_WARNING_VERSION = 103;
+    private static final int AGENT_EVIDENCE_VERSION = 104;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -55,6 +56,24 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
                     "market_capital_behavior_snapshot(instrument_id,created_at DESC,id DESC)");
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     SNAPSHOT_WARNING_VERSION, "资金快照保存降级原因并按刷新时间读取", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, AGENT_EVIDENCE_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN market_state TEXT");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN executive_summary TEXT");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN observations_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN counter_evidence_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN watch_condition_refs_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN confidence TEXT");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN factor_version TEXT");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN signal_version TEXT");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN evidence_refs_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN rejected_output_count INTEGER NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN rejection_reasons_json TEXT NOT NULL DEFAULT '[]'");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    AGENT_EVIDENCE_VERSION, "资金行为Agent保存因子证据与门禁结果", LocalDateTime.now().toString());
         });
     }
 
