@@ -79,17 +79,21 @@ class FactorResearchPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=200"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=201"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=202"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=203"));
         assertEquals(1, objectCount("table", "quant_capital_flow_daily"));
         assertEquals(1, objectCount("table", "quant_dataset_partition"));
         assertEquals(1, objectCount("index", "idx_quant_capital_flow_code_date"));
         assertEquals(1, objectCount("index", "idx_quant_capital_flow_date"));
+        assertEquals(1, objectCount("table", "factor_research_draft"));
+        assertEquals(1, objectCount("index", "idx_factor_research_draft_created"));
 
-        jdbc.update("DELETE FROM schema_migration WHERE version IN (200,201,202)");
+        jdbc.update("DELETE FROM schema_migration WHERE version IN (200,201,202,203)");
         migrator.migrate();
 
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=200"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=201"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=202"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=203"));
     }
 
     @Test
@@ -279,10 +283,15 @@ class FactorResearchPersistenceTest {
         assertEquals(1, initializerJdbc.queryForObject(
                 "SELECT COUNT(*) FROM schema_migration WHERE version=202", Integer.class));
         assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=203", Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_capital_flow_daily'",
                 Integer.class));
         assertEquals(1, initializerJdbc.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_dataset_partition'",
+                Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='factor_research_draft'",
                 Integer.class));
     }
 

@@ -46,6 +46,30 @@ export interface ResearchFactorDefinition {
   validationEvidenceRef?: string;
 }
 
+export interface ResearchDraft {
+  id: number;
+  sourceType: 'CAPITAL_BEHAVIOR';
+  instrumentCode: string;
+  instrumentName: string;
+  observedAt: string;
+  signalCode: string;
+  factor: { namespace: string; code: string; version: string };
+  snapshotId: number;
+  snapshotFingerprint: string;
+  evidenceRefs: string[];
+  objectiveTags: string[];
+  evaluationMode: 'CROSS_SECTIONAL_FACTOR_STUDY';
+  status: 'DRAFT';
+  requiredNextSteps: string[];
+  createdAt: string;
+}
+
+export interface QuantResearchEntryIntent {
+  factorCode: string;
+  draftId?: number;
+  sourceLabel?: string;
+}
+
 export interface QuantStrategySpec {
   name: string; datasetId: number; benchmark: string; investmentHypothesis: string; riskBoundary: string;
   startDate?: string; endDate?: string;

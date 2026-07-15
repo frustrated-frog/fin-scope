@@ -1,16 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LongTermStrategyView } from './LongTermStrategyView';
 import { QuantWorkspace } from './QuantWorkspace';
+import { QuantResearchEntryIntent } from './quantTypes';
 
-interface Props { addToast: (message: string, type?: 'success' | 'error' | 'info') => void; setMessage: (message: string) => void }
+interface Props {
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  setMessage: (message: string) => void;
+  entryIntent?: QuantResearchEntryIntent;
+  onEntryIntentConsumed?: () => void;
+}
 
 export function StrategyView(props: Props) {
   const [mode, setMode] = useState<'quant' | 'long-term'>('quant');
+  useEffect(() => { if (props.entryIntent) setMode('quant'); }, [props.entryIntent]);
   return <div className="strategy-mode-shell">
     <nav className="strategy-mode-switch" aria-label="策略工作台模式">
       <button type="button" aria-current={mode === 'quant' ? 'page' : undefined} className={mode === 'quant' ? 'active' : ''} onClick={() => setMode('quant')}><span>Quant</span>量化策略平台</button>
       <button type="button" aria-current={mode === 'long-term' ? 'page' : undefined} className={mode === 'long-term' ? 'active' : ''} onClick={() => setMode('long-term')}><span>Compound</span>长期投资工作台</button>
     </nav>
-    {mode === 'quant' ? <QuantWorkspace {...props} /> : <LongTermStrategyView {...props} />}
+    {mode === 'quant' ? <QuantWorkspace {...props} /> : <LongTermStrategyView addToast={props.addToast} setMessage={props.setMessage} />}
   </div>;
 }

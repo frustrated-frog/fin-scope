@@ -20,6 +20,7 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
     private static final int CAPITAL_FLOW_VERSION = 200;
     private static final int DATASET_PARTITION_VERSION = 201;
     private static final int DATASET_METADATA_VERSION = 202;
+    private static final int RESEARCH_DRAFT_VERSION = 203;
 
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -40,6 +41,7 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
         migrateVersion(CAPITAL_FLOW_VERSION, "quant capital-flow frozen facts", this::createCapitalFlowSchema);
         migrateVersion(DATASET_PARTITION_VERSION, "quant dataset partition manifest", this::createPartitionSchema);
         migrateVersion(DATASET_METADATA_VERSION, "quant dataset research metadata", this::upgradeDatasetSchema);
+        migrateVersion(RESEARCH_DRAFT_VERSION, "capital behavior research drafts", this::createResearchDraftSchema);
     }
 
     private void migrateVersion(int version, String description, Runnable migration) {
@@ -131,6 +133,29 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
                 + "WHERE fingerprint_version IS NULL OR trim(fingerprint_version)=''");
         jdbcTemplate.update("UPDATE quant_dataset SET partition_manifest='[]' "
                 + "WHERE partition_manifest IS NULL OR trim(partition_manifest)=''");
+    }
+
+    private void createResearchDraftSchema() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS factor_research_draft ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "source_type TEXT NOT NULL,"
+                + "instrument_code TEXT NOT NULL,"
+                + "instrument_name TEXT NOT NULL,"
+                + "observed_at TEXT NOT NULL,"
+                + "signal_code TEXT NOT NULL,"
+                + "factor_namespace TEXT NOT NULL,"
+                + "factor_code TEXT NOT NULL,"
+                + "factor_version TEXT NOT NULL,"
+                + "snapshot_id INTEGER NOT NULL,"
+                + "snapshot_fingerprint TEXT NOT NULL,"
+                + "evidence_refs_json TEXT NOT NULL,"
+                + "objective_tags_json TEXT NOT NULL,"
+                + "evaluation_mode TEXT NOT NULL,"
+                + "status TEXT NOT NULL CHECK(status='DRAFT'),"
+                + "required_next_steps_json TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_factor_research_draft_created "
+                + "ON factor_research_draft(created_at DESC,id DESC)");
     }
 
     private boolean addColumnIfMissing(String table, String column, String definition) {

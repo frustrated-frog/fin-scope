@@ -4,6 +4,7 @@ import { api } from '../../shared/api/client';
 import { DataQualityNotice } from '../../shared/components/DataQualityNotice';
 import { CapitalAgentInterpretationPanel } from './CapitalAgentInterpretationPanel';
 import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
+import { CapitalResearchBridge } from './CapitalResearchBridge';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
 import { CapitalHistoricalEvaluationCard } from './CapitalHistoricalEvaluationCard';
 import { capitalAgentStatusMessage } from './agentWaitPresentation';
@@ -18,6 +19,7 @@ import {
   MarketIntelInstrument,
   MarketIntelRefreshRun
 } from './marketIntelTypes';
+import { QuantResearchEntryIntent } from '../strategy/quantTypes';
 
 const POLL_DELAY_MS = 650;
 const AGENT_MAX_POLL_ATTEMPTS = 185;
@@ -28,10 +30,12 @@ function delay(milliseconds: number) {
 
 export function MarketIntelView({
   addToast,
-  setMessage
+  setMessage,
+  onOpenQuantResearch
 }: {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
+  onOpenQuantResearch?: (intent: QuantResearchEntryIntent) => void;
 }) {
   const [instruments, setInstruments] = useState<MarketIntelInstrument[]>([]);
   const [instrumentId, setInstrumentId] = useState<number | null>(null);
@@ -241,6 +245,7 @@ export function MarketIntelView({
         <div className="market-intel-grid">
           <div className="market-intel-primary">
             <CapitalBehaviorPanel overview={overview} />
+            <CapitalResearchBridge overview={overview} addToast={addToast} onOpenQuantResearch={onOpenQuantResearch} />
           </div>
           <aside className="market-intel-interpretation">
             <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />

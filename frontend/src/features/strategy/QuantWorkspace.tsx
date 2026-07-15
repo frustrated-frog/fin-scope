@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FactorGuide } from './FactorGuide';
-import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchFactorDefinition } from './quantTypes';
+import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
 type Pane = 'laboratory' | 'factors' | 'experiments';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -30,12 +30,19 @@ function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
   </div>;
 }
 
-export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setMessage: (message: string) => void }) {
+export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed }: {
+  addToast: Toast;
+  setMessage: (message: string) => void;
+  entryIntent?: QuantResearchEntryIntent;
+  onEntryIntentConsumed?: () => void;
+}) {
   const [pane, setPane] = useState<Pane>('laboratory');
   const [datasets, setDatasets] = useState<QuantDataset[]>([]);
   const [researchFactors, setResearchFactors] = useState<ResearchFactorDefinition[]>([]);
   const [datasetQuality, setDatasetQuality] = useState<QuantDatasetQuality>();
   const [selectedFactorCode, setSelectedFactorCode] = useState<string>();
+  const [entryDraft, setEntryDraft] = useState<ResearchDraft>();
+  const [entrySourceLabel, setEntrySourceLabel] = useState<string>();
   const [strategies, setStrategies] = useState<QuantStrategyVersion[]>([]);
   const [experiments, setExperiments] = useState<QuantExperiment[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
@@ -61,6 +68,20 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
   }
 
   useEffect(() => { load().catch(error => addToast(error instanceof Error ? error.message : '量化工作台加载失败', 'error')); }, []);
+  useEffect(() => {
+    if (!entryIntent) return;
+    setPane('factors');
+    setSelectedFactorCode(entryIntent.factorCode);
+    setEntrySourceLabel(entryIntent.sourceLabel);
+    if (entryIntent.draftId) {
+      api<ResearchDraft>(`/api/factor-research/research-drafts/${entryIntent.draftId}`)
+        .then(setEntryDraft)
+        .catch(error => addToast(error instanceof Error ? error.message : '研究草稿读取失败', 'error'));
+    } else {
+      setEntryDraft(undefined);
+    }
+    onEntryIntentConsumed?.();
+  }, [entryIntent?.draftId, entryIntent?.factorCode]);
   useEffect(() => {
     setFactorAnalyses({});
     if (!selectedDatasetId) { setDatasetQuality(undefined); return; }
@@ -164,6 +185,10 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
 
     {pane === 'factors' && <div className="quant-factor-page">
       <header><span>FACTOR MANUAL / {researchFactors.length}</span><h4>先看懂，再验证</h4><p>每个因子都有明确公式、可获得时间和误读边界；诊断评价同日股票池排序，不预测单只股票。</p></header>
+      {(entryDraft || entrySourceLabel) && <section className="quant-research-entry" aria-label="资金行为研究上下文">
+        <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
+        <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
+      </section>}
       <FactorGuide
         definitions={researchFactors}
         selectedCode={selectedFactorCode}
