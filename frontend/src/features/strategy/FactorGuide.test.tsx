@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { FactorGuide } from './FactorGuide';
 import { ResearchFactorDefinition } from './quantTypes';
+
+afterEach(() => vi.unstubAllGlobals());
 
 function definition(overrides: Partial<ResearchFactorDefinition> = {}): ResearchFactorDefinition {
   return {
@@ -89,4 +91,42 @@ test('blocks unsupported factors and explains a completed analysis before metric
   const explanation = screen.getByText(/预设方向较一致/);
   const metric = screen.getByText('方向对齐 IC');
   expect(explanation.compareDocumentPosition(metric) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('requires approval before the research agent runs and renders its auditable finding', async () => {
+  const user = userEvent.setup();
+  const plan = {
+    id: 9, datasetId: 1, datasetFingerprint: 'abcdef1234567890',
+    factor: { namespace: 'quant', code: 'EP', version: '1.0.0' }, question: '证据是否支持预设方向？',
+    status: 'AWAITING_APPROVAL', plan: ['检查数据集质量', '运行确定性横截面诊断'],
+    allowedTools: ['inspect_dataset', 'run_factor_diagnostics'], maxToolCalls: 4, toolCallsUsed: 0,
+    maxLlmCalls: 0, llmCallsUsed: 0, maxRunSeconds: 60, evidenceJson: '', evidenceHash: '',
+    findingJson: '', stopReason: '', trace: []
+  };
+  const completed = {
+    ...plan, status: 'COMPLETED', toolCallsUsed: 3, evidenceHash: 'a'.repeat(64), stopReason: 'EVIDENCE_GATE_BLOCKED',
+    findingJson: JSON.stringify({ verdict: 'INCONCLUSIVE', summary: '当前证据不足。',
+      counterEvidence: ['学习样本不能证明真实市场有效性'], blockingReasons: ['数据不是实盘研究数据'],
+      nextSteps: ['在真实点时数据上复核'] }),
+    trace: [{ id: 1, nodeName: 'inspect_dataset', status: 'SUCCESS', output: '数据集已读取' }]
+  };
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith('/approve')) return new Response(JSON.stringify(completed));
+    return new Response(JSON.stringify(plan), { status: 201 });
+  }));
+
+  render(<FactorGuide definitions={[definition()]} selectedCode="EP" onSelect={vi.fn()}
+    selectedDataset={{ id: 1, name: '学习样本', market: 'A_SHARE', dataKind: 'LEARNING_SAMPLE', status: 'READY' }}
+    availableFactors={new Set(['EP'])} onAnalyze={vi.fn()} />);
+
+  await user.click(screen.getByRole('button', { name: '生成复核计划' }));
+  expect(await screen.findByRole('button', { name: '批准并运行' })).toBeInTheDocument();
+  expect(screen.getByText('0/4')).toBeInTheDocument();
+  expect(screen.queryByText('当前证据不足。')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: '批准并运行' }));
+  expect(await screen.findByText('当前证据不足。')).toBeInTheDocument();
+  expect(screen.getByText(/证据哈希 aaaaaaaaaaaaaaaa/)).toBeInTheDocument();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(2);
 });
