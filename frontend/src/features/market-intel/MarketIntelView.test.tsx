@@ -193,7 +193,7 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
   await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
 
   await waitFor(() => expect(api).toHaveBeenCalledWith(
-    '/api/market-intel/instruments/7/capital-interpretations',
+    '/api/market-intel/instruments/7/capital-interpretations?force=true',
     { method: 'POST' }
   ));
   expect(await screen.findByText('目前只能确认量价资金出现背离，拆单仍是假设。')).toBeInTheDocument();

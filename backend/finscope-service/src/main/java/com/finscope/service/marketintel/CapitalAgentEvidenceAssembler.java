@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 public class CapitalAgentEvidenceAssembler {
     public static final String PROMPT_VERSION = "capital-interpret-v2";
     private static final int MINIMUM_COVERAGE_DIMENSIONS = 3;
+    private static final int MINIMUM_FACTORS_FOR_DEGRADED_COVERAGE = 4;
     private static final List<String> ALLOWED_HYPOTHESES = Collections.unmodifiableList(Arrays.asList(
             "ACCUMULATION", "DISTRIBUTION", "ORDER_SPLITTING", "HIDDEN_FLOW", "LIQUIDITY_SHIFT"));
 
@@ -51,11 +52,15 @@ public class CapitalAgentEvidenceAssembler {
         List<CapitalWatchCondition> watchConditions = signalService.watchConditions(factors);
         List<CapitalEvidenceRef> rawMetrics = rawMetrics(snapshot.getFacts());
         List<String> dataGaps = dataGaps(snapshot, rules, factors);
-        List<String> coverage = factors.getObservations().stream()
+        List<CapitalFactorObservation> usableFactors = factors.getObservations().stream()
+                .filter(value -> "COMPLETE".equals(value.getQualityStatus()))
+                .collect(Collectors.toList());
+        List<String> coverage = usableFactors.stream()
                 .map(CapitalFactorObservation::getCategory)
                 .filter(value -> value != null && !value.trim().isEmpty())
                 .distinct().sorted().collect(Collectors.toList());
-        boolean sufficientCoverage = coverage.size() >= MINIMUM_COVERAGE_DIMENSIONS;
+        boolean sufficientCoverage = coverage.size() >= MINIMUM_COVERAGE_DIMENSIONS
+                || (!coverage.isEmpty() && usableFactors.size() >= MINIMUM_FACTORS_FOR_DEGRADED_COVERAGE);
         String ruleVersion = rules == null || rules.getRuleVersion() == null
                 ? "capital-rules-v2" : rules.getRuleVersion();
         String fingerprint = evidenceFingerprint(snapshot, factors, signals, watchConditions,

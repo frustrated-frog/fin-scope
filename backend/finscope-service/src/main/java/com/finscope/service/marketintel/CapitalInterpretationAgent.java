@@ -20,7 +20,7 @@ import java.util.Map;
 public class CapitalInterpretationAgent {
     private static final int PRIMARY_TIMEOUT_MS = 60_000;
     private static final int REPAIR_TIMEOUT_MS = 30_000;
-    private static final int MINIMUM_OUTPUT_DIMENSIONS = 3;
+    private static final int MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS = 3;
     private final LlmChatClient llm;
     private final ObjectMapper json;
     private final CapitalAgentResponseParser parser;
@@ -43,7 +43,7 @@ public class CapitalInterpretationAgent {
         if (!llm.isConfigured()) return fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED");
         String output = null;
         try {
-            output = llm.complete(systemPrompt(), input(packet), PRIMARY_TIMEOUT_MS);
+            output = llm.complete(systemPrompt(packet), input(packet), PRIMARY_TIMEOUT_MS);
             JsonNode root;
             try {
                 root = parser.parse(output);
@@ -54,9 +54,10 @@ public class CapitalInterpretationAgent {
             CapitalInterpretationGate.Result accepted = gate.apply(root, packet);
             long acceptedDimensions = accepted.observations.stream()
                     .map(item -> item.getDimension()).distinct().count();
-            if (acceptedDimensions < MINIMUM_OUTPUT_DIMENSIONS) {
+            int requiredDimensions = requiredOutputDimensions(packet);
+            if (acceptedDimensions < requiredDimensions) {
                 List<String> reasons = new ArrayList<String>(accepted.rejectionReasons);
-                reasons.add("模型输出未覆盖至少三个分析维度");
+                reasons.add("模型输出未覆盖至少" + requiredDimensions + "个可用分析维度");
                 CapitalInterpretation rejected = fallback(packet, rules, "FALLBACK", "OUTPUT_REJECTED_BY_GATE");
                 rejected.setRejectedOutputCount(reasons.size());
                 rejected.setRejectionReasons(reasons);
@@ -73,7 +74,9 @@ public class CapitalInterpretationAgent {
             result.setCounterEvidence(accepted.counterEvidence);
             result.setWatchConditionRefs(accepted.watchConditionRefs);
             result.setDataGaps(union(packet.getDataGaps(), accepted.dataGaps));
-            result.setConfidence(accepted.confidence);
+            result.setConfidence(!"COMPLETE".equals(packet.getQualityStatus())
+                    || packet.getCoverageDimensions().size() < MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS
+                    ? "LOW" : accepted.confidence);
             result.setDisclaimer(accepted.disclaimer);
             result.setRejectedOutputCount(accepted.rejectionReasons.size());
             result.setRejectionReasons(accepted.rejectionReasons);
@@ -126,13 +129,20 @@ public class CapitalInterpretationAgent {
         return value;
     }
 
-    private String systemPrompt() {
+    private String systemPrompt(CapitalAgentEvidencePacket packet) {
+        int requiredDimensions = requiredOutputDimensions(packet);
         return "你是A股资金行为研究Agent。只能使用输入中的factorRef、metricRef和watch id；"
                 + "输出单个JSON对象，字段必须为marketState、executiveSummary、observations、hypotheses、"
                 + "counterEvidence、watchConditionRefs、dataGaps、confidence、disclaimer。"
-                + "observations每项必须含dimension、claim、factorRefs、metricRefs，并覆盖至少三个不同维度。"
+                + "observations每项必须含dimension、claim、factorRefs、metricRefs，并覆盖至少"
+                + requiredDimensions + "个输入中实际可用的不同维度。"
                 + "文本只能复述证据包已有数字，不得自行计算或创造数值，不得输出买卖建议；"
                 + "拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
+    }
+
+    private int requiredOutputDimensions(CapitalAgentEvidencePacket packet) {
+        return Math.max(1, Math.min(MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS,
+                packet.getCoverageDimensions().size()));
     }
 
     private String repairPrompt() {

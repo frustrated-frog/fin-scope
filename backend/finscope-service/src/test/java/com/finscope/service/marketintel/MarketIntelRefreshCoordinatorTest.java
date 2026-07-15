@@ -5,17 +5,23 @@ import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
+import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
+import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.CapitalRuleExplanation;
 import com.finscope.domain.marketintel.MarketIntelRefreshRun;
 import com.finscope.domain.marketintel.MarketIntelRefreshStep;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.service.marketdata.CapitalFlowGatewayResult;
 import com.finscope.service.marketdata.MarketDataGateway;
+import com.finscope.service.marketdata.QuoteGatewayResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 
@@ -28,6 +34,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MarketIntelRefreshCoordinatorTest {
     private final MarketIntelCapitalService capital = mock(MarketIntelCapitalService.class);
@@ -89,5 +96,110 @@ class MarketIntelRefreshCoordinatorTest {
         verify(gateway).fetchCapitalFlow(eq(instrument), any(LocalDate.class));
         verify(runs).updateStep(19L, MarketIntelRefreshStep.Status.EMPTY, 0, null, null);
         verify(runs, never()).finishRun(anyLong(), eq(MarketIntelRefreshRun.Status.FAILED), anyInt(), anyInt());
+    }
+
+    @Test
+    void reusesPersistedDailyFactsWhenFreshHistoricalFlowIsUnavailable() {
+        CapitalFlowPoint minute = point(301L, "MINUTE_1", LocalDateTime.of(2026, 7, 15, 10, 0));
+        CapitalFlowPoint staleDaily = point(201L, "DAY_1", LocalDateTime.of(2026, 7, 14, 15, 0));
+        CapitalFlowData partial = new CapitalFlowData(Collections.singletonList(minute), Collections.emptyList(),
+                null, null, Arrays.asList("HISTORICAL_FUND_FLOW_UNAVAILABLE:CONNECTION_ERROR",
+                "DAILY_MARKET_UNAVAILABLE:CONNECTION_ERROR"), "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", partial, null, "r-11"));
+        when(flows.findLatestByGranularity(7L, "DAY_1", 60))
+                .thenReturn(Collections.singletonList(staleDaily));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
+                Arrays.asList(staleDaily, minute), Collections.emptyList(), "merged");
+        saved.setId(31L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        verify(flows).saveAll(org.mockito.ArgumentMatchers.argThat(values -> values.stream()
+                .anyMatch(value -> "DAY_1".equals(value.getGranularity()))));
+        verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(2),
+                eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("历史资金流刷新失败，已使用最近成功数据"));
+    }
+
+    @Test
+    void fillsCurrentQuoteFromTheExistingQuoteGatewayAndClearsRawProviderWarning() {
+        CapitalFlowPoint minute = point(301L, "MINUTE_1", LocalDateTime.of(2026, 7, 15, 10, 0));
+        minute.setPrice(null);
+        minute.setTradeVolume(null);
+        minute.setCumulativeTradeAmount(null);
+        CapitalFlowData partial = new CapitalFlowData(Collections.singletonList(minute), Collections.emptyList(),
+                null, null, Collections.singletonList("QUOTE_UNAVAILABLE:CONNECTION_ERROR"),
+                "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", partial, null, "r-12"));
+        Quote quote = new Quote();
+        quote.setInstrumentCode("600519"); quote.setValid(true); quote.setPrice(12.34);
+        quote.setVolume(9876.0); quote.setTurnover(1234567.0);
+        quote.setAsOf(LocalDateTime.of(2026, 7, 15, 10, 0)); quote.setSourceCode("TENCENT_STOCK");
+        when(gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), true))
+                .thenReturn(new QuoteGatewayResult(Collections.singletonList(quote),
+                        com.finscope.domain.marketdata.MarketDataQualityStatus.FRESH_FALLBACK,
+                        "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), null, null, "q-1"));
+        when(flows.findLatestByGranularity(7L, "DAY_1", 60)).thenReturn(Collections.emptyList());
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
+                Collections.singletonList(minute), Collections.emptyList(), "quote-merged");
+        saved.setId(32L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        assertEquals(new BigDecimal("12.34"), minute.getPrice());
+        assertEquals(new BigDecimal("9876.0"), minute.getTradeVolume());
+        assertEquals(new BigDecimal("1234567.0"), minute.getCumulativeTradeAmount());
+        verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(1),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    void keepsTheProviderWarningWhenTheQuoteGatewayOnlyHasStaleData() {
+        CapitalFlowPoint minute = point(302L, "MINUTE_1", LocalDateTime.of(2026, 7, 15, 10, 0));
+        minute.setPrice(null);
+        CapitalFlowData partial = new CapitalFlowData(Collections.singletonList(minute), Collections.emptyList(),
+                null, null, Collections.singletonList("QUOTE_UNAVAILABLE:CONNECTION_ERROR"),
+                "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", partial, null, "r-13"));
+        Quote quote = new Quote();
+        quote.setInstrumentCode("600519"); quote.setValid(true); quote.setPrice(12.34);
+        quote.setAsOf(LocalDateTime.of(2026, 7, 15, 10, 0));
+        when(gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), true))
+                .thenReturn(new QuoteGatewayResult(Collections.singletonList(quote),
+                        com.finscope.domain.marketdata.MarketDataQualityStatus.STALE_FALLBACK,
+                        "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), 86400L,
+                        "报价源不可用，正在显示旧报价", "q-2"));
+        when(flows.findLatestByGranularity(7L, "DAY_1", 60)).thenReturn(Collections.emptyList());
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
+                Collections.singletonList(minute), Collections.emptyList(), "stale-quote-not-used");
+        saved.setId(33L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        assertEquals(null, minute.getPrice());
+        verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(1),
+                eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("QUOTE_UNAVAILABLE"));
+    }
+
+    private CapitalFlowPoint point(Long id, String granularity, LocalDateTime observedAt) {
+        CapitalFlowPoint value = new CapitalFlowPoint();
+        value.setId(id); value.setInstrumentId(7L); value.setProviderCode("EASTMONEY_CAPITAL_FLOW");
+        value.setGranularity(granularity); value.setDataDate(observedAt.toLocalDate());
+        value.setObservedAt(observedAt); value.setPrice(new BigDecimal("12"));
+        value.setTradeVolume(new BigDecimal("100")); value.setIntervalTradeAmount(new BigDecimal("1000"));
+        value.setMainNetInflow(new BigDecimal("10")); value.setQualityStatus("COMPLETE");
+        value.setCalculationVersion("test"); value.setRetrievedAt(observedAt); value.setPayloadHash("hash-" + id);
+        return value;
     }
 }

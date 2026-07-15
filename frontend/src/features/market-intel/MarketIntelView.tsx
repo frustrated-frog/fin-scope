@@ -124,7 +124,7 @@ export function MarketIntelView({
     setMessage('Agent 正在解读资金行为');
     try {
       let value = await api<CapitalInterpretation>(
-        `/api/market-intel/instruments/${instrumentId}/capital-interpretations`,
+        `/api/market-intel/instruments/${instrumentId}/capital-interpretations?force=true`,
         { method: 'POST' }
       );
       setInterpretation(value);

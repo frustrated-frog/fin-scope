@@ -46,6 +46,29 @@ class CapitalAgentEvidenceAssemblerTest {
                 () -> first.getFactorObservations().clear());
     }
 
+    @Test
+    void treatsACompleteIntradayFactorSetAsUsableDegradedCoverage() {
+        CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
+        CapitalBehaviorSignalService signals = new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors);
+        CapitalAgentEvidenceAssembler assembler = new CapitalAgentEvidenceAssembler(
+                factors, signals, new CapitalMetricCatalog());
+        List<CapitalFlowPoint> facts = new ArrayList<CapitalFlowPoint>();
+        for (int i = 0; i < 8; i++) {
+            facts.add(point(200 + i, "MINUTE_1", LocalDateTime.of(2026, 7, 15, 9, 31 + i),
+                    String.valueOf(20 + i), String.valueOf(100 + i * 10), String.valueOf(i % 2 == 0 ? 30 : -20)));
+        }
+        CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L,
+                LocalDateTime.of(2026, 7, 15, 9, 38), facts, Collections.emptyList(), "intraday-only");
+        snapshot.setId(78L);
+        snapshot.setQualityStatus("PARTIAL");
+
+        CapitalAgentEvidencePacket packet = assembler.assemble(snapshot, rules());
+
+        assertEquals(Collections.singletonList("INTRADAY"), packet.getCoverageDimensions());
+        assertTrue(packet.getFactorObservations().size() >= 4);
+        assertTrue(packet.isSufficientCoverage());
+    }
+
     private CapitalBehaviorSnapshot snapshot() {
         List<CapitalFlowPoint> facts = new ArrayList<CapitalFlowPoint>();
         for (int i = 0; i < 6; i++) {

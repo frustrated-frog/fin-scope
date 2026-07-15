@@ -52,6 +52,11 @@ public class CapitalFlowRepository {
                         "ORDER BY observed_at DESC,id DESC LIMIT ?", mapper, instrumentId, limit);
     }
 
+    public List<CapitalFlowPoint> findLatestByGranularity(Long instrumentId, String granularity, int limit) {
+        return jdbc.query("SELECT * FROM market_capital_flow_snapshot WHERE instrument_id=? AND granularity=? " +
+                        "ORDER BY observed_at DESC,id DESC LIMIT ?", mapper, instrumentId, granularity, limit);
+    }
+
     private final RowMapper<CapitalFlowPoint> mapper = (rs, row) -> {
         CapitalFlowPoint p = new CapitalFlowPoint();
         p.setId(rs.getLong("id")); p.setInstrumentId(rs.getLong("instrument_id"));

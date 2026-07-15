@@ -5,6 +5,7 @@ import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
+import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
@@ -16,13 +17,19 @@ import com.finscope.domain.marketintel.MarketIntelRefreshStep;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.service.marketdata.CapitalFlowGatewayResult;
 import com.finscope.service.marketdata.MarketDataGateway;
+import com.finscope.service.marketdata.QuoteGatewayResult;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 
 /** 资金行为刷新编排；数据源选择、切换和熔断统一由 MarketDataGateway 负责。 */
@@ -113,7 +120,7 @@ public class MarketIntelRefreshCoordinator {
 
     private void persistFresh(MarketIntelRefreshRun run, Instrument instrument,
                               MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
-        CapitalFlowData data = routed.getData();
+        CapitalFlowData data = applyFallbacks(instrument, routed.getData());
         List<CapitalFlowPoint> points = data.allPoints();
         if (points.isEmpty()) {
             runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.EMPTY, 0, null, null);
@@ -136,6 +143,89 @@ public class MarketIntelRefreshCoordinator {
                 partial ? "PARTIAL_DATA" : null, partial ? String.join("；", warnings) : null);
         runs.finishRun(run.getId(), partial ? MarketIntelRefreshRun.Status.PARTIAL
                 : MarketIntelRefreshRun.Status.SUCCEEDED, 1, 0);
+    }
+
+    private CapitalFlowData applyFallbacks(Instrument instrument, CapitalFlowData fresh) {
+        List<CapitalFlowPoint> minutes = new ArrayList<CapitalFlowPoint>(fresh.getMinutePoints());
+        List<CapitalFlowPoint> days = new ArrayList<CapitalFlowPoint>(fresh.getDailyPoints());
+        List<String> warnings = new ArrayList<String>(fresh.getWarnings());
+        applyQuoteFallback(instrument, minutes, days, warnings);
+        if (days.isEmpty()) {
+            List<CapitalFlowPoint> storedDays = latestStoredDays(instrument.getId());
+            if (!storedDays.isEmpty()) {
+                days.addAll(storedDays);
+                removeWarnings(warnings, "HISTORICAL_FUND_FLOW_UNAVAILABLE", "DAILY_MARKET_UNAVAILABLE");
+                LocalDate latest = storedDays.get(storedDays.size() - 1).getDataDate();
+                warnings.add("历史资金流刷新失败，已使用最近成功数据（截至 " + latest + "）");
+            }
+        }
+        return new CapitalFlowData(minutes, days, fresh.getTurnoverRate(), fresh.getVolumeRatio(),
+                warnings, fresh.getProviderCode());
+    }
+
+    private void applyQuoteFallback(Instrument instrument, List<CapitalFlowPoint> minutes,
+                                    List<CapitalFlowPoint> days, List<String> warnings) {
+        if (!hasWarning(warnings, "QUOTE_UNAVAILABLE")) return;
+        try {
+            QuoteGatewayResult result = gateway.fetchQuotes("STOCK",
+                    Collections.singletonList(instrument.getCode()), true);
+            if (!isFresh(result.getQualityStatus())) return;
+            Quote quote = result.getQuotes().stream().filter(Quote::isValid).findFirst().orElse(null);
+            if (quote == null) return;
+            CapitalFlowPoint target = latestPointForDate(minutes, quote.getAsOf());
+            if (target == null) target = latestPointForDate(days, quote.getAsOf());
+            if (target == null) return;
+            if (quote.getPrice() != null) target.setPrice(decimal(quote.getPrice()));
+            if (quote.getVolume() != null) target.setTradeVolume(decimal(quote.getVolume()));
+            if (quote.getTurnover() != null) target.setCumulativeTradeAmount(decimal(quote.getTurnover()));
+            removeWarnings(warnings, "QUOTE_UNAVAILABLE");
+        } catch (RuntimeException ignored) {
+            // 备用报价失败时保留原始告警；资金流主链路仍可继续保存。
+        }
+    }
+
+    private CapitalFlowPoint latestPointForDate(List<CapitalFlowPoint> points, LocalDateTime asOf) {
+        return points.stream()
+                .filter(value -> asOf == null || value.getDataDate() == null
+                        || value.getDataDate().equals(asOf.toLocalDate()))
+                .max(Comparator.comparing(CapitalFlowPoint::getObservedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+
+    private List<CapitalFlowPoint> latestStoredDays(Long instrumentId) {
+        Map<LocalDateTime, CapitalFlowPoint> distinct = new LinkedHashMap<LocalDateTime, CapitalFlowPoint>();
+        for (CapitalFlowPoint point : flows.findLatestByGranularity(instrumentId, "DAY_1", 60)) {
+            if (point.getObservedAt() != null && !distinct.containsKey(point.getObservedAt())) {
+                distinct.put(point.getObservedAt(), point);
+                if (distinct.size() == 20) break;
+            }
+        }
+        List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>(distinct.values());
+        result.sort(Comparator.comparing(CapitalFlowPoint::getObservedAt));
+        return result;
+    }
+
+    private boolean hasWarning(List<String> warnings, String prefix) {
+        return warnings.stream().anyMatch(value -> value != null && value.startsWith(prefix));
+    }
+
+    private boolean isFresh(MarketDataQualityStatus status) {
+        return status == MarketDataQualityStatus.FRESH_PRIMARY
+                || status == MarketDataQualityStatus.FRESH_FALLBACK
+                || status == MarketDataQualityStatus.PARTIAL_FRESH;
+    }
+
+    private void removeWarnings(List<String> warnings, String... prefixes) {
+        warnings.removeIf(value -> {
+            if (value == null) return false;
+            for (String prefix : prefixes) if (value.startsWith(prefix)) return true;
+            return false;
+        });
+    }
+
+    private BigDecimal decimal(Double value) {
+        return new BigDecimal(String.valueOf(value));
     }
 
     private void persistRule(CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation rule) {

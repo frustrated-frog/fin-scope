@@ -106,7 +106,35 @@ class CapitalInterpretationAgentTest {
 
         assertEquals("FALLBACK", result.getStatus());
         assertEquals("OUTPUT_REJECTED_BY_GATE", result.getFallbackReason());
-        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("三个分析维度")));
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("至少3个可用分析维度")));
+    }
+
+    @Test
+    void acceptsOneDimensionAndForcesLowConfidenceWhenOnlyIntradayEvidenceIsAvailable() {
+        CapitalAgentEvidencePacket packet = packet(intradaySnapshot());
+        String output = "{\"marketState\":\"INTRADAY_REVERSAL\",\"executiveSummary\":\"日内资金反复\"," +
+                "\"observations\":[" + observationForCategory(packet, "INTRADAY", "日内资金方向反复") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertTrue(packet.isSufficientCoverage());
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(1, result.getObservations().size());
+        assertEquals("LOW", result.getConfidence());
+    }
+
+    @Test
+    void forcesLowConfidenceWhenSnapshotContainsFallbackData() {
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        snapshot.setQualityStatus("PARTIAL");
+        CapitalAgentEvidencePacket packet = packet(snapshot);
+
+        CapitalInterpretation result = agent(llm(true, validOutput(packet))).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("LOW", result.getConfidence());
     }
 
     @Test
@@ -252,6 +280,19 @@ class CapitalInterpretationAgentTest {
         CapitalFlowPoint p = flow(101, "MINUTE_1", LocalDateTime.of(2026, 7, 14, 10, 30), "120000000", "18000000");
         return CapitalBehaviorSnapshot.of(7L, p.getObservedAt(), Collections.singletonList(p),
                 Collections.emptyList(), "fingerprint");
+    }
+
+    private CapitalBehaviorSnapshot intradaySnapshot() {
+        List<CapitalFlowPoint> facts = new ArrayList<CapitalFlowPoint>();
+        for (int i = 0; i < 8; i++) {
+            facts.add(flow(400 + i, "MINUTE_1", LocalDateTime.of(2026, 7, 15, 9, 31 + i),
+                    String.valueOf(100 + i * 10), String.valueOf(i % 2 == 0 ? 30 : -20)));
+        }
+        CapitalBehaviorSnapshot value = CapitalBehaviorSnapshot.of(7L,
+                LocalDateTime.of(2026, 7, 15, 9, 38), facts, Collections.emptyList(), "intraday-only");
+        value.setId(78L);
+        value.setQualityStatus("PARTIAL");
+        return value;
     }
 
     private CapitalFlowPoint flow(long id, String granularity, LocalDateTime at, String amount, String net) {
