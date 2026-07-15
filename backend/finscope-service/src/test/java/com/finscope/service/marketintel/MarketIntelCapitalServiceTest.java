@@ -1,7 +1,9 @@
 package com.finscope.service.marketintel;
 
 import com.finscope.dao.instrument.InstrumentRepository;
+import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
@@ -25,6 +27,7 @@ class MarketIntelCapitalServiceTest {
     void appliesRequestedTradingDayWindowToDailyTrend() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
         CapitalBehaviorSnapshotRepository snapshots = mock(CapitalBehaviorSnapshotRepository.class);
+        CapitalBehaviorEvaluationRepository evaluations = mock(CapitalBehaviorEvaluationRepository.class);
         Instrument stock = new Instrument(); stock.setId(7L); stock.setType("STOCK"); stock.setMarket("SH"); stock.setCode("600519");
         when(instruments.findById(7L)).thenReturn(Optional.of(stock));
 
@@ -39,8 +42,12 @@ class MarketIntelCapitalServiceTest {
         CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L, first.plusDays(24).atTime(15, 0), facts,
                 Collections.emptyList(), "fingerprint");
         when(snapshots.findLatest(7L)).thenReturn(Optional.of(snapshot));
+        CapitalBehaviorEvaluation evaluation = new CapitalBehaviorEvaluation();
+        evaluation.setSnapshotId(snapshot.getId());
+        evaluation.setStatus("INSUFFICIENT_DATA");
+        when(evaluations.findBySnapshotId(snapshot.getId())).thenReturn(Optional.of(evaluation));
         CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
-        MarketIntelCapitalService service = new MarketIntelCapitalService(instruments, snapshots,
+        MarketIntelCapitalService service = new MarketIntelCapitalService(instruments, snapshots, evaluations,
                 new CapitalFlowAggregationService(), new CapitalRuleExplanationService(), new CapitalBehaviorMetricsService(),
                 factors, new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors));
 
@@ -51,5 +58,6 @@ class MarketIntelCapitalServiceTest {
         assertEquals(first.plusDays(24), view.getDailyTrend().get(19).getDataDate());
         assertEquals("capital-factor-v1", view.getFactorVersion());
         assertEquals("capital-signal-v2", view.getSignalVersion());
+        assertEquals(evaluation, view.getHistoricalEvaluation());
     }
 }

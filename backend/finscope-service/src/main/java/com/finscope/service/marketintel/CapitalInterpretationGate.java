@@ -7,6 +7,7 @@ import com.finscope.domain.marketintel.CapitalEvidenceRef;
 import com.finscope.domain.marketintel.CapitalFactorObservation;
 import com.finscope.domain.marketintel.CapitalHypothesis;
 import com.finscope.domain.marketintel.CapitalInterpretationObservation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.domain.marketintel.CapitalWatchCondition;
 import org.springframework.stereotype.Component;
 
@@ -39,17 +40,27 @@ public class CapitalInterpretationGate {
         List<String> rejections = new ArrayList<String>();
         String summary = required(root, "executiveSummary");
         Set<String> allowedNumbers = allowedNumbers(packet);
+        Set<String> allHistoricalNumbers = historicalNumbers(packet, null);
         Set<String> unsafeSummaryNumbers = externalNumbers(summary, allowedNumbers);
-        if (!unsafeSummaryNumbers.isEmpty()) {
-            rejections.add("摘要包含证据包之外的数字" + unsafeSummaryNumbers + "，已使用规则摘要替换");
+        Set<String> unauditedSummaryNumbers = numbers(summary);
+        unauditedSummaryNumbers.retainAll(allHistoricalNumbers);
+        if (!unsafeSummaryNumbers.isEmpty() || !unauditedSummaryNumbers.isEmpty()) {
+            rejections.add(!unauditedSummaryNumbers.isEmpty()
+                    ? "摘要包含无法绑定引用的历史统计数字" + unauditedSummaryNumbers + "，已使用规则摘要替换"
+                    : "摘要包含证据包之外的数字" + unsafeSummaryNumbers + "，已使用规则摘要替换");
             summary = null;
         }
         String confidence = required(root, "confidence").toUpperCase();
         if (!Arrays.asList("LOW", "MID").contains(confidence)) confidence = "MID";
         String disclaimer = required(root, "disclaimer");
         Set<String> unsafeDisclaimerNumbers = externalNumbers(disclaimer, allowedNumbers);
-        if (!unsafeDisclaimerNumbers.isEmpty()) {
-            rejections.add("免责声明包含证据包之外的数字" + unsafeDisclaimerNumbers + "，已使用系统免责声明替换");
+        Set<String> unauditedDisclaimerNumbers = numbers(disclaimer);
+        unauditedDisclaimerNumbers.retainAll(allHistoricalNumbers);
+        if (!unsafeDisclaimerNumbers.isEmpty() || !unauditedDisclaimerNumbers.isEmpty()) {
+            rejections.add(!unauditedDisclaimerNumbers.isEmpty()
+                    ? "免责声明包含无法绑定引用的历史统计数字" + unauditedDisclaimerNumbers
+                    + "，已使用系统免责声明替换"
+                    : "免责声明包含证据包之外的数字" + unsafeDisclaimerNumbers + "，已使用系统免责声明替换");
             disclaimer = null;
         }
         Set<String> factorRefs = packet.getFactorObservations().stream()
@@ -58,6 +69,8 @@ public class CapitalInterpretationGate {
                 .collect(Collectors.toMap(item -> item.factorRef(), item -> item.getCategory()));
         Set<String> metricRefs = packet.getRawMetrics().stream()
                 .map(item -> item.getRef()).collect(Collectors.toSet());
+        Set<String> evaluationRefs = packet.getHistoricalEvaluations().stream()
+                .map(CapitalSignalEvaluation::evaluationRef).collect(Collectors.toSet());
         Set<String> watchRefs = packet.getWatchConditions().stream()
                 .map(item -> item.getId()).collect(Collectors.toSet());
 
@@ -68,16 +81,27 @@ public class CapitalInterpretationGate {
             String claim = required(node, "claim");
             List<String> nodeFactors = strings(node.path("factorRefs"));
             List<String> nodeMetrics = strings(node.path("metricRefs"));
+            List<String> nodeEvaluations = optionalStrings(node.get("evaluationRefs"));
             boolean dimensionMatches = nodeFactors.stream()
                     .anyMatch(ref -> dimension.equals(factorDimensions.get(ref)));
             if (!DIMENSIONS.contains(dimension) || nodeFactors.isEmpty()
                     || !factorRefs.containsAll(nodeFactors) || !metricRefs.containsAll(nodeMetrics)
+                    || !evaluationRefs.containsAll(nodeEvaluations)
                     || !dimensionMatches) {
-                rejections.add("观察项引用了未知或不匹配的维度、因子或指标");
+                rejections.add("观察项引用了未知或不匹配的维度、因子、指标或历史评价");
                 continue;
             }
-            if (containsExternalNumber(claim, allowedNumbers)) {
-                rejections.add("观察项包含证据包之外的数字");
+            Set<String> claimedHistoricalNumbers = numbers(claim);
+            claimedHistoricalNumbers.retainAll(allHistoricalNumbers);
+            Set<String> citedHistoricalNumbers = historicalNumbers(packet,
+                    new HashSet<String>(nodeEvaluations));
+            if (!citedHistoricalNumbers.containsAll(claimedHistoricalNumbers)) {
+                rejections.add("观察项复述了历史统计数字，但缺少对应的历史评价引用");
+                continue;
+            }
+            Set<String> localAllowedNumbers = observationNumbers(packet, nodeFactors, nodeMetrics, nodeEvaluations);
+            if (containsExternalNumber(claim, localAllowedNumbers)) {
+                rejections.add("观察项包含所引用证据之外的数字");
                 continue;
             }
             CapitalInterpretationObservation value = new CapitalInterpretationObservation();
@@ -85,6 +109,7 @@ public class CapitalInterpretationGate {
             value.setClaim(claim);
             value.setFactorRefs(nodeFactors);
             value.setMetricRefs(nodeMetrics);
+            value.setEvaluationRefs(nodeEvaluations);
             observations.add(value);
         }
         List<String> acceptedWatchRefs = strings(array(root, "watchConditionRefs")).stream()
@@ -92,15 +117,17 @@ public class CapitalInterpretationGate {
         int rejectedWatchRefs = strings(array(root, "watchConditionRefs")).size() - acceptedWatchRefs.size();
         for (int i = 0; i < rejectedWatchRefs; i++) rejections.add("观察条件引用不存在");
         List<CapitalHypothesis> hypotheses = hypotheses(array(root, "hypotheses"), packet, metricRefs,
-                allowedNumbers, rejections);
+                allowedNumbers, allHistoricalNumbers, rejections);
         return new Result(marketState, summary, observations, hypotheses,
-                validatedTexts(array(root, "counterEvidence"), allowedNumbers, rejections), acceptedWatchRefs,
-                validatedTexts(array(root, "dataGaps"), allowedNumbers, rejections),
+                validatedTexts(array(root, "counterEvidence"), allowedNumbers, allHistoricalNumbers, rejections),
+                acceptedWatchRefs,
+                validatedTexts(array(root, "dataGaps"), allowedNumbers, allHistoricalNumbers, rejections),
                 confidence, disclaimer, rejections);
     }
 
     private List<CapitalHypothesis> hypotheses(JsonNode nodes, CapitalAgentEvidencePacket packet,
                                                 Set<String> metricRefs, Set<String> allowedNumbers,
+                                                Set<String> historicalNumbers,
                                                 List<String> rejections) {
         List<CapitalHypothesis> result = new ArrayList<CapitalHypothesis>();
         for (JsonNode node : nodes) {
@@ -109,6 +136,10 @@ public class CapitalInterpretationGate {
             List<String> refs = strings(node.path("supportingMetricRefs"));
             if (!packet.getAllowedHypotheses().contains(type) || refs.isEmpty() || !metricRefs.containsAll(refs)) {
                 rejections.add("假设类型或证据引用不在允许范围内");
+                continue;
+            }
+            if (containsHistoricalNumber(claim, historicalNumbers)) {
+                rejections.add("假设包含无法绑定引用的历史统计数字");
                 continue;
             }
             if (containsExternalNumber(claim, allowedNumbers)) {
@@ -122,8 +153,10 @@ public class CapitalInterpretationGate {
             value.setConfidence(("ORDER_SPLITTING".equals(type) || "HIDDEN_FLOW".equals(type))
                     ? "LOW" : ("LOW".equalsIgnoreCase(requested) ? "LOW" : "MID"));
             value.setSupportingMetricRefs(refs);
-            value.setCounterEvidence(validatedTexts(node.path("counterEvidence"), allowedNumbers, rejections));
-            value.setDataGaps(validatedTexts(node.path("dataGaps"), allowedNumbers, rejections));
+            value.setCounterEvidence(validatedTexts(node.path("counterEvidence"), allowedNumbers,
+                    historicalNumbers, rejections));
+            value.setDataGaps(validatedTexts(node.path("dataGaps"), allowedNumbers,
+                    historicalNumbers, rejections));
             if ("ORDER_SPLITTING".equals(type) || "HIDDEN_FLOW".equals(type)) {
                 List<String> counter = new ArrayList<String>(value.getCounterEvidence());
                 counter.add("缺少 Level-2 逐笔委托/成交，只能保留为低置信度行为假设。");
@@ -135,10 +168,13 @@ public class CapitalInterpretationGate {
     }
 
     private List<String> validatedTexts(JsonNode nodes, Set<String> allowedNumbers,
+                                        Set<String> historicalNumbers,
                                         List<String> rejections) {
         List<String> result = new ArrayList<String>();
         for (String value : strings(nodes)) {
-            if (containsExternalNumber(value, allowedNumbers)) {
+            if (containsHistoricalNumber(value, historicalNumbers)) {
+                rejections.add("文本包含无法绑定引用的历史统计数字");
+            } else if (containsExternalNumber(value, allowedNumbers)) {
                 rejections.add("文本包含证据包之外的数字");
             } else {
                 result.add(value);
@@ -147,10 +183,64 @@ public class CapitalInterpretationGate {
         return result;
     }
 
+    private boolean containsHistoricalNumber(String value, Set<String> historicalNumbers) {
+        Set<String> values = numbers(value);
+        values.retainAll(historicalNumbers);
+        return !values.isEmpty();
+    }
+
     /**
      * 允许集合严格来自实际发送给模型的证据包字段。文本可以复述已有数字，不能自行计算或补值。
      */
     private Set<String> allowedNumbers(CapitalAgentEvidencePacket packet) {
+        // 没有引用字段的摘要、假设和缺口文本不得复述历史统计；历史数字只在观察项局部门禁中开放。
+        return nonHistoricalNumbers(packet);
+    }
+
+    private Set<String> observationNumbers(CapitalAgentEvidencePacket packet,
+                                           List<String> factorRefs,
+                                           List<String> metricRefs,
+                                           List<String> evaluationRefs) {
+        Set<String> result = new HashSet<String>();
+        packet.getFactorObservations().stream()
+                .filter(item -> factorRefs.contains(item.factorRef()))
+                .forEach(item -> collectFactorNumbers(result, item));
+        packet.getRawMetrics().stream()
+                .filter(item -> metricRefs.contains(item.getRef()))
+                .forEach(item -> collectMetricNumbers(result, item));
+        packet.getHistoricalEvaluations().stream()
+                .filter(item -> evaluationRefs.contains(item.evaluationRef()))
+                .forEach(item -> {
+                    collectNumbers(result, item.evaluationRef());
+                    collectNumbers(result, item.getSignalType());
+                    collectNumbers(result, item.getSignalLabel());
+                    collectHistoricalNumbers(result, item);
+                });
+        return result;
+    }
+
+    private void collectFactorNumbers(Set<String> result, CapitalFactorObservation item) {
+        collectNumbers(result, item.factorRef());
+        collectNumbers(result, item.getFactorCode());
+        collectNumbers(result, item.getLabel());
+        collectNumbers(result, item.getWindow());
+        collectNumbers(result, item.getValue());
+        collectNumbers(result, item.getBaseline());
+        collectNumbers(result, item.getPercentile());
+        collectNumbers(result, item.getZScore());
+        collectNumbers(result, item.getState());
+        collectNumbers(result, item.getMetricRefs());
+    }
+
+    private void collectMetricNumbers(Set<String> result, CapitalEvidenceRef item) {
+        collectNumbers(result, item.getRef());
+        collectNumbers(result, item.getLabel());
+        collectNumbers(result, item.getValue());
+        collectNumbers(result, item.getUnit());
+        collectNumbers(result, item.getObservedAt());
+    }
+
+    private Set<String> nonHistoricalNumbers(CapitalAgentEvidencePacket packet) {
         Set<String> result = new HashSet<String>();
         collectNumbers(result, packet.getSnapshotId());
         collectNumbers(result, packet.getAsOf());
@@ -190,6 +280,36 @@ public class CapitalInterpretationGate {
             collectNumbers(result, item.getUnit());
         }
         collectNumbers(result, packet.getDataGaps());
+        return result;
+    }
+
+    private Set<String> historicalNumbers(CapitalAgentEvidencePacket packet, Set<String> refs) {
+        Set<String> result = new HashSet<String>();
+        packet.getHistoricalEvaluations().stream()
+                .filter(item -> refs == null || refs.contains(item.evaluationRef()))
+                .forEach(item -> collectHistoricalNumbers(result, item));
+        return result;
+    }
+
+    private void collectHistoricalNumbers(Set<String> destination, CapitalSignalEvaluation item) {
+        collectNumbers(destination, item.getHorizonDays());
+        collectNumbers(destination, item.getSampleCount());
+        collectRatioNumbers(destination, item.getAverageReturn());
+        collectRatioNumbers(destination, item.getMedianReturn());
+        collectRatioNumbers(destination, item.getPositiveRate());
+        collectRatioNumbers(destination, item.getAverageMfe());
+        collectRatioNumbers(destination, item.getAverageMae());
+        collectNumbers(destination, item.getLastEventDate());
+    }
+
+    private void collectRatioNumbers(Set<String> destination, java.math.BigDecimal value) {
+        collectNumbers(destination, value);
+        if (value != null) collectNumbers(destination, value.multiply(new java.math.BigDecimal("100")));
+    }
+
+    private Set<String> numbers(String value) {
+        Set<String> result = new HashSet<String>();
+        collectNumbers(result, value);
         return result;
     }
 
@@ -254,6 +374,10 @@ public class CapitalInterpretationGate {
             result.add(node.asText());
         }
         return result;
+    }
+
+    private List<String> optionalStrings(JsonNode nodes) {
+        return nodes == null || nodes.isNull() ? Collections.emptyList() : strings(nodes);
     }
 
     public static final class Result {

@@ -25,6 +25,7 @@ public final class CapitalAgentEvidencePacket {
     private final List<CapitalFactorObservation> factorObservations;
     private final List<CapitalBehaviorSignal> signals;
     private final List<CapitalEvidenceRef> rawMetrics;
+    private final List<CapitalSignalEvaluation> historicalEvaluations;
     private final List<String> allowedHypotheses;
     private final List<CapitalWatchCondition> watchConditions;
     private final List<String> dataGaps;
@@ -38,6 +39,7 @@ public final class CapitalAgentEvidencePacket {
                                       List<CapitalFactorObservation> factorObservations,
                                       List<CapitalBehaviorSignal> signals,
                                       List<CapitalEvidenceRef> rawMetrics,
+                                      List<CapitalSignalEvaluation> historicalEvaluations,
                                       List<String> allowedHypotheses,
                                       List<CapitalWatchCondition> watchConditions,
                                       List<String> dataGaps, List<String> coverageDimensions,
@@ -55,6 +57,7 @@ public final class CapitalAgentEvidencePacket {
         this.factorObservations = immutable(factorObservations);
         this.signals = immutable(signals);
         this.rawMetrics = immutable(rawMetrics);
+        this.historicalEvaluations = immutable(historicalEvaluations);
         this.allowedHypotheses = immutable(allowedHypotheses);
         this.watchConditions = immutable(watchConditions);
         this.dataGaps = immutable(dataGaps);

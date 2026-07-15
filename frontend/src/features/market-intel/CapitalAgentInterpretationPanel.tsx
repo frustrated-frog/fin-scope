@@ -8,6 +8,7 @@ import {
 import {
   CapitalFactorObservation,
   CapitalInterpretation,
+  CapitalSignalEvaluation,
   CapitalWatchCondition
 } from './marketIntelTypes';
 
@@ -54,15 +55,25 @@ function formatEvidence(value: number, unit: string) {
   return value.toFixed(2) + ' ' + unit;
 }
 
+function percent(value?: number | null) {
+  if (value == null) return '--';
+  const amount = value * 100;
+  return `${amount > 0 ? '+' : ''}${amount.toFixed(2)}%`;
+}
+
 export function CapitalAgentInterpretationPanel({
   interpretation,
   factorObservations,
+  historicalEvaluations = [],
+  evaluationVersion = 'capital-evaluation-v1',
   watchConditions,
   busy,
   onRun
 }: {
   interpretation: CapitalInterpretation | null;
   factorObservations: CapitalFactorObservation[];
+  historicalEvaluations?: CapitalSignalEvaluation[];
+  evaluationVersion?: string;
   watchConditions: CapitalWatchCondition[];
   busy: boolean;
   onRun: () => void;
@@ -87,6 +98,10 @@ export function CapitalAgentInterpretationPanel({
     factor
   ]));
   const evidenceByRef = new Map((interpretation?.evidenceRefs ?? []).map((evidence) => [evidence.ref, evidence]));
+  const evaluationByRef = new Map(historicalEvaluations.map((evaluation) => [
+    `evaluation:${evaluationVersion}:${evaluation.signalType}:${evaluation.horizonDays}d`,
+    evaluation
+  ]));
   const watchById = new Map(watchConditions.map((condition) => [condition.id, condition]));
   const reason = interpretation?.fallbackReason
     ? capitalAgentStatusMessage(interpretation.fallbackReason)
@@ -151,6 +166,16 @@ export function CapitalAgentInterpretationPanel({
                           <span>指标</span>
                           <strong>{evidence.label}</strong>
                           <small>{formatEvidence(evidence.value, evidence.unit)}</small>
+                        </li>
+                      ) : null;
+                    })}
+                    {(observation.evaluationRefs ?? []).map((ref) => {
+                      const evaluation = evaluationByRef.get(ref);
+                      return evaluation ? (
+                        <li key={ref}>
+                          <span>历史评价</span>
+                          <strong>{evaluation.signalLabel} · {evaluation.horizonDays} 日</strong>
+                          <small>{evaluation.sampleCount} 个样本 · 平均 {percent(evaluation.averageReturn)}</small>
                         </li>
                       ) : null;
                     })}

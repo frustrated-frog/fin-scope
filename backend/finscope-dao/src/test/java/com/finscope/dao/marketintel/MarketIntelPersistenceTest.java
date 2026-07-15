@@ -3,10 +3,12 @@ package com.finscope.dao.marketintel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentTraceSchemaMigrator;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalEvidenceRef;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalInterpretationObservation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,6 +31,7 @@ class MarketIntelPersistenceTest {
     private JdbcTemplate jdbc;
     private CapitalFlowRepository flows;
     private CapitalBehaviorSnapshotRepository snapshots;
+    private CapitalBehaviorEvaluationRepository evaluations;
     private MarketIntelSchemaMigrator migrator;
 
     @BeforeEach
@@ -45,7 +48,9 @@ class MarketIntelPersistenceTest {
         migrator.migrate();
         new AgentTraceSchemaMigrator(jdbc, new DataSourceTransactionManager(dataSource)).migrate();
         flows = new CapitalFlowRepository(jdbc);
-        snapshots = new CapitalBehaviorSnapshotRepository(jdbc, new ObjectMapper().findAndRegisterModules());
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        snapshots = new CapitalBehaviorSnapshotRepository(jdbc, mapper);
+        evaluations = new CapitalBehaviorEvaluationRepository(jdbc, mapper);
     }
 
     @Test
@@ -55,12 +60,14 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=102"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=103"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=104"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=105"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
         assertEquals(1, tableCount("market_capital_flow_snapshot"));
         assertEquals(1, tableCount("market_capital_behavior_snapshot"));
         assertEquals(1, tableCount("market_capital_interpretation"));
         assertEquals(1, tableCount("market_intel_refresh_run"));
         assertEquals(1, tableCount("market_intel_refresh_step"));
+        assertEquals(1, tableCount("market_capital_behavior_evaluation"));
 
         CapitalFlowPoint point = point("payload-1");
         flows.saveAll(Collections.singletonList(point));
@@ -81,6 +88,43 @@ class MarketIntelPersistenceTest {
         CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
         assertEquals(new BigDecimal("18000000"), restored.getFacts().get(0).getMainNetInflow());
         assertEquals("fingerprint-1", restored.getFingerprint());
+    }
+
+    @Test
+    void evaluationRoundTripsAndIsIdempotentForTheSameInputFingerprint() {
+        CapitalFlowPoint point = point("payload-evaluation");
+        flows.saveAll(Collections.singletonList(point));
+        CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L, point.getObservedAt(),
+                Collections.singletonList(point), Collections.emptyList(), "snapshot-evaluation");
+        snapshots.save(snapshot);
+        CapitalSignalEvaluation signal = new CapitalSignalEvaluation();
+        signal.setSignalType("AMOUNT_EXPANSION_WITH_INFLOW");
+        signal.setSignalLabel("放量净流入");
+        signal.setHorizonDays(3);
+        signal.setSampleCount(6);
+        signal.setAverageReturn(new BigDecimal("0.031200"));
+        signal.setMedianReturn(new BigDecimal("0.025000"));
+        signal.setPositiveRate(new BigDecimal("0.666667"));
+        signal.setAverageMfe(new BigDecimal("0.048000"));
+        signal.setAverageMae(new BigDecimal("-0.017000"));
+        signal.setStabilityStatus("CONSISTENT");
+        signal.setEvaluationStatus("EXPLORATORY");
+        signal.setLastEventDate(LocalDate.of(2026, 7, 10));
+        CapitalBehaviorEvaluation value = CapitalBehaviorEvaluation.of(7L, snapshot.getId(),
+                point.getObservedAt(), LocalDate.of(2026, 6, 18), LocalDate.of(2026, 7, 14),
+                "capital-factor-v1", "capital-signal-v2", "evaluation-input-fp", "AVAILABLE",
+                20, 6, new BigDecimal("0.750000"), new BigDecimal("0.250000"),
+                Collections.singletonList(signal), Collections.singletonList("仅为历史统计参考"));
+
+        evaluations.save(value);
+        evaluations.save(value);
+
+        CapitalBehaviorEvaluation restored = evaluations.findBySnapshotId(snapshot.getId())
+                .orElseThrow(AssertionError::new);
+        assertEquals(1, count("SELECT COUNT(*) FROM market_capital_behavior_evaluation"));
+        assertEquals("evaluation-input-fp", restored.getInputFingerprint());
+        assertEquals(new BigDecimal("0.031200"), restored.getSignals().get(0).getAverageReturn());
+        assertEquals("仅为历史统计参考", restored.getDataGaps().get(0));
     }
 
     @Test

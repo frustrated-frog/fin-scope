@@ -1,9 +1,11 @@
 package com.finscope.service.marketintel;
 
 import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.service.marketintel.factor.CapitalFactorEngine;
 import com.finscope.service.marketintel.factor.CapitalFactorRegistry;
 import com.finscope.service.quant.factor.TimeSeriesFactorOperators;
@@ -67,6 +69,41 @@ class CapitalAgentEvidenceAssemblerTest {
         assertEquals(Collections.singletonList("INTRADAY"), packet.getCoverageDimensions());
         assertTrue(packet.getFactorObservations().size() >= 4);
         assertTrue(packet.isSufficientCoverage());
+    }
+
+    @Test
+    void exposesOnlyPublishableHistoricalStatisticsAndIncludesThemInTheFingerprint() {
+        CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
+        CapitalAgentEvidenceAssembler assembler = new CapitalAgentEvidenceAssembler(factors,
+                new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors), new CapitalMetricCatalog());
+        CapitalBehaviorSnapshot snapshot = snapshot();
+        CapitalSignalEvaluation publishable = new CapitalSignalEvaluation();
+        publishable.setSignalType("AMOUNT_EXPANSION_WITH_INFLOW");
+        publishable.setSignalLabel("放量流入");
+        publishable.setHorizonDays(3);
+        publishable.setSampleCount(8);
+        publishable.setAverageReturn(new BigDecimal("0.012500"));
+        publishable.setMedianReturn(new BigDecimal("0.010000"));
+        publishable.setPositiveRate(new BigDecimal("0.625000"));
+        publishable.setAverageMfe(new BigDecimal("0.020000"));
+        publishable.setAverageMae(new BigDecimal("-0.008000"));
+        publishable.setStabilityStatus("INSUFFICIENT_SAMPLE");
+        publishable.setEvaluationStatus("EXPLORATORY");
+        CapitalSignalEvaluation hidden = CapitalSignalEvaluation.insufficient(
+                "PRICE_FLOW_DIVERGENCE", "价资背离", 5, 3, LocalDate.of(2026, 7, 9));
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, 77L, snapshot.getAsOf(),
+                LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 14), "capital-factor-v1",
+                "capital-signal-v2", "evaluation-input", "AVAILABLE", 14, 11,
+                new BigDecimal("0.900000"), new BigDecimal("0.100000"),
+                java.util.Arrays.asList(publishable, hidden), Collections.singletonList("部分价格标签缺失"));
+
+        CapitalAgentEvidencePacket withoutHistory = assembler.assemble(snapshot, rules());
+        CapitalAgentEvidencePacket withHistory = assembler.assemble(snapshot, rules(), evaluation);
+
+        assertEquals(1, withHistory.getHistoricalEvaluations().size());
+        assertEquals(publishable.evaluationRef(), withHistory.getHistoricalEvaluations().get(0).evaluationRef());
+        assertTrue(withHistory.getDataGaps().contains("部分价格标签缺失"));
+        assertFalse(withoutHistory.getEvidenceFingerprint().equals(withHistory.getEvidenceFingerprint()));
     }
 
     private CapitalBehaviorSnapshot snapshot() {

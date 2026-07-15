@@ -5,6 +5,7 @@ import { DataQualityNotice } from '../../shared/components/DataQualityNotice';
 import { CapitalAgentInterpretationPanel } from './CapitalAgentInterpretationPanel';
 import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
+import { CapitalHistoricalEvaluationCard } from './CapitalHistoricalEvaluationCard';
 import { capitalAgentStatusMessage } from './agentWaitPresentation';
 import {
   marketDataProviderLabel,
@@ -105,6 +106,8 @@ export function MarketIntelView({
       if (!['SUCCEEDED', 'PARTIAL'].includes(run.status)) throw new Error('刷新任务仍在运行，可稍后再查看');
       const latest = await fetchOverview(instrumentId);
       setOverview(latest);
+      // Agent 结论严格绑定生成它的快照；新快照加载后必须由用户重新运行。
+      setInterpretation(null);
       setLoadError(null);
       const message = run.status === 'PARTIAL' ? (run.errorMessage || '资金流已刷新，部分辅助行情暂不可用') : '资金数据已刷新';
       setMessage(message);
@@ -241,9 +244,15 @@ export function MarketIntelView({
           </div>
           <aside className="market-intel-interpretation">
             <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />
+            <CapitalHistoricalEvaluationCard
+              evaluation={overview.historicalEvaluation ?? null}
+              currentSignalTypes={overview.metrics?.objectiveTags.map((tag) => tag.code) ?? []}
+            />
             <CapitalAgentInterpretationPanel
               interpretation={interpretation}
               factorObservations={overview.factorObservations ?? []}
+              historicalEvaluations={overview.historicalEvaluation?.signals ?? []}
+              evaluationVersion={overview.historicalEvaluation?.evaluationVersion}
               watchConditions={overview.watchConditions ?? []}
               busy={agentBusy}
               onRun={runAgent}

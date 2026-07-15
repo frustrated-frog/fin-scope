@@ -93,6 +93,39 @@ export type CapitalWatchCondition = {
   unit: string;
 };
 
+export type CapitalSignalEvaluation = {
+  signalType: string;
+  signalLabel: string;
+  horizonDays: number;
+  sampleCount: number;
+  averageReturn?: number | null;
+  medianReturn?: number | null;
+  positiveRate?: number | null;
+  averageMfe?: number | null;
+  averageMae?: number | null;
+  stabilityStatus: 'INSUFFICIENT_SAMPLE' | 'CONSISTENT' | 'MIXED';
+  evaluationStatus: 'UNTESTED' | 'EXPLORATORY' | 'VALIDATED' | 'INVALIDATED';
+  lastEventDate?: string | null;
+};
+
+export type CapitalBehaviorEvaluation = {
+  id: number;
+  snapshotId: number;
+  asOf: string;
+  dataFrom?: string | null;
+  dataTo?: string | null;
+  evaluationVersion: string;
+  factorVersion: string;
+  signalVersion: string;
+  status: 'AVAILABLE' | 'INSUFFICIENT_DATA';
+  dailySampleCount: number;
+  evaluableEventCount: number;
+  coverageRate: number;
+  missingLossRate: number;
+  signals: CapitalSignalEvaluation[];
+  dataGaps: string[];
+};
+
 export type MarketIntelCapitalOverview = {
   instrument: MarketIntelInstrument;
   snapshot: {
@@ -107,6 +140,7 @@ export type MarketIntelCapitalOverview = {
   dailyTrend: CapitalFlowPoint[];
   metrics: CapitalBehaviorMetrics | null;
   ruleExplanation: CapitalRuleExplanation | null;
+  historicalEvaluation: CapitalBehaviorEvaluation | null;
   factorObservations: CapitalFactorObservation[];
   watchConditions: CapitalWatchCondition[];
   factorVersion?: string;
@@ -144,6 +178,7 @@ export type CapitalInterpretation = {
     claim: string;
     factorRefs: string[];
     metricRefs: string[];
+    evaluationRefs?: string[];
   }>;
   counterEvidence: string[];
   watchConditionRefs: string[];

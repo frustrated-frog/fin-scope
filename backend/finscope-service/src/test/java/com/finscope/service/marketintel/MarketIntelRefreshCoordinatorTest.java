@@ -1,11 +1,13 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
@@ -43,13 +45,15 @@ class MarketIntelRefreshCoordinatorTest {
     private final CapitalBehaviorSignalService signalService = mock(CapitalBehaviorSignalService.class);
     private final CapitalBehaviorSnapshotFactory snapshotFactory = mock(CapitalBehaviorSnapshotFactory.class);
     private final CapitalBehaviorSnapshotRepository snapshots = mock(CapitalBehaviorSnapshotRepository.class);
+    private final CapitalFactorEvaluationService evaluationService = mock(CapitalFactorEvaluationService.class);
+    private final CapitalBehaviorEvaluationRepository evaluations = mock(CapitalBehaviorEvaluationRepository.class);
     private final CapitalRuleExplanationService ruleService = mock(CapitalRuleExplanationService.class);
     private final CapitalInterpretationRepository interpretations = mock(CapitalInterpretationRepository.class);
     private final CapitalFactAssembler facts = mock(CapitalFactAssembler.class);
     private final MarketIntelRefreshRunRepository runs = mock(MarketIntelRefreshRunRepository.class);
     private final MarketIntelRefreshCoordinator coordinator = new MarketIntelRefreshCoordinator(
             capital, gateway, flows, signalService, snapshotFactory, snapshots,
-            ruleService, interpretations, facts, runs);
+            ruleService, interpretations, facts, runs, evaluationService, evaluations);
     private Instrument instrument;
     private MarketIntelRefreshRun run;
 
@@ -66,6 +70,8 @@ class MarketIntelRefreshCoordinatorTest {
         MarketIntelRefreshStep step = new MarketIntelRefreshStep();
         step.setId(19L);
         when(runs.createStep(eq(11L), eq("CAPITAL_FLOW"), any(String.class), eq(1))).thenReturn(step);
+        when(evaluationService.evaluate(any(CapitalBehaviorSnapshot.class)))
+                .thenReturn(new CapitalBehaviorEvaluation());
     }
 
     @Test
@@ -190,6 +196,81 @@ class MarketIntelRefreshCoordinatorTest {
         assertEquals(null, minute.getPrice());
         verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(1),
                 eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("QUOTE_UNAVAILABLE"));
+    }
+
+    @Test
+    void persistsHistoricalEvaluationForTheSavedSnapshot() {
+        CapitalFlowPoint daily = point(401L, "DAY_1", LocalDateTime.of(2026, 7, 15, 15, 0));
+        CapitalFlowData fresh = new CapitalFlowData(Collections.emptyList(), Collections.singletonList(daily),
+                null, null, Collections.emptyList(), "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", fresh, null, "r-14"));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, daily.getObservedAt(),
+                Collections.singletonList(daily), Collections.emptyList(), "evaluation-input");
+        saved.setId(41L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+        CapitalBehaviorEvaluation evaluation = new CapitalBehaviorEvaluation();
+        evaluation.setSnapshotId(41L);
+        when(evaluationService.evaluate(saved)).thenReturn(evaluation);
+
+        coordinator.refresh(run, instrument);
+
+        verify(evaluations).save(evaluation);
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.SUCCEEDED, 1, 0);
+    }
+
+    @Test
+    void evaluationFailureKeepsCapitalRefreshUsableAndMakesTheWarningExplicit() {
+        CapitalFlowPoint daily = point(402L, "DAY_1", LocalDateTime.of(2026, 7, 15, 15, 0));
+        CapitalFlowData fresh = new CapitalFlowData(Collections.emptyList(), Collections.singletonList(daily),
+                null, null, Collections.emptyList(), "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", fresh, null, "r-15"));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, daily.getObservedAt(),
+                Collections.singletonList(daily), Collections.emptyList(), "evaluation-failed");
+        saved.setId(42L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+        when(evaluationService.evaluate(saved)).thenThrow(new IllegalStateException("broken label"));
+
+        coordinator.refresh(run, instrument);
+
+        verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(1),
+                eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("历史评价暂不可用"));
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 0);
+        verify(evaluations, never()).save(any(CapitalBehaviorEvaluation.class));
+        verify(snapshots).updateWarnings(eq(42L), eq("PARTIAL"),
+                org.mockito.ArgumentMatchers.argThat(values -> values.contains(
+                        "历史评价暂不可用，本次资金快照仍已更新")));
+    }
+
+    @Test
+    void clearsPersistedEvaluationWarningWhenTheSameSnapshotRecovers() {
+        CapitalFlowPoint daily = point(403L, "DAY_1", LocalDateTime.of(2026, 7, 15, 15, 0));
+        CapitalFlowData fresh = new CapitalFlowData(Collections.emptyList(), Collections.singletonList(daily),
+                null, null, Collections.emptyList(), "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", fresh, null, "r-16"));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, daily.getObservedAt(),
+                Collections.singletonList(daily), Collections.emptyList(), "evaluation-recovered");
+        saved.setId(43L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+        CapitalBehaviorEvaluation evaluation = new CapitalBehaviorEvaluation();
+        evaluation.setSnapshotId(43L);
+        when(evaluationService.evaluate(saved))
+                .thenThrow(new IllegalStateException("temporary failure"))
+                .thenReturn(evaluation);
+
+        coordinator.refresh(run, instrument);
+        coordinator.refresh(run, instrument);
+
+        verify(evaluations).save(evaluation);
+        verify(snapshots).updateWarnings(eq(43L), eq("COMPLETE"), eq(Collections.emptyList()));
     }
 
     private CapitalFlowPoint point(Long id, String granularity, LocalDateTime observedAt) {

@@ -64,4 +64,13 @@ public class CapitalBehaviorSnapshotRepository {
         }, instrumentId);
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
+
+    public void updateWarnings(Long snapshotId, String qualityStatus, List<String> warnings) {
+        try {
+            jdbc.update("UPDATE market_capital_behavior_snapshot SET quality_status=?,warnings_json=? WHERE id=?",
+                    qualityStatus, mapper.writeValueAsString(warnings), snapshotId);
+        } catch (Exception error) {
+            throw new IllegalStateException("cannot update capital snapshot warnings id=" + snapshotId, error);
+        }
+    }
 }

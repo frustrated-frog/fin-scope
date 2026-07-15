@@ -1,5 +1,6 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.domain.agent.AgentActionFingerprint;
@@ -22,6 +23,7 @@ import java.util.concurrent.Executor;
 @Service
 public class CapitalInterpretationFacade {
     private final CapitalBehaviorSnapshotRepository snapshots;
+    private final CapitalBehaviorEvaluationRepository evaluations;
     private final CapitalInterpretationRepository interpretations;
     private final CapitalRuleExplanationService rules;
     private final CapitalInterpretationAgent agent;
@@ -33,6 +35,7 @@ public class CapitalInterpretationFacade {
     private Executor executor;
 
     public CapitalInterpretationFacade(CapitalBehaviorSnapshotRepository snapshots,
+                                       CapitalBehaviorEvaluationRepository evaluations,
                                        CapitalInterpretationRepository interpretations,
                                        CapitalRuleExplanationService rules,
                                        CapitalInterpretationAgent agent,
@@ -40,6 +43,7 @@ public class CapitalInterpretationFacade {
                                        CapitalAgentEvidenceAssembler evidenceAssembler,
                                        AgentHarness harness, AgentTraceService traces) {
         this.snapshots = snapshots;
+        this.evaluations = evaluations;
         this.interpretations = interpretations;
         this.rules = rules;
         this.agent = agent;
@@ -52,7 +56,8 @@ public class CapitalInterpretationFacade {
     public synchronized CapitalInterpretation request(Long instrumentId, boolean force) {
         CapitalBehaviorSnapshot snapshot = snapshots.findLatest(instrumentId).orElseThrow(() -> new IllegalArgumentException("capital snapshot not found for instrument " + instrumentId));
         CapitalRuleExplanation explanation = rules.explain(snapshot.getFacts(), snapshot.getSignals());
-        CapitalAgentEvidencePacket packet = evidenceAssembler.assemble(snapshot, explanation);
+        CapitalAgentEvidencePacket packet = evidenceAssembler.assemble(snapshot, explanation,
+                evaluations.findBySnapshotId(snapshot.getId()).orElse(null));
         String base = packet.getEvidenceFingerprint();
         String inputHash = force ? JdkFinanceHttpClient.sha256(base + "|" + System.nanoTime()) : base;
         if (!force) {

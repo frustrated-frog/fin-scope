@@ -41,6 +41,6 @@ public class FinScopeProperties {
         private String ruleVersion = "capital-rules-v1";
         private boolean agentEnabled = true;
         private int agentTimeoutMs = 15000;
-        private String promptVersion = "capital-interpret-v2";
+        private String promptVersion = "capital-interpret-v3";
     }
 }

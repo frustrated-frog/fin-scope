@@ -2,6 +2,7 @@ package com.finscope.service.marketintel;
 
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
 import com.finscope.domain.marketintel.CapitalFactorObservation;
@@ -20,6 +21,7 @@ public class MarketIntelCapitalView {
     private List<CapitalFlowPoint> dailyTrend = Collections.emptyList();
     private CapitalBehaviorMetrics metrics;
     private CapitalRuleExplanation ruleExplanation;
+    private CapitalBehaviorEvaluation historicalEvaluation;
     private List<CapitalFactorObservation> factorObservations = Collections.emptyList();
     private List<CapitalWatchCondition> watchConditions = Collections.emptyList();
     private String factorVersion;

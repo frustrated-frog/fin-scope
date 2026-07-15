@@ -33,6 +33,36 @@ const overview = {
     items: [{ level: 'WATCH', text: '量能放大但资金转弱', metricRefs: ['flow:102:mainNetInflow'] }],
     dataGaps: ['缺少逐笔成交和委托队列，不能确认拆单。']
   },
+  historicalEvaluation: {
+    id: 8,
+    snapshotId: 12,
+    asOf: '2026-07-14T15:00:00',
+    dataFrom: '2026-06-20',
+    dataTo: '2026-07-14',
+    evaluationVersion: 'capital-evaluation-v1',
+    factorVersion: 'capital-factor-v1',
+    signalVersion: 'capital-signal-v2',
+    status: 'AVAILABLE',
+    dailySampleCount: 20,
+    evaluableEventCount: 8,
+    coverageRate: 1,
+    missingLossRate: 0,
+    signals: [{
+      signalType: 'AMOUNT_EXPANSION_WITH_OUTFLOW',
+      signalLabel: '放量净流出',
+      horizonDays: 3,
+      sampleCount: 6,
+      averageReturn: -0.012,
+      medianReturn: -0.008,
+      positiveRate: 0.333333,
+      averageMfe: 0.01,
+      averageMae: -0.024,
+      stabilityStatus: 'INSUFFICIENT_SAMPLE',
+      evaluationStatus: 'EXPLORATORY',
+      lastEventDate: '2026-07-10'
+    }],
+    dataGaps: []
+  },
   factorObservations: [{
     factorRef: 'factor:PRICE_FLOW_ALIGNMENT:2026-07-14T15:00',
     factorCode: 'PRICE_FLOW_ALIGNMENT',
@@ -133,6 +163,8 @@ test('shows deterministic explanation before the user requests agent analysis', 
   expect(await screen.findByRole('heading', { name: '贵州茅台' })).toBeInTheDocument();
   expect(await screen.findByText('成交额明显放大，但主力净流向转负，短线承接需要继续观察。')).toBeInTheDocument();
   expect(screen.getByText('量能放大但资金转弱')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '历史表现校验' })).toBeInTheDocument();
+  expect(screen.getByText('探索性统计')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '资金证据带' })).toBeInTheDocument();
   expect(screen.getByText('成交量')).toBeInTheDocument();
   expect(screen.getByText('121.00 万手')).toBeInTheDocument();
@@ -142,7 +174,7 @@ test('shows deterministic explanation before the user requests agent analysis', 
   expect(screen.getAllByText('-16.67%').length).toBeGreaterThan(0);
   expect(screen.getByText('连续净流入 3 个 5 分钟区间')).toBeInTheDocument();
   expect(screen.getByText('连续净流出 2 个交易日')).toBeInTheDocument();
-  expect(screen.getByText('放量净流出')).toBeInTheDocument();
+  expect(screen.getAllByText('放量净流出').length).toBeGreaterThan(0);
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('capital-interpretations'), expect.anything());
 });
 
@@ -298,6 +330,20 @@ test('polls the refresh run before reloading the capital snapshot', async () => 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith('资金数据已刷新', 'success'));
   const overviewCalls = vi.mocked(api).mock.calls.filter(([path]) => String(path).includes('/capital-behavior'));
   expect(overviewCalls.length).toBeGreaterThanOrEqual(2);
+});
+
+test('clears the previous Agent interpretation after refreshing the capital snapshot', async () => {
+  const user = userEvent.setup();
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
+  expect(await screen.findByText('目前只能确认量价资金出现背离，拆单仍是假设。')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: '刷新资金数据' }));
+
+  await waitFor(() => expect(screen.queryByText('目前只能确认量价资金出现背离，拆单仍是假设。'))
+    .not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: '运行 Agent 解读' })).toBeInTheDocument();
 });
 
 test('shows the provider error when refresh fails', async () => {

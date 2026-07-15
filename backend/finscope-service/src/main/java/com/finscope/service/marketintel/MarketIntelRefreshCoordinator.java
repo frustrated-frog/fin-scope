@@ -1,5 +1,6 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
@@ -7,6 +8,7 @@ import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
@@ -19,6 +21,8 @@ import com.finscope.service.marketdata.CapitalFlowGatewayResult;
 import com.finscope.service.marketdata.MarketDataGateway;
 import com.finscope.service.marketdata.QuoteGatewayResult;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
@@ -35,6 +39,7 @@ import java.util.concurrent.Executor;
 /** 资金行为刷新编排；数据源选择、切换和熔断统一由 MarketDataGateway 负责。 */
 @Service
 public class MarketIntelRefreshCoordinator {
+    private static final Logger log = LoggerFactory.getLogger(MarketIntelRefreshCoordinator.class);
     private final MarketIntelCapitalService capital;
     private final MarketDataGateway gateway;
     private final CapitalFlowRepository flows;
@@ -45,6 +50,8 @@ public class MarketIntelRefreshCoordinator {
     private final CapitalInterpretationRepository interpretations;
     private final CapitalFactAssembler facts;
     private final MarketIntelRefreshRunRepository runs;
+    private final CapitalFactorEvaluationService evaluationService;
+    private final CapitalBehaviorEvaluationRepository evaluations;
 
     @Resource(name = "marketIntelRefreshExecutor")
     private Executor executor;
@@ -58,7 +65,9 @@ public class MarketIntelRefreshCoordinator {
                                          CapitalRuleExplanationService ruleService,
                                          CapitalInterpretationRepository interpretations,
                                          CapitalFactAssembler facts,
-                                         MarketIntelRefreshRunRepository runs) {
+                                         MarketIntelRefreshRunRepository runs,
+                                         CapitalFactorEvaluationService evaluationService,
+                                         CapitalBehaviorEvaluationRepository evaluations) {
         this.capital = capital;
         this.gateway = gateway;
         this.flows = flows;
@@ -69,6 +78,8 @@ public class MarketIntelRefreshCoordinator {
         this.interpretations = interpretations;
         this.facts = facts;
         this.runs = runs;
+        this.evaluationService = evaluationService;
+        this.evaluations = evaluations;
     }
 
     public MarketIntelRefreshRun requestRefresh(Long instrumentId) {
@@ -137,12 +148,35 @@ public class MarketIntelRefreshCoordinator {
         List<CapitalBehaviorSignal> signals = signalService.detect(points);
         CapitalBehaviorSnapshot snapshot = snapshots.save(
                 snapshotsFactory.create(instrument.getId(), points, signals, warnings));
+        String evaluationWarning = persistEvaluation(snapshot);
+        if (evaluationWarning != null) {
+            warnings.add(evaluationWarning);
+        }
+        snapshot.setWarnings(warnings);
+        snapshot.setQualityStatus(warnings.isEmpty() ? "COMPLETE" : "PARTIAL");
+        // INSERT OR IGNORE 可能复用同一事实快照，因此成功和失败都要同步评价警告状态。
+        snapshots.updateWarnings(snapshot.getId(), snapshot.getQualityStatus(), snapshot.getWarnings());
         persistRule(snapshot, ruleService.explain(points, signals));
         boolean partial = !warnings.isEmpty();
         runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SUCCEEDED, points.size(),
                 partial ? "PARTIAL_DATA" : null, partial ? String.join("；", warnings) : null);
         runs.finishRun(run.getId(), partial ? MarketIntelRefreshRun.Status.PARTIAL
                 : MarketIntelRefreshRun.Status.SUCCEEDED, 1, 0);
+    }
+
+    private String persistEvaluation(CapitalBehaviorSnapshot snapshot) {
+        try {
+            CapitalBehaviorEvaluation evaluation = evaluationService.evaluate(snapshot);
+            if (evaluation == null) {
+                return "历史评价暂不可用，本次资金快照仍已更新";
+            }
+            evaluations.save(evaluation);
+            return null;
+        } catch (RuntimeException error) {
+            // 历史评价是研究增强能力，不得反向阻断资金快照主链路。
+            log.warn("capital history evaluation failed for snapshot={}", snapshot.getId(), error);
+            return "历史评价暂不可用，本次资金快照仍已更新";
+        }
     }
 
     private CapitalFlowData applyFallbacks(Instrument instrument, CapitalFlowData fresh) {

@@ -46,7 +46,7 @@ class MarketIntelApiIntegrationTest {
     @MockBean(name="marketIntelAgentExecutor") Executor agentExecutor;
 
     @BeforeEach void setUp(){
-        jdbc.update("DELETE FROM market_capital_interpretation");jdbc.update("DELETE FROM market_capital_behavior_snapshot");jdbc.update("DELETE FROM market_capital_flow_snapshot");
+        jdbc.update("DELETE FROM market_capital_interpretation");jdbc.update("DELETE FROM market_capital_behavior_evaluation");jdbc.update("DELETE FROM market_capital_behavior_snapshot");jdbc.update("DELETE FROM market_capital_flow_snapshot");
         jdbc.update("DELETE FROM market_intel_refresh_step");jdbc.update("DELETE FROM market_intel_refresh_run");jdbc.update("DELETE FROM agent_run");jdbc.update("DELETE FROM watchlist_item");jdbc.update("DELETE FROM instrument");
         jdbc.update("INSERT INTO instrument(id,code,type,name,market,created_at,updated_at) VALUES(7,'600519','STOCK','贵州茅台','SH',?,?)",LocalDateTime.now().toString(),LocalDateTime.now().toString());
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(refreshExecutor).execute(any(Runnable.class));
@@ -67,6 +67,9 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v2"))
                 .andExpect(jsonPath("$.factorVersion").value("capital-factor-v1"))
                 .andExpect(jsonPath("$.signalVersion").value("capital-signal-v2"))
+                .andExpect(jsonPath("$.historicalEvaluation.evaluationVersion").value("capital-evaluation-v1"))
+                .andExpect(jsonPath("$.historicalEvaluation.status").value("INSUFFICIENT_DATA"))
+                .andExpect(jsonPath("$.historicalEvaluation.signals").isArray())
                 .andExpect(jsonPath("$.factorObservations").isArray())
                 .andExpect(jsonPath("$.metrics.latest.tradeAmount").value(180000000))
                 .andExpect(jsonPath("$.metrics.latest.tradeVolume").value(1210000))

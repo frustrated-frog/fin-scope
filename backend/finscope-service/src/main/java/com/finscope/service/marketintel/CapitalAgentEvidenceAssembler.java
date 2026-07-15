@@ -2,12 +2,14 @@ package com.finscope.service.marketintel;
 
 import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalEvidenceRef;
 import com.finscope.domain.marketintel.CapitalFactorObservation;
 import com.finscope.domain.marketintel.CapitalFactorResult;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.domain.marketintel.CapitalWatchCondition;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
 import com.finscope.service.marketintel.factor.CapitalFactorEngine;
@@ -27,7 +29,7 @@ import java.util.stream.Collectors;
  */
 @Service
 public class CapitalAgentEvidenceAssembler {
-    public static final String PROMPT_VERSION = "capital-interpret-v2";
+    public static final String PROMPT_VERSION = "capital-interpret-v3";
     private static final int MINIMUM_COVERAGE_DIMENSIONS = 3;
     private static final int MINIMUM_FACTORS_FOR_DEGRADED_COVERAGE = 4;
     private static final List<String> ALLOWED_HYPOTHESES = Collections.unmodifiableList(Arrays.asList(
@@ -47,11 +49,21 @@ public class CapitalAgentEvidenceAssembler {
 
     public CapitalAgentEvidencePacket assemble(CapitalBehaviorSnapshot snapshot,
                                                CapitalRuleExplanation rules) {
+        return assemble(snapshot, rules, null);
+    }
+
+    public CapitalAgentEvidencePacket assemble(CapitalBehaviorSnapshot snapshot,
+                                               CapitalRuleExplanation rules,
+                                               CapitalBehaviorEvaluation evaluation) {
         CapitalFactorResult factors = factorEngine.calculate(snapshot.getFacts());
         List<CapitalBehaviorSignal> signals = signalService.detect(factors);
         List<CapitalWatchCondition> watchConditions = signalService.watchConditions(factors);
         List<CapitalEvidenceRef> rawMetrics = rawMetrics(snapshot.getFacts());
-        List<String> dataGaps = dataGaps(snapshot, rules, factors);
+        List<CapitalSignalEvaluation> historicalEvaluations = evaluation == null
+                ? Collections.emptyList() : evaluation.getSignals().stream()
+                .filter(CapitalSignalEvaluation::eligibleForAgent)
+                .collect(Collectors.toList());
+        List<String> dataGaps = dataGaps(snapshot, rules, factors, evaluation);
         List<CapitalFactorObservation> usableFactors = factors.getObservations().stream()
                 .filter(value -> "COMPLETE".equals(value.getQualityStatus()))
                 .collect(Collectors.toList());
@@ -64,11 +76,11 @@ public class CapitalAgentEvidenceAssembler {
         String ruleVersion = rules == null || rules.getRuleVersion() == null
                 ? "capital-rules-v2" : rules.getRuleVersion();
         String fingerprint = evidenceFingerprint(snapshot, factors, signals, watchConditions,
-                rawMetrics, dataGaps, ruleVersion);
+                rawMetrics, historicalEvaluations, dataGaps, ruleVersion);
         return new CapitalAgentEvidencePacket(snapshot.getId(), snapshot.getInstrumentId(), snapshot.getAsOf(),
                 snapshot.getFingerprint(), fingerprint, snapshot.getQualityStatus(), factors.getFactorVersion(),
                 CapitalBehaviorSignalService.VERSION, ruleVersion, PROMPT_VERSION,
-                factors.getObservations(), signals, rawMetrics, ALLOWED_HYPOTHESES,
+                factors.getObservations(), signals, rawMetrics, historicalEvaluations, ALLOWED_HYPOTHESES,
                 watchConditions, dataGaps, coverage, sufficientCoverage);
     }
 
@@ -95,10 +107,11 @@ public class CapitalAgentEvidenceAssembler {
     }
 
     private List<String> dataGaps(CapitalBehaviorSnapshot snapshot, CapitalRuleExplanation rules,
-                                  CapitalFactorResult factors) {
+                                  CapitalFactorResult factors, CapitalBehaviorEvaluation evaluation) {
         Set<String> result = new LinkedHashSet<String>();
         result.addAll(factors.getDataGaps());
         if (rules != null) result.addAll(rules.getDataGaps());
+        if (evaluation != null) result.addAll(evaluation.getDataGaps());
         result.addAll(snapshot.getWarnings());
         if (!"COMPLETE".equals(snapshot.getQualityStatus())) {
             result.add("行情快照并非完整状态，结论仅基于当前可用证据。");
@@ -110,6 +123,7 @@ public class CapitalAgentEvidenceAssembler {
                                        List<CapitalBehaviorSignal> signals,
                                        List<CapitalWatchCondition> watchConditions,
                                        List<CapitalEvidenceRef> rawMetrics,
+                                       List<CapitalSignalEvaluation> historicalEvaluations,
                                        List<String> dataGaps, String ruleVersion) {
         StringBuilder canonical = new StringBuilder();
         canonical.append(snapshot.getFingerprint()).append('|').append(snapshot.getQualityStatus())
@@ -129,6 +143,13 @@ public class CapitalAgentEvidenceAssembler {
         rawMetrics.stream().sorted(Comparator.comparing(CapitalEvidenceRef::getRef))
                 .forEach(item -> canonical.append("|m:").append(item.getRef()).append('=')
                         .append(item.getValue()));
+        historicalEvaluations.stream().sorted(Comparator.comparing(CapitalSignalEvaluation::evaluationRef))
+                .forEach(item -> canonical.append("|e:").append(item.evaluationRef()).append('=')
+                        .append(item.getSampleCount()).append(':').append(item.getAverageReturn())
+                        .append(':').append(item.getMedianReturn()).append(':').append(item.getPositiveRate())
+                        .append(':').append(item.getAverageMfe()).append(':').append(item.getAverageMae())
+                        .append(':').append(item.getStabilityStatus()).append(':')
+                        .append(item.getEvaluationStatus()));
         dataGaps.stream().sorted().forEach(item -> canonical.append("|g:").append(item));
         return JdkFinanceHttpClient.sha256(canonical.toString());
     }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
 import org.springframework.stereotype.Service;
@@ -172,6 +173,8 @@ public class CapitalInterpretationAgent {
                 + "counterEvidence、watchConditionRefs、dataGaps、confidence、disclaimer。"
                 + "observations每项必须含dimension、claim、factorRefs、metricRefs，并覆盖至少"
                 + requiredDimensions + "个输入中实际可用的不同维度。"
+                + "如引用historicalEvaluations中的统计，必须在对应observation的evaluationRefs中填写evaluationRef；"
+                + "历史统计仅是探索性背景，不代表未来预测或收益承诺。"
                 + contractSchema()
                 + "文本只能复述证据包已有数字，不得自行计算或创造数值，不得输出买卖建议；"
                 + "executiveSummary和disclaimer不要包含任何数字；"
@@ -193,6 +196,7 @@ public class CapitalInterpretationAgent {
         return "marketState只能是VOLUME_EXPANSION_OUTFLOW、VOLUME_EXPANSION_INFLOW、"
                 + "PRICE_FLOW_DIVERGENCE、MIXED、NEUTRAL、INTRADAY_REVERSAL或INSUFFICIENT_DATA；"
                 + "dimension只能是VOLUME、TURNOVER、FLOW、ORDER_STRUCTURE、INTRADAY或MULTI_PERIOD；"
+                + "observations中的evaluationRefs为可选字符串数组，且只能引用historicalEvaluations.evaluationRef；"
                 + "hypotheses每项必须含type、claim、confidence、supportingMetricRefs、counterEvidence、dataGaps，"
                 + "supportingMetricRefs只能引用rawMetrics.ref；counterEvidence和dataGaps必须是字符串数组；"
                 + "顶层counterEvidence、dataGaps和watchConditionRefs也必须是字符串数组；";
@@ -224,6 +228,7 @@ public class CapitalInterpretationAgent {
         value.put("qualityStatus", packet.getQualityStatus());
         value.put("factorVersion", packet.getFactorVersion());
         value.put("signalVersion", packet.getSignalVersion());
+        value.put("historicalStatisticsOnly", true);
         List<Map<String, Object>> factorValues = new ArrayList<Map<String, Object>>();
         packet.getFactorObservations().forEach(item -> {
             Map<String, Object> row = new LinkedHashMap<String, Object>();
@@ -280,10 +285,31 @@ public class CapitalInterpretationAgent {
         value.put("factors", factorValues);
         value.put("signals", signalValues);
         value.put("rawMetrics", metricValues);
+        List<Map<String, Object>> historicalValues = new ArrayList<Map<String, Object>>();
+        packet.getHistoricalEvaluations().forEach(item -> historicalValues.add(historicalValue(item)));
+        value.put("historicalEvaluations", historicalValues);
         value.put("allowedHypotheses", packet.getAllowedHypotheses());
         value.put("watchConditions", watchValues);
         value.put("dataGaps", packet.getDataGaps());
         return json.writeValueAsString(value);
+    }
+
+    private Map<String, Object> historicalValue(CapitalSignalEvaluation item) {
+        Map<String, Object> row = new LinkedHashMap<String, Object>();
+        row.put("evaluationRef", item.evaluationRef());
+        row.put("signalType", item.getSignalType());
+        row.put("signalLabel", item.getSignalLabel());
+        row.put("horizonDays", item.getHorizonDays());
+        row.put("sampleCount", item.getSampleCount());
+        row.put("averageReturn", item.getAverageReturn());
+        row.put("medianReturn", item.getMedianReturn());
+        row.put("positiveRate", item.getPositiveRate());
+        row.put("averageMfe", item.getAverageMfe());
+        row.put("averageMae", item.getAverageMae());
+        row.put("stabilityStatus", item.getStabilityStatus());
+        row.put("evaluationStatus", item.getEvaluationStatus());
+        row.put("boundary", "探索性历史统计，不代表未来预测或收益承诺");
+        return row;
     }
 
     private List<String> union(List<String> first, List<String> second) {

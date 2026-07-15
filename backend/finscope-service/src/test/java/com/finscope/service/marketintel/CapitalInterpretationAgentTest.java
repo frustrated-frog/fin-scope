@@ -2,11 +2,13 @@ package com.finscope.service.marketintel;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketintel.CapitalAgentEvidencePacket;
+import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalHypothesis;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.marketintel.factor.CapitalFactorEngine;
 import com.finscope.service.marketintel.factor.CapitalFactorRegistry;
@@ -118,6 +120,26 @@ class CapitalInterpretationAgentTest {
     }
 
     @Test
+    void replacesDisclaimerThatBorrowsAnUnreferencedHistoricalNumber() {
+        CapitalSignalEvaluation history = historicalEvaluation();
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String output = validOutput(packet).replace("不构成投资建议", "历史样本8次，不构成投资建议");
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("模型仅组织公开数据和已登记因子，仅用于研究，不构成投资建议。", result.getDisclaimer());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("免责声明")
+                && value.contains("历史统计")));
+    }
+
+    @Test
     void fallsBackWhenAllObservationsContainNumbersOutsideEvidencePacket() {
         CapitalAgentEvidencePacket packet = packet(richSnapshot());
         String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +
@@ -214,6 +236,7 @@ class CapitalInterpretationAgentTest {
         assertEquals("SUCCEEDED", result.getStatus());
         assertEquals(2, calls.get());
         assertTrue(systemPrompts.get(1).contains("INTRADAY_REVERSAL"));
+        assertTrue(userPrompts.get(0).contains("\"historicalStatisticsOnly\":true"));
         assertTrue(userPrompts.get(1).contains("unknown market state"));
         assertTrue(userPrompts.get(1).contains("evidencePacket"));
     }
@@ -299,6 +322,150 @@ class CapitalInterpretationAgentTest {
         assertFalse(result.getFacts().isEmpty());
     }
 
+    @Test
+    void acceptsPublishableHistoricalStatisticsOnlyThroughTheirStableReference() {
+        CapitalSignalEvaluation history = new CapitalSignalEvaluation();
+        history.setSignalType("AMOUNT_EXPANSION_WITH_INFLOW");
+        history.setSignalLabel("放量流入");
+        history.setHorizonDays(3);
+        history.setSampleCount(8);
+        history.setAverageReturn(new BigDecimal("0.012500"));
+        history.setMedianReturn(new BigDecimal("0.010000"));
+        history.setPositiveRate(new BigDecimal("0.625000"));
+        history.setAverageMfe(new BigDecimal("0.020000"));
+        history.setAverageMae(new BigDecimal("-0.008000"));
+        history.setStabilityStatus("INSUFFICIENT_SAMPLE");
+        history.setEvaluationStatus("EXPLORATORY");
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String historicalObservation = observationForCategory(packet, "FLOW", "历史样本平均收益为1.25%")
+                .replace("}", ",\"evaluationRefs\":[\"" + history.evaluationRef() + "\"]}");
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"资金分化\"," +
+                "\"observations\":[" + observationForCategory(packet, "VOLUME", "量能活跃") + "," +
+                historicalObservation + "," + observationForCategory(packet, "ORDER_STRUCTURE", "订单结构分化") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(Collections.singletonList(history.evaluationRef()),
+                result.getObservations().get(1).getEvaluationRefs());
+    }
+
+    @Test
+    void rejectsHistoricalStatisticsWhenTheObservationOmitsItsEvaluationReference() {
+        CapitalSignalEvaluation history = historicalEvaluation();
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"资金分化\"," +
+                "\"observations\":[" + observationForCategory(packet, "VOLUME", "量能活跃") + "," +
+                observationForCategory(packet, "FLOW", "历史样本平均收益为0.0125") + "," +
+                observationForCategory(packet, "ORDER_STRUCTURE", "订单结构分化") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("FALLBACK", result.getStatus());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("历史评价引用")));
+    }
+
+    @Test
+    void rejectsUncitedHistoricalSampleCountEvenWhenTheSameNumberExistsInOtherEvidence() {
+        CapitalSignalEvaluation history = historicalEvaluation();
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"资金分化\"," +
+                "\"observations\":[" + observationForCategory(packet, "VOLUME", "量能活跃") + "," +
+                observationForCategory(packet, "FLOW", "历史有效样本为8次") + "," +
+                observationForCategory(packet, "ORDER_STRUCTURE", "订单结构分化") + "]," +
+                "\"hypotheses\":[],\"counterEvidence\":[],\"watchConditionRefs\":[]," +
+                "\"dataGaps\":[],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}";
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("FALLBACK", result.getStatus());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("历史评价引用")));
+    }
+
+    @Test
+    void replacesSummaryThatUsesHistoricalNumbersWithoutAnAuditableReference() {
+        CapitalSignalEvaluation history = historicalEvaluation();
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String output = validOutput(packet).replace("资金分化", "历史有效样本为8次");
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("规则摘要", result.getExecutiveSummary());
+        assertTrue(result.getRejectionReasons().stream().anyMatch(value -> value.contains("摘要")
+                && value.contains("历史统计")));
+    }
+
+    @Test
+    void rejectsHistoricalNumbersFromHypothesesAndFreeTextWithoutEvaluationReferences() {
+        CapitalSignalEvaluation history = historicalEvaluation();
+        CapitalBehaviorSnapshot snapshot = richSnapshot();
+        CapitalBehaviorEvaluation evaluation = CapitalBehaviorEvaluation.of(7L, snapshot.getId(), snapshot.getAsOf(),
+                snapshot.getAsOf().toLocalDate().minusDays(20), snapshot.getAsOf().toLocalDate(),
+                "capital-factor-v1", "capital-signal-v2", "historical-input", "AVAILABLE",
+                20, 8, BigDecimal.ONE, BigDecimal.ZERO,
+                Collections.singletonList(history), Collections.emptyList());
+        CapitalAgentEvidencePacket packet = packet(snapshot, evaluation);
+        String metricRef = packet.getRawMetrics().get(0).getRef();
+        String historyHypothesis = "{\"type\":\"ACCUMULATION\",\"claim\":\"历史样本8次支持该假设\"," +
+                "\"confidence\":\"MID\",\"supportingMetricRefs\":[\"" + metricRef + "\"]," +
+                "\"counterEvidence\":[],\"dataGaps\":[]}";
+        String output = validOutput(packet)
+                .replace("\"hypotheses\":[]", "\"hypotheses\":[" + historyHypothesis + "]")
+                .replace("\"counterEvidence\":[]", "\"counterEvidence\":[\"历史有效样本为8次\"]");
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertTrue(result.getHypotheses().isEmpty());
+        assertTrue(result.getCounterEvidence().isEmpty());
+        assertTrue(result.getRejectionReasons().stream().filter(value -> value.contains("历史统计数字")).count() >= 2);
+    }
+
+    private CapitalSignalEvaluation historicalEvaluation() {
+        CapitalSignalEvaluation history = new CapitalSignalEvaluation();
+        history.setSignalType("AMOUNT_EXPANSION_WITH_INFLOW");
+        history.setSignalLabel("放量流入");
+        history.setHorizonDays(3);
+        history.setSampleCount(8);
+        history.setAverageReturn(new BigDecimal("0.012500"));
+        history.setMedianReturn(new BigDecimal("0.010000"));
+        history.setPositiveRate(new BigDecimal("0.625000"));
+        history.setAverageMfe(new BigDecimal("0.020000"));
+        history.setAverageMae(new BigDecimal("-0.008000"));
+        history.setStabilityStatus("INSUFFICIENT_SAMPLE");
+        history.setEvaluationStatus("EXPLORATORY");
+        return history;
+    }
+
     private CapitalInterpretationAgent agent(LlmChatClient llm) {
         ObjectMapper mapper = new ObjectMapper();
         return new CapitalInterpretationAgent(llm, mapper, new CapitalAgentResponseParser(mapper),
@@ -306,10 +473,15 @@ class CapitalInterpretationAgentTest {
     }
 
     private CapitalAgentEvidencePacket packet(CapitalBehaviorSnapshot snapshot) {
+        return packet(snapshot, null);
+    }
+
+    private CapitalAgentEvidencePacket packet(CapitalBehaviorSnapshot snapshot,
+                                               CapitalBehaviorEvaluation evaluation) {
         CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
         return new CapitalAgentEvidenceAssembler(factors,
                 new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors),
-                new CapitalMetricCatalog()).assemble(snapshot, rules());
+                new CapitalMetricCatalog()).assemble(snapshot, rules(), evaluation);
     }
 
     private String validOutput(CapitalAgentEvidencePacket packet) {

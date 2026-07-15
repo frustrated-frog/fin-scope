@@ -97,3 +97,53 @@ test('explains the concrete timeout budget when the Agent falls back to rules', 
 
   expect(screen.getByText('模型在 60 秒内未完成，已自动展示规则解读。')).toBeInTheDocument();
 });
+
+test('renders the historical evaluation referenced by an Agent observation', () => {
+  render(
+    <CapitalAgentInterpretationPanel
+      interpretation={{
+        id: 61,
+        status: 'SUCCEEDED',
+        interpretationType: 'AGENT',
+        plainSummary: '历史样本支持该观察。',
+        marketState: 'MIXED',
+        executiveSummary: '资金分化',
+        facts: [],
+        hypotheses: [],
+        dataGaps: [],
+        observationPoints: [],
+        observations: [{
+          dimension: 'FLOW',
+          claim: '历史样本平均收益为1.25%',
+          factorRefs: [],
+          metricRefs: [],
+          evaluationRefs: ['evaluation:capital-evaluation-v1:AMOUNT_EXPANSION_WITH_INFLOW:3d']
+        }],
+        counterEvidence: [],
+        watchConditionRefs: [],
+        confidence: 'MID',
+        evidenceRefs: [],
+        rejectedOutputCount: 0,
+        rejectionReasons: [],
+        disclaimer: '不构成投资建议'
+      }}
+      factorObservations={[]}
+      historicalEvaluations={[{
+        signalType: 'AMOUNT_EXPANSION_WITH_INFLOW',
+        signalLabel: '放量流入',
+        horizonDays: 3,
+        sampleCount: 8,
+        averageReturn: 0.0125,
+        stabilityStatus: 'INSUFFICIENT_SAMPLE',
+        evaluationStatus: 'EXPLORATORY'
+      }]}
+      watchConditions={[]}
+      busy={false}
+      onRun={vi.fn()}
+    />
+  );
+
+  expect(screen.getByText('历史评价')).toBeInTheDocument();
+  expect(screen.getByText('放量流入 · 3 日')).toBeInTheDocument();
+  expect(screen.getByText('8 个样本 · 平均 +1.25%')).toBeInTheDocument();
+});

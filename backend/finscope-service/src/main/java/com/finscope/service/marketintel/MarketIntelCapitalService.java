@@ -1,6 +1,7 @@
 package com.finscope.service.marketintel;
 
 import com.finscope.dao.instrument.InstrumentRepository;
+import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
@@ -22,6 +23,7 @@ public class MarketIntelCapitalService {
 
     private final InstrumentRepository instruments;
     private final CapitalBehaviorSnapshotRepository snapshots;
+    private final CapitalBehaviorEvaluationRepository evaluations;
     private final CapitalFlowAggregationService aggregation;
     private final CapitalRuleExplanationService rules;
     private final CapitalBehaviorMetricsService metrics;
@@ -30,6 +32,7 @@ public class MarketIntelCapitalService {
 
     public MarketIntelCapitalService(InstrumentRepository instruments,
                                      CapitalBehaviorSnapshotRepository snapshots,
+                                     CapitalBehaviorEvaluationRepository evaluations,
                                      CapitalFlowAggregationService aggregation,
                                      CapitalRuleExplanationService rules,
                                      CapitalBehaviorMetricsService metrics,
@@ -37,6 +40,7 @@ public class MarketIntelCapitalService {
                                      CapitalBehaviorSignalService signals) {
         this.instruments = instruments;
         this.snapshots = snapshots;
+        this.evaluations = evaluations;
         this.aggregation = aggregation;
         this.rules = rules;
         this.metrics = metrics;
@@ -81,6 +85,7 @@ public class MarketIntelCapitalService {
         view.setDailyTrend(dailyTrend);
         view.setMetrics(metrics.derive(timeline, dailyTrend, snapshot.getSignals()));
         view.setRuleExplanation(rules.explain(snapshot.getFacts(), snapshot.getSignals()));
+        view.setHistoricalEvaluation(evaluations.findBySnapshotId(snapshot.getId()).orElse(null));
         view.setFactorObservations(factorResult.getObservations());
         view.setWatchConditions(signals.watchConditions(factorResult));
         view.setFactorVersion(factorResult.getFactorVersion());

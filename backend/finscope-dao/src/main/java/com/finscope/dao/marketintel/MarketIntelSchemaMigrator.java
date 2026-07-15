@@ -16,6 +16,7 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
     private static final int CALCULATION_IDENTITY_VERSION = 102;
     private static final int SNAPSHOT_WARNING_VERSION = 103;
     private static final int AGENT_EVIDENCE_VERSION = 104;
+    private static final int CAPITAL_EVALUATION_VERSION = 105;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -74,6 +75,25 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
             jdbc.execute("ALTER TABLE market_capital_interpretation ADD COLUMN rejection_reasons_json TEXT NOT NULL DEFAULT '[]'");
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     AGENT_EVIDENCE_VERSION, "资金行为Agent保存因子证据与门禁结果", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, CAPITAL_EVALUATION_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("CREATE TABLE IF NOT EXISTS market_capital_behavior_evaluation (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL," +
+                    "snapshot_id INTEGER NOT NULL,as_of TEXT NOT NULL,data_from TEXT,data_to TEXT," +
+                    "evaluation_version TEXT NOT NULL,factor_version TEXT NOT NULL,signal_version TEXT NOT NULL," +
+                    "input_fingerprint TEXT NOT NULL,status TEXT NOT NULL,daily_sample_count INTEGER NOT NULL," +
+                    "evaluable_event_count INTEGER NOT NULL,coverage_rate TEXT,missing_loss_rate TEXT," +
+                    "signals_json TEXT NOT NULL,data_gaps_json TEXT NOT NULL,created_at TEXT NOT NULL," +
+                    "UNIQUE(snapshot_id,evaluation_version,input_fingerprint)," +
+                    "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT," +
+                    "FOREIGN KEY(snapshot_id) REFERENCES market_capital_behavior_snapshot(id) ON DELETE CASCADE)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_capital_evaluation_snapshot ON " +
+                    "market_capital_behavior_evaluation(snapshot_id,id DESC)");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    CAPITAL_EVALUATION_VERSION, "资金行为历史事件评价快照", LocalDateTime.now().toString());
         });
     }
 
