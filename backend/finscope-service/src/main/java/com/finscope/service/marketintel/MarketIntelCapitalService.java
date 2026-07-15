@@ -114,8 +114,7 @@ public class MarketIntelCapitalService {
         MarketIntelCapitalView.Health health = new MarketIntelCapitalView.Health();
         health.setAsOf(snapshot.getAsOf());
         health.setProviderCode(snapshot.getFacts().isEmpty() ? "" : snapshot.getFacts().get(0).getProviderCode());
-        List<String> warnings = new ArrayList<String>();
-        warnings.addAll(snapshot.getWarnings());
+        List<String> warnings = new ArrayList<String>(MarketIntelWarnings.normalize(snapshot.getWarnings()));
         if (snapshot.getFacts().stream().anyMatch(value -> !"COMPLETE".equals(value.getQualityStatus()))) {
             if (!warnings.contains("部分时间点行情未与资金流对齐")) warnings.add("部分时间点行情未与资金流对齐");
         }

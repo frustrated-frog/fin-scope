@@ -6,6 +6,11 @@ import { CapitalAgentInterpretationPanel } from './CapitalAgentInterpretationPan
 import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
 import {
+  marketDataProviderLabel,
+  marketDataStatusLabel,
+  marketIntelWarningMessages
+} from './marketIntelPresentation';
+import {
   CapitalInterpretation,
   MarketIntelCapitalOverview,
   MarketIntelInstrument,
@@ -13,6 +18,7 @@ import {
 } from './marketIntelTypes';
 
 const POLL_DELAY_MS = 650;
+const AGENT_MAX_POLL_ATTEMPTS = 100;
 const TERMINAL_AGENT_STATUSES = new Set(['SUCCEEDED', 'FALLBACK', 'INSUFFICIENT_DATA', 'FAILED']);
 const AGENT_STATUS_MESSAGES: Record<string, string> = {
   LLM_NOT_CONFIGURED: '模型尚未配置，已自动展示规则解读。',
@@ -131,7 +137,7 @@ export function MarketIntelView({
         { method: 'POST' }
       );
       setInterpretation(value);
-      for (let attempt = 0; attempt < 20 && !TERMINAL_AGENT_STATUSES.has(value.status); attempt++) {
+      for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS && !TERMINAL_AGENT_STATUSES.has(value.status); attempt++) {
         await delay(POLL_DELAY_MS);
         value = await api<CapitalInterpretation>(`/api/market-intel/capital-interpretations/${value.id}`);
         setInterpretation(value);
@@ -180,6 +186,8 @@ export function MarketIntelView({
     return <section className="panel wide market-intel-empty-page"><h3>还没有可分析的 A 股标的</h3><p>先在自选页添加股票，再回到这里刷新资金数据。</p></section>;
   }
 
+  const healthWarnings = marketIntelWarningMessages(overview?.health.warnings ?? []);
+
   return (
     <div className="market-intel-page">
       <section className="market-intel-hero">
@@ -204,23 +212,20 @@ export function MarketIntelView({
         {overview && (
           <div className="market-intel-health">
             <span className={overview.health.status === 'FRESH_PRIMARY' ? 'fresh'
-              : overview.health.status === 'UNAVAILABLE' ? 'empty' : 'stale'}>{overview.health.status}</span>
+              : overview.health.status === 'UNAVAILABLE' ? 'empty' : 'stale'}>
+              {marketDataStatusLabel(overview.health.status)}
+            </span>
             <dl>
-              <div><dt>数据源</dt><dd>{overview.health.providerCode || '等待首次刷新'}</dd></div>
+              <div><dt>数据源</dt><dd>{marketDataProviderLabel(overview.health.providerCode)}</dd></div>
               <div><dt>快照时点</dt><dd>{overview.health.asOf ? new Date(overview.health.asOf).toLocaleString('zh-CN', { hour12: false }) : '--'}</dd></div>
             </dl>
-            {overview.health.warnings.length > 0 && (
-              <ul className="market-intel-health-warnings">
-                {overview.health.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-              </ul>
-            )}
           </div>
         )}
         {overview?.snapshot && (
           <DataQualityNotice quality={{
             status: overview.health.status,
-            sourceCode: overview.health.providerCode,
-            warning: overview.health.warnings.join('；') || undefined
+            sourceCode: marketDataProviderLabel(overview.health.providerCode),
+            warning: healthWarnings.join('；') || undefined
           }} />
         )}
       </section>

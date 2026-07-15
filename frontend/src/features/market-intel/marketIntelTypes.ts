@@ -9,7 +9,7 @@ export type MarketIntelInstrument = {
 };
 
 export type CapitalFlowPoint = {
-  id: number;
+  id: number | null;
   observedAt: string;
   price?: number;
   tradeVolume?: number;

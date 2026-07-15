@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -56,6 +57,21 @@ class CapitalBehaviorRulesTest {
         assertFalse(explanation.getSummary().contains("买入"));
         assertFalse(explanation.getSummary().contains("卖出"));
         assertEquals("capital-rules-v2", explanation.getRuleVersion());
+    }
+
+    @Test
+    void keepsOnlyRecentRepresentativeMetricRefsInSignalsAndRuleExplanations() {
+        List<String> refs = new ArrayList<String>();
+        for (int index = 1; index <= 120; index++) refs.add("flow:" + index + ":mainNetInflow");
+        CapitalBehaviorSignal oldSignal = CapitalBehaviorSignal.of(
+                "INTRADAY_FLOW_REVERSAL", "capital-signal-v2", refs);
+
+        CapitalRuleExplanation explanation = new CapitalRuleExplanationService()
+                .explain(new ArrayList<CapitalFlowPoint>(), Arrays.asList(oldSignal));
+
+        assertTrue(explanation.getItems().get(0).getMetricRefs().size() <= 8);
+        assertTrue(explanation.getItems().get(0).getMetricRefs().contains("flow:120:mainNetInflow"));
+        assertFalse(explanation.getItems().get(0).getMetricRefs().contains("flow:1:mainNetInflow"));
     }
 
     private CapitalFlowPoint point(long id,String granularity,int hour,int minute,String amount,String flow,String price) {

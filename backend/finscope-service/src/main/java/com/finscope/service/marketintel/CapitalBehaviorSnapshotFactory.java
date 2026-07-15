@@ -26,7 +26,7 @@ public class CapitalBehaviorSnapshotFactory {
                 .append(s.getVersion()).append(':').append(s.getRuleVersion()).append(':')
                 .append(s.getFactorRefs()).append(':').append(s.getMetricRefs()).append(':')
                 .append(s.getActualValues()).append(':').append(s.getThresholds());
-        List<String> normalizedWarnings=new ArrayList<String>(warnings==null?Collections.emptyList():warnings);Collections.sort(normalizedWarnings);
+        List<String> normalizedWarnings=new ArrayList<String>(MarketIntelWarnings.normalize(warnings));Collections.sort(normalizedWarnings);
         for(String warning:normalizedWarnings)canonical.append("|warning:").append(warning);
         CapitalBehaviorSnapshot snapshot=CapitalBehaviorSnapshot.of(instrumentId,asOf,sorted,signals,JdkFinanceHttpClient.sha256(canonical.toString()));
         snapshot.setWarnings(normalizedWarnings);snapshot.setQualityStatus(normalizedWarnings.isEmpty()?"COMPLETE":"PARTIAL");return snapshot;

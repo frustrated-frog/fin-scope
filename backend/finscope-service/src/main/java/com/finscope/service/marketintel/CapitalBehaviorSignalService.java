@@ -117,7 +117,8 @@ public class CapitalBehaviorSignalService {
             actual.put(observation.getFactorCode(), observation.getValue());
             complete = complete && "COMPLETE".equals(observation.getQualityStatus());
         }
-        CapitalBehaviorSignal value = CapitalBehaviorSignal.of(code, VERSION, metricRefs);
+        CapitalBehaviorSignal value = CapitalBehaviorSignal.of(
+                code, VERSION, CapitalEvidenceRefs.recentDistinct(metricRefs));
         value.setLabel(label);
         value.setWindow(window);
         value.setFactorRefs(factorRefs);

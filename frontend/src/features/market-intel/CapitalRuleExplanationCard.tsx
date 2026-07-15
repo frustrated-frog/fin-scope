@@ -17,7 +17,9 @@ export function CapitalRuleExplanationCard({ explanation }: { explanation: Capit
             <span className={`market-intel-rule-level ${item.level.toLowerCase()}`}>{item.level}</span>
             <div>
               <strong>{item.text}</strong>
-              <small>{item.metricRefs.join(' · ')}</small>
+              {item.metricRefs.length > 0 && (
+                <small>已关联 {new Set(item.metricRefs).size} 条可追溯证据</small>
+              )}
             </div>
           </li>
         ))}
@@ -31,4 +33,3 @@ export function CapitalRuleExplanationCard({ explanation }: { explanation: Capit
     </section>
   );
 }
-

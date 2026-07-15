@@ -50,6 +50,10 @@ function newestFirst(points: CapitalFlowPoint[]) {
   return [...points].sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
 }
 
+function evidenceKey(point: CapitalFlowPoint, scope: 'intraday' | 'daily') {
+  return `${scope}:${point.id ?? point.observedAt}`;
+}
+
 function EvidenceRow({ point, daily = false, maxAmount }: { point: CapitalFlowPoint; daily?: boolean; maxAmount: number }) {
   const amount = Math.abs(point.intervalTradeAmount ?? 0);
   const width = maxAmount ? Math.max(8, amount / maxAmount * 100) : 8;
@@ -144,7 +148,7 @@ export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapita
         {overview.intradayTimeline.length ? (
           <ol className="market-intel-evidence-list">
             {displayedIntradayTimeline.map((point) => (
-              <EvidenceRow key={point.id} point={point} maxAmount={intradayMax} />
+              <EvidenceRow key={evidenceKey(point, 'intraday')} point={point} maxAmount={intradayMax} />
             ))}
           </ol>
         ) : <p className="market-intel-empty">当前没有分钟级资金点，刷新后再查看盘中节奏。</p>}
@@ -165,7 +169,7 @@ export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapita
         </header>
         <ol className="market-intel-evidence-list daily">
           {displayedDailyTrend.map((point) => (
-            <EvidenceRow key={point.id} point={point} daily maxAmount={dailyMax} />
+            <EvidenceRow key={evidenceKey(point, 'daily')} point={point} daily maxAmount={dailyMax} />
           ))}
         </ol>
       </section>

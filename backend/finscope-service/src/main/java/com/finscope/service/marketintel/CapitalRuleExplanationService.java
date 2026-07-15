@@ -18,7 +18,7 @@ public class CapitalRuleExplanationService {
         for (CapitalBehaviorSignal signal : signals) {
             CapitalRuleExplanation.Item item = new CapitalRuleExplanation.Item();
             item.setLevel("OBSERVATION");
-            item.setMetricRefs(signal.getMetricRefs());
+            item.setMetricRefs(CapitalEvidenceRefs.recentDistinct(signal.getMetricRefs()));
             item.setText(text(signal.getType()));
             items.add(item);
         }

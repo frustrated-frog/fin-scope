@@ -22,7 +22,6 @@ import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -121,11 +120,8 @@ public class MarketIntelRefreshCoordinator {
             runs.finishRun(run.getId(), MarketIntelRefreshRun.Status.PARTIAL, 0, 0);
             return;
         }
-        List<String> warnings = new ArrayList<String>(new LinkedHashSet<String>(data.getWarnings()));
-        if (routed.getWarning() != null && !routed.getWarning().trim().isEmpty()
-                && !warnings.contains(routed.getWarning())) {
-            warnings.add(routed.getWarning());
-        }
+        List<String> warnings = new ArrayList<String>(
+                MarketIntelWarnings.merge(data.getWarnings(), routed.getWarning()));
         if (points.stream().anyMatch(point -> !"COMPLETE".equals(point.getQualityStatus()))
                 && !warnings.contains("部分时间点行情未与资金流对齐")) {
             warnings.add("部分时间点行情未与资金流对齐");

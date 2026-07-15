@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
 import { MarketIntelView } from './MarketIntelView';
@@ -123,6 +123,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 test('shows deterministic explanation before the user requests agent analysis', async () => {
   render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
 
@@ -151,6 +155,24 @@ test('shows the newest capital evidence first', async () => {
     .map((time) => time.textContent);
 
   expect(displayedTimes).toEqual(['10:10', '09:35', '09:30']);
+});
+
+test('uses stable evidence row keys when aggregated points do not have database ids', async () => {
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve({
+      ...overview,
+      intradayTimeline: overview.intradayTimeline.map((point) => ({ ...point, id: null }))
+    }) as never;
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+  expect(await screen.findByRole('heading', { name: '资金证据带' })).toBeInTheDocument();
+
+  expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+  consoleError.mockRestore();
 });
 
 test('shows the newest daily capital trend first', async () => {
@@ -349,8 +371,101 @@ test('surfaces incomplete snapshot warnings in the health summary', async () => 
 
   render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByText('成交额、成交量、换手率或量比尚未补齐')).toBeInTheDocument();
-  expect(screen.getByText('PARTIAL_FRESH')).toBeInTheDocument();
+  expect(await screen.findByText(/成交额、成交量、换手率或量比尚未补齐/)).toBeInTheDocument();
+  expect(screen.getByText('部分可用')).toBeInTheDocument();
+});
+
+test('deduplicates and translates provider diagnostics before showing them', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) {
+      return Promise.resolve({
+        ...overview,
+        health: {
+          status: 'PARTIAL_FRESH',
+          asOf: '2026-07-15T11:30:00',
+          providerCode: 'EASTMONEY_CAPITAL_FLOW',
+          warnings: [
+            'DAILY_MARKET_UNAVAILABLE:CONNECTION_ERROR',
+            'QUOTE_UNAVAILABLE:CONNECTION_ERROR',
+            'QUOTE_UNAVAILABLE:CONNECTION_ERROR；DAILY_MARKET_UNAVAILABLE:CONNECTION_ERROR'
+          ]
+        }
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('东方财富资金流')).toBeInTheDocument();
+  const notice = screen.getByText('本次刷新仅部分成功').closest('[role="status"]');
+  expect(notice).toHaveTextContent('日线行情暂不可用（连接失败）');
+  expect(notice).toHaveTextContent('实时报价暂不可用（连接失败）');
+  expect(notice?.textContent?.match(/日线行情暂不可用/g)).toHaveLength(1);
+  expect(notice?.textContent?.match(/实时报价暂不可用/g)).toHaveLength(1);
+  expect(screen.queryByText(/DAILY_MARKET_UNAVAILABLE/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/QUOTE_UNAVAILABLE/)).not.toBeInTheDocument();
+});
+
+test('keeps polling long enough for the backend model timeout fallback', async () => {
+  const originalSetTimeout = window.setTimeout.bind(window);
+  const timer = vi.spyOn(window, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
+    if (timeout === 650) {
+      queueMicrotask(() => {
+        if (typeof handler === 'function') handler(...args);
+      });
+      return 1;
+    }
+    return originalSetTimeout(handler, timeout, ...args);
+  });
+  let polls = 0;
+  const running = {
+    id: 58,
+    status: 'RUNNING',
+    interpretationType: 'AGENT',
+    plainSummary: 'Agent 正在分析',
+    facts: [],
+    hypotheses: [],
+    dataGaps: [],
+    observationPoints: [],
+    observations: [],
+    counterEvidence: [],
+    watchConditionRefs: [],
+    evidenceRefs: [],
+    rejectedOutputCount: 0,
+    rejectionReasons: [],
+    disclaimer: '不构成投资建议'
+  };
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/capital-interpretations') && options?.method === 'POST') {
+      return Promise.resolve(running) as never;
+    }
+    if (path === '/api/market-intel/capital-interpretations/58') {
+      polls += 1;
+      return Promise.resolve(polls <= 20 ? running : {
+        ...running,
+        status: 'FALLBACK',
+        fallbackReason: 'LLM_TIMEOUT',
+        plainSummary: '模型超时，当前展示规则结果。'
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+  const addToast = vi.fn();
+  const user = userEvent.setup({ delay: null });
+
+  render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
+  await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith(
+    '模型响应超时，已自动展示规则解读。',
+    'info'
+  ));
+  expect(polls).toBe(21);
+  timer.mockRestore();
 });
 
 test('treats an instrument without a snapshot as a first-run state instead of an error', async () => {
