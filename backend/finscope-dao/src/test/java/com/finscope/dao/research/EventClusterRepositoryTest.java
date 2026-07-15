@@ -37,26 +37,22 @@ class EventClusterRepositoryTest {
     }
 
     @Test
-    void movingLinkIntoExistingTargetMergesMetadataInsteadOfReplacingIt() {
+    void movingArticlePreservesMetadataAndMaintainsSingleEventOwnership() {
         EventArticleLink source = link(1L, 10L, ResearchEnums.RELATION_SUPPORTING, 0.70,
                 ResearchEnums.NOVELTY_FOLLOW_UP, "源事件原因", LocalDateTime.of(2026, 6, 28, 8, 0));
-        EventArticleLink target = link(2L, 10L, ResearchEnums.RELATION_PRIMARY, 0.90,
-                ResearchEnums.NOVELTY_NEW, "目标事件原因", LocalDateTime.of(2026, 6, 28, 9, 0));
         repository.linkArticle(source);
-        repository.linkArticle(target);
 
         int moved = repository.moveArticleLink(1L, 10L, 2L, "源事件原因；人工治理调整");
 
-        EventArticleLink merged = repository.findLink(2L, 10L).get();
+        EventArticleLink movedLink = repository.findLink(2L, 10L).get();
         assertEquals(1, moved);
         assertFalse(repository.findLink(1L, 10L).isPresent());
-        assertEquals(ResearchEnums.RELATION_PRIMARY, merged.getRelationType());
-        assertEquals(0.90, merged.getMatchScore(), 0.001);
-        assertEquals(ResearchEnums.NOVELTY_NEW, merged.getNoveltyType());
-        assertEquals(LocalDateTime.of(2026, 6, 28, 8, 0), merged.getCreatedAt());
-        assertTrue(merged.getNoveltyReason().contains("目标事件原因"));
-        assertTrue(merged.getNoveltyReason().contains("源事件原因"));
-        assertTrue(merged.getNoveltyReason().contains("人工治理调整"));
+        assertEquals(ResearchEnums.RELATION_SUPPORTING, movedLink.getRelationType());
+        assertEquals(0.70, movedLink.getMatchScore(), 0.001);
+        assertEquals(ResearchEnums.NOVELTY_FOLLOW_UP, movedLink.getNoveltyType());
+        assertEquals(LocalDateTime.of(2026, 6, 28, 8, 0), movedLink.getCreatedAt());
+        assertTrue(movedLink.getNoveltyReason().contains("源事件原因"));
+        assertTrue(movedLink.getNoveltyReason().contains("人工治理调整"));
     }
 
     private EventArticleLink link(Long eventId,

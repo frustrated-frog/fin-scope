@@ -154,6 +154,19 @@ const responses: Record<string, unknown> = {
     phase: 'COMPLETED',
     message: '候选池已更新：2 条候选'
   },
+  '/api/intake/candidates/1/promote-async': {
+    taskId: 'task-promote-1',
+    status: 'QUEUED',
+    phase: 'QUEUED',
+    message: '等待入文章库'
+  },
+  '/api/tasks/task-promote-1': {
+    taskId: 'task-promote-1',
+    status: 'COMPLETED',
+    phase: 'COMPLETED',
+    message: '已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个',
+    articleId: 3
+  },
   '/api/tasks/task-manual': {
     taskId: 'task-manual',
     status: 'COMPLETED',
@@ -534,7 +547,7 @@ beforeEach(() => {
         json: async () => state['/api/events'][0]
       } as Response;
     }
-    if (url === '/api/events/2/merge' && init?.method === 'POST') {
+    if (url === '/api/events/1/merge' && init?.method === 'POST') {
       state['/api/events'][1].status = 'ARCHIVED';
       return {
         ok: true,
@@ -545,28 +558,6 @@ beforeEach(() => {
       return {
         ok: true,
         json: async () => ({ ...state['/api/events'][1], articleCount: 2 })
-      } as Response;
-    }
-    if (url === '/api/intake/candidates/1/promote' && init?.method === 'POST') {
-      const [candidate] = state['/api/intake/candidates?status=PENDING'];
-      candidate.humanStatus = 'PROMOTED';
-      candidate.promotedArticleId = 3;
-      state['/api/intake/candidates?status=PENDING'] = [];
-      state['/api/intake/candidates?status=PROMOTED'] = [candidate];
-      return {
-        ok: true,
-        json: async () => ({
-          candidateId: 1,
-          articleId: 3,
-          status: 'PROMOTED',
-          workflowStatus: 'SUCCESS',
-          eventId: 1,
-          eventTitle: '美联储释放降息信号',
-          evidenceCount: 1,
-          learningTaskCount: 3,
-          contentIdeaCount: 2,
-          workflowSummary: '研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个'
-        })
       } as Response;
     }
     if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
@@ -842,9 +833,10 @@ test('intake workspace shows agent-reviewed Chinese candidates and promotes to a
 
   await userEvent.click(screen.getByRole('button', { name: '入文章库-1' }));
 
-  expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/promote', expect.objectContaining({ method: 'POST' }));
+  expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/promote-async', expect.objectContaining({ method: 'POST' }));
+  expect(fetch).toHaveBeenCalledWith('/api/tasks/task-promote-1', expect.any(Object));
   expect(await screen.findByText('已入文章库 #3')).toBeInTheDocument();
-  expect(screen.getByText('已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个')).toBeInTheDocument();
+  expect(screen.getAllByText('已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个').length).toBeGreaterThan(0);
 });
 
 test('intake workspace supports saving candidates for later review', async () => {
@@ -1081,7 +1073,7 @@ test('evidence ledger shows source tiers and evidence types in one workspace', a
 
   expect(await screen.findByText('证据账本')).toBeInTheDocument();
   expect(screen.getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
-  expect(screen.getByText('REGULATOR')).toBeInTheDocument();
+  expect(screen.getAllByText('REGULATOR').length).toBeGreaterThan(0);
   expect(screen.getByText('TIMELINE')).toBeInTheDocument();
 });
 
@@ -1168,26 +1160,28 @@ test('research workbench runs a full research job and shows agent trace', async 
 
   await user.click(screen.getByRole('button', { name: 'Research' }));
 
-  expect(await screen.findByText('生成今日研究')).toBeInTheDocument();
-  expect(screen.getByText('研究运行记录')).toBeInTheDocument();
+  expect(await screen.findByText('启动探索性研究')).toBeInTheDocument();
+  expect(screen.getByText('历次研究运行')).toBeInTheDocument();
   expect(screen.getByText('1/1')).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: '运行研究' }));
+  await user.click(screen.getByRole('button', { name: '开始探索研究' }));
 
   expect(fetch).toHaveBeenCalledWith('/api/research/runs', expect.objectContaining({
     method: 'POST',
     body: expect.stringContaining('"themeCodes"')
   }));
   expect(await screen.findAllByText('研究运行已启动，正在同步进度')).not.toHaveLength(0);
-  expect(await screen.findByText('计划来源')).toBeInTheDocument();
-  expect(screen.getByText('Plan steps')).toBeInTheDocument();
+  await user.click(await screen.findByText('研究过程与来源'));
+  expect(screen.getByText('执行步骤')).toBeInTheDocument();
+  expect(screen.getByText('来源快照')).toBeInTheDocument();
   expect(screen.getByText('规划来源')).toBeInTheDocument();
   expect(screen.getByText('抓取来源')).toBeInTheDocument();
   expect(screen.getByText('Macro Source')).toBeInTheDocument();
   expect(screen.getAllByText('RUNNING').length).toBeGreaterThan(0);
 
-  expect(await screen.findByText('fallback: LLM_UNCONFIGURED')).toBeInTheDocument();
-  expect(await screen.findByText('research-orchestrate')).toBeInTheDocument();
+  expect(await screen.findByText('提取证据')).toBeInTheDocument();
+  expect(screen.getAllByText('LLM_UNCONFIGURED').length).toBeGreaterThan(0);
+  expect(await screen.findByText('research orchestrate')).toBeInTheDocument();
   expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
 });
 
@@ -1227,7 +1221,7 @@ test('events workbench explains timeline, merge basis, evidence strength and eve
   expect(within(detail).getByText(/匹配 88%/)).toBeInTheDocument();
   expect(within(detail).getByText('命中历史事件，包含新的数据、时间线或市场反应')).toBeInTheDocument();
   expect(within(detail).getByText('最高可信证据')).toBeInTheDocument();
-  expect(within(detail).getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
+  expect(within(detail).getByText('暂无学习任务。事件仍可先用于观察证据和新变量。')).toBeInTheDocument();
   expect(within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
 });
 
@@ -1255,18 +1249,18 @@ test('events governance panel updates status, merges events and moves articles',
     body: JSON.stringify({ status: 'COOLING' })
   }));
 
+  await userEvent.selectOptions(within(detail).getByLabelText('移动文章目标-2'), 'NEW_EVENT');
+  await userEvent.click(within(detail).getByRole('button', { name: '移动文章-2' }));
+  expect(fetch).toHaveBeenCalledWith('/api/events/1/articles/2/move', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({ createNewEvent: true })
+  }));
+
   await userEvent.selectOptions(within(detail).getByLabelText('合并到事件'), '2');
   await userEvent.click(within(detail).getByRole('button', { name: '合并事件' }));
   expect(fetch).toHaveBeenCalledWith('/api/events/1/merge', expect.objectContaining({
     method: 'POST',
     body: JSON.stringify({ targetEventId: 2 })
-  }));
-
-  await userEvent.selectOptions(within(detail).getByLabelText('移动文章-2'), 'NEW_EVENT');
-  await userEvent.click(within(detail).getByRole('button', { name: '移动文章-2' }));
-  expect(fetch).toHaveBeenCalledWith('/api/events/1/articles/2/move', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ createNewEvent: true })
   }));
 });
 

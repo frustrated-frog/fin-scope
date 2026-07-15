@@ -7,7 +7,6 @@ import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.ArrayList;
@@ -19,16 +18,23 @@ import java.util.stream.Collectors;
 @Service
 public class MarketIntelCapitalService {
 
-    @Resource
-    private InstrumentRepository instruments;
-    @Resource
-    private CapitalBehaviorSnapshotRepository snapshots;
-    @Resource
-    private CapitalFlowAggregationService aggregation;
-    @Resource
-    private CapitalRuleExplanationService rules;
-    @Resource
-    private CapitalBehaviorMetricsService metrics;
+    private final InstrumentRepository instruments;
+    private final CapitalBehaviorSnapshotRepository snapshots;
+    private final CapitalFlowAggregationService aggregation;
+    private final CapitalRuleExplanationService rules;
+    private final CapitalBehaviorMetricsService metrics;
+
+    public MarketIntelCapitalService(InstrumentRepository instruments,
+                                     CapitalBehaviorSnapshotRepository snapshots,
+                                     CapitalFlowAggregationService aggregation,
+                                     CapitalRuleExplanationService rules,
+                                     CapitalBehaviorMetricsService metrics) {
+        this.instruments = instruments;
+        this.snapshots = snapshots;
+        this.aggregation = aggregation;
+        this.rules = rules;
+        this.metrics = metrics;
+    }
 
     public List<Instrument> listStockInstruments() {
         return instruments.findAll().stream()
