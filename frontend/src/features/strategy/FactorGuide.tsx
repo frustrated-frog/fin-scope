@@ -6,6 +6,7 @@ import {
   researchDirectionLabel
 } from './factorPresentation';
 import { QuantDataset, QuantFactorAnalysis, ResearchFactorDefinition } from './quantTypes';
+import { FactorResearchAgentPanel } from './FactorResearchAgentPanel';
 
 interface FactorGuideProps {
   definitions: ResearchFactorDefinition[];
@@ -16,6 +17,8 @@ interface FactorGuideProps {
   analysis?: QuantFactorAnalysis;
   busy?: boolean;
   onAnalyze: (code: string) => void;
+  researchDraftId?: number;
+  addToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 function percent(value: number) {
@@ -30,7 +33,9 @@ export function FactorGuide({
   availableFactors,
   analysis,
   busy,
-  onAnalyze
+  onAnalyze,
+  researchDraftId,
+  addToast = () => undefined
 }: FactorGuideProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('全部');
@@ -169,6 +174,8 @@ export function FactorGuide({
           <small>数据集指纹 {analysis.datasetFingerprint.slice(0, 16)}</small>
         </div>}
       </section>
+      <FactorResearchAgentPanel factor={selected} dataset={selectedDataset} researchDraftId={researchDraftId}
+        enabled={canAnalyze} addToast={addToast} />
     </article>
   </div>;
 }

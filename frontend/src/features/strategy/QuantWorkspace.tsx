@@ -198,6 +198,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         analysis={selectedFactorAnalysis}
         busy={Boolean(selectedFactorCode && busy === `factor-${selectedFactorCode}`)}
         onAnalyze={analyzeFactor}
+        researchDraftId={entryDraft?.id}
+        addToast={addToast}
       />
     </div>}
 

@@ -78,6 +78,22 @@ export interface ResearchDraft {
   createdAt: string;
 }
 
+export interface FactorResearchAgentTrace {
+  id: number; nodeName: string; status: string; input: string; output: string;
+  budgetSnapshot?: string; createdAt?: string;
+}
+
+export interface FactorResearchAgentRun {
+  id: number; datasetId: number; datasetFingerprint: string;
+  factor: { namespace: string; code: string; version: string };
+  researchDraftId?: number; question: string;
+  status: 'AWAITING_APPROVAL' | 'APPROVED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'BUDGET_EXHAUSTED';
+  plan: string[]; allowedTools: string[];
+  maxToolCalls: number; toolCallsUsed: number; maxLlmCalls: number; llmCallsUsed: number; maxRunSeconds: number;
+  evidenceJson: string; evidenceHash: string; findingJson: string; stopReason: string;
+  trace: FactorResearchAgentTrace[];
+}
+
 export interface QuantResearchEntryIntent {
   factorCode: string;
   draftId?: number;

@@ -21,6 +21,7 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
     private static final int DATASET_PARTITION_VERSION = 201;
     private static final int DATASET_METADATA_VERSION = 202;
     private static final int RESEARCH_DRAFT_VERSION = 203;
+    private static final int RESEARCH_AGENT_RUN_VERSION = 204;
 
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -42,6 +43,22 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
         migrateVersion(DATASET_PARTITION_VERSION, "quant dataset partition manifest", this::createPartitionSchema);
         migrateVersion(DATASET_METADATA_VERSION, "quant dataset research metadata", this::upgradeDatasetSchema);
         migrateVersion(RESEARCH_DRAFT_VERSION, "capital behavior research drafts", this::createResearchDraftSchema);
+        migrateVersion(RESEARCH_AGENT_RUN_VERSION, "controlled factor research agent runs", this::createResearchAgentRunSchema);
+    }
+
+    private void createResearchAgentRunSchema() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS factor_research_agent_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,dataset_fingerprint TEXT NOT NULL,"
+                + "factor_namespace TEXT NOT NULL,factor_code TEXT NOT NULL,factor_version TEXT NOT NULL,"
+                + "research_draft_id INTEGER,question TEXT NOT NULL,status TEXT NOT NULL,plan_json TEXT NOT NULL,"
+                + "allowed_tools_json TEXT NOT NULL,max_tool_calls INTEGER NOT NULL,tool_calls_used INTEGER NOT NULL DEFAULT 0,"
+                + "max_llm_calls INTEGER NOT NULL,llm_calls_used INTEGER NOT NULL DEFAULT 0,max_run_seconds INTEGER NOT NULL,"
+                + "evidence_json TEXT NOT NULL DEFAULT '{}',evidence_hash TEXT NOT NULL DEFAULT '',finding_json TEXT NOT NULL DEFAULT '{}',"
+                + "stop_reason TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,approved_at TEXT,completed_at TEXT,"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id),"
+                + "FOREIGN KEY(research_draft_id) REFERENCES factor_research_draft(id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_factor_research_agent_run_created "
+                + "ON factor_research_agent_run(created_at DESC,id DESC)");
     }
 
     private void migrateVersion(int version, String description, Runnable migration) {

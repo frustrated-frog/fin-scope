@@ -86,6 +86,8 @@ class FactorResearchPersistenceTest {
         assertEquals(1, objectCount("index", "idx_quant_capital_flow_date"));
         assertEquals(1, objectCount("table", "factor_research_draft"));
         assertEquals(1, objectCount("index", "idx_factor_research_draft_created"));
+        assertEquals(1, objectCount("table", "factor_research_agent_run"));
+        assertEquals(1, objectCount("index", "idx_factor_research_agent_run_created"));
 
         jdbc.update("DELETE FROM schema_migration WHERE version IN (200,201,202,203)");
         migrator.migrate();
