@@ -50,7 +50,9 @@ public class TaskSseRegistry implements TaskProgressPublisher {
         if (pending != null) {
             List<TaskProgressEvent> snapshot;
             synchronized (pending) { snapshot = new ArrayList<>(pending); }
-            for (TaskProgressEvent event : snapshot) send(taskId, emitter, event);
+            for (TaskProgressEvent event : snapshot) {
+                send(taskId, emitter, event);
+            }
         }
         TaskProgressEvent snapshot = TaskProgressEvent.snapshot(persistedSnapshot);
         send(taskId, emitter, snapshot);
@@ -64,14 +66,22 @@ public class TaskSseRegistry implements TaskProgressPublisher {
     public void publish(String taskId, TaskProgressEvent event) {
         buffer(taskId, event);
         List<SseEmitter> current = subscribers.get(taskId);
-        if (current == null) return;
-        for (SseEmitter emitter : current) send(taskId, emitter, event);
+        if (current == null) {
+            return;
+        }
+        for (SseEmitter emitter : current) {
+            send(taskId, emitter, event);
+        }
     }
 
     @Override
     public void complete(String taskId) {
         List<SseEmitter> current = subscribers.remove(taskId);
-        if (current != null) for (SseEmitter emitter : current) completeEmitter(taskId, emitter);
+        if (current != null) {
+            for (SseEmitter emitter : current) {
+                completeEmitter(taskId, emitter);
+            }
+        }
         clearBuffer(taskId);
     }
 

@@ -46,7 +46,16 @@ public class QuantDataQualityService {
     private void require(boolean valid, String message) {
         if (!valid) throw new BusinessException(ErrorCode.BAD_REQUEST, message);
     }
-    private boolean positive(BigDecimal value) { return value != null && value.signum() > 0; }
-    private boolean nonNegative(BigDecimal value) { return value != null && value.signum() >= 0; }
-    private boolean text(String value) { return value != null && !value.trim().isEmpty(); }
+
+    private boolean positive(BigDecimal value) {
+        return value != null && value.signum() > 0;
+    }
+
+    private boolean nonNegative(BigDecimal value) {
+        return value != null && value.signum() >= 0;
+    }
+
+    private boolean text(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
 }

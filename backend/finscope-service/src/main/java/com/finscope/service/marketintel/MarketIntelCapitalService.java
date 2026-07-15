@@ -7,6 +7,7 @@ import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.ArrayList;
@@ -17,23 +18,17 @@ import java.util.stream.Collectors;
 
 @Service
 public class MarketIntelCapitalService {
-    private final InstrumentRepository instruments;
-    private final CapitalBehaviorSnapshotRepository snapshots;
-    private final CapitalFlowAggregationService aggregation;
-    private final CapitalRuleExplanationService rules;
-    private final CapitalBehaviorMetricsService metrics;
 
-    public MarketIntelCapitalService(InstrumentRepository instruments,
-                                     CapitalBehaviorSnapshotRepository snapshots,
-                                     CapitalFlowAggregationService aggregation,
-                                     CapitalRuleExplanationService rules,
-                                     CapitalBehaviorMetricsService metrics) {
-        this.instruments = instruments;
-        this.snapshots = snapshots;
-        this.aggregation = aggregation;
-        this.rules = rules;
-        this.metrics = metrics;
-    }
+    @Resource
+    private InstrumentRepository instruments;
+    @Resource
+    private CapitalBehaviorSnapshotRepository snapshots;
+    @Resource
+    private CapitalFlowAggregationService aggregation;
+    @Resource
+    private CapitalRuleExplanationService rules;
+    @Resource
+    private CapitalBehaviorMetricsService metrics;
 
     public List<Instrument> listStockInstruments() {
         return instruments.findAll().stream()
@@ -103,7 +98,7 @@ public class MarketIntelCapitalService {
         List<String> warnings = new ArrayList<String>();
         warnings.addAll(snapshot.getWarnings());
         if (snapshot.getFacts().stream().anyMatch(value -> !"COMPLETE".equals(value.getQualityStatus()))) {
-            if(!warnings.contains("部分时间点行情未与资金流对齐"))warnings.add("部分时间点行情未与资金流对齐");
+            if (!warnings.contains("部分时间点行情未与资金流对齐")) warnings.add("部分时间点行情未与资金流对齐");
         }
         CapitalFlowPoint latestDaily = snapshot.getFacts().stream()
                 .filter(value -> "DAY_1".equals(value.getGranularity()))
@@ -118,8 +113,8 @@ public class MarketIntelCapitalService {
                 || currentContext.getVolumeRatio() == null) {
             warnings.add("成交额、成交量、换手率或量比尚未补齐");
         }
-        boolean stale=snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36));
-        if(stale && !warnings.contains("资金快照已超过 36 小时，请刷新后再判断")) {
+        boolean stale = snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36));
+        if (stale && !warnings.contains("资金快照已超过 36 小时，请刷新后再判断")) {
             warnings.add("资金快照已超过 36 小时，请刷新后再判断");
         }
         health.setStatus(stale ? "STALE_FALLBACK"
