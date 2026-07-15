@@ -12,9 +12,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.SQLiteDataSource;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -30,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,6 +44,7 @@ class FactorResearchPersistenceTest {
     Path tempDir;
 
     private JdbcTemplate jdbc;
+    private DataSourceTransactionManager transactionManager;
     private FactorResearchSchemaMigrator migrator;
     private QuantDatasetRepository datasets;
     private QuantCapitalFlowRepository capitalFlows;
@@ -50,6 +54,7 @@ class FactorResearchPersistenceTest {
     void setUp() throws Exception {
         SQLiteDataSource dataSource = dataSource(tempDir.resolve("factor-research.db"));
         jdbc = new JdbcTemplate(dataSource);
+        transactionManager = new DataSourceTransactionManager(dataSource);
 
         DatabaseInitializer initializer = new DatabaseInitializer();
         ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbc);
@@ -57,12 +62,11 @@ class FactorResearchPersistenceTest {
         initializer.afterPropertiesSet();
 
         migrator = new FactorResearchSchemaMigrator(
-                jdbc, new DataSourceTransactionManager(dataSource));
+                jdbc, transactionManager);
         migrator.migrate();
 
         datasets = new QuantDatasetRepository();
-        capitalFlows = new QuantCapitalFlowRepository(
-                jdbc, new DataSourceTransactionManager(dataSource));
+        capitalFlows = new QuantCapitalFlowRepository(jdbc, transactionManager);
         partitions = new QuantDatasetPartitionRepository();
         ReflectionTestUtils.setField(datasets, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(partitions, "jdbcTemplate", jdbc);
@@ -151,6 +155,22 @@ class FactorResearchPersistenceTest {
         assertEquals(existing.getTradeDate(), restored.get(0).getTradeDate());
     }
 
+    @Test
+    void saveAllParticipatesInOuterRequiredTransaction() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        QuantCapitalFlowDaily first = capitalFlow(datasetId);
+        QuantCapitalFlowDaily second = capitalFlow(datasetId);
+        second.setTradeDate(first.getTradeDate().plusDays(1));
+        TransactionTemplate outerTransaction = new TransactionTemplate(transactionManager);
+
+        assertThrows(RuntimeException.class, () -> outerTransaction.executeWithoutResult(status -> {
+            capitalFlows.saveAll(Arrays.asList(first, second));
+            throw new RuntimeException("force outer rollback");
+        }));
+
+        assertEquals(0, capitalFlows.findByDatasetId(datasetId).size());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"600519", "600519.sh", " 600519.SH ", "600519.HK"})
     void rejectsNonCanonicalInstrumentCodesBeforeWriting(String code) {
@@ -224,11 +244,14 @@ class FactorResearchPersistenceTest {
         initializerJdbc.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
                 + "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
 
-        CyclicBarrier version200ReadBarrier = new CyclicBarrier(2);
+        CyclicBarrier version200ClaimBarrier = new CyclicBarrier(2);
+        AtomicInteger version200ClaimArrivals = new AtomicInteger();
         SQLiteDataSource firstDataSource = dataSource(database);
         SQLiteDataSource secondDataSource = dataSource(database);
-        JdbcTemplate firstJdbc = new MigrationRaceJdbcTemplate(firstDataSource, version200ReadBarrier);
-        JdbcTemplate secondJdbc = new MigrationRaceJdbcTemplate(secondDataSource, version200ReadBarrier);
+        JdbcTemplate firstJdbc = new MigrationRaceJdbcTemplate(
+                firstDataSource, version200ClaimBarrier, version200ClaimArrivals);
+        JdbcTemplate secondJdbc = new MigrationRaceJdbcTemplate(
+                secondDataSource, version200ClaimBarrier, version200ClaimArrivals);
         FactorResearchSchemaMigrator first = new FactorResearchSchemaMigrator(
                 firstJdbc, new DataSourceTransactionManager(firstDataSource));
         FactorResearchSchemaMigrator second = new FactorResearchSchemaMigrator(
@@ -248,6 +271,7 @@ class FactorResearchPersistenceTest {
             executor.shutdownNow();
         }
 
+        assertEquals(2, version200ClaimArrivals.get());
         assertEquals(1, initializerJdbc.queryForObject(
                 "SELECT COUNT(*) FROM schema_migration WHERE version=200", Integer.class));
         assertEquals(1, initializerJdbc.queryForObject(
@@ -259,6 +283,43 @@ class FactorResearchPersistenceTest {
                 Integer.class));
         assertEquals(1, initializerJdbc.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_dataset_partition'",
+                Integer.class));
+    }
+
+    @Test
+    void failedVersion200DdlRollsBackClaimAndAllowsCleanRerun() throws Exception {
+        Path database = tempDir.resolve("failed-migration.db");
+        SQLiteDataSource dataSource = dataSource(database);
+        JdbcTemplate normalJdbc = new JdbcTemplate(dataSource);
+        DatabaseInitializer initializer = new DatabaseInitializer();
+        ReflectionTestUtils.setField(initializer, "jdbcTemplate", normalJdbc);
+        ReflectionTestUtils.setField(initializer, "dataRoot", tempDir.resolve("failed-data").toString());
+        initializer.afterPropertiesSet();
+
+        AtomicInteger successfulClaims = new AtomicInteger();
+        AtomicInteger failedDdlAttempts = new AtomicInteger();
+        JdbcTemplate failingJdbc = new FailingCapitalTableJdbcTemplate(
+                dataSource, successfulClaims, failedDdlAttempts);
+        FactorResearchSchemaMigrator failingMigrator = new FactorResearchSchemaMigrator(
+                failingJdbc, new DataSourceTransactionManager(dataSource));
+
+        assertThrows(DataAccessException.class, failingMigrator::migrate);
+        assertEquals(1, successfulClaims.get());
+        assertEquals(1, failedDdlAttempts.get());
+        assertEquals(0, normalJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=200", Integer.class));
+        assertEquals(0, normalJdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_capital_flow_daily'",
+                Integer.class));
+
+        FactorResearchSchemaMigrator retry = new FactorResearchSchemaMigrator(
+                normalJdbc, new DataSourceTransactionManager(dataSource));
+        retry.migrate();
+
+        assertEquals(1, normalJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=200", Integer.class));
+        assertEquals(1, normalJdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_capital_flow_daily'",
                 Integer.class));
     }
 
@@ -333,24 +394,60 @@ class FactorResearchPersistenceTest {
 
     private static final class MigrationRaceJdbcTemplate extends JdbcTemplate {
         private final CyclicBarrier barrier;
+        private final AtomicInteger arrivals;
 
-        private MigrationRaceJdbcTemplate(SQLiteDataSource dataSource, CyclicBarrier barrier) {
+        private MigrationRaceJdbcTemplate(SQLiteDataSource dataSource,
+                                           CyclicBarrier barrier,
+                                           AtomicInteger arrivals) {
             super(dataSource);
             this.barrier = barrier;
+            this.arrivals = arrivals;
         }
 
         @Override
-        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
-            T result = super.queryForObject(sql, requiredType, args);
-            if (sql.contains("schema_migration") && args.length == 1
+        public int update(String sql, Object... args) {
+            if (sql.startsWith("INSERT OR IGNORE INTO schema_migration") && args.length == 3
                     && Integer.valueOf(200).equals(args[0])) {
+                arrivals.incrementAndGet();
                 try {
                     barrier.await(5, TimeUnit.SECONDS);
                 } catch (Exception e) {
                     throw new IllegalStateException("failed to synchronize migration race", e);
                 }
             }
-            return result;
+            return super.update(sql, args);
+        }
+    }
+
+    private static final class FailingCapitalTableJdbcTemplate extends JdbcTemplate {
+        private final AtomicInteger successfulClaims;
+        private final AtomicInteger failedDdlAttempts;
+
+        private FailingCapitalTableJdbcTemplate(SQLiteDataSource dataSource,
+                                                 AtomicInteger successfulClaims,
+                                                 AtomicInteger failedDdlAttempts) {
+            super(dataSource);
+            this.successfulClaims = successfulClaims;
+            this.failedDdlAttempts = failedDdlAttempts;
+        }
+
+        @Override
+        public int update(String sql, Object... args) {
+            int updated = super.update(sql, args);
+            if (sql.startsWith("INSERT OR IGNORE INTO schema_migration") && args.length == 3
+                    && Integer.valueOf(200).equals(args[0]) && updated == 1) {
+                successfulClaims.incrementAndGet();
+            }
+            return updated;
+        }
+
+        @Override
+        public void execute(String sql) {
+            if (sql.startsWith("CREATE TABLE IF NOT EXISTS quant_capital_flow_daily")) {
+                failedDdlAttempts.incrementAndGet();
+                throw new DataIntegrityViolationException("injected version 200 DDL failure");
+            }
+            super.execute(sql);
         }
     }
 
