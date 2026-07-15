@@ -205,6 +205,7 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
   expect(screen.getAllByText(/-3000.00 万元/).length).toBeGreaterThan(0);
   expect(screen.getByText('主力净额占比转正')).toBeInTheDocument();
   expect(screen.getByText('1 项模型输出未通过证据门禁')).toBeInTheDocument();
+  expect(screen.getByText('观察项引用了未知因子')).toBeInTheDocument();
   expect(screen.getByText('低置信度')).toBeInTheDocument();
   expect(screen.getByText('缺少逐笔明细')).toBeInTheDocument();
 });

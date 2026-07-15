@@ -42,51 +42,85 @@ public class CapitalInterpretationAgent {
         }
         if (!llm.isConfigured()) return fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED");
         String output = null;
+        List<String> validationReasons = new ArrayList<String>();
         try {
             output = llm.complete(systemPrompt(packet), input(packet), PRIMARY_TIMEOUT_MS);
-            JsonNode root;
             try {
-                root = parser.parse(output);
-            } catch (Exception firstFailure) {
-                output = llm.complete(repairPrompt(), output == null ? "" : output, REPAIR_TIMEOUT_MS);
-                root = parser.parse(output);
+                return interpretOutput(output, packet, rules);
+            } catch (ModelOutputException firstFailure) {
+                validationReasons.add(validationReason("首次输出", firstFailure));
             }
-            CapitalInterpretationGate.Result accepted = gate.apply(root, packet);
-            long acceptedDimensions = accepted.observations.stream()
-                    .map(item -> item.getDimension()).distinct().count();
-            int requiredDimensions = requiredOutputDimensions(packet);
-            if (acceptedDimensions < requiredDimensions) {
-                List<String> reasons = new ArrayList<String>(accepted.rejectionReasons);
-                reasons.add("模型输出未覆盖至少" + requiredDimensions + "个可用分析维度");
-                CapitalInterpretation rejected = fallback(packet, rules, "FALLBACK", "OUTPUT_REJECTED_BY_GATE");
-                rejected.setRejectedOutputCount(reasons.size());
-                rejected.setRejectionReasons(reasons);
-                rejected.setOutputHash(JdkFinanceHttpClient.sha256(output));
-                return rejected;
+            output = llm.complete(repairPrompt(packet),
+                    repairInput(packet, output, validationReasons.get(0)), REPAIR_TIMEOUT_MS);
+            try {
+                return interpretOutput(output, packet, rules);
+            } catch (ModelOutputException repairFailure) {
+                validationReasons.add(validationReason("修复输出", repairFailure));
+                return invalidOutputFallback(packet, rules, output,
+                        repairFailure.fallbackReason, validationReasons);
             }
-            CapitalInterpretation result = base(packet, rules);
-            result.setStatus("SUCCEEDED");
-            result.setMarketState(accepted.marketState);
-            result.setExecutiveSummary(accepted.executiveSummary);
-            result.setPlainSummary(accepted.executiveSummary);
-            result.setObservations(accepted.observations);
-            result.setHypotheses(accepted.hypotheses);
-            result.setCounterEvidence(accepted.counterEvidence);
-            result.setWatchConditionRefs(accepted.watchConditionRefs);
-            result.setDataGaps(union(packet.getDataGaps(), accepted.dataGaps));
-            result.setConfidence(!"COMPLETE".equals(packet.getQualityStatus())
-                    || packet.getCoverageDimensions().size() < MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS
-                    ? "LOW" : accepted.confidence);
-            result.setDisclaimer(accepted.disclaimer);
-            result.setRejectedOutputCount(accepted.rejectionReasons.size());
-            result.setRejectionReasons(accepted.rejectionReasons);
-            result.setOutputHash(JdkFinanceHttpClient.sha256(output));
-            return result;
         } catch (SocketTimeoutException e) {
             return fallback(packet, rules, "FALLBACK", "LLM_TIMEOUT");
         } catch (Exception e) {
-            return fallback(packet, rules, "FALLBACK", "INVALID_MODEL_OUTPUT");
+            validationReasons.add("模型调用异常：" + e.getClass().getSimpleName());
+            return invalidOutputFallback(packet, rules, output,
+                    "INVALID_MODEL_OUTPUT", validationReasons);
         }
+    }
+
+    private CapitalInterpretation interpretOutput(String output, CapitalAgentEvidencePacket packet,
+                                                   CapitalRuleExplanation rules) throws ModelOutputException {
+        JsonNode root;
+        try {
+            root = parser.parse(output);
+        } catch (Exception error) {
+            throw new ModelOutputException("INVALID_MODEL_OUTPUT", message(error), error);
+        }
+        CapitalInterpretationGate.Result accepted;
+        try {
+            accepted = gate.apply(root, packet);
+        } catch (Exception error) {
+            throw new ModelOutputException("INVALID_MODEL_OUTPUT", message(error), error);
+        }
+        long acceptedDimensions = accepted.observations.stream()
+                .map(item -> item.getDimension()).distinct().count();
+        int requiredDimensions = requiredOutputDimensions(packet);
+        if (acceptedDimensions < requiredDimensions) {
+            List<String> reasons = new ArrayList<String>(accepted.rejectionReasons);
+            reasons.add("模型输出未覆盖至少" + requiredDimensions + "个可用分析维度");
+            throw new ModelOutputException("OUTPUT_REJECTED_BY_GATE", String.join("；", reasons), null);
+        }
+        CapitalInterpretation result = base(packet, rules);
+        result.setStatus("SUCCEEDED");
+        result.setMarketState(accepted.marketState);
+        result.setExecutiveSummary(accepted.executiveSummary);
+        result.setPlainSummary(accepted.executiveSummary);
+        result.setObservations(accepted.observations);
+        result.setHypotheses(accepted.hypotheses);
+        result.setCounterEvidence(accepted.counterEvidence);
+        result.setWatchConditionRefs(accepted.watchConditionRefs);
+        result.setDataGaps(union(packet.getDataGaps(), accepted.dataGaps));
+        result.setConfidence(!"COMPLETE".equals(packet.getQualityStatus())
+                || packet.getCoverageDimensions().size() < MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS
+                ? "LOW" : accepted.confidence);
+        result.setDisclaimer(accepted.disclaimer);
+        result.setRejectedOutputCount(accepted.rejectionReasons.size());
+        result.setRejectionReasons(accepted.rejectionReasons);
+        result.setOutputHash(JdkFinanceHttpClient.sha256(output));
+        return result;
+    }
+
+    private CapitalInterpretation invalidOutputFallback(CapitalAgentEvidencePacket packet,
+                                                        CapitalRuleExplanation rules,
+                                                        String output, String reason,
+                                                        List<String> validationReasons) {
+        CapitalInterpretation rejected = fallback(packet, rules, "FALLBACK", reason);
+        rejected.setRejectedOutputCount(validationReasons.size());
+        rejected.setRejectionReasons(validationReasons);
+        if (output != null && !output.trim().isEmpty()) {
+            rejected.setOutputHash(JdkFinanceHttpClient.sha256(output));
+        }
+        return rejected;
     }
 
     private CapitalInterpretation base(CapitalAgentEvidencePacket packet, CapitalRuleExplanation rules) {
@@ -136,6 +170,7 @@ public class CapitalInterpretationAgent {
                 + "counterEvidence、watchConditionRefs、dataGaps、confidence、disclaimer。"
                 + "observations每项必须含dimension、claim、factorRefs、metricRefs，并覆盖至少"
                 + requiredDimensions + "个输入中实际可用的不同维度。"
+                + contractSchema()
                 + "文本只能复述证据包已有数字，不得自行计算或创造数值，不得输出买卖建议；"
                 + "拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
     }
@@ -145,8 +180,38 @@ public class CapitalInterpretationAgent {
                 packet.getCoverageDimensions().size()));
     }
 
-    private String repairPrompt() {
-        return "把输入修复成符合上一个资金行为JSON契约的单个JSON对象。不得补充新事实或新引用，只输出JSON。";
+    private String repairPrompt(CapitalAgentEvidencePacket packet) {
+        return systemPrompt(packet)
+                + "你正在修复一份未通过服务端校验的输出。必须根据validationError纠正字段和值，"
+                + "只能引用evidencePacket中的现有引用，只输出修复后的单个JSON对象。";
+    }
+
+    private String contractSchema() {
+        return "marketState只能是VOLUME_EXPANSION_OUTFLOW、VOLUME_EXPANSION_INFLOW、"
+                + "PRICE_FLOW_DIVERGENCE、MIXED、NEUTRAL、INTRADAY_REVERSAL或INSUFFICIENT_DATA；"
+                + "dimension只能是VOLUME、TURNOVER、FLOW、ORDER_STRUCTURE、INTRADAY或MULTI_PERIOD；"
+                + "hypotheses每项必须含type、claim、confidence、supportingMetricRefs、counterEvidence、dataGaps，"
+                + "supportingMetricRefs只能引用rawMetrics.ref；counterEvidence和dataGaps必须是字符串数组；"
+                + "顶层counterEvidence、dataGaps和watchConditionRefs也必须是字符串数组；";
+    }
+
+    private String repairInput(CapitalAgentEvidencePacket packet, String invalidOutput,
+                               String validationError) throws Exception {
+        Map<String, Object> value = new LinkedHashMap<String, Object>();
+        value.put("validationError", validationError);
+        value.put("invalidOutput", invalidOutput == null ? "" : invalidOutput);
+        value.put("evidencePacket", json.readTree(input(packet)));
+        return json.writeValueAsString(value);
+    }
+
+    private String validationReason(String stage, Exception error) {
+        return stage + "未通过JSON契约校验：" + message(error);
+    }
+
+    private String message(Throwable error) {
+        String value = error == null || error.getMessage() == null
+                ? "未知校验错误" : error.getMessage().replace('\n', ' ').replace('\r', ' ').trim();
+        return value.length() <= 300 ? value : value.substring(0, 300);
     }
 
     private String input(CapitalAgentEvidencePacket packet) throws Exception {
@@ -223,5 +288,14 @@ public class CapitalInterpretationAgent {
         result.addAll(first);
         result.addAll(second);
         return Collections.unmodifiableList(new ArrayList<String>(result));
+    }
+
+    private static final class ModelOutputException extends Exception {
+        private final String fallbackReason;
+
+        private ModelOutputException(String fallbackReason, String message, Throwable cause) {
+            super(message, cause);
+            this.fallbackReason = fallbackReason;
+        }
     }
 }

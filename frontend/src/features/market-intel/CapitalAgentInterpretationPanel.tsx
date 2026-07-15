@@ -203,7 +203,16 @@ export function CapitalAgentInterpretationPanel({
               <summary>数据缺口与审计信息</summary>
               <ul>{interpretation.dataGaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
               {interpretation.rejectedOutputCount > 0 && (
-                <p>{interpretation.rejectedOutputCount} 项模型输出未通过证据门禁</p>
+                <>
+                  <p>{interpretation.rejectedOutputCount} 项模型输出未通过证据门禁</p>
+                  {(interpretation.rejectionReasons ?? []).length > 0 && (
+                    <ul className="market-intel-agent-rejections">
+                      {(interpretation.rejectionReasons ?? []).map((item, index) => (
+                        <li key={index + '-' + item}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
               <small>因子 {interpretation.factorVersion ?? '--'} · 信号 {interpretation.signalVersion ?? '--'}</small>
             </details>

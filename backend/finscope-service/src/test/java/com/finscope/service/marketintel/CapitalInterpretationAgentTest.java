@@ -153,6 +153,62 @@ class CapitalInterpretationAgentTest {
     }
 
     @Test
+    void repairsJsonThatParsesButViolatesTheAgentContract() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String invalidContract = validOutput(packet).replace("\"marketState\":\"MIXED\"",
+                "\"marketState\":\"INTRADAY_SESSION\"");
+        String valid = validOutput(packet);
+        AtomicInteger calls = new AtomicInteger();
+        List<String> systemPrompts = new ArrayList<String>();
+        List<String> userPrompts = new ArrayList<String>();
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String system, String user, int timeoutMs) {
+                systemPrompts.add(system);
+                userPrompts.add(user);
+                return calls.incrementAndGet() == 1 ? invalidContract : valid;
+            }
+            public String complete(String system, String user) { throw new AssertionError("must use explicit timeout"); }
+        };
+
+        CapitalInterpretation result = agent(llm).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(2, calls.get());
+        assertTrue(systemPrompts.get(1).contains("INTRADAY_REVERSAL"));
+        assertTrue(userPrompts.get(1).contains("unknown market state"));
+        assertTrue(userPrompts.get(1).contains("evidencePacket"));
+    }
+
+    @Test
+    void recordsValidationStagesWhenContractRepairStillFails() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String invalidContract = validOutput(packet).replace("\"marketState\":\"MIXED\"",
+                "\"marketState\":\"INTRADAY_SESSION\"");
+        AtomicInteger calls = new AtomicInteger();
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String system, String user, int timeoutMs) {
+                calls.incrementAndGet();
+                return invalidContract;
+            }
+            public String complete(String system, String user) { throw new AssertionError("must use explicit timeout"); }
+        };
+
+        CapitalInterpretation result = agent(llm).interpret(packet, rules());
+
+        assertEquals("FALLBACK", result.getStatus());
+        assertEquals("INVALID_MODEL_OUTPUT", result.getFallbackReason());
+        assertEquals(2, calls.get());
+        assertEquals(2, result.getRejectedOutputCount());
+        assertTrue(result.getRejectionReasons().get(0).contains("首次输出"));
+        assertTrue(result.getRejectionReasons().get(1).contains("修复输出"));
+        assertTrue(result.getOutputHash() != null && !result.getOutputHash().isEmpty());
+    }
+
+    @Test
     void returnsExplicitStatusForInsufficientDataAndTimeout() {
         CapitalAgentEvidencePacket insufficient = packet(snapshot());
         LlmChatClient mustNotCall = new LlmChatClient() {
