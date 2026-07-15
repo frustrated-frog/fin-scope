@@ -29,6 +29,8 @@ class InstrumentCodeCanonicalizerTest {
         assertThrows(IllegalArgumentException.class,
                 () -> InstrumentCodeCanonicalizer.canonical("600519.US", null));
         assertThrows(IllegalArgumentException.class,
+                () -> InstrumentCodeCanonicalizer.canonical("600519.sh", null));
+        assertThrows(IllegalArgumentException.class,
                 () -> InstrumentCodeCanonicalizer.canonical("600519", null));
         assertThrows(IllegalArgumentException.class,
                 () -> InstrumentCodeCanonicalizer.canonical("600519.SH", "SZ"));
