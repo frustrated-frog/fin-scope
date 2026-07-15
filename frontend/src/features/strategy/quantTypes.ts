@@ -15,7 +15,17 @@ export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;
 }
-export interface QuantFactorAnalysis { datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
+export interface QuantFactorAnalysis {
+  datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number;
+  icMean: number; icStd: number; icIr: number; positiveIcRatio: number;
+  evaluationMode?: 'CROSS_SECTIONAL_FACTOR_STUDY';
+  researchDirection?: FactorResearchDirection;
+  directionAdjustedIcMean?: number;
+  favorableIcRatio?: number;
+  sampleEvidence?: 'INSUFFICIENT_SAMPLE' | 'DIRECTIONALLY_ALIGNED' | 'OPPOSED' | 'UNSTABLE';
+  conclusion?: 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
+  caveats?: string[];
+}
 
 export type FactorLifecycleStatus =
   | 'CANDIDATE' | 'DEFINITION_REVIEWED' | 'IMPLEMENTED' | 'CALCULATION_VERIFIED'

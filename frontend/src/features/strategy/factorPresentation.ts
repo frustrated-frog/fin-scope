@@ -47,10 +47,10 @@ export function explainFactorAnalysis(
   dataKind: QuantDataset['dataKind']
 ): FactorAnalysisExplanation {
   const sign = direction === 'NEGATIVE_HYPOTHESIS' ? -1 : 1;
-  const directionAdjustedIcMean = analysis.icMean * sign;
-  const favorableIcRatio = direction === 'NEGATIVE_HYPOTHESIS'
+  const directionAdjustedIcMean = analysis.directionAdjustedIcMean ?? analysis.icMean * sign;
+  const favorableIcRatio = analysis.favorableIcRatio ?? (direction === 'NEGATIVE_HYPOTHESIS'
     ? 1 - analysis.positiveIcRatio
-    : analysis.positiveIcRatio;
+    : analysis.positiveIcRatio);
   const directionText = direction === 'NEGATIVE_HYPOTHESIS' ? '低值方向' : '高值方向';
   const commonBoundary = `本结果评价同日股票池的横截面排序，不是个股涨跌预测。${datasetEvidenceNotice(dataKind)}`;
 

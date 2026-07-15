@@ -14,6 +14,7 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.factorresearch.FactorCalculationContext;
 import com.finscope.service.factorresearch.FactorProviderRegistry;
+import com.finscope.service.factorresearch.FactorEvidenceAssessmentService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -28,6 +29,7 @@ public class DatasetFactorAnalysisService {
     @Resource private FactorProviderRegistry providers;
     @Resource private QuantCapitalFlowRepository capitalFlows;
     private final FactorAnalysisService analysis = new FactorAnalysisService();
+    private final FactorEvidenceAssessmentService evidenceAssessment = new FactorEvidenceAssessmentService();
 
     public FactorAnalysis analyze(Long datasetId, String factorCode) {
         QuantDataset dataset = datasets.get(datasetId);
@@ -63,11 +65,21 @@ public class DatasetFactorAnalysisService {
             if (factorValues.size() >= 2) dailyIc.add(analysis.rankIc(factorValues, nextReturns));
         }
         FactorAnalysis result = analysis.summarize(factorCode, dailyIc); result.setDatasetId(datasetId);
-        result.setDatasetFingerprint(dataset.getFingerprint()); return result;
+        result.setDatasetFingerprint(dataset.getFingerprint());
+        evidenceAssessment.assess(result, researchDirection(factorCode), dataset.getDataKind());
+        return result;
     }
 
     private FactorProviderRegistry providerRegistry() {
         return providers == null ? FactorProviderRegistry.legacyOnly() : providers;
+    }
+
+    private String researchDirection(String factorCode) {
+        if (registry != null && registry.contains(factorCode)) {
+            return "LOW".equals(registry.get(factorCode).getDirection())
+                    ? "NEGATIVE_HYPOTHESIS" : "POSITIVE_HYPOTHESIS";
+        }
+        return "POSITIVE_HYPOTHESIS";
     }
 
     private Map<String, QuantCapitalFlowDaily> capital(Long datasetId) {

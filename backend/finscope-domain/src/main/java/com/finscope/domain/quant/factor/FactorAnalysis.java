@@ -1,5 +1,9 @@
 package com.finscope.domain.quant.factor;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 public class FactorAnalysis {
     /**
      * 因子编码。
@@ -33,6 +37,13 @@ public class FactorAnalysis {
      * 数据集指纹。
      */
     private String datasetFingerprint;
+    private String evaluationMode;
+    private String researchDirection;
+    private double directionAdjustedIcMean;
+    private double favorableIcRatio;
+    private String sampleEvidence;
+    private String conclusion;
+    private List<String> caveats = Collections.emptyList();
 
     public String getFactorCode() { return factorCode; }
     public void setFactorCode(String factorCode) { this.factorCode = factorCode; }
@@ -50,4 +61,21 @@ public class FactorAnalysis {
     public void setDatasetId(Long datasetId) { this.datasetId = datasetId; }
     public String getDatasetFingerprint() { return datasetFingerprint; }
     public void setDatasetFingerprint(String datasetFingerprint) { this.datasetFingerprint = datasetFingerprint; }
+    public String getEvaluationMode() { return evaluationMode; }
+    public void setEvaluationMode(String evaluationMode) { this.evaluationMode = evaluationMode; }
+    public String getResearchDirection() { return researchDirection; }
+    public void setResearchDirection(String researchDirection) { this.researchDirection = researchDirection; }
+    public double getDirectionAdjustedIcMean() { return directionAdjustedIcMean; }
+    public void setDirectionAdjustedIcMean(double directionAdjustedIcMean) { this.directionAdjustedIcMean = directionAdjustedIcMean; }
+    public double getFavorableIcRatio() { return favorableIcRatio; }
+    public void setFavorableIcRatio(double favorableIcRatio) { this.favorableIcRatio = favorableIcRatio; }
+    public String getSampleEvidence() { return sampleEvidence; }
+    public void setSampleEvidence(String sampleEvidence) { this.sampleEvidence = sampleEvidence; }
+    public String getConclusion() { return conclusion; }
+    public void setConclusion(String conclusion) { this.conclusion = conclusion; }
+    public List<String> getCaveats() { return caveats; }
+    public void setCaveats(List<String> caveats) {
+        this.caveats = caveats == null ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<String>(caveats));
+    }
 }

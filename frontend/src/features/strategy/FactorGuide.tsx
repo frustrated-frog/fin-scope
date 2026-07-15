@@ -159,6 +159,8 @@ export function FactorGuide({
             <div><dt>原始 ICIR</dt><dd>{analysis.icIr.toFixed(2)}</dd></div>
             <div><dt>有效交易日</dt><dd>{analysis.sampleCount}</dd></div>
           </dl>
+          {analysis.conclusion && <p className="quant-factor-conclusion">研究结论：{analysis.conclusion === 'INCONCLUSIVE' ? '证据不足' : analysis.conclusion === 'SUPPORTED' ? '支持假设' : '反驳假设'}。生命周期不会由本次诊断自动升级。</p>}
+          {analysis.caveats?.length ? <ul className="quant-factor-caveats">{analysis.caveats.map(item => <li key={item}>{item}</li>)}</ul> : null}
           <small>数据集指纹 {analysis.datasetFingerprint.slice(0, 16)}</small>
         </div>}
       </section>
