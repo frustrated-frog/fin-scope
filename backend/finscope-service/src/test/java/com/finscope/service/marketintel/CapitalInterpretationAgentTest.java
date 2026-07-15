@@ -147,6 +147,28 @@ class CapitalInterpretationAgentTest {
     }
 
     @Test
+    void givesPrimaryInterpretationMoreTimeThanJsonRepair() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String valid = validOutput(packet);
+        List<Integer> requestedTimeouts = new ArrayList<Integer>();
+        AtomicInteger calls = new AtomicInteger();
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String a, String b) { throw new AssertionError("must use explicit timeout"); }
+            public String complete(String a, String b, int timeoutMs) {
+                requestedTimeouts.add(timeoutMs);
+                return calls.incrementAndGet() == 1 ? "not-json" : valid;
+            }
+        };
+
+        CapitalInterpretation result = agent(llm).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(Arrays.asList(60000, 30000), requestedTimeouts);
+    }
+
+    @Test
     void returnsHonestFallbackWhenLlmIsNotConfigured() {
         LlmChatClient llm = llm(false, "");
         CapitalInterpretation result = agent(llm).interpret(packet(richSnapshot()), rules());

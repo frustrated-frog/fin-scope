@@ -1,3 +1,10 @@
+import { useEffect, useState } from 'react';
+
+import {
+  agentWaitButtonLabel,
+  agentWaitMessage,
+  capitalAgentStatusMessage
+} from './agentWaitPresentation';
 import {
   CapitalFactorObservation,
   CapitalInterpretation,
@@ -37,16 +44,6 @@ const hypothesisLabels: Record<string, string> = {
   HIDDEN_FLOW: '疑似隐藏资金',
   LIQUIDITY_SHIFT: '流动性变化'
 };
-const fallbackMessages: Record<string, string> = {
-  LLM_NOT_CONFIGURED: '模型尚未配置，已自动展示规则解读。',
-  LLM_TIMEOUT: '模型响应超时，已自动展示规则解读。',
-  INVALID_MODEL_OUTPUT: '模型输出格式无效，已自动展示规则解读。',
-  OUTPUT_REJECTED_BY_GATE: '模型结论未通过证据门禁，已自动展示规则解读。',
-  INSUFFICIENT_FACTOR_COVERAGE: '有效因子维度不足，未调用模型。',
-  EXECUTOR_REJECTED: '分析任务暂未被执行，请稍后重试。',
-  UNKNOWN: 'Agent 执行异常，本次未生成模型解读，请稍后重试。'
-};
-
 function formatEvidence(value: number, unit: string) {
   if (unit === '元') {
     if (Math.abs(value) >= 1e8) return (value >= 0 ? '+' : '') + (value / 1e8).toFixed(2) + ' 亿元';
@@ -70,6 +67,21 @@ export function CapitalAgentInterpretationPanel({
   busy: boolean;
   onRun: () => void;
 }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!busy) {
+      setElapsedSeconds(0);
+      return undefined;
+    }
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
   const factorByRef = new Map(factorObservations.map((factor) => [
     factor.factorRef ?? 'factor:' + factor.factorCode + ':' + factor.observedAt.replace(/:00$/, ''),
     factor
@@ -77,7 +89,7 @@ export function CapitalAgentInterpretationPanel({
   const evidenceByRef = new Map((interpretation?.evidenceRefs ?? []).map((evidence) => [evidence.ref, evidence]));
   const watchById = new Map(watchConditions.map((condition) => [condition.id, condition]));
   const reason = interpretation?.fallbackReason
-    ? fallbackMessages[interpretation.fallbackReason] ?? '解读已降级：' + interpretation.fallbackReason
+    ? capitalAgentStatusMessage(interpretation.fallbackReason)
     : null;
   const observations = interpretation?.observations ?? [];
   const counterEvidence = interpretation?.counterEvidence ?? [];
@@ -91,7 +103,7 @@ export function CapitalAgentInterpretationPanel({
           <h3 id="capital-agent-heading">Agent 深度解读</h3>
         </div>
         <button className="primary-button" type="button" disabled={busy} onClick={onRun}>
-          {busy ? 'Agent 分析中…' : interpretation ? '重新运行 Agent 解读' : '运行 Agent 解读'}
+          {busy ? agentWaitButtonLabel(elapsedSeconds) : interpretation ? '重新运行 Agent 解读' : '运行 Agent 解读'}
         </button>
       </header>
 
@@ -101,7 +113,7 @@ export function CapitalAgentInterpretationPanel({
           <p>点击后才调用模型。Agent 只组织已登记因子和可追溯指标，拆单、吸筹、出货始终作为待验证假设。</p>
         </div>
       )}
-      {busy && <p className="market-intel-agent-running" role="status">正在计算因子、组装证据包并校验模型引用…</p>}
+      {busy && <p className="market-intel-agent-running" role="status">{agentWaitMessage(elapsedSeconds)}</p>}
       {interpretation && (
         <div className="market-intel-agent-report">
           <div className={'market-intel-agent-verdict status-' + interpretation.status.toLowerCase()} role={interpretation.status === 'FAILED' ? 'alert' : 'status'}>

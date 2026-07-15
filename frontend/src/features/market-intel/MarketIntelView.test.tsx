@@ -244,8 +244,8 @@ test('clearly labels rule fallback instead of presenting it as model analysis', 
   await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
 
   expect(await screen.findByText('规则兜底')).toBeInTheDocument();
-  expect(screen.getByText('模型响应超时，已自动展示规则解读。')).toBeInTheDocument();
-  expect(addToast).toHaveBeenCalledWith('模型响应超时，已自动展示规则解读。', 'info');
+  expect(screen.getByText('模型在 60 秒内未完成，已自动展示规则解读。')).toBeInTheDocument();
+  expect(addToast).toHaveBeenCalledWith('模型在 60 秒内未完成，已自动展示规则解读。', 'info');
 });
 
 test('clearly explains when factor coverage is insufficient', async () => {
@@ -461,7 +461,7 @@ test('keeps polling long enough for the backend model timeout fallback', async (
   await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith(
-    '模型响应超时，已自动展示规则解读。',
+    '模型在 60 秒内未完成，已自动展示规则解读。',
     'info'
   ));
   expect(polls).toBe(21);

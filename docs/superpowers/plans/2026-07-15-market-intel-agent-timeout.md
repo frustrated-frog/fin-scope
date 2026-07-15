@@ -16,21 +16,21 @@
 - Modify: `backend/finscope-service/src/test/java/com/finscope/service/marketintel/CapitalInterpretationAgentTest.java`
 - Modify: `backend/finscope-service/src/main/java/com/finscope/service/marketintel/CapitalInterpretationAgent.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 增加一个记录三参数 `complete` 调用的测试客户端：首次返回非法 JSON，第二次返回合法结果，并断言收到的超时依次为 `60000`、`30000`。
 
-- [ ] **Step 2: 验证测试失败**
+- [x] **Step 2: 验证测试失败**
 
 Run: `mvn -q -pl finscope-service -am -Dtest=CapitalInterpretationAgentTest -Dsurefire.failIfNoSpecifiedTests=false test`
 
 Expected: FAIL，实际超时仍为 `15000`、`15000`。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 在 `CapitalInterpretationAgent` 中用 `PRIMARY_TIMEOUT_MS = 60_000` 和 `REPAIR_TIMEOUT_MS = 30_000` 替代单一常量，并分别传给首次调用和修复调用。
 
-- [ ] **Step 4: 验证测试通过**
+- [x] **Step 4: 验证测试通过**
 
 Run: `mvn -q -pl finscope-service -am -Dtest=CapitalInterpretationAgentTest -Dsurefire.failIfNoSpecifiedTests=false test`
 
@@ -44,21 +44,21 @@ Expected: PASS。
 - Modify: `frontend/src/features/market-intel/CapitalAgentInterpretationPanel.tsx`
 - Modify: `frontend/src/features/market-intel/MarketIntelView.tsx`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试运行按钮随时间显示 `Agent 解读中 · 0s`、`Agent 解读中 · 12s`、`Agent 解读中 · 31s`；同时验证三个阶段提示和按钮禁用状态。
 
-- [ ] **Step 2: 验证测试失败**
+- [x] **Step 2: 验证测试失败**
 
 Run: `npm test -- CapitalAgentInterpretationPanel.test.tsx`
 
 Expected: FAIL，当前按钮只有静态的 `Agent 分析中…`。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 新增纯函数根据 elapsed seconds 返回阶段文案；组件在 `busy=true` 时启动每秒定时器，以 `Date.now()` 计算经过时间，并在结束或卸载时清理。将轮询次数从 100 提高到 185，使前端等待窗口达到约 120 秒。
 
-- [ ] **Step 4: 验证测试通过**
+- [x] **Step 4: 验证测试通过**
 
 Run: `npm test -- CapitalAgentInterpretationPanel.test.tsx MarketIntelView.test.tsx`
 
@@ -69,19 +69,19 @@ Expected: PASS。
 **Files:**
 - Verify all modified files.
 
-- [ ] **Step 1: 前端全量验证**
+- [x] **Step 1: 前端全量验证**
 
 Run: `npm test && npm run build`
 
 Expected: 全部测试通过且 Vite 构建退出码为 0。
 
-- [ ] **Step 2: 后端全量验证**
+- [x] **Step 2: 后端全量验证**
 
 Run: `mvn -q test`
 
 Expected: Maven 退出码为 0。
 
-- [ ] **Step 3: 差异检查并提交**
+- [x] **Step 3: 差异检查并提交**
 
 Run: `git diff --check`
 

@@ -18,7 +18,8 @@ import java.util.Map;
 
 @Service
 public class CapitalInterpretationAgent {
-    private static final int TIMEOUT_MS = 15000;
+    private static final int PRIMARY_TIMEOUT_MS = 60_000;
+    private static final int REPAIR_TIMEOUT_MS = 30_000;
     private static final int MINIMUM_OUTPUT_DIMENSIONS = 3;
     private final LlmChatClient llm;
     private final ObjectMapper json;
@@ -42,12 +43,12 @@ public class CapitalInterpretationAgent {
         if (!llm.isConfigured()) return fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED");
         String output = null;
         try {
-            output = llm.complete(systemPrompt(), input(packet), TIMEOUT_MS);
+            output = llm.complete(systemPrompt(), input(packet), PRIMARY_TIMEOUT_MS);
             JsonNode root;
             try {
                 root = parser.parse(output);
             } catch (Exception firstFailure) {
-                output = llm.complete(repairPrompt(), output == null ? "" : output, TIMEOUT_MS);
+                output = llm.complete(repairPrompt(), output == null ? "" : output, REPAIR_TIMEOUT_MS);
                 root = parser.parse(output);
             }
             CapitalInterpretationGate.Result accepted = gate.apply(root, packet);

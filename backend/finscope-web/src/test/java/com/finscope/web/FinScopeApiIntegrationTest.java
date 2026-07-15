@@ -1229,7 +1229,7 @@ class FinScopeApiIntegrationTest {
     }
 
     private String waitForResearchRun(Long runId) throws Exception {
-        for (int attempt = 0; attempt < 60; attempt++) {
+        for (int attempt = 0; attempt < 150; attempt++) {
             MvcResult result = mvc.perform(get("/api/research/runs"))
                     .andExpect(status().isOk())
                     .andReturn();
