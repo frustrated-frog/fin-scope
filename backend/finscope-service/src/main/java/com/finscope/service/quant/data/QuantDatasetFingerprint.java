@@ -6,6 +6,7 @@ import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.data.QuantDatasetPartition;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
+import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+@Component
 public class QuantDatasetFingerprint {
     public String bars(List<QuantDailyBar> values) {
         return dataset(values, java.util.Collections.<QuantFundamentalSnapshot>emptyList(),
