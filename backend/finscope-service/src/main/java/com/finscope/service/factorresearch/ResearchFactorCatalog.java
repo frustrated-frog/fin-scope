@@ -126,11 +126,11 @@ public class ResearchFactorCatalog {
                 .availableAtRule("只使用已冻结数据；availableAt 严格等于源快照 retrievedAt，且不得晚于策略信号对应的下一交易日开盘时间")
                 .missingPolicy("任一必需字段缺失、amount 非正、质量非 COMPLETE 或数据尚不可见时返回 MISSING_INPUT，不做零值填充")
                 .calculationKey("mainNetInflow / amount，保留 10 位小数并采用 HALF_UP")
-                .calculationVersion("main-flow-share-v1")
+                .calculationVersion("capital-flow-share-v1")
                 .sourceType("FROZEN_CAPITAL_FLOW")
                 .sourceRef("market_capital_flow_snapshot.DAY_1 -> quant_capital_flow_daily")
                 .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN")
-                .evaluationPolicyVersion("1.0.0")
+                .evaluationPolicyVersion(FactorValidationPolicy.VERSION)
                 .status(FactorLifecycleStatus.EXPLORATORY)
                 .build();
         add(values, mainFlowShare);
@@ -187,7 +187,7 @@ public class ResearchFactorCatalog {
                 .sourceType("FROZEN_CAPITAL_FLOW")
                 .sourceRef("market_capital_flow_snapshot.DAY_1 -> quant_capital_flow_daily")
                 .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN")
-                .evaluationPolicyVersion("cross-sectional-evidence-v1")
+                .evaluationPolicyVersion(FactorValidationPolicy.VERSION)
                 .status(FactorLifecycleStatus.EXPLORATORY)
                 .build();
     }
@@ -206,7 +206,7 @@ public class ResearchFactorCatalog {
                 .calculationKey(formula + "，结果保留10位小数")
                 .calculationVersion("capital-window-v1").sourceType("FROZEN_CAPITAL_FLOW_AND_DAILY_BAR")
                 .sourceRef("quant_capital_flow_daily + quant_daily_bar")
-                .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN").evaluationPolicyVersion("cross-sectional-evidence-v1")
+                .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN").evaluationPolicyVersion(FactorValidationPolicy.VERSION)
                 .status(FactorLifecycleStatus.EXPLORATORY).build();
     }
 
@@ -259,7 +259,7 @@ public class ResearchFactorCatalog {
                 .sourceType(sourceType)
                 .sourceRef(sourceRef)
                 .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN")
-                .evaluationPolicyVersion("1.0.0")
+                .evaluationPolicyVersion(FactorValidationPolicy.VERSION)
                 .status(FactorLifecycleStatus.CALCULATION_VERIFIED)
                 .build();
     }

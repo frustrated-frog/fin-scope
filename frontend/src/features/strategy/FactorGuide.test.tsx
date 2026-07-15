@@ -130,3 +130,25 @@ test('requires approval before the research agent runs and renders its auditable
   expect(screen.getByText(/证据哈希 aaaaaaaaaaaaaaaa/)).toBeInTheDocument();
   expect(globalThis.fetch).toHaveBeenCalledTimes(2);
 });
+
+test('survives an empty budget-exhausted finding and explains the stop', async () => {
+  const user = userEvent.setup();
+  const plan = {
+    id: 10, datasetId: 1, datasetFingerprint: 'abcdef1234567890',
+    factor: { namespace: 'quant', code: 'EP', version: '1.0.0' }, question: 'test',
+    status: 'AWAITING_APPROVAL', plan: ['检查数据集'], allowedTools: ['inspect_dataset'],
+    maxToolCalls: 4, toolCallsUsed: 0, maxLlmCalls: 0, llmCallsUsed: 0, maxRunSeconds: 60,
+    evidenceJson: '', evidenceHash: '', findingJson: '', stopReason: '', trace: []
+  };
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/approve')
+    ? new Response(JSON.stringify({ ...plan, status: 'BUDGET_EXHAUSTED', findingJson: '{}', stopReason: 'TOOL_BUDGET_EXHAUSTED' }))
+    : new Response(JSON.stringify(plan), { status: 201 })));
+
+  render(<FactorGuide definitions={[definition()]} selectedCode="EP" onSelect={vi.fn()}
+    selectedDataset={{ id: 1, name: '研究样本', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }}
+    availableFactors={new Set(['EP'])} onAnalyze={vi.fn()} />);
+
+  await user.click(screen.getByRole('button', { name: '生成复核计划' }));
+  await user.click(await screen.findByRole('button', { name: '批准并运行' }));
+  expect(await screen.findByText(/预算耗尽.*TOOL_BUDGET_EXHAUSTED/)).toBeInTheDocument();
+});

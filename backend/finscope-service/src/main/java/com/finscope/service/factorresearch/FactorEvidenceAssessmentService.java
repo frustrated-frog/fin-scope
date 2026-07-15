@@ -60,6 +60,10 @@ public class FactorEvidenceAssessmentService {
             caveats.add("有效分位组检验少于 60 个交易日，组合证据不足");
             blocking.add("QUANTILE_DAYS_BELOW_60");
         }
+        if (analysis.getCoverageRatio() < FactorValidationPolicy.MIN_COVERAGE_RATIO) {
+            caveats.add("有效日期覆盖率低于 80%，结果可能集中在少数可计算日期");
+            blocking.add("VALID_DATE_COVERAGE_BELOW_80_PERCENT");
+        }
         caveats.add("尚未完成样本外、市场阶段、成本压力和多重检验");
         caveats.add("当前 ICIR 未年化，sampleCount 是有效交易日数而不是股票数");
         analysis.setCaveats(caveats);
@@ -70,7 +74,9 @@ public class FactorEvidenceAssessmentService {
                 && analysis.getDirectionAdjustedQuantileSpread() > 0d
                 && analysis.getDirectionAdjustedMonotonicity() > 0d) {
             analysis.setConclusion("SUPPORTED");
-        } else if (eligible && "OPPOSED".equals(analysis.getSampleEvidence())) {
+        } else if (eligible && "OPPOSED".equals(analysis.getSampleEvidence())
+                && analysis.getDirectionAdjustedQuantileSpread() < 0d
+                && analysis.getDirectionAdjustedMonotonicity() < 0d) {
             analysis.setConclusion("REFUTED");
         } else {
             analysis.setConclusion("INCONCLUSIVE");

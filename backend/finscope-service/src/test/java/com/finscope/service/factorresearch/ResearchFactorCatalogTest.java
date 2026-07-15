@@ -59,6 +59,8 @@ class ResearchFactorCatalogTest {
         ResearchFactorDefinition capital = catalog.get("capital", "MAIN_FLOW_SHARE", "1.0.0");
         assertEquals(FactorLifecycleStatus.EXPLORATORY, capital.getStatus());
         assertTrue(capital.getInterpretationBoundary().contains("不构成投资建议"));
+        assertEquals(new CapitalFlowFactorProvider().calculationVersion(), capital.getCalculationVersion());
+        assertEquals(FactorValidationPolicy.VERSION, capital.getEvaluationPolicyVersion());
         assertTrue(catalog.get("capital", "BIG_ORDER_FLOW_SHARE", "1.0.0")
                 .getMissingPolicy().contains("必需订单桶缺失"));
     }

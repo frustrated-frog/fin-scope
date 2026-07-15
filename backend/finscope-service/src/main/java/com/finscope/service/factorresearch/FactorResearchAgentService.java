@@ -56,8 +56,14 @@ public class FactorResearchAgentService {
     public FactorResearchAgentRun createPlan(Long datasetId, FactorIdentity factor, Long draftId, String question) {
         if (datasetId == null || factor == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集和因子不能为空");
         QuantDataset dataset = datasets.get(datasetId);
+        if (!"READY".equals(dataset.getStatus()) || dataset.getFingerprint() == null
+                || dataset.getFingerprint().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "只有已冻结且具备指纹的数据集才能生成研究计划");
+        }
         catalog.get(factor.getNamespace(), factor.getCode(), factor.getVersion());
-        if (draftId != null) drafts.get(draftId);
+        if (draftId != null && !factor.equals(drafts.get(draftId).getFactor())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "研究草稿与本次因子身份不一致");
+        }
         FactorResearchAgentRun run = new FactorResearchAgentRun();
         run.setDatasetId(datasetId); run.setDatasetFingerprint(dataset.getFingerprint() == null ? "" : dataset.getFingerprint());
         run.setFactor(factor); run.setResearchDraftId(draftId);
@@ -88,12 +94,20 @@ public class FactorResearchAgentService {
             ObjectNode evidence = json.createObjectNode();
             if (run.getResearchDraftId() != null) {
                 enforceBudget(run, calls + 1, startedNanos); calls++;
-                evidence.set("researchDraft", json.valueToTree(drafts.get(run.getResearchDraftId())));
+                com.finscope.domain.factorresearch.ResearchDraft draft = drafts.get(run.getResearchDraftId());
+                if (!run.getFactor().equals(draft.getFactor())) {
+                    throw new BusinessException(ErrorCode.CONFLICT, "RESEARCH_DRAFT_FACTOR_CHANGED");
+                }
+                evidence.set("researchDraft", json.valueToTree(draft));
                 enforceTimeBudget(run, startedNanos);
                 trace(run, "inspect_research_draft", "研究草稿 " + run.getResearchDraftId(), "来源边界已读取", calls);
             }
             enforceBudget(run, calls + 1, startedNanos); calls++;
             QuantDataset dataset = datasets.get(run.getDatasetId());
+            if (!"READY".equals(dataset.getStatus())
+                    || !java.util.Objects.equals(run.getDatasetFingerprint(), dataset.getFingerprint())) {
+                throw new BusinessException(ErrorCode.CONFLICT, "DATASET_FINGERPRINT_CHANGED");
+            }
             enforceTimeBudget(run, startedNanos);
             ObjectNode datasetEvidence = json.createObjectNode();
             datasetEvidence.put("id", dataset.getId()); datasetEvidence.put("status", dataset.getStatus());

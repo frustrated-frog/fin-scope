@@ -25,9 +25,6 @@ public class CapitalResearchDraftRequest {
         require(signalCode, "信号代码不能为空");
         require(snapshotId, "快照标识不能为空");
         require(snapshotFingerprint, "快照指纹不能为空");
-        if (evidenceRefs == null || evidenceRefs.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "至少需要一条可追溯证据");
-        }
         return new CapitalResearchDraftCommand(instrumentCode, instrumentName, observedAt, signalCode,
                 snapshotId, snapshotFingerprint, evidenceRefs, objectiveTags);
     }

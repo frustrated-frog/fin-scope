@@ -37,6 +37,23 @@ class FactorEvidenceAssessmentServiceTest {
         FactorAnalysis opposite = analysis(-0.08, 0.15, 0.30, 80);
         service.assess(opposite, "POSITIVE_HYPOTHESIS", "REAL");
         assertEquals("OPPOSED", opposite.getSampleEvidence());
+        assertEquals("REFUTED", opposite.getConclusion());
+    }
+
+    @Test
+    void blocksLowCoverageAndRequiresNegativePortfolioEvidenceToRefute() {
+        FactorAnalysis lowCoverage = analysis(0.06, 0.10, 0.70, 80);
+        lowCoverage.setCoverageRatio(0.79);
+        service.assess(lowCoverage, "POSITIVE_HYPOTHESIS", "REAL");
+        assertEquals("INCONCLUSIVE", lowCoverage.getConclusion());
+        assertTrue(lowCoverage.getBlockingReasons().contains("VALID_DATE_COVERAGE_BELOW_80_PERCENT"));
+
+        FactorAnalysis conflictingPortfolio = analysis(-0.08, 0.15, 0.30, 80);
+        conflictingPortfolio.setQuantileSpreadMean(0.01);
+        conflictingPortfolio.setQuantileMonotonicityMean(0.5);
+        service.assess(conflictingPortfolio, "POSITIVE_HYPOTHESIS", "REAL");
+        assertEquals("OPPOSED", conflictingPortfolio.getSampleEvidence());
+        assertEquals("INCONCLUSIVE", conflictingPortfolio.getConclusion());
     }
 
     private FactorAnalysis analysis(double mean, double std, double positiveRatio, int samples) {
@@ -44,6 +61,7 @@ class FactorEvidenceAssessmentServiceTest {
         value.setIcMean(mean); value.setIcStd(std); value.setIcIr(std == 0 ? 0 : mean / std);
         value.setPositiveIcRatio(positiveRatio); value.setNegativeIcRatio(1d - positiveRatio);
         value.setSampleCount(samples); value.setMinCrossSectionSize(20);
+        value.setCoverageRatio(1d);
         value.setQuantileSampleDays(samples); value.setQuantileSpreadMean(mean < 0 ? -0.01 : 0.01);
         value.setQuantileMonotonicityMean(mean < 0 ? -0.5 : 0.5);
         value.setIcMeanCiLower(mean - 0.01); value.setIcMeanCiUpper(mean + 0.01);

@@ -5,6 +5,7 @@ import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.factorresearch.FactorResearchAgentRunRepository;
 import com.finscope.domain.factorresearch.FactorIdentity;
 import com.finscope.domain.factorresearch.FactorResearchAgentRun;
+import com.finscope.domain.factorresearch.ResearchDraft;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.factor.FactorAnalysis;
 import com.finscope.service.quant.data.QuantDatasetService;
@@ -47,6 +48,22 @@ class FactorResearchAgentServiceTest {
     }
 
     @Test
+    void refusesToPlanAgainstAMutableDatasetOrAttachADraftToAnotherFactor() {
+        QuantDataset building = dataset(); building.setStatus("BUILDING");
+        when(datasets.get(7L)).thenReturn(building);
+        assertThrows(RuntimeException.class, () -> service.createPlan(7L,
+                new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"), null, "test"));
+
+        when(datasets.get(7L)).thenReturn(dataset());
+        ResearchDraft draft = new ResearchDraft();
+        draft.setId(3L); draft.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
+        when(drafts.get(3L)).thenReturn(draft);
+        assertThrows(RuntimeException.class, () -> service.createPlan(7L,
+                new FactorIdentity("quant", "EP", "1.0.0"), 3L, "test"));
+        verify(runs, never()).save(argThat(value -> Long.valueOf(3L).equals(value.getResearchDraftId())));
+    }
+
+    @Test
     void approvedRunUsesOnlyWhitelistedReadsAndPersistsEvidenceHashAndTrace() {
         FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
         run.setDatasetFingerprint("sha"); run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
@@ -69,6 +86,7 @@ class FactorResearchAgentServiceTest {
     @Test
     void stopsCleanlyWhenTheApprovedToolBudgetIsExhausted() {
         FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
+        run.setDatasetFingerprint("sha");
         run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
         run.setMaxToolCalls(2); run.setMaxRunSeconds(60); run.setStatus("RUNNING");
         when(runs.transition(eq(9L), anyString(), anyString(), any())).thenReturn(true);
@@ -80,6 +98,24 @@ class FactorResearchAgentServiceTest {
         verify(diagnostics, never()).analyze(anyLong(), anyString());
         verify(runs).complete(eq(9L), eq("BUDGET_EXHAUSTED"), eq(2), eq("{}"), eq(""), eq("{}"),
                 eq("TOOL_BUDGET_EXHAUSTED"), any());
+    }
+
+    @Test
+    void failsClosedWhenTheApprovedDatasetFingerprintHasChanged() {
+        FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
+        run.setDatasetFingerprint("approved-sha");
+        run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
+        run.setMaxToolCalls(4); run.setMaxRunSeconds(60); run.setStatus("RUNNING");
+        QuantDataset changed = dataset(); changed.setFingerprint("changed-sha");
+        when(runs.transition(eq(9L), anyString(), anyString(), any())).thenReturn(true);
+        when(runs.findById(9L)).thenReturn(Optional.of(run));
+        when(datasets.get(7L)).thenReturn(changed);
+
+        assertThrows(RuntimeException.class, () -> service.approveAndRun(9L));
+
+        verify(diagnostics, never()).analyze(anyLong(), anyString());
+        verify(runs).complete(eq(9L), eq("FAILED"), eq(1), eq("{}"), eq(""), eq("{}"),
+                eq("DATASET_FINGERPRINT_CHANGED"), any());
     }
 
     private QuantDataset dataset() { QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY"); value.setDataKind("REAL"); value.setDatasetLevel("RESEARCH"); value.setFingerprint("sha"); return value; }

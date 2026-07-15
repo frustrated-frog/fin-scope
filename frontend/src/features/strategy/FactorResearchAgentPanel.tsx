@@ -18,7 +18,14 @@ const toolLabels: Record<string, string> = {
 };
 
 function parseFinding(value?: string) {
-  try { return value ? JSON.parse(value) as { verdict: string; summary: string; counterEvidence: string[]; blockingReasons: string[]; nextSteps: string[] } : undefined; }
+  try {
+    if (!value) return undefined;
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (typeof parsed.verdict !== 'string' || typeof parsed.summary !== 'string'
+      || !Array.isArray(parsed.counterEvidence) || !Array.isArray(parsed.blockingReasons)
+      || !Array.isArray(parsed.nextSteps)) return undefined;
+    return parsed as { verdict: string; summary: string; counterEvidence: string[]; blockingReasons: string[]; nextSteps: string[] };
+  }
   catch { return undefined; }
 }
 
@@ -74,6 +81,7 @@ export function FactorResearchAgentPanel({ factor, dataset, researchDraftId, ena
         <small>证据哈希 {run.evidenceHash.slice(0, 16)} · 停止原因 {run.stopReason}</small>
       </article>}
       {run.status === 'FAILED' && <p className="quant-factor-blocker">运行失败：{run.stopReason}</p>}
+      {run.status === 'BUDGET_EXHAUSTED' && <p className="quant-factor-blocker">预算耗尽：{run.stopReason}</p>}
     </>}
     {!dataset && <p className="quant-factor-blocker">先选择数据集后才能生成复核计划。</p>}
     {dataset && !enabled && <p className="quant-factor-blocker">只有质量通过且具备当前因子输入的数据集才能运行。</p>}

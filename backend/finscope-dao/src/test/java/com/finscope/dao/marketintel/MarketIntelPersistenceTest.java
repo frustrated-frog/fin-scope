@@ -92,6 +92,8 @@ class MarketIntelPersistenceTest {
         CapitalBehaviorSnapshot restored = snapshots.findLatest(7L).orElseThrow(AssertionError::new);
         assertEquals(new BigDecimal("18000000"), restored.getFacts().get(0).getMainNetInflow());
         assertEquals("fingerprint-1", restored.getFingerprint());
+        assertEquals("fingerprint-1", snapshots.findById(snapshot.getId())
+                .orElseThrow(AssertionError::new).getFingerprint());
     }
 
     @Test
