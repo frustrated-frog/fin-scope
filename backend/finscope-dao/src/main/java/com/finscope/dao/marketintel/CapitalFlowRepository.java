@@ -57,6 +57,22 @@ public class CapitalFlowRepository {
                         "ORDER BY observed_at DESC,id DESC LIMIT ?", mapper, instrumentId, granularity, limit);
     }
 
+    public List<CapitalFlowPoint> findDailyPointInTime(LocalDate from, LocalDate to, LocalDateTime asOfTime) {
+        if (from == null || to == null || asOfTime == null) {
+            throw new IllegalArgumentException("from, to and asOfTime are required");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must not be after to");
+        }
+        return jdbc.query("SELECT * FROM (" +
+                        "SELECT f.*,ROW_NUMBER() OVER (PARTITION BY instrument_id,data_date " +
+                        "ORDER BY retrieved_at DESC,id DESC) AS rn " +
+                        "FROM market_capital_flow_snapshot f WHERE granularity='DAY_1' " +
+                        "AND data_date BETWEEN ? AND ? AND retrieved_at<=?) ranked " +
+                        "WHERE rn=1 ORDER BY data_date ASC,instrument_id ASC",
+                mapper, text(from), text(to), text(asOfTime));
+    }
+
     private final RowMapper<CapitalFlowPoint> mapper = (rs, row) -> {
         CapitalFlowPoint p = new CapitalFlowPoint();
         p.setId(rs.getLong("id")); p.setInstrumentId(rs.getLong("instrument_id"));
