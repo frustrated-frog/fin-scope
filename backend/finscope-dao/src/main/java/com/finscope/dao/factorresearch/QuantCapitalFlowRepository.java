@@ -98,6 +98,10 @@ public class QuantCapitalFlowRepository {
                 mapper, datasetId);
     }
 
+    public void deleteByDatasetId(Long datasetId) {
+        jdbcTemplate.update("DELETE FROM quant_capital_flow_daily WHERE dataset_id=?", datasetId);
+    }
+
     private static String text(BigDecimal value) {
         return value == null ? null : value.toPlainString();
     }

@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -74,12 +75,17 @@ class CapitalFlowPointInTimeQueryTest {
 
         List<CapitalFlowPoint> first = repository.findDailyPointInTime(FROM, TO, AS_OF);
         List<CapitalFlowPoint> second = repository.findDailyPointInTime(FROM, TO, AS_OF);
+        List<CapitalFlowPoint> targeted = repository.findDailyPointInTime(
+                FROM, TO, AS_OF, Collections.singletonList(7L));
 
         assertTrue(tieHigherId.getId() > tieLowerId.getId());
         assertEquals(Arrays.asList(versionB.getId(), tieHigherId.getId(), upperBoundary.getId()), ids(first));
         assertEquals(ids(first), ids(second));
         assertEquals("PARTIAL", first.get(0).getQualityStatus());
         assertEquals("secondary", first.get(0).getProviderCode());
+        assertEquals(Arrays.asList(versionB.getId(), upperBoundary.getId()), ids(targeted));
+        assertTrue(repository.findDailyPointInTime(
+                FROM, TO, AS_OF, Collections.<Long>emptyList()).isEmpty());
     }
 
     @Test

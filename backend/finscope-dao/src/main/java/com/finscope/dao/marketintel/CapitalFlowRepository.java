@@ -8,6 +8,11 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Repository
@@ -58,19 +63,57 @@ public class CapitalFlowRepository {
     }
 
     public List<CapitalFlowPoint> findDailyPointInTime(LocalDate from, LocalDate to, LocalDateTime asOfTime) {
+        validatePointInTimeRequest(from, to, asOfTime);
+        return queryDailyPointInTime(from, to, asOfTime, null);
+    }
+
+    public List<CapitalFlowPoint> findDailyPointInTime(LocalDate from, LocalDate to,
+                                                       LocalDateTime asOfTime,
+                                                       Collection<Long> instrumentIds) {
+        validatePointInTimeRequest(from, to, asOfTime);
+        if (instrumentIds == null || instrumentIds.isEmpty()) return Collections.emptyList();
+        List<Long> ids = new ArrayList<Long>(new LinkedHashSet<Long>(instrumentIds));
+        if (ids.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("instrumentIds must not contain null");
+        }
+        List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>();
+        for (int start = 0; start < ids.size(); start += 500) {
+            result.addAll(queryDailyPointInTime(from, to, asOfTime,
+                    ids.subList(start, Math.min(start + 500, ids.size()))));
+        }
+        result.sort(Comparator.comparing(CapitalFlowPoint::getDataDate)
+                .thenComparing(CapitalFlowPoint::getInstrumentId));
+        return result;
+    }
+
+    private void validatePointInTimeRequest(LocalDate from, LocalDate to, LocalDateTime asOfTime) {
         if (from == null || to == null || asOfTime == null) {
             throw new IllegalArgumentException("from, to and asOfTime are required");
         }
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("from must not be after to");
         }
+    }
+
+    private List<CapitalFlowPoint> queryDailyPointInTime(LocalDate from, LocalDate to,
+                                                          LocalDateTime asOfTime, List<Long> ids) {
+        String idFilter = "";
+        List<Object> parameters = new ArrayList<Object>();
+        parameters.add(text(from));
+        parameters.add(text(to));
+        parameters.add(text(asOfTime));
+        if (ids != null) {
+            idFilter = " AND instrument_id IN (" + String.join(",",
+                    Collections.nCopies(ids.size(), "?")) + ")";
+            parameters.addAll(ids);
+        }
         return jdbc.query("SELECT * FROM (" +
                         "SELECT f.*,ROW_NUMBER() OVER (PARTITION BY instrument_id,data_date " +
                         "ORDER BY retrieved_at DESC,id DESC) AS rn " +
                         "FROM market_capital_flow_snapshot f WHERE granularity='DAY_1' " +
-                        "AND data_date BETWEEN ? AND ? AND retrieved_at<=?) ranked " +
+                        "AND data_date BETWEEN ? AND ? AND retrieved_at<=?" + idFilter + ") ranked " +
                         "WHERE rn=1 ORDER BY data_date ASC,instrument_id ASC",
-                mapper, text(from), text(to), text(asOfTime));
+                mapper, parameters.toArray());
     }
 
     private final RowMapper<CapitalFlowPoint> mapper = (rs, row) -> {

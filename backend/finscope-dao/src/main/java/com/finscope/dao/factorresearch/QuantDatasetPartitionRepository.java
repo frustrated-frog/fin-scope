@@ -41,4 +41,9 @@ public class QuantDatasetPartitionRepository {
         return jdbcTemplate.query("SELECT * FROM quant_dataset_partition WHERE dataset_id=? "
                 + "ORDER BY partition_type", mapper, datasetId);
     }
+
+    public void deleteByDatasetIdAndType(Long datasetId, String partitionType) {
+        jdbcTemplate.update("DELETE FROM quant_dataset_partition WHERE dataset_id=? AND partition_type=?",
+                datasetId, partitionType);
+    }
 }

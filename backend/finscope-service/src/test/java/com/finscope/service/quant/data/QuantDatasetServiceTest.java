@@ -23,11 +23,75 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import com.finscope.service.quant.factor.FactorRegistry;
 
 class QuantDatasetServiceTest {
+    @Test
+    void newRealDatasetStartsBuildingV2WhileLearningDatasetBehaviorRemains() {
+        QuantDatasetRepository datasets = mock(QuantDatasetRepository.class);
+        when(datasets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        QuantDatasetService service = service(datasets, mock(QuantMarketDataRepository.class));
+
+        QuantDataset real = service.create("research", "REAL");
+        QuantDataset learning = service.create("learning", "LEARNING_SAMPLE");
+
+        assertEquals("RESEARCH", real.getDatasetLevel());
+        assertEquals("quant-dataset-v2", real.getFingerprintVersion());
+        assertEquals("BUILDING", real.getStatus());
+        assertEquals("[]", real.getPartitionManifest());
+        assertEquals("LEARNING", learning.getDatasetLevel());
+        assertEquals("quant-dataset-v1", learning.getFingerprintVersion());
+        assertEquals("EMPTY", learning.getStatus());
+    }
+
+    @Test
+    void completeResearchV2BaseDataRemainsBuildingUntilCapitalFreeze() {
+        QuantDatasetRepository datasets = mock(QuantDatasetRepository.class);
+        QuantMarketDataRepository marketData = mock(QuantMarketDataRepository.class);
+        QuantDataset value = new QuantDataset(); value.setId(1L); value.setRevision(0); value.setStatus("BUILDING");
+        value.setDataKind("REAL"); value.setDatasetLevel("RESEARCH"); value.setFingerprintVersion("quant-dataset-v2");
+        QuantDailyBar first = bar("600000.SH", "10", "10.2");
+        QuantDailyBar second = bar("600000.SH", "10.2", "10.4"); second.setTradeDate(first.getTradeDate().plusDays(1));
+        QuantUniverseMember member = new QuantUniverseMember(); member.setTradeDate(first.getTradeDate());
+        member.setInstrumentCode("600000.SH"); member.setMember(true); member.setSourceKind("POINT_IN_TIME");
+        when(datasets.findById(1L)).thenReturn(java.util.Optional.of(value));
+        when(marketData.findBars(1L)).thenReturn(Arrays.asList(first, second));
+        when(marketData.findFundamentals(1L)).thenReturn(Collections.emptyList());
+        when(marketData.findUniverseMembers(1L)).thenReturn(Collections.singletonList(member));
+        when(datasets.updateSummary(any(), any(), any(), anyString(), anyString(), anyString(), eq(0L))).thenReturn(true);
+
+        service(datasets, marketData).importBars(1L, Collections.singletonList(first));
+
+        verify(datasets).updateSummary(eq(1L), any(), any(), eq("BUILDING"), anyString(), anyString(), eq(0L));
+    }
+
+    @Test
+    void rejectsMutationWhenDatasetIsReady() {
+        QuantDatasetRepository datasets = mock(QuantDatasetRepository.class);
+        QuantMarketDataRepository marketData = mock(QuantMarketDataRepository.class);
+        QuantDataset ready = new QuantDataset(); ready.setId(1L); ready.setStatus("READY"); ready.setRevision(1L);
+        when(datasets.findById(1L)).thenReturn(java.util.Optional.of(ready));
+        QuantDatasetService service = service(datasets, marketData);
+        QuantDailyBar invalidBar = new QuantDailyBar();
+        QuantFundamentalSnapshot invalidFundamental = new QuantFundamentalSnapshot();
+
+        BusinessException barsError = assertThrows(BusinessException.class,
+                () -> service.importBars(1L, Collections.singletonList(invalidBar)));
+        BusinessException fundamentalsError = assertThrows(BusinessException.class,
+                () -> service.importFundamentals(1L, Collections.singletonList(invalidFundamental)));
+        BusinessException universeError = assertThrows(BusinessException.class,
+                () -> service.importUniverse(1L, Collections.emptyList()));
+
+        assertEquals("已就绪数据集不可原地修改，请创建新版本", barsError.getMessage());
+        assertEquals("已就绪数据集不可原地修改，请创建新版本", fundamentalsError.getMessage());
+        assertEquals("已就绪数据集不可原地修改，请创建新版本", universeError.getMessage());
+        verify(marketData, never()).insertBars(any());
+        verify(marketData, never()).insertFundamentals(any());
+        verify(marketData, never()).insertUniverseMembers(any());
+    }
     @Test
     void fingerprintIsStableAcrossInputOrder() {
         QuantDatasetFingerprint fingerprint = new QuantDatasetFingerprint();

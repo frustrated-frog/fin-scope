@@ -84,6 +84,18 @@ public class QuantDatasetRepository {
                 text(start), text(end), status, fingerprint, qualitySummary, TimeUtil.text(LocalDateTime.now()), id, revision) == 1;
     }
 
+    public boolean updateResearchState(Long id, LocalDate start, LocalDate end, String status,
+                                       LocalDateTime asOfTime, String fingerprintVersion,
+                                       String partitionManifest, String fingerprint,
+                                       String qualitySummary, long revision) {
+        return jdbcTemplate.update("UPDATE quant_dataset SET start_date=?,end_date=?,status=?,as_of_time=?,"
+                        + "fingerprint_version=?,partition_manifest=?,fingerprint=?,quality_summary=?,"
+                        + "revision=revision+1,updated_at=? WHERE id=? AND revision=?",
+                text(start), text(end), status, TimeUtil.text(asOfTime), fingerprintVersion,
+                partitionManifest, fingerprint, qualitySummary, TimeUtil.text(LocalDateTime.now()),
+                id, revision) == 1;
+    }
+
     private static String text(LocalDate value) { return value == null ? null : value.toString(); }
     private static LocalDate date(String value) { return value == null ? null : LocalDate.parse(value); }
     private static String defaultDatasetLevel(String datasetLevel, String dataKind) {

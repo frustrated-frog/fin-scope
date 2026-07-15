@@ -80,7 +80,11 @@ public class QuantDatasetService {
         value.setUniverseType("CUSTOM");
         value.setSourceType("LEARNING_SAMPLE".equals(dataKind) ? "BUILT_IN" : "MANUAL_IMPORT");
         value.setDataKind(dataKind);
-        value.setStatus("EMPTY");
+        boolean research = "REAL".equals(dataKind);
+        value.setDatasetLevel(research ? "RESEARCH" : "LEARNING");
+        value.setFingerprintVersion(research ? "quant-dataset-v2" : "quant-dataset-v1");
+        value.setPartitionManifest("[]");
+        value.setStatus(research ? "BUILDING" : "EMPTY");
         return datasets.save(value);
     }
 
@@ -113,6 +117,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importBars(Long datasetId, List<QuantDailyBar> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         quality.assertValidBars(values);
         for (QuantDailyBar value : values) value.setDatasetId(datasetId);
         try {
@@ -137,6 +142,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importFundamentals(Long datasetId, List<QuantFundamentalSnapshot> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         quality.assertValidFundamentals(values);
         for (QuantFundamentalSnapshot value : values) value.setDatasetId(datasetId);
         try {
@@ -150,6 +156,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importUniverse(Long datasetId, List<QuantUniverseMember> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         if (values == null || values.isEmpty() || values.size() > 100_000) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "股票池成员不能为空且单次不能超过 100000 条");
         }
@@ -188,10 +195,18 @@ public class QuantDatasetService {
 
     private String researchStatus(QuantDataset dataset, List<QuantDailyBar> bars, List<QuantUniverseMember> universe) {
         if ("LEARNING_SAMPLE".equals(dataset.getDataKind())) return bars.isEmpty() ? "EMPTY" : "READY";
+        if ("RESEARCH".equals(dataset.getDatasetLevel())
+                && "quant-dataset-v2".equals(dataset.getFingerprintVersion())) return "BUILDING";
         if (bars.isEmpty()) return "EMPTY";
         if (universe.isEmpty()) return "QUALITY_PENDING";
         if (universe.stream().anyMatch(value -> "CURRENT_SNAPSHOT".equals(value.getSourceKind()))) return "BLOCKED";
         return hasCompleteUniverseCoverage(bars, universe) ? "READY" : "BLOCKED";
+    }
+
+    private void assertMutable(QuantDataset dataset) {
+        if ("READY".equals(dataset.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "已就绪数据集不可原地修改，请创建新版本");
+        }
     }
 
     private String qualitySummary(List<QuantDailyBar> bars, List<QuantFundamentalSnapshot> fundamentals,
