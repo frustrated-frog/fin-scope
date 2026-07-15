@@ -81,6 +81,43 @@ class CapitalInterpretationAgentTest {
     }
 
     @Test
+    void replacesUnsafeExecutiveSummaryWithoutRetryingTheWholeInterpretation() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String output = validOutput(packet).replace("资金分化", "主力资金达到999.99亿元");
+        AtomicInteger calls = new AtomicInteger();
+        LlmChatClient llm = new LlmChatClient() {
+            public boolean isConfigured() { return true; }
+            public String modelName() { return "test-model"; }
+            public String complete(String system, String user, int timeoutMs) {
+                calls.incrementAndGet();
+                return output;
+            }
+            public String complete(String system, String user) { throw new AssertionError("must use explicit timeout"); }
+        };
+
+        CapitalInterpretation result = agent(llm).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("规则摘要", result.getExecutiveSummary());
+        assertEquals(1, calls.get());
+        assertTrue(result.getRejectionReasons().stream()
+                .anyMatch(value -> value.contains("摘要") && value.contains("999.99")));
+    }
+
+    @Test
+    void replacesUnsafeDisclaimerWithTheServerOwnedDisclaimer() {
+        CapitalAgentEvidencePacket packet = packet(richSnapshot());
+        String output = validOutput(packet).replace("不构成投资建议", "风险等级为999级");
+
+        CapitalInterpretation result = agent(llm(true, output)).interpret(packet, rules());
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals("模型仅组织公开数据和已登记因子，仅用于研究，不构成投资建议。", result.getDisclaimer());
+        assertTrue(result.getRejectionReasons().stream()
+                .anyMatch(value -> value.contains("免责声明") && value.contains("999")));
+    }
+
+    @Test
     void fallsBackWhenAllObservationsContainNumbersOutsideEvidencePacket() {
         CapitalAgentEvidencePacket packet = packet(richSnapshot());
         String output = "{\"marketState\":\"MIXED\",\"executiveSummary\":\"量价资金表现分化\"," +

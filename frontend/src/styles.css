@@ -317,6 +317,7 @@
 .market-intel-agent-running { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .market-intel-agent-running { border-left: 2px solid var(--mi-cyan); padding-left: 10px; }
 .market-intel-agent-report { display: grid; gap: 16px; }
+.market-intel-agent-report.is-pending { margin-top: 12px; }
 .market-intel-agent-verdict { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; border: 1px solid color-mix(in srgb, var(--mi-cyan) 25%, var(--line)); border-left: 4px solid var(--mi-cyan); border-radius: 7px; background: color-mix(in srgb, var(--mi-cyan) 6%, var(--surface)); padding: 10px 11px; }
 .market-intel-agent-verdict > span { color: var(--mi-cyan); font: 800 9px/1 ui-monospace, monospace; letter-spacing: .09em; }
 .market-intel-agent-verdict > strong { color: var(--ink); font-size: 12px; }

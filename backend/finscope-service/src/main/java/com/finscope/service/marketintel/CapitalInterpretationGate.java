@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,16 +36,21 @@ public class CapitalInterpretationGate {
         requireObject(root);
         String marketState = required(root, "marketState");
         if (!STATES.contains(marketState)) throw new IllegalArgumentException("unknown market state");
+        List<String> rejections = new ArrayList<String>();
         String summary = required(root, "executiveSummary");
         Set<String> allowedNumbers = allowedNumbers(packet);
-        if (containsExternalNumber(summary, allowedNumbers)) {
-            throw new IllegalArgumentException("executive summary contains number outside evidence packet");
+        Set<String> unsafeSummaryNumbers = externalNumbers(summary, allowedNumbers);
+        if (!unsafeSummaryNumbers.isEmpty()) {
+            rejections.add("摘要包含证据包之外的数字" + unsafeSummaryNumbers + "，已使用规则摘要替换");
+            summary = null;
         }
         String confidence = required(root, "confidence").toUpperCase();
         if (!Arrays.asList("LOW", "MID").contains(confidence)) confidence = "MID";
         String disclaimer = required(root, "disclaimer");
-        if (containsExternalNumber(disclaimer, allowedNumbers)) {
-            throw new IllegalArgumentException("disclaimer contains number outside evidence packet");
+        Set<String> unsafeDisclaimerNumbers = externalNumbers(disclaimer, allowedNumbers);
+        if (!unsafeDisclaimerNumbers.isEmpty()) {
+            rejections.add("免责声明包含证据包之外的数字" + unsafeDisclaimerNumbers + "，已使用系统免责声明替换");
+            disclaimer = null;
         }
         Set<String> factorRefs = packet.getFactorObservations().stream()
                 .map(item -> item.factorRef()).collect(Collectors.toSet());
@@ -56,7 +62,6 @@ public class CapitalInterpretationGate {
                 .map(item -> item.getId()).collect(Collectors.toSet());
 
         List<CapitalInterpretationObservation> observations = new ArrayList<CapitalInterpretationObservation>();
-        List<String> rejections = new ArrayList<String>();
         JsonNode observationNodes = array(root, "observations");
         for (JsonNode node : observationNodes) {
             String dimension = required(node, "dimension");
@@ -206,11 +211,17 @@ public class CapitalInterpretationGate {
     }
 
     private boolean containsExternalNumber(String value, Set<String> allowedNumbers) {
+        return !externalNumbers(value, allowedNumbers).isEmpty();
+    }
+
+    private Set<String> externalNumbers(String value, Set<String> allowedNumbers) {
+        Set<String> result = new LinkedHashSet<String>();
         Matcher matcher = NUMBER.matcher(value == null ? "" : value);
         while (matcher.find()) {
-            if (!allowedNumbers.contains(normalizeNumber(matcher.group()))) return true;
+            String normalized = normalizeNumber(matcher.group());
+            if (!allowedNumbers.contains(normalized)) result.add(normalized);
         }
-        return false;
+        return result;
     }
 
     private String normalizeNumber(String value) {

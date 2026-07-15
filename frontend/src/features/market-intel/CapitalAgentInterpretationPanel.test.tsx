@@ -36,6 +36,37 @@ test('shows elapsed time and increasingly explicit guidance while the Agent is b
   expect(screen.getByRole('status')).toHaveTextContent('超时后会自动展示规则解读');
 });
 
+test('adds breathing room before the pending verdict while analysis is running', () => {
+  render(
+    <CapitalAgentInterpretationPanel
+      interpretation={{
+        id: 60,
+        status: 'PENDING',
+        interpretationType: 'AGENT',
+        plainSummary: '',
+        facts: [],
+        hypotheses: [],
+        dataGaps: [],
+        observationPoints: [],
+        observations: [],
+        counterEvidence: [],
+        watchConditionRefs: [],
+        evidenceRefs: [],
+        rejectedOutputCount: 0,
+        rejectionReasons: [],
+        disclaimer: ''
+      }}
+      factorObservations={[]}
+      watchConditions={[]}
+      busy
+      onRun={vi.fn()}
+    />
+  );
+
+  expect(screen.getByText('资金行为待确认').closest('.market-intel-agent-report'))
+    .toHaveClass('is-pending');
+});
+
 test('explains the concrete timeout budget when the Agent falls back to rules', () => {
   render(
     <CapitalAgentInterpretationPanel

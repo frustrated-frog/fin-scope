@@ -21,6 +21,7 @@ public class CapitalInterpretationAgent {
     private static final int PRIMARY_TIMEOUT_MS = 60_000;
     private static final int REPAIR_TIMEOUT_MS = 30_000;
     private static final int MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS = 3;
+    private static final String SAFE_DISCLAIMER = "模型仅组织公开数据和已登记因子，仅用于研究，不构成投资建议。";
     private final LlmChatClient llm;
     private final ObjectMapper json;
     private final CapitalAgentResponseParser parser;
@@ -93,8 +94,9 @@ public class CapitalInterpretationAgent {
         CapitalInterpretation result = base(packet, rules);
         result.setStatus("SUCCEEDED");
         result.setMarketState(accepted.marketState);
-        result.setExecutiveSummary(accepted.executiveSummary);
-        result.setPlainSummary(accepted.executiveSummary);
+        String summary = accepted.executiveSummary == null ? rules.getSummary() : accepted.executiveSummary;
+        result.setExecutiveSummary(summary);
+        result.setPlainSummary(summary);
         result.setObservations(accepted.observations);
         result.setHypotheses(accepted.hypotheses);
         result.setCounterEvidence(accepted.counterEvidence);
@@ -103,7 +105,7 @@ public class CapitalInterpretationAgent {
         result.setConfidence(!"COMPLETE".equals(packet.getQualityStatus())
                 || packet.getCoverageDimensions().size() < MAXIMUM_REQUIRED_OUTPUT_DIMENSIONS
                 ? "LOW" : accepted.confidence);
-        result.setDisclaimer(accepted.disclaimer);
+        result.setDisclaimer(accepted.disclaimer == null ? SAFE_DISCLAIMER : accepted.disclaimer);
         result.setRejectedOutputCount(accepted.rejectionReasons.size());
         result.setRejectionReasons(accepted.rejectionReasons);
         result.setOutputHash(JdkFinanceHttpClient.sha256(output));
@@ -172,6 +174,7 @@ public class CapitalInterpretationAgent {
                 + requiredDimensions + "个输入中实际可用的不同维度。"
                 + contractSchema()
                 + "文本只能复述证据包已有数字，不得自行计算或创造数值，不得输出买卖建议；"
+                + "executiveSummary和disclaimer不要包含任何数字；"
                 + "拆单和隐藏资金只能是LOW，整体置信度只能LOW或MID。";
     }
 

@@ -115,7 +115,7 @@ export function CapitalAgentInterpretationPanel({
       )}
       {busy && <p className="market-intel-agent-running" role="status">{agentWaitMessage(elapsedSeconds)}</p>}
       {interpretation && (
-        <div className="market-intel-agent-report">
+        <div className={'market-intel-agent-report' + (busy && interpretation.status === 'PENDING' ? ' is-pending' : '')}>
           <div className={'market-intel-agent-verdict status-' + interpretation.status.toLowerCase()} role={interpretation.status === 'FAILED' ? 'alert' : 'status'}>
             <span>{statusLabels[interpretation.status]}</span>
             <strong>{marketStateLabels[interpretation.marketState ?? ''] ?? '资金行为待确认'}</strong>
