@@ -46,6 +46,7 @@ public class DatasetFactorAnalysisService {
         List<LocalDate> dates = new ArrayList<LocalDate>(byDate.keySet()); Map<String,List<QuantDailyBar>> histories = new LinkedHashMap<String,List<QuantDailyBar>>();
         Set<String> active = new LinkedHashSet<String>(); int eventCursor = 0; List<Double> dailyIc = new ArrayList<Double>();
         int candidateDays = 0, minCrossSection = Integer.MAX_VALUE;
+        List<Double> dailySpread = new ArrayList<Double>(), dailyMonotonicity = new ArrayList<Double>();
         for (int dateIndex = 0; dateIndex + 1 < dates.size(); dateIndex++) {
             LocalDate date = dates.get(dateIndex); while (eventCursor < events.size() && !events.get(eventCursor).getTradeDate().isAfter(date)) {
                 QuantUniverseMember event = events.get(eventCursor++); if (event.isMember()) active.add(event.getInstrumentCode()); else active.remove(event.getInstrumentCode());
@@ -60,7 +61,8 @@ public class DatasetFactorAnalysisService {
                 FactorObservation observation = providerRegistry().calculate(factorCode,
                         new FactorCalculationContext(String.valueOf(datasetId), code, date,
                                 dates.get(dateIndex + 1).atTime(9, 30),
-                                histories.get(code), latestVisible(fundamentals, code, date), capitalFlow));
+                                histories.get(code), latestVisible(fundamentals, code, date), capitalFlow,
+                                visibleCapitalHistory(capital, code, date, dates.get(dateIndex + 1).atTime(9, 30))));
                 double factor = observation.getProcessedValue() == null
                         ? Double.NaN : observation.getProcessedValue().doubleValue();
                 if (Double.isFinite(factor)) { factorValues.add(factor); nextReturns.add(next.getClose().doubleValue() / next.getOpen().doubleValue() - 1d); }
@@ -70,6 +72,8 @@ public class DatasetFactorAnalysisService {
                 double ic = analysis.rankIc(factorValues, nextReturns);
                 if (Double.isFinite(ic)) {
                     dailyIc.add(ic);
+                    dailySpread.add(analysis.quantileSpread(factorValues, nextReturns));
+                    dailyMonotonicity.add(analysis.quantileMonotonicity(factorValues, nextReturns));
                     minCrossSection = Math.min(minCrossSection, factorValues.size());
                 }
             }
@@ -79,6 +83,7 @@ public class DatasetFactorAnalysisService {
         result.setTotalEligibleDays(candidateDays);
         result.setMinCrossSectionSize(minCrossSection == Integer.MAX_VALUE ? 0 : minCrossSection);
         result.setCoverageRatio(candidateDays == 0 ? 0d : (double) dailyIc.size() / candidateDays);
+        analysis.attachQuantileEvidence(result, dailySpread, dailyMonotonicity);
         evidenceAssessment.assess(result, researchDirection(factorCode), dataset.getDataKind(), dataset.getDatasetLevel());
         return result;
     }
@@ -107,6 +112,16 @@ public class DatasetFactorAnalysisService {
     }
 
     private String key(LocalDate date, String code) { return date + "|" + code; }
+
+    private List<QuantCapitalFlowDaily> visibleCapitalHistory(Map<String, QuantCapitalFlowDaily> values,
+                                                               String code, LocalDate date,
+                                                               java.time.LocalDateTime cutoff) {
+        List<QuantCapitalFlowDaily> result = new ArrayList<QuantCapitalFlowDaily>();
+        for (QuantCapitalFlowDaily value : values.values())
+            if (code.equals(value.getInstrumentCode()) && !value.getTradeDate().isAfter(date)
+                    && value.getAvailableAt() != null && !value.getAvailableAt().isAfter(cutoff)) result.add(value);
+        result.sort(Comparator.comparing(QuantCapitalFlowDaily::getTradeDate)); return result;
+    }
 
     private QuantFundamentalSnapshot latestVisible(List<QuantFundamentalSnapshot> values, String code, LocalDate date) {
         QuantFundamentalSnapshot latest = null;

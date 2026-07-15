@@ -34,4 +34,13 @@ class FactorAnalysisServiceTest {
         assertEquals(1d / 3d, result.getZeroIcRatio(), 0.000001);
         assertTrue(result.getIcMeanCiLower() <= result.getIcMeanCiUpper());
     }
+
+    @Test
+    void calculatesTopBottomSpreadAndQuintileMonotonicity() {
+        FactorAnalysisService service = new FactorAnalysisService();
+        java.util.List<Double> factors = Arrays.asList(1d,2d,3d,4d,5d,6d,7d,8d,9d,10d);
+        java.util.List<Double> returns = Arrays.asList(-.05,-.04,-.03,-.02,-.01,.01,.02,.03,.04,.05);
+        assertEquals(0.09, service.quantileSpread(factors, returns), 0.000001);
+        assertEquals(1d, service.quantileMonotonicity(factors, returns), 0.000001);
+    }
 }

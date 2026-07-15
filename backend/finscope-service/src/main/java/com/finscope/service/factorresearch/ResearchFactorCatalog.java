@@ -144,6 +144,22 @@ public class ResearchFactorCatalog {
                 "(superLargeNetInflow + largeNetInflow) / amount",
                 Arrays.asList("superLargeNetInflow", "largeNetInflow", "amount"),
                 "这是两个订单规模桶的合计统计；任一桶缺失即拒绝计算，不把缺失值当作零，也不等同于真实机构净买入"));
+        add(values, capitalWindowFactor(CapitalFlowFactorProvider.NORMALIZED_MAIN_FLOW_SUM_5D,
+                "5日主力流入累计", "最近5个完整交易日的主力净流入强度之和",
+                "sum(mainNetInflow / amount, 5 trading days)", 5,
+                "累计值同时混合方向和持续时间，不能与绝对资金净额混用；缺一天就拒绝计算"));
+        add(values, capitalWindowFactor(CapitalFlowFactorProvider.FLOW_PERSISTENCE_5D,
+                "5日资金持续性", "最近5个完整交易日流入方向符号的平均值，范围为 -1 到 1",
+                "mean(sign(mainNetInflow / amount), 5 trading days)", 5,
+                "它只衡量方向是否连续，不衡量资金强度；连续微小流入也可能得到高值"));
+        add(values, capitalWindowFactor(CapitalFlowFactorProvider.MAIN_FLOW_SHARE_ZSCORE_20D,
+                "20日资金强度 Z 分数", "当前主力流入强度相对自身最近20个交易日常态的标准化偏离",
+                "(share[t] - mean(share,20)) / populationStd(share,20)", 20,
+                "这是标的自身时间序列异常度，不是机构身份识别；标准差为零或窗口不完整时拒绝计算"));
+        add(values, capitalWindowFactor(CapitalFlowFactorProvider.PRICE_FLOW_DIVERGENCE_5D,
+                "5日价格—资金背离", "将5日价格收益与同期归一化资金累计的乘积取反，正值表示方向相反",
+                "-return(adjustedClose,5) * sum(mainNetInflow / amount,5)", 5,
+                "正值只表示价格和资金统计方向相反，不自动等于反转机会；复权价格需6个交易日、资金需5个完整交易日"));
         this.definitions = Collections.unmodifiableMap(values);
     }
 
@@ -174,6 +190,24 @@ public class ResearchFactorCatalog {
                 .evaluationPolicyVersion("cross-sectional-evidence-v1")
                 .status(FactorLifecycleStatus.EXPLORATORY)
                 .build();
+    }
+
+    private static ResearchFactorDefinition capitalWindowFactor(FactorIdentity identity, String name,
+                                                                  String meaning, String formula,
+                                                                  int window, String boundary) {
+        return ResearchFactorDefinition.builder().identity(identity).name(name).category("资金行为")
+                .frequency("DAILY").expectedDirection("POSITIVE_HYPOTHESIS").plainMeaning(meaning)
+                .hypothesis("若资金行为具有短期延续或与价格形成可解释的错位，该指标与下一交易日横截面收益可能同向；必须由数据检验")
+                .economicRationale("先以每日成交额归一化，再在连续交易日窗口聚合，降低绝对资金规模和非交易日间隔造成的机械偏差")
+                .interpretationBoundary(boundary + "；当前仅为探索性研究假设，不构成投资建议")
+                .requiredFields(Arrays.asList("tradeDate", "availableAt", "qualityStatus", "mainNetInflow", "amount", "adjustedClose"))
+                .availableAtRule("严格按行情交易日历取最近 " + window + " 个完整交易日；所有资金行 availableAt 必须不晚于 executionCutoff")
+                .missingPolicy("窗口不足、任一天资金行缺失/迟到/质量异常、amount 非正时整项返回 MISSING_INPUT，不压缩窗口")
+                .calculationKey(formula + "，结果保留10位小数")
+                .calculationVersion("capital-window-v1").sourceType("FROZEN_CAPITAL_FLOW_AND_DAILY_BAR")
+                .sourceRef("quant_capital_flow_daily + quant_daily_bar")
+                .evaluationPolicyCode("CROSS_SECTIONAL_FORWARD_RETURN").evaluationPolicyVersion("cross-sectional-evidence-v1")
+                .status(FactorLifecycleStatus.EXPLORATORY).build();
     }
 
     private static ResearchFactorDefinition marketFactor(String code, String name, String category,

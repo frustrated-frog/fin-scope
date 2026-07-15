@@ -8,9 +8,13 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapitalFlowFactorProviderTest {
     private final CapitalFlowFactorProvider provider = new CapitalFlowFactorProvider();
@@ -84,6 +88,55 @@ class CapitalFlowFactorProviderTest {
         FactorObservation value = provider.calculate(context, CapitalFlowFactorProvider.MAIN_FLOW_SHARE);
 
         assertEquals(ObservationQuality.MISSING_INPUT, value.getQualityStatus());
+    }
+
+    @Test
+    void calculatesStrictNormalizedFlowWindowsAndPriceDivergence() {
+        List<com.finscope.domain.quant.data.QuantDailyBar> prices = new ArrayList<com.finscope.domain.quant.data.QuantDailyBar>();
+        List<QuantCapitalFlowDaily> flows = new ArrayList<QuantCapitalFlowDaily>();
+        LocalDate start = LocalDate.of(2026, 6, 1);
+        for (int day = 0; day < 20; day++) {
+            LocalDate date = start.plusDays(day);
+            com.finscope.domain.quant.data.QuantDailyBar bar = new com.finscope.domain.quant.data.QuantDailyBar();
+            bar.setTradeDate(date); bar.setAdjustedClose(BigDecimal.valueOf(100 + day)); prices.add(bar);
+            QuantCapitalFlowDaily flow = source(BigDecimal.valueOf(day + 1), new BigDecimal("100"));
+            flow.setTradeDate(date); flow.setAvailableAt(date.atTime(18, 0)); flow.setSourceFingerprint("flow-" + day); flows.add(flow);
+        }
+        QuantCapitalFlowDaily latest = flows.get(19);
+        FactorCalculationContext context = new FactorCalculationContext("7", "600519.SH", latest.getTradeDate(),
+                latest.getAvailableAt(), prices, null, latest, flows);
+
+        assertEquals(new BigDecimal("0.9000000000"), provider.calculate(context,
+                CapitalFlowFactorProvider.NORMALIZED_MAIN_FLOW_SUM_5D).getProcessedValue());
+        assertEquals(new BigDecimal("1.0000000000"), provider.calculate(context,
+                CapitalFlowFactorProvider.FLOW_PERSISTENCE_5D).getProcessedValue());
+        assertEquals(new BigDecimal("1.6475089421"), provider.calculate(context,
+                CapitalFlowFactorProvider.MAIN_FLOW_SHARE_ZSCORE_20D).getProcessedValue());
+        assertTrue(provider.calculate(context, CapitalFlowFactorProvider.PRICE_FLOW_DIVERGENCE_5D)
+                .getProcessedValue().signum() < 0);
+    }
+
+    @Test
+    void refusesCompressedOrLateCapitalWindows() {
+        List<com.finscope.domain.quant.data.QuantDailyBar> prices = new ArrayList<com.finscope.domain.quant.data.QuantDailyBar>();
+        List<QuantCapitalFlowDaily> flows = new ArrayList<QuantCapitalFlowDaily>();
+        LocalDate start = LocalDate.of(2026, 7, 1);
+        for (int day = 0; day < 5; day++) {
+            com.finscope.domain.quant.data.QuantDailyBar bar = new com.finscope.domain.quant.data.QuantDailyBar();
+            bar.setTradeDate(start.plusDays(day)); bar.setAdjustedClose(BigDecimal.TEN); prices.add(bar);
+            QuantCapitalFlowDaily flow = source(BigDecimal.ONE, BigDecimal.TEN); flow.setTradeDate(start.plusDays(day));
+            flow.setAvailableAt(start.plusDays(day).atTime(18, 0)); flows.add(flow);
+        }
+        QuantCapitalFlowDaily latest = flows.get(4);
+        FactorCalculationContext missingDay = new FactorCalculationContext("7", "600519.SH", latest.getTradeDate(), latest.getAvailableAt(),
+                prices, null, latest, Arrays.asList(flows.get(0), flows.get(1), flows.get(3), flows.get(4)));
+        assertEquals(ObservationQuality.MISSING_INPUT, provider.calculate(missingDay,
+                CapitalFlowFactorProvider.NORMALIZED_MAIN_FLOW_SUM_5D).getQualityStatus());
+        flows.get(2).setAvailableAt(latest.getAvailableAt().plusMinutes(1));
+        FactorCalculationContext late = new FactorCalculationContext("7", "600519.SH", latest.getTradeDate(), latest.getAvailableAt(),
+                prices, null, latest, flows);
+        assertEquals(ObservationQuality.MISSING_INPUT, provider.calculate(late,
+                CapitalFlowFactorProvider.NORMALIZED_MAIN_FLOW_SUM_5D).getQualityStatus());
     }
 
     private FactorCalculationContext context(QuantCapitalFlowDaily source) {

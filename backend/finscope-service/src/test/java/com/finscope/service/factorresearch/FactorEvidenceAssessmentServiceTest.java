@@ -44,6 +44,8 @@ class FactorEvidenceAssessmentServiceTest {
         value.setIcMean(mean); value.setIcStd(std); value.setIcIr(std == 0 ? 0 : mean / std);
         value.setPositiveIcRatio(positiveRatio); value.setNegativeIcRatio(1d - positiveRatio);
         value.setSampleCount(samples); value.setMinCrossSectionSize(20);
+        value.setQuantileSampleDays(samples); value.setQuantileSpreadMean(mean < 0 ? -0.01 : 0.01);
+        value.setQuantileMonotonicityMean(mean < 0 ? -0.5 : 0.5);
         value.setIcMeanCiLower(mean - 0.01); value.setIcMeanCiUpper(mean + 0.01);
         return value;
     }

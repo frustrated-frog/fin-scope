@@ -134,7 +134,8 @@ public class QuantBacktestEngine {
                 FactorObservation observation = providers.calculate(factor.getCode(),
                         new FactorCalculationContext(datasetId == null ? "backtest" : datasetId,
                                 entry.getKey(), date, executionCutoff,
-                                history, latestVisible(fundamentals, entry.getKey(), date), capitalFlow));
+                                history, latestVisible(fundamentals, entry.getKey(), date), capitalFlow,
+                                visibleCapitalHistory(capital, entry.getKey(), date, executionCutoff)));
                 double value = observation.getProcessedValue() == null
                         ? Double.NaN : observation.getProcessedValue().doubleValue();
                 if (Double.isFinite(value)) raw.add(new FactorValue(date, entry.getKey(), factor.getCode(), value));
@@ -159,6 +160,9 @@ public class QuantBacktestEngine {
 
     private int providerLookback(String code) {
         providers.identity(code);
+        if ("MAIN_FLOW_SHARE_ZSCORE_20D".equals(code)) return 20;
+        if ("NORMALIZED_MAIN_FLOW_SUM_5D".equals(code) || "FLOW_PERSISTENCE_5D".equals(code)) return 5;
+        if ("PRICE_FLOW_DIVERGENCE_5D".equals(code)) return 6;
         return 0;
     }
 
@@ -172,6 +176,16 @@ public class QuantBacktestEngine {
     }
 
     private String key(LocalDate date, String code) { return date + "|" + code; }
+
+    private List<QuantCapitalFlowDaily> visibleCapitalHistory(Map<String, QuantCapitalFlowDaily> values,
+                                                               String code, LocalDate date,
+                                                               java.time.LocalDateTime cutoff) {
+        List<QuantCapitalFlowDaily> result = new ArrayList<QuantCapitalFlowDaily>();
+        for (QuantCapitalFlowDaily value : values.values())
+            if (code.equals(value.getInstrumentCode()) && !value.getTradeDate().isAfter(date)
+                    && value.getAvailableAt() != null && !value.getAvailableAt().isAfter(cutoff)) result.add(value);
+        result.sort(Comparator.comparing(QuantCapitalFlowDaily::getTradeDate)); return result;
+    }
 
     private boolean eligible(QuantDailyBar bar, List<QuantDailyBar> history, QuantStrategySpec spec) {
         return bar != null && "TRADING".equals(bar.getTradeStatus()) && (!spec.getFilters().isExcludeSt() || !bar.isSt())

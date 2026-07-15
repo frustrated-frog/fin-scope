@@ -17,11 +17,20 @@ public final class FactorCalculationContext {
     private final List<QuantDailyBar> history;
     private final QuantFundamentalSnapshot fundamental;
     private final QuantCapitalFlowDaily capitalFlow;
+    private final List<QuantCapitalFlowDaily> capitalHistory;
 
     public FactorCalculationContext(String datasetId, String instrumentCode, LocalDate tradeDate,
                                     LocalDateTime availableAt, List<QuantDailyBar> history,
                                     QuantFundamentalSnapshot fundamental,
                                     QuantCapitalFlowDaily capitalFlow) {
+        this(datasetId, instrumentCode, tradeDate, availableAt, history, fundamental, capitalFlow,
+                capitalFlow == null ? Collections.<QuantCapitalFlowDaily>emptyList() : Collections.singletonList(capitalFlow));
+    }
+
+    public FactorCalculationContext(String datasetId, String instrumentCode, LocalDate tradeDate,
+                                    LocalDateTime availableAt, List<QuantDailyBar> history,
+                                    QuantFundamentalSnapshot fundamental, QuantCapitalFlowDaily capitalFlow,
+                                    List<QuantCapitalFlowDaily> capitalHistory) {
         if (datasetId == null || datasetId.trim().isEmpty() || instrumentCode == null
                 || tradeDate == null || availableAt == null) {
             throw new IllegalArgumentException("factor calculation context is incomplete");
@@ -30,9 +39,12 @@ public final class FactorCalculationContext {
         this.instrumentCode = instrumentCode;
         this.tradeDate = tradeDate;
         this.availableAt = availableAt;
-        this.history = history == null ? Collections.<QuantDailyBar>emptyList() : history;
+        this.history = history == null ? Collections.<QuantDailyBar>emptyList()
+                : Collections.unmodifiableList(new java.util.ArrayList<QuantDailyBar>(history));
         this.fundamental = fundamental;
         this.capitalFlow = capitalFlow;
+        this.capitalHistory = capitalHistory == null ? Collections.<QuantCapitalFlowDaily>emptyList()
+                : Collections.unmodifiableList(new java.util.ArrayList<QuantCapitalFlowDaily>(capitalHistory));
     }
 
     public String getDatasetId() { return datasetId; }
@@ -42,4 +54,5 @@ public final class FactorCalculationContext {
     public List<QuantDailyBar> getHistory() { return history; }
     public QuantFundamentalSnapshot getFundamental() { return fundamental; }
     public QuantCapitalFlowDaily getCapitalFlow() { return capitalFlow; }
+    public List<QuantCapitalFlowDaily> getCapitalHistory() { return capitalHistory; }
 }

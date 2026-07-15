@@ -167,6 +167,8 @@ export function FactorGuide({
               ? <div><dt>95% HAC 区间</dt><dd>[{analysis.directionAdjustedCiLower.toFixed(3)}, {analysis.directionAdjustedCiUpper.toFixed(3)}]</dd></div> : null}
             {analysis.minCrossSectionSize !== undefined ? <div><dt>最小横截面</dt><dd>{analysis.minCrossSectionSize} 只</dd></div> : null}
             {analysis.coverageRatio !== undefined ? <div><dt>有效日期覆盖</dt><dd>{percent(analysis.coverageRatio)}</dd></div> : null}
+            {analysis.directionAdjustedQuantileSpread !== undefined ? <div><dt>首尾分位差</dt><dd>{percent(analysis.directionAdjustedQuantileSpread)}</dd></div> : null}
+            {analysis.directionAdjustedMonotonicity !== undefined ? <div><dt>分位单调性</dt><dd>{analysis.directionAdjustedMonotonicity.toFixed(2)}</dd></div> : null}
           </dl>
           {analysis.evaluationPolicyVersion && <p className="quant-factor-conclusion">评价门禁：{analysis.evaluationPolicyVersion} · {analysis.validationEligible ? '具备结论资格' : '未通过准入'}</p>}
           {analysis.conclusion && <p className="quant-factor-conclusion">研究结论：{analysis.conclusion === 'INCONCLUSIVE' ? '证据不足' : analysis.conclusion === 'SUPPORTED' ? '支持假设' : '反驳假设'}。生命周期不会由本次诊断自动升级。</p>}

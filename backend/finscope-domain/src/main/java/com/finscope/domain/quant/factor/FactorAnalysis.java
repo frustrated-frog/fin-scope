@@ -50,6 +50,12 @@ public class FactorAnalysis {
     private int totalEligibleDays;
     private int minCrossSectionSize;
     private double coverageRatio;
+    private int quantileSampleDays;
+    private double quantileSpreadMean;
+    private double favorableQuantileSpreadRatio;
+    private double quantileMonotonicityMean;
+    private double directionAdjustedQuantileSpread;
+    private double directionAdjustedMonotonicity;
     private boolean validationEligible;
     private String evaluationPolicyVersion;
     private List<String> blockingReasons = Collections.emptyList();
@@ -99,6 +105,18 @@ public class FactorAnalysis {
     public void setMinCrossSectionSize(int value) { this.minCrossSectionSize = value; }
     public double getCoverageRatio() { return coverageRatio; }
     public void setCoverageRatio(double value) { this.coverageRatio = value; }
+    public int getQuantileSampleDays() { return quantileSampleDays; }
+    public void setQuantileSampleDays(int value) { quantileSampleDays = value; }
+    public double getQuantileSpreadMean() { return quantileSpreadMean; }
+    public void setQuantileSpreadMean(double value) { quantileSpreadMean = value; }
+    public double getFavorableQuantileSpreadRatio() { return favorableQuantileSpreadRatio; }
+    public void setFavorableQuantileSpreadRatio(double value) { favorableQuantileSpreadRatio = value; }
+    public double getQuantileMonotonicityMean() { return quantileMonotonicityMean; }
+    public void setQuantileMonotonicityMean(double value) { quantileMonotonicityMean = value; }
+    public double getDirectionAdjustedQuantileSpread() { return directionAdjustedQuantileSpread; }
+    public void setDirectionAdjustedQuantileSpread(double value) { directionAdjustedQuantileSpread = value; }
+    public double getDirectionAdjustedMonotonicity() { return directionAdjustedMonotonicity; }
+    public void setDirectionAdjustedMonotonicity(double value) { directionAdjustedMonotonicity = value; }
     public boolean isValidationEligible() { return validationEligible; }
     public void setValidationEligible(boolean value) { this.validationEligible = value; }
     public String getEvaluationPolicyVersion() { return evaluationPolicyVersion; }

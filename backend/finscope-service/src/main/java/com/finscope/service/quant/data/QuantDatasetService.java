@@ -84,6 +84,12 @@ public class QuantDatasetService {
             if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE")) result.add("MAIN_FLOW_SHARE");
             if (computableCapitalRows(frozenCapital, "SUPER_LARGE_FLOW_SHARE")) result.add("SUPER_LARGE_FLOW_SHARE");
             if (computableCapitalRows(frozenCapital, "BIG_ORDER_FLOW_SHARE")) result.add("BIG_ORDER_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE") && hasCapitalWindowCoverage(frozenCapital, 5)) {
+                result.add("NORMALIZED_MAIN_FLOW_SUM_5D"); result.add("FLOW_PERSISTENCE_5D");
+                if (tradingDates >= 6) result.add("PRICE_FLOW_DIVERGENCE_5D");
+            }
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE") && hasCapitalWindowCoverage(frozenCapital, 20))
+                result.add("MAIN_FLOW_SHARE_ZSCORE_20D");
         }
         return result;
     }
@@ -98,6 +104,13 @@ public class QuantDatasetService {
             if ("SUPER_LARGE_FLOW_SHARE".equals(factorCode)) return value.getSuperLargeNetInflow() != null;
             return value.getSuperLargeNetInflow() != null && value.getLargeNetInflow() != null;
         });
+    }
+
+    private boolean hasCapitalWindowCoverage(List<QuantCapitalFlowDaily> rows, int window) {
+        Map<String, Set<LocalDate>> datesByInstrument = new LinkedHashMap<String, Set<LocalDate>>();
+        for (QuantCapitalFlowDaily row : rows)
+            datesByInstrument.computeIfAbsent(row.getInstrumentCode(), key -> new LinkedHashSet<LocalDate>()).add(row.getTradeDate());
+        return !datesByInstrument.isEmpty() && datesByInstrument.values().stream().allMatch(dates -> dates.size() >= window);
     }
 
     public QuantDataset create(String name, String dataKind) {

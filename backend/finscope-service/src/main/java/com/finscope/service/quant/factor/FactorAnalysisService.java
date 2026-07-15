@@ -34,6 +34,34 @@ public class FactorAnalysisService {
         return result;
     }
 
+    public double quantileSpread(List<Double> factors, List<Double> returns) {
+        if (!validPair(factors, returns) || factors.size() < 10) return Double.NaN;
+        List<Integer> order = order(factors); int bucket = factors.size() / 5;
+        double low = 0d, high = 0d;
+        for (int i = 0; i < bucket; i++) { low += returns.get(order.get(i)); high += returns.get(order.get(order.size() - 1 - i)); }
+        return high / bucket - low / bucket;
+    }
+
+    public double quantileMonotonicity(List<Double> factors, List<Double> returns) {
+        if (!validPair(factors, returns) || factors.size() < 10) return Double.NaN;
+        List<Integer> order = order(factors); List<Double> groups = new ArrayList<Double>();
+        for (int bucket = 0; bucket < 5; bucket++) {
+            int from = bucket * order.size() / 5, to = (bucket + 1) * order.size() / 5; double sum = 0d;
+            for (int i = from; i < to; i++) sum += returns.get(order.get(i));
+            groups.add(sum / (to - from));
+        }
+        return rankIc(java.util.Arrays.asList(1d, 2d, 3d, 4d, 5d), groups);
+    }
+
+    public void attachQuantileEvidence(FactorAnalysis result, List<Double> spreads, List<Double> monotonicities) {
+        List<Double> finiteSpread = finite(spreads), finiteMonotonicity = finite(monotonicities);
+        result.setQuantileSampleDays(Math.min(finiteSpread.size(), finiteMonotonicity.size()));
+        result.setQuantileSpreadMean(mean(finiteSpread));
+        result.setFavorableQuantileSpreadRatio(finiteSpread.isEmpty() ? 0d
+                : (double) finiteSpread.stream().filter(value -> value > 0d).count() / finiteSpread.size());
+        result.setQuantileMonotonicityMean(mean(finiteMonotonicity));
+    }
+
     private List<Double> ranks(List<Double> values) {
         List<Integer> indexes = new ArrayList<Integer>(); for (int i = 0; i < values.size(); i++) indexes.add(i);
         indexes.sort(Comparator.comparing(values::get));
@@ -47,6 +75,11 @@ public class FactorAnalysisService {
         }
         return java.util.Arrays.asList(result);
     }
+
+    private boolean validPair(List<Double> factors, List<Double> returns) { return factors != null && returns != null && factors.size() == returns.size(); }
+    private List<Integer> order(List<Double> values) { List<Integer> indexes = new ArrayList<Integer>(); for (int i = 0; i < values.size(); i++) indexes.add(i); indexes.sort(Comparator.comparing(values::get)); return indexes; }
+    private List<Double> finite(List<Double> values) { List<Double> result = new ArrayList<Double>(); if (values != null) for (Double value : values) if (value != null && Double.isFinite(value)) result.add(value); return result; }
+    private double mean(List<Double> values) { return values.isEmpty() ? 0d : values.stream().mapToDouble(Double::doubleValue).average().orElse(0d); }
 
     private double correlation(List<Double> x, List<Double> y) {
         double mx = x.stream().mapToDouble(Double::doubleValue).average().orElse(0);

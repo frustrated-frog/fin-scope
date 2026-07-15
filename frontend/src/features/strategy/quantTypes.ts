@@ -25,6 +25,8 @@ export interface QuantFactorAnalysis {
   favorableIcRatio?: number;
   directionAdjustedCiLower?: number; directionAdjustedCiUpper?: number;
   totalEligibleDays?: number; minCrossSectionSize?: number; coverageRatio?: number;
+  quantileSampleDays?: number; quantileSpreadMean?: number; favorableQuantileSpreadRatio?: number;
+  quantileMonotonicityMean?: number; directionAdjustedQuantileSpread?: number; directionAdjustedMonotonicity?: number;
   validationEligible?: boolean; evaluationPolicyVersion?: string; blockingReasons?: string[];
   sampleEvidence?: 'INSUFFICIENT_SAMPLE' | 'DIRECTIONALLY_ALIGNED' | 'OPPOSED' | 'UNSTABLE';
   conclusion?: 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';

@@ -28,11 +28,15 @@ class ResearchFactorCatalogTest {
                 .map(value -> value.getCode())
                 .collect(Collectors.toSet());
 
-        assertEquals(16, definitions.size());
+        assertEquals(20, definitions.size());
         assertTrue(codes.containsAll(executableCodes));
         assertTrue(codes.contains("MAIN_FLOW_SHARE"));
         assertTrue(codes.contains("SUPER_LARGE_FLOW_SHARE"));
         assertTrue(codes.contains("BIG_ORDER_FLOW_SHARE"));
+        assertTrue(codes.contains("NORMALIZED_MAIN_FLOW_SUM_5D"));
+        assertTrue(codes.contains("FLOW_PERSISTENCE_5D"));
+        assertTrue(codes.contains("MAIN_FLOW_SHARE_ZSCORE_20D"));
+        assertTrue(codes.contains("PRICE_FLOW_DIVERGENCE_5D"));
         assertEquals(definitions.size(), new HashSet<String>(definitions.stream()
                 .map(value -> value.getIdentity().toString())
                 .collect(Collectors.toList())).size());
