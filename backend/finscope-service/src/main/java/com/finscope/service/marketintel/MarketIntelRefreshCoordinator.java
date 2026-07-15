@@ -40,6 +40,8 @@ import java.util.concurrent.Executor;
 @Service
 public class MarketIntelRefreshCoordinator {
     private static final Logger log = LoggerFactory.getLogger(MarketIntelRefreshCoordinator.class);
+    private static final int STORED_DAILY_READ_LIMIT = 320;
+    private static final int EVALUATION_DAILY_LIMIT = 250;
     private final MarketIntelCapitalService capital;
     private final MarketDataGateway gateway;
     private final CapitalFlowRepository flows;
@@ -184,13 +186,19 @@ public class MarketIntelRefreshCoordinator {
         List<CapitalFlowPoint> days = new ArrayList<CapitalFlowPoint>(fresh.getDailyPoints());
         List<String> warnings = new ArrayList<String>(fresh.getWarnings());
         applyQuoteFallback(instrument, minutes, days, warnings);
+        List<CapitalFlowPoint> storedDays = latestStoredDays(instrument.getId());
         if (days.isEmpty()) {
-            List<CapitalFlowPoint> storedDays = latestStoredDays(instrument.getId());
             if (!storedDays.isEmpty()) {
                 days.addAll(storedDays);
                 removeWarnings(warnings, "HISTORICAL_FUND_FLOW_UNAVAILABLE", "DAILY_MARKET_UNAVAILABLE");
                 LocalDate latest = storedDays.get(storedDays.size() - 1).getDataDate();
                 warnings.add("历史资金流刷新失败，已使用最近成功数据（截至 " + latest + "）");
+            }
+        } else {
+            int onlineDays = uniqueDailyCount(days);
+            days = mergeDailyHistory(storedDays, days);
+            if (days.size() > onlineDays && !warnings.contains("在线历史返回较短，已与本地成功历史合并")) {
+                warnings.add("在线历史返回较短，已与本地成功历史合并");
             }
         }
         return new CapitalFlowData(minutes, days, fresh.getTurnoverRate(), fresh.getVolumeRatio(),
@@ -228,16 +236,61 @@ public class MarketIntelRefreshCoordinator {
     }
 
     private List<CapitalFlowPoint> latestStoredDays(Long instrumentId) {
-        Map<LocalDateTime, CapitalFlowPoint> distinct = new LinkedHashMap<LocalDateTime, CapitalFlowPoint>();
-        for (CapitalFlowPoint point : flows.findLatestByGranularity(instrumentId, "DAY_1", 60)) {
-            if (point.getObservedAt() != null && !distinct.containsKey(point.getObservedAt())) {
-                distinct.put(point.getObservedAt(), point);
-                if (distinct.size() == 20) break;
+        Map<LocalDate, CapitalFlowPoint> distinct = new LinkedHashMap<LocalDate, CapitalFlowPoint>();
+        List<CapitalFlowPoint> stored = flows.findLatestByGranularity(
+                instrumentId, "DAY_1", STORED_DAILY_READ_LIMIT);
+        if (stored != null) {
+            for (CapitalFlowPoint point : stored) {
+                if (point.getDataDate() != null && !distinct.containsKey(point.getDataDate())) {
+                    distinct.put(point.getDataDate(), point);
+                    if (distinct.size() == EVALUATION_DAILY_LIMIT) break;
+                }
             }
         }
         List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>(distinct.values());
         result.sort(Comparator.comparing(CapitalFlowPoint::getObservedAt));
         return result;
+    }
+
+    private List<CapitalFlowPoint> mergeDailyHistory(List<CapitalFlowPoint> stored,
+                                                     List<CapitalFlowPoint> online) {
+        Map<LocalDate, CapitalFlowPoint> byDate = new LinkedHashMap<LocalDate, CapitalFlowPoint>();
+        mergeDailyCandidates(byDate, stored);
+        mergeDailyCandidates(byDate, online);
+        List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>(byDate.values());
+        result.sort(Comparator.comparing(CapitalFlowPoint::getObservedAt));
+        if (result.size() > EVALUATION_DAILY_LIMIT) {
+            result = new ArrayList<CapitalFlowPoint>(
+                    result.subList(result.size() - EVALUATION_DAILY_LIMIT, result.size()));
+        }
+        return result;
+    }
+
+    private void mergeDailyCandidates(Map<LocalDate, CapitalFlowPoint> byDate,
+                                      List<CapitalFlowPoint> candidates) {
+        if (candidates == null) return;
+        for (CapitalFlowPoint candidate : candidates) {
+            if (candidate == null || candidate.getDataDate() == null) continue;
+            CapitalFlowPoint current = byDate.get(candidate.getDataDate());
+            if (current == null || preferred(candidate, current)) {
+                byDate.put(candidate.getDataDate(), candidate);
+            }
+        }
+    }
+
+    private boolean preferred(CapitalFlowPoint candidate, CapitalFlowPoint current) {
+        int candidateQuality = "COMPLETE".equals(candidate.getQualityStatus()) ? 1 : 0;
+        int currentQuality = "COMPLETE".equals(current.getQualityStatus()) ? 1 : 0;
+        if (candidateQuality != currentQuality) return candidateQuality > currentQuality;
+        LocalDateTime candidateRetrieved = candidate.getRetrievedAt();
+        LocalDateTime currentRetrieved = current.getRetrievedAt();
+        if (candidateRetrieved == null) return false;
+        return currentRetrieved == null || candidateRetrieved.isAfter(currentRetrieved);
+    }
+
+    private int uniqueDailyCount(List<CapitalFlowPoint> points) {
+        return (int) points.stream().filter(point -> point != null && point.getDataDate() != null)
+                .map(CapitalFlowPoint::getDataDate).distinct().count();
     }
 
     private boolean hasWarning(List<String> warnings, String prefix) {

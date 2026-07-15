@@ -117,7 +117,7 @@ test('renders the historical evaluation referenced by an Agent observation', () 
           claim: '历史样本平均收益为1.25%',
           factorRefs: [],
           metricRefs: [],
-          evaluationRefs: ['evaluation:capital-evaluation-v1:AMOUNT_EXPANSION_WITH_INFLOW:3d']
+          evaluationRefs: ['evaluation:capital-evaluation-v2:AMOUNT_EXPANSION_WITH_INFLOW:3d']
         }],
         counterEvidence: [],
         watchConditionRefs: [],

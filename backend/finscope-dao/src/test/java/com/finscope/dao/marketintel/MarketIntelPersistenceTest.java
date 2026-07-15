@@ -25,6 +25,7 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class MarketIntelPersistenceTest {
     @TempDir Path tempDir;
@@ -61,6 +62,9 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=103"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=104"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=105"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=106"));
+        assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('market_capital_behavior_evaluation') " +
+                "WHERE name='history_quality_status'"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
         assertEquals(1, tableCount("market_capital_flow_snapshot"));
         assertEquals(1, tableCount("market_capital_behavior_snapshot"));
@@ -107,7 +111,12 @@ class MarketIntelPersistenceTest {
         signal.setPositiveRate(new BigDecimal("0.666667"));
         signal.setAverageMfe(new BigDecimal("0.048000"));
         signal.setAverageMae(new BigDecimal("-0.017000"));
+        signal.setBaselineAverageReturn(new BigDecimal("0.020000"));
+        signal.setBaselineMedianReturn(new BigDecimal("0.018000"));
+        signal.setExcessAverageReturn(new BigDecimal("0.011200"));
+        signal.setExcessMedianReturn(new BigDecimal("0.007000"));
         signal.setStabilityStatus("CONSISTENT");
+        signal.setDecayStatus("PERSISTENT");
         signal.setEvaluationStatus("EXPLORATORY");
         signal.setLastEventDate(LocalDate.of(2026, 7, 10));
         CapitalBehaviorEvaluation value = CapitalBehaviorEvaluation.of(7L, snapshot.getId(),
@@ -115,6 +124,9 @@ class MarketIntelPersistenceTest {
                 "capital-factor-v1", "capital-signal-v2", "evaluation-input-fp", "AVAILABLE",
                 20, 6, new BigDecimal("0.750000"), new BigDecimal("0.250000"),
                 Collections.singletonList(signal), Collections.singletonList("仅为历史统计参考"));
+        value.setHistoryQualityStatus("RELIABLE");
+        value.setPriceCoverageRate(new BigDecimal("0.980000"));
+        value.setAmountCoverageRate(new BigDecimal("0.950000"));
 
         evaluations.save(value);
         evaluations.save(value);
@@ -124,7 +136,20 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM market_capital_behavior_evaluation"));
         assertEquals("evaluation-input-fp", restored.getInputFingerprint());
         assertEquals(new BigDecimal("0.031200"), restored.getSignals().get(0).getAverageReturn());
+        assertEquals(new BigDecimal("0.011200"), restored.getSignals().get(0).getExcessAverageReturn());
+        assertEquals("PERSISTENT", restored.getSignals().get(0).getDecayStatus());
+        assertEquals("RELIABLE", restored.getHistoryQualityStatus());
+        assertEquals(new BigDecimal("0.980000"), restored.getPriceCoverageRate());
         assertEquals("仅为历史统计参考", restored.getDataGaps().get(0));
+
+        jdbc.update("UPDATE market_capital_behavior_evaluation SET signals_json=? WHERE id=?",
+                "[{\"signalType\":\"LEGACY\",\"signalLabel\":\"旧评价\",\"horizonDays\":1," +
+                        "\"sampleCount\":5,\"stabilityStatus\":\"MIXED\"," +
+                        "\"evaluationStatus\":\"EXPLORATORY\"}]", restored.getId());
+        CapitalBehaviorEvaluation legacy = evaluations.findBySnapshotId(snapshot.getId())
+                .orElseThrow(AssertionError::new);
+        assertEquals("LEGACY", legacy.getSignals().get(0).getSignalType());
+        assertNull(legacy.getSignals().get(0).getExcessAverageReturn());
     }
 
     @Test

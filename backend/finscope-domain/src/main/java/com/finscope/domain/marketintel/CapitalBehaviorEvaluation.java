@@ -14,7 +14,7 @@ import java.util.List;
  */
 @Data
 public class CapitalBehaviorEvaluation {
-    public static final String VERSION = "capital-evaluation-v1";
+    public static final String VERSION = "capital-evaluation-v2";
 
     private Long id;
     private Long instrumentId;
@@ -31,6 +31,9 @@ public class CapitalBehaviorEvaluation {
     private int evaluableEventCount;
     private BigDecimal coverageRate;
     private BigDecimal missingLossRate;
+    private String historyQualityStatus;
+    private BigDecimal priceCoverageRate;
+    private BigDecimal amountCoverageRate;
     private List<CapitalSignalEvaluation> signals = Collections.emptyList();
     private List<String> dataGaps = Collections.emptyList();
     private LocalDateTime createdAt;

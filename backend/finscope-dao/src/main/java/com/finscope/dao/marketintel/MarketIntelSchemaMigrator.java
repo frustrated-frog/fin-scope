@@ -17,6 +17,7 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
     private static final int SNAPSHOT_WARNING_VERSION = 103;
     private static final int AGENT_EVIDENCE_VERSION = 104;
     private static final int CAPITAL_EVALUATION_VERSION = 105;
+    private static final int CAPITAL_EVALUATION_QUALITY_VERSION = 106;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -94,6 +95,17 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
                     "market_capital_behavior_evaluation(snapshot_id,id DESC)");
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     CAPITAL_EVALUATION_VERSION, "资金行为历史事件评价快照", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, CAPITAL_EVALUATION_QUALITY_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("ALTER TABLE market_capital_behavior_evaluation ADD COLUMN history_quality_status TEXT");
+            jdbc.execute("ALTER TABLE market_capital_behavior_evaluation ADD COLUMN price_coverage_rate TEXT");
+            jdbc.execute("ALTER TABLE market_capital_behavior_evaluation ADD COLUMN amount_coverage_rate TEXT");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    CAPITAL_EVALUATION_QUALITY_VERSION,
+                    "资金行为历史评价保存数据质量与覆盖率", LocalDateTime.now().toString());
         });
     }
 

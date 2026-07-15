@@ -103,7 +103,12 @@ export type CapitalSignalEvaluation = {
   positiveRate?: number | null;
   averageMfe?: number | null;
   averageMae?: number | null;
+  baselineAverageReturn?: number | null;
+  baselineMedianReturn?: number | null;
+  excessAverageReturn?: number | null;
+  excessMedianReturn?: number | null;
   stabilityStatus: 'INSUFFICIENT_SAMPLE' | 'CONSISTENT' | 'MIXED';
+  decayStatus?: 'INSUFFICIENT_SAMPLE' | 'BASELINE' | 'PERSISTENT' | 'DECAYING' | 'REVERSING';
   evaluationStatus: 'UNTESTED' | 'EXPLORATORY' | 'VALIDATED' | 'INVALIDATED';
   lastEventDate?: string | null;
 };
@@ -117,11 +122,14 @@ export type CapitalBehaviorEvaluation = {
   evaluationVersion: string;
   factorVersion: string;
   signalVersion: string;
-  status: 'AVAILABLE' | 'INSUFFICIENT_DATA';
+  status: 'AVAILABLE' | 'INSUFFICIENT_DATA' | 'DATA_UNRELIABLE';
   dailySampleCount: number;
   evaluableEventCount: number;
   coverageRate: number;
   missingLossRate: number;
+  historyQualityStatus?: 'RELIABLE' | 'DATA_UNRELIABLE' | null;
+  priceCoverageRate?: number | null;
+  amountCoverageRate?: number | null;
   signals: CapitalSignalEvaluation[];
   dataGaps: string[];
 };

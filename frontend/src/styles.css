@@ -312,6 +312,11 @@
 .market-intel-gap-note ul { display: grid; gap: 4px; margin: 7px 0 0; padding-left: 16px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 
 .market-intel-evaluation { border-top: 3px solid var(--mi-amber); }
+.market-intel-evaluation-quality { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; border-left: 3px solid var(--mi-cyan); border-radius: 5px; background: color-mix(in srgb, var(--mi-cyan) 7%, var(--surface)); padding: 8px 10px; }
+.market-intel-evaluation-quality strong { color: var(--mi-cyan); font-size: 10px; }
+.market-intel-evaluation-quality span { color: var(--muted); font: 8px/1.4 ui-monospace, monospace; text-align: right; }
+.market-intel-evaluation-quality.unreliable { border-left-color: var(--mi-amber); background: color-mix(in srgb, var(--mi-amber) 7%, var(--surface)); }
+.market-intel-evaluation-quality.unreliable strong { color: var(--mi-amber); }
 .market-intel-evaluation-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--line); gap: 1px; }
 .market-intel-evaluation-scope > div { display: grid; gap: 3px; background: var(--surface-2); padding: 9px; }
 .market-intel-evaluation-scope span { color: var(--faint); font-size: 8px; }
@@ -365,14 +370,14 @@
 .market-intel-agent-observations { display: grid; gap: 9px; }
 .market-intel-agent-observations > article { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); padding: 11px; }
 .market-intel-agent-observations > article > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.market-intel-agent-observations > article > header span { color: var(--mi-cyan); font-size: 10px; font-weight: 780; }
-.market-intel-agent-observations > article > header small { color: var(--faint); font: 8px/1 ui-monospace, monospace; }
-.market-intel-agent-observations > article > p { margin: 8px 0 10px; color: var(--ink); font-size: 11px; line-height: 1.6; }
+.market-intel-agent-observations > article > header span { color: var(--mi-cyan); font-size: 12px; font-weight: 780; }
+.market-intel-agent-observations > article > header small { color: var(--faint); font: 10px/1 ui-monospace, monospace; }
+.market-intel-agent-observations > article > p { margin: 10px 0 12px; color: var(--ink); font-size: 13px; line-height: 1.65; }
 .market-intel-agent-evidence { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
-.market-intel-agent-evidence li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: baseline; gap: 7px; border-top: 1px solid var(--line); padding-top: 6px; }
-.market-intel-agent-evidence li > span { color: var(--faint); font: 750 8px/1 ui-monospace, monospace; }
-.market-intel-agent-evidence li > strong { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.market-intel-agent-evidence li > small { color: var(--ink); font: 650 8px/1.2 ui-monospace, monospace; }
+.market-intel-agent-evidence li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: baseline; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.market-intel-agent-evidence li > span { color: var(--faint); font: 750 10px/1 ui-monospace, monospace; }
+.market-intel-agent-evidence li > strong { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.market-intel-agent-evidence li > small { color: var(--ink); font: 650 10px/1.3 ui-monospace, monospace; }
 .market-intel-agent-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .market-intel-agent-columns section { border-top: 1px solid var(--line); padding-top: 10px; }
 .market-intel-agent-columns h4 { color: var(--muted); font-size: 10px; letter-spacing: .08em; }
@@ -421,6 +426,10 @@
   .market-intel-streaks { grid-template-columns: 1fr; }
   .market-intel-metric-note { max-width: none; text-align: left; }
   .market-intel-agent-columns { grid-template-columns: 1fr; }
+  .market-intel-evaluation-quality { align-items: flex-start; flex-direction: column; }
+  .market-intel-evaluation-quality span { text-align: left; }
+  .market-intel-agent-evidence li { grid-template-columns: 48px minmax(0, 1fr); }
+  .market-intel-agent-evidence li > small { grid-column: 2; }
   .market-intel-ledger > header,
   .market-intel-trend > header,
   .market-intel-metrics > header,

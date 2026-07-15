@@ -4,6 +4,7 @@ import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.CapitalHistoryQuality;
 import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
 import com.finscope.service.marketintel.factor.CapitalFactorRegistry;
@@ -31,14 +32,22 @@ public class CapitalFactorEvaluationService {
     private static final int SCALE = 6;
 
     private final CapitalBehaviorSignalService signals;
+    private final CapitalHistoryQualityGate historyQualityGate;
 
-    public CapitalFactorEvaluationService(CapitalBehaviorSignalService signals) {
+    public CapitalFactorEvaluationService(CapitalBehaviorSignalService signals,
+                                          CapitalHistoryQualityGate historyQualityGate) {
         this.signals = signals;
+        this.historyQualityGate = historyQualityGate;
     }
 
     public CapitalBehaviorEvaluation evaluate(CapitalBehaviorSnapshot snapshot) {
         if (snapshot == null) throw new IllegalArgumentException("capital snapshot is required");
         List<CapitalFlowPoint> daily = daily(snapshot.getFacts());
+        LocalDateTime asOf = snapshot.getAsOf();
+        LocalDate qualityDate = asOf == null ? (daily.isEmpty() ? LocalDate.now()
+                : daily.get(daily.size() - 1).getDataDate()) : asOf.toLocalDate();
+        CapitalHistoryQuality historyQuality = historyQualityGate.evaluate(snapshot.getFacts(), qualityDate);
+        Map<Integer, List<BigDecimal>> baselines = baselines(daily);
         Map<String, Bucket> buckets = new LinkedHashMap<String, Bucket>();
         int evaluable = 0;
         int missing = 0;
@@ -64,30 +73,53 @@ public class CapitalFactorEvaluationService {
             }
         }
 
-        List<CapitalSignalEvaluation> evaluations = new ArrayList<CapitalSignalEvaluation>();
-        List<String> gaps = new ArrayList<String>();
-        for (Bucket bucket : buckets.values()) {
-            CapitalSignalEvaluation value = summarize(bucket);
-            evaluations.add(value);
-            if (!value.eligibleForAgent()) {
-                gaps.add(value.getSignalLabel() + " " + value.getHorizonDays() + " 日样本仅 "
-                        + value.getSampleCount() + " 次，未展示百分比。");
-            }
-        }
+        List<String> gaps = new ArrayList<String>(historyQuality.getDataGaps());
         if (missing > 0) gaps.add("有 " + missing + " 个事件的价格标签缺失，未纳入历史统计。");
         if (buckets.isEmpty()) gaps.add("当前日线窗口内没有已成熟的资金行为事件样本。");
 
         int completed = evaluable - missing;
         BigDecimal coverage = rate(completed, evaluable);
         BigDecimal missingRate = rate(missing, evaluable);
-        boolean available = evaluations.stream().anyMatch(CapitalSignalEvaluation::eligibleForAgent);
+        boolean reliable = historyQuality.isReliable();
+        if (missingRate.compareTo(new BigDecimal("0.100000")) > 0) {
+            reliable = false;
+            gaps.add("未来价格标签缺失率超过 10%，本次不发布历史收益统计。");
+        }
+        List<CapitalSignalEvaluation> evaluations = new ArrayList<CapitalSignalEvaluation>();
+        for (Bucket bucket : buckets.values()) {
+            CapitalSignalEvaluation value = summarize(bucket, baselines.get(bucket.horizonDays), reliable);
+            evaluations.add(value);
+            if (reliable && !value.eligibleForAgent()) {
+                gaps.add(value.getSignalLabel() + " " + value.getHorizonDays() + " 日样本仅 "
+                        + value.getSampleCount() + " 次，未展示百分比。");
+            }
+        }
+        applyDecay(evaluations);
+        boolean available = reliable && evaluations.stream().anyMatch(CapitalSignalEvaluation::eligibleForAgent);
         LocalDate dataFrom = daily.isEmpty() ? null : daily.get(0).getDataDate();
         LocalDate dataTo = daily.isEmpty() ? null : daily.get(daily.size() - 1).getDataDate();
-        LocalDateTime asOf = snapshot.getAsOf();
-        return CapitalBehaviorEvaluation.of(snapshot.getInstrumentId(), snapshot.getId(), asOf,
+        CapitalBehaviorEvaluation result = CapitalBehaviorEvaluation.of(snapshot.getInstrumentId(), snapshot.getId(), asOf,
                 dataFrom, dataTo, CapitalFactorRegistry.VERSION, CapitalBehaviorSignalService.VERSION,
-                fingerprint(snapshot, daily), available ? "AVAILABLE" : "INSUFFICIENT_DATA",
+                fingerprint(snapshot, daily), !reliable ? "DATA_UNRELIABLE"
+                        : available ? "AVAILABLE" : "INSUFFICIENT_DATA",
                 daily.size(), evaluable, coverage, missingRate, evaluations, gaps);
+        result.setHistoryQualityStatus(reliable ? "RELIABLE" : "DATA_UNRELIABLE");
+        result.setPriceCoverageRate(historyQuality.getPriceCoverageRate());
+        result.setAmountCoverageRate(historyQuality.getAmountCoverageRate());
+        return result;
+    }
+
+    private Map<Integer, List<BigDecimal>> baselines(List<CapitalFlowPoint> daily) {
+        Map<Integer, List<BigDecimal>> values = new LinkedHashMap<Integer, List<BigDecimal>>();
+        for (int horizon : HORIZONS) {
+            List<BigDecimal> returns = new ArrayList<BigDecimal>();
+            for (int eventIndex = 0; eventIndex + horizon < daily.size(); eventIndex++) {
+                Outcome outcome = outcome(daily, eventIndex, horizon);
+                if (outcome != null) returns.add(outcome.forwardReturn);
+            }
+            values.put(horizon, returns);
+        }
+        return values;
     }
 
     private List<CapitalFlowPoint> daily(List<CapitalFlowPoint> facts) {
@@ -130,9 +162,11 @@ public class CapitalFactorEvaluationService {
                 .subtract(BigDecimal.ONE).setScale(SCALE, RoundingMode.HALF_UP);
     }
 
-    private CapitalSignalEvaluation summarize(Bucket bucket) {
+    private CapitalSignalEvaluation summarize(Bucket bucket, List<BigDecimal> baselineReturns,
+                                               boolean publishableHistory) {
         int size = bucket.outcomes.size();
-        if (size < MINIMUM_PUBLISHABLE_SAMPLES) {
+        if (!publishableHistory || size < MINIMUM_PUBLISHABLE_SAMPLES
+                || baselineReturns == null || baselineReturns.isEmpty()) {
             return CapitalSignalEvaluation.insufficient(bucket.signalType, bucket.signalLabel,
                     bucket.horizonDays, size, bucket.lastEventDate);
         }
@@ -156,10 +190,47 @@ public class CapitalFactorEvaluationService {
         value.setPositiveRate(rate(positive, size));
         value.setAverageMfe(average(mfes));
         value.setAverageMae(average(maes));
-        value.setStabilityStatus(stability(returns));
+        BigDecimal baselineAverage = average(baselineReturns);
+        BigDecimal baselineMedian = median(baselineReturns);
+        value.setBaselineAverageReturn(baselineAverage);
+        value.setBaselineMedianReturn(baselineMedian);
+        value.setExcessAverageReturn(value.getAverageReturn().subtract(baselineAverage).setScale(SCALE, RoundingMode.HALF_UP));
+        value.setExcessMedianReturn(value.getMedianReturn().subtract(baselineMedian).setScale(SCALE, RoundingMode.HALF_UP));
+        List<BigDecimal> excessReturns = new ArrayList<BigDecimal>();
+        for (BigDecimal item : returns) excessReturns.add(item.subtract(baselineAverage));
+        value.setStabilityStatus(stability(excessReturns));
+        value.setDecayStatus("INSUFFICIENT_SAMPLE");
         value.setEvaluationStatus("EXPLORATORY");
         value.setLastEventDate(bucket.lastEventDate);
         return value;
+    }
+
+    private void applyDecay(List<CapitalSignalEvaluation> evaluations) {
+        Map<String, List<CapitalSignalEvaluation>> bySignal = new LinkedHashMap<String, List<CapitalSignalEvaluation>>();
+        for (CapitalSignalEvaluation value : evaluations) {
+            bySignal.computeIfAbsent(value.getSignalType(), ignored -> new ArrayList<CapitalSignalEvaluation>())
+                    .add(value);
+        }
+        for (List<CapitalSignalEvaluation> values : bySignal.values()) {
+            values.sort(Comparator.comparingInt(CapitalSignalEvaluation::getHorizonDays));
+            CapitalSignalEvaluation previous = null;
+            for (CapitalSignalEvaluation value : values) {
+                if (value.getExcessAverageReturn() == null) {
+                    value.setDecayStatus("INSUFFICIENT_SAMPLE");
+                } else if (previous == null || previous.getExcessAverageReturn() == null) {
+                    value.setDecayStatus("BASELINE");
+                } else if (value.getExcessAverageReturn().signum()
+                        != previous.getExcessAverageReturn().signum()) {
+                    value.setDecayStatus("REVERSING");
+                } else if (value.getExcessAverageReturn().abs().compareTo(
+                        previous.getExcessAverageReturn().abs().multiply(new BigDecimal("0.80"))) < 0) {
+                    value.setDecayStatus("DECAYING");
+                } else {
+                    value.setDecayStatus("PERSISTENT");
+                }
+                previous = value;
+            }
+        }
     }
 
     private BigDecimal average(List<BigDecimal> values) {
@@ -191,6 +262,7 @@ public class CapitalFactorEvaluationService {
 
     private String fingerprint(CapitalBehaviorSnapshot snapshot, List<CapitalFlowPoint> daily) {
         StringBuilder canonical = new StringBuilder(CapitalBehaviorEvaluation.VERSION)
+                .append('|').append(CapitalHistoryQualityGate.VERSION)
                 .append('|').append(CapitalFactorRegistry.VERSION)
                 .append('|').append(CapitalBehaviorSignalService.VERSION)
                 .append('|').append(snapshot.getInstrumentId())

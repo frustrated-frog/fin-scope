@@ -65,7 +65,7 @@ export function CapitalAgentInterpretationPanel({
   interpretation,
   factorObservations,
   historicalEvaluations = [],
-  evaluationVersion = 'capital-evaluation-v1',
+  evaluationVersion = 'capital-evaluation-v2',
   watchConditions,
   busy,
   onRun
@@ -175,7 +175,9 @@ export function CapitalAgentInterpretationPanel({
                         <li key={ref}>
                           <span>历史评价</span>
                           <strong>{evaluation.signalLabel} · {evaluation.horizonDays} 日</strong>
-                          <small>{evaluation.sampleCount} 个样本 · 平均 {percent(evaluation.averageReturn)}</small>
+                          <small>{evaluation.sampleCount} 个样本 · {evaluation.excessAverageReturn != null
+                            ? `超额 ${percent(evaluation.excessAverageReturn)}`
+                            : `平均 ${percent(evaluation.averageReturn)}`}</small>
                         </li>
                       ) : null;
                     })}

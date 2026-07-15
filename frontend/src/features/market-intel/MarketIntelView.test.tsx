@@ -39,7 +39,7 @@ const overview = {
     asOf: '2026-07-14T15:00:00',
     dataFrom: '2026-06-20',
     dataTo: '2026-07-14',
-    evaluationVersion: 'capital-evaluation-v1',
+    evaluationVersion: 'capital-evaluation-v2',
     factorVersion: 'capital-factor-v1',
     signalVersion: 'capital-signal-v2',
     status: 'AVAILABLE',

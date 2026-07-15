@@ -23,10 +23,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -113,7 +117,7 @@ class MarketIntelRefreshCoordinatorTest {
                 "DAILY_MARKET_UNAVAILABLE:CONNECTION_ERROR"), "EASTMONEY_CAPITAL_FLOW");
         when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
                 .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", partial, null, "r-11"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 60))
+        when(flows.findLatestByGranularity(7L, "DAY_1", 320))
                 .thenReturn(Collections.singletonList(staleDaily));
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Arrays.asList(staleDaily, minute), Collections.emptyList(), "merged");
@@ -128,6 +132,58 @@ class MarketIntelRefreshCoordinatorTest {
                 .anyMatch(value -> "DAY_1".equals(value.getGranularity()))));
         verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(2),
                 eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("历史资金流刷新失败，已使用最近成功数据"));
+    }
+
+    @Test
+    void mergesShortFreshHistoryWithThePersistedReservoirWithoutDuplicatingTradingDays() {
+        List<CapitalFlowPoint> stored = new ArrayList<CapitalFlowPoint>();
+        LocalDate start = LocalDate.of(2025, 8, 1);
+        for (int index = 0; index < 270; index++) {
+            CapitalFlowPoint point = point(1000L + index, "DAY_1", start.plusDays(index).atTime(15, 0));
+            point.setRetrievedAt(start.plusDays(index).atTime(16, 0));
+            stored.add(point);
+        }
+        Collections.reverse(stored); // 仓储契约按 observed_at DESC 返回最近记录。
+        List<CapitalFlowPoint> fresh = new ArrayList<CapitalFlowPoint>();
+        for (int index = 260; index < 270; index++) {
+            CapitalFlowPoint point = point(2000L + index, "DAY_1", start.plusDays(index).atTime(15, 0));
+            point.setRetrievedAt(LocalDateTime.of(2026, 7, 15, 16, 0));
+            point.setMainNetInflow(new BigDecimal("99"));
+            if (index == 265) point.setQualityStatus("PARTIAL");
+            fresh.add(point);
+        }
+        CapitalFlowData shortFresh = new CapitalFlowData(Collections.emptyList(), fresh,
+                null, null, Collections.emptyList(), "EASTMONEY_CAPITAL_FLOW");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary(
+                        "EASTMONEY_CAPITAL_FLOW", shortFresh, null, "r-history"));
+        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(stored);
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L,
+                fresh.get(fresh.size() - 1).getObservedAt(), fresh, Collections.emptyList(), "history-merged");
+        saved.setId(35L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        verify(flows).saveAll(argThat(values -> {
+            List<CapitalFlowPoint> daily = values.stream()
+                    .filter(value -> "DAY_1".equals(value.getGranularity()))
+                    .collect(java.util.stream.Collectors.toList());
+            long uniqueDates = daily.stream().map(CapitalFlowPoint::getDataDate).distinct().count();
+            CapitalFlowPoint partialOverlap = daily.stream()
+                    .filter(value -> start.plusDays(265).equals(value.getDataDate()))
+                    .findFirst().orElse(null);
+            CapitalFlowPoint completeOverlap = daily.stream()
+                    .filter(value -> start.plusDays(266).equals(value.getDataDate()))
+                    .findFirst().orElse(null);
+            return uniqueDates == 250
+                    && start.plusDays(20).equals(daily.get(0).getDataDate())
+                    && partialOverlap != null && new BigDecimal("10").equals(partialOverlap.getMainNetInflow())
+                    && completeOverlap != null && new BigDecimal("99").equals(completeOverlap.getMainNetInflow());
+        }));
+        assertTrue(fresh.size() < 60, "test must exercise a short online response");
     }
 
     @Test
@@ -149,7 +205,7 @@ class MarketIntelRefreshCoordinatorTest {
                 .thenReturn(new QuoteGatewayResult(Collections.singletonList(quote),
                         com.finscope.domain.marketdata.MarketDataQualityStatus.FRESH_FALLBACK,
                         "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), null, null, "q-1"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 60)).thenReturn(Collections.emptyList());
+        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(Collections.emptyList());
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Collections.singletonList(minute), Collections.emptyList(), "quote-merged");
         saved.setId(32L);
@@ -183,7 +239,7 @@ class MarketIntelRefreshCoordinatorTest {
                         com.finscope.domain.marketdata.MarketDataQualityStatus.STALE_FALLBACK,
                         "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), 86400L,
                         "报价源不可用，正在显示旧报价", "q-2"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 60)).thenReturn(Collections.emptyList());
+        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(Collections.emptyList());
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Collections.singletonList(minute), Collections.emptyList(), "stale-quote-not-used");
         saved.setId(33L);

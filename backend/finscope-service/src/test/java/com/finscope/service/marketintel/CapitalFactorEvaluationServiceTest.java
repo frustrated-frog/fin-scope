@@ -4,6 +4,7 @@ import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.CapitalHistoryQuality;
 import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -27,12 +30,11 @@ class CapitalFactorEvaluationServiceTest {
     void evaluatesOnlyMaturedEventsAndProducesExploratoryStatistics() {
         List<CapitalFlowPoint> points = dailyPoints(12);
         Collections.reverse(points);
-        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
-                signalOnEveryPrefixFrom(2));
+        CapitalFactorEvaluationService service = service(signalOnEveryPrefixFrom(2));
 
         CapitalBehaviorEvaluation result = service.evaluate(snapshot(points));
 
-        assertEquals("capital-evaluation-v1", result.getEvaluationVersion());
+        assertEquals("capital-evaluation-v2", result.getEvaluationVersion());
         assertEquals(12, result.getDailySampleCount());
         assertEquals("AVAILABLE", result.getStatus());
         assertEquals(new BigDecimal("1.000000"), result.getCoverageRate());
@@ -52,8 +54,7 @@ class CapitalFactorEvaluationServiceTest {
         List<CapitalFlowPoint> changedFuture = dailyPoints(10);
         changedFuture.stream().filter(point -> point.getDataDate().isAfter(eventDate))
                 .forEach(point -> point.setMainNetInflow(new BigDecimal("-999999999")));
-        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
-                signalThrough(eventDate));
+        CapitalFactorEvaluationService service = service(signalThrough(eventDate));
 
         CapitalBehaviorEvaluation first = service.evaluate(snapshot(baseline));
         CapitalBehaviorEvaluation second = service.evaluate(snapshot(changedFuture));
@@ -69,8 +70,7 @@ class CapitalFactorEvaluationServiceTest {
         List<CapitalFlowPoint> ascending = dailyPoints(7);
         List<CapitalFlowPoint> descending = new ArrayList<CapitalFlowPoint>(ascending);
         descending.sort(Comparator.comparing(CapitalFlowPoint::getObservedAt).reversed());
-        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
-                signalOnlyOn(LocalDate.of(2026, 7, 3)));
+        CapitalFactorEvaluationService service = service(signalOnlyOn(LocalDate.of(2026, 7, 3)));
 
         CapitalBehaviorEvaluation first = service.evaluate(snapshot(ascending));
         CapitalBehaviorEvaluation second = service.evaluate(snapshot(descending));
@@ -90,8 +90,7 @@ class CapitalFactorEvaluationServiceTest {
     void countsMissingForwardPricesWithoutInventingOutcomes() {
         List<CapitalFlowPoint> points = dailyPoints(8);
         points.get(4).setPrice(null);
-        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
-                signalOnEveryPrefixFrom(2));
+        CapitalFactorEvaluationService service = service(signalOnEveryPrefixFrom(2));
 
         CapitalBehaviorEvaluation result = service.evaluate(snapshot(points));
 
@@ -103,8 +102,7 @@ class CapitalFactorEvaluationServiceTest {
     @Test
     void keepsZeroSampleRowsForSignalsWhoseForwardHorizonsHaveNotMatured() {
         List<CapitalFlowPoint> points = dailyPoints(7);
-        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
-                signalOnlyOn(LocalDate.of(2026, 7, 7)));
+        CapitalFactorEvaluationService service = service(signalOnlyOn(LocalDate.of(2026, 7, 7)));
 
         CapitalBehaviorEvaluation result = service.evaluate(snapshot(points));
 
@@ -115,14 +113,69 @@ class CapitalFactorEvaluationServiceTest {
                 .map(CapitalSignalEvaluation::getHorizonDays).collect(java.util.stream.Collectors.toList()));
     }
 
+    @Test
+    void comparesSignalReturnsWithTheStocksUnconditionalBaseline() {
+        List<CapitalFlowPoint> points = biasedHistory(80);
+        Set<LocalDate> eventDates = new LinkedHashSet<LocalDate>();
+        for (int index = 10; index <= 60; index += 10) eventDates.add(points.get(index).getDataDate());
+        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
+                signalOnDates(eventDates), new CapitalHistoryQualityGate());
+
+        CapitalBehaviorEvaluation result = service.evaluate(snapshot(points));
+        CapitalSignalEvaluation oneDay = evaluation(result, 1);
+
+        assertEquals("RELIABLE", result.getHistoryQualityStatus());
+        assertTrue(oneDay.getBaselineAverageReturn().signum() > 0);
+        assertTrue(oneDay.getAverageReturn().compareTo(oneDay.getBaselineAverageReturn()) < 0);
+        assertTrue(oneDay.getExcessAverageReturn().signum() < 0);
+        assertEquals(oneDay.getAverageReturn().subtract(oneDay.getBaselineAverageReturn()),
+                oneDay.getExcessAverageReturn());
+        assertEquals("BASELINE", oneDay.getDecayStatus());
+    }
+
+    @Test
+    void withholdsStatisticsWhenHistoricalInputsFailTheQualityGate() {
+        List<CapitalFlowPoint> points = dailyPoints(40);
+        CapitalFactorEvaluationService service = new CapitalFactorEvaluationService(
+                signalOnEveryPrefixFrom(2), new CapitalHistoryQualityGate());
+
+        CapitalBehaviorEvaluation result = service.evaluate(snapshot(points));
+        CapitalSignalEvaluation oneDay = evaluation(result, 1);
+
+        assertEquals("DATA_UNRELIABLE", result.getStatus());
+        assertEquals("DATA_UNRELIABLE", result.getHistoryQualityStatus());
+        assertEquals("UNTESTED", oneDay.getEvaluationStatus());
+        assertNull(oneDay.getAverageReturn());
+        assertNull(oneDay.getExcessAverageReturn());
+        assertTrue(result.getDataGaps().stream().anyMatch(value -> value.contains("至少需要 60")));
+    }
+
     private CapitalSignalEvaluation evaluation(CapitalBehaviorEvaluation result, int horizon) {
         return result.getSignals().stream().filter(item -> item.getHorizonDays() == horizon)
                 .findFirst().orElseThrow(() -> new AssertionError("missing horizon " + horizon));
     }
 
+    private CapitalFactorEvaluationService service(CapitalBehaviorSignalService signalService) {
+        CapitalHistoryQualityGate relaxed = new CapitalHistoryQualityGate() {
+            @Override
+            public CapitalHistoryQuality evaluate(List<CapitalFlowPoint> facts, LocalDate asOfDate) {
+                CapitalHistoryQuality quality = new CapitalHistoryQuality();
+                quality.setStatus("RELIABLE");
+                quality.setDailySampleCount(facts == null ? 0 : facts.size());
+                quality.setPriceCoverageRate(new BigDecimal("1.000000"));
+                quality.setAmountCoverageRate(new BigDecimal("1.000000"));
+                quality.setDataGaps(Collections.emptyList());
+                return quality;
+            }
+        };
+        return new CapitalFactorEvaluationService(signalService, relaxed);
+    }
+
     private CapitalBehaviorSnapshot snapshot(List<CapitalFlowPoint> points) {
+        LocalDateTime asOf = points.stream().map(CapitalFlowPoint::getObservedAt)
+                .max(LocalDateTime::compareTo).orElse(LocalDateTime.of(2026, 7, 15, 15, 0));
         CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L,
-                LocalDateTime.of(2026, 7, 15, 15, 0), points, Collections.emptyList(), "snapshot-fp");
+                asOf, points, Collections.emptyList(), "snapshot-fp");
         snapshot.setId(11L);
         return snapshot;
     }
@@ -147,6 +200,19 @@ class CapitalFactorEvaluationServiceTest {
             result.add(point);
         }
         return result;
+    }
+
+    private List<CapitalFlowPoint> biasedHistory(int count) {
+        List<CapitalFlowPoint> points = dailyPoints(count);
+        BigDecimal price = new BigDecimal("10");
+        for (int index = 0; index < points.size(); index++) {
+            if (index > 0) {
+                boolean followsEvent = (index - 1) >= 10 && (index - 1) <= 60 && (index - 1) % 10 == 0;
+                price = price.multiply(followsEvent ? new BigDecimal("0.99") : new BigDecimal("1.02"));
+            }
+            points.get(index).setPrice(price.setScale(8, java.math.RoundingMode.HALF_UP));
+        }
+        return points;
     }
 
     private CapitalBehaviorSignalService signalOnEveryPrefixFrom(int minimumSize) {
@@ -175,6 +241,18 @@ class CapitalFactorEvaluationServiceTest {
             @Override
             public List<CapitalBehaviorSignal> detect(List<CapitalFlowPoint> facts) {
                 if (facts.isEmpty() || facts.get(facts.size() - 1).getDataDate().isAfter(lastEventDate)) {
+                    return Collections.emptyList();
+                }
+                return Collections.singletonList(signal());
+            }
+        };
+    }
+
+    private CapitalBehaviorSignalService signalOnDates(Set<LocalDate> eventDates) {
+        return new CapitalBehaviorSignalService() {
+            @Override
+            public List<CapitalBehaviorSignal> detect(List<CapitalFlowPoint> facts) {
+                if (facts.isEmpty() || !eventDates.contains(facts.get(facts.size() - 1).getDataDate())) {
                     return Collections.emptyList();
                 }
                 return Collections.singletonList(signal());

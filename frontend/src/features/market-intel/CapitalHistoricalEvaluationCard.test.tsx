@@ -10,7 +10,7 @@ const evaluation: CapitalBehaviorEvaluation = {
   asOf: '2026-07-14T15:00:00',
   dataFrom: '2026-06-20',
   dataTo: '2026-07-14',
-  evaluationVersion: 'capital-evaluation-v1',
+  evaluationVersion: 'capital-evaluation-v2',
   factorVersion: 'capital-factor-v1',
   signalVersion: 'capital-signal-v2',
   status: 'AVAILABLE',
@@ -18,6 +18,9 @@ const evaluation: CapitalBehaviorEvaluation = {
   evaluableEventCount: 11,
   coverageRate: 0.9,
   missingLossRate: 0.1,
+  historyQualityStatus: 'RELIABLE',
+  priceCoverageRate: 0.98,
+  amountCoverageRate: 0.95,
   signals: [{
     signalType: 'AMOUNT_EXPANSION_WITH_INFLOW',
     signalLabel: '放量流入',
@@ -28,7 +31,12 @@ const evaluation: CapitalBehaviorEvaluation = {
     positiveRate: 0.625,
     averageMfe: 0.02,
     averageMae: -0.008,
+    baselineAverageReturn: 0.02,
+    baselineMedianReturn: 0.018,
+    excessAverageReturn: -0.0075,
+    excessMedianReturn: -0.008,
     stabilityStatus: 'INSUFFICIENT_SAMPLE',
+    decayStatus: 'DECAYING',
     evaluationStatus: 'EXPLORATORY',
     lastEventDate: '2026-07-09'
   }, {
@@ -37,6 +45,7 @@ const evaluation: CapitalBehaviorEvaluation = {
     horizonDays: 5,
     sampleCount: 3,
     stabilityStatus: 'INSUFFICIENT_SAMPLE',
+    decayStatus: 'INSUFFICIENT_SAMPLE',
     evaluationStatus: 'UNTESTED',
     lastEventDate: '2026-07-08'
   }],
@@ -48,7 +57,11 @@ test('separates exploratory statistics from samples below the publication gate',
 
   expect(screen.getByRole('heading', { name: '历史表现校验' })).toBeInTheDocument();
   expect(screen.getByText('探索性统计')).toBeInTheDocument();
-  expect(screen.getByText('平均收益')).toBeInTheDocument();
+  expect(screen.getByText('超额平均收益')).toBeInTheDocument();
+  expect(screen.getByText('-0.75%')).toBeInTheDocument();
+  expect(screen.getByText('历史质量通过')).toBeInTheDocument();
+  expect(screen.getByText('跨周期衰减')).toBeInTheDocument();
+  expect(screen.getByText('价格覆盖 98.00% · 成交额覆盖 95.00%')).toBeInTheDocument();
   expect(screen.getByText('+1.25%')).toBeInTheDocument();
   expect(screen.getByText('样本不足，暂不展示收益比例')).toBeInTheDocument();
   expect(screen.getByText('历史统计仅描述样本，不代表未来表现。')).toBeInTheDocument();
@@ -74,6 +87,28 @@ test('never publishes statistics from an invalidated evaluation', () => {
   render(<CapitalHistoricalEvaluationCard evaluation={invalidated} />);
 
   expect(screen.getByText('已失效')).toBeInTheDocument();
-  expect(screen.queryByText('平均收益')).not.toBeInTheDocument();
+  expect(screen.queryByText('超额平均收益')).not.toBeInTheDocument();
   expect(screen.getByText('该统计已失效，暂不展示收益比例')).toBeInTheDocument();
+});
+
+test('withholds every percentage when historical data is unreliable', () => {
+  const unreliable: CapitalBehaviorEvaluation = {
+    ...evaluation,
+    status: 'DATA_UNRELIABLE',
+    historyQualityStatus: 'DATA_UNRELIABLE',
+    signals: evaluation.signals.map((signal) => ({
+      ...signal,
+      evaluationStatus: 'UNTESTED',
+      averageReturn: null,
+      excessAverageReturn: null
+    })),
+    dataGaps: ['历史日线仅 40 个交易日，至少需要 60 个。']
+  };
+
+  render(<CapitalHistoricalEvaluationCard evaluation={unreliable} />);
+
+  expect(screen.getByText('历史质量未通过')).toBeInTheDocument();
+  expect(screen.getAllByText('数据质量未通过，暂不展示收益比例')).toHaveLength(2);
+  expect(screen.queryByText('超额平均收益')).not.toBeInTheDocument();
+  expect(screen.getByText(/至少需要 60/)).toBeInTheDocument();
 });

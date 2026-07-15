@@ -37,7 +37,8 @@ public class CapitalBehaviorEvaluationRepository {
                                 "market_capital_behavior_evaluation(instrument_id,snapshot_id,as_of,data_from,data_to," +
                                 "evaluation_version,factor_version,signal_version,input_fingerprint,status," +
                                 "daily_sample_count,evaluable_event_count,coverage_rate,missing_loss_rate," +
-                                "signals_json,data_gaps_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                "history_quality_status,price_coverage_rate,amount_coverage_rate," +
+                                "signals_json,data_gaps_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         Statement.RETURN_GENERATED_KEYS);
                 statement.setLong(1, value.getInstrumentId());
                 statement.setLong(2, value.getSnapshotId());
@@ -53,9 +54,12 @@ public class CapitalBehaviorEvaluationRepository {
                 statement.setInt(12, value.getEvaluableEventCount());
                 statement.setString(13, text(value.getCoverageRate()));
                 statement.setString(14, text(value.getMissingLossRate()));
-                statement.setString(15, signalsJson);
-                statement.setString(16, dataGapsJson);
-                statement.setString(17, text(value.getCreatedAt()));
+                statement.setString(15, value.getHistoryQualityStatus());
+                statement.setString(16, text(value.getPriceCoverageRate()));
+                statement.setString(17, text(value.getAmountCoverageRate()));
+                statement.setString(18, signalsJson);
+                statement.setString(19, dataGapsJson);
+                statement.setString(20, text(value.getCreatedAt()));
                 return statement;
             }, keys);
             Long id = keys.getKey() == null
@@ -91,6 +95,9 @@ public class CapitalBehaviorEvaluationRepository {
                         value.setEvaluableEventCount(rs.getInt("evaluable_event_count"));
                         value.setCoverageRate(decimal(rs.getString("coverage_rate")));
                         value.setMissingLossRate(decimal(rs.getString("missing_loss_rate")));
+                        value.setHistoryQualityStatus(rs.getString("history_quality_status"));
+                        value.setPriceCoverageRate(decimal(rs.getString("price_coverage_rate")));
+                        value.setAmountCoverageRate(decimal(rs.getString("amount_coverage_rate")));
                         value.setSignals(mapper.readValue(rs.getString("signals_json"),
                                 new TypeReference<List<CapitalSignalEvaluation>>() { }));
                         value.setDataGaps(mapper.readValue(rs.getString("data_gaps_json"),

@@ -88,7 +88,7 @@ class CapitalMarketIntelContractTest {
                 "AMOUNT_EXPANSION_WITH_INFLOW", "放量净流入", 3, 2,
                 LocalDate.of(2026, 7, 10));
 
-        assertEquals("evaluation:capital-evaluation-v1:AMOUNT_EXPANSION_WITH_INFLOW:3d",
+        assertEquals("evaluation:capital-evaluation-v2:AMOUNT_EXPANSION_WITH_INFLOW:3d",
                 signal.evaluationRef());
         assertEquals("UNTESTED", signal.getEvaluationStatus());
         assertEquals("INSUFFICIENT_SAMPLE", signal.getStabilityStatus());
@@ -110,7 +110,7 @@ class CapitalMarketIntelContractTest {
         signals.clear();
         dataGaps.clear();
 
-        assertEquals("capital-evaluation-v1", evaluation.getEvaluationVersion());
+        assertEquals("capital-evaluation-v2", evaluation.getEvaluationVersion());
         assertEquals(1, evaluation.getSignals().size());
         assertEquals(1, evaluation.getDataGaps().size());
         assertThrows(UnsupportedOperationException.class,

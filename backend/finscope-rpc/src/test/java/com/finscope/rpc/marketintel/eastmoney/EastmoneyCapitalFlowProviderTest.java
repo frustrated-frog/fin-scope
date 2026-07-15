@@ -70,9 +70,9 @@ class EastmoneyCapitalFlowProviderTest {
         assertEquals("push2his.eastmoney.com", client.find("/fflow/daykline/get").getHost());
         assertEquals("push2.eastmoney.com", client.find("/stock/get").getHost());
         assertTrue(client.find("/fflow/kline/get").getQuery().contains("lmt=500"));
-        assertTrue(client.find("/fflow/daykline/get").getQuery().contains("lmt=20"));
+        assertTrue(client.find("/fflow/daykline/get").getQuery().contains("lmt=250"));
         assertTrue(client.find("/fflow/daykline/get").getQuery().contains("ut=b2884a393a59ad64002292a3e90d46a5"));
-        assertTrue(client.find("/stock/kline/get").getQuery().contains("lmt=21"));
+        assertTrue(client.find("/stock/kline/get").getQuery().contains("lmt=260"));
         assertTrue(client.find("/stock/kline/get").getQuery().contains("end=20500101"));
         assertTrue(client.find("/stock/kline/get").getQuery().contains("fields1=f1,f2,f3,f4,f5,f6"));
         assertTrue(client.find("/stock/kline/get").getQuery().contains("fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116"));

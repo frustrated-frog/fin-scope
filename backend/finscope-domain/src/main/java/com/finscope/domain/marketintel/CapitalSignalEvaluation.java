@@ -19,7 +19,12 @@ public class CapitalSignalEvaluation {
     private BigDecimal positiveRate;
     private BigDecimal averageMfe;
     private BigDecimal averageMae;
+    private BigDecimal baselineAverageReturn;
+    private BigDecimal baselineMedianReturn;
+    private BigDecimal excessAverageReturn;
+    private BigDecimal excessMedianReturn;
     private String stabilityStatus;
+    private String decayStatus;
     private String evaluationStatus;
     private LocalDate lastEventDate;
 
@@ -32,6 +37,7 @@ public class CapitalSignalEvaluation {
         value.horizonDays = horizonDays;
         value.sampleCount = sampleCount;
         value.stabilityStatus = "INSUFFICIENT_SAMPLE";
+        value.decayStatus = "INSUFFICIENT_SAMPLE";
         value.evaluationStatus = "UNTESTED";
         value.lastEventDate = lastEventDate;
         return value;

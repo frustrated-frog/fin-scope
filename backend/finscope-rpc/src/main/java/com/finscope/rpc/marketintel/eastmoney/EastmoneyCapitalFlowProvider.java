@@ -32,6 +32,8 @@ import java.util.Set;
 
 @Component
 public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
+    private static final int DAILY_HISTORY_LIMIT = 250;
+    private static final int DAILY_MARKET_LIMIT = 260;
     private static final String REALTIME_HOST = "https://push2.eastmoney.com/api/qt/stock/";
     private static final String HISTORY_HOST = "https://push2his.eastmoney.com/api/qt/stock/";
     private static final String EASTMONEY_UT = "7eea3edcaed734bea9cbfc24409ed989";
@@ -168,7 +170,8 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     }
 
     private FinanceHttpResponse getDailyFundFlow(String secid) throws Exception {
-        return request(HISTORY_HOST, "fflow/daykline/get", "secid=" + secid + "&lmt=20&klt=101&fields1=f1,f2,f3,f7"
+        return request(HISTORY_HOST, "fflow/daykline/get", "secid=" + secid + "&lmt=" + DAILY_HISTORY_LIMIT
+                + "&klt=101&fields1=f1,f2,f3,f7"
                 + "&fields2=f51,f52,f53,f54,f55,f56,f57&ut=" + FUND_FLOW_UT);
     }
 
@@ -183,7 +186,8 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     private FinanceHttpResponse getDailyMarket(String secid) throws Exception {
         return request(HISTORY_HOST, "kline/get", "fields1=f1,f2,f3,f4,f5,f6"
                 + "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116"
-                + "&ut=" + EASTMONEY_UT + "&klt=101&fqt=1&secid=" + secid + "&lmt=21&end=20500101");
+                + "&ut=" + EASTMONEY_UT + "&klt=101&fqt=1&secid=" + secid
+                + "&lmt=" + DAILY_MARKET_LIMIT + "&end=20500101");
     }
 
     private FinanceHttpResponse request(String host, String path, String query) throws Exception {
