@@ -8,6 +8,8 @@ import com.finscope.domain.quant.data.QuantDatasetPartition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.SQLiteDataSource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,10 +24,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FactorResearchPersistenceTest {
     @TempDir
@@ -52,10 +61,10 @@ class FactorResearchPersistenceTest {
         migrator.migrate();
 
         datasets = new QuantDatasetRepository();
-        capitalFlows = new QuantCapitalFlowRepository();
+        capitalFlows = new QuantCapitalFlowRepository(
+                jdbc, new DataSourceTransactionManager(dataSource));
         partitions = new QuantDatasetPartitionRepository();
         ReflectionTestUtils.setField(datasets, "jdbcTemplate", jdbc);
-        ReflectionTestUtils.setField(capitalFlows, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(partitions, "jdbcTemplate", jdbc);
     }
 
@@ -127,6 +136,34 @@ class FactorResearchPersistenceTest {
     }
 
     @Test
+    void saveAllRollsBackEarlierRowsWhenAnyFrozenKeyIsDuplicate() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        QuantCapitalFlowDaily existing = capitalFlow(datasetId);
+        capitalFlows.saveAll(Collections.singletonList(existing));
+        QuantCapitalFlowDaily validNewRow = capitalFlow(datasetId);
+        validNewRow.setTradeDate(existing.getTradeDate().plusDays(1));
+
+        assertThrows(DataAccessException.class,
+                () -> capitalFlows.saveAll(Arrays.asList(validNewRow, existing)));
+
+        List<QuantCapitalFlowDaily> restored = capitalFlows.findByDatasetId(datasetId);
+        assertEquals(1, restored.size());
+        assertEquals(existing.getTradeDate(), restored.get(0).getTradeDate());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"600519", "600519.sh", " 600519.SH ", "600519.HK"})
+    void rejectsNonCanonicalInstrumentCodesBeforeWriting(String code) {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        QuantCapitalFlowDaily invalid = capitalFlow(datasetId);
+        invalid.setInstrumentCode(code);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> capitalFlows.saveAll(Collections.singletonList(invalid)));
+        assertEquals(0, capitalFlows.findByDatasetId(datasetId).size());
+    }
+
+    @Test
     void partitionsRoundTripInStablePartitionTypeOrder() {
         Long datasetId = datasets.save(dataset("LEARNING_SAMPLE")).getId();
         partitions.save(partition(datasetId, "UNIVERSE", 30));
@@ -142,6 +179,87 @@ class FactorResearchPersistenceTest {
         assertEquals("partition-CAPITAL_FLOW_DAILY", restored.get(0).getPartitionFingerprint());
         assertEquals("COMPLETE", restored.get(0).getQualityStatus());
         assertEquals(LocalDateTime.of(2026, 7, 15, 16, 0), restored.get(0).getCreatedAt());
+    }
+
+    @Test
+    void repositoryRejectsInvalidPartitionRangesBeforeWriting() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        QuantDatasetPartition negativeRows = partition(datasetId, "NEGATIVE", -1);
+        QuantDatasetPartition oneSidedRange = partition(datasetId, "ONE_SIDED", 0);
+        oneSidedRange.setMaxDate(null);
+        QuantDatasetPartition invertedRange = partition(datasetId, "INVERTED", 0);
+        invertedRange.setMinDate(LocalDate.of(2026, 7, 15));
+        invertedRange.setMaxDate(LocalDate.of(2026, 7, 14));
+
+        assertThrows(IllegalArgumentException.class, () -> partitions.save(negativeRows));
+        assertThrows(IllegalArgumentException.class, () -> partitions.save(oneSidedRange));
+        assertThrows(IllegalArgumentException.class, () -> partitions.save(invertedRange));
+        assertEquals(0, partitions.findByDatasetId(datasetId).size());
+    }
+
+    @Test
+    void databaseChecksRejectInvalidPartitionRangesFromDirectSql() {
+        Long datasetId = datasets.save(dataset("REAL")).getId();
+        String sql = "INSERT INTO quant_dataset_partition(dataset_id,partition_type,row_count,min_date,max_date,"
+                + "partition_fingerprint,quality_status,created_at) VALUES(?,?,?,?,?,?,?,?)";
+
+        assertThrows(DataAccessException.class, () -> jdbc.update(sql, datasetId, "NEGATIVE", -1,
+                null, null, "negative", "INVALID", "2026-07-15T16:00"));
+        assertThrows(DataAccessException.class, () -> jdbc.update(sql, datasetId, "ONE_SIDED", 0,
+                "2026-01-02", null, "one-sided", "INVALID", "2026-07-15T16:00"));
+        assertThrows(DataAccessException.class, () -> jdbc.update(sql, datasetId, "INVERTED", 0,
+                "2026-07-15", "2026-07-14", "inverted", "INVALID", "2026-07-15T16:00"));
+        assertEquals(0, partitions.findByDatasetId(datasetId).size());
+    }
+
+    @Test
+    void concurrentMigratorsAtomicallyClaimEveryVersion() throws Exception {
+        Path database = tempDir.resolve("concurrent-migration.db");
+        SQLiteDataSource initializerDataSource = dataSource(database);
+        JdbcTemplate initializerJdbc = new JdbcTemplate(initializerDataSource);
+        DatabaseInitializer initializer = new DatabaseInitializer();
+        ReflectionTestUtils.setField(initializer, "jdbcTemplate", initializerJdbc);
+        ReflectionTestUtils.setField(initializer, "dataRoot", tempDir.resolve("concurrent-data").toString());
+        initializer.afterPropertiesSet();
+        initializerJdbc.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
+                + "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
+
+        CyclicBarrier version200ReadBarrier = new CyclicBarrier(2);
+        SQLiteDataSource firstDataSource = dataSource(database);
+        SQLiteDataSource secondDataSource = dataSource(database);
+        JdbcTemplate firstJdbc = new MigrationRaceJdbcTemplate(firstDataSource, version200ReadBarrier);
+        JdbcTemplate secondJdbc = new MigrationRaceJdbcTemplate(secondDataSource, version200ReadBarrier);
+        FactorResearchSchemaMigrator first = new FactorResearchSchemaMigrator(
+                firstJdbc, new DataSourceTransactionManager(firstDataSource));
+        FactorResearchSchemaMigrator second = new FactorResearchSchemaMigrator(
+                secondJdbc, new DataSourceTransactionManager(secondDataSource));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> firstRun = executor.submit(() -> migrateTogether(first, ready, start));
+            Future<?> secondRun = executor.submit(() -> migrateTogether(second, ready, start));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            firstRun.get(10, TimeUnit.SECONDS);
+            secondRun.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=200", Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=201", Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM schema_migration WHERE version=202", Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_capital_flow_daily'",
+                Integer.class));
+        assertEquals(1, initializerJdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quant_dataset_partition'",
+                Integer.class));
     }
 
     @Test
@@ -195,7 +313,45 @@ class FactorResearchPersistenceTest {
     private SQLiteDataSource dataSource(Path database) {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + database + "?foreign_keys=on");
+        dataSource.setBusyTimeout(5000);
+        dataSource.setEnforceForeignKeys(true);
         return dataSource;
+    }
+
+    private void migrateTogether(FactorResearchSchemaMigrator target,
+                                 CountDownLatch ready,
+                                 CountDownLatch start) {
+        try {
+            ready.countDown();
+            start.await(5, TimeUnit.SECONDS);
+            target.migrate();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("migration test interrupted", e);
+        }
+    }
+
+    private static final class MigrationRaceJdbcTemplate extends JdbcTemplate {
+        private final CyclicBarrier barrier;
+
+        private MigrationRaceJdbcTemplate(SQLiteDataSource dataSource, CyclicBarrier barrier) {
+            super(dataSource);
+            this.barrier = barrier;
+        }
+
+        @Override
+        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+            T result = super.queryForObject(sql, requiredType, args);
+            if (sql.contains("schema_migration") && args.length == 1
+                    && Integer.valueOf(200).equals(args[0])) {
+                try {
+                    barrier.await(5, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new IllegalStateException("failed to synchronize migration race", e);
+                }
+            }
+            return result;
+        }
     }
 
     private QuantDataset dataset(String dataKind) {

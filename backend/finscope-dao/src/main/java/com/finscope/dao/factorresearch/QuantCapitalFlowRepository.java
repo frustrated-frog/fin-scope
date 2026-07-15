@@ -2,12 +2,14 @@ package com.finscope.dao.factorresearch;
 
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
+import com.finscope.domain.instrument.InstrumentCodeCanonicalizer;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -15,8 +17,14 @@ import java.util.List;
 
 @Repository
 public class QuantCapitalFlowRepository {
-    @Resource
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
+
+    public QuantCapitalFlowRepository(JdbcTemplate jdbcTemplate,
+                                      PlatformTransactionManager transactionManager) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
 
     private final RowMapper<QuantCapitalFlowDaily> mapper = (rs, rowNum) -> {
         QuantCapitalFlowDaily value = new QuantCapitalFlowDaily();
@@ -41,6 +49,14 @@ public class QuantCapitalFlowRepository {
     };
 
     public void saveAll(final List<QuantCapitalFlowDaily> values) {
+        for (QuantCapitalFlowDaily value : values) {
+            value.setInstrumentCode(InstrumentCodeCanonicalizer.canonical(
+                    value.getInstrumentCode(), null));
+        }
+        transactionTemplate.executeWithoutResult(status -> insertAll(values));
+    }
+
+    private void insertAll(final List<QuantCapitalFlowDaily> values) {
         final String sql = "INSERT INTO quant_capital_flow_daily("
                 + "dataset_id,trade_date,instrument_code,available_at,source_flow_id,provider_code,"
                 + "main_net_inflow,main_flow_share,super_large_net_inflow,large_net_inflow,"

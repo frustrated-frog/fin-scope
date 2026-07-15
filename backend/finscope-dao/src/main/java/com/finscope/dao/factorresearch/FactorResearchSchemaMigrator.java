@@ -44,25 +44,27 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
 
     private void migrateVersion(int version, String description, Runnable migration) {
         transactionTemplate.executeWithoutResult(status -> {
-            if (isApplied(version)) {
+            configureBusyTimeout();
+            int claimed = jdbcTemplate.update(
+                    "INSERT OR IGNORE INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    version, description, LocalDateTime.now().toString());
+            if (claimed == 0) {
                 return;
             }
             migration.run();
-            jdbcTemplate.update(
-                    "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
-                    version, description, LocalDateTime.now().toString());
         });
     }
 
     private void createMigrationLedger() {
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
-                + "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
+        transactionTemplate.executeWithoutResult(status -> {
+            configureBusyTimeout();
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
+                    + "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
+        });
     }
 
-    private boolean isApplied(int version) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM schema_migration WHERE version=?", Integer.class, version);
-        return count != null && count > 0;
+    private void configureBusyTimeout() {
+        jdbcTemplate.execute("PRAGMA busy_timeout=30000");
     }
 
     private void createCapitalFlowSchema() {
@@ -96,12 +98,14 @@ public class FactorResearchSchemaMigrator implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_dataset_partition ("
                 + "dataset_id INTEGER NOT NULL,"
                 + "partition_type TEXT NOT NULL,"
-                + "row_count INTEGER NOT NULL,"
+                + "row_count INTEGER NOT NULL CHECK(row_count >= 0),"
                 + "min_date TEXT,"
                 + "max_date TEXT,"
                 + "partition_fingerprint TEXT NOT NULL,"
                 + "quality_status TEXT NOT NULL,"
                 + "created_at TEXT NOT NULL,"
+                + "CHECK((min_date IS NULL AND max_date IS NULL) OR "
+                + "(min_date IS NOT NULL AND max_date IS NOT NULL AND min_date <= max_date)),"
                 + "PRIMARY KEY(dataset_id,partition_type),"
                 + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
     }

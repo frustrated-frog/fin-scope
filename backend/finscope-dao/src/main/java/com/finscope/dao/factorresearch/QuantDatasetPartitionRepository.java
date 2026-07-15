@@ -28,6 +28,7 @@ public class QuantDatasetPartitionRepository {
     };
 
     public void save(QuantDatasetPartition value) {
+        value.validate();
         jdbcTemplate.update("INSERT INTO quant_dataset_partition("
                         + "dataset_id,partition_type,row_count,min_date,max_date,partition_fingerprint,"
                         + "quality_status,created_at) VALUES(?,?,?,?,?,?,?,?)",

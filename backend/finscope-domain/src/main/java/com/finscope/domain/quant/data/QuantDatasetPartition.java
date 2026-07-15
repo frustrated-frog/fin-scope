@@ -18,4 +18,16 @@ public class QuantDatasetPartition {
     private String partitionFingerprint;
     private String qualityStatus;
     private LocalDateTime createdAt;
+
+    public void validate() {
+        if (rowCount < 0) {
+            throw new IllegalArgumentException("partition rowCount must not be negative");
+        }
+        if ((minDate == null) != (maxDate == null)) {
+            throw new IllegalArgumentException("partition minDate and maxDate must both be set or both be null");
+        }
+        if (minDate != null && minDate.isAfter(maxDate)) {
+            throw new IllegalArgumentException("partition minDate must not be after maxDate");
+        }
+    }
 }
