@@ -4,6 +4,7 @@ import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
+import com.finscope.dao.marketintel.DragonTigerRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
@@ -11,10 +12,13 @@ import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.DragonTigerRecord;
 import com.finscope.domain.marketintel.MarketIntelRefreshRun;
 import com.finscope.domain.marketintel.MarketIntelRefreshStep;
 import com.finscope.rpc.marketintel.CapitalFlowData;
+import com.finscope.rpc.marketintel.DragonTigerData;
 import com.finscope.service.marketdata.CapitalFlowGatewayResult;
+import com.finscope.service.marketdata.DragonTigerGatewayResult;
 import com.finscope.service.marketdata.MarketDataGateway;
 import com.finscope.service.marketdata.QuoteGatewayResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,13 +55,14 @@ class MarketIntelRefreshCoordinatorTest {
     private final CapitalBehaviorSnapshotRepository snapshots = mock(CapitalBehaviorSnapshotRepository.class);
     private final CapitalFactorEvaluationService evaluationService = mock(CapitalFactorEvaluationService.class);
     private final CapitalBehaviorEvaluationRepository evaluations = mock(CapitalBehaviorEvaluationRepository.class);
+    private final DragonTigerRepository dragonTiger = mock(DragonTigerRepository.class);
     private final CapitalRuleExplanationService ruleService = mock(CapitalRuleExplanationService.class);
     private final CapitalInterpretationRepository interpretations = mock(CapitalInterpretationRepository.class);
     private final CapitalFactAssembler facts = mock(CapitalFactAssembler.class);
     private final MarketIntelRefreshRunRepository runs = mock(MarketIntelRefreshRunRepository.class);
     private final MarketIntelRefreshCoordinator coordinator = new MarketIntelRefreshCoordinator(
             capital, gateway, flows, signalService, snapshotFactory, snapshots,
-            ruleService, interpretations, facts, runs, evaluationService, evaluations);
+            ruleService, interpretations, facts, runs, evaluationService, evaluations, dragonTiger);
     private Instrument instrument;
     private MarketIntelRefreshRun run;
 
@@ -74,6 +79,12 @@ class MarketIntelRefreshCoordinatorTest {
         MarketIntelRefreshStep step = new MarketIntelRefreshStep();
         step.setId(19L);
         when(runs.createStep(eq(11L), eq("CAPITAL_FLOW"), any(String.class), eq(1))).thenReturn(step);
+        MarketIntelRefreshStep dragonTigerStep = new MarketIntelRefreshStep();
+        dragonTigerStep.setId(20L);
+        when(runs.createStep(eq(11L), eq("DRAGON_TIGER"), any(String.class), eq(1)))
+                .thenReturn(dragonTigerStep);
+        when(gateway.fetchDragonTiger(eq(instrument), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(freshDragonTiger(Collections.<DragonTigerRecord>emptyList(), "dt-empty"));
         when(evaluationService.evaluate(any(CapitalBehaviorSnapshot.class)))
                 .thenReturn(new CapitalBehaviorEvaluation());
     }
@@ -87,7 +98,7 @@ class MarketIntelRefreshCoordinatorTest {
 
         coordinator.refresh(run, instrument);
 
-        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 0, 0);
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 0);
         verify(runs).updateStep(19L, MarketIntelRefreshStep.Status.SKIPPED, 0,
                 "STALE_FALLBACK", "资金源均不可用，保留上一份资金快照");
         verify(flows, never()).saveAll(anyList());
@@ -274,7 +285,7 @@ class MarketIntelRefreshCoordinatorTest {
         coordinator.refresh(run, instrument);
 
         verify(evaluations).save(evaluation);
-        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.SUCCEEDED, 1, 0);
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.SUCCEEDED, 2, 0);
     }
 
     @Test
@@ -296,7 +307,7 @@ class MarketIntelRefreshCoordinatorTest {
 
         verify(runs).updateStep(eq(19L), eq(MarketIntelRefreshStep.Status.SUCCEEDED), eq(1),
                 eq("PARTIAL_DATA"), org.mockito.ArgumentMatchers.contains("历史评价暂不可用"));
-        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 0);
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 2, 0);
         verify(evaluations, never()).save(any(CapitalBehaviorEvaluation.class));
         verify(snapshots).updateWarnings(eq(42L), eq("PARTIAL"),
                 org.mockito.ArgumentMatchers.argThat(values -> values.contains(
@@ -327,6 +338,97 @@ class MarketIntelRefreshCoordinatorTest {
 
         verify(evaluations).save(evaluation);
         verify(snapshots).updateWarnings(eq(43L), eq("COMPLETE"), eq(Collections.emptyList()));
+    }
+
+    @Test
+    void createsIndependentCapitalAndDragonTigerStepsAndFinishesOnce() {
+        CapitalFlowPoint minute = point(501L, "MINUTE_1",
+                LocalDateTime.of(2026, 7, 16, 10, 0));
+        CapitalFlowData freshCapital = new CapitalFlowData(
+                Collections.singletonList(minute), Collections.emptyList(),
+                null, null, Collections.emptyList(), "TEST_CAPITAL");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary(
+                        "TEST_CAPITAL", freshCapital, null, "capital-fresh"));
+        DragonTigerRecord record = dragonTigerRecord();
+        when(gateway.fetchDragonTiger(eq(instrument), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(freshDragonTiger(Collections.singletonList(record), "dt-fresh"));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
+                Collections.singletonList(minute), Collections.emptyList(), "two-dimensions");
+        saved.setId(51L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        verify(runs).createStep(11L, "CAPITAL_FLOW", "TEST_CAPITAL", 1);
+        verify(runs).createStep(11L, "DRAGON_TIGER", "TEST_DRAGON_TIGER", 1);
+        verify(dragonTiger).saveAll(Collections.singletonList(record));
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.SUCCEEDED, 2, 0);
+    }
+
+    @Test
+    void oneDimensionFailureMakesTheRunPartialWithoutDiscardingTheOther() {
+        CapitalFlowPoint minute = point(502L, "MINUTE_1",
+                LocalDateTime.of(2026, 7, 16, 10, 0));
+        CapitalFlowData freshCapital = new CapitalFlowData(
+                Collections.singletonList(minute), Collections.emptyList(),
+                null, null, Collections.emptyList(), "TEST_CAPITAL");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary(
+                        "TEST_CAPITAL", freshCapital, null, "capital-fresh"));
+        when(gateway.fetchDragonTiger(eq(instrument), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(DragonTigerGatewayResult.unavailable(
+                        "EASTMONEY_DRAGON_TIGER", "龙虎榜源不可用", "dt-failed"));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
+                Collections.singletonList(minute), Collections.emptyList(), "capital-survives");
+        saved.setId(52L);
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
+
+        coordinator.refresh(run, instrument);
+
+        verify(flows).saveAll(anyList());
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 1);
+    }
+
+    @Test
+    void successfulDragonTigerEmptySetCountsAsSuccess() {
+        CapitalFlowData emptyCapital = new CapitalFlowData(
+                Collections.emptyList(), Collections.emptyList(),
+                null, null, Collections.emptyList(), "TEST_CAPITAL");
+        when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
+                .thenReturn(CapitalFlowGatewayResult.freshPrimary(
+                        "TEST_CAPITAL", emptyCapital, null, "capital-empty"));
+
+        coordinator.refresh(run, instrument);
+
+        verify(runs).updateStep(20L, MarketIntelRefreshStep.Status.EMPTY,
+                0, null, null);
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 0);
+    }
+
+    private DragonTigerGatewayResult freshDragonTiger(
+            List<DragonTigerRecord> records, String refreshId) {
+        return DragonTigerGatewayResult.freshPrimary(
+                "TEST_DRAGON_TIGER",
+                new DragonTigerData(records, Collections.emptyList()),
+                LocalDateTime.of(2026, 7, 16, 16, 0), refreshId);
+    }
+
+    private DragonTigerRecord dragonTigerRecord() {
+        DragonTigerRecord record = new DragonTigerRecord();
+        record.setInstrumentId(7L);
+        record.setProviderCode("TEST_DRAGON_TIGER");
+        record.setTradeDate(LocalDate.of(2026, 7, 15));
+        record.setExternalId("100373909");
+        record.setReason("日跌幅偏离值达到7%的前5只证券");
+        record.setRetrievedAt(LocalDateTime.of(2026, 7, 16, 16, 0));
+        record.setPayloadHash("dragon-tiger");
+        record.setQualityStatus("COMPLETE");
+        return record;
     }
 
     private CapitalFlowPoint point(Long id, String granularity, LocalDateTime observedAt) {
