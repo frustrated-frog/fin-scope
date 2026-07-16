@@ -1,6 +1,8 @@
 package com.finscope.service.marketdata;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
@@ -9,6 +11,8 @@ import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.SectorMarketSnapshot;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
+import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.rpc.marketintel.DragonTigerData;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -25,14 +29,18 @@ import java.util.Optional;
 public class MarketDataSnapshotCodec {
     private static final int QUOTE_SCHEMA_VERSION = 1;
     private static final int SECTOR_CATALOG_SCHEMA_VERSION = 1;
+    private static final int DRAGON_TIGER_SCHEMA_VERSION = 1;
     private final ObjectMapper mapper;
 
     public MarketDataSnapshotCodec(ObjectMapper mapper) {
-        this.mapper = mapper.copy().findAndRegisterModules();
+        this.mapper = mapper.copy().findAndRegisterModules()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        this.mapper.addMixIn(DragonTigerRecord.class, DragonTigerRecordSnapshotMixin.class);
     }
 
     public int quoteSchemaVersion() { return QUOTE_SCHEMA_VERSION; }
     public int sectorCatalogSchemaVersion() { return SECTOR_CATALOG_SCHEMA_VERSION; }
+    public int dragonTigerSchemaVersion() { return DRAGON_TIGER_SCHEMA_VERSION; }
 
     public String encodeQuote(Quote quote) {
         try {
@@ -104,6 +112,34 @@ public class MarketDataSnapshotCodec {
                 payload, sha256(payload), SECTOR_CATALOG_SCHEMA_VERSION, updatedAt);
     }
 
+    public Optional<DragonTigerData> decodeDragonTiger(MarketDataSnapshot snapshot) {
+        if (snapshot == null
+                || snapshot.getCapability() != MarketDataCapability.DRAGON_TIGER
+                || snapshot.getSchemaVersion() != DRAGON_TIGER_SCHEMA_VERSION
+                || !sha256(snapshot.getPayloadJson()).equals(snapshot.getPayloadHash())) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(mapper.readValue(snapshot.getPayloadJson(), DragonTigerData.class));
+        } catch (IOException error) {
+            return Optional.empty();
+        }
+    }
+
+    public MarketDataSnapshot dragonTigerSnapshot(
+            String scopeKey, String providerCode, String providerFamily,
+            DragonTigerData data, LocalDateTime dataAsOf,
+            LocalDateTime retrievedAt, LocalDateTime updatedAt) {
+        try {
+            String payload = mapper.writeValueAsString(data);
+            return new MarketDataSnapshot(MarketDataCapability.DRAGON_TIGER, scopeKey,
+                    providerCode, providerFamily, dataAsOf, retrievedAt,
+                    payload, sha256(payload), DRAGON_TIGER_SCHEMA_VERSION, updatedAt);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("龙虎榜快照序列化失败", error);
+        }
+    }
+
     private String textOrDefault(JsonNode root, String field, String fallback) {
         String value = root.path(field).asText();
         return value == null || value.trim().isEmpty() ? fallback : value;
@@ -119,5 +155,10 @@ public class MarketDataSnapshotCodec {
         } catch (Exception error) {
             throw new IllegalStateException("JDK does not provide SHA-256", error);
         }
+    }
+
+    private abstract static class DragonTigerRecordSnapshotMixin {
+        @JsonIgnore abstract Object getBuySeats();
+        @JsonIgnore abstract Object getSellSeats();
     }
 }
