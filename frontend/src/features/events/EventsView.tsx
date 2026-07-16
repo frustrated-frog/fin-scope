@@ -311,20 +311,22 @@ export function EventsView({
                 onOpenEvent?.(event.id);
               }}
             >
-              <div className="event-card-top">
-                <strong>{event.canonicalTitle}</strong>
-                <span className="badge">{event.status ?? 'ACTIVE'}</span>
+              <div className="event-card-signal" aria-hidden="true" />
+              <div className="event-card-main">
+                <div className="event-card-titleblock">
+                  <span className="event-card-kicker">{themeLabel(event.themeCode)} · {event.noveltyState ?? 'NEW'}</span>
+                  <strong>{event.canonicalTitle}</strong>
+                </div>
+                <span className={`event-status-pill ${eventStatusTone(event.status)}`}>{event.status ?? 'ACTIVE'}</span>
               </div>
               <p>{event.summary || '暂无摘要'}</p>
-              <div className="event-card-meta">
-                <span>{themeLabel(event.themeCode)}</span>
-                <span>{event.noveltyState ?? 'NEW'}</span>
-                <span>文章 {event.articleCount ?? 0}</span>
-                <span>证据 {event.evidenceCount ?? 0}</span>
-                <span>重要性 {event.importanceScore ?? 0}</span>
-              </div>
-              <div className="event-card-meta">
-                <span>最近更新 {formatDate(event.lastSeenAt || event.updatedAt)}</span>
+              <div className="event-card-bottom">
+                <div className="event-card-metrics" aria-label="事件指标">
+                  <span><small>文章</small><strong>{event.articleCount ?? 0}</strong><em>文章 {event.articleCount ?? 0}</em></span>
+                  <span><small>证据</small><strong>{event.evidenceCount ?? 0}</strong><em>证据 {event.evidenceCount ?? 0}</em></span>
+                  <span><small>重要性</small><strong>{event.importanceScore ?? 0}</strong><em>重要性 {event.importanceScore ?? 0}</em></span>
+                </div>
+                <span className="event-card-updated">最近更新 {formatDate(event.lastSeenAt || event.updatedAt)}</span>
               </div>
             </button>
           )) : (
@@ -346,15 +348,17 @@ export function EventsView({
         ) : (
           <>
             <header className="event-detail-hero">
-              {onBack && <button className="secondary-button event-archive-back" type="button" onClick={onBack}>返回事件队列</button>}
+              <div className="event-detail-topbar">
+                {onBack && <button className="secondary-button event-archive-back" type="button" onClick={onBack}>返回事件队列</button>}
+                <div className="event-hero-badges">
+                  <span className={`event-status-pill ${eventStatusTone(selectedEvent.status)}`}>{selectedEvent.status ?? 'ACTIVE'}</span>
+                  <span className="subtle-badge">{selectedEvent.noveltyState ?? 'NEW'}</span>
+                </div>
+              </div>
               <div className="event-detail-title">
                 <span className="section-kicker">{themeLabel(selectedEvent.themeCode)}</span>
                 <h3>{selectedEvent.canonicalTitle}</h3>
                 <p>{selectedEvent.summary || '暂无摘要'}</p>
-              </div>
-              <div className="event-hero-badges">
-                <span className="badge">{selectedEvent.status ?? 'ACTIVE'}</span>
-                <span className="subtle-badge">{selectedEvent.noveltyState ?? 'NEW'}</span>
               </div>
             </header>
 
@@ -378,7 +382,7 @@ export function EventsView({
             </div>
 
             <div className="events-detail-grid">
-              <section className="event-detail-section">
+              <section className="event-detail-section event-timeline-section">
                 <div className="event-detail-section-head">
                   <strong>事件时间线</strong>
                   <span>{eventArticles.length} 篇文章</span>
@@ -400,7 +404,7 @@ export function EventsView({
                 )}
               </section>
 
-              <section className="event-detail-section">
+              <section className="event-detail-section event-merge-section">
                 <div className="event-detail-section-head">
                   <strong>归并依据</strong>
                   <span>relation / score / reason</span>
@@ -485,7 +489,7 @@ export function EventsView({
                 )}
               </section>
 
-              <section className="event-detail-section">
+              <section className="event-detail-section event-learning-section">
                 <div className="event-detail-section-head">
                   <strong>学习任务</strong>
                   <span>{selectedTasks.length} tasks</span>
@@ -502,7 +506,7 @@ export function EventsView({
                 )}
               </section>
 
-              <section className="event-detail-section">
+              <section className="event-detail-section event-idea-section">
                 <div className="event-detail-section-head">
                   <strong>内容选题</strong>
                   <span>{selectedIdeas.length} ideas</span>
@@ -632,6 +636,12 @@ function trustedTierRank(tier?: string) {
     return 1;
   }
   return 0;
+}
+
+function eventStatusTone(status?: string) {
+  if (status === 'ARCHIVED') return 'archived';
+  if (status === 'COOLING') return 'cooling';
+  return 'active';
 }
 
 function isTrustedTier(tier?: string) {
