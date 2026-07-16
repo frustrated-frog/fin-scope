@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
+import { apiResponse } from '../../test/apiEnvelope';
 import { FactorGuide } from './FactorGuide';
 import { ResearchFactorDefinition } from './quantTypes';
 
@@ -112,8 +113,8 @@ test('requires approval before the research agent runs and renders its auditable
   };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
-    if (path.endsWith('/approve')) return new Response(JSON.stringify(completed));
-    return new Response(JSON.stringify(plan), { status: 201 });
+    if (path.endsWith('/approve')) return apiResponse(completed);
+    return apiResponse(plan, { status: 201 });
   }));
 
   render(<FactorGuide definitions={[definition()]} selectedCode="EP" onSelect={vi.fn()}
@@ -141,8 +142,8 @@ test('survives an empty budget-exhausted finding and explains the stop', async (
     evidenceJson: '', evidenceHash: '', findingJson: '', stopReason: '', trace: []
   };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/approve')
-    ? new Response(JSON.stringify({ ...plan, status: 'BUDGET_EXHAUSTED', findingJson: '{}', stopReason: 'TOOL_BUDGET_EXHAUSTED' }))
-    : new Response(JSON.stringify(plan), { status: 201 })));
+    ? apiResponse({ ...plan, status: 'BUDGET_EXHAUSTED', findingJson: '{}', stopReason: 'TOOL_BUDGET_EXHAUSTED' })
+    : apiResponse(plan, { status: 201 })));
 
   render(<FactorGuide definitions={[definition()]} selectedCode="EP" onSelect={vi.fn()}
     selectedDataset={{ id: 1, name: '研究样本', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }}

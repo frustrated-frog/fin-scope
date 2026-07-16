@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 
+import { apiEnvelope } from '../../test/apiEnvelope';
 import { KnowledgeView } from './KnowledgeView';
 
 const overview = {
@@ -28,7 +29,7 @@ beforeEach(() => {
       : url.startsWith('/api/knowledge/topics')
       ? { items: [], totalCount: 0, page: 0, pageSize: 20, totalPages: 0 }
       : overview;
-    return { ok: true, status: 200, text: async () => JSON.stringify(value) } as Response;
+    return { ok: true, status: 200, text: async () => JSON.stringify(apiEnvelope(value)) } as Response;
   }));
 });
 

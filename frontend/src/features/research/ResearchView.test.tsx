@@ -10,6 +10,7 @@ import {
   ThesisFinding
 } from '../../shared/types';
 import { ResearchView } from './ResearchView';
+import { apiResponse } from '../../test/apiEnvelope';
 
 test('renders research runs as a telemetry list', () => {
   renderView(legacyDetail());
@@ -209,7 +210,7 @@ function finding(id: number, stance: ThesisFinding['stance'], summary: string): 
 }
 
 function stubThesisDetail(detail: ResearchThesisDetail) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(detail), {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(apiResponse(detail, {
     status: 200,
     headers: { 'Content-Type': 'application/json' }
   })));

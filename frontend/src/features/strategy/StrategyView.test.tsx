@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
+import { apiResponse } from '../../test/apiEnvelope';
 import { StrategyView } from './StrategyView';
 
 test('shows empty workspace and creates the first fund', async () => {
@@ -8,17 +9,17 @@ test('shows empty workspace and creates the first fund', async () => {
   const overview = { holdings: [], targetWeight: 0, currentWeight: 0 };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input); const method = init?.method ?? 'GET'; requests.push({ url, method });
-    if (url.startsWith('/api/quant/')) return new Response(JSON.stringify([]), { status: 200 });
-    if (url === '/api/strategy/overview' && method === 'GET') return new Response(JSON.stringify(overview), { status: 200 });
-    if (url === '/api/strategy/playbooks') return new Response(JSON.stringify([]), { status: 200 });
-    if (url === '/api/strategy/stock-theses') return new Response(JSON.stringify([]), { status: 200 });
-    if (url === '/api/strategy/reviews') return new Response(JSON.stringify([]), { status: 200 });
+    if (url.startsWith('/api/quant/')) return apiResponse([], { status: 200 });
+    if (url === '/api/strategy/overview' && method === 'GET') return apiResponse(overview, { status: 200 });
+    if (url === '/api/strategy/playbooks') return apiResponse([], { status: 200 });
+    if (url === '/api/strategy/stock-theses') return apiResponse([], { status: 200 });
+    if (url === '/api/strategy/reviews') return apiResponse([], { status: 200 });
     if (url === '/api/strategy/holdings' && method === 'POST') {
       overview.holdings = [{ id: 1, code: '020608', name: '测试基金', type: 'FUND', role: 'CORE', targetWeight: 60, currentWeight: 0, revision: 0 }] as never[];
       overview.targetWeight = 60;
-      return new Response(JSON.stringify(overview.holdings[0]), { status: 200 });
+      return apiResponse(overview.holdings[0], { status: 200 });
     }
-    return new Response('{}', { status: 200 });
+    return apiResponse({}, { status: 200 });
   }));
   const user = userEvent.setup();
   render(<StrategyView addToast={vi.fn()} setMessage={vi.fn()} />);

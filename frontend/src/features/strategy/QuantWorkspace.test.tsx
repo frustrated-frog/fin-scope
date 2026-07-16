@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
+import { apiResponse } from '../../test/apiEnvelope';
 import { QuantWorkspace } from './QuantWorkspace';
 
 test('keeps dataset, agent confirmation and experiment actions explicit', async () => {
@@ -9,20 +10,20 @@ test('keeps dataset, agent confirmation and experiment actions explicit', async 
   let strategies: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input); const method = init?.method ?? 'GET'; requests.push(`${method} ${path}`);
-    if (path === '/api/quant/datasets' && method === 'GET') return new Response(JSON.stringify(datasets));
-    if (path === '/api/quant/factors') return new Response(JSON.stringify([{ code: 'EP', name: '盈利收益率', category: '价值', direction: 'HIGH', description: '市盈率倒数', lookbackDays: 0, pointInTime: true }]));
-    if (path === '/api/quant/strategies') return new Response(JSON.stringify(strategies));
-    if (path === '/api/quant/experiments') return new Response(JSON.stringify([]));
+    if (path === '/api/quant/datasets' && method === 'GET') return apiResponse(datasets);
+    if (path === '/api/quant/factors') return apiResponse([{ code: 'EP', name: '盈利收益率', category: '价值', direction: 'HIGH', description: '市盈率倒数', lookbackDays: 0, pointInTime: true }]);
+    if (path === '/api/quant/strategies') return apiResponse(strategies);
+    if (path === '/api/quant/experiments') return apiResponse([]);
     if (path === '/api/quant/datasets/learning-sample') {
       const value = { id: 1, name: 'A股多因子学习样本 1', market: 'A_SHARE', dataKind: 'LEARNING_SAMPLE', status: 'READY', fingerprint: 'abcdef1234567890' };
-      datasets = [value]; return new Response(JSON.stringify(value));
+      datasets = [value]; return apiResponse(value);
     }
-    if (path === '/api/quant/strategy-drafts') return new Response(JSON.stringify({ id: 2, status: 'VALIDATED', spec: { name: '质量价值', datasetId: 1, benchmark: 'EQUAL_WEIGHT', investmentHypothesis: '高质量低估值获得长期补偿', riskBoundary: '控制回撤', factors: [{ code: 'EP', weight: 1, direction: 'HIGH' }], portfolio: { topN: 10, rebalanceEvery: 20, weighting: 'EQUAL' }, execution: { signalPrice: 'CLOSE', fillPrice: 'NEXT_OPEN', slippageBps: 5 }, cost: {} }, validationIssues: [] }));
+    if (path === '/api/quant/strategy-drafts') return apiResponse({ id: 2, status: 'VALIDATED', spec: { name: '质量价值', datasetId: 1, benchmark: 'EQUAL_WEIGHT', investmentHypothesis: '高质量低估值获得长期补偿', riskBoundary: '控制回撤', factors: [{ code: 'EP', weight: 1, direction: 'HIGH' }], portfolio: { topN: 10, rebalanceEvery: 20, weighting: 'EQUAL' }, execution: { signalPrice: 'CLOSE', fillPrice: 'NEXT_OPEN', slippageBps: 5 }, cost: {} }, validationIssues: [] });
     if (path === '/api/quant/strategy-drafts/2/confirm') {
       const value = { id: 3, name: '质量价值', datasetId: 1, version: 1, specJson: '{}', strategyFingerprint: '1234567890', datasetFingerprint: 'abcdef', engineVersion: 'quant-java-v1', source: 'AGENT' };
-      strategies = [value]; return new Response(JSON.stringify(value));
+      strategies = [value]; return apiResponse(value);
     }
-    return new Response('{}');
+    return apiResponse({});
   }));
 
   const user = userEvent.setup();
@@ -55,18 +56,18 @@ test('opens a persisted capital draft on the factor manual without auto-running 
   };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input); requests.push(`${init?.method ?? 'GET'} ${path}`);
-    if (path === '/api/quant/datasets') return new Response(JSON.stringify([{ id: 4, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }]));
-    if (path === '/api/factor-research/factors') return new Response(JSON.stringify([capitalFactor]));
-    if (path === '/api/quant/strategies' || path === '/api/quant/experiments') return new Response(JSON.stringify([]));
-    if (path === '/api/quant/datasets/4/quality') return new Response(JSON.stringify({ datasetId: 4, status: 'READY', availableFactors: ['MAIN_FLOW_SHARE'] }));
-    if (path === '/api/factor-research/research-drafts/9') return new Response(JSON.stringify({
+    if (path === '/api/quant/datasets') return apiResponse([{ id: 4, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }]);
+    if (path === '/api/factor-research/factors') return apiResponse([capitalFactor]);
+    if (path === '/api/quant/strategies' || path === '/api/quant/experiments') return apiResponse([]);
+    if (path === '/api/quant/datasets/4/quality') return apiResponse({ datasetId: 4, status: 'READY', availableFactors: ['MAIN_FLOW_SHARE'] });
+    if (path === '/api/factor-research/research-drafts/9') return apiResponse({
       id: 9, sourceType: 'CAPITAL_BEHAVIOR', instrumentCode: '600519.SH', instrumentName: '贵州茅台',
       observedAt: '2026-07-14T15:00:00', signalCode: 'PRICE_FLOW_DIVERGENCE', factor: capitalFactor.identity,
       snapshotId: 12, snapshotFingerprint: 'snapshot-12', evidenceRefs: ['snapshot:12'], objectiveTags: [],
       evaluationMode: 'CROSS_SECTIONAL_FACTOR_STUDY', status: 'DRAFT',
       requiredNextSteps: ['冻结同日股票池资金数据', '预注册失败条件'], createdAt: '2026-07-16T01:00:00'
-    }));
-    return new Response('{}');
+    });
+    return apiResponse({});
   }));
 
   render(<QuantWorkspace
