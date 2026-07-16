@@ -23,6 +23,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/research/runs")
 public class ResearchController {
+
     @Resource
     private ResearchService researchService;
     @Resource

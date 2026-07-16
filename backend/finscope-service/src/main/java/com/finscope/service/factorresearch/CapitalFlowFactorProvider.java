@@ -4,10 +4,12 @@ import com.finscope.domain.factorresearch.FactorIdentity;
 import com.finscope.domain.factorresearch.FactorObservation;
 import com.finscope.domain.factorresearch.ObservationQuality;
 import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
+import com.finscope.domain.quant.data.QuantDailyBar;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -35,10 +37,12 @@ public class CapitalFlowFactorProvider implements FactorProvider {
     public static final FactorIdentity PRICE_FLOW_DIVERGENCE_5D =
             new FactorIdentity("capital", "PRICE_FLOW_DIVERGENCE_5D", "1.0.0");
 
-    public Set<FactorIdentity> factors() { return new LinkedHashSet<FactorIdentity>(Arrays.asList(
-            MAIN_FLOW_SHARE, SUPER_LARGE_FLOW_SHARE, BIG_ORDER_FLOW_SHARE,
-            NORMALIZED_MAIN_FLOW_SUM_5D, FLOW_PERSISTENCE_5D,
-            MAIN_FLOW_SHARE_ZSCORE_20D, PRICE_FLOW_DIVERGENCE_5D)); }
+    public Set<FactorIdentity> factors() {
+        return new LinkedHashSet<FactorIdentity>(Arrays.asList(
+                MAIN_FLOW_SHARE, SUPER_LARGE_FLOW_SHARE, BIG_ORDER_FLOW_SHARE,
+                NORMALIZED_MAIN_FLOW_SUM_5D, FLOW_PERSISTENCE_5D,
+                MAIN_FLOW_SHARE_ZSCORE_20D, PRICE_FLOW_DIVERGENCE_5D));
+    }
 
     public FactorObservation calculate(FactorCalculationContext context, FactorIdentity factor) {
         if (!factors().contains(factor)) throw new IllegalArgumentException("unsupported capital factor: " + factor);
@@ -61,7 +65,7 @@ public class CapitalFlowFactorProvider implements FactorProvider {
                 source == null || source.getAvailableAt() == null ? context.getAvailableAt() : source.getAvailableAt(),
                 factor, value, value, complete ? ObservationQuality.COMPLETE : ObservationQuality.MISSING_INPUT,
                 sourceFingerprint, providerCode() + ":" + factor.getCode() + ":"
-                        + calculationVersion() + ":" + sourceFingerprint);
+                + calculationVersion() + ":" + sourceFingerprint);
     }
 
     private boolean requiredValuePresent(QuantCapitalFlowDaily source, FactorIdentity factor) {
@@ -76,8 +80,13 @@ public class CapitalFlowFactorProvider implements FactorProvider {
         return source.getSuperLargeNetInflow().add(source.getLargeNetInflow());
     }
 
-    public String providerCode() { return "FROZEN_CAPITAL_FLOW"; }
-    public String calculationVersion() { return "capital-flow-share-v1"; }
+    public String providerCode() {
+        return "FROZEN_CAPITAL_FLOW";
+    }
+
+    public String calculationVersion() {
+        return "capital-flow-share-v1";
+    }
 
     private boolean isWindowFactor(FactorIdentity factor) {
         return NORMALIZED_MAIN_FLOW_SUM_5D.equals(factor) || FLOW_PERSISTENCE_5D.equals(factor)
@@ -90,7 +99,8 @@ public class CapitalFlowFactorProvider implements FactorProvider {
         BigDecimal value = null;
         if (!rows.isEmpty() && (!PRICE_FLOW_DIVERGENCE_5D.equals(factor) || hasPriceWindow(context, 6))) {
             List<Double> shares = new ArrayList<Double>();
-            for (QuantCapitalFlowDaily row : rows) shares.add(row.getMainNetInflow().divide(row.getAmount(), 16, RoundingMode.HALF_UP).doubleValue());
+            for (QuantCapitalFlowDaily row : rows)
+                shares.add(row.getMainNetInflow().divide(row.getAmount(), 16, RoundingMode.HALF_UP).doubleValue());
             if (NORMALIZED_MAIN_FLOW_SUM_5D.equals(factor)) {
                 value = decimal(shares.stream().mapToDouble(Double::doubleValue).sum());
             } else if (FLOW_PERSISTENCE_5D.equals(factor)) {
@@ -119,19 +129,21 @@ public class CapitalFlowFactorProvider implements FactorProvider {
 
     private List<QuantCapitalFlowDaily> strictWindow(FactorCalculationContext context, int window) {
         List<com.finscope.domain.quant.data.QuantDailyBar> prices = context.getHistory();
-        if (prices.size() < window || !context.getTradeDate().equals(prices.get(prices.size() - 1).getTradeDate())) return Collections.emptyList();
+        if (prices.size() < window || !context.getTradeDate().equals(prices.get(prices.size() - 1).getTradeDate()))
+            return Collections.emptyList();
         List<java.time.LocalDate> dates = new ArrayList<java.time.LocalDate>();
         for (int i = prices.size() - window; i < prices.size(); i++) {
-            java.time.LocalDate date = prices.get(i).getTradeDate();
+            LocalDate date = prices.get(i).getTradeDate();
             if (date == null || dates.contains(date)) return Collections.emptyList();
             dates.add(date);
         }
-        Map<java.time.LocalDate, QuantCapitalFlowDaily> byDate = new LinkedHashMap<java.time.LocalDate, QuantCapitalFlowDaily>();
+        Map<LocalDate, QuantCapitalFlowDaily> byDate = new LinkedHashMap<java.time.LocalDate, QuantCapitalFlowDaily>();
         for (QuantCapitalFlowDaily row : context.getCapitalHistory()) {
-            if (row == null || row.getTradeDate() == null || byDate.put(row.getTradeDate(), row) != null) return Collections.emptyList();
+            if (row == null || row.getTradeDate() == null || byDate.put(row.getTradeDate(), row) != null)
+                return Collections.emptyList();
         }
         List<QuantCapitalFlowDaily> result = new ArrayList<QuantCapitalFlowDaily>();
-        for (java.time.LocalDate date : dates) {
+        for (LocalDate date : dates) {
             QuantCapitalFlowDaily row = byDate.get(date);
             if (!validMainRow(context, row)) return Collections.emptyList();
             result.add(row);
@@ -148,11 +160,13 @@ public class CapitalFlowFactorProvider implements FactorProvider {
     }
 
     private boolean hasPriceWindow(FactorCalculationContext context, int size) {
-        List<com.finscope.domain.quant.data.QuantDailyBar> prices = context.getHistory();
+        List<QuantDailyBar> prices = context.getHistory();
         return prices.size() >= size && prices.get(prices.size() - 1).getAdjustedClose() != null
                 && prices.get(prices.size() - size).getAdjustedClose() != null
                 && prices.get(prices.size() - size).getAdjustedClose().signum() > 0;
     }
 
-    private BigDecimal decimal(double value) { return Double.isFinite(value) ? BigDecimal.valueOf(value).setScale(10, RoundingMode.HALF_UP) : null; }
+    private BigDecimal decimal(double value) {
+        return Double.isFinite(value) ? BigDecimal.valueOf(value).setScale(10, RoundingMode.HALF_UP) : null;
+    }
 }
