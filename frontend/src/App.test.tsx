@@ -1161,7 +1161,7 @@ test('research workbench runs a full research job and shows agent trace', async 
   await user.click(screen.getByRole('button', { name: 'Research' }));
 
   expect(await screen.findByText('启动探索性研究')).toBeInTheDocument();
-  expect(screen.getByText('历次研究运行')).toBeInTheDocument();
+  expect(screen.getByText('最新研究运行')).toBeInTheDocument();
   expect(screen.getByText('1/1')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: '开始探索研究' }));
@@ -1177,12 +1177,12 @@ test('research workbench runs a full research job and shows agent trace', async 
   expect(screen.getByText('规划来源')).toBeInTheDocument();
   expect(screen.getByText('抓取来源')).toBeInTheDocument();
   expect(screen.getByText('Macro Source')).toBeInTheDocument();
-  expect(screen.getAllByText('RUNNING').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('运行中').length).toBeGreaterThan(0);
 
   expect(await screen.findByText('提取证据')).toBeInTheDocument();
   expect(screen.getAllByText('LLM_UNCONFIGURED').length).toBeGreaterThan(0);
   expect(await screen.findByText('research orchestrate')).toBeInTheDocument();
-  expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
 });
 
 test('events view presents the selected event as a structured detail panel', async () => {

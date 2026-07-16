@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Table } from '../../shared/components/Table';
 import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
 import { ResearchProgressPanel } from './ResearchProgressPanel';
@@ -58,6 +57,10 @@ export function ResearchView({
   const [subjectCode, setSubjectCode] = useState('');
   const [thesisDetail, setThesisDetail] = useState<ResearchThesisDetail | null>(null);
   useEffect(() => { if (!selectedThesisId) { setThesisDetail(null); return; } api<ResearchThesisDetail>(`/api/research/theses/${selectedThesisId}`).then(setThesisDetail).catch(() => setThesisDetail(null)); }, [selectedThesisId]);
+  const latestRun = useMemo(() => [...runs].sort((left, right) => {
+    const dateOrder = right.runDate.localeCompare(left.runDate);
+    return dateOrder || right.id - left.id;
+  })[0], [runs]);
 
   async function submit() {
     await onRun({ thesisId: selectedThesisId || undefined, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
@@ -196,27 +199,19 @@ export function ResearchView({
           <div className="panel-head research-archive-head">
             <div>
               <p className="eyebrow">研究档案</p>
-              <h3>历次研究运行</h3>
+              <h3>最新研究运行</h3>
             </div>
-            <span className="research-run-count">共 {runs.length} 次</span>
+            <span className="research-run-count">仅展示最新 · 隐藏 {Math.max(runs.length - 1, 0)} 条</span>
           </div>
-          {runs[0] && <button className="research-latest-run" style={{ marginTop: 12 }} type="button" onClick={() => onOpenRun(runs[0].id)}>
-            <span>最近一次 · {runs[0].runDate} · {runs[0].status}</span>
-            <strong>新增 {runs[0].evidenceCount ?? 0} 条证据 →</strong>
-          </button>}
-          <Table
-            headers={['日期', '命题', '状态', '来源', '事件', '证据', '学习/选题']}
-            rows={runs.map((run) => [
-              <button className="link-button" type="button" onClick={() => onOpenRun(run.id)}>{run.runDate}</button>,
-              run.thesisId ? theses.find((thesis) => thesis.id === run.thesisId)?.subjectName || `#${run.thesisId}` : '探索',
-              run.status,
-              `${run.fetchedSourceCount ?? 0}/${run.sourceCount}`,
-              `${run.eventCount ?? 0}`,
-              `${run.evidenceCount ?? 0}`,
-              `${run.learningTaskCount ?? 0}/${run.contentIdeaCount ?? 0}`
-            ])}
-            empty="还没有研究运行"
-          />
+          {latestRun ? (
+            <LatestResearchRunCard
+              run={latestRun}
+              thesisName={latestRun.thesisId ? theses.find((thesis) => thesis.id === latestRun.thesisId)?.subjectName || `#${latestRun.thesisId}` : '探索'}
+              onOpen={() => onOpenRun(latestRun.id)}
+            />
+          ) : (
+            <p className="muted">还没有研究运行</p>
+          )}
         </div>
 
         <aside className="research-detail-panel">
@@ -263,6 +258,68 @@ function presentRunStatus(status: string) {
     PENDING: '等待中', SKIPPED: '已跳过', FALLBACK: '保底完成'
   };
   return labels[status] || status;
+}
+
+function runStatusTone(status: string) {
+  if (status === 'COMPLETED') return 'success';
+  if (status === 'PARTIAL_SUCCESS' || status === 'RUNNING') return 'active';
+  if (status === 'FAILED') return 'danger';
+  return 'neutral';
+}
+
+function LatestResearchRunCard({
+  run,
+  thesisName,
+  onOpen
+}: {
+  run: ResearchRun;
+  thesisName: string;
+  onOpen: () => void;
+}) {
+  const fetchedSources = run.fetchedSourceCount ?? 0;
+  const sourceCount = run.sourceCount || 0;
+  const sourcePercent = sourceCount ? Math.min(100, Math.round((fetchedSources / sourceCount) * 100)) : 0;
+  const metrics = [
+    { label: '来源', value: `${fetchedSources}/${sourceCount}`, detail: `${sourcePercent}% fetched` },
+    { label: '事件', value: run.eventCount ?? 0, detail: 'clustered' },
+    { label: '证据', value: run.evidenceCount ?? 0, detail: 'validated' },
+    { label: '学习/选题', value: `${run.learningTaskCount ?? 0}/${run.contentIdeaCount ?? 0}`, detail: 'next actions' }
+  ];
+
+  return (
+    <button
+      className={`research-latest-run-card ${runStatusTone(run.status)}`}
+      type="button"
+      onClick={onOpen}
+      aria-label={`打开最近一次研究运行 ${run.runDate} ${presentRunStatus(run.status)}`}
+    >
+      <span className="research-run-scanline" aria-hidden="true" />
+      <span className="research-run-card-head">
+        <span>
+          <span className="research-run-kicker">最近一次 · RUN #{run.id}</span>
+          <strong>{thesisName}</strong>
+        </span>
+        <span className={`research-status-chip ${runStatusTone(run.status)}`}>{presentRunStatus(run.status)}</span>
+      </span>
+      <span className="research-run-date-row">
+        <span>{run.runDate}</span>
+        <span>{run.summary || '等待打开运行细节查看 agent trace'}</span>
+      </span>
+      <span className="research-source-meter" aria-label={`来源进度 ${fetchedSources}/${sourceCount}`}>
+        <span style={{ width: `${sourcePercent}%` }} />
+      </span>
+      <span className="research-run-metric-grid">
+        {metrics.map((metric) => (
+          <span className="research-run-metric" key={metric.label}>
+            <small>{metric.label}</small>
+            <strong>{metric.value}</strong>
+            <em>{metric.detail}</em>
+          </span>
+        ))}
+      </span>
+      <span className="research-run-open">打开运行细节</span>
+    </button>
+  );
 }
 
 function presentDuration(durationMs: number) {

@@ -14,7 +14,8 @@ import { ResearchView } from './ResearchView';
 test('keeps breathing room between the archive heading and latest run card', () => {
   renderView(legacyDetail());
 
-  expect(screen.getByRole('button', { name: /最近一次/ })).toHaveStyle({ marginTop: '12px' });
+  expect(screen.getByRole('button', { name: /最近一次/ })).toHaveClass('research-latest-run-card');
+  expect(screen.getByText('仅展示最新 · 隐藏 0 条')).toBeInTheDocument();
 });
 
 test('groups the report action inside a responsive research detail header', () => {
