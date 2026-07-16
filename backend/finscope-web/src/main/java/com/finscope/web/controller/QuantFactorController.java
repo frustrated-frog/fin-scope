@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.service.quant.factor.FactorRegistry;
 import com.finscope.service.quant.factor.DatasetFactorAnalysisService;
@@ -25,7 +27,7 @@ public class QuantFactorController {
      *
      * @return 因子定义列表，包含因子编码、名称和计算说明。
      */
-    @GetMapping public List<FactorDefinition> list() { return factorRegistry.list(); }
+    @GetMapping public ApiResponse<List<FactorDefinition>> list() { return ApiResponses.success(factorRegistry.list()); }
     /**
      * 分析指定数据集上的因子表现。
      *
@@ -33,7 +35,7 @@ public class QuantFactorController {
      * @param datasetId 数据集 ID。
      * @return 因子分析结果，包含覆盖度、分布和表现指标。
      */
-    @GetMapping("/{code}/analysis") public FactorAnalysis analyze(@PathVariable String code, @RequestParam Long datasetId) {
-        return datasetFactorAnalysisService.analyze(datasetId, code);
+    @GetMapping("/{code}/analysis") public ApiResponse<FactorAnalysis> analyze(@PathVariable String code, @RequestParam Long datasetId) {
+        return ApiResponses.success(datasetFactorAnalysisService.analyze(datasetId, code));
     }
 }

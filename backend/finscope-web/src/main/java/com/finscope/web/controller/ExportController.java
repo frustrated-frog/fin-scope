@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.service.export.ExportService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,8 +23,8 @@ public class ExportController {
      * @return 导出结果 Map，包含导出状态和导出文件等服务层返回信息。
      */
     @PostMapping("/exports")
-    public Map<String, Object> exportData() {
-        return exportService.exportData();
+    public ApiResponse<Map<String, Object>> exportData() {
+        return ApiResponses.success(exportService.exportData());
     }
 
     /**
@@ -31,7 +33,7 @@ public class ExportController {
      * @return 导入能力状态；当前 MVP 返回未实现标记。
      */
     @PostMapping("/imports")
-    public Map<String, Object> importData() {
-        return Collections.singletonMap("status", "IMPORT_NOT_IMPLEMENTED_IN_MVP");
+    public ApiResponse<Map<String, Object>> importData() {
+        return ApiResponses.success(Collections.singletonMap("status", "IMPORT_NOT_IMPLEMENTED_IN_MVP"));
     }
 }

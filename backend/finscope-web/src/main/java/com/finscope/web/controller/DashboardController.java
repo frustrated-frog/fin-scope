@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.service.dashboard.DashboardService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +22,7 @@ public class DashboardController {
      * @return 仪表盘汇总 Map，包含文章、事件、任务等首页展示指标。
      */
     @GetMapping
-    public Map<String, Object> summary() {
-        return dashboardService.summary();
+    public ApiResponse<Map<String, Object>> summary() {
+        return ApiResponses.success(dashboardService.summary());
     }
 }

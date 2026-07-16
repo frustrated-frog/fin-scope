@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.ResearchDraft;
@@ -25,18 +27,18 @@ public class ResearchDraftController {
     }
 
     @PostMapping("/from-capital-signal")
-    public ResponseEntity<ResearchDraft> createFromCapitalSignal(
+    public ResponseEntity<ApiResponse<ResearchDraft>> createFromCapitalSignal(
             @RequestBody(required = false) CapitalResearchDraftRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
         }
         ResearchDraft value = service.createFromCapitalSignal(request.toCommand());
         return ResponseEntity.created(URI.create("/api/factor-research/research-drafts/" + value.getId()))
-                .body(value);
+                .body(ApiResponses.success(value));
     }
 
     @GetMapping("/{id}")
-    public ResearchDraft get(@PathVariable Long id) {
-        return service.get(id);
+    public ApiResponse<ResearchDraft> get(@PathVariable Long id) {
+        return ApiResponses.success(service.get(id));
     }
 }

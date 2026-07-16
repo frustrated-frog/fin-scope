@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.response.PageResponse;
@@ -30,9 +32,9 @@ public class EvidenceController {
      * @return 该事件下的证据条目列表。
      */
     @GetMapping("/events/{eventId}/evidence")
-    public List<EvidenceItem> list(@PathVariable Long eventId) {
+    public ApiResponse<List<EvidenceItem>> list(@PathVariable Long eventId) {
         eventClusterService.detail(eventId);
-        return evidenceService.listByEventId(eventId);
+        return ApiResponses.success(evidenceService.listByEventId(eventId));
     }
 
     /**
@@ -45,14 +47,14 @@ public class EvidenceController {
      * @return 符合过滤条件的证据条目列表。
      */
     @GetMapping("/evidence")
-    public List<EvidenceItem> listAll(@RequestParam(required = false) Long eventId,
+    public ApiResponse<List<EvidenceItem>> listAll(@RequestParam(required = false) Long eventId,
                                       @RequestParam(required = false) String sourceTier,
                                       @RequestParam(required = false) String evidenceType,
                                       @RequestParam(required = false) Integer minConfidence) {
         if (eventId != null) {
             eventClusterService.detail(eventId);
         }
-        return evidenceService.listAll(eventId, sourceTier, evidenceType, minConfidence);
+        return ApiResponses.success(evidenceService.listAll(eventId, sourceTier, evidenceType, minConfidence));
     }
 
     /**
@@ -67,7 +69,7 @@ public class EvidenceController {
      * @return 分页后的证据条目结果，包含记录列表和分页元数据。
      */
     @GetMapping("/evidence/paged")
-    public PageResponse<EvidenceItem> listPaged(@RequestParam(required = false) Long eventId,
+    public ApiResponse<PageResponse<EvidenceItem>> listPaged(@RequestParam(required = false) Long eventId,
                                                 @RequestParam(required = false) String sourceTier,
                                                 @RequestParam(required = false) String evidenceType,
                                                 @RequestParam(required = false) Integer minConfidence,
@@ -80,7 +82,7 @@ public class EvidenceController {
             throw new BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID,
                     "页码不能小于 0，且每页数量必须在 1 到 200 之间");
         }
-        return evidenceService.listPaged(eventId, sourceTier, evidenceType, minConfidence, page, pageSize);
+        return ApiResponses.success(evidenceService.listPaged(eventId, sourceTier, evidenceType, minConfidence, page, pageSize));
     }
 
     /**
@@ -90,7 +92,7 @@ public class EvidenceController {
      * @return 指定证据条目详情。
      */
     @GetMapping("/evidence/{id}")
-    public EvidenceItem detail(@PathVariable Long id) {
-        return evidenceService.detail(id);
+    public ApiResponse<EvidenceItem> detail(@PathVariable Long id) {
+        return ApiResponses.success(evidenceService.detail(id));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import com.finscope.service.quant.experiment.QuantExperimentService;
 import com.finscope.web.request.quant.CreateQuantExperimentRequest;
@@ -25,8 +27,8 @@ public class QuantExperimentController {
      * @return 量化实验列表，包含实验状态、回测结果和解释信息。
      */
     @GetMapping
-    public List<QuantExperiment> list() {
-        return quantExperimentService.list();
+    public ApiResponse<List<QuantExperiment>> list() {
+        return ApiResponses.success(quantExperimentService.list());
     }
 
     /**
@@ -36,8 +38,8 @@ public class QuantExperimentController {
      * @return 指定量化实验详情。
      */
     @GetMapping("/{id}")
-    public QuantExperiment get(@PathVariable Long id) {
-        return quantExperimentService.get(id);
+    public ApiResponse<QuantExperiment> get(@PathVariable Long id) {
+        return ApiResponses.success(quantExperimentService.get(id));
     }
 
     /**
@@ -47,10 +49,10 @@ public class QuantExperimentController {
      * @return 202 Accepted 响应，响应体为已创建的量化实验。
      */
     @PostMapping
-    public ResponseEntity<QuantExperiment> create(@RequestBody CreateQuantExperimentRequest request) {
+    public ResponseEntity<ApiResponse<QuantExperiment>> create(@RequestBody CreateQuantExperimentRequest request) {
         if (request == null || request.getStrategyVersionId() == null)
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略版本不能为空");
-        return ResponseEntity.accepted().body(quantExperimentService.create(request.getStrategyVersionId()));
+        return ResponseEntity.accepted().body(ApiResponses.success(quantExperimentService.create(request.getStrategyVersionId())));
     }
 
     /**
@@ -60,7 +62,7 @@ public class QuantExperimentController {
      * @return 带有解读结果的量化实验。
      */
     @PostMapping("/{id}/interpretations")
-    public QuantExperiment interpret(@PathVariable Long id) {
-        return quantExperimentService.interpret(id);
+    public ApiResponse<QuantExperiment> interpret(@PathVariable Long id) {
+        return ApiResponses.success(quantExperimentService.interpret(id));
     }
 }

@@ -4,7 +4,9 @@
 
 **Goal:** 全量统一 FinScope 普通 JSON API 的响应、中文错误码、异常处理、请求日志和前端解包，并清除配置文件中的硬编码密钥。
 
-**Architecture:** `finscope-common` 提供无 Spring 依赖的响应与异常契约；`finscope-web` 使用 `ResponseBodyAdvice` 和 `RestControllerAdvice` 统一 Web 出入口；前端 `api<T>` 严格解析统一信封并只向业务代码返回 `data`。SSE、204、流式和二进制响应保持原协议。
+**Architecture:** `finscope-common` 提供无 Spring 依赖的响应与异常契约；`finscope-web` 的 Controller 显式返回 `ApiResponse<T>` 或 `ResponseEntity<ApiResponse<T>>`，`RestControllerAdvice` 统一异常出口；前端 `api<T>` 严格解析统一信封并只向业务代码返回 `data`。SSE 和 204 响应保持原协议。
+
+> **方案修订（2026-07-16）：** 初版曾采用运行时自动包装。代码审查后确认这会让 Controller 方法签名继续暴露裸实体，无法形成可见的接口契约，因此改为全量显式返回，并增加 Controller 契约扫描测试防止回归。
 
 **Tech Stack:** Java 8、Spring Boot 2.7.18、Spring MVC、SLF4J/MDC、JUnit 5、MockMvc、React 18、TypeScript 5.6、Vitest
 
@@ -26,10 +28,12 @@
 
 ### Backend Web boundary
 
-- Create `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiResponseBodyAdvice.java`: 普通 JSON 成功响应自动包装。
+- Create `backend/finscope-web/src/main/java/com/finscope/web/response/ApiResponses.java`: 统一构造带 `traceId` 的成功响应。
+- Modify all files under `backend/finscope-web/src/main/java/com/finscope/web/controller/`: 显式声明统一响应类型。
 - Replace `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiErrorResponse.java`: 删除双轨错误实体。
 - Modify `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiExceptionHandler.java`: 全面异常翻译。
-- Create `backend/finscope-web/src/test/java/com/finscope/web/handler/ApiResponseBodyAdviceTest.java`.
+- Create `backend/finscope-web/src/test/java/com/finscope/web/controller/ControllerResponseContractTest.java`.
+- Create `backend/finscope-web/src/test/java/com/finscope/web/controller/ControllerResponseProtocolTest.java`.
 - Create `backend/finscope-web/src/test/java/com/finscope/web/handler/ApiExceptionHandlerTest.java`.
 
 ### Logging and configuration
@@ -173,32 +177,24 @@ git add backend/finscope-common
 git commit -m "feat: 建立统一响应与中文错误码"
 ```
 
-## Task 2: Automatic success response wrapping
+## Task 2: Explicit Controller success response contract
 
 **Files:**
-- Create: `backend/finscope-web/src/test/java/com/finscope/web/handler/ApiResponseBodyAdviceTest.java`
-- Create: `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiResponseBodyAdvice.java`
+- Create: `backend/finscope-web/src/test/java/com/finscope/web/controller/ControllerResponseContractTest.java`
+- Create: `backend/finscope-web/src/test/java/com/finscope/web/controller/ControllerResponseProtocolTest.java`
+- Create: `backend/finscope-web/src/main/java/com/finscope/web/response/ApiResponses.java`
+- Modify: all Controller classes under `backend/finscope-web/src/main/java/com/finscope/web/controller/`
 
-- [x] **Step 1: Write failing MockMvc tests**
+- [x] **Step 1: Write a failing Controller contract test**
 
-Cover:
+Scan every mapped method on every FinScope `@RestController` and only permit:
 
 ```java
-mockMvc.perform(get("/test/value").header("X-Request-Id", "trace-success"))
-    .andExpect(status().isOk())
-    .andExpect(jsonPath("$.success").value(true))
-    .andExpect(jsonPath("$.code").value("FS-0000"))
-    .andExpect(jsonPath("$.message").value("成功"))
-    .andExpect(jsonPath("$.data.name").value("value"))
-    .andExpect(jsonPath("$.traceId").value("trace-success"));
+ApiResponse<T>
+ResponseEntity<ApiResponse<T>>
+SseEmitter
+ResponseEntity<Void>
 ```
-
-Also assert:
-
-- `ResponseEntity.created(location).body(value)` keeps 201 and `Location`.
-- Existing `ApiResponse` is not nested.
-- `SseEmitter` support returns false.
-- `ResponseEntity<Void>` with 204 remains empty.
 
 - [x] **Step 2: Verify RED**
 
@@ -206,30 +202,18 @@ Run:
 
 ```bash
 cd backend
-mvn -pl finscope-web -am -Dtest=ApiResponseBodyAdviceTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl finscope-web -am -Dtest=ControllerResponseContractTest -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-Expected: test fails because responses are still raw.
+Expected: test fails and lists Controller methods that still return raw entities.
 
-- [x] **Step 3: Implement `ApiResponseBodyAdvice`**
+- [x] **Step 3: Implement explicit response signatures**
 
-Use `@RestControllerAdvice(basePackages = "com.finscope.web.controller")` and `ResponseBodyAdvice<Object>`.
-
-`supports` must return false for:
-
-```java
-ApiResponse.class.isAssignableFrom(returnType.getParameterType())
-SseEmitter.class.isAssignableFrom(returnType.getParameterType())
-StreamingResponseBody.class.isAssignableFrom(returnType.getParameterType())
-Resource.class.isAssignableFrom(returnType.getParameterType())
-byte[].class.equals(returnType.getParameterType())
-```
-
-`beforeBodyWrite` must skip non-JSON media types and return:
-
-```java
-ApiResponse.success(body, TraceId.current())
-```
+- Normal JSON methods return `ApiResponse<T>`.
+- Status/header-bearing JSON methods return `ResponseEntity<ApiResponse<T>>`.
+- `ApiResponses.success(data)` constructs the envelope and reads `traceId` from MDC.
+- `SseEmitter` and `ResponseEntity<Void>` remain protocol exceptions.
+- Protocol tests verify 201/202 status, `Location`, request trace propagation, SSE, and empty 204 responses.
 
 - [x] **Step 4: Verify GREEN**
 
@@ -238,9 +222,10 @@ Run the focused test and then `mvn -pl finscope-web -am -DskipTests package`.
 - [x] **Step 5: Commit**
 
 ```bash
-git add backend/finscope-web/src/main/java/com/finscope/web/handler/ApiResponseBodyAdvice.java \
-        backend/finscope-web/src/test/java/com/finscope/web/handler/ApiResponseBodyAdviceTest.java
-git commit -m "feat: 统一包装 Web 成功响应"
+git add backend/finscope-web/src/main/java/com/finscope/web/controller \
+        backend/finscope-web/src/main/java/com/finscope/web/response/ApiResponses.java \
+        backend/finscope-web/src/test/java/com/finscope/web/controller/ControllerResponseContractTest.java
+git commit -m "refactor: Controller 显式返回统一响应"
 ```
 
 ## Task 3: Comprehensive exception translation
@@ -565,9 +550,9 @@ When parsing IDs:
 objectMapper.readTree(body).path("data").path("id").asLong();
 ```
 
-- [x] **Step 4: Ensure advice is imported in sliced tests**
+- [x] **Step 4: Enforce explicit response declarations**
 
-Add `ApiResponseBodyAdvice.class` to relevant `@Import` declarations where the slice does not auto-discover it.
+Run `ControllerResponseContractTest` together with the Web tests. Any newly added mapped method that returns a raw entity must fail the build.
 
 - [x] **Step 5: Run Web tests**
 

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.source.Source;
 import com.finscope.service.intake.IntakeService;
@@ -36,8 +38,8 @@ public class SourceController {
      * @return 信息源列表。
      */
     @GetMapping
-    public List<Source> list() {
-        return sourceService.list();
+    public ApiResponse<List<Source>> list() {
+        return ApiResponses.success(sourceService.list());
     }
 
     /**
@@ -47,8 +49,8 @@ public class SourceController {
      * @return 新创建的信息源。
      */
     @PostMapping
-    public Source create(@RequestBody Source source) {
-        return sourceService.create(source);
+    public ApiResponse<Source> create(@RequestBody Source source) {
+        return ApiResponses.success(sourceService.create(source));
     }
 
     /**
@@ -57,8 +59,8 @@ public class SourceController {
      * @return 本次安装或更新后的新闻源。
      */
     @PostMapping("/recommended-news")
-    public List<Source> installRecommendedNewsSources() {
-        return sourceService.installRecommendedNewsSources();
+    public ApiResponse<List<Source>> installRecommendedNewsSources() {
+        return ApiResponses.success(sourceService.installRecommendedNewsSources());
     }
 
     /**
@@ -69,8 +71,8 @@ public class SourceController {
      * @return 更新后的信息源。
      */
     @PutMapping("/{id}")
-    public Source update(@PathVariable Long id, @RequestBody Source source) {
-        return sourceService.update(id, source);
+    public ApiResponse<Source> update(@PathVariable Long id, @RequestBody Source source) {
+        return ApiResponses.success(sourceService.update(id, source));
     }
 
     /**
@@ -79,8 +81,9 @@ public class SourceController {
      * @param id 信息源 ID。
      */
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable Long id) {
         sourceService.delete(id);
+        return ApiResponses.success(null);
     }
 
     /**
@@ -92,9 +95,9 @@ public class SourceController {
      */
     @PostMapping("/{id}/fetch")
     @Deprecated
-    public FetchBatch fetch(@PathVariable Long id) {
+    public ApiResponse<FetchBatch> fetch(@PathVariable Long id) {
         log.info("[已废弃] 旧抓取入口转入摄入候选池，请使用 /intake-fetch sourceId={}", id);
-        return intakeService.intakeFetch(id);
+        return ApiResponses.success(intakeService.intakeFetch(id));
     }
 
     /**
@@ -104,9 +107,9 @@ public class SourceController {
      * @return 抓取批次结果，包含本次抓取和候选生成情况。
      */
     @PostMapping("/{id}/intake-fetch")
-    public FetchBatch intakeFetch(@PathVariable Long id) {
+    public ApiResponse<FetchBatch> intakeFetch(@PathVariable Long id) {
         log.info("开始摄入信息源 sourceId={}", id);
-        return intakeService.intakeFetch(id);
+        return ApiResponses.success(intakeService.intakeFetch(id));
     }
 
     /**
@@ -116,8 +119,8 @@ public class SourceController {
      * @return 已创建的异步任务视图，用于查询抓取进度。
      */
     @PostMapping("/{id}/intake-fetch-async")
-    public TaskView intakeFetchAsync(@PathVariable Long id) {
+    public ApiResponse<TaskView> intakeFetchAsync(@PathVariable Long id) {
         log.info("提交信息源异步摄入 sourceId={}", id);
-        return intakeFetchTaskService.submit(id);
+        return ApiResponses.success(intakeFetchTaskService.submit(id));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.FactorResearchAgentRun;
@@ -17,15 +19,15 @@ public class FactorResearchAgentController {
     public FactorResearchAgentController(FactorResearchAgentService service) { this.service = service; }
 
     @PostMapping
-    public ResponseEntity<FactorResearchAgentRun> create(@RequestBody(required = false) CreateFactorResearchAgentRunRequest request) {
+    public ResponseEntity<ApiResponse<FactorResearchAgentRun>> create(@RequestBody(required = false) CreateFactorResearchAgentRunRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究 Agent 请求不能为空");
         FactorResearchAgentRun value = service.createPlan(request.getDatasetId(), request.factor(), request.getResearchDraftId(), request.getQuestion());
-        return ResponseEntity.created(URI.create("/api/factor-research/agent-runs/" + value.getId())).body(value);
+        return ResponseEntity.created(URI.create("/api/factor-research/agent-runs/" + value.getId())).body(ApiResponses.success(value));
     }
 
     @PostMapping("/{id}/approve")
-    public FactorResearchAgentRun approve(@PathVariable Long id) { return service.approveAndRun(id); }
+    public ApiResponse<FactorResearchAgentRun> approve(@PathVariable Long id) { return ApiResponses.success(service.approveAndRun(id)); }
 
     @GetMapping("/{id}")
-    public FactorResearchAgentRun get(@PathVariable Long id) { return service.get(id); }
+    public ApiResponse<FactorResearchAgentRun> get(@PathVariable Long id) { return ApiResponses.success(service.get(id)); }
 }

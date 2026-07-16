@@ -74,6 +74,8 @@ Java 接入方式和数据接口说明见 [market-data-service/README.md](market
 
 除 SSE、文件/二进制流和 `204 No Content` 外，所有 `/api/**` JSON 接口都返回统一信封：
 
+Controller 方法签名必须显式声明 `ApiResponse<T>` 或 `ResponseEntity<ApiResponse<T>>`，不依赖运行时隐式包装；契约测试会阻止裸实体返回。
+
 ```json
 {
   "success": true,

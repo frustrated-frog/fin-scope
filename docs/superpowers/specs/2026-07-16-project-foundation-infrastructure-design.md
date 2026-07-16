@@ -20,13 +20,13 @@ FinScope 已具备基础的 `BusinessException`、少量错误码、全局异常
 
 每个接口将返回类型改为 `ApiResponse<T>` 或 `ResponseEntity<ApiResponse<T>>`。
 
-优点是接口代码显式，缺点是 140 个接口存在大量重复包装，容易遗漏，Controller 被基础设施代码淹没。
+优点是接口签名本身就是可见、可检查的统一契约，IDE、测试和 OpenAPI 都不会把裸实体误认为真实 HTTP 响应。通过 `ApiResponses.success(...)` 统一补充 `traceId`，可以控制重复代码；通过契约测试扫描全部 Controller，可以防止遗漏。
 
 ### 方案 B：使用 `ResponseBodyAdvice` 集中包装普通 JSON 响应
 
 Controller 继续返回业务对象或 `ResponseEntity<T>`，Web 出口统一包装为 `ApiResponse<T>`。异常由 `RestControllerAdvice` 直接返回同一结构。
 
-优点是迁移集中、覆盖完整、保留 HTTP 语义，后续新增接口默认遵循规范。缺点是必须清晰定义 SSE、流式响应、文件下载和 204 响应的豁免规则。
+优点是迁移集中，但 Controller 方法签名仍然暴露裸实体，统一响应只在运行时隐式发生，代码审查、静态分析和接口文档无法直接识别真实契约；同时必须维护 SSE、流式响应、文件下载和 204 响应的复杂豁免规则。
 
 ### 方案 C：只改前端客户端和错误响应
 
@@ -36,7 +36,7 @@ Controller 继续返回业务对象或 `ResponseEntity<T>`，Web 出口统一包
 
 ### 决策
 
-采用方案 B。它最适合当前接口数量较多、Controller 已经存在大量业务返回类型的项目。普通 JSON 响应全部自动包装；SSE、流式/二进制响应和无响应体的 204 接口不包装。
+采用方案 A。所有普通 JSON Controller 方法必须显式声明 `ApiResponse<T>`；需要保留状态码或响应头时声明 `ResponseEntity<ApiResponse<T>>`。统一使用 `ApiResponses.success(...)` 创建成功信封，并使用 `ControllerResponseContractTest` 扫描全部映射方法，阻止裸实体返回重新进入代码库。SSE 和无响应体的 204 接口保留原协议。
 
 ## 3. 统一响应契约
 
@@ -59,7 +59,6 @@ Controller 继续返回业务对象或 `ResponseEntity<T>`，Web 出口统一包
 - `success=false` 时 `data=null`，`code` 和 `message` 来自错误码或受控业务异常。
 - `traceId` 与响应头 `X-Request-Id` 一致。
 - `timestamp` 使用 UTC `Instant`。
-- 已经是 `ApiResponse` 的返回值不重复包装。
 - `ResponseEntity` 的 HTTP 状态和响应头保持不变。
 - SSE、流式、二进制、文件下载和 204 No Content 保持原协议。
 
@@ -101,12 +100,14 @@ Controller 继续返回业务对象或 `ResponseEntity<T>`，Web 出口统一包
 
 ### 6.1 成功响应
 
-新增 `ApiResponseBodyAdvice`：
+所有普通 JSON Controller 显式返回统一响应：
 
-- 仅作用于 FinScope Controller。
-- 仅包装 JSON 兼容响应。
-- 自动读取 MDC 中的 `traceId`。
-- 跳过 `ApiResponse`、`SseEmitter`、流式/资源/字节响应和 204。
+- 普通成功结果声明为 `ApiResponse<T>`，并通过 `ApiResponses.success(data)` 构造。
+- 需要保留 HTTP 状态或响应头时声明为 `ResponseEntity<ApiResponse<T>>`。
+- `ApiResponses` 自动读取 MDC 中的 `traceId`，避免各 Controller 重复处理链路字段。
+- `ControllerResponseContractTest` 扫描全部 `@RestController` 映射方法，任何裸实体或裸泛型返回都会导致测试失败。
+- `ControllerResponseProtocolTest` 固化统一信封、traceId、201/202、`Location`、SSE 和 204 空响应等 Web 行为。
+- `SseEmitter` 和 `ResponseEntity<Void>` 的 204 响应作为明确的协议例外保留。
 
 ### 6.2 异常响应
 

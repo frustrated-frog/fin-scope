@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.service.instrument.MarketIndexService;
 import com.finscope.web.response.MarketIndexQuoteResponse;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +27,9 @@ public class MarketIndexController {
      * @return 市场指数行情响应列表，包含指数基础信息和最新报价。
      */
     @GetMapping
-    public List<MarketIndexQuoteResponse> list(@RequestParam(defaultValue = "false") boolean refresh) {
-        return (refresh ? marketIndexService.list(true) : marketIndexService.list()).stream()
+    public ApiResponse<List<MarketIndexQuoteResponse>> list(@RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponses.success((refresh ? marketIndexService.list(true) : marketIndexService.list()).stream()
                 .map(MarketIndexQuoteResponse::of)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.ThesisFinding;
 import com.finscope.service.research.ResearchThesisService;
@@ -27,8 +29,8 @@ public class ResearchThesisController {
      * @return 研究命题列表。
      */
     @GetMapping
-    public List<ResearchThesis> list() {
-        return researchThesisService.list();
+    public ApiResponse<List<ResearchThesis>> list() {
+        return ApiResponses.success(researchThesisService.list());
     }
 
     /**
@@ -38,8 +40,8 @@ public class ResearchThesisController {
      * @return 新创建的研究命题。
      */
     @PostMapping
-    public ResearchThesis create(@RequestBody ResearchThesis thesis) {
-        return researchThesisService.create(thesis);
+    public ApiResponse<ResearchThesis> create(@RequestBody ResearchThesis thesis) {
+        return ApiResponses.success(researchThesisService.create(thesis));
     }
 
     /**
@@ -49,9 +51,9 @@ public class ResearchThesisController {
      * @return 研究命题详情，包含发现、研究运行和输出内容。
      */
     @GetMapping("/{id}")
-    public ResearchThesisDetailResponse detail(@PathVariable Long id) {
+    public ApiResponse<ResearchThesisDetailResponse> detail(@PathVariable Long id) {
         ResearchThesisService.ThesisDetail detail = researchThesisService.detailWithResearch(id);
-        return new ResearchThesisDetailResponse(detail.thesis, detail.findings, detail.runs, detail.outputs);
+        return ApiResponses.success(new ResearchThesisDetailResponse(detail.thesis, detail.findings, detail.runs, detail.outputs));
     }
 
     /**
@@ -62,8 +64,8 @@ public class ResearchThesisController {
      * @return 更新后的研究命题。
      */
     @PutMapping("/{id}")
-    public ResearchThesis update(@PathVariable Long id, @RequestBody ResearchThesis thesis) {
-        return researchThesisService.update(id, thesis);
+    public ApiResponse<ResearchThesis> update(@PathVariable Long id, @RequestBody ResearchThesis thesis) {
+        return ApiResponses.success(researchThesisService.update(id, thesis));
     }
 
     /**
@@ -73,8 +75,8 @@ public class ResearchThesisController {
      * @return 该命题下的研究发现列表。
      */
     @GetMapping("/{id}/findings")
-    public List<ThesisFinding> findings(@PathVariable Long id) {
-        return researchThesisService.findings(id);
+    public ApiResponse<List<ThesisFinding>> findings(@PathVariable Long id) {
+        return ApiResponses.success(researchThesisService.findings(id));
     }
 
     /**
@@ -85,7 +87,7 @@ public class ResearchThesisController {
      * @return 新创建的研究发现。
      */
     @PostMapping("/{id}/findings")
-    public ThesisFinding addFinding(@PathVariable Long id, @RequestBody ThesisFinding finding) {
-        return researchThesisService.addFinding(id, finding);
+    public ApiResponse<ThesisFinding> addFinding(@PathVariable Long id, @RequestBody ThesisFinding finding) {
+        return ApiResponses.success(researchThesisService.addFinding(id, finding));
     }
 }

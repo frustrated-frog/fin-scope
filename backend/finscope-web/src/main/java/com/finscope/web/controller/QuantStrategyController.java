@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.strategy.QuantStrategyService;
@@ -26,10 +28,10 @@ public class QuantStrategyController {
      * @return 生成的量化策略草稿。
      */
     @PostMapping("/strategy-drafts")
-    public QuantStrategyDraft generate(@RequestBody GenerateQuantStrategyDraftRequest request) {
+    public ApiResponse<QuantStrategyDraft> generate(@RequestBody GenerateQuantStrategyDraftRequest request) {
         if (request == null || request.getDatasetId() == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty())
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和策略描述不能为空");
-        return quantStrategyService.generateDraft(request.getDatasetId(), request.getPrompt());
+        return ApiResponses.success(quantStrategyService.generateDraft(request.getDatasetId(), request.getPrompt()));
     }
 
     /**
@@ -39,9 +41,9 @@ public class QuantStrategyController {
      * @return 201 Created 响应，响应体为确认后的策略版本。
      */
     @PostMapping("/strategy-drafts/{id}/confirm")
-    public ResponseEntity<QuantStrategyVersion> confirm(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<QuantStrategyVersion>> confirm(@PathVariable Long id) {
         QuantStrategyVersion value = quantStrategyService.confirm(id);
-        return ResponseEntity.created(URI.create("/api/quant/strategies/" + value.getId())).body(value);
+        return ResponseEntity.created(URI.create("/api/quant/strategies/" + value.getId())).body(ApiResponses.success(value));
     }
 
     /**
@@ -50,8 +52,8 @@ public class QuantStrategyController {
      * @return 已确认的量化策略版本列表。
      */
     @GetMapping("/strategies")
-    public List<QuantStrategyVersion> list() {
-        return quantStrategyService.listVersions();
+    public ApiResponse<List<QuantStrategyVersion>> list() {
+        return ApiResponses.success(quantStrategyService.listVersions());
     }
 
     /**
@@ -61,7 +63,7 @@ public class QuantStrategyController {
      * @return 指定量化策略版本详情。
      */
     @GetMapping("/strategies/{id}")
-    public QuantStrategyVersion get(@PathVariable Long id) {
-        return quantStrategyService.getVersion(id);
+    public ApiResponse<QuantStrategyVersion> get(@PathVariable Long id) {
+        return ApiResponses.success(quantStrategyService.getVersion(id));
     }
 }

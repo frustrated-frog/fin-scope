@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.response.PageResponse;
@@ -29,8 +31,8 @@ public class ContentIdeaController {
      * @return 内容创意列表。
      */
     @GetMapping
-    public List<ContentIdea> list() {
-        return contentIdeaService.list();
+    public ApiResponse<List<ContentIdea>> list() {
+        return ApiResponses.success(contentIdeaService.list());
     }
 
     /**
@@ -41,14 +43,14 @@ public class ContentIdeaController {
      * @return 分页后的内容创意结果，包含记录列表和分页元数据。
      */
     @GetMapping("/paged")
-    public PageResponse<ContentIdea> listPaged(
+    public ApiResponse<PageResponse<ContentIdea>> listPaged(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "8") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                     "页码不能小于 0，且每页数量必须在 1 到 100 之间");
         }
-        return contentIdeaService.listPaged(page, pageSize);
+        return ApiResponses.success(contentIdeaService.listPaged(page, pageSize));
     }
 
     /**
@@ -58,8 +60,8 @@ public class ContentIdeaController {
      * @return 指定内容创意详情。
      */
     @GetMapping("/{id}")
-    public ContentIdea detail(@PathVariable Long id) {
-        return contentIdeaService.detail(id);
+    public ApiResponse<ContentIdea> detail(@PathVariable Long id) {
+        return ApiResponses.success(contentIdeaService.detail(id));
     }
 
     /**
@@ -70,7 +72,7 @@ public class ContentIdeaController {
      * @return 更新后的内容创意。
      */
     @PostMapping("/{id}/status")
-    public ContentIdea updateStatus(@PathVariable Long id, @RequestBody UpdateContentIdeaStatusRequest request) {
-        return contentIdeaService.updateStatus(id, request.getStatus());
+    public ApiResponse<ContentIdea> updateStatus(@PathVariable Long id, @RequestBody UpdateContentIdeaStatusRequest request) {
+        return ApiResponses.success(contentIdeaService.updateStatus(id, request.getStatus()));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRunPlan;
@@ -39,14 +41,14 @@ public class ResearchController {
      * @return 创建后的研究运行响应，包含运行计划摘要。
      */
     @PostMapping
-    public ResearchRunResponse create(@RequestBody CreateResearchRunRequest request) {
+    public ApiResponse<ResearchRunResponse> create(@RequestBody CreateResearchRunRequest request) {
         ResearchRunPlan plan = researchService.createRun(
                 request.getThesisId(),
                 request.getRunDate(),
                 request.getThemeCodes(),
                 request.getMaxSourcesPerTheme(),
                 request.getIncludeDisabled());
-        return ResearchRunResponse.of(plan);
+        return ApiResponses.success(ResearchRunResponse.of(plan));
     }
 
     /**
@@ -55,8 +57,8 @@ public class ResearchController {
      * @return 研究运行列表。
      */
     @GetMapping
-    public List<ResearchRun> list() {
-        return researchService.listRuns();
+    public ApiResponse<List<ResearchRun>> list() {
+        return ApiResponses.success(researchService.listRuns());
     }
 
     /**
@@ -66,22 +68,22 @@ public class ResearchController {
      * @return 研究运行详情，包含运行记录、计划来源、计划步骤和关联 Agent 运行。
      */
     @GetMapping("/{id}")
-    public ResearchRunDetailResponse detail(@PathVariable Long id) {
-        return new ResearchRunDetailResponse(
+    public ApiResponse<ResearchRunDetailResponse> detail(@PathVariable Long id) {
+        return ApiResponses.success(new ResearchRunDetailResponse(
                 researchService.detail(id),
                 researchService.plannedSources(id),
                 researchRunPlanService.findByRunId(id),
                 agentRunService.findByResearchRunId(id),
-                researchReportService.findByRunId(id).orElse(null));
+                researchReportService.findByRunId(id).orElse(null)));
     }
 
     @GetMapping("/{id}/report")
-    public ResearchReport report(@PathVariable Long id) {
-        return researchReportService.detailByRunId(id);
+    public ApiResponse<ResearchReport> report(@PathVariable Long id) {
+        return ApiResponses.success(researchReportService.detailByRunId(id));
     }
 
     @PostMapping("/{id}/report/regenerate")
-    public ResearchReport regenerateReport(@PathVariable Long id) {
-        return researchService.regenerateReport(id);
+    public ApiResponse<ResearchReport> regenerateReport(@PathVariable Long id) {
+        return ApiResponses.success(researchService.regenerateReport(id));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.instrument.SectorCategory;
@@ -31,35 +33,35 @@ public class SectorMarketController {
     private WatchlistService watchlistService;
 
     @GetMapping("/overview")
-    public SectorMarketOverviewResponse overview(
+    public ApiResponse<SectorMarketOverviewResponse> overview(
             @RequestParam(defaultValue = "INDUSTRY") String category,
             @RequestParam(defaultValue = "5") int limit,
             @RequestParam(defaultValue = "false") boolean refresh) {
         SectorCategory parsed = parseCategory(category, false);
-        return SectorMarketOverviewResponse.of(sectorMarketService.overview(parsed, limit, refresh));
+        return ApiResponses.success(SectorMarketOverviewResponse.of(sectorMarketService.overview(parsed, limit, refresh)));
     }
 
     @GetMapping("/search")
-    public SectorMarketSearchResponse search(
+    public ApiResponse<SectorMarketSearchResponse> search(
             @RequestParam("q") String query,
             @RequestParam(defaultValue = "ALL") String category,
             @RequestParam(defaultValue = "10") int limit) {
-        return SectorMarketSearchResponse.of(
-                sectorMarketService.search(query, parseCategory(category, true), limit));
+        return ApiResponses.success(SectorMarketSearchResponse.of(
+                sectorMarketService.search(query, parseCategory(category, true), limit)));
     }
 
     @GetMapping("/follows")
-    public List<FollowedSectorResponse> follows(
+    public ApiResponse<List<FollowedSectorResponse>> follows(
             @RequestParam(defaultValue = "false") boolean refresh) {
-        return watchlistService.listFollowedSectorsWithQuotes(refresh).stream()
+        return ApiResponses.success(watchlistService.listFollowedSectorsWithQuotes(refresh).stream()
                 .map(FollowedSectorResponse::of)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     @PutMapping("/follows/{code}")
-    public FollowedSectorResponse follow(@PathVariable String code) {
+    public ApiResponse<FollowedSectorResponse> follow(@PathVariable String code) {
         watchlistService.followSector(code);
-        return FollowedSectorResponse.of(watchlistService.followedSectorWithQuote(code));
+        return ApiResponses.success(FollowedSectorResponse.of(watchlistService.followedSectorWithQuote(code)));
     }
 
     @DeleteMapping("/follows/{code}")

@@ -1,14 +1,15 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.topic.Topic;
 import com.finscope.domain.topic.TopicDetail;
 import com.finscope.service.topic.TopicService;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,8 +31,8 @@ public class TopicController {
      * @return 主题列表。
      */
     @GetMapping
-    public List<Topic> list() {
-        return topicService.list();
+    public ApiResponse<List<Topic>> list() {
+        return ApiResponses.success(topicService.list());
     }
 
     /**
@@ -41,8 +42,8 @@ public class TopicController {
      * @return 新创建的主题。
      */
     @PostMapping
-    public Topic create(@RequestBody Topic topic) {
-        return topicService.create(topic);
+    public ApiResponse<Topic> create(@RequestBody Topic topic) {
+        return ApiResponses.success(topicService.create(topic));
     }
 
     /**
@@ -52,8 +53,8 @@ public class TopicController {
      * @return 主题详情，包含主题基础信息和关联内容。
      */
     @GetMapping("/{id}")
-    public TopicDetail detail(@PathVariable Long id) {
-        return topicService.detail(id);
+    public ApiResponse<TopicDetail> detail(@PathVariable Long id) {
+        return ApiResponses.success(topicService.detail(id));
     }
 
     /**
@@ -62,9 +63,9 @@ public class TopicController {
      * @param id 主题 ID。
      */
     @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
         topicService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -74,8 +75,8 @@ public class TopicController {
      * @return 基于文章内容生成或关联的主题。
      */
     @PostMapping("/from-article/{articleId}")
-    public Topic createFromArticle(@PathVariable Long articleId) {
-        return topicService.createFromArticle(articleId);
+    public ApiResponse<Topic> createFromArticle(@PathVariable Long articleId) {
+        return ApiResponses.success(topicService.createFromArticle(articleId));
     }
 
     /**
@@ -85,8 +86,8 @@ public class TopicController {
      * @return 从该简报中生成或关联的主题列表。
      */
     @PostMapping("/from-brief/{date}")
-    public List<Topic> createFromBrief(@PathVariable String date) {
-        return topicService.createFromBrief(LocalDate.parse(date));
+    public ApiResponse<List<Topic>> createFromBrief(@PathVariable String date) {
+        return ApiResponses.success(topicService.createFromBrief(LocalDate.parse(date)));
     }
 
     /**
@@ -97,7 +98,7 @@ public class TopicController {
      * @return 追加笔记后的主题。
      */
     @PostMapping("/{id}/notes")
-    public Topic appendNote(@PathVariable Long id, @RequestBody Map<String, String> payload) {
-        return topicService.appendNote(id, payload.get("status"), payload.get("note"));
+    public ApiResponse<Topic> appendNote(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        return ApiResponses.success(topicService.appendNote(id, payload.get("status"), payload.get("note")));
     }
 }

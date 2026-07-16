@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.service.task.TaskView;
 import com.finscope.service.task.UrlIngestTaskService;
 import com.finscope.web.sse.TaskSseRegistry;
@@ -26,8 +28,8 @@ public class TaskController {
      * @return 任务视图，包含任务状态、进度和结果摘要。
      */
     @GetMapping("/{taskId}")
-    public TaskView get(@PathVariable String taskId) {
-        return urlIngestTaskService.get(taskId);
+    public ApiResponse<TaskView> get(@PathVariable String taskId) {
+        return ApiResponses.success(urlIngestTaskService.get(taskId));
     }
 
     /**

@@ -4,7 +4,6 @@ import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.web.config.RequestLoggingFilter;
 import com.finscope.web.handler.ApiExceptionHandler;
-import com.finscope.web.handler.ApiResponseBodyAdvice;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -33,7 +32,7 @@ class ApiExceptionHandlerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new ErrorController())
-                .setControllerAdvice(new ApiExceptionHandler(), new ApiResponseBodyAdvice())
+                .setControllerAdvice(new ApiExceptionHandler())
                 .addFilters(new RequestLoggingFilter())
                 .build();
     }
