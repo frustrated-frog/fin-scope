@@ -37,6 +37,10 @@ class FinancialReportRepositoryTest {
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("CREATE TABLE instrument(id INTEGER PRIMARY KEY,code TEXT,type TEXT,name TEXT)");
         jdbc.update("INSERT INTO instrument VALUES(7,'600519','STOCK','贵州茅台')");
+        jdbc.execute("CREATE TABLE schema_migration (" +
+                "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
+        jdbc.update("INSERT INTO schema_migration VALUES(200,'factor research capital flow','2026-01-01')");
+        jdbc.update("INSERT INTO schema_migration VALUES(201,'factor research dataset partition','2026-01-01')");
         FinancialSchemaMigrator migrator = new FinancialSchemaMigrator(
                 jdbc, new DataSourceTransactionManager(dataSource));
         migrator.migrate();
@@ -80,7 +84,20 @@ class FinancialReportRepositoryTest {
         assertEquals(first.getId(), second.getId());
         assertEquals(1, repository.findReports(7L).size());
         assertEquals(1, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM schema_migration WHERE version=200",
+                "SELECT COUNT(*) FROM schema_migration " +
+                        "WHERE description='company financial statements workspace'",
+                Integer.class));
+    }
+
+    @Test
+    void migrationRunsWhenOtherBoundedContextOwnsVersions200And201() {
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master " +
+                        "WHERE type='table' AND name='financial_report'",
+                Integer.class));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master " +
+                        "WHERE type='table' AND name='financial_document'",
                 Integer.class));
     }
 

@@ -12,8 +12,8 @@ import java.time.LocalDateTime;
 @Component
 @DependsOn("databaseInitializer")
 public class FinancialSchemaMigrator implements InitializingBean {
-    private static final int VERSION = 200;
-    private static final int DOCUMENT_VERSION = 201;
+    private static final int VERSION = 300;
+    private static final int DOCUMENT_VERSION = 301;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
