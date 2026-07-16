@@ -97,6 +97,26 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def profile(market: str, code: str):
         return _response(await _fetch(application, DataCapability.PROFILE, market, code))
 
+    @application.get("/v1/stocks/{market}/{code}/financial-statements")
+    async def financial_statements(
+        market: str,
+        code: str,
+        period_end: str,
+        report_type: str,
+        scope: str = "CONSOLIDATED",
+    ):
+        return _response(
+            await _fetch(
+                application,
+                DataCapability.FINANCIAL_STATEMENTS,
+                market,
+                code,
+                period_end=period_end,
+                report_type=report_type,
+                scope=scope,
+            )
+        )
+
     @application.get("/v1/stocks/{market}/{code}/overview")
     async def overview(
         market: str,

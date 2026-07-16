@@ -13,6 +13,11 @@ from finscope_market_data.models import (
     CapitalFlowPoint,
     DailyBar,
     DataCapability,
+    FinancialReportMeta,
+    FinancialStatement,
+    FinancialStatementType,
+    FinancialStatementValue,
+    FinancialStatementsData,
     StockProfile,
     StockQuote,
     StockSymbol,
@@ -54,6 +59,40 @@ class MultiCapabilityProvider:
                 main_net_inflow=1_000_000,
             )
             return CapitalFlowData(minute_points=[point])
+        if capability is DataCapability.FINANCIAL_STATEMENTS:
+            return FinancialStatementsData(
+                report=FinancialReportMeta(
+                    symbol=symbol,
+                    period_end="2026-06-30",
+                    report_type="HALF_YEAR",
+                    scope="CONSOLIDATED",
+                    published_at=observed,
+                    audited=False,
+                    currency="CNY",
+                ),
+                statements=[
+                    FinancialStatement(
+                        statement_type=FinancialStatementType.INCOME,
+                        values=[
+                            FinancialStatementValue(
+                                source_label="营业收入",
+                                concept_code="REVENUE",
+                                period_role="CURRENT_YTD",
+                                value="1200000000.12",
+                                source_field="TOTAL_OPERATE_INCOME",
+                            )
+                        ],
+                    ),
+                    FinancialStatement(
+                        statement_type=FinancialStatementType.BALANCE_SHEET,
+                        values=[],
+                    ),
+                    FinancialStatement(
+                        statement_type=FinancialStatementType.CASH_FLOW,
+                        values=[],
+                    ),
+                ],
+            )
         return StockProfile(symbol=symbol, name="贵州茅台", industry="白酒")
 
 
@@ -91,6 +130,26 @@ def test_stock_data_endpoints_expose_normalized_rich_data(tmp_path: Path) -> Non
     assert profile.json()["data"]["industry"] == "白酒"
 
 
+def test_financial_statement_endpoint_exposes_three_normalized_statements(tmp_path: Path) -> None:
+    api = client(tmp_path, [MultiCapabilityProvider()])
+
+    response = api.get(
+        "/v1/stocks/SH/600519/financial-statements"
+        "?period_end=2026-06-30&report_type=HALF_YEAR"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["capability"] == "FINANCIAL_STATEMENTS"
+    assert body["data"]["report"]["period_end"] == "2026-06-30"
+    assert {item["statement_type"] for item in body["data"]["statements"]} == {
+        "INCOME",
+        "BALANCE_SHEET",
+        "CASH_FLOW",
+    }
+    assert body["data"]["statements"][0]["values"][0]["value"] == "1200000000.12"
+
+
 def test_overview_keeps_each_dataset_quality_and_source(tmp_path: Path) -> None:
     api = client(tmp_path, [MultiCapabilityProvider()])
 
@@ -111,4 +170,3 @@ def test_unavailable_data_returns_structured_503(tmp_path: Path) -> None:
     assert response.status_code == 503
     assert response.json()["quality_status"] == "UNAVAILABLE"
     assert response.json()["data"] is None
-

@@ -9,6 +9,7 @@ from finscope_market_data.models import (
     DailyBar,
     DataCapability,
     DataEnvelope,
+    FinancialStatementsData,
     StockProfile,
     StockQuote,
     StockSymbol,
@@ -20,6 +21,7 @@ PAYLOAD_MODELS: dict[DataCapability, Any] = {
     DataCapability.DAILY_BARS: list[DailyBar],
     DataCapability.CAPITAL_FLOW: CapitalFlowData,
     DataCapability.PROFILE: StockProfile,
+    DataCapability.FINANCIAL_STATEMENTS: FinancialStatementsData,
 }
 
 
@@ -74,4 +76,3 @@ class SnapshotStore:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(str(self.path), timeout=5)
-
