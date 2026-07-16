@@ -15,6 +15,7 @@ import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.jdbc.core.RowMapper;
 
 @Repository
 public class CapitalBehaviorSnapshotRepository {
@@ -51,7 +52,18 @@ public class CapitalBehaviorSnapshotRepository {
 
     public Optional<CapitalBehaviorSnapshot> findLatest(Long instrumentId) {
         List<CapitalBehaviorSnapshot> values = jdbc.query("SELECT * FROM market_capital_behavior_snapshot " +
-                "WHERE instrument_id=? ORDER BY created_at DESC,id DESC LIMIT 1", (rs, row) -> {
+                "WHERE instrument_id=? ORDER BY created_at DESC,id DESC LIMIT 1", mapper(), instrumentId);
+        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    }
+
+    public Optional<CapitalBehaviorSnapshot> findById(Long id) {
+        List<CapitalBehaviorSnapshot> values = jdbc.query(
+                "SELECT * FROM market_capital_behavior_snapshot WHERE id=?", mapper(), id);
+        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    }
+
+    private RowMapper<CapitalBehaviorSnapshot> mapper() {
+        return (rs, row) -> {
             try {
                 CapitalBehaviorSnapshot s = new CapitalBehaviorSnapshot(); s.setId(rs.getLong("id"));
                 s.setInstrumentId(rs.getLong("instrument_id")); s.setAsOf(LocalDateTime.parse(rs.getString("as_of")));
@@ -61,8 +73,7 @@ public class CapitalBehaviorSnapshotRepository {
                 s.setWarnings(mapper.readValue(rs.getString("warnings_json"), new TypeReference<List<String>>() {}));
                 s.setCreatedAt(LocalDateTime.parse(rs.getString("created_at"))); return s;
             } catch (Exception e) { throw new IllegalStateException("cannot read capital snapshot id=" + rs.getLong("id"), e); }
-        }, instrumentId);
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+        };
     }
 
     public void updateWarnings(Long snapshotId, String qualityStatus, List<String> warnings) {

@@ -4,7 +4,10 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantDatasetRepository;
 import com.finscope.dao.quant.QuantMarketDataRepository;
+import com.finscope.dao.factorresearch.QuantCapitalFlowRepository;
+import com.finscope.dao.factorresearch.QuantDatasetPartitionRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
@@ -37,6 +40,10 @@ public class QuantDatasetService {
     @Resource
     private QuantLearningDatasetFactory learningDatasetFactory;
     @Resource
+    private QuantCapitalFlowRepository capitalFlows;
+    @Resource
+    private QuantDatasetPartitionRepository datasetPartitions;
+    @Resource
     private FactorRegistry factors;
     private QuantDatasetFingerprint fingerprint = defaultFingerprint;
     private QuantDataQualityService quality = defaultQuality;
@@ -64,7 +71,46 @@ public class QuantDatasetService {
             if (factor.isPointInTime() && coverage(bars, fundamentals, universe, factor.getCode()) >= 0.90d)
                 result.add(factor.getCode());
         }
+        List<QuantCapitalFlowDaily> frozenCapital = capitalFlows == null
+                ? java.util.Collections.<QuantCapitalFlowDaily>emptyList() : capitalFlows.findByDatasetId(datasetId);
+        boolean completeCapitalPartition = datasetPartitions != null && datasetPartitions.findByDatasetId(datasetId).stream()
+                .anyMatch(value -> "CAPITAL_FLOW_DAILY".equals(value.getPartitionType())
+                        && "COMPLETE".equals(value.getQualityStatus())
+                        && value.getRowCount() == frozenCapital.size() && value.getRowCount() > 0);
+        boolean capitalGate = "READY".equals(dataset.getStatus())
+                && "quant-dataset-v2".equals(dataset.getFingerprintVersion())
+                && completeCapitalPartition && !frozenCapital.isEmpty();
+        if (capitalGate) {
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE")) result.add("MAIN_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "SUPER_LARGE_FLOW_SHARE")) result.add("SUPER_LARGE_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "BIG_ORDER_FLOW_SHARE")) result.add("BIG_ORDER_FLOW_SHARE");
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE") && hasCapitalWindowCoverage(frozenCapital, 5)) {
+                result.add("NORMALIZED_MAIN_FLOW_SUM_5D"); result.add("FLOW_PERSISTENCE_5D");
+                if (tradingDates >= 6) result.add("PRICE_FLOW_DIVERGENCE_5D");
+            }
+            if (computableCapitalRows(frozenCapital, "MAIN_FLOW_SHARE") && hasCapitalWindowCoverage(frozenCapital, 20))
+                result.add("MAIN_FLOW_SHARE_ZSCORE_20D");
+        }
         return result;
+    }
+
+    private boolean computableCapitalRows(List<QuantCapitalFlowDaily> rows, String factorCode) {
+        return rows.stream().allMatch(value -> {
+            boolean common = "COMPLETE".equals(value.getQualityStatus())
+                    && value.getAmount() != null && value.getAmount().signum() > 0
+                    && value.getAvailableAt() != null;
+            if (!common) return false;
+            if ("MAIN_FLOW_SHARE".equals(factorCode)) return value.getMainNetInflow() != null;
+            if ("SUPER_LARGE_FLOW_SHARE".equals(factorCode)) return value.getSuperLargeNetInflow() != null;
+            return value.getSuperLargeNetInflow() != null && value.getLargeNetInflow() != null;
+        });
+    }
+
+    private boolean hasCapitalWindowCoverage(List<QuantCapitalFlowDaily> rows, int window) {
+        Map<String, Set<LocalDate>> datesByInstrument = new LinkedHashMap<String, Set<LocalDate>>();
+        for (QuantCapitalFlowDaily row : rows)
+            datesByInstrument.computeIfAbsent(row.getInstrumentCode(), key -> new LinkedHashSet<LocalDate>()).add(row.getTradeDate());
+        return !datesByInstrument.isEmpty() && datesByInstrument.values().stream().allMatch(dates -> dates.size() >= window);
     }
 
     public QuantDataset create(String name, String dataKind) {
@@ -80,7 +126,11 @@ public class QuantDatasetService {
         value.setUniverseType("CUSTOM");
         value.setSourceType("LEARNING_SAMPLE".equals(dataKind) ? "BUILT_IN" : "MANUAL_IMPORT");
         value.setDataKind(dataKind);
-        value.setStatus("EMPTY");
+        boolean research = "REAL".equals(dataKind);
+        value.setDatasetLevel(research ? "RESEARCH" : "LEARNING");
+        value.setFingerprintVersion(research ? "quant-dataset-v2" : "quant-dataset-v1");
+        value.setPartitionManifest("[]");
+        value.setStatus(research ? "BUILDING" : "EMPTY");
         return datasets.save(value);
     }
 
@@ -113,6 +163,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importBars(Long datasetId, List<QuantDailyBar> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         quality.assertValidBars(values);
         for (QuantDailyBar value : values) value.setDatasetId(datasetId);
         try {
@@ -137,6 +188,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importFundamentals(Long datasetId, List<QuantFundamentalSnapshot> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         quality.assertValidFundamentals(values);
         for (QuantFundamentalSnapshot value : values) value.setDatasetId(datasetId);
         try {
@@ -150,6 +202,7 @@ public class QuantDatasetService {
     @Transactional
     public QuantDataset importUniverse(Long datasetId, List<QuantUniverseMember> values) {
         QuantDataset dataset = get(datasetId);
+        assertMutable(dataset);
         if (values == null || values.isEmpty() || values.size() > 100_000) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "股票池成员不能为空且单次不能超过 100000 条");
         }
@@ -188,10 +241,18 @@ public class QuantDatasetService {
 
     private String researchStatus(QuantDataset dataset, List<QuantDailyBar> bars, List<QuantUniverseMember> universe) {
         if ("LEARNING_SAMPLE".equals(dataset.getDataKind())) return bars.isEmpty() ? "EMPTY" : "READY";
+        if ("RESEARCH".equals(dataset.getDatasetLevel())
+                && "quant-dataset-v2".equals(dataset.getFingerprintVersion())) return "BUILDING";
         if (bars.isEmpty()) return "EMPTY";
         if (universe.isEmpty()) return "QUALITY_PENDING";
         if (universe.stream().anyMatch(value -> "CURRENT_SNAPSHOT".equals(value.getSourceKind()))) return "BLOCKED";
         return hasCompleteUniverseCoverage(bars, universe) ? "READY" : "BLOCKED";
+    }
+
+    private void assertMutable(QuantDataset dataset) {
+        if ("READY".equals(dataset.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "已就绪数据集不可原地修改，请创建新版本");
+        }
     }
 
     private String qualitySummary(List<QuantDailyBar> bars, List<QuantFundamentalSnapshot> fundamentals,

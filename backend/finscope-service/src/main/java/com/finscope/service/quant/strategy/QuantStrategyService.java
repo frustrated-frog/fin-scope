@@ -12,6 +12,7 @@ import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.factorresearch.FactorProviderRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ public class QuantStrategyService {
     @Resource private QuantDatasetService datasets;
     @Resource private QuantStrategyAgent agent;
     @Resource private FactorRegistry factors;
+    @Resource private FactorProviderRegistry factorProviders;
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
@@ -74,7 +76,7 @@ public class QuantStrategyService {
             if (!text(dataset.getFingerprint())) throw new BusinessException(ErrorCode.CONFLICT, "数据集缺少可复现指纹");
             if (!dataset.getFingerprint().equals(draft.getValidatedDatasetFingerprint()))
                 throw new BusinessException(ErrorCode.CONFLICT, "数据集在草案生成后已变化，请重新生成策略草案");
-            new QuantStrategySpecValidator(factors).validateOrThrow(spec);
+            new QuantStrategySpecValidator(factors, factorProviders).validateOrThrow(spec);
             java.util.Set<String> available = datasets.availableFactorCodes(dataset.getId());
             if (spec.getFactors().stream().anyMatch(item -> !available.contains(item.getCode())))
                 throw new BusinessException(ErrorCode.CONFLICT, "数据变化后策略因子覆盖率已不足，请重新生成草案");

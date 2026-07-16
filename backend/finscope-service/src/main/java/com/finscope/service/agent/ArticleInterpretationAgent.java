@@ -20,6 +20,7 @@ import java.util.Locale;
 
 @Service
 public class ArticleInterpretationAgent {
+
     private static final String NODE_NAME = "article-interpret";
     private static final int PROMPT_BODY_LIMIT = 9000;
     private static final int COMPACT_RETRY_BODY_LIMIT = 3600;

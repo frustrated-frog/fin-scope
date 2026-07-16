@@ -20,6 +20,7 @@ import { SourcesView } from './features/sources/SourcesView';
 import { TopicsView } from './features/topics/TopicsView';
 import { WatchlistView } from './features/watchlist/WatchlistView';
 import { StrategyView } from './features/strategy/StrategyView';
+import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
 import { api } from './shared/api/client';
 import {
   AgentRun,
@@ -84,6 +85,7 @@ export default function App() {
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -628,8 +630,8 @@ export default function App() {
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
-      {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} />}
-      {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} />}
+      {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
+      {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
       {topicDeleteTarget && (
         <div className="modal-overlay">
           <div className="modal topic-delete-modal" role="dialog" aria-modal="true" aria-labelledby="topic-delete-title">

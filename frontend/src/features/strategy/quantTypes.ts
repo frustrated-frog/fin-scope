@@ -3,11 +3,104 @@ export interface QuantDataset {
   startDate?: string; endDate?: string; status: string; fingerprint?: string; qualitySummary?: string;
 }
 
+export interface QuantDatasetQuality {
+  datasetId: number;
+  status: string;
+  summary?: string;
+  fingerprint?: string;
+  availableFactors: string[];
+}
+
 export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;
 }
-export interface QuantFactorAnalysis { datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number; icMean: number; icStd: number; icIr: number; positiveIcRatio: number }
+export interface QuantFactorAnalysis {
+  datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number;
+  icMean: number; icStd: number; icIr: number; positiveIcRatio: number;
+  negativeIcRatio?: number; zeroIcRatio?: number; icMeanCiLower?: number; icMeanCiUpper?: number;
+  evaluationMode?: 'CROSS_SECTIONAL_FACTOR_STUDY';
+  researchDirection?: FactorResearchDirection;
+  directionAdjustedIcMean?: number;
+  favorableIcRatio?: number;
+  directionAdjustedCiLower?: number; directionAdjustedCiUpper?: number;
+  totalEligibleDays?: number; minCrossSectionSize?: number; coverageRatio?: number;
+  quantileSampleDays?: number; quantileSpreadMean?: number; favorableQuantileSpreadRatio?: number;
+  quantileMonotonicityMean?: number; directionAdjustedQuantileSpread?: number; directionAdjustedMonotonicity?: number;
+  validationEligible?: boolean; evaluationPolicyVersion?: string; blockingReasons?: string[];
+  sampleEvidence?: 'INSUFFICIENT_SAMPLE' | 'DIRECTIONALLY_ALIGNED' | 'OPPOSED' | 'UNSTABLE';
+  conclusion?: 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
+  caveats?: string[];
+}
+
+export type FactorLifecycleStatus =
+  | 'CANDIDATE' | 'DEFINITION_REVIEWED' | 'IMPLEMENTED' | 'CALCULATION_VERIFIED'
+  | 'EXPLORATORY' | 'VALIDATED' | 'PRODUCTION_ELIGIBLE' | 'INVALIDATED' | 'RETIRED';
+
+export type FactorResearchDirection = 'POSITIVE_HYPOTHESIS' | 'NEGATIVE_HYPOTHESIS';
+
+export interface ResearchFactorDefinition {
+  identity: { namespace: string; code: string; version: string };
+  name: string;
+  category: string;
+  frequency: string;
+  expectedDirection: FactorResearchDirection;
+  plainMeaning: string;
+  hypothesis: string;
+  economicRationale: string;
+  interpretationBoundary: string;
+  requiredFields: string[];
+  availableAtRule: string;
+  missingPolicy: string;
+  calculationKey: string;
+  calculationVersion: string;
+  sourceType: string;
+  sourceRef: string;
+  evaluationPolicyCode: string;
+  evaluationPolicyVersion: string;
+  status: FactorLifecycleStatus;
+  validationEvidenceRef?: string;
+}
+
+export interface ResearchDraft {
+  id: number;
+  sourceType: 'CAPITAL_BEHAVIOR';
+  instrumentCode: string;
+  instrumentName: string;
+  observedAt: string;
+  signalCode: string;
+  factor: { namespace: string; code: string; version: string };
+  snapshotId: number;
+  snapshotFingerprint: string;
+  evidenceRefs: string[];
+  objectiveTags: string[];
+  evaluationMode: 'CROSS_SECTIONAL_FACTOR_STUDY';
+  status: 'DRAFT';
+  requiredNextSteps: string[];
+  createdAt: string;
+}
+
+export interface FactorResearchAgentTrace {
+  id: number; nodeName: string; status: string; input: string; output: string;
+  budgetSnapshot?: string; createdAt?: string;
+}
+
+export interface FactorResearchAgentRun {
+  id: number; datasetId: number; datasetFingerprint: string;
+  factor: { namespace: string; code: string; version: string };
+  researchDraftId?: number; question: string;
+  status: 'AWAITING_APPROVAL' | 'APPROVED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'BUDGET_EXHAUSTED';
+  plan: string[]; allowedTools: string[];
+  maxToolCalls: number; toolCallsUsed: number; maxLlmCalls: number; llmCallsUsed: number; maxRunSeconds: number;
+  evidenceJson: string; evidenceHash: string; findingJson: string; stopReason: string;
+  trace: FactorResearchAgentTrace[];
+}
+
+export interface QuantResearchEntryIntent {
+  factorCode: string;
+  draftId?: number;
+  sourceLabel?: string;
+}
 
 export interface QuantStrategySpec {
   name: string; datasetId: number; benchmark: string; investmentHypothesis: string; riskBoundary: string;

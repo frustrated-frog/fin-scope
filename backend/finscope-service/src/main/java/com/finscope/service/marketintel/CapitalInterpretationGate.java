@@ -23,7 +23,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/** 服务端证据门禁：模型只能组织已计算证据，不能创造因子、指标或观察条件。 */
+/**
+ * 服务端证据门禁：模型只能组织已计算证据，不能创造因子、指标或观察条件。
+ */
 @Component
 public class CapitalInterpretationGate {
     private static final Set<String> STATES = new HashSet<String>(Arrays.asList(
@@ -126,9 +128,9 @@ public class CapitalInterpretationGate {
     }
 
     private List<CapitalHypothesis> hypotheses(JsonNode nodes, CapitalAgentEvidencePacket packet,
-                                                Set<String> metricRefs, Set<String> allowedNumbers,
-                                                Set<String> historicalNumbers,
-                                                List<String> rejections) {
+                                               Set<String> metricRefs, Set<String> allowedNumbers,
+                                               Set<String> historicalNumbers,
+                                               List<String> rejections) {
         List<CapitalHypothesis> result = new ArrayList<CapitalHypothesis>();
         for (JsonNode node : nodes) {
             String type = required(node, "type");

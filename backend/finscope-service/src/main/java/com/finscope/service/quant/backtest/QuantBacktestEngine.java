@@ -5,11 +5,16 @@ import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.backtest.EquityPoint;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
+import com.finscope.domain.factorresearch.FactorObservation;
 import com.finscope.domain.quant.factor.FactorValue;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
-import com.finscope.service.quant.factor.FactorCalculator;
 import com.finscope.service.quant.factor.FactorPreprocessor;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.factorresearch.FactorCalculationContext;
+import com.finscope.service.factorresearch.FactorProviderRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -21,10 +26,18 @@ import java.util.TreeMap;
 import java.util.Set;
 import java.util.LinkedHashSet;
 
+@Component
 public class QuantBacktestEngine {
     private final FactorRegistry registry = new FactorRegistry();
-    private final FactorCalculator calculator = new FactorCalculator();
     private final FactorPreprocessor preprocessor = new FactorPreprocessor();
+    private final FactorProviderRegistry providers;
+
+    public QuantBacktestEngine() { this(FactorProviderRegistry.legacyOnly()); }
+    @Autowired
+    public QuantBacktestEngine(FactorProviderRegistry providers) {
+        if (providers == null) throw new IllegalArgumentException("factor provider registry is required");
+        this.providers = providers;
+    }
 
     public BacktestResult run(BacktestRequest request) {
         if (request == null || request.getSpec() == null || request.getBars() == null)
@@ -42,10 +55,12 @@ public class QuantBacktestEngine {
         int index = 0, liveIndex = 0, warmupDays = 0;
         int startAt = spec.getFilters() == null ? 0 : spec.getFilters().getMinTradingDays();
         for (QuantStrategySpec.FactorWeight factor : spec.getFactors())
-            startAt = Math.max(startAt, registry.get(factor.getCode()).getLookbackDays());
+            startAt = Math.max(startAt, registry.contains(factor.getCode())
+                    ? registry.get(factor.getCode()).getLookbackDays() : providerLookback(factor.getCode()));
         double benchmarkNav = 1d;
         Map<String, Double> previousClose = new LinkedHashMap<String, Double>();
         Map<LocalDate, Set<String>> universe = universe(request, byDate.keySet());
+        Map<String, QuantCapitalFlowDaily> capital = capital(request.getCapitalFlows());
         if (universe.isEmpty()) result.getWarnings().add("未提供时点股票池，使用当日可见行情标的作为研究范围");
         for (Map.Entry<LocalDate, Map<String, QuantDailyBar>> day : byDate.entrySet()) {
             LocalDate date = day.getKey();
@@ -80,7 +95,9 @@ public class QuantBacktestEngine {
             int firstSignal = Math.max(0, startAt - warmupDays);
             if (index >= startAt && liveIndex >= firstSignal && (liveIndex - firstSignal) % spec.getPortfolio().getRebalanceEvery() == 0
                     && !date.equals(byDate.lastKey())) {
-                pendingTargets = select(date, bars, histories, request.getFundamentals(), spec, result.getWarnings(), dayMembers);
+                pendingTargets = select(date, bars, histories, request.getFundamentals(), spec,
+                        result.getWarnings(), dayMembers, request.getDatasetId(), capital,
+                        byDate.higherKey(date).atTime(9, 30));
                 pendingSignal = date;
             }
             index++;
@@ -102,7 +119,9 @@ public class QuantBacktestEngine {
 
     private Map<String, Double> select(LocalDate date, Map<String, QuantDailyBar> today,
                                        Map<String, List<QuantDailyBar>> histories, List<QuantFundamentalSnapshot> fundamentals,
-                                       QuantStrategySpec spec, List<String> warnings, Set<String> members) {
+                                       QuantStrategySpec spec, List<String> warnings, Set<String> members,
+                                       String datasetId, Map<String, QuantCapitalFlowDaily> capital,
+                                       java.time.LocalDateTime executionCutoff) {
         Map<String, Double> scores = new LinkedHashMap<String, Double>();
         for (QuantStrategySpec.FactorWeight factor : spec.getFactors()) {
             List<FactorValue> raw = new ArrayList<FactorValue>();
@@ -111,7 +130,14 @@ public class QuantBacktestEngine {
                 QuantDailyBar bar = entry.getValue();
                 List<QuantDailyBar> history = histories.get(entry.getKey());
                 if (!eligible(bar, history, spec)) continue;
-                double value = calculator.value(factor.getCode(), history, latestVisible(fundamentals, entry.getKey(), date));
+                QuantCapitalFlowDaily capitalFlow = capital.get(key(date, entry.getKey()));
+                FactorObservation observation = providers.calculate(factor.getCode(),
+                        new FactorCalculationContext(datasetId == null ? "backtest" : datasetId,
+                                entry.getKey(), date, executionCutoff,
+                                history, latestVisible(fundamentals, entry.getKey(), date), capitalFlow,
+                                visibleCapitalHistory(capital, entry.getKey(), date, executionCutoff)));
+                double value = observation.getProcessedValue() == null
+                        ? Double.NaN : observation.getProcessedValue().doubleValue();
                 if (Double.isFinite(value)) raw.add(new FactorValue(date, entry.getKey(), factor.getCode(), value));
             }
             Map<String, Double> normalized = preprocessor.normalize(raw);
@@ -130,6 +156,35 @@ public class QuantBacktestEngine {
         }
         for (int i = 0; i < count; i++) targets.put(ordered.get(i).getKey(), 1d / count);
         return targets;
+    }
+
+    private int providerLookback(String code) {
+        providers.identity(code);
+        if ("MAIN_FLOW_SHARE_ZSCORE_20D".equals(code)) return 20;
+        if ("NORMALIZED_MAIN_FLOW_SUM_5D".equals(code) || "FLOW_PERSISTENCE_5D".equals(code)) return 5;
+        if ("PRICE_FLOW_DIVERGENCE_5D".equals(code)) return 6;
+        return 0;
+    }
+
+    private Map<String, QuantCapitalFlowDaily> capital(List<QuantCapitalFlowDaily> values) {
+        Map<String, QuantCapitalFlowDaily> result = new LinkedHashMap<String, QuantCapitalFlowDaily>();
+        if (values == null) return result;
+        for (QuantCapitalFlowDaily value : values) {
+            result.put(key(value.getTradeDate(), value.getInstrumentCode()), value);
+        }
+        return result;
+    }
+
+    private String key(LocalDate date, String code) { return date + "|" + code; }
+
+    private List<QuantCapitalFlowDaily> visibleCapitalHistory(Map<String, QuantCapitalFlowDaily> values,
+                                                               String code, LocalDate date,
+                                                               java.time.LocalDateTime cutoff) {
+        List<QuantCapitalFlowDaily> result = new ArrayList<QuantCapitalFlowDaily>();
+        for (QuantCapitalFlowDaily value : values.values())
+            if (code.equals(value.getInstrumentCode()) && !value.getTradeDate().isAfter(date)
+                    && value.getAvailableAt() != null && !value.getAvailableAt().isAfter(cutoff)) result.add(value);
+        result.sort(Comparator.comparing(QuantCapitalFlowDaily::getTradeDate)); return result;
     }
 
     private boolean eligible(QuantDailyBar bar, List<QuantDailyBar> history, QuantStrategySpec spec) {

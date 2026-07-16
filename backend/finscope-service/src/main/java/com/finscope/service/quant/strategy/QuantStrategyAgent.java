@@ -8,6 +8,7 @@ import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.factorresearch.FactorProviderRegistry;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -23,9 +24,13 @@ public class QuantStrategyAgent {
             .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
-    @Autowired
     public QuantStrategyAgent(LlmChatClient llm, FactorRegistry registry) {
         this(llm, registry, new QuantStrategySpecValidator(registry));
+    }
+
+    @Autowired
+    public QuantStrategyAgent(LlmChatClient llm, FactorRegistry registry, FactorProviderRegistry providers) {
+        this(llm, registry, new QuantStrategySpecValidator(registry, providers));
     }
 
     public QuantStrategyAgent(LlmChatClient llm, FactorRegistry registry, QuantStrategySpecValidator validator) {
@@ -85,8 +90,8 @@ public class QuantStrategyAgent {
 
     private String systemPrompt(Long datasetId, java.util.Set<String> availableFactors,
                                 java.time.LocalDate datasetStart, java.time.LocalDate datasetEnd) {
-        String catalog = registry.list().stream().filter(item -> availableFactors.contains(item.getCode()))
-                .map(item -> item.getCode() + "(" + item.getDirection() + ")")
+        String catalog = availableFactors.stream()
+                .map(code -> code + "(" + (registry.contains(code) ? registry.get(code).getDirection() : "HIGH") + ")")
                 .collect(Collectors.joining(","));
         return "你是量化策略研究 Agent。只输出一个 JSON 对象，不要输出收益预测或代码。datasetId 必须为 " + datasetId
                 + "。可用因子仅限：" + catalog + "。策略必须为 Top-N 等权、收盘后生成信号、NEXT_OPEN 执行。"

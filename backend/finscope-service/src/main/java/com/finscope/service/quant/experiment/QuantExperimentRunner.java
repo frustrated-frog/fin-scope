@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.dao.quant.QuantExperimentRepository;
 import com.finscope.dao.quant.QuantMarketDataRepository;
+import com.finscope.dao.factorresearch.QuantCapitalFlowRepository;
 import com.finscope.domain.quant.backtest.BacktestRequest;
 import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.data.QuantDataset;
@@ -27,6 +28,8 @@ public class QuantExperimentRunner {
     @Resource private QuantStrategyService strategies;
     @Resource private QuantDatasetService datasets;
     @Resource private QuantMarketDataRepository marketData;
+    @Resource private QuantCapitalFlowRepository capitalFlows;
+    @Resource private QuantBacktestEngine backtestEngine;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule()).configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
 
     public void run(Long experimentId) {
@@ -41,7 +44,9 @@ public class QuantExperimentRunner {
             BacktestRequest request = new BacktestRequest(); request.setSpec(spec); request.setBars(marketData.findBars(dataset.getId()));
             request.setFundamentals(marketData.findFundamentals(dataset.getId()));
             request.setUniverse(marketData.findUniverseMembers(dataset.getId()));
-            BacktestResult result = new QuantBacktestEngine().run(request);
+            request.setDatasetId(String.valueOf(dataset.getId()));
+            if (capitalFlows != null) request.setCapitalFlows(capitalFlows.findByDatasetId(dataset.getId()));
+            BacktestResult result = (backtestEngine == null ? new QuantBacktestEngine() : backtestEngine).run(request);
             persistSuccess(experimentId, result);
             log.info("量化实验完成 experimentId={} durationMs={} trades={}", experimentId, System.currentTimeMillis() - started, result.getTrades().size());
         } catch (Exception ex) {

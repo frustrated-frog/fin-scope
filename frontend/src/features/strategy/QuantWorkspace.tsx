@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { QuantDataset, QuantExperiment, QuantFactor, QuantFactorAnalysis, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion } from './quantTypes';
+import { FactorGuide } from './FactorGuide';
+import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
 type Pane = 'laboratory' | 'factors' | 'experiments';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -29,10 +30,19 @@ function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
   </div>;
 }
 
-export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setMessage: (message: string) => void }) {
+export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed }: {
+  addToast: Toast;
+  setMessage: (message: string) => void;
+  entryIntent?: QuantResearchEntryIntent;
+  onEntryIntentConsumed?: () => void;
+}) {
   const [pane, setPane] = useState<Pane>('laboratory');
   const [datasets, setDatasets] = useState<QuantDataset[]>([]);
-  const [factors, setFactors] = useState<QuantFactor[]>([]);
+  const [researchFactors, setResearchFactors] = useState<ResearchFactorDefinition[]>([]);
+  const [datasetQuality, setDatasetQuality] = useState<QuantDatasetQuality>();
+  const [selectedFactorCode, setSelectedFactorCode] = useState<string>();
+  const [entryDraft, setEntryDraft] = useState<ResearchDraft>();
+  const [entrySourceLabel, setEntrySourceLabel] = useState<string>();
   const [strategies, setStrategies] = useState<QuantStrategyVersion[]>([]);
   const [experiments, setExperiments] = useState<QuantExperiment[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
@@ -44,18 +54,43 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
   const [busy, setBusy] = useState<string>();
 
   async function load() {
-    const [datasetValues, factorValues, strategyValues, experimentValues] = await Promise.all([
-      api<QuantDataset[]>('/api/quant/datasets'), api<QuantFactor[]>('/api/quant/factors'),
+    const [datasetValues, researchFactorValues, strategyValues, experimentValues] = await Promise.all([
+      api<QuantDataset[]>('/api/quant/datasets'),
+      api<ResearchFactorDefinition[]>('/api/factor-research/factors').catch(() => []),
       api<QuantStrategyVersion[]>('/api/quant/strategies'), api<QuantExperiment[]>('/api/quant/experiments')
     ]);
-    setDatasets(datasetValues); setFactors(factorValues); setStrategies(strategyValues); setExperiments(experimentValues);
+    const safeResearchFactors = Array.isArray(researchFactorValues) ? researchFactorValues : [];
+    setDatasets(datasetValues); setResearchFactors(safeResearchFactors); setStrategies(strategyValues); setExperiments(experimentValues);
+    setSelectedFactorCode(current => current ?? safeResearchFactors[0]?.identity.code);
     setSelectedDatasetId(current => current ?? datasetValues.find(item => item.status === 'READY')?.id ?? null);
     setSelectedExperimentId(current => current ?? experimentValues[0]?.id ?? null);
     setMessage('量化研究环境已同步');
   }
 
   useEffect(() => { load().catch(error => addToast(error instanceof Error ? error.message : '量化工作台加载失败', 'error')); }, []);
-  useEffect(() => { setFactorAnalyses({}); }, [selectedDatasetId]);
+  useEffect(() => {
+    if (!entryIntent) return;
+    setPane('factors');
+    setSelectedFactorCode(entryIntent.factorCode);
+    setEntrySourceLabel(entryIntent.sourceLabel);
+    if (entryIntent.draftId) {
+      api<ResearchDraft>(`/api/factor-research/research-drafts/${entryIntent.draftId}`)
+        .then(setEntryDraft)
+        .catch(error => addToast(error instanceof Error ? error.message : '研究草稿读取失败', 'error'));
+    } else {
+      setEntryDraft(undefined);
+    }
+    onEntryIntentConsumed?.();
+  }, [entryIntent?.draftId, entryIntent?.factorCode]);
+  useEffect(() => {
+    setFactorAnalyses({});
+    if (!selectedDatasetId) { setDatasetQuality(undefined); return; }
+    let cancelled = false;
+    api<QuantDatasetQuality>(`/api/quant/datasets/${selectedDatasetId}/quality`)
+      .then(value => { if (!cancelled) setDatasetQuality(Array.isArray(value?.availableFactors) ? value : { ...value, availableFactors: [] }); })
+      .catch(() => { if (!cancelled) setDatasetQuality(undefined); });
+    return () => { cancelled = true; };
+  }, [selectedDatasetId]);
   useEffect(() => {
     if (!selectedExperimentId) { setExperimentDetail(undefined); return; }
     let cancelled = false;
@@ -119,7 +154,10 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
   const latestPositionDate = (experimentDetail?.result?.positions ?? []).reduce((latest, item) => item.tradeDate > latest ? item.tradeDate : latest, '');
   const latestPositions = (experimentDetail?.result?.positions ?? []).filter(item => item.tradeDate === latestPositionDate);
   const draftSpec = draft?.spec;
-  const categories = useMemo(() => Array.from(new Set(factors.map(item => item.category))), [factors]);
+  const availableFactors = useMemo(() => new Set(datasetQuality?.availableFactors ?? []), [datasetQuality]);
+  const selectedFactorAnalysis = selectedDatasetId && selectedFactorCode
+    ? factorAnalyses[`${selectedDatasetId}:${selectedFactorCode}`]
+    : undefined;
 
   return <section className="quant-workspace">
     <header className="quant-hero">
@@ -128,7 +166,7 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
     </header>
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['laboratory','策略实验室'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'laboratory' ? strategies.length : id === 'factors' ? factors.length : experiments.length}</small></button>)}
+      {([['laboratory','策略实验室'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'laboratory' ? strategies.length : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
     </nav>
 
     {pane === 'laboratory' && <div className="quant-lab-grid">
@@ -145,7 +183,25 @@ export function QuantWorkspace({ addToast, setMessage }: { addToast: Toast; setM
       <aside className="quant-versions-panel quant-panel"><div className="quant-panel-title"><span>03 / VERSIONS</span><h4>可运行策略</h4></div>{strategies.length === 0 ? <div className="quant-empty compact"><strong>暂无已确认版本</strong><p>草案必须由你确认后才能进入实验队列。</p></div> : <div className="quant-version-list">{strategies.map(item => { const spec = parseSpec(item); return <article key={item.id}><header><span>v{item.version}</span><b>{item.name}</b></header><p>{spec?.riskBoundary ?? '已锁定策略边界'}</p><small>{item.engineVersion} · {item.strategyFingerprint.slice(0,8)}</small><button type="button" onClick={() => runExperiment(item.id)} disabled={busy === `run-${item.id}`}>{busy === `run-${item.id}` ? '正在入队…' : '启动实验'}</button></article>; })}</div>}</aside>
     </div>}
 
-    {pane === 'factors' && <div className="quant-factor-page"><header><span>FACTOR CATALOG / 13</span><h4>因子不是答案，是可被证伪的观察角度</h4><p>选择研究样本后，可按 T 日因子与下一交易日开盘至收盘收益计算 Rank IC；财务值只在披露日之后可见。</p></header>{categories.map(category => <section key={category}><h5>{category}</h5><div>{factors.filter(item => item.category === category).map(item => { const analysis = selectedDatasetId ? factorAnalyses[`${selectedDatasetId}:${item.code}`] : undefined; return <article key={item.code}><span>{item.code}</span><h4>{item.name}</h4><p>{item.description}</p>{analysis && <dl className="quant-factor-analysis"><div><dt>IC 均值</dt><dd>{analysis.icMean.toFixed(3)}</dd></div><div><dt>ICIR</dt><dd>{analysis.icIr.toFixed(2)}</dd></div><div><dt>正 IC</dt><dd>{percent(analysis.positiveIcRatio)}</dd></div><div><dt>样本</dt><dd>{analysis.sampleCount}</dd></div></dl>}<footer><b>{item.direction === 'HIGH' ? '高值优先' : '低值优先'}</b><small>{item.pointInTime ? '披露时点约束' : `${item.lookbackDays} 日窗口`}</small><button type="button" disabled={!selectedDatasetId || selectedDataset?.status !== 'READY' || busy === `factor-${item.code}`} onClick={() => analyzeFactor(item.code)}>{busy === `factor-${item.code}` ? '诊断中…' : '运行诊断'}</button></footer></article>; })}</div></section>)}</div>}
+    {pane === 'factors' && <div className="quant-factor-page">
+      <header><span>FACTOR MANUAL / {researchFactors.length}</span><h4>先看懂，再验证</h4><p>每个因子都有明确公式、可获得时间和误读边界；诊断评价同日股票池排序，不预测单只股票。</p></header>
+      {(entryDraft || entrySourceLabel) && <section className="quant-research-entry" aria-label="资金行为研究上下文">
+        <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
+        <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
+      </section>}
+      <FactorGuide
+        definitions={researchFactors}
+        selectedCode={selectedFactorCode}
+        onSelect={setSelectedFactorCode}
+        selectedDataset={selectedDataset}
+        availableFactors={availableFactors}
+        analysis={selectedFactorAnalysis}
+        busy={Boolean(selectedFactorCode && busy === `factor-${selectedFactorCode}`)}
+        onAnalyze={analyzeFactor}
+        researchDraftId={entryDraft && entryDraft.factor.code === selectedFactorCode ? entryDraft.id : undefined}
+        addToast={addToast}
+      />
+    </div>}
 
     {pane === 'experiments' && <div className="quant-experiment-grid"><aside className="quant-run-list quant-panel"><div className="quant-panel-title"><span>RUN ARCHIVE</span><h4>实验批次</h4></div>{experiments.length === 0 ? <div className="quant-empty compact"><strong>暂无实验</strong><p>从已确认的策略版本启动第一轮回测。</p></div> : experiments.map(item => <button type="button" className={selectedExperimentId === item.id ? 'active' : ''} onClick={() => setSelectedExperimentId(item.id)} key={item.id}><i data-status={item.status}/><span><b>实验 #{item.id}</b><small>策略版本 #{item.strategyVersionId}</small></span><em>{statusText[item.status]}</em></button>)}</aside>
       <main className="quant-results">{experimentDetail && <section className="quant-readout"><header><div><span>DATA PROVENANCE</span><h4>{experimentDetail.datasetName ?? `数据集 #${experimentDetail.datasetId ?? '—'}`}</h4></div><b>{experimentDetail.dataKind === 'LEARNING_SAMPLE' ? '虚拟学习数据 · 不可用于实盘结论' : '真实研究数据'}</b></header><p>数据指纹 {experimentDetail.datasetFingerprint.slice(0, 16)} · 引擎 {experimentDetail.engineVersion}{selectedSpec ? ` · Top ${selectedSpec.portfolio.topN} · 每 ${selectedSpec.portfolio.rebalanceEvery} 日调仓` : ''}</p></section>}<div className="quant-metrics">{[['年化收益', selectedMetrics ? percent(selectedMetrics.annualizedReturn) : '—'],['最大回撤', selectedMetrics ? percent(selectedMetrics.maxDrawdown) : '—'],['Sharpe', selectedMetrics ? selectedMetrics.sharpeRatio.toFixed(2) : '—'],['超额收益', selectedMetrics ? percent(selectedMetrics.excessReturn) : '—']].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><EquityChart experiment={experimentDetail}/>

@@ -4,6 +4,7 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
 import com.finscope.service.quant.factor.FactorRegistry;
+import com.finscope.service.factorresearch.FactorProviderRegistry;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,7 +13,11 @@ import java.util.Set;
 
 public class QuantStrategySpecValidator {
     private final FactorRegistry factors;
-    public QuantStrategySpecValidator(FactorRegistry factors) { this.factors = factors; }
+    private final FactorProviderRegistry providers;
+    public QuantStrategySpecValidator(FactorRegistry factors) { this(factors, null); }
+    public QuantStrategySpecValidator(FactorRegistry factors, FactorProviderRegistry providers) {
+        this.factors = factors; this.providers = providers;
+    }
 
     public void validateOrThrow(QuantStrategySpec spec) {
         List<String> issues = validate(spec);
@@ -34,8 +39,8 @@ public class QuantStrategySpecValidator {
             Set<String> seen = new HashSet<String>(); double weight = 0;
             for (QuantStrategySpec.FactorWeight item : spec.getFactors()) {
                 if (item == null) { issues.add("因子配置不能为空"); continue; }
-                if (!factors.contains(item.getCode())) issues.add("未知因子：" + item.getCode());
-                else if (!factors.get(item.getCode()).getDirection().equals(item.getDirection()))
+                if (!known(item.getCode())) issues.add("未知因子：" + item.getCode());
+                else if (!expectedDirection(item.getCode()).equals(item.getDirection()))
                     issues.add("因子方向必须与登记目录一致：" + item.getCode());
                 if (!seen.add(item.getCode())) issues.add("因子不能重复：" + item.getCode());
                 if (!Double.isFinite(item.getWeight()) || item.getWeight() <= 0 || item.getWeight() > 1) issues.add("因子权重必须在 0 到 1 之间");
@@ -68,6 +73,12 @@ public class QuantStrategySpecValidator {
             issues.add("交易成本参数超出允许范围");
         }
         return issues;
+    }
+    private boolean known(String code) {
+        return factors.contains(code) || providers != null && providers.contains(code);
+    }
+    private String expectedDirection(String code) {
+        return factors.contains(code) ? factors.get(code).getDirection() : "HIGH";
     }
     private boolean text(String value) { return value != null && !value.trim().isEmpty(); }
     private boolean rate(double value) { return value >= 0 && value <= 0.05 && Double.isFinite(value); }
