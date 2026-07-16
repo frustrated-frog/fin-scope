@@ -14,8 +14,10 @@ import java.util.Optional;
 
 @Repository
 public class BriefRepository {
+
     @Resource
     private JdbcTemplate jdbcTemplate;
+
     private final RowMapper<Brief> mapper = (rs, rowNum) -> {
         Brief brief = new Brief();
         brief.setId(rs.getLong("id"));

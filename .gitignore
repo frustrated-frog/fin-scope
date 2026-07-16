@@ -17,6 +17,13 @@ data/exports/
 backend/target/
 backend/**/target/
 
+# Python market data service
+market-data-service/.venv/
+market-data-service/.pytest_cache/
+market-data-service/data/
+market-data-service/**/__pycache__/
+market-data-service/**/*.pyc
+
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/

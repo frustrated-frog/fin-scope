@@ -7,6 +7,7 @@ FinScope 是一个本地优先的个人投研信息工作台。它用于建立�
 ## 技术栈
 
 - 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS、站点专属抓取适配器
+- 市场数据服务：Python 3.11+、FastAPI、AkShare、pytdx、httpx
 - 前端：React、TypeScript、Vite
 - 存储：`data/finance.db` 与 `data/vault/` 下的 Markdown 文件
 - AI 扩展点：OpenAI 兼容 `LlmChatClient`、文章解读 Agent、`agent_run` 调用留痕
@@ -35,6 +36,7 @@ fin-scope/
     finscope-service/  业务编排、去重、简报、Vault、导出
     finscope-web/      REST 控制器与应用装配
   frontend/  React/Vite Web 工作台
+  market-data-service/  Python A 股数据获取、多源降级与快照服务
   data/      本地个人数据目录，除 Vault 占位文件外默认忽略
   docs/      PRD、架构说明和路线图
 ```
@@ -57,6 +59,16 @@ npm run dev
 ```
 
 默认打开 `http://localhost:5173`；如果 Vite 提示端口被占用并切换到 `5174` 或其他端口，以终端输出为准。前端会把 `/api` 代理到 `http://localhost:8080`。
+
+Python 市场数据服务：
+
+```bash
+cd market-data-service
+uv sync --extra ecosystem --extra dev
+uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
+```
+
+Java 接入方式和数据接口说明见 [market-data-service/README.md](market-data-service/README.md)。
 
 ## Agent / LLM 配置
 
