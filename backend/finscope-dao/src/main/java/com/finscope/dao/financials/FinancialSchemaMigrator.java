@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @DependsOn("databaseInitializer")
 public class FinancialSchemaMigrator implements InitializingBean {
     private static final int VERSION = 200;
+    private static final int DOCUMENT_VERSION = 201;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -40,6 +41,18 @@ public class FinancialSchemaMigrator implements InitializingBean {
             jdbc.update(
                     "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     VERSION, "company financial statements workspace", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, DOCUMENT_VERSION);
+            if (count != null && count > 0) {
+                return;
+            }
+            createDocumentTables();
+            jdbc.update(
+                    "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    DOCUMENT_VERSION, "financial report pdf documents", LocalDateTime.now().toString());
         });
     }
 
@@ -86,5 +99,18 @@ public class FinancialSchemaMigrator implements InitializingBean {
                 "success_count INTEGER NOT NULL DEFAULT 0,failure_count INTEGER NOT NULL DEFAULT 0," +
                 "error_message TEXT,started_at TEXT NOT NULL,finished_at TEXT," +
                 "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
+    }
+
+    private void createDocumentTables() {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS financial_document (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL," +
+                "report_id INTEGER,original_file_name TEXT NOT NULL,relative_path TEXT NOT NULL," +
+                "mime_type TEXT NOT NULL,file_size INTEGER NOT NULL,file_hash TEXT NOT NULL UNIQUE," +
+                "page_count INTEGER,parse_status TEXT NOT NULL,extracted_text TEXT," +
+                "error_message TEXT,created_at TEXT NOT NULL," +
+                "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT," +
+                "FOREIGN KEY(report_id) REFERENCES financial_report(id) ON DELETE SET NULL)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_document_report ON " +
+                "financial_document(report_id,created_at DESC,id DESC)");
     }
 }
