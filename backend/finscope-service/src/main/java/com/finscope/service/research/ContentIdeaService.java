@@ -8,6 +8,7 @@ import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.domain.article.Article;
+import com.finscope.domain.response.PageResponse;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.ContentIdea;
 import com.finscope.domain.research.EventCluster;
@@ -95,6 +96,11 @@ public class ContentIdeaService {
 
     public List<ContentIdea> list() {
         return contentIdeaRepository.findAll();
+    }
+
+    public PageResponse<ContentIdea> listPaged(int page, int pageSize) {
+        return PageResponse.of(contentIdeaRepository.findAllPaged(page, pageSize),
+                contentIdeaRepository.countAll(), page, pageSize);
     }
 
     public List<ContentIdea> listByEventId(Long eventId) {

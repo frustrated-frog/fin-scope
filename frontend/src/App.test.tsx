@@ -420,6 +420,34 @@ const responses: Record<string, unknown> = {
       status: 'IDEA'
     }
   ],
+  '/api/content-ideas/paged?page=0&pageSize=8': {
+    items: [
+      {
+        id: 1,
+        eventId: 1,
+        themeCode: 'china_macro',
+        title: '为什么市场还没等到降息，黄金已经先涨了？',
+        angle: '用实际利率和预期差解释黄金先涨的逻辑。',
+        format: 'X_THREAD',
+        audience: '宏观投资学习者',
+        score: 84,
+        scoreReason: '证据强度够高，而且能沉淀成长期有效的宏观解释框架。',
+        outline: '1. 先看降息预期\n2. 再看实际利率\n3. 最后看资金流向',
+        status: 'IDEA'
+      }
+    ],
+    totalCount: 9,
+    page: 0,
+    pageSize: 8,
+    totalPages: 2
+  },
+  '/api/content-ideas/paged?page=1&pageSize=8': {
+    items: [],
+    totalCount: 9,
+    page: 1,
+    pageSize: 8,
+    totalPages: 2
+  },
   '/api/research/runs': [
     {
       id: 1,
@@ -1087,6 +1115,23 @@ test('content studio shows idea score and outline for generated topics', async (
   expect(screen.getByText('X_THREAD')).toBeInTheDocument();
   expect(screen.getByText('证据强度够高，而且能沉淀成长期有效的宏观解释框架。')).toBeInTheDocument();
   expect(screen.getByText(/1\. 先看降息预期/)).toBeInTheDocument();
+});
+
+test('content studio loads ideas through backend pagination', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Studio' }));
+
+  expect(await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledWith('/api/content-ideas/paged?page=0&pageSize=8', expect.any(Object));
+  expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument();
+  expect(screen.getByText('共 9 个选题')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/content-ideas/paged?page=1&pageSize=8', expect.any(Object));
+  expect(await screen.findByText('当前筛选下暂无选题。')).toBeInTheDocument();
+  expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument();
 });
 
 test('agent runs table shows node start time', () => {

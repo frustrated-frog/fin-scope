@@ -73,6 +73,12 @@ public class ContentIdeaRepository {
         return jdbcTemplate.query("SELECT * FROM content_idea ORDER BY score DESC, id DESC", mapper);
     }
 
+    public List<ContentIdea> findAllPaged(int page, int pageSize) {
+        int offset = page * pageSize;
+        return jdbcTemplate.query("SELECT * FROM content_idea ORDER BY score DESC, id DESC LIMIT ? OFFSET ?",
+                mapper, pageSize, offset);
+    }
+
     public List<ContentIdea> findByEventId(Long eventId) {
         return jdbcTemplate.query("SELECT * FROM content_idea WHERE event_id = ? ORDER BY score DESC, id DESC",
                 mapper, eventId);

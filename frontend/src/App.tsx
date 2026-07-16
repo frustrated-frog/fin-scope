@@ -34,6 +34,7 @@ import {
   FetchBatch,
   IntakeCandidate,
   LearningTask,
+  PageResponse,
   ResearchRun,
   ResearchRunDetail,
   ResearchReport,
@@ -47,6 +48,7 @@ import {
 
 const AGENT_RUN_REFRESH_INTERVAL_MS = 3000;
 const RESEARCH_RUN_REFRESH_INTERVAL_MS = 750;
+const CONTENT_IDEA_PAGE_SIZE = 8;
 const RESEARCH_ACTIVE_STATUSES = new Set(['RUNNING']);
 
 function isResearchRunActive(status?: string) {
@@ -73,6 +75,8 @@ export default function App() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
+  const [contentIdeaPage, setContentIdeaPage] = useState<PageResponse<ContentIdea> | null>(null);
+  const [contentIdeaPageIndex, setContentIdeaPageIndex] = useState(0);
   const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
   const [researchTheses, setResearchTheses] = useState<ResearchThesis[]>([]);
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
@@ -138,9 +142,26 @@ export default function App() {
     }
   };
 
+  async function loadContentIdeaPage(page = contentIdeaPageIndex) {
+    const nextPage = Math.max(0, page);
+    const response = await api<PageResponse<ContentIdea>>(
+      `/api/content-ideas/paged?page=${nextPage}&pageSize=${CONTENT_IDEA_PAGE_SIZE}`
+    );
+    setContentIdeaPage(response);
+    setContentIdeaPageIndex(response.page);
+  }
+
   useEffect(() => {
     refresh().catch((error) => setMessage(error instanceof Error ? error.message : '初始化失败'));
   }, []);
+
+  useEffect(() => {
+    if (view !== 'contentStudio') {
+      return;
+    }
+    loadContentIdeaPage(contentIdeaPageIndex)
+      .catch((error) => setMessage(error instanceof Error ? error.message : '选题分页加载失败'));
+  }, [view, contentIdeaPageIndex]);
 
   useEffect(() => {
     if (view !== 'agents') {
@@ -447,6 +468,9 @@ export default function App() {
     });
     setMessage(`选题状态已更新为 ${status}`);
     await refresh();
+    if (view === 'contentStudio') {
+      await loadContentIdeaPage(contentIdeaPageIndex);
+    }
   }
 
   async function updateEventStatus(eventId: number, status: string) {
@@ -622,7 +646,9 @@ export default function App() {
       )}
       {view === 'contentStudio' && (
         <ContentStudioView
-          contentIdeas={contentIdeas}
+          contentIdeas={contentIdeaPage?.items ?? contentIdeas}
+          pagination={contentIdeaPage}
+          onPageChange={setContentIdeaPageIndex}
           onIdeaStatusChange={updateContentIdeaStatus}
           addToast={addToast}
         />

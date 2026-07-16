@@ -833,6 +833,24 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void contentIdeasCanBePagedFromBackend() throws Exception {
+        seedResearchArtifacts();
+
+        mvc.perform(get("/api/content-ideas/paged?page=0&pageSize=1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.totalCount").value(greaterThanOrEqualTo(2)))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.pageSize").value(1))
+                .andExpect(jsonPath("$.totalPages").value(greaterThanOrEqualTo(2)))
+                .andExpect(jsonPath("$.items[0].title").isNotEmpty());
+
+        mvc.perform(get("/api/content-ideas/paged?page=-1&pageSize=20"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("page must be >= 0")));
+    }
+
+    @Test
     void briefIncludesResearchSectionsAndExposesResearchContext() throws Exception {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
