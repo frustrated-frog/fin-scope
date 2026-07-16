@@ -20,10 +20,12 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class DatasetFactorAnalysisService {
+    private static final int[] HORIZONS = {1, 3, 5, 10, 20};
     @Resource private QuantDatasetService datasets;
     @Resource private QuantMarketDataRepository marketData;
     @Resource private FactorRegistry registry;
@@ -44,48 +46,83 @@ public class DatasetFactorAnalysisService {
         TreeMap<LocalDate, Map<String, QuantDailyBar>> byDate = new TreeMap<LocalDate, Map<String, QuantDailyBar>>();
         for (QuantDailyBar bar : bars) byDate.computeIfAbsent(bar.getTradeDate(), key -> new LinkedHashMap<String, QuantDailyBar>()).put(bar.getInstrumentCode(), bar);
         List<LocalDate> dates = new ArrayList<LocalDate>(byDate.keySet()); Map<String,List<QuantDailyBar>> histories = new LinkedHashMap<String,List<QuantDailyBar>>();
-        Set<String> active = new LinkedHashSet<String>(); int eventCursor = 0; List<Double> dailyIc = new ArrayList<Double>();
-        int candidateDays = 0, minCrossSection = Integer.MAX_VALUE;
-        List<Double> dailySpread = new ArrayList<Double>(), dailyMonotonicity = new ArrayList<Double>();
+        Map<Integer, HorizonAccumulator> evidenceByHorizon = new LinkedHashMap<Integer, HorizonAccumulator>();
+        for (int horizon : HORIZONS) evidenceByHorizon.put(horizon, new HorizonAccumulator());
+        List<Map<String, Double>> factorSnapshots = new ArrayList<Map<String, Double>>();
+        Set<String> active = new LinkedHashSet<String>(); int eventCursor = 0;
         for (int dateIndex = 0; dateIndex + 1 < dates.size(); dateIndex++) {
             LocalDate date = dates.get(dateIndex); while (eventCursor < events.size() && !events.get(eventCursor).getTradeDate().isAfter(date)) {
                 QuantUniverseMember event = events.get(eventCursor++); if (event.isMember()) active.add(event.getInstrumentCode()); else active.remove(event.getInstrumentCode());
             }
-            Map<String, QuantDailyBar> today = byDate.get(date); Map<String, QuantDailyBar> tomorrow = byDate.get(dates.get(dateIndex + 1));
+            Map<String, QuantDailyBar> today = byDate.get(date);
             for (QuantDailyBar bar : today.values()) histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
-            List<Double> factorValues = new ArrayList<Double>(), nextReturns = new ArrayList<Double>();
+            LocalDateTime calculationCutoff = dates.get(dateIndex + 1).atTime(9, 30);
+            Map<String, Double> factorByInstrument = new LinkedHashMap<String, Double>();
             for (Map.Entry<String, QuantDailyBar> entry : today.entrySet()) {
-                String code = entry.getKey(); if (!events.isEmpty() && !active.contains(code)) continue; QuantDailyBar next = tomorrow.get(code);
-                if (next == null || next.getOpen().signum() <= 0) continue;
+                String code = entry.getKey(); if (!events.isEmpty() && !active.contains(code)) continue;
                 QuantCapitalFlowDaily capitalFlow = capital.get(key(date, code));
                 FactorObservation observation = providerRegistry().calculate(factorCode,
                         new FactorCalculationContext(String.valueOf(datasetId), code, date,
-                                dates.get(dateIndex + 1).atTime(9, 30),
+                                calculationCutoff,
                                 histories.get(code), latestVisible(fundamentals, code, date), capitalFlow,
-                                visibleCapitalHistory(capital, code, date, dates.get(dateIndex + 1).atTime(9, 30))));
+                                visibleCapitalHistory(capital, code, date, calculationCutoff)));
                 double factor = observation.getProcessedValue() == null
                         ? Double.NaN : observation.getProcessedValue().doubleValue();
-                if (Double.isFinite(factor)) { factorValues.add(factor); nextReturns.add(next.getClose().doubleValue() / next.getOpen().doubleValue() - 1d); }
+                if (Double.isFinite(factor)) factorByInstrument.put(code, factor);
             }
-            candidateDays++;
-            if (factorValues.size() >= com.finscope.service.factorresearch.FactorValidationPolicy.MIN_CROSS_SECTION_SIZE) {
-                double ic = analysis.rankIc(factorValues, nextReturns);
-                if (Double.isFinite(ic)) {
-                    dailyIc.add(ic);
-                    dailySpread.add(analysis.quantileSpread(factorValues, nextReturns));
-                    dailyMonotonicity.add(analysis.quantileMonotonicity(factorValues, nextReturns));
-                    minCrossSection = Math.min(minCrossSection, factorValues.size());
+            for (int horizon : HORIZONS) {
+                if (dateIndex + horizon >= dates.size()) continue;
+                HorizonAccumulator accumulator = evidenceByHorizon.get(horizon);
+                accumulator.totalEligibleDays++;
+                Map<String, QuantDailyBar> nextDay = byDate.get(dates.get(dateIndex + 1));
+                Map<String, QuantDailyBar> horizonDay = byDate.get(dates.get(dateIndex + horizon));
+                List<Double> factorValues = new ArrayList<Double>();
+                List<Double> futureReturns = new ArrayList<Double>();
+                Map<String, Double> eligibleFactors = new LinkedHashMap<String, Double>();
+                for (Map.Entry<String, Double> factorEntry : factorByInstrument.entrySet()) {
+                    QuantDailyBar next = nextDay.get(factorEntry.getKey());
+                    QuantDailyBar future = horizonDay.get(factorEntry.getKey());
+                    if (next == null || future == null || next.getOpen() == null || future.getClose() == null
+                            || next.getOpen().signum() <= 0) continue;
+                    factorValues.add(factorEntry.getValue());
+                    futureReturns.add(future.getClose().doubleValue() / next.getOpen().doubleValue() - 1d);
+                    eligibleFactors.put(factorEntry.getKey(), factorEntry.getValue());
                 }
+                if (factorValues.size() < com.finscope.service.factorresearch.FactorValidationPolicy.MIN_CROSS_SECTION_SIZE) continue;
+                double ic = analysis.rankIc(factorValues, futureReturns);
+                if (!Double.isFinite(ic)) continue;
+                accumulator.dailyIc.add(ic);
+                accumulator.dailySpread.add(analysis.quantileSpread(factorValues, futureReturns));
+                accumulator.dailyMonotonicity.add(analysis.quantileMonotonicity(factorValues, futureReturns));
+                accumulator.minCrossSection = Math.min(accumulator.minCrossSection, factorValues.size());
+                if (horizon == 1) factorSnapshots.add(eligibleFactors);
             }
         }
-        FactorAnalysis result = analysis.summarize(factorCode, dailyIc); result.setDatasetId(datasetId);
+        HorizonAccumulator primary = evidenceByHorizon.get(1);
+        FactorAnalysis result = analysis.summarize(factorCode, primary.dailyIc); result.setDatasetId(datasetId);
         result.setDatasetFingerprint(dataset.getFingerprint());
-        result.setTotalEligibleDays(candidateDays);
-        result.setMinCrossSectionSize(minCrossSection == Integer.MAX_VALUE ? 0 : minCrossSection);
-        result.setCoverageRatio(candidateDays == 0 ? 0d : (double) dailyIc.size() / candidateDays);
-        analysis.attachQuantileEvidence(result, dailySpread, dailyMonotonicity);
+        result.setTotalEligibleDays(primary.totalEligibleDays);
+        result.setMinCrossSectionSize(primary.minCrossSection == Integer.MAX_VALUE ? 0 : primary.minCrossSection);
+        result.setCoverageRatio(primary.totalEligibleDays == 0 ? 0d : (double) primary.dailyIc.size() / primary.totalEligibleDays);
+        analysis.attachQuantileEvidence(result, primary.dailySpread, primary.dailyMonotonicity);
+        List<com.finscope.domain.quant.factor.FactorHorizonAnalysis> horizons = new ArrayList<com.finscope.domain.quant.factor.FactorHorizonAnalysis>();
+        for (Map.Entry<Integer, HorizonAccumulator> entry : evidenceByHorizon.entrySet()) {
+            HorizonAccumulator value = entry.getValue();
+            horizons.add(analysis.summarizeHorizon(entry.getKey(), value.dailyIc, value.totalEligibleDays,
+                    value.minCrossSection, value.dailySpread, value.dailyMonotonicity));
+        }
+        result.setHorizons(horizons);
+        result.setRobustness(analysis.robustness(primary.dailyIc, factorSnapshots));
         evidenceAssessment.assess(result, researchDirection(factorCode), dataset.getDataKind(), dataset.getDatasetLevel());
         return result;
+    }
+
+    private static final class HorizonAccumulator {
+        private final List<Double> dailyIc = new ArrayList<Double>();
+        private final List<Double> dailySpread = new ArrayList<Double>();
+        private final List<Double> dailyMonotonicity = new ArrayList<Double>();
+        private int totalEligibleDays;
+        private int minCrossSection = Integer.MAX_VALUE;
     }
 
     private FactorProviderRegistry providerRegistry() {

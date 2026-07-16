@@ -1,10 +1,13 @@
 package com.finscope.service.quant.factor;
 
 import com.finscope.domain.quant.factor.FactorAnalysis;
+import com.finscope.domain.quant.factor.FactorHorizonAnalysis;
+import com.finscope.domain.quant.factor.FactorRobustnessReport;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 public class FactorAnalysisService {
     public double rankIc(List<Double> factors, List<Double> returns) {
@@ -60,6 +63,67 @@ public class FactorAnalysisService {
         result.setFavorableQuantileSpreadRatio(finiteSpread.isEmpty() ? 0d
                 : (double) finiteSpread.stream().filter(value -> value > 0d).count() / finiteSpread.size());
         result.setQuantileMonotonicityMean(mean(finiteMonotonicity));
+    }
+
+    public FactorHorizonAnalysis summarizeHorizon(int horizonDays, List<Double> icValues,
+                                                   int totalEligibleDays, int minCrossSectionSize,
+                                                   List<Double> spreads, List<Double> monotonicities) {
+        FactorAnalysis summary = summarize("", icValues);
+        attachQuantileEvidence(summary, spreads, monotonicities);
+        FactorHorizonAnalysis result = new FactorHorizonAnalysis();
+        result.setHorizonDays(horizonDays);
+        result.setSampleCount(summary.getSampleCount());
+        result.setTotalEligibleDays(totalEligibleDays);
+        result.setMinCrossSectionSize(minCrossSectionSize == Integer.MAX_VALUE ? 0 : minCrossSectionSize);
+        result.setCoverageRatio(totalEligibleDays == 0 ? 0d : (double) summary.getSampleCount() / totalEligibleDays);
+        result.setIcMean(summary.getIcMean());
+        result.setIcStd(summary.getIcStd());
+        result.setIcIr(summary.getIcIr());
+        result.setPositiveIcRatio(summary.getPositiveIcRatio());
+        result.setNegativeIcRatio(summary.getNegativeIcRatio());
+        result.setIcMeanCiLower(summary.getIcMeanCiLower());
+        result.setIcMeanCiUpper(summary.getIcMeanCiUpper());
+        result.setDirectionAdjustedQuantileSpread(summary.getQuantileSpreadMean());
+        result.setDirectionAdjustedMonotonicity(summary.getQuantileMonotonicityMean());
+        result.setFavorableIcRatio(summary.getPositiveIcRatio());
+        result.setDirectionAdjustedIcMean(summary.getIcMean());
+        return result;
+    }
+
+    public FactorRobustnessReport robustness(List<Double> primaryIc,
+                                             List<Map<String, Double>> factorSnapshots) {
+        List<Double> finiteIc = finite(primaryIc);
+        int split = finiteIc.size() < 2 ? finiteIc.size() : Math.max(1, (int) Math.floor(finiteIc.size() * 0.70d));
+        List<Double> inSample = new ArrayList<Double>(finiteIc.subList(0, split));
+        List<Double> outOfSample = new ArrayList<Double>(finiteIc.subList(split, finiteIc.size()));
+        FactorRobustnessReport result = new FactorRobustnessReport();
+        result.setInSampleCount(inSample.size());
+        result.setOutOfSampleCount(outOfSample.size());
+        result.setInSampleIcMean(mean(inSample));
+        result.setOutOfSampleIcMean(mean(outOfSample));
+        result.setRankTurnoverProxy(rankTurnoverProxy(factorSnapshots));
+        return result;
+    }
+
+    private double rankTurnoverProxy(List<Map<String, Double>> snapshots) {
+        if (snapshots == null || snapshots.size() < 2) return 0d;
+        List<Double> changes = new ArrayList<Double>();
+        for (int i = 1; i < snapshots.size(); i++) {
+            Map<String, Double> previous = snapshots.get(i - 1);
+            Map<String, Double> current = snapshots.get(i);
+            List<String> common = new ArrayList<String>();
+            for (String code : previous.keySet()) if (current.containsKey(code)) common.add(code);
+            if (common.size() < 2) continue;
+            List<Double> before = new ArrayList<Double>();
+            List<Double> after = new ArrayList<Double>();
+            for (String code : common) {
+                before.add(previous.get(code));
+                after.add(current.get(code));
+            }
+            double correlation = rankIc(before, after);
+            if (Double.isFinite(correlation)) changes.add(Math.max(0d, Math.min(1d, (1d - correlation) / 2d)));
+        }
+        return mean(changes);
     }
 
     private List<Double> ranks(List<Double> values) {

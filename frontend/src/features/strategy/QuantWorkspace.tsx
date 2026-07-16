@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FactorGuide } from './FactorGuide';
+import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
 type Pane = 'laboratory' | 'factors' | 'experiments';
@@ -173,6 +174,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
       <aside className="quant-dataset-panel quant-panel"><div className="quant-panel-title"><span>01 / DATASET</span><h4>研究样本</h4></div>
         {datasets.length === 0 ? <div className="quant-empty"><strong>先建立一份学习样本</strong><p>30 个虚拟标的、320 个交易日，适合验证完整流程，不代表真实市场。</p></div> : <div className="quant-dataset-list">{datasets.map(item => <button type="button" className={selectedDatasetId === item.id ? 'active' : ''} onClick={() => setSelectedDatasetId(item.id)} key={item.id}><span><i data-status={item.status}/>{item.name}</span><small>{item.dataKind === 'LEARNING_SAMPLE' ? '虚拟学习数据' : '真实数据'} · {statusText[item.status] ?? item.status}</small></button>)}</div>}
         <button type="button" className="quant-action secondary" onClick={createLearningDataset} disabled={busy === 'dataset'}>{busy === 'dataset' ? '正在生成 9,600 条行情…' : '＋ 新建学习样本'}</button>
+        <ResearchDatasetWizard dataset={selectedDataset} suggestedIndex={datasets.filter(item => item.dataKind === 'REAL').length + 1}
+          addToast={addToast} onDatasetChanged={async value => { await load(); setSelectedDatasetId(value.id); }} />
         {selectedDataset && <dl className="quant-dataset-meta"><div><dt>区间</dt><dd>{selectedDataset.startDate ?? '—'} → {selectedDataset.endDate ?? '—'}</dd></div><div><dt>指纹</dt><dd>{selectedDataset.fingerprint?.slice(0, 12) ?? '等待生成'}</dd></div><div><dt>性质</dt><dd>{selectedDataset.dataKind === 'LEARNING_SAMPLE' ? '虚拟 / 不可用于实盘结论' : '真实数据'}</dd></div></dl>}
       </aside>
       <main className="quant-agent-panel quant-panel"><div className="quant-panel-title"><span>02 / AGENT DRAFT</span><h4>用自然语言描述假设</h4><p>Agent 只能从登记因子中组装受限策略 DSL。</p></div>

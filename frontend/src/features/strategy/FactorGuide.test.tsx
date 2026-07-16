@@ -152,3 +152,36 @@ test('survives an empty budget-exhausted finding and explains the stop', async (
   await user.click(await screen.findByRole('button', { name: '批准并运行' }));
   expect(await screen.findByText(/预算耗尽.*TOOL_BUDGET_EXHAUSTED/)).toBeInTheDocument();
 });
+
+test('explains multi-horizon, out-of-sample and cost evidence progressively', async () => {
+  const user = userEvent.setup();
+  render(<FactorGuide definitions={[definition()]} selectedCode="EP" onSelect={vi.fn()}
+    selectedDataset={{ id: 2, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }}
+    availableFactors={new Set(['EP'])} onAnalyze={vi.fn()} analysis={{
+      datasetId: 2, datasetFingerprint: 'fingerprint', factorCode: 'EP', sampleCount: 80,
+      icMean: 0.05, icStd: 0.1, icIr: 0.5, positiveIcRatio: 0.65,
+      directionAdjustedIcMean: 0.05, favorableIcRatio: 0.65, sampleEvidence: 'DIRECTIONALLY_ALIGNED',
+      conclusion: 'INCONCLUSIVE', validationEligible: false, evaluationPolicyVersion: 'cross-sectional-evidence-v2',
+      horizons: [1, 3, 5, 10, 20].map(horizonDays => ({
+        horizonDays, sampleCount: 80 - horizonDays, totalEligibleDays: 82, minCrossSectionSize: 20,
+        coverageRatio: 0.9, icMean: 0.05, icStd: 0.1, icIr: 0.5, favorableIcRatio: 0.65,
+        directionAdjustedIcMean: horizonDays === 20 ? -0.01 : 0.05,
+        directionAdjustedCiLower: -0.01, directionAdjustedCiUpper: 0.11,
+        directionAdjustedQuantileSpread: 0.003, directionAdjustedMonotonicity: 0.4
+      })),
+      robustness: {
+        protocolVersion: 'cross-sectional-robustness-v1', inSampleCount: 56, outOfSampleCount: 24,
+        inSampleIcMean: 0.06, outOfSampleIcMean: -0.01, directionAdjustedInSampleIcMean: 0.06,
+        directionAdjustedOutOfSampleIcMean: -0.01, outOfSampleDirectionAligned: false,
+        rankTurnoverProxy: 0.42, netQuantileSpreadAt10Bps: 0.0026,
+        netQuantileSpreadAt30Bps: 0.0017, costModel: 'rank-turnover-proxy-v1'
+      }
+    }} />);
+
+  expect(screen.getByText(/样本外方向冲突/)).toBeInTheDocument();
+  expect(screen.getByText(/换手代理 42.0%/)).toBeInTheDocument();
+  expect(screen.getByText('多持有期证据')).toBeInTheDocument();
+  expect(screen.queryByText('20 日')).not.toBeVisible();
+  await user.click(screen.getByText('多持有期证据'));
+  expect(screen.getByText('20 日')).toBeInTheDocument();
+});

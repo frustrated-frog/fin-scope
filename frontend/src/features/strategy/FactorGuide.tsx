@@ -158,6 +158,10 @@ export function FactorGuide({
             <strong>{explanation.headline}</strong>
             <p>{explanation.detail}</p>
           </div>
+          {explanation.robustnessHeadline && <div className="quant-robustness-summary" data-aligned={analysis.robustness?.outOfSampleDirectionAligned}>
+            <strong>{explanation.robustnessHeadline}</strong>
+            <p>{explanation.robustnessDetail}</p>
+          </div>}
           <dl>
             <div><dt>方向对齐 IC</dt><dd>{explanation.directionAdjustedIcMean.toFixed(3)}</dd></div>
             <div><dt>方向一致日占比</dt><dd>{percent(explanation.favorableIcRatio)}</dd></div>
@@ -173,6 +177,18 @@ export function FactorGuide({
           {analysis.evaluationPolicyVersion && <p className="quant-factor-conclusion">评价门禁：{analysis.evaluationPolicyVersion} · {analysis.validationEligible ? '具备结论资格' : '未通过准入'}</p>}
           {analysis.conclusion && <p className="quant-factor-conclusion">研究结论：{analysis.conclusion === 'INCONCLUSIVE' ? '证据不足' : analysis.conclusion === 'SUPPORTED' ? '支持假设' : '反驳假设'}。生命周期不会由本次诊断自动升级。</p>}
           {analysis.caveats?.length ? <ul className="quant-factor-caveats">{analysis.caveats.map(item => <li key={item}>{item}</li>)}</ul> : null}
+          {analysis.horizons?.length ? <details className="quant-horizon-evidence">
+            <summary>多持有期证据</summary>
+            <div className="quant-table-wrap"><table>
+              <caption>预注册持有期；收益口径为下一交易日开盘至目标日收盘</caption>
+              <thead><tr><th>持有期</th><th>方向对齐 IC</th><th>95% HAC 区间</th><th>首尾分位差</th><th>有效日</th></tr></thead>
+              <tbody>{analysis.horizons.map(item => <tr key={item.horizonDays}>
+                <td>{item.horizonDays} 日</td><td>{item.directionAdjustedIcMean.toFixed(3)}</td>
+                <td>[{item.directionAdjustedCiLower.toFixed(3)}, {item.directionAdjustedCiUpper.toFixed(3)}]</td>
+                <td>{percent(item.directionAdjustedQuantileSpread)}</td><td>{item.sampleCount}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </details> : null}
           <small>数据集指纹 {analysis.datasetFingerprint.slice(0, 16)}</small>
         </div>}
       </section>

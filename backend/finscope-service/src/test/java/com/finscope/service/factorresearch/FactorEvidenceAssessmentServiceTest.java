@@ -1,6 +1,7 @@
 package com.finscope.service.factorresearch;
 
 import com.finscope.domain.quant.factor.FactorAnalysis;
+import com.finscope.domain.quant.factor.FactorRobustnessReport;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,6 +55,26 @@ class FactorEvidenceAssessmentServiceTest {
         service.assess(conflictingPortfolio, "POSITIVE_HYPOTHESIS", "REAL");
         assertEquals("OPPOSED", conflictingPortfolio.getSampleEvidence());
         assertEquals("INCONCLUSIVE", conflictingPortfolio.getConclusion());
+    }
+
+    @Test
+    void downgradesAnOtherwisePositiveResultWhenOutOfSampleDirectionConflicts() {
+        FactorAnalysis analysis = analysis(0.06, 0.10, 0.70, 100);
+        FactorRobustnessReport robustness = new FactorRobustnessReport();
+        robustness.setInSampleCount(70);
+        robustness.setOutOfSampleCount(30);
+        robustness.setInSampleIcMean(0.08);
+        robustness.setOutOfSampleIcMean(-0.02);
+        robustness.setRankTurnoverProxy(0.4);
+        analysis.setRobustness(robustness);
+
+        service.assess(analysis, "POSITIVE_HYPOTHESIS", "REAL", "RESEARCH");
+
+        assertEquals("INCONCLUSIVE", analysis.getConclusion());
+        assertTrue(analysis.getBlockingReasons().contains("OUT_OF_SAMPLE_DIRECTION_CONFLICT"));
+        assertEquals(-0.02, analysis.getRobustness().getDirectionAdjustedOutOfSampleIcMean(), 0.000001);
+        assertTrue(analysis.getRobustness().getNetQuantileSpreadAt30Bps()
+                < analysis.getDirectionAdjustedQuantileSpread());
     }
 
     private FactorAnalysis analysis(double mean, double std, double positiveRatio, int samples) {

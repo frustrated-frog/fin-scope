@@ -1,6 +1,8 @@
 package com.finscope.service.factorresearch;
 
 import com.finscope.domain.quant.factor.FactorAnalysis;
+import com.finscope.domain.quant.factor.FactorHorizonAnalysis;
+import com.finscope.domain.quant.factor.FactorRobustnessReport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +30,7 @@ public class FactorEvidenceAssessmentService {
         analysis.setDirectionAdjustedCiUpper(alignedUpper);
         analysis.setDirectionAdjustedQuantileSpread(analysis.getQuantileSpreadMean() * (negative ? -1d : 1d));
         analysis.setDirectionAdjustedMonotonicity(analysis.getQuantileMonotonicityMean() * (negative ? -1d : 1d));
+        alignHorizonEvidence(analysis, negative);
 
         if (analysis.getSampleCount() < FactorValidationPolicy.MIN_VALID_IC_DAYS) {
             analysis.setSampleEvidence("INSUFFICIENT_SAMPLE");
@@ -64,7 +67,7 @@ public class FactorEvidenceAssessmentService {
             caveats.add("有效日期覆盖率低于 80%，结果可能集中在少数可计算日期");
             blocking.add("VALID_DATE_COVERAGE_BELOW_80_PERCENT");
         }
-        caveats.add("尚未完成样本外、市场阶段、成本压力和多重检验");
+        assessRobustness(analysis, negative, caveats, blocking);
         caveats.add("当前 ICIR 未年化，sampleCount 是有效交易日数而不是股票数");
         analysis.setCaveats(caveats);
         boolean eligible = blocking.isEmpty();
@@ -81,5 +84,49 @@ public class FactorEvidenceAssessmentService {
         } else {
             analysis.setConclusion("INCONCLUSIVE");
         }
+    }
+
+    private void alignHorizonEvidence(FactorAnalysis analysis, boolean negative) {
+        for (FactorHorizonAnalysis horizon : analysis.getHorizons()) {
+            double rawLower = horizon.getIcMeanCiLower();
+            double rawUpper = horizon.getIcMeanCiUpper();
+            horizon.setDirectionAdjustedIcMean(horizon.getIcMean() * (negative ? -1d : 1d));
+            horizon.setFavorableIcRatio(negative ? horizon.getNegativeIcRatio() : horizon.getPositiveIcRatio());
+            horizon.setDirectionAdjustedCiLower(negative ? -rawUpper : rawLower);
+            horizon.setDirectionAdjustedCiUpper(negative ? -rawLower : rawUpper);
+            horizon.setDirectionAdjustedQuantileSpread(
+                    horizon.getDirectionAdjustedQuantileSpread() * (negative ? -1d : 1d));
+            horizon.setDirectionAdjustedMonotonicity(
+                    horizon.getDirectionAdjustedMonotonicity() * (negative ? -1d : 1d));
+        }
+    }
+
+    private void assessRobustness(FactorAnalysis analysis, boolean negative,
+                                  List<String> caveats, List<String> blocking) {
+        FactorRobustnessReport robustness = analysis.getRobustness();
+        if (robustness == null) {
+            caveats.add("尚未完成样本外、市场阶段、成本压力和多重检验");
+            return;
+        }
+        double direction = negative ? -1d : 1d;
+        robustness.setDirectionAdjustedInSampleIcMean(robustness.getInSampleIcMean() * direction);
+        robustness.setDirectionAdjustedOutOfSampleIcMean(robustness.getOutOfSampleIcMean() * direction);
+        robustness.setOutOfSampleDirectionAligned(robustness.getOutOfSampleCount() >= 20
+                && robustness.getDirectionAdjustedOutOfSampleIcMean() > 0d);
+        robustness.setNetQuantileSpreadAt10Bps(analysis.getDirectionAdjustedQuantileSpread()
+                - robustness.getRankTurnoverProxy() * 0.001d);
+        robustness.setNetQuantileSpreadAt30Bps(analysis.getDirectionAdjustedQuantileSpread()
+                - robustness.getRankTurnoverProxy() * 0.003d);
+        if (robustness.getOutOfSampleCount() < 20) {
+            caveats.add("顺序样本外有效交易日少于 20 个，暂不能判断外推稳定性");
+            blocking.add("OUT_OF_SAMPLE_DAYS_BELOW_20");
+        } else if (!robustness.isOutOfSampleDirectionAligned()) {
+            caveats.add("后 30% 顺序样本的 IC 方向与预设假设冲突");
+            blocking.add("OUT_OF_SAMPLE_DIRECTION_CONFLICT");
+        } else {
+            caveats.add("后 30% 顺序样本方向一致，但仍需 walk-forward 和市场阶段复核");
+        }
+        caveats.add("成本压力使用因子排名变化估算换手，不代表真实成交与容量");
+        caveats.add("尚未完成市场阶段、参数扰动、bootstrap 与多重检验");
     }
 }

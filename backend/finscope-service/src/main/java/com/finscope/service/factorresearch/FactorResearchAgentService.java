@@ -2,6 +2,8 @@ package com.finscope.service.factorresearch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.agent.AgentRunRepository;
@@ -70,14 +72,19 @@ public class FactorResearchAgentService {
         run.setQuestion(question == null || question.trim().isEmpty() ? "这项因子在当前数据集中的证据是否支持预设研究方向？" : question.trim());
         run.setStatus("AWAITING_APPROVAL");
         List<String> plan = new ArrayList<String>();
+        List<FactorResearchAgentRun> history = completedHistory(factor);
         if (draftId != null) plan.add("检查资金行为研究草稿的来源边界");
         plan.add("检查数据集质量、指纹与因子可用性"); plan.add("核对因子版本、公式和解释边界");
-        plan.add("运行确定性横截面诊断"); plan.add("强制审查反证、样本限制和下一步");
+        plan.add("运行多持有期、样本外与成本压力诊断");
+        if (!history.isEmpty()) plan.add("对比同因子历史研究记忆，只引用证据哈希和结论差异");
+        plan.add("强制审查反证、样本限制和下一步");
         run.setPlan(plan);
-        run.setAllowedTools(draftId == null
-                ? Arrays.asList("inspect_dataset", "inspect_factor_definition", "run_factor_diagnostics")
-                : Arrays.asList("inspect_research_draft", "inspect_dataset", "inspect_factor_definition", "run_factor_diagnostics"));
-        run.setMaxToolCalls(4); run.setMaxLlmCalls(0); run.setMaxRunSeconds(60); run.setCreatedAt(LocalDateTime.now(clock));
+        List<String> allowed = new ArrayList<String>();
+        if (draftId != null) allowed.add("inspect_research_draft");
+        allowed.addAll(Arrays.asList("inspect_dataset", "inspect_factor_definition", "run_factor_diagnostics"));
+        if (!history.isEmpty()) allowed.add("compare_prior_research_runs");
+        run.setAllowedTools(allowed);
+        run.setMaxToolCalls(history.isEmpty() ? 4 : 5); run.setMaxLlmCalls(0); run.setMaxRunSeconds(60); run.setCreatedAt(LocalDateTime.now(clock));
         return runs.save(run);
     }
 
@@ -129,10 +136,19 @@ public class FactorResearchAgentService {
             evidence.set("diagnostics", json.valueToTree(analysis));
             trace(run, "run_factor_diagnostics", "只读横截面诊断", "确定性评价门禁已完成：" + analysis.getConclusion(), calls);
 
+            if (run.getAllowedTools().contains("compare_prior_research_runs")) {
+                enforceBudget(run, calls + 1, startedNanos); calls++;
+                ArrayNode memory = researchMemory(run);
+                evidence.set("researchMemory", memory);
+                enforceTimeBudget(run, startedNanos);
+                trace(run, "compare_prior_research_runs", run.getFactor().toString(),
+                        "已读取 " + memory.size() + " 条历史证据引用，未复制历史数值为当前结论", calls);
+            }
+
             ObjectNode finding = json.createObjectNode(); finding.put("verdict", analysis.getConclusion());
             finding.put("summary", summary(analysis)); finding.set("counterEvidence", json.valueToTree(analysis.getCaveats()));
             finding.set("blockingReasons", json.valueToTree(analysis.getBlockingReasons()));
-            finding.set("nextSteps", json.valueToTree(Arrays.asList("在独立样本和不同市场阶段复核", "执行成本与容量压力测试", "通过人工评审后再考虑生命周期升级")));
+            finding.set("nextSteps", json.valueToTree(nextSteps(analysis)));
             String evidenceJson = json.writeValueAsString(evidence); String findingJson = json.writeValueAsString(finding);
             trace(run, "review_counter_evidence", "确定性证据包", "反证和停止条件已强制写入", calls);
             runs.complete(id, "COMPLETED", calls, evidenceJson, sha256(evidenceJson), findingJson,
@@ -153,6 +169,31 @@ public class FactorResearchAgentService {
     }
 
     private FactorResearchAgentRun require(Long id) { return runs.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "研究 Agent 运行不存在")); }
+    private List<FactorResearchAgentRun> completedHistory(FactorIdentity factor) {
+        List<FactorResearchAgentRun> values = runs.findCompletedByFactor(factor, 5);
+        return values == null ? java.util.Collections.<FactorResearchAgentRun>emptyList() : values;
+    }
+
+    private ArrayNode researchMemory(FactorResearchAgentRun current) {
+        ArrayNode result = json.createArrayNode();
+        for (FactorResearchAgentRun previous : completedHistory(current.getFactor())) {
+            if (java.util.Objects.equals(previous.getId(), current.getId())) continue;
+            ObjectNode item = json.createObjectNode();
+            item.put("runId", previous.getId());
+            item.put("datasetFingerprint", previous.getDatasetFingerprint());
+            item.put("evidenceHash", previous.getEvidenceHash());
+            try {
+                JsonNode finding = json.readTree(previous.getFindingJson());
+                item.put("verdict", finding.path("verdict").asText("INCONCLUSIVE"));
+                item.put("summary", finding.path("summary").asText("历史运行未提供摘要"));
+            } catch (Exception ignored) {
+                item.put("verdict", "INCONCLUSIVE");
+                item.put("summary", "历史运行结果无法解析，只保留证据引用");
+            }
+            result.add(item);
+        }
+        return result;
+    }
     private void enforceBudget(FactorResearchAgentRun run, int requestedCalls, long startedNanos) {
         enforceTimeBudget(run, startedNanos);
         if (requestedCalls > run.getMaxToolCalls()) throw new BudgetExceededException("TOOL_BUDGET_EXHAUSTED");
@@ -164,6 +205,23 @@ public class FactorResearchAgentService {
         }
     }
     private String summary(FactorAnalysis a) { return "结论为" + a.getConclusion() + "；有效日度 IC " + a.getSampleCount() + " 个，方向对齐 IC " + String.format("%.3f", a.getDirectionAdjustedIcMean()) + "。"; }
+    private List<String> nextSteps(FactorAnalysis analysis) {
+        List<String> result = new ArrayList<String>();
+        if (analysis.getRobustness() == null || analysis.getRobustness().getOutOfSampleCount() < 20) {
+            result.add("扩展冻结历史，使顺序样本外至少覆盖 20 个有效交易日");
+        } else if (!analysis.getRobustness().isOutOfSampleDirectionAligned()) {
+            result.add("定位样本外方向冲突对应的市场阶段，并执行 walk-forward 复核");
+        } else {
+            result.add("按市场阶段执行 walk-forward 与参数扰动复核");
+        }
+        if (analysis.getRobustness() == null || analysis.getRobustness().getNetQuantileSpreadAt30Bps() <= 0d) {
+            result.add("降低换手或调整调仓频率，并在更保守成本假设下复算");
+        } else {
+            result.add("补充真实可成交量与容量约束；当前成本仅为排名换手代理");
+        }
+        result.add("通过人工评审后再考虑生命周期升级");
+        return result;
+    }
     private String safe(String value) { return value == null ? "UNKNOWN_FAILURE" : value.substring(0, Math.min(300, value.length())); }
     private String sha256(String value) throws Exception { byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); StringBuilder out = new StringBuilder(); for (byte b : bytes) out.append(String.format("%02x", b)); return out.toString(); }
 

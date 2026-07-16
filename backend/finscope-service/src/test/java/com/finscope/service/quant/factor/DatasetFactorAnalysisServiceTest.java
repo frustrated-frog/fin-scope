@@ -22,6 +22,8 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -78,6 +80,44 @@ class DatasetFactorAnalysisServiceTest {
                 new LegacyQuantFactorProvider(), new CapitalFlowFactorProvider())));
 
         assertEquals(1, service.analyze(1L, "MAIN_FLOW_SHARE").getSampleCount());
+    }
+
+    @Test
+    void returnsMultiHorizonAndOutOfSampleRobustnessEvidence() {
+        QuantDatasetService datasets = mock(QuantDatasetService.class);
+        QuantMarketDataRepository market = mock(QuantMarketDataRepository.class);
+        QuantDataset dataset = new QuantDataset();
+        dataset.setId(1L); dataset.setStatus("READY"); dataset.setFingerprint("multi-horizon");
+        dataset.setDataKind("REAL"); dataset.setDatasetLevel("RESEARCH");
+        when(datasets.get(1L)).thenReturn(dataset);
+        when(datasets.availableFactorCodes(1L)).thenReturn(Collections.singleton("MOMENTUM_20D"));
+        List<QuantDailyBar> bars = new ArrayList<QuantDailyBar>();
+        LocalDate start = LocalDate.of(2024, 1, 1);
+        for (int day = 0; day < 90; day++) {
+            for (int instrument = 1; instrument <= 12; instrument++) {
+                double close = 100d + day * instrument * 0.2d + Math.sin(day * 0.3d + instrument);
+                bars.add(bar(String.format("600%03d.SH", instrument), start.plusDays(day),
+                        String.valueOf(close * 0.999d), String.valueOf(close)));
+            }
+        }
+        when(market.findBars(1L)).thenReturn(bars);
+        when(market.findFundamentals(1L)).thenReturn(Collections.emptyList());
+        when(market.findUniverseMembers(1L)).thenReturn(Collections.emptyList());
+        DatasetFactorAnalysisService service = new DatasetFactorAnalysisService();
+        ReflectionTestUtils.setField(service, "datasets", datasets);
+        ReflectionTestUtils.setField(service, "marketData", market);
+        ReflectionTestUtils.setField(service, "registry", new FactorRegistry());
+
+        com.finscope.domain.quant.factor.FactorAnalysis result = service.analyze(1L, "MOMENTUM_20D");
+
+        assertEquals(Arrays.asList(1, 3, 5, 10, 20), result.getHorizons().stream()
+                .map(value -> value.getHorizonDays()).collect(java.util.stream.Collectors.toList()));
+        assertTrue(result.getHorizons().get(0).getSampleCount() > result.getHorizons().get(4).getSampleCount());
+        assertNotNull(result.getRobustness());
+        assertTrue(result.getRobustness().getInSampleCount() > 0);
+        assertTrue(result.getRobustness().getOutOfSampleCount() > 0);
+        assertTrue(result.getRobustness().getRankTurnoverProxy() >= 0d);
+        assertTrue(result.getRobustness().getRankTurnoverProxy() <= 1d);
     }
 
     private QuantDailyBar bar(String code, LocalDate date, String open, String close) {

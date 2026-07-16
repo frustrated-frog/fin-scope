@@ -39,6 +39,8 @@ export interface FactorAnalysisExplanation {
   directionAdjustedIcMean: number;
   favorableIcRatio: number;
   evidenceLevel: 'INSUFFICIENT' | 'UNSTABLE' | 'DIRECTIONALLY_ALIGNED';
+  robustnessHeadline?: string;
+  robustnessDetail?: string;
 }
 
 export function explainFactorAnalysis(
@@ -53,6 +55,15 @@ export function explainFactorAnalysis(
     : analysis.positiveIcRatio);
   const directionText = direction === 'NEGATIVE_HYPOTHESIS' ? '低值方向' : '高值方向';
   const commonBoundary = `本结果评价同日股票池的横截面排序，不是个股涨跌预测。${datasetEvidenceNotice(dataKind)}`;
+  const robustness = analysis.robustness;
+  const robustnessHeadline = robustness
+    ? robustness.outOfSampleCount < 20 ? `样本外证据不足：只有 ${robustness.outOfSampleCount} 个交易日`
+      : robustness.outOfSampleDirectionAligned ? '样本外方向一致，但仍不是最终验证'
+        : '样本外方向冲突：样本内关系没有稳定外推'
+    : undefined;
+  const robustnessDetail = robustness
+    ? `前 70% / 后 30% 的方向对齐 IC 为 ${robustness.directionAdjustedInSampleIcMean.toFixed(3)} / ${robustness.directionAdjustedOutOfSampleIcMean.toFixed(3)}；换手代理 ${(robustness.rankTurnoverProxy * 100).toFixed(1)}%，30 bps 压力后的首尾分位差为 ${(robustness.netQuantileSpreadAt30Bps * 100).toFixed(2)}%。`
+    : undefined;
 
   if (analysis.sampleEvidence === 'INSUFFICIENT_SAMPLE' || analysis.sampleCount < 60) {
     return {
@@ -60,7 +71,7 @@ export function explainFactorAnalysis(
       detail: `只有 ${analysis.sampleCount} 个有效日度 IC 样本，未达到版本化门禁要求，容易被少数交易日影响。${commonBoundary}`,
       directionAdjustedIcMean,
       favorableIcRatio,
-      evidenceLevel: 'INSUFFICIENT'
+      evidenceLevel: 'INSUFFICIENT', robustnessHeadline, robustnessDetail
     };
   }
   if (analysis.sampleEvidence === 'OPPOSED') {
@@ -69,7 +80,7 @@ export function explainFactorAnalysis(
       detail: `${directionText}在当前样本中被确定性门禁反驳，但仍需在独立样本复核。${commonBoundary}`,
       directionAdjustedIcMean,
       favorableIcRatio,
-      evidenceLevel: 'UNSTABLE'
+      evidenceLevel: 'UNSTABLE', robustnessHeadline, robustnessDetail
     };
   }
   if (analysis.sampleEvidence === 'UNSTABLE'
@@ -79,7 +90,7 @@ export function explainFactorAnalysis(
       detail: `${directionText}与未来收益排序的一致性不足，不能据此称因子有效。${commonBoundary}`,
       directionAdjustedIcMean,
       favorableIcRatio,
-      evidenceLevel: 'UNSTABLE'
+      evidenceLevel: 'UNSTABLE', robustnessHeadline, robustnessDetail
     };
   }
   return {
@@ -87,6 +98,6 @@ export function explainFactorAnalysis(
     detail: `${directionText}在这份数据中的平均排序关系与假设同向，但尚未完成样本外、成本和市场阶段检验。${commonBoundary}`,
     directionAdjustedIcMean,
     favorableIcRatio,
-    evidenceLevel: 'DIRECTIONALLY_ALIGNED'
+    evidenceLevel: 'DIRECTIONALLY_ALIGNED', robustnessHeadline, robustnessDetail
   };
 }

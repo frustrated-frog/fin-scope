@@ -1,6 +1,7 @@
 export interface QuantDataset {
   id: number; name: string; market: string; dataKind: 'REAL' | 'LEARNING_SAMPLE';
   startDate?: string; endDate?: string; status: string; fingerprint?: string; qualitySummary?: string;
+  datasetLevel?: 'RESEARCH' | 'LEARNING'; asOfTime?: string; fingerprintVersion?: string;
 }
 
 export interface QuantDatasetQuality {
@@ -31,6 +32,25 @@ export interface QuantFactorAnalysis {
   sampleEvidence?: 'INSUFFICIENT_SAMPLE' | 'DIRECTIONALLY_ALIGNED' | 'OPPOSED' | 'UNSTABLE';
   conclusion?: 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
   caveats?: string[];
+  horizons?: FactorHorizonAnalysis[];
+  robustness?: FactorRobustnessReport;
+}
+
+export interface FactorHorizonAnalysis {
+  horizonDays: number; sampleCount: number; totalEligibleDays: number; minCrossSectionSize: number;
+  coverageRatio: number; icMean: number; icStd: number; icIr: number;
+  positiveIcRatio?: number; negativeIcRatio?: number; icMeanCiLower?: number; icMeanCiUpper?: number;
+  favorableIcRatio: number;
+  directionAdjustedIcMean: number; directionAdjustedCiLower: number; directionAdjustedCiUpper: number;
+  directionAdjustedQuantileSpread: number; directionAdjustedMonotonicity: number;
+}
+
+export interface FactorRobustnessReport {
+  protocolVersion: string; inSampleCount: number; outOfSampleCount: number;
+  inSampleIcMean: number; outOfSampleIcMean: number;
+  directionAdjustedInSampleIcMean: number; directionAdjustedOutOfSampleIcMean: number;
+  outOfSampleDirectionAligned: boolean; rankTurnoverProxy: number;
+  netQuantileSpreadAt10Bps: number; netQuantileSpreadAt30Bps: number; costModel: string;
 }
 
 export type FactorLifecycleStatus =

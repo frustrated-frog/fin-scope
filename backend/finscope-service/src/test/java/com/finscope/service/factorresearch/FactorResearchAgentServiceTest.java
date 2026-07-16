@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,6 +46,21 @@ class FactorResearchAgentServiceTest {
         assertEquals(4, value.getMaxToolCalls()); assertEquals(0, value.getMaxLlmCalls());
         assertTrue(value.getAllowedTools().contains("run_factor_diagnostics"));
         verify(diagnostics, never()).analyze(anyLong(), anyString());
+    }
+
+    @Test
+    void addsAReadOnlyMemoryComparisonWhenPriorCompletedRunsExist() {
+        QuantDataset dataset = dataset(); when(datasets.get(7L)).thenReturn(dataset);
+        FactorResearchAgentRun previous = completedRun(3L, "old-dataset", "REFUTED");
+        when(runs.findCompletedByFactor(any(FactorIdentity.class), eq(5))).thenReturn(Collections.singletonList(previous));
+        when(runs.save(any())).thenAnswer(invocation -> { FactorResearchAgentRun value = invocation.getArgument(0); value.setId(9L); return value; });
+
+        FactorResearchAgentRun plan = service.createPlan(7L,
+                new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"), null, "方向可靠吗？");
+
+        assertEquals(5, plan.getMaxToolCalls());
+        assertTrue(plan.getAllowedTools().contains("compare_prior_research_runs"));
+        assertTrue(plan.getPlan().stream().anyMatch(value -> value.contains("历史研究记忆")));
     }
 
     @Test
@@ -84,6 +100,28 @@ class FactorResearchAgentServiceTest {
     }
 
     @Test
+    void approvedRunStoresOnlyMinimalPriorEvidenceReferencesInMemory() {
+        FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
+        run.setDatasetFingerprint("sha"); run.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
+        run.setMaxToolCalls(5); run.setMaxLlmCalls(0); run.setMaxRunSeconds(60); run.setStatus("RUNNING");
+        run.setAllowedTools(Arrays.asList("inspect_dataset", "inspect_factor_definition", "run_factor_diagnostics", "compare_prior_research_runs"));
+        when(runs.transition(eq(9L), anyString(), anyString(), any())).thenReturn(true);
+        when(runs.findById(9L)).thenReturn(Optional.of(run)); when(traces.findBySubject(anyString(), eq(9L))).thenReturn(Collections.emptyList());
+        when(runs.findCompletedByFactor(run.getFactor(), 5)).thenReturn(Arrays.asList(
+                completedRun(3L, "old-dataset", "REFUTED"), run));
+        when(datasets.get(7L)).thenReturn(dataset()); when(datasets.availableFactorCodes(7L)).thenReturn(Collections.singleton("MAIN_FLOW_SHARE"));
+        FactorAnalysis analysis = new FactorAnalysis(); analysis.setFactorCode("MAIN_FLOW_SHARE"); analysis.setSampleCount(80);
+        analysis.setDirectionAdjustedIcMean(0.04); analysis.setConclusion("SUPPORTED"); analysis.setValidationEligible(true);
+        analysis.setCaveats(Collections.singletonList("仍需复核")); when(diagnostics.analyze(7L, "MAIN_FLOW_SHARE")).thenReturn(analysis);
+
+        service.approveAndRun(9L);
+
+        verify(runs).complete(eq(9L), eq("COMPLETED"), eq(4), contains("researchMemory"),
+                argThat(value -> value.length() == 64), contains("SUPPORTED"), eq("POLICY_REVIEW_COMPLETE"), any());
+        verify(traces, times(5)).record(any(com.finscope.domain.agent.AgentRun.class));
+    }
+
+    @Test
     void stopsCleanlyWhenTheApprovedToolBudgetIsExhausted() {
         FactorResearchAgentRun run = new FactorResearchAgentRun(); run.setId(9L); run.setDatasetId(7L);
         run.setDatasetFingerprint("sha");
@@ -119,4 +157,13 @@ class FactorResearchAgentServiceTest {
     }
 
     private QuantDataset dataset() { QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY"); value.setDataKind("REAL"); value.setDatasetLevel("RESEARCH"); value.setFingerprint("sha"); return value; }
+
+    private FactorResearchAgentRun completedRun(Long id, String datasetFingerprint, String verdict) {
+        FactorResearchAgentRun value = new FactorResearchAgentRun();
+        value.setId(id); value.setDatasetId(id); value.setDatasetFingerprint(datasetFingerprint);
+        value.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0"));
+        value.setStatus("COMPLETED"); value.setEvidenceHash("evidence-" + id);
+        value.setFindingJson("{\"verdict\":\"" + verdict + "\",\"summary\":\"历史结论\"}");
+        return value;
+    }
 }

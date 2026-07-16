@@ -14,7 +14,8 @@ interface Props {
 
 const toolLabels: Record<string, string> = {
   inspect_research_draft: '读取研究草稿', inspect_dataset: '检查数据集',
-  inspect_factor_definition: '核对因子定义', run_factor_diagnostics: '运行因子诊断'
+  inspect_factor_definition: '核对因子定义', run_factor_diagnostics: '运行因子诊断',
+  compare_prior_research_runs: '对比同因子历史研究记忆'
 };
 
 function parseFinding(value?: string) {

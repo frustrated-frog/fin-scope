@@ -62,6 +62,8 @@ public class FactorAnalysis {
     private String sampleEvidence;
     private String conclusion;
     private List<String> caveats = Collections.emptyList();
+    private List<FactorHorizonAnalysis> horizons = Collections.emptyList();
+    private FactorRobustnessReport robustness;
 
     public String getFactorCode() { return factorCode; }
     public void setFactorCode(String factorCode) { this.factorCode = factorCode; }
@@ -135,4 +137,11 @@ public class FactorAnalysis {
         this.caveats = caveats == null ? Collections.emptyList()
                 : Collections.unmodifiableList(new ArrayList<String>(caveats));
     }
+    public List<FactorHorizonAnalysis> getHorizons() { return horizons; }
+    public void setHorizons(List<FactorHorizonAnalysis> values) {
+        this.horizons = values == null ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<FactorHorizonAnalysis>(values));
+    }
+    public FactorRobustnessReport getRobustness() { return robustness; }
+    public void setRobustness(FactorRobustnessReport value) { this.robustness = value; }
 }

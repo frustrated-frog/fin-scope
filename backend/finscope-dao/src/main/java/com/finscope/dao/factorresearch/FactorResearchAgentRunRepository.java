@@ -69,6 +69,13 @@ public class FactorResearchAgentRunRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public List<FactorResearchAgentRun> findCompletedByFactor(FactorIdentity factor, int limit) {
+        if (factor == null || limit <= 0) return Collections.emptyList();
+        return jdbc.query("SELECT * FROM factor_research_agent_run WHERE factor_namespace=? AND factor_code=? "
+                        + "AND factor_version=? AND status='COMPLETED' ORDER BY completed_at DESC,id DESC LIMIT ?",
+                mapper, factor.getNamespace(), factor.getCode(), factor.getVersion(), Math.min(limit, 20));
+    }
+
     public boolean transition(Long id, String expected, String next, LocalDateTime at) {
         if ("APPROVED".equals(next)) {
             return jdbc.update("UPDATE factor_research_agent_run SET status=?,approved_at=? WHERE id=? AND status=?",
