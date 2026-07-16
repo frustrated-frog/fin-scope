@@ -124,6 +124,14 @@ public class FinancialReportRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public Optional<FinancialReport> findReport(Long instrumentId, java.time.LocalDate periodEnd,
+                                                FinancialReportType type, String scope) {
+        List<FinancialReport> values = jdbc.query("SELECT * FROM financial_report WHERE " +
+                        "instrument_id=? AND period_end=? AND report_type=? AND scope=?",
+                reportMapper, instrumentId, TimeUtil.text(periodEnd), type.name(), scope);
+        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    }
+
     public List<FinancialLineItem> findLineItems(Long reportId, FinancialStatementType type) {
         return jdbc.query("SELECT * FROM financial_line_item WHERE report_id=? AND statement_type=? " +
                         "ORDER BY display_order,id",
