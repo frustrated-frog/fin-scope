@@ -17,18 +17,20 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} traceId=%X{traceId} - %msg%n"
 
 finscope:
-  data-root: ../data
-  cors-origin: http://localhost:*
+  data-root: ${FINSCOPE_DATA_ROOT:../data}
+  cors-origin: ${FINSCOPE_CORS_ORIGIN:http://localhost:*}
+  logging:
+    slow-request-ms: ${FINSCOPE_SLOW_REQUEST_MS:2000}
   llm:
-    enabled: true
-    base-url: "https://modelservice.jdcloud.com/v1"
-    api-key: "pk-1439bbdb-a7a8-47d3-a7f1-0d9e3bd103ea"
-    model: "GLM-5"
-    timeout-ms: 300000
-    temperature: 0.2
+    enabled: ${FINSCOPE_LLM_ENABLED:false}
+    base-url: ${FINSCOPE_LLM_BASE_URL:https://api.openai.com/v1}
+    api-key: ${FINSCOPE_LLM_API_KEY:}
+    model: ${FINSCOPE_LLM_MODEL:}
+    timeout-ms: ${FINSCOPE_LLM_TIMEOUT_MS:300000}
+    temperature: ${FINSCOPE_LLM_TEMPERATURE:0.2}
   search:
-    enabled: ${FINSCOPE_SEARCH_ENABLED:true}
-    provider: tavily
-    api-key: "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"
+    enabled: ${FINSCOPE_SEARCH_ENABLED:false}
+    provider: ${FINSCOPE_SEARCH_PROVIDER:tavily}
+    api-key: ${FINSCOPE_SEARCH_API_KEY:}
   python-market-data:
     base-url: ${FINSCOPE_PYTHON_MARKET_DATA_BASE_URL:http://127.0.0.1:8000}
