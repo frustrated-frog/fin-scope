@@ -12,10 +12,6 @@ import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Condition;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.context.annotation.Conditional;
-import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -37,12 +33,10 @@ import java.util.Set;
  * Java 只依赖稳定 JSON 契约，不感知 AkShare、腾讯或东方财富的具体字段。
  */
 @Component
-@Conditional(PythonMarketDataCapitalFlowProvider.EnabledCondition.class)
 public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider {
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.CAPITAL_FLOW_5M);
 
-    private final boolean enabled;
     private final String baseUrl;
     private final FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
@@ -50,13 +44,11 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
     @Autowired
     public PythonMarketDataCapitalFlowProvider(
             FinanceHttpClient http,
-            @Value("${finscope.python-market-data.enabled:false}") boolean enabled,
             @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl) {
-        this(enabled, baseUrl, http);
+        this(baseUrl, http);
     }
 
-    PythonMarketDataCapitalFlowProvider(boolean enabled, String baseUrl, FinanceHttpClient http) {
-        this.enabled = enabled;
+    PythonMarketDataCapitalFlowProvider(String baseUrl, FinanceHttpClient http) {
         this.baseUrl = trimTrailingSlash(baseUrl);
         this.http = http;
     }
@@ -98,7 +90,7 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
 
     @Override
     public boolean supports(Instrument instrument) {
-        return enabled && instrument != null && "STOCK".equals(instrument.getType())
+        return instrument != null && "STOCK".equals(instrument.getType())
                 && ("SH".equals(instrument.getMarket()) || "SZ".equals(instrument.getMarket())
                 || "BJ".equals(instrument.getMarket()));
     }
@@ -107,8 +99,8 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
     public CapitalFlowData fetch(Instrument instrument, LocalDate asOfDate) {
         if (!supports(instrument)) {
             throw new ProviderContractException(
-                    "PYTHON_PROVIDER_DISABLED",
-                    "Python market data provider is disabled or does not support this instrument",
+                    "PYTHON_PROVIDER_UNSUPPORTED",
+                    "Python market data provider does not support this instrument",
                     false);
         }
         URI uri = URI.create(baseUrl + "/v1/stocks/" + instrument.getMarket() + "/"
@@ -247,15 +239,4 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
-    /**
-     * finscope-rpc 不依赖 Spring Boot autoconfigure，因此直接使用 Spring
-     * Condition 保持“未启用就不注册 Bean”的语义。
-     */
-    public static class EnabledCondition implements Condition {
-        @Override
-        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return Boolean.parseBoolean(context.getEnvironment().getProperty(
-                    "finscope.python-market-data.enabled", "false"));
-        }
-    }
 }

@@ -31,5 +31,4 @@ finscope:
     provider: tavily
     api-key: "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"
   python-market-data:
-    enabled: ${FINSCOPE_PYTHON_MARKET_DATA_ENABLED:false}
     base-url: ${FINSCOPE_PYTHON_MARKET_DATA_BASE_URL:http://127.0.0.1:8000}

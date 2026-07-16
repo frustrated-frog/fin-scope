@@ -51,16 +51,15 @@ GET /v1/stocks/SH/600519/overview
 
 ## Java 接入
 
-Java 中的 `PythonMarketDataCapitalFlowProvider` 已注册到现有 `MarketDataGateway`，默认关闭。启用：
+Java 中的 `PythonMarketDataCapitalFlowProvider` 会固定注册到现有 `MarketDataGateway`，不提供关闭开关。启动 Java 前应先启动 Python 服务：
 
 ```bash
-export FINSCOPE_PYTHON_MARKET_DATA_ENABLED=true
 export FINSCOPE_PYTHON_MARKET_DATA_BASE_URL=http://127.0.0.1:8000
 cd backend
 mvn -pl finscope-web -am spring-boot:run
 ```
 
-启用后，Python Provider 的优先级高于 Java 东方财富直连；Python 服务停机、超时或返回 503 时，网关继续尝试现有 Java Provider。Java 请求资金行为时带 `require_minute=true`，避免把只有日级数据的来源冒充 5 分钟资金流。
+Python Provider 的优先级固定高于 Java 东方财富直连；Python 服务停机、超时或返回 503 时，网关继续尝试现有 Java Provider。Java 请求资金行为时带 `require_minute=true`，避免把只有日级数据的来源冒充 5 分钟资金流。`base-url` 仍可配置，以适配 Docker 服务名或云端内网地址。
 
 ## Docker / 云部署
 

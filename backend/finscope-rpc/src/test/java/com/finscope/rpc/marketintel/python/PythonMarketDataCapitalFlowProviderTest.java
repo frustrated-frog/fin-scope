@@ -14,7 +14,6 @@ import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PythonMarketDataCapitalFlowProviderTest {
@@ -26,7 +25,7 @@ class PythonMarketDataCapitalFlowProviderTest {
             return response(freshPayload());
         };
         PythonMarketDataCapitalFlowProvider provider =
-                new PythonMarketDataCapitalFlowProvider(true, "http://127.0.0.1:8000/", http);
+                new PythonMarketDataCapitalFlowProvider("http://127.0.0.1:8000/", http);
 
         CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
 
@@ -47,7 +46,7 @@ class PythonMarketDataCapitalFlowProviderTest {
         FinanceHttpClient http = (provider, uri, headers) -> response(
                 freshPayload().replace("FRESH_PRIMARY", "STALE_FALLBACK"));
         PythonMarketDataCapitalFlowProvider provider =
-                new PythonMarketDataCapitalFlowProvider(true, "http://python-market-data:8000", http);
+                new PythonMarketDataCapitalFlowProvider("http://python-market-data:8000", http);
 
         CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
 
@@ -56,13 +55,12 @@ class PythonMarketDataCapitalFlowProviderTest {
     }
 
     @Test
-    void disabledProviderDoesNotSupportStocks() {
+    void providerAlwaysSupportsAshareStocksWithoutEnableSwitch() {
         PythonMarketDataCapitalFlowProvider provider = new PythonMarketDataCapitalFlowProvider(
-                false,
                 "http://127.0.0.1:8000",
                 (providerCode, uri, headers) -> response(freshPayload()));
 
-        assertFalse(provider.supports(stock()));
+        assertTrue(provider.supports(stock()));
     }
 
     private static Instrument stock() {
@@ -106,4 +104,3 @@ class PythonMarketDataCapitalFlowProviderTest {
                 + "}}";
     }
 }
-

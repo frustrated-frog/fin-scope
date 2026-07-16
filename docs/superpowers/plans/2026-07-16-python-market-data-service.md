@@ -124,7 +124,7 @@ Expected: PASS。
 
 - [x] **Step 1: 编写 Java 解析失败测试**
 
-固定 Python JSON 响应，验证分钟/日级资金流、行情上下文、来源和旧快照质量映射；验证禁用配置时 Provider 不支持标的。
+固定 Python JSON 响应，验证分钟/日级资金流、行情上下文、来源和旧快照质量映射；验证 Provider 无需启用开关即可支持 A 股标的。
 
 - [x] **Step 2: 运行测试确认 RED**
 
@@ -133,7 +133,7 @@ Expected: FAIL，因为 Java Provider 尚不存在。
 
 - [x] **Step 3: 实现 Java Provider**
 
-通过 `FINSCOPE_PYTHON_MARKET_DATA_ENABLED` 和 `FINSCOPE_PYTHON_MARKET_DATA_BASE_URL` 配置；Python Provider 优先级高于东财直连，Python 服务不可用时现有 Java Provider 自动接管。
+Python Provider 固定注册，仅通过 `FINSCOPE_PYTHON_MARKET_DATA_BASE_URL` 适配部署地址；其优先级高于东财直连，Python 服务不可用时现有 Java Provider 自动接管。
 
 - [x] **Step 4: 运行测试确认 GREEN**
 

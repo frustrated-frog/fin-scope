@@ -41,7 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DirtiesContext(classMode= DirtiesContext.ClassMode.AFTER_CLASS)
 class MarketIntelApiIntegrationTest {
     @Resource MockMvc mvc;@Resource JdbcTemplate jdbc;
-    @MockBean CapitalFlowProvider provider;@MockBean LlmChatClient llm;
+    @MockBean(name="pythonMarketDataCapitalFlowProvider") CapitalFlowProvider provider;
+    @MockBean(name="eastmoneyCapitalFlowProvider") CapitalFlowProvider fallbackProvider;
+    @MockBean LlmChatClient llm;
     @MockBean(name="marketIntelRefreshExecutor") Executor refreshExecutor;
     @MockBean(name="marketIntelAgentExecutor") Executor agentExecutor;
 
