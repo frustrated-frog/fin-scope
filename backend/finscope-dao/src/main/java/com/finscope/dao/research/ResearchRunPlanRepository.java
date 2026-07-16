@@ -1,5 +1,6 @@
 package com.finscope.dao.research;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.ResearchRunPlanStep;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -94,7 +95,8 @@ public class ResearchRunPlanRepository {
                 "SELECT * FROM research_run_plan WHERE research_run_id = ? AND step_id = ?",
                 mapper, researchRunId, stepId);
         if (steps.isEmpty()) {
-            throw new IllegalArgumentException("Research run plan step not found: " + researchRunId + "/" + stepId);
+            throw new ResourceNotFoundException(
+                    "研究运行计划步骤不存在：" + researchRunId + "/" + stepId);
         }
         return steps.get(0);
     }

@@ -140,7 +140,7 @@ public class CapitalFlowFreezeService {
         String summary = qualitySummary(frozen.size(), expected.size(), issues);
         if (!datasets.updateResearchState(datasetId, from, to, state, asOfTime,
                 FINGERPRINT_VERSION, manifest, datasetFingerprint, summary, dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return datasets.findById(datasetId).orElse(dataset);
     }

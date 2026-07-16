@@ -1,5 +1,6 @@
 package com.finscope.service.insight;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.insight.InsightCardRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
@@ -43,6 +44,6 @@ public class InsightCardService {
 
     public InsightCard detail(Long id) {
         return insightCardRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Insight card not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("情报卡片不存在：" + id));
     }
 }

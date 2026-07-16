@@ -51,7 +51,7 @@ public class ResearchDraftService {
 
     @Transactional
     public ResearchDraft createFromCapitalSignal(CapitalResearchDraftCommand command) {
-        if (command == null) throw new IllegalArgumentException("command is required");
+        if (command == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
         catalog.get(CAPITAL_FACTOR.getNamespace(), CAPITAL_FACTOR.getCode(), CAPITAL_FACTOR.getVersion());
         Long snapshotId = required(command.getSnapshotId(), "snapshotId");
         CapitalBehaviorSnapshot snapshot = snapshots.findById(snapshotId).orElseThrow(() ->
@@ -100,7 +100,7 @@ public class ResearchDraftService {
 
     private static <T> T required(T value, String field) {
         if (value == null || value instanceof String && ((String) value).trim().isEmpty()) {
-            throw new IllegalArgumentException(field + " is required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "必填字段不能为空：" + field);
         }
         return value;
     }
@@ -117,7 +117,7 @@ public class ResearchDraftService {
         for (CapitalBehaviorSignal signal : snapshot.getSignals()) {
             if (requiredSignal.equals(signal.getType())) return signal.getType();
         }
-        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "SIGNAL_DOES_NOT_BELONG_TO_SNAPSHOT");
+        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "所选信号不属于当前资金行为快照");
     }
 
     private static List<String> authoritativeEvidenceRefs(CapitalBehaviorSnapshot snapshot) {

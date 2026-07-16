@@ -103,7 +103,7 @@ public class FactorResearchAgentService {
                 enforceBudget(run, calls + 1, startedNanos); calls++;
                 com.finscope.domain.factorresearch.ResearchDraft draft = drafts.get(run.getResearchDraftId());
                 if (!run.getFactor().equals(draft.getFactor())) {
-                    throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "RESEARCH_DRAFT_FACTOR_CHANGED");
+                    throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "研究草稿的因子定义已变化，请重新创建研究计划");
                 }
                 evidence.set("researchDraft", json.valueToTree(draft));
                 enforceTimeBudget(run, startedNanos);
@@ -113,7 +113,7 @@ public class FactorResearchAgentService {
             QuantDataset dataset = datasets.get(run.getDatasetId());
             if (!"READY".equals(dataset.getStatus())
                     || !java.util.Objects.equals(run.getDatasetFingerprint(), dataset.getFingerprint())) {
-                throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "DATASET_FINGERPRINT_CHANGED");
+                throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集指纹已变化，请重新创建研究计划");
             }
             enforceTimeBudget(run, startedNanos);
             ObjectNode datasetEvidence = json.createObjectNode();

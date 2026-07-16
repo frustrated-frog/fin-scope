@@ -1,5 +1,7 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.BusinessConflictException;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
@@ -91,7 +93,7 @@ public class ResearchService {
                                      Integer maxSourcesPerTheme,
                                      Boolean includeDisabled) {
         if (thesisId != null && (researchThesisRepository == null || !researchThesisRepository.findById(thesisId).isPresent())) {
-            throw new IllegalArgumentException("Research thesis not found: " + thesisId);
+            throw new ResourceNotFoundException("研究命题不存在：" + thesisId);
         }
         LocalDate actualRunDate = runDate == null ? LocalDate.now() : runDate;
         int actualMaxSources = maxSourcesPerTheme == null ? 3 : maxSourcesPerTheme;
@@ -158,7 +160,7 @@ public class ResearchService {
 
     public ResearchRun detail(Long id) {
         return researchRunRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Research run not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("研究运行不存在：" + id));
     }
 
     public List<SourceProfile> plannedSources(Long id) {
@@ -169,10 +171,10 @@ public class ResearchService {
     public ResearchReport regenerateReport(Long runId) {
         ResearchRun run = detail(runId);
         if (run.getThesisId() == null) {
-            throw new IllegalStateException("A thesis is required to regenerate a research report");
+            throw new BusinessConflictException("该研究运行未关联研究命题，无法重新生成研究报告");
         }
         com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
-                .orElseThrow(() -> new IllegalStateException("Research thesis not found: " + run.getThesisId()));
+                .orElseThrow(() -> new ResourceNotFoundException("研究命题不存在：" + run.getThesisId()));
         try {
             ResearchRunContext.setCurrentRunId(runId);
             for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(runId).isSufficient(); round++) {

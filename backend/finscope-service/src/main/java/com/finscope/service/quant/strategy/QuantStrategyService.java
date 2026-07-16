@@ -75,7 +75,7 @@ public class QuantStrategyService {
             if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集已不再满足质量门禁");
             if (!text(dataset.getFingerprint())) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集缺少可复现指纹");
             if (!dataset.getFingerprint().equals(draft.getValidatedDatasetFingerprint()))
-                throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集在草案生成后已变化，请重新生成策略草案");
+                throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集在草案生成后已变化，请重新生成策略草案");
             new QuantStrategySpecValidator(factors, factorProviders).validateOrThrow(spec);
             java.util.Set<String> available = datasets.availableFactorCodes(dataset.getId());
             if (spec.getFactors().stream().anyMatch(item -> !available.contains(item.getCode())))

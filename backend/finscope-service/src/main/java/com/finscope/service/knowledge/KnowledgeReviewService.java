@@ -155,6 +155,6 @@ public class KnowledgeReviewService {
     }
 
     private BusinessException conflict() {
-        return new BusinessException(ErrorCode.BUSINESS_CONFLICT, "复习记录已更新，请刷新后重试");
+        return new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "复习记录已更新，请刷新后重试");
     }
 }

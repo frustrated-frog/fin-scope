@@ -1,6 +1,10 @@
 package com.finscope.service.intake;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessConflictException;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.fetch.FetchRunRepository;
 import com.finscope.dao.intake.FetchBatchRepository;
@@ -79,8 +83,8 @@ public class IntakeService {
 
     public FetchBatch intakeFetch(Long sourceId, String triggerType, String scheduleSlot, Consumer<TaskPhase> progress) {
         Source source = sourceRepository.findById(sourceId)
-                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
-        if (!source.isEnabled()) throw new IllegalStateException("信息源已归档，无法抓取");
+                .orElseThrow(() -> new ResourceNotFoundException("信息源不存在：" + sourceId));
+        if (!source.isEnabled()) throw new BusinessConflictException("信息源已归档，无法抓取");
         FetchBatch batch = new FetchBatch();
         batch.setSourceId(source.getId());
         batch.setSourceName(source.getName());
@@ -150,7 +154,7 @@ public class IntakeService {
 
     public FetchBatch batch(Long id) {
         return fetchBatchRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Fetch batch not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("采集批次不存在：" + id));
     }
 
     public List<IntakeCandidate> candidates(String status, Long batchId, Long sourceId) {
@@ -159,17 +163,17 @@ public class IntakeService {
 
     public IntakeCandidate candidate(Long id) {
         return candidateRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Intake candidate not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("采集候选不存在：" + id));
     }
 
     public IntakeCandidate updateHumanStatus(Long id, String status, String note) {
         IntakeCandidate candidate = candidate(id);
         String target = status == null ? "" : status.trim().toUpperCase();
         if (!HUMAN_STATUSES.contains(target)) {
-            throw new IllegalArgumentException("Unsupported candidate status: " + status);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的候选状态：" + status);
         }
         if (IntakeEnums.HUMAN_PROMOTED.equals(candidate.getHumanStatus())) {
-            throw new IllegalArgumentException("已入库候选不能变更人工状态");
+            throw new BusinessConflictException("已入库候选不能变更人工状态");
         }
         candidateRepository.updateHumanStatus(id, target, note);
         return candidate(id);
@@ -188,10 +192,10 @@ public class IntakeService {
         }
         if (!IntakeEnums.HUMAN_PENDING.equals(candidate.getHumanStatus())
                 && !IntakeEnums.HUMAN_SAVED_FOR_LATER.equals(candidate.getHumanStatus())) {
-            throw new IllegalArgumentException("Candidate cannot be promoted from status: " + candidate.getHumanStatus());
+            throw new BusinessConflictException("当前候选状态不允许入库：" + candidate.getHumanStatus());
         }
         Source source = sourceRepository.findById(candidate.getSourceId())
-                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + candidate.getSourceId()));
+                .orElseThrow(() -> new ResourceNotFoundException("信息源不存在：" + candidate.getSourceId()));
         RawItem item = new RawItem(
                 firstNonBlank(candidate.getChineseTitle(), candidate.getOriginalTitle()),
                 candidate.getOriginalUrl(),

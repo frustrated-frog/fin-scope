@@ -180,7 +180,7 @@ public class QuantDatasetService {
         String status = researchStatus(dataset, all, universe);
         if (!datasets.updateSummary(datasetId, start, end, status, digest,
                 qualitySummary(all, fundamentals, universe, status), dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return get(datasetId);
     }
@@ -234,7 +234,7 @@ public class QuantDatasetService {
         LocalDate end = bars.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
         if (!datasets.updateSummary(dataset.getId(), start, end, status,
                 digest, qualitySummary(bars, fundamentals, universe, status), dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return get(dataset.getId());
     }

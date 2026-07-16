@@ -88,6 +88,6 @@ public class StrategyStockThesisService {
     }
 
     private void conflict() {
-        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
+        throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
     }
 }

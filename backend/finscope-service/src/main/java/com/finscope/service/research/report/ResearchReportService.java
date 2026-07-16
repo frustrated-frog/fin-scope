@@ -1,5 +1,6 @@
 package com.finscope.service.research.report;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.ResearchReportRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchReport;
@@ -101,7 +102,7 @@ public class ResearchReportService {
 
     public ResearchReport detailByRunId(Long runId) {
         return reportRepository.findByRunId(runId)
-                .orElseThrow(() -> new IllegalArgumentException("Research report not found for run: " + runId));
+                .orElseThrow(() -> new ResourceNotFoundException("研究运行尚无研究报告：" + runId));
     }
 
     public Optional<ResearchReport> findByRunId(Long runId) {

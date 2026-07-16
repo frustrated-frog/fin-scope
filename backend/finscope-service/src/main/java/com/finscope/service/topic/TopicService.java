@@ -1,5 +1,8 @@
 package com.finscope.service.topic;
 
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.InfrastructureException;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.brief.BriefRepository;
 import com.finscope.dao.insight.InsightCardRepository;
@@ -69,14 +72,14 @@ public class TopicService {
             return saved;
         } catch (Exception ex) {
             log.error("主题创建失败 name={} durationMs={}", topic.getName(), System.currentTimeMillis() - start, ex);
-            throw new IllegalStateException("Failed to create topic", ex);
+            throw new InfrastructureException(ErrorCode.FILE_OPERATION_ERROR, "主题创建失败，请稍后重试", ex);
         }
     }
 
     public Topic createFromArticle(Long articleId) {
         log.info("从文章创建主题开始 articleId={}", articleId);
         Article article = articleRepository.findById(articleId)
-                .orElseThrow(() -> new IllegalArgumentException("Article not found: " + articleId));
+                .orElseThrow(() -> new ResourceNotFoundException("文章不存在：" + articleId));
         TopicExtraction extraction = extractFromArticle(article);
         Topic topic = createTopicFromExtraction(extraction);
         topicRepository.linkArticle(topic.getId(), article.getId());
@@ -88,7 +91,7 @@ public class TopicService {
     public List<Topic> createFromBrief(LocalDate date) {
         log.info("从日报创建主题开始 date={}", date);
         Brief brief = briefRepository.findByDate(date)
-                .orElseThrow(() -> new IllegalArgumentException("Brief not found: " + date));
+                .orElseThrow(() -> new ResourceNotFoundException("简报不存在：" + date));
         TopicExtraction extraction = topicExtractor.extract(brief.getContent());
         Topic topic = createTopicFromExtraction(extraction);
         topicRepository.linkBrief(topic.getId(), brief.getId());
@@ -101,18 +104,18 @@ public class TopicService {
     public TopicDetail detail(Long id) {
         log.info("查询主题详情开始 topicId={}", id);
         Topic topic = topicRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("主题不存在：" + id));
         try {
             return new TopicDetail(topic, topicRepository.findLinkedArticles(id), topicRepository.findLinkedBriefs(id),
                     vaultWriter.readTopic(topic.getSlug()));
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to read topic markdown", ex);
+            throw new InfrastructureException(ErrorCode.FILE_OPERATION_ERROR, "主题文件读取失败，请稍后重试", ex);
         }
     }
 
     public Topic appendNote(Long id, String status, String note) {
         Topic topic = topicRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("主题不存在：" + id));
         try {
             Path path = vaultWriter.appendTopicNote(topic.getSlug(), note);
             if (status != null && !status.isEmpty()) {
@@ -121,17 +124,17 @@ public class TopicService {
             topic.setMarkdownPath(path.toString());
             return topicRepository.update(topic);
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to append topic note", ex);
+            throw new InfrastructureException(ErrorCode.FILE_OPERATION_ERROR, "主题笔记写入失败，请稍后重试", ex);
         }
     }
 
     public void delete(Long id) {
         long start = System.currentTimeMillis();
         Topic topic = topicRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("主题不存在：" + id));
         int deleted = topicRepository.deleteById(id);
         if (deleted == 0) {
-            throw new IllegalArgumentException("Topic not found: " + id);
+            throw new ResourceNotFoundException("主题不存在：" + id);
         }
         log.info("主题删除成功 topicId={} slug={} durationMs={}", id, topic.getSlug(), System.currentTimeMillis() - start);
     }
@@ -150,7 +153,7 @@ public class TopicService {
             topic.setMarkdownPath(markdown.toString());
             return topicRepository.upsertBySlug(topic);
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to write topic markdown", ex);
+            throw new InfrastructureException(ErrorCode.FILE_OPERATION_ERROR, "主题文件写入失败，请稍后重试", ex);
         }
     }
 
@@ -165,7 +168,7 @@ public class TopicService {
 
     private Topic refreshMarkdown(Long topicId) {
         Topic topic = topicRepository.findById(topicId)
-                .orElseThrow(() -> new IllegalArgumentException("Topic not found: " + topicId));
+                .orElseThrow(() -> new ResourceNotFoundException("主题不存在：" + topicId));
         List<Article> articles = topicRepository.findLinkedArticles(topicId);
         List<Brief> briefs = topicRepository.findLinkedBriefs(topicId);
         Map<Long, InsightCard> insightCards = insightCardRepository.findByArticleIds(articleIds(articles));
@@ -174,7 +177,7 @@ public class TopicService {
             topic.setMarkdownPath(markdown.toString());
             return topicRepository.update(topic);
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to refresh topic markdown", ex);
+            throw new InfrastructureException(ErrorCode.FILE_OPERATION_ERROR, "主题文件刷新失败，请稍后重试", ex);
         }
     }
 

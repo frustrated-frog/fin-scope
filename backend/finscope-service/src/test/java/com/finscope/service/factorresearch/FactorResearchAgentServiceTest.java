@@ -153,7 +153,7 @@ class FactorResearchAgentServiceTest {
 
         verify(diagnostics, never()).analyze(anyLong(), anyString());
         verify(runs).complete(eq(9L), eq("FAILED"), eq(1), eq("{}"), eq(""), eq("{}"),
-                eq("DATASET_FINGERPRINT_CHANGED"), any());
+                eq("数据集指纹已变化，请重新创建研究计划"), any());
     }
 
     private QuantDataset dataset() { QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY"); value.setDataKind("REAL"); value.setDatasetLevel("RESEARCH"); value.setFingerprint("sha"); return value; }

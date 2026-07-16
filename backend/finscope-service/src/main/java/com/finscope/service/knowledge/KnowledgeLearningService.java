@@ -295,7 +295,7 @@ public class KnowledgeLearningService {
     }
 
     private BusinessException conflict() {
-        return new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已更新，请刷新后重试");
+        return new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已更新，请刷新后重试");
     }
 
     private boolean isBlank(String value) {

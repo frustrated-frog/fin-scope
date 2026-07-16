@@ -76,7 +76,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.startTask(1L, 3L));
-        assertEquals(ErrorCode.BUSINESS_CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.DATA_VERSION_CONFLICT, error.getErrorCode());
     }
 
     @Test
@@ -164,7 +164,7 @@ class KnowledgeLearningServiceTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
                         1L, 2L, "answer", "HIGH", Collections.emptyList(), 4L, null));
-        assertEquals(ErrorCode.BUSINESS_CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.DATA_VERSION_CONFLICT, error.getErrorCode());
         verify(projectionJobs, never()).enqueue(anyLong(), anyLong());
         verify(events, never()).publishEvent(any());
     }

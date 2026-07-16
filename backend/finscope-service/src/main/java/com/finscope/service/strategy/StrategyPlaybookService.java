@@ -59,7 +59,7 @@ public class StrategyPlaybookService {
         }
         repository.upsert(code, "RESEARCHING", null);
         if (!repository.updateStatus(code, status, note, revision)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
         }
         return repository.findByCode(code).orElseThrow(IllegalStateException::new);
     }

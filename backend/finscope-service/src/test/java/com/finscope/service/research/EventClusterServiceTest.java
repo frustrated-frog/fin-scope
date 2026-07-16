@@ -40,7 +40,7 @@ class EventClusterServiceTest {
         assertEquals(ResearchEnums.EVENT_COOLING, updated.getStatus());
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository).updateStatus(1L, "BROKEN"));
-        assertEquals("Unsupported event status: BROKEN", error.getMessage());
+        assertEquals("不支持的事件状态：BROKEN", error.getMessage());
     }
 
     @Test
@@ -185,7 +185,7 @@ class EventClusterServiceTest {
                         mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
 
-        assertEquals(ErrorCode.BUSINESS_CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.DATA_VERSION_CONFLICT, error.getErrorCode());
         verify(evidenceItemRepository, never()).moveByEventIdAndArticleId(any(), any(), any());
     }
 

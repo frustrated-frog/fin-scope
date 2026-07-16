@@ -27,6 +27,7 @@ public enum ErrorCode {
     DATABASE_ERROR("FS-4001", "数据库操作失败，请稍后重试", 500),
     FILE_OPERATION_ERROR("FS-4002", "文件操作失败，请稍后重试", 500),
     ASYNC_TASK_ERROR("FS-4003", "异步任务执行失败，请稍后重试", 500),
+    DATA_INTEGRITY_ERROR("FS-4004", "数据完整性异常，请联系管理员", 500),
 
     INTERNAL_ERROR("FS-5000", "系统繁忙，请稍后重试", 500);
 

@@ -59,7 +59,7 @@ public class StrategyHoldingService {
         validateRole(current.getType(), role);
         validateTotal(id, targetWeight);
         if (!holdingRepository.update(id, role, targetWeight, currentWeight, note, revision)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
         }
         return holdingRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "组合条目不存在"));
@@ -67,7 +67,7 @@ public class StrategyHoldingService {
 
     public void delete(Long id, long revision) {
         if (!holdingRepository.deleteByIdAndRevision(id, revision)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
         }
     }
 

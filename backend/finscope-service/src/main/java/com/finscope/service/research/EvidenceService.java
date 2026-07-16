@@ -13,6 +13,7 @@ import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.response.PageResponse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.domain.source.Source;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
@@ -202,13 +203,13 @@ public class EvidenceService {
 
     private void validateMinConfidence(Integer minConfidence) {
         if (minConfidence != null && (minConfidence < 0 || minConfidence > 100)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "minConfidence must be between 0 and 100");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "最低置信度必须在 0 到 100 之间");
         }
     }
 
     public EvidenceItem detail(Long id) {
         return evidenceItemRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Evidence not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("证据不存在：" + id));
     }
 
     private String resolveSourceTier(Article article) {

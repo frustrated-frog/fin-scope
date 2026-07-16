@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
@@ -47,7 +48,8 @@ public class MarketIntelController {
 
     @GetMapping("/refresh-runs/{id}")
     public MarketIntelRefreshRun refreshRun(@PathVariable Long id) {
-        return refreshRuns.findRunById(id).orElseThrow(() -> new IllegalArgumentException("market intel refresh run not found: " + id));
+        return refreshRuns.findRunById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("市场情报刷新任务不存在：" + id));
     }
 
     @GetMapping("/instruments/{id}/capital-behavior")
@@ -62,6 +64,7 @@ public class MarketIntelController {
 
     @GetMapping("/capital-interpretations/{id}")
     public CapitalInterpretation interpretation(@PathVariable Long id) {
-        return interpretations.findById(id).orElseThrow(() -> new IllegalArgumentException("capital interpretation not found: " + id));
+        return interpretations.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("资金行为解读不存在：" + id));
     }
 }

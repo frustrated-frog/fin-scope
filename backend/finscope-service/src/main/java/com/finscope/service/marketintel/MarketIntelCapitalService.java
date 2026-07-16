@@ -1,5 +1,8 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
@@ -96,9 +99,9 @@ public class MarketIntelCapitalService {
 
     public Instrument stock(Long id) {
         Instrument value = instruments.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("instrument not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("标的不存在：" + id));
         if (!"STOCK".equals(value.getType())) {
-            throw new IllegalArgumentException("Market Intel currently supports STOCK instruments only");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "市场情报当前仅支持股票标的");
         }
         return value;
     }
