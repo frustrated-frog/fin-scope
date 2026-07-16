@@ -91,6 +91,18 @@ const overview = {
   health: { status: 'FRESH_PRIMARY', asOf: '2026-07-14T15:00:00', providerCode: 'EASTMONEY', warnings: [] }
 };
 
+const dragonTigerView = {
+  instrument: overview.instrument,
+  range: { days: 120, from: '2026-03-17', to: '2026-07-14' },
+  records: [],
+  health: {
+    status: 'FRESH_PRIMARY',
+    providerCode: 'EASTMONEY_DRAGON_TIGER',
+    asOf: '2026-07-14T16:00:00',
+    warnings: []
+  }
+};
+
 beforeEach(() => {
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
@@ -100,11 +112,14 @@ beforeEach(() => {
     if (path.includes('/capital-behavior')) {
       return Promise.resolve(overview) as never;
     }
+    if (path.includes('/dragon-tiger')) {
+      return Promise.resolve(dragonTigerView) as never;
+    }
     if (path.endsWith('/refresh') && options?.method === 'POST') {
       return Promise.resolve({ id: 55, instrumentId: 7, status: 'PENDING', successCount: 0, failureCount: 0 }) as never;
     }
     if (path === '/api/market-intel/refresh-runs/55') {
-      return Promise.resolve({ id: 55, instrumentId: 7, status: 'SUCCEEDED', successCount: 1, failureCount: 0 }) as never;
+      return Promise.resolve({ id: 55, instrumentId: 7, status: 'SUCCEEDED', successCount: 2, failureCount: 0 }) as never;
     }
     if (path.includes('/capital-interpretations') && options?.method === 'POST') {
       return Promise.resolve({
@@ -175,7 +190,83 @@ test('shows deterministic explanation before the user requests agent analysis', 
   expect(screen.getByText('连续净流入 3 个 5 分钟区间')).toBeInTheDocument();
   expect(screen.getByText('连续净流出 2 个交易日')).toBeInTheDocument();
   expect(screen.getAllByText('放量净流出').length).toBeGreaterThan(0);
+  expect(screen.getByRole('heading', { name: '龙虎榜事实' })).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('capital-interpretations'), expect.anything());
+});
+
+test('keeps capital facts usable when the dragon tiger query fails', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/dragon-tiger')) return Promise.reject(new Error('龙虎榜接口暂不可用'));
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('heading', { name: '资金证据带' })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('龙虎榜接口暂不可用');
+});
+
+test('does not let a previous instrument response overwrite the new selection', async () => {
+  const secondInstrument = {
+    id: 8, code: '000858', type: 'STOCK' as const, name: '五粮液', market: 'SZ'
+  };
+  let resolveOldCapital!: (value: unknown) => void;
+  let resolveOldDragonTiger!: (value: unknown) => void;
+  const oldCapital = new Promise((resolve) => { resolveOldCapital = resolve; });
+  const oldDragonTiger = new Promise((resolve) => { resolveOldDragonTiger = resolve; });
+  const secondDragonTiger = {
+    ...dragonTigerView,
+    instrument: secondInstrument,
+    records: [{
+      id: 801,
+      tradeDate: '2026-07-15',
+      externalId: 'second',
+      reason: '新标的龙虎榜记录',
+      qualityStatus: 'COMPLETE',
+      buySeats: [],
+      sellSeats: []
+    }]
+  };
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') {
+      return Promise.resolve([overview.instrument, secondInstrument]) as never;
+    }
+    if (path.includes('/instruments/7/capital-behavior')) return oldCapital as never;
+    if (path.includes('/instruments/7/dragon-tiger')) return oldDragonTiger as never;
+    if (path.includes('/instruments/8/capital-behavior')) {
+      return Promise.resolve({ ...overview, instrument: secondInstrument }) as never;
+    }
+    if (path.includes('/instruments/8/dragon-tiger')) {
+      return Promise.resolve(secondDragonTiger) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+  const user = userEvent.setup();
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.selectOptions(await screen.findByLabelText('研究标的'), '8');
+
+  expect(await screen.findByRole('heading', { name: '五粮液' })).toBeInTheDocument();
+  expect(await screen.findByText('新标的龙虎榜记录')).toBeInTheDocument();
+
+  resolveOldCapital(overview);
+  resolveOldDragonTiger({
+    ...dragonTigerView,
+    records: [{
+      id: 701,
+      tradeDate: '2026-07-14',
+      externalId: 'old',
+      reason: '旧标的龙虎榜记录',
+      qualityStatus: 'COMPLETE',
+      buySeats: [],
+      sellSeats: []
+    }]
+  });
+
+  await waitFor(() => expect(screen.queryByText('旧标的龙虎榜记录')).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: '五粮液' })).toBeInTheDocument();
 });
 
 test('shows the newest capital evidence first', async () => {
@@ -193,6 +284,7 @@ test('uses stable evidence row keys when aggregated points do not have database 
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve({
       ...overview,
       intradayTimeline: overview.intradayTimeline.map((point) => ({ ...point, id: null }))
@@ -245,6 +337,7 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
 test('clearly labels rule fallback instead of presenting it as model analysis', async () => {
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
     if (path.includes('/capital-interpretations') && options?.method === 'POST') {
       return Promise.resolve({
@@ -284,6 +377,7 @@ test('clearly labels rule fallback instead of presenting it as model analysis', 
 test('clearly explains when factor coverage is insufficient', async () => {
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
     if (path.includes('/capital-interpretations') && options?.method === 'POST') {
       return Promise.resolve({
@@ -324,12 +418,14 @@ test('polls the refresh run before reloading the capital snapshot', async () => 
   const addToast = vi.fn();
   render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
 
-  await user.click(await screen.findByRole('button', { name: '刷新资金数据' }));
+  await user.click(await screen.findByRole('button', { name: '刷新市场数据' }));
 
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/market-intel/refresh-runs/55'));
-  await waitFor(() => expect(addToast).toHaveBeenCalledWith('资金数据已刷新', 'success'));
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('市场数据已刷新', 'success'));
   const overviewCalls = vi.mocked(api).mock.calls.filter(([path]) => String(path).includes('/capital-behavior'));
+  const dragonTigerCalls = vi.mocked(api).mock.calls.filter(([path]) => String(path).includes('/dragon-tiger'));
   expect(overviewCalls.length).toBeGreaterThanOrEqual(2);
+  expect(dragonTigerCalls.length).toBeGreaterThanOrEqual(2);
 });
 
 test('clears the previous Agent interpretation after refreshing the capital snapshot', async () => {
@@ -339,7 +435,7 @@ test('clears the previous Agent interpretation after refreshing the capital snap
   await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
   expect(await screen.findByText('目前只能确认量价资金出现背离，拆单仍是假设。')).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: '刷新资金数据' }));
+  await user.click(screen.getByRole('button', { name: '刷新市场数据' }));
 
   await waitFor(() => expect(screen.queryByText('目前只能确认量价资金出现背离，拆单仍是假设。'))
     .not.toBeInTheDocument());
@@ -349,6 +445,7 @@ test('clears the previous Agent interpretation after refreshing the capital snap
 test('shows the provider error when refresh fails', async () => {
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
     if (path.endsWith('/refresh') && options?.method === 'POST') {
       return Promise.resolve({ id: 56, instrumentId: 7, status: 'PENDING', successCount: 0, failureCount: 0 }) as never;
@@ -370,7 +467,7 @@ test('shows the provider error when refresh fails', async () => {
   const addToast = vi.fn();
   render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
 
-  await user.click(await screen.findByRole('button', { name: '刷新资金数据' }));
+  await user.click(await screen.findByRole('button', { name: '刷新市场数据' }));
 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith('东财资金流接口暂不可用，请稍后重试', 'error'));
 });
@@ -378,6 +475,7 @@ test('shows the provider error when refresh fails', async () => {
 test('shows the concrete provider warning when refresh is partial', async () => {
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
     if (path.endsWith('/refresh') && options?.method === 'POST') {
       return Promise.resolve({ id: 57, instrumentId: 7, status: 'PENDING', successCount: 0, failureCount: 0 }) as never;
@@ -399,7 +497,7 @@ test('shows the concrete provider warning when refresh is partial', async () => 
   const addToast = vi.fn();
   render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
 
-  await user.click(await screen.findByRole('button', { name: '刷新资金数据' }));
+  await user.click(await screen.findByRole('button', { name: '刷新市场数据' }));
 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith('实时行情接口暂不可用', 'info'));
 });
@@ -407,6 +505,7 @@ test('shows the concrete provider warning when refresh is partial', async () => 
 test('surfaces incomplete snapshot warnings in the health summary', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) {
       return Promise.resolve({
         ...overview,
@@ -425,6 +524,7 @@ test('surfaces incomplete snapshot warnings in the health summary', async () => 
 test('deduplicates and translates provider diagnostics before showing them', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) {
       return Promise.resolve({
         ...overview,
@@ -486,6 +586,7 @@ test('keeps polling long enough for the backend model timeout fallback', async (
   };
   vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
     if (path.includes('/capital-interpretations') && options?.method === 'POST') {
       return Promise.resolve(running) as never;
@@ -518,6 +619,7 @@ test('keeps polling long enough for the backend model timeout fallback', async (
 test('treats an instrument without a snapshot as a first-run state instead of an error', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) {
       return Promise.resolve({
         instrument: overview.instrument,
@@ -541,6 +643,7 @@ test('treats an instrument without a snapshot as a first-run state instead of an
 test('shows an explicit alert when capital analysis uses a stale snapshot', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
     if (path.includes('/capital-behavior')) return Promise.resolve({
       ...overview,
       health: {

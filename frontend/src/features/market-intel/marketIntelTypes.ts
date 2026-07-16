@@ -219,3 +219,58 @@ export type MarketIntelRefreshRun = {
   errorMessage?: string;
   finishedAt?: string;
 };
+
+export type DragonTigerSeat = {
+  id: number | null;
+  direction: 'BUY' | 'SELL';
+  rank: number;
+  seatCode?: string | null;
+  seatName: string;
+  buyAmount?: number | null;
+  sellAmount?: number | null;
+  netAmount?: number | null;
+  buyRatio?: number | null;
+  sellRatio?: number | null;
+  seatType?: string | null;
+  institutional: boolean;
+  northbound: boolean;
+};
+
+export type DragonTigerRecord = {
+  id: number;
+  tradeDate: string;
+  externalId: string;
+  reasonCode?: string | null;
+  reason: string;
+  providerExplanation?: string | null;
+  closePrice?: number | null;
+  changeRate?: number | null;
+  buyAmount?: number | null;
+  sellAmount?: number | null;
+  netAmount?: number | null;
+  billboardAmount?: number | null;
+  marketAmount?: number | null;
+  netAmountRatio?: number | null;
+  billboardAmountRatio?: number | null;
+  turnoverRate?: number | null;
+  freeMarketCap?: number | null;
+  qualityStatus: 'COMPLETE' | 'PARTIAL';
+  buySeats: DragonTigerSeat[];
+  sellSeats: DragonTigerSeat[];
+};
+
+export type DragonTigerView = {
+  instrument: MarketIntelInstrument;
+  range: {
+    days: 30 | 60 | 120;
+    from: string;
+    to: string;
+  };
+  records: DragonTigerRecord[];
+  health: {
+    status: MarketDataQualityStatus | 'NOT_REFRESHED';
+    providerCode: string;
+    asOf: string | null;
+    warnings: string[];
+  };
+};
