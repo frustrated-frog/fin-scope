@@ -21,4 +21,9 @@ test('summarizes traceable evidence without exposing internal metric identifiers
 
   expect(screen.getByText('已关联 3 条可追溯证据')).toBeInTheDocument();
   expect(screen.queryByText(/flow:3544/)).not.toBeInTheDocument();
+
+  const level = screen.getByText('OBSERVATION');
+  const row = level.closest('li');
+  expect(row).not.toBeNull();
+  expect(level).toHaveClass('market-intel-rule-level');
 });
