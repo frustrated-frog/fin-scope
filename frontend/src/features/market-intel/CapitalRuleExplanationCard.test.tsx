@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 
@@ -21,4 +23,15 @@ test('summarizes traceable evidence without exposing internal metric identifiers
 
   expect(screen.getByText('已关联 3 条可追溯证据')).toBeInTheDocument();
   expect(screen.queryByText(/flow:3544/)).not.toBeInTheDocument();
+
+  const level = screen.getByText('OBSERVATION');
+  const row = level.closest('li');
+  expect(row).not.toBeNull();
+  const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+  const rowRule = styles.match(/\.market-intel-rule-list > li\s*{[^}]+}/)?.[0] ?? '';
+  const levelRule = styles.match(/\.market-intel-rule-level\s*{[^}]+}/)?.[0] ?? '';
+  expect(rowRule).toContain('grid-template-columns: max-content minmax(0, 1fr)');
+  expect(rowRule).toContain('padding: 14px 12px 0');
+  expect(levelRule).toContain('white-space: nowrap');
+  expect(levelRule).toContain('padding: 6px 10px');
 });
