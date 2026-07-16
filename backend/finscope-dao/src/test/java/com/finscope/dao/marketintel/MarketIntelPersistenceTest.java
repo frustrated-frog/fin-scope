@@ -9,6 +9,8 @@ import com.finscope.domain.marketintel.CapitalEvidenceRef;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalInterpretationObservation;
 import com.finscope.domain.marketintel.CapitalSignalEvaluation;
+import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.domain.marketintel.DragonTigerSeat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,6 +36,7 @@ class MarketIntelPersistenceTest {
     private CapitalFlowRepository flows;
     private CapitalBehaviorSnapshotRepository snapshots;
     private CapitalBehaviorEvaluationRepository evaluations;
+    private DragonTigerRepository dragonTiger;
     private MarketIntelSchemaMigrator migrator;
 
     @BeforeEach
@@ -52,6 +56,7 @@ class MarketIntelPersistenceTest {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         snapshots = new CapitalBehaviorSnapshotRepository(jdbc, mapper);
         evaluations = new CapitalBehaviorEvaluationRepository(jdbc, mapper);
+        dragonTiger = new DragonTigerRepository(jdbc);
     }
 
     @Test
@@ -63,6 +68,7 @@ class MarketIntelPersistenceTest {
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=104"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=105"));
         assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=106"));
+        assertEquals(1, count("SELECT COUNT(*) FROM schema_migration WHERE version=107"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('market_capital_behavior_evaluation') " +
                 "WHERE name='history_quality_status'"));
         assertEquals(1, count("SELECT COUNT(*) FROM pragma_table_info('agent_run') WHERE name='subject_type'"));
@@ -72,6 +78,8 @@ class MarketIntelPersistenceTest {
         assertEquals(1, tableCount("market_intel_refresh_run"));
         assertEquals(1, tableCount("market_intel_refresh_step"));
         assertEquals(1, tableCount("market_capital_behavior_evaluation"));
+        assertEquals(1, tableCount("market_dragon_tiger_record"));
+        assertEquals(1, tableCount("market_dragon_tiger_seat"));
 
         CapitalFlowPoint point = point("payload-1");
         flows.saveAll(Collections.singletonList(point));
@@ -79,6 +87,27 @@ class MarketIntelPersistenceTest {
         assertEquals(1, flows.findRange(7L, point.getObservedAt().minusMinutes(1),
                 point.getObservedAt().plusMinutes(1)).size());
         assertNotNull(point.getId());
+    }
+
+    @Test
+    void dragonTigerFactsAreVersionedAndQueriesReturnLatestBusinessVersion() {
+        DragonTigerRecord first = dragonTiger("payload-v1", new BigDecimal("100"));
+        DragonTigerRecord revised = dragonTiger("payload-v2", new BigDecimal("120"));
+
+        dragonTiger.saveAll(Collections.singletonList(first));
+        dragonTiger.saveAll(Collections.singletonList(dragonTiger(
+                "payload-v1", new BigDecimal("100"))));
+        dragonTiger.saveAll(Collections.singletonList(revised));
+
+        assertEquals(2, count("SELECT COUNT(*) FROM market_dragon_tiger_record"));
+        assertEquals(2, count("SELECT COUNT(*) FROM market_dragon_tiger_seat"));
+        List<DragonTigerRecord> latest = dragonTiger.findLatestBusinessVersions(
+                7L, LocalDate.of(2026, 3, 19), LocalDate.of(2026, 7, 16));
+        assertEquals(1, latest.size());
+        assertEquals(new BigDecimal("120"), latest.get(0).getNetAmount());
+        assertEquals(1, latest.get(0).getBuySeats().get(0).getRank().intValue());
+        assertNotNull(revised.getId());
+        assertNotNull(revised.getBuySeats().get(0).getRecordId());
     }
 
     @Test
@@ -281,6 +310,35 @@ class MarketIntelPersistenceTest {
         point.setPayloadHash(hash);
         point.setQualityStatus("COMPLETE");
         return point;
+    }
+
+    private DragonTigerRecord dragonTiger(String hash, BigDecimal netAmount) {
+        DragonTigerSeat seat = new DragonTigerSeat();
+        seat.setExternalTradeId("100373909");
+        seat.setSeatCode("0");
+        seat.setSeatName("机构专用");
+        seat.setDirection("BUY");
+        seat.setRank(1);
+        seat.setBuyAmount(new BigDecimal("200"));
+        seat.setSellAmount(new BigDecimal("80"));
+        seat.setNetAmount(new BigDecimal("120"));
+        seat.setInstitutional(true);
+        seat.setRetrievedAt(LocalDateTime.of(2026, 7, 16, 16, 0));
+        seat.setPayloadHash(hash + "-seat");
+
+        DragonTigerRecord record = new DragonTigerRecord();
+        record.setInstrumentId(7L);
+        record.setProviderCode("EASTMONEY_DRAGON_TIGER");
+        record.setTradeDate(LocalDate.of(2026, 7, 15));
+        record.setExternalId("100373909");
+        record.setReasonCode("137001002002001");
+        record.setReason("日跌幅偏离值达到7%的前5只证券");
+        record.setNetAmount(netAmount);
+        record.setRetrievedAt(LocalDateTime.of(2026, 7, 16, 16, 0));
+        record.setPayloadHash(hash);
+        record.setQualityStatus("COMPLETE");
+        record.setSeats(Collections.singletonList(seat));
+        return record;
     }
 
     private int tableCount(String table) {
