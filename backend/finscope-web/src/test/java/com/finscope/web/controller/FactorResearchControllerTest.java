@@ -43,10 +43,10 @@ class FactorResearchControllerTest {
 
         mockMvc.perform(get("/api/factor-research/factors/capital/MAIN_FLOW_SHARE/versions/1.0.0"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plainMeaning").value("主力净流入占当日成交额的比例"))
-                .andExpect(jsonPath("$.status").value("EXPLORATORY"))
-                .andExpect(jsonPath("$.interpretationBoundary").isNotEmpty())
-                .andExpect(jsonPath("$.identity.namespace").value("capital"));
+                .andExpect(jsonPath("$.data.plainMeaning").value("主力净流入占当日成交额的比例"))
+                .andExpect(jsonPath("$.data.status").value("EXPLORATORY"))
+                .andExpect(jsonPath("$.data.interpretationBoundary").isNotEmpty())
+                .andExpect(jsonPath("$.data.identity.namespace").value("capital"));
     }
 
     @Test
@@ -61,8 +61,8 @@ class FactorResearchControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"from\":\"2024-01-01\",\"to\":\"2024-06-30\",\"asOfTime\":\"2026-07-15T15:30:00\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("BLOCKED"))
-                .andExpect(jsonPath("$.qualitySummary").isNotEmpty());
+                .andExpect(jsonPath("$.data.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.data.qualitySummary").isNotEmpty());
     }
 
     @Test
@@ -71,13 +71,13 @@ class FactorResearchControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"from\":\"2024-01-01\",\"to\":\"2024-06-30\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.code").value("FS-1002"));
 
         mockMvc.perform(post("/api/factor-research/datasets/7/capital-flow-freeze")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"from\":\"2024-06-30\",\"to\":\"2024-01-01\",\"asOfTime\":\"2026-07-15T15:30:00\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.code").value("FS-1002"));
     }
 
     @Test
@@ -90,7 +90,7 @@ class FactorResearchControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"from\":\"2024-01-01\",\"to\":\"2024-06-30\",\"asOfTime\":\"2026-07-15T15:30:00\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CONFLICT"));
+                .andExpect(jsonPath("$.code").value("FS-2002"));
     }
 
     @Test
@@ -100,7 +100,7 @@ class FactorResearchControllerTest {
 
         mockMvc.perform(get("/api/factor-research/factors/capital/UNKNOWN/versions/1.0.0"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .andExpect(jsonPath("$.code").value("FS-2001"));
     }
 
     private ResearchFactorDefinition definition() {

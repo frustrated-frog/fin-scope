@@ -51,11 +51,11 @@ class SectorMarketControllerTest {
         mockMvc.perform(get("/api/sector-market/overview")
                         .param("category", "INDUSTRY").param("limit", "5"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.qualityStatus").value("FRESH_PRIMARY"))
-                .andExpect(jsonPath("$.sourceCode").value("EASTMONEY_SECTOR"))
-                .andExpect(jsonPath("$.refreshId").value("refresh-overview"))
-                .andExpect(jsonPath("$.leaders[0].code").value("BK1036"))
-                .andExpect(jsonPath("$.leaders[0].leaderStockName").value("中芯国际"));
+                .andExpect(jsonPath("$.data.qualityStatus").value("FRESH_PRIMARY"))
+                .andExpect(jsonPath("$.data.sourceCode").value("EASTMONEY_SECTOR"))
+                .andExpect(jsonPath("$.data.refreshId").value("refresh-overview"))
+                .andExpect(jsonPath("$.data.leaders[0].code").value("BK1036"))
+                .andExpect(jsonPath("$.data.leaders[0].leaderStockName").value("中芯国际"));
     }
 
     @Test
@@ -69,9 +69,9 @@ class SectorMarketControllerTest {
         mockMvc.perform(get("/api/sector-market/search")
                         .param("q", "半导体").param("category", "ALL"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.qualityStatus").value("FRESH_FALLBACK"))
-                .andExpect(jsonPath("$.warning").value("已自动切换备用数据源"))
-                .andExpect(jsonPath("$.items[0].category").value("INDUSTRY"));
+                .andExpect(jsonPath("$.data.qualityStatus").value("FRESH_FALLBACK"))
+                .andExpect(jsonPath("$.data.warning").value("已自动切换备用数据源"))
+                .andExpect(jsonPath("$.data.items[0].category").value("INDUSTRY"));
     }
 
     @Test
@@ -92,11 +92,11 @@ class SectorMarketControllerTest {
 
         mockMvc.perform(put("/api/sector-market/follows/BK1036"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("BK1036"))
-                .andExpect(jsonPath("$.quoteValid").value(true))
-                .andExpect(jsonPath("$.qualityStatus").value("FRESH_FALLBACK"))
-                .andExpect(jsonPath("$.sourceCode").value("EASTMONEY_SECTOR_QUOTE"))
-                .andExpect(jsonPath("$.refreshId").value("r-sector"));
+                .andExpect(jsonPath("$.data.code").value("BK1036"))
+                .andExpect(jsonPath("$.data.quoteValid").value(true))
+                .andExpect(jsonPath("$.data.qualityStatus").value("FRESH_FALLBACK"))
+                .andExpect(jsonPath("$.data.sourceCode").value("EASTMONEY_SECTOR_QUOTE"))
+                .andExpect(jsonPath("$.data.refreshId").value("r-sector"));
         mockMvc.perform(delete("/api/sector-market/follows/bk1036"))
                 .andExpect(status().isNoContent());
 

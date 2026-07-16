@@ -103,7 +103,7 @@ public class ContentIdeaRepository {
     public ContentIdea updateStatus(Long id, String status) {
         jdbcTemplate.update("UPDATE content_idea SET status = ?, updated_at = ? WHERE id = ?",
                 status, TimeUtil.text(LocalDateTime.now()), id);
-        return findById(id).orElseThrow(() -> new IllegalArgumentException("Content idea not found: " + id));
+        return findById(id).orElseThrow(() -> new IllegalStateException("更新后的内容选题不存在：" + id));
     }
 
     public int moveByEventId(Long sourceEventId, Long targetEventId) {

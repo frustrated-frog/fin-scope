@@ -44,7 +44,7 @@ class StrategyControllerTest {
         when(thesisService.list()).thenReturn(Collections.emptyList());
         when(reviewService.list()).thenReturn(Collections.emptyList());
         mockMvc.perform(get("/api/strategy/overview")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.holdings").isArray()).andExpect(jsonPath("$.targetWeight").value(0));
+                .andExpect(jsonPath("$.data.holdings").isArray()).andExpect(jsonPath("$.data.targetWeight").value(0));
     }
 
     @Test
@@ -53,8 +53,8 @@ class StrategyControllerTest {
         when(holdingService.add(anyString(),anyString(),anyString(),anyDouble(),anyDouble(),anyString())).thenReturn(value);
         mockMvc.perform(post("/api/strategy/holdings").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"code\":\"020608\",\"type\":\"FUND\",\"role\":\"CORE\",\"targetWeight\":60,\"currentWeight\":0,\"note\":\"长期核心\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value("020608"))
-                .andExpect(jsonPath("$.revision").value(0));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.code").value("020608"))
+                .andExpect(jsonPath("$.data.revision").value(0));
     }
 
     @Test
@@ -72,6 +72,6 @@ class StrategyControllerTest {
                         .content("{\"stage\":\"WATCH_POOL\",\"thesis\":\"逻辑\",\"buyConditions\":\"买入\","
                                 + "\"invalidationConditions\":\"失效\",\"watchFocus\":\"观察\",\"note\":\"\",\"revision\":0}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.stage").value("WATCH_POOL"));
+                .andExpect(jsonPath("$.data.stage").value("WATCH_POOL"));
     }
 }

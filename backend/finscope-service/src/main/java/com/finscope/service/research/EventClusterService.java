@@ -155,8 +155,8 @@ public class EventClusterService {
         }
         EventCluster source = detail(sourceEventId);
         EventCluster target = detail(targetEventId);
-        ensureGovernable(source, "source event");
-        ensureGovernable(target, "target event");
+        ensureGovernable(source, "源事件");
+        ensureGovernable(target, "目标事件");
 
         eventClusterRepository.moveLinks(source.getId(), target.getId());
         evidenceItemRepository.moveByEventId(source.getId(), target.getId());
@@ -176,7 +176,7 @@ public class EventClusterService {
                                     Long targetEventId,
                                     Boolean createNewEvent) {
         EventCluster source = detail(sourceEventId);
-        ensureGovernable(source, "source event");
+        ensureGovernable(source, "源事件");
         EventArticleLink link = eventClusterRepository.findLink(source.getId(), articleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "事件 " + sourceEventId + " 中不存在文章关联：" + articleId));
@@ -189,7 +189,7 @@ public class EventClusterService {
         }
 
         EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
-        ensureGovernable(target, "target event");
+        ensureGovernable(target, "目标事件");
         if (source.getId().equals(target.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "文章不能移动到原事件");
         }

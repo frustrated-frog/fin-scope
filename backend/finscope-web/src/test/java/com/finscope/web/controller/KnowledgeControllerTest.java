@@ -71,15 +71,15 @@ class KnowledgeControllerTest {
 
         mockMvc.perform(get("/api/knowledge/overview"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.acceptedTaskCount").value(3));
+                .andExpect(jsonPath("$.data.acceptedTaskCount").value(3));
         mockMvc.perform(get("/api/knowledge/topics")
                         .param("lifecycle", "ACTIVE").param("mastery", "BUILDING")
                         .param("query", "agent").param("page", "0").param("size", "20"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.pageSize").value(20));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.pageSize").value(20));
         mockMvc.perform(get("/api/knowledge/tasks")
                         .param("status", "TODO").param("topicId", "2")
                         .param("query", "why").param("page", "0").param("size", "20"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray());
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isArray());
     }
 
     @Test
@@ -89,7 +89,7 @@ class KnowledgeControllerTest {
 
         mockMvc.perform(get("/api/knowledge/reviews/due"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items").isArray());
+                .andExpect(jsonPath("$.data.items").isArray());
     }
 
     @Test
@@ -101,7 +101,7 @@ class KnowledgeControllerTest {
 
         mockMvc.perform(get("/api/knowledge/tasks/7/evidence"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(11));
+                .andExpect(jsonPath("$.data[0].id").value(11));
     }
 
     @Test
@@ -123,13 +123,13 @@ class KnowledgeControllerTest {
 
         mockMvc.perform(get("/api/knowledge/topics/2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.topic.name").value("Agent 工程化"));
+                .andExpect(jsonPath("$.data.topic.name").value("Agent 工程化"));
         mockMvc.perform(post("/api/knowledge/topics/2/reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"conclusion\":\"结论更新\",\"confidence\":\"HIGH\"," +
                                 "\"evidenceIds\":[11],\"intervalDays\":30,\"expectedRevision\":4}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.intervalDays").value(30));
+                .andExpect(jsonPath("$.data.intervalDays").value(30));
     }
 
     @Test
@@ -151,7 +151,7 @@ class KnowledgeControllerTest {
         mockMvc.perform(post("/api/knowledge/tasks/7/accept")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"topicId\":2,\"expectedRevision\":3}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(7));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(7));
         mockMvc.perform(post("/api/knowledge/tasks/7/start")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedRevision\":4}"))
@@ -159,7 +159,7 @@ class KnowledgeControllerTest {
         mockMvc.perform(put("/api/knowledge/tasks/7/draft")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(entryBody(5)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.entryStatus").value("DRAFT"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.entryStatus").value("DRAFT"));
         mockMvc.perform(post("/api/knowledge/tasks/7/complete")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(entryBody(5)))
@@ -180,7 +180,7 @@ class KnowledgeControllerTest {
         mockMvc.perform(post("/api/knowledge/tasks/7/complete")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.code").value("FS-1002"));
         mockMvc.perform(post("/api/knowledge/tasks/404/start")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedRevision\":0}"))

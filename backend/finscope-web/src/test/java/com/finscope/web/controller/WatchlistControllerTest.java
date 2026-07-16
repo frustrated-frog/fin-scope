@@ -54,11 +54,11 @@ class WatchlistControllerTest {
 
         mockMvc.perform(get("/api/watchlist"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[0].qualityStatus").value("FRESH_FALLBACK"))
-                .andExpect(jsonPath("$[0].sourceCode").value("SINA_STOCK"))
-                .andExpect(jsonPath("$[0].warning").value("腾讯行情暂不可用，已自动切换至新浪。"))
-                .andExpect(jsonPath("$[0].refreshId").value("r-watchlist"));
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].qualityStatus").value("FRESH_FALLBACK"))
+                .andExpect(jsonPath("$.data[0].sourceCode").value("SINA_STOCK"))
+                .andExpect(jsonPath("$.data[0].warning").value("腾讯行情暂不可用，已自动切换至新浪。"))
+                .andExpect(jsonPath("$.data[0].refreshId").value("r-watchlist"));
 
         verify(watchlistService).listInvestmentItemsWithQuotes(false);
     }

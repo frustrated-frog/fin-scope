@@ -49,9 +49,9 @@ class ResearchDraftControllerTest {
                                 + "\"objectiveTags\":[\"PRICE_FLOW_DIVERGENCE\"]}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/factor-research/research-drafts/9"))
-                .andExpect(jsonPath("$.status").value("DRAFT"))
-                .andExpect(jsonPath("$.factor.code").value("MAIN_FLOW_SHARE"))
-                .andExpect(jsonPath("$.evaluationMode").value("CROSS_SECTIONAL_FACTOR_STUDY"));
+                .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andExpect(jsonPath("$.data.factor.code").value("MAIN_FLOW_SHARE"))
+                .andExpect(jsonPath("$.data.evaluationMode").value("CROSS_SECTIONAL_FACTOR_STUDY"));
 
         ArgumentCaptor<CapitalResearchDraftCommand> command = ArgumentCaptor.forClass(CapitalResearchDraftCommand.class);
         org.mockito.Mockito.verify(service).createFromCapitalSignal(command.capture());
@@ -59,7 +59,7 @@ class ResearchDraftControllerTest {
 
         mockMvc.perform(get("/api/factor-research/research-drafts/9"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.instrumentCode").value("600519.SH"));
+                .andExpect(jsonPath("$.data.instrumentCode").value("600519.SH"));
     }
 
     private ResearchDraft draft() {

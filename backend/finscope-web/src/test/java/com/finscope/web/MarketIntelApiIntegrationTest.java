@@ -62,38 +62,38 @@ class MarketIntelApiIntegrationTest {
     }
 
     @Test void refreshThenQueryReturnsRuleExplanationWithoutCallingLlm() throws Exception{
-        MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("PENDING")).andReturn();
-        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
-        mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted()).andExpect(jsonPath("$.data.status").value("PENDING")).andReturn();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("data").path("id").asLong();
+        mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.ruleExplanation.ruleVersion").value("capital-rules-v2"))
-                .andExpect(jsonPath("$.factorVersion").value("capital-factor-v1"))
-                .andExpect(jsonPath("$.signalVersion").value("capital-signal-v2"))
-                .andExpect(jsonPath("$.historicalEvaluation.evaluationVersion").value("capital-evaluation-v2"))
-                .andExpect(jsonPath("$.historicalEvaluation.status").value("DATA_UNRELIABLE"))
-                .andExpect(jsonPath("$.historicalEvaluation.historyQualityStatus").value("DATA_UNRELIABLE"))
-                .andExpect(jsonPath("$.historicalEvaluation.dataGaps[0]").value("历史日线仅 2 个交易日，至少需要 60 个。"))
-                .andExpect(jsonPath("$.historicalEvaluation.signals").isArray())
-                .andExpect(jsonPath("$.factorObservations").isArray())
-                .andExpect(jsonPath("$.metrics.latest.tradeAmount").value(180000000))
-                .andExpect(jsonPath("$.metrics.latest.tradeVolume").value(1210000))
-                .andExpect(jsonPath("$.metrics.latest.volumeRatio").value(1.67))
-                .andExpect(jsonPath("$.metrics.latest.mainNetInflowSharePct").value(-16.666667))
-                .andExpect(jsonPath("$.metrics.intradayStreak.direction").value("INFLOW"))
-                .andExpect(jsonPath("$.metrics.dailyStreak.direction").value("OUTFLOW"))
-                .andExpect(jsonPath("$.metrics.objectiveTags[0].code").value("AMOUNT_EXPANSION_WITH_OUTFLOW"))
-                .andExpect(jsonPath("$.intradayTimeline").isArray()).andExpect(jsonPath("$.health.status").value("FRESH_PRIMARY"));
+                .andExpect(jsonPath("$.data.ruleExplanation.ruleVersion").value("capital-rules-v2"))
+                .andExpect(jsonPath("$.data.factorVersion").value("capital-factor-v1"))
+                .andExpect(jsonPath("$.data.signalVersion").value("capital-signal-v2"))
+                .andExpect(jsonPath("$.data.historicalEvaluation.evaluationVersion").value("capital-evaluation-v2"))
+                .andExpect(jsonPath("$.data.historicalEvaluation.status").value("DATA_UNRELIABLE"))
+                .andExpect(jsonPath("$.data.historicalEvaluation.historyQualityStatus").value("DATA_UNRELIABLE"))
+                .andExpect(jsonPath("$.data.historicalEvaluation.dataGaps[0]").value("历史日线仅 2 个交易日，至少需要 60 个。"))
+                .andExpect(jsonPath("$.data.historicalEvaluation.signals").isArray())
+                .andExpect(jsonPath("$.data.factorObservations").isArray())
+                .andExpect(jsonPath("$.data.metrics.latest.tradeAmount").value(180000000))
+                .andExpect(jsonPath("$.data.metrics.latest.tradeVolume").value(1210000))
+                .andExpect(jsonPath("$.data.metrics.latest.volumeRatio").value(1.67))
+                .andExpect(jsonPath("$.data.metrics.latest.mainNetInflowSharePct").value(-16.666667))
+                .andExpect(jsonPath("$.data.metrics.intradayStreak.direction").value("INFLOW"))
+                .andExpect(jsonPath("$.data.metrics.dailyStreak.direction").value("OUTFLOW"))
+                .andExpect(jsonPath("$.data.metrics.objectiveTags[0].code").value("AMOUNT_EXPANSION_WITH_OUTFLOW"))
+                .andExpect(jsonPath("$.data.intradayTimeline").isArray()).andExpect(jsonPath("$.data.health.status").value("FRESH_PRIMARY"));
         verifyNoInteractions(llm);
     }
 
     @Test void instrumentWithoutSnapshotReturnsNormalEmptyState() throws Exception{
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.instrument.id").value(7))
-                .andExpect(jsonPath("$.health.status").value("UNAVAILABLE"))
-                .andExpect(jsonPath("$.snapshot").doesNotExist())
-                .andExpect(jsonPath("$.intradayTimeline").isEmpty())
-                .andExpect(jsonPath("$.dailyTrend").isEmpty());
+                .andExpect(jsonPath("$.data.instrument.id").value(7))
+                .andExpect(jsonPath("$.data.health.status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.data.snapshot").doesNotExist())
+                .andExpect(jsonPath("$.data.intradayTimeline").isEmpty())
+                .andExpect(jsonPath("$.data.dailyTrend").isEmpty());
         verifyNoInteractions(provider,llm);
     }
 
@@ -102,12 +102,12 @@ class MarketIntelApiIntegrationTest {
                 "ALL_FUND_FLOW_SOURCES_FAILED", "东财资金流接口暂不可用，请稍后重试", true));
         MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh"))
                 .andExpect(status().isAccepted()).andReturn();
-        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("data").path("id").asLong();
 
         mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("FAILED"))
-                .andExpect(jsonPath("$.errorType").value("ALL_FUND_FLOW_SOURCES_FAILED"))
-                .andExpect(jsonPath("$.errorMessage").value("东财资金流接口暂不可用，请稍后重试"));
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.errorType").value("ALL_FUND_FLOW_SOURCES_FAILED"))
+                .andExpect(jsonPath("$.data.errorMessage").value("东财资金流接口暂不可用，请稍后重试"));
     }
 
     @Test void partialRefreshPersistsAndReturnsProviderWarnings() throws Exception{
@@ -117,18 +117,18 @@ class MarketIntelApiIntegrationTest {
                 complete.getVolumeRatio(), Collections.singletonList("实时行情接口暂不可用"), "TEST"));
         MvcResult refresh=mvc.perform(post("/api/market-intel/instruments/7/refresh"))
                 .andExpect(status().isAccepted()).andReturn();
-        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("id").asLong();
+        long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("data").path("id").asLong();
 
         mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PARTIAL"))
-                .andExpect(jsonPath("$.errorType").value("PARTIAL_DATA"))
-                .andExpect(jsonPath("$.errorMessage").value("实时行情接口暂不可用"));
+                .andExpect(jsonPath("$.data.status").value("PARTIAL"))
+                .andExpect(jsonPath("$.data.errorType").value("PARTIAL_DATA"))
+                .andExpect(jsonPath("$.data.errorMessage").value("实时行情接口暂不可用"));
         mvc.perform(get("/api/market-intel/instruments/7/capital-behavior?range=20d&granularity=5m"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.snapshot.qualityStatus").value("PARTIAL"))
-                .andExpect(jsonPath("$.snapshot.warnings[0]").value("实时行情接口暂不可用"))
-                .andExpect(jsonPath("$.health.status").value("PARTIAL_FRESH"))
-                .andExpect(jsonPath("$.health.warnings[0]").value("实时行情接口暂不可用"));
+                .andExpect(jsonPath("$.data.snapshot.qualityStatus").value("PARTIAL"))
+                .andExpect(jsonPath("$.data.snapshot.warnings[0]").value("实时行情接口暂不可用"))
+                .andExpect(jsonPath("$.data.health.status").value("PARTIAL_FRESH"))
+                .andExpect(jsonPath("$.data.health.warnings[0]").value("实时行情接口暂不可用"));
     }
 
     @Test void clickInterpretationRunsAgentAndReturnsGuardedHypothesis() throws Exception{
@@ -141,14 +141,14 @@ class MarketIntelApiIntegrationTest {
                 +"{\"dimension\":\"FLOW\",\"claim\":\"资金方向偏弱\",\"factorRefs\":[\"factor:MAIN_FLOW_SHARE:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]},"
                 +"{\"dimension\":\"MULTI_PERIOD\",\"claim\":\"多周期资金表现分化\",\"factorRefs\":[\"factor:MAIN_FLOW_SUM_5D:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]}";
         when(llm.complete(anyString(),anyString(),anyInt())).thenReturn("{\"marketState\":\"MIXED\",\"executiveSummary\":\"可能存在拆单\",\"observations\":["+observations+"],\"hypotheses\":[{\"type\":\"ORDER_SPLITTING\",\"claim\":\"连续小额成交可能对应拆单\",\"confidence\":\"HIGH\",\"supportingMetricRefs\":[\""+metricRef+"\"],\"counterEvidence\":[],\"dataGaps\":[]}],\"counterEvidence\":[],\"watchConditionRefs\":[],\"dataGaps\":[\"缺少逐笔\"],\"confidence\":\"MID\",\"disclaimer\":\"不构成投资建议\"}");
-        MvcResult created=mvc.perform(post("/api/market-intel/instruments/7/capital-interpretations")).andExpect(status().isAccepted()).andExpect(jsonPath("$.id").isNumber()).andReturn();
-        long id=new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString()).path("id").asLong();
+        MvcResult created=mvc.perform(post("/api/market-intel/instruments/7/capital-interpretations")).andExpect(status().isAccepted()).andExpect(jsonPath("$.data.id").isNumber()).andReturn();
+        long id=new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
         mvc.perform(get("/api/market-intel/capital-interpretations/"+id)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.facts").isArray())
-                .andExpect(jsonPath("$.factorVersion").value("capital-factor-v1"))
-                .andExpect(jsonPath("$.signalVersion").value("capital-signal-v2"))
-                .andExpect(jsonPath("$.hypotheses[0].confidence").value("LOW"));
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.data.facts").isArray())
+                .andExpect(jsonPath("$.data.factorVersion").value("capital-factor-v1"))
+                .andExpect(jsonPath("$.data.signalVersion").value("capital-signal-v2"))
+                .andExpect(jsonPath("$.data.hypotheses[0].confidence").value("LOW"));
     }
 
     private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));

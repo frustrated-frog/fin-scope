@@ -67,7 +67,7 @@ public class EventController {
                                                  @RequestParam(defaultValue = "50") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 200) {
             throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "page must be >= 0 and pageSize must be between 1 and 200");
+                    "页码不能小于 0，且每页数量必须在 1 到 200 之间");
         }
         return eventClusterService.listPaged(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize);
     }

@@ -46,7 +46,7 @@ public class ContentIdeaController {
             @RequestParam(defaultValue = "8") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "page must be >= 0 and pageSize must be between 1 and 100");
+                    "页码不能小于 0，且每页数量必须在 1 到 100 之间");
         }
         return contentIdeaService.listPaged(page, pageSize);
     }

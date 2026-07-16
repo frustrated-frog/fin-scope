@@ -261,7 +261,7 @@ public class ResearchService {
 
             if (run.getThesisId() != null) {
                 com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
-                        .orElseThrow(() -> new IllegalStateException("Research thesis not found: " + run.getThesisId()));
+                        .orElseThrow(() -> new IllegalStateException("研究命题不存在：" + run.getThesisId()));
                 for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(run.getId()).isSufficient(); round++) {
                     for (Source querySource : thesisQueryExpansionService.queries(thesis, round)) {
                         FetchRun queryRun = fetchService.fetch(querySource);
