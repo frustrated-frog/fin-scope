@@ -1,0 +1,29 @@
+{
+  "result": {
+    "pages": 1,
+    "data": [
+      {
+        "TRADE_DATE": "2026-07-15 00:00:00",
+        "DEAL_AMOUNT_RATIO": 24.391937666749,
+        "BILLBOARD_DEAL_AMT": 2215092039.55,
+        "FREE_MARKET_CAP": 74394592710.8,
+        "EXPLAIN": "4家机构卖出，成功率22.22%",
+        "SECURITY_CODE": "000021",
+        "CLOSE_PRICE": 47.26,
+        "CHANGE_RATE": -9.9981,
+        "TURNOVERRATE": 11.6572,
+        "EXPLANATION": "日跌幅偏离值达到7%的前5只证券",
+        "BILLBOARD_SELL_AMT": 1305481357.84,
+        "BILLBOARD_BUY_AMT": 909610681.71,
+        "BILLBOARD_NET_AMT": -395870676.13,
+        "DEAL_NET_RATIO": -4.359210671092,
+        "ACCUM_AMOUNT": 9081246721,
+        "CHANGE_TYPE": "137001002002001",
+        "TRADE_ID": 100373909
+      }
+    ],
+    "count": 1
+  },
+  "success": true,
+  "code": 0
+}
