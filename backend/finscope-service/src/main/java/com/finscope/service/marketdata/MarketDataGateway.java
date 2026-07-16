@@ -29,6 +29,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -272,8 +273,9 @@ public class MarketDataGateway {
     }
 
     private String dragonTigerScopeKey(Long instrumentId, LocalDate startDate, LocalDate endDate) {
+        long windowDays = ChronoUnit.DAYS.between(startDate, endDate) + 1L;
         return MarketDataCapability.DRAGON_TIGER.name() + ":" + instrumentId
-                + ":" + startDate + ":" + endDate;
+                + ":" + windowDays + "D";
     }
 
     private LocalDateTime dragonTigerDataAsOf(DragonTigerData data, LocalDate endDate) {

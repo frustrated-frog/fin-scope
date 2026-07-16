@@ -88,6 +88,8 @@ public class EastmoneyDragonTigerProvider implements DragonTigerProvider {
     @Override
     public boolean supports(Instrument instrument) {
         return instrument != null && "STOCK".equals(instrument.getType())
+                && instrument.getCode() != null
+                && instrument.getCode().matches("\\d{6}")
                 && ("SH".equals(instrument.getMarket())
                 || "SZ".equals(instrument.getMarket())
                 || "BJ".equals(instrument.getMarket()));
@@ -194,12 +196,15 @@ public class EastmoneyDragonTigerProvider implements DragonTigerProvider {
                             + "(TRADE_DATE='" + date + "')");
             List<JsonNode> rows = rows(response);
             List<SeatRow> seats = new ArrayList<SeatRow>();
-            int rank = 1;
+            Map<String, Integer> ranks = new LinkedHashMap<String, Integer>();
             for (JsonNode row : rows) {
+                String group = seatGroup(row);
+                int rank = ranks.containsKey(group) ? ranks.get(group) + 1 : 1;
                 if (rank > 5) {
-                    break;
+                    continue;
                 }
-                seats.add(new SeatRow(seat(row, direction, rank++, response), row));
+                ranks.put(group, rank);
+                seats.add(new SeatRow(seat(row, direction, rank, response), row));
             }
             return DirectionResult.success(direction, seats, response);
         } catch (Exception error) {
@@ -350,6 +355,15 @@ public class EastmoneyDragonTigerProvider implements DragonTigerProvider {
             return "NORTHBOUND";
         }
         return null;
+    }
+
+    private static String seatGroup(JsonNode row) {
+        String tradeId = text(row.get("TRADE_ID"));
+        if (tradeId != null) {
+            return "TRADE_ID:" + tradeId;
+        }
+        String reason = text(row.get("EXPLANATION"));
+        return reason == null ? "UNMATCHED" : "REASON:" + reason;
     }
 
     private static String seatPayload(List<DragonTigerSeat> seats) {

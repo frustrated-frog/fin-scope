@@ -72,14 +72,14 @@ class MarketDataGatewayDragonTigerTest {
     }
 
     @Test
-    void fallsBackToStoredSnapshotWhenAllProvidersFail() {
+    void fallsBackToStoredSnapshotWhenTheRollingWindowMovesToTheNextDay() {
         gateway(provider(data())).fetchDragonTiger(
                 instrument(), LocalDate.of(2026, 3, 19), LocalDate.of(2026, 7, 16));
         FakeDragonTigerProvider failing = provider(data());
         failing.failure = new ProviderContractException("TIMEOUT", "upstream timeout", true);
 
         DragonTigerGatewayResult result = gateway(failing).fetchDragonTiger(
-                instrument(), LocalDate.of(2026, 3, 19), LocalDate.of(2026, 7, 16));
+                instrument(), LocalDate.of(2026, 3, 20), LocalDate.of(2026, 7, 17));
 
         assertEquals(MarketDataQualityStatus.STALE_FALLBACK, result.getQualityStatus());
         assertEquals(1, result.getData().getRecords().size());

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EastmoneyDragonTigerProviderTest {
@@ -86,6 +87,41 @@ class EastmoneyDragonTigerProviderTest {
         assertTrue(result.getData().getRecords().get(0).getSellSeats().isEmpty());
         assertTrue(result.getWarnings().stream()
                 .anyMatch(value -> value.startsWith("DRAGON_TIGER_SEAT_UNAVAILABLE:SELL")));
+    }
+
+    @Test
+    void keepsTopFiveSeatsForEveryTradeIdOnTheSameDate() {
+        FinanceHttpClient client = (provider, uri, headers) -> {
+            if (decoded(uri).contains("RPT_DAILYBILLBOARD_DETAILSNEW")) {
+                return response("{\"result\":{\"data\":["
+                        + summaryRow("trade-1", "原因一") + ","
+                        + summaryRow("trade-2", "原因二")
+                        + "]},\"success\":true}");
+            }
+            return response("{\"result\":{\"data\":["
+                    + seatRows("trade-1", "原因一") + ","
+                    + seatRows("trade-2", "原因二")
+                    + "]},\"success\":true}");
+        };
+
+        ProviderResult<DragonTigerData> result = provider(client).fetch(
+                stock(), LocalDate.of(2026, 7, 15), LocalDate.of(2026, 7, 15));
+
+        assertEquals(2, result.getData().getRecords().size());
+        result.getData().getRecords().forEach(record -> {
+            assertEquals(5, record.getBuySeats().size());
+            assertEquals(5, record.getSellSeats().size());
+            assertEquals(5, record.getBuySeats().get(4).getRank());
+            assertEquals("COMPLETE", record.getQualityStatus());
+        });
+    }
+
+    @Test
+    void rejectsAnInstrumentCodeThatCannotBeSafelyEmbeddedInTheProviderFilter() {
+        Instrument instrument = stock();
+        instrument.setCode("000021\")");
+
+        assertFalse(provider(new EmptyHttpClient()).supports(instrument));
     }
 
     private static EastmoneyDragonTigerProvider provider(FinanceHttpClient client) {
@@ -154,5 +190,32 @@ class EastmoneyDragonTigerProviderTest {
                 .getClassLoader().getResource("marketintel/" + name).toURI()));
         return new FinanceHttpResponse(200, new String(bytes, StandardCharsets.UTF_8),
                 Instant.parse("2026-07-16T08:00:00Z"), name);
+    }
+
+    private static FinanceHttpResponse response(String body) {
+        return new FinanceHttpResponse(200, body,
+                Instant.parse("2026-07-16T08:00:00Z"), "inline");
+    }
+
+    private static String summaryRow(String tradeId, String reason) {
+        return "{\"TRADE_DATE\":\"2026-07-15 00:00:00\","
+                + "\"EXPLANATION\":\"" + reason + "\",\"TRADE_ID\":\"" + tradeId + "\"}";
+    }
+
+    private static String seatRows(String tradeId, String reason) {
+        StringBuilder rows = new StringBuilder();
+        for (int index = 1; index <= 5; index++) {
+            if (index > 1) {
+                rows.append(',');
+            }
+            rows.append("{\"TRADE_ID\":\"").append(tradeId)
+                    .append("\",\"EXPLANATION\":\"").append(reason)
+                    .append("\",\"OPERATEDEPT_CODE\":\"").append(index)
+                    .append("\",\"OPERATEDEPT_NAME\":\"席位").append(index)
+                    .append("\",\"BUY\":").append(index)
+                    .append(",\"SELL\":").append(index)
+                    .append(",\"NET\":0}");
+        }
+        return rows.toString();
     }
 }

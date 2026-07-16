@@ -71,6 +71,22 @@ test('explains a confirmed empty window without treating it as an error', () => 
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
+test('does not describe an unrefreshed dimension as a confirmed empty window', () => {
+  render(<DragonTigerPanel view={{
+    ...dragonTigerView,
+    records: [],
+    health: {
+      status: 'NOT_REFRESHED',
+      providerCode: '',
+      asOf: null,
+      warnings: ['尚未刷新龙虎榜数据']
+    }
+  }} />);
+
+  expect(screen.getByText(/尚未刷新龙虎榜事实/)).toBeInTheDocument();
+  expect(screen.queryByText(/没有公开龙虎榜记录/)).not.toBeInTheDocument();
+});
+
 test('shows stale and unavailable states', () => {
   const { rerender } = render(<DragonTigerPanel view={{
     ...dragonTigerView,

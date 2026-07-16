@@ -98,6 +98,7 @@ export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const unavailable = view.health.status === 'UNAVAILABLE';
   const stale = view.health.status === 'STALE_FALLBACK';
+  const notRefreshed = view.health.status === 'NOT_REFRESHED';
 
   function toggle(id: number) {
     setExpanded((current) => {
@@ -144,7 +145,9 @@ export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
         </div>
       ) : !unavailable && (
         <p className="dragon-tiger-empty">
-          近 {view.range.days} 日没有公开龙虎榜记录。这表示当前窗口内未发现满足公开披露条件的上榜事件。
+          {notRefreshed
+            ? '尚未刷新龙虎榜事实。点击“刷新市场数据”后，系统会查询当前窗口内的公开披露记录。'
+            : `近 ${view.range.days} 日没有公开龙虎榜记录。这表示当前窗口内未发现满足公开披露条件的上榜事件。`}
         </p>
       )}
 
