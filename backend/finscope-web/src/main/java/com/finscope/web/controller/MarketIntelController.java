@@ -11,6 +11,8 @@ import com.finscope.domain.marketintel.MarketIntelRefreshRun;
 import com.finscope.service.marketintel.CapitalInterpretationFacade;
 import com.finscope.service.marketintel.MarketIntelCapitalService;
 import com.finscope.service.marketintel.MarketIntelCapitalView;
+import com.finscope.service.marketintel.DragonTigerView;
+import com.finscope.service.marketintel.MarketIntelDragonTigerService;
 import com.finscope.service.marketintel.MarketIntelRefreshCoordinator;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +39,8 @@ public class MarketIntelController {
     private CapitalInterpretationRepository interpretations;
     @Resource
     private MarketIntelRefreshRunRepository refreshRuns;
+    @Resource
+    private MarketIntelDragonTigerService dragonTiger;
 
     @GetMapping("/instruments")
     public ApiResponse<List<Instrument>> instruments() {
@@ -57,6 +61,13 @@ public class MarketIntelController {
     @GetMapping("/instruments/{id}/capital-behavior")
     public ApiResponse<MarketIntelCapitalView> behavior(@PathVariable Long id, @RequestParam(defaultValue = "20d") String range, @RequestParam(defaultValue = "5m") String granularity) {
         return ApiResponses.success(capital.view(id, range, granularity));
+    }
+
+    @GetMapping("/instruments/{id}/dragon-tiger")
+    public ApiResponse<DragonTigerView> dragonTiger(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "120") int days) {
+        return ApiResponses.success(dragonTiger.view(id, days));
     }
 
     @PostMapping("/instruments/{id}/capital-interpretations")

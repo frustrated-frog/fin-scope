@@ -2,9 +2,14 @@ package com.finscope.web;
 
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.domain.marketintel.DragonTigerSeat;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
+import com.finscope.rpc.marketintel.DragonTigerData;
+import com.finscope.rpc.marketintel.DragonTigerProvider;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,12 +48,14 @@ class MarketIntelApiIntegrationTest {
     @Resource MockMvc mvc;@Resource JdbcTemplate jdbc;
     @MockBean(name="pythonMarketDataCapitalFlowProvider") CapitalFlowProvider provider;
     @MockBean(name="eastmoneyCapitalFlowProvider") CapitalFlowProvider fallbackProvider;
+    @MockBean(name="eastmoneyDragonTigerProvider") DragonTigerProvider dragonTigerProvider;
     @MockBean LlmChatClient llm;
     @MockBean(name="marketIntelRefreshExecutor") Executor refreshExecutor;
     @MockBean(name="marketIntelAgentExecutor") Executor agentExecutor;
 
     @BeforeEach void setUp(){
         jdbc.update("DELETE FROM market_capital_interpretation");jdbc.update("DELETE FROM market_capital_behavior_evaluation");jdbc.update("DELETE FROM market_capital_behavior_snapshot");jdbc.update("DELETE FROM market_capital_flow_snapshot");
+        jdbc.update("DELETE FROM market_dragon_tiger_seat");jdbc.update("DELETE FROM market_dragon_tiger_record");
         jdbc.update("DELETE FROM market_intel_refresh_step");jdbc.update("DELETE FROM market_intel_refresh_run");jdbc.update("DELETE FROM agent_run");jdbc.update("DELETE FROM watchlist_item");jdbc.update("DELETE FROM instrument");
         jdbc.update("INSERT INTO instrument(id,code,type,name,market,created_at,updated_at) VALUES(7,'600519','STOCK','贵州茅台','SH',?,?)",LocalDateTime.now().toString(),LocalDateTime.now().toString());
         doAnswer(invocation->{((Runnable)invocation.getArgument(0)).run();return null;}).when(refreshExecutor).execute(any(Runnable.class));
@@ -59,6 +66,21 @@ class MarketIntelApiIntegrationTest {
         when(provider.priority()).thenReturn(10);when(provider.batchLimit()).thenReturn(1);
         when(provider.minimumInterval()).thenReturn(Duration.ZERO);when(provider.timeout()).thenReturn(Duration.ofSeconds(1));
         when(provider.supports(any(Instrument.class))).thenReturn(true);when(provider.fetch(any(),any())).thenReturn(fixture());
+        when(dragonTigerProvider.providerCode()).thenReturn("TEST_DRAGON_TIGER");
+        when(dragonTigerProvider.providerFamily()).thenReturn("TEST_FAMILY");
+        when(dragonTigerProvider.capabilities()).thenReturn(Collections.singleton(
+                com.finscope.domain.marketdata.MarketDataCapability.DRAGON_TIGER));
+        when(dragonTigerProvider.supports(
+                com.finscope.domain.marketdata.MarketDataCapability.DRAGON_TIGER)).thenReturn(true);
+        when(dragonTigerProvider.priority()).thenReturn(10);
+        when(dragonTigerProvider.batchLimit()).thenReturn(1);
+        when(dragonTigerProvider.minimumInterval()).thenReturn(Duration.ZERO);
+        when(dragonTigerProvider.timeout()).thenReturn(Duration.ofSeconds(1));
+        when(dragonTigerProvider.supports(any(Instrument.class))).thenReturn(true);
+        when(dragonTigerProvider.fetch(any(), any(), any())).thenReturn(
+                ProviderResult.of(new DragonTigerData(
+                                Collections.emptyList(), Collections.emptyList()),
+                        LocalDateTime.now(), "empty-lhb", Collections.emptyList()));
     }
 
     @Test void refreshThenQueryReturnsRuleExplanationWithoutCallingLlm() throws Exception{
@@ -105,7 +127,7 @@ class MarketIntelApiIntegrationTest {
         long runId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(refresh.getResponse().getContentAsString()).path("data").path("id").asLong();
 
         mvc.perform(get("/api/market-intel/refresh-runs/"+runId)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.status").value("PARTIAL"))
                 .andExpect(jsonPath("$.data.errorType").value("ALL_FUND_FLOW_SOURCES_FAILED"))
                 .andExpect(jsonPath("$.data.errorMessage").value("东财资金流接口暂不可用，请稍后重试"));
     }
@@ -151,9 +173,68 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(jsonPath("$.data.hypotheses[0].confidence").value("LOW"));
     }
 
+    @Test void returnsPersistedDragonTigerFactsAndSeats() throws Exception {
+        DragonTigerRecord record = dragonTigerRecord();
+        when(dragonTigerProvider.fetch(any(), any(), any())).thenReturn(
+                ProviderResult.of(new DragonTigerData(
+                                Collections.singletonList(record), Collections.emptyList()),
+                        LocalDateTime.now(), "lhb-record", Collections.emptyList()));
+
+        mvc.perform(post("/api/market-intel/instruments/7/refresh"))
+                .andExpect(status().isAccepted());
+        mvc.perform(get("/api/market-intel/instruments/7/dragon-tiger?days=120"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.range.days").value(120))
+                .andExpect(jsonPath("$.data.records[0].reason").isNotEmpty())
+                .andExpect(jsonPath("$.data.records[0].buySeats[0].direction").value("BUY"))
+                .andExpect(jsonPath("$.data.health.status").value("FRESH_PRIMARY"));
+    }
+
+    @Test void returns200ForAConfirmedEmptyDragonTigerWindow() throws Exception {
+        mvc.perform(post("/api/market-intel/instruments/7/refresh"))
+                .andExpect(status().isAccepted());
+
+        mvc.perform(get("/api/market-intel/instruments/7/dragon-tiger?days=120"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.records").isEmpty())
+                .andExpect(jsonPath("$.data.health.status").value("FRESH_PRIMARY"));
+    }
+
+    @Test void rejectsUnsupportedDragonTigerRange() throws Exception {
+        mvc.perform(get("/api/market-intel/instruments/7/dragon-tiger?days=15"))
+                .andExpect(status().isBadRequest());
+    }
+
     private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));
         CapitalFlowPoint previous=point("DAY_1",today.minusDays(1).atTime(15,0),new BigDecimal("100000000"),new BigDecimal("20000000"),"daily-1");
         CapitalFlowPoint latest=point("DAY_1",today.atTime(15,0),new BigDecimal("180000000"),new BigDecimal("-30000000"),"daily-2");latest.setTradeVolume(new BigDecimal("1210000"));
         return new CapitalFlowData(Collections.singletonList(minute),Arrays.asList(previous,latest),new BigDecimal("3.21"),new BigDecimal("1.67"),Collections.emptyList(),"TEST");}
     private CapitalFlowPoint point(String granularity,LocalDateTime at,BigDecimal amount,BigDecimal flow,String hash){CapitalFlowPoint p=new CapitalFlowPoint();p.setInstrumentId(7L);p.setProviderCode("TEST");p.setGranularity(granularity);p.setDataDate(at.toLocalDate());p.setObservedAt(at);p.setPrice(new BigDecimal("100"));p.setIntervalTradeAmount(amount);p.setMainNetInflow(flow);p.setTurnoverRate(new BigDecimal("3.21"));p.setVolumeRatio(new BigDecimal("1.67"));p.setCalculationVersion("test-v1");p.setRetrievedAt(LocalDateTime.now());p.setPayloadHash(hash);p.setQualityStatus("COMPLETE");return p;}
+
+    private DragonTigerRecord dragonTigerRecord() {
+        DragonTigerSeat seat = new DragonTigerSeat();
+        seat.setExternalTradeId("100373909");
+        seat.setSeatCode("0");
+        seat.setSeatName("机构专用");
+        seat.setDirection("BUY");
+        seat.setRank(1);
+        seat.setBuyAmount(new BigDecimal("206268197.34"));
+        seat.setInstitutional(true);
+        seat.setRetrievedAt(LocalDateTime.now());
+        seat.setPayloadHash("lhb-seat");
+        DragonTigerRecord record = new DragonTigerRecord();
+        record.setInstrumentId(7L);
+        record.setProviderCode("TEST_DRAGON_TIGER");
+        record.setTradeDate(LocalDate.now().minusDays(1));
+        record.setExternalId("100373909");
+        record.setReason("日跌幅偏离值达到7%的前5只证券");
+        record.setNetAmount(new BigDecimal("-395870676.13"));
+        record.setRetrievedAt(LocalDateTime.now());
+        record.setPayloadHash("lhb-record");
+        record.setQualityStatus("COMPLETE");
+        record.setSeats(Collections.singletonList(seat));
+        return record;
+    }
 }
