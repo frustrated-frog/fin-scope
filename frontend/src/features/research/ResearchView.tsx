@@ -57,10 +57,6 @@ export function ResearchView({
   const [subjectCode, setSubjectCode] = useState('');
   const [thesisDetail, setThesisDetail] = useState<ResearchThesisDetail | null>(null);
   useEffect(() => { if (!selectedThesisId) { setThesisDetail(null); return; } api<ResearchThesisDetail>(`/api/research/theses/${selectedThesisId}`).then(setThesisDetail).catch(() => setThesisDetail(null)); }, [selectedThesisId]);
-  const latestRun = useMemo(() => [...runs].sort((left, right) => {
-    const dateOrder = right.runDate.localeCompare(left.runDate);
-    return dateOrder || right.id - left.id;
-  })[0], [runs]);
 
   async function submit() {
     await onRun({ thesisId: selectedThesisId || undefined, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
@@ -199,19 +195,11 @@ export function ResearchView({
           <div className="panel-head research-archive-head">
             <div>
               <p className="eyebrow">研究档案</p>
-              <h3>最新研究运行</h3>
+              <h3>历次研究运行</h3>
             </div>
-            <span className="research-run-count">仅展示最新 · 隐藏 {Math.max(runs.length - 1, 0)} 条</span>
+            <span className="research-run-count">共 {runs.length} 次</span>
           </div>
-          {latestRun ? (
-            <LatestResearchRunCard
-              run={latestRun}
-              thesisName={latestRun.thesisId ? theses.find((thesis) => thesis.id === latestRun.thesisId)?.subjectName || `#${latestRun.thesisId}` : '探索'}
-              onOpen={() => onOpenRun(latestRun.id)}
-            />
-          ) : (
-            <p className="muted">还没有研究运行</p>
-          )}
+          <ResearchRunList runs={runs} theses={theses} onOpenRun={onOpenRun} />
         </div>
 
         <aside className="research-detail-panel">
@@ -267,7 +255,45 @@ function runStatusTone(status: string) {
   return 'neutral';
 }
 
-function LatestResearchRunCard({
+function ResearchRunList({
+  runs,
+  theses,
+  onOpenRun
+}: {
+  runs: ResearchRun[];
+  theses: ResearchThesis[];
+  onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
+}) {
+  if (runs.length === 0) {
+    return <p className="muted">还没有研究运行</p>;
+  }
+
+  return (
+    <div className="research-run-list" aria-label="研究运行列表">
+      <div className="research-run-list-head">
+        <span>日期</span>
+        <span>命题</span>
+        <span>状态</span>
+        <span>来源</span>
+        <span>事件</span>
+        <span>证据</span>
+        <span>学习/选题</span>
+      </div>
+      <div className="research-run-list-body">
+        {runs.map((run) => (
+          <ResearchRunRow
+            key={run.id}
+            run={run}
+            thesisName={researchRunThesisName(run, theses)}
+            onOpen={() => onOpenRun(run.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResearchRunRow({
   run,
   thesisName,
   onOpen
@@ -279,47 +305,42 @@ function LatestResearchRunCard({
   const fetchedSources = run.fetchedSourceCount ?? 0;
   const sourceCount = run.sourceCount || 0;
   const sourcePercent = sourceCount ? Math.min(100, Math.round((fetchedSources / sourceCount) * 100)) : 0;
-  const metrics = [
-    { label: '来源', value: `${fetchedSources}/${sourceCount}`, detail: `${sourcePercent}% fetched` },
-    { label: '事件', value: run.eventCount ?? 0, detail: 'clustered' },
-    { label: '证据', value: run.evidenceCount ?? 0, detail: 'validated' },
-    { label: '学习/选题', value: `${run.learningTaskCount ?? 0}/${run.contentIdeaCount ?? 0}`, detail: 'next actions' }
-  ];
+  const tone = runStatusTone(run.status);
 
   return (
     <button
-      className={`research-latest-run-card ${runStatusTone(run.status)}`}
+      className={`research-run-row ${tone}`}
       type="button"
       onClick={onOpen}
-      aria-label={`打开最近一次研究运行 ${run.runDate} ${presentRunStatus(run.status)}`}
+      aria-label={`打开研究运行 ${run.runDate} ${thesisName} ${presentRunStatus(run.status)}`}
     >
-      <span className="research-run-scanline" aria-hidden="true" />
-      <span className="research-run-card-head">
-        <span>
-          <span className="research-run-kicker">最近一次 · RUN #{run.id}</span>
-          <strong>{thesisName}</strong>
+      <span className="research-run-date-cell">
+        <strong>{run.runDate}</strong>
+        <small>RUN #{run.id}</small>
+      </span>
+      <span className="research-run-thesis-cell">
+        <strong>{thesisName}</strong>
+        <small>{run.summary || '等待打开运行细节查看 agent trace'}</small>
+      </span>
+      <span>
+        <span className={`research-status-chip ${tone}`}>{presentRunStatus(run.status)}</span>
+      </span>
+      <span className="research-source-cell">
+        <strong>{fetchedSources}/{sourceCount}</strong>
+        <span className="research-source-mini-meter" aria-label={`来源进度 ${fetchedSources}/${sourceCount}`}>
+          <span style={{ width: `${sourcePercent}%` }} />
         </span>
-        <span className={`research-status-chip ${runStatusTone(run.status)}`}>{presentRunStatus(run.status)}</span>
       </span>
-      <span className="research-run-date-row">
-        <span>{run.runDate}</span>
-        <span>{run.summary || '等待打开运行细节查看 agent trace'}</span>
-      </span>
-      <span className="research-source-meter" aria-label={`来源进度 ${fetchedSources}/${sourceCount}`}>
-        <span style={{ width: `${sourcePercent}%` }} />
-      </span>
-      <span className="research-run-metric-grid">
-        {metrics.map((metric) => (
-          <span className="research-run-metric" key={metric.label}>
-            <small>{metric.label}</small>
-            <strong>{metric.value}</strong>
-            <em>{metric.detail}</em>
-          </span>
-        ))}
-      </span>
-      <span className="research-run-open">打开运行细节</span>
+      <span className="research-run-number-cell">{run.eventCount ?? 0}</span>
+      <span className="research-run-number-cell">{run.evidenceCount ?? 0}</span>
+      <span className="research-run-number-cell">{run.learningTaskCount ?? 0}/{run.contentIdeaCount ?? 0}</span>
     </button>
   );
+}
+
+function researchRunThesisName(run: ResearchRun, theses: ResearchThesis[]) {
+  if (!run.thesisId) return '探索';
+  return theses.find((thesis) => thesis.id === run.thesisId)?.subjectName || `命题 #${run.thesisId}`;
 }
 
 function presentDuration(durationMs: number) {

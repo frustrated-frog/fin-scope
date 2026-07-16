@@ -1161,7 +1161,7 @@ test('research workbench runs a full research job and shows agent trace', async 
   await user.click(screen.getByRole('button', { name: 'Research' }));
 
   expect(await screen.findByText('启动探索性研究')).toBeInTheDocument();
-  expect(screen.getByText('最新研究运行')).toBeInTheDocument();
+  expect(screen.getByText('历次研究运行')).toBeInTheDocument();
   expect(screen.getByText('1/1')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: '开始探索研究' }));

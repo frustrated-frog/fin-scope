@@ -28,6 +28,7 @@ import java.util.LinkedHashSet;
 
 @Service
 public class EventClusterService {
+
     private static final Set<String> VALID_EVENT_STATUSES = new LinkedHashSet<String>(Arrays.asList(
             ResearchEnums.EVENT_ACTIVE,
             ResearchEnums.EVENT_COOLING,
@@ -106,11 +107,7 @@ public class EventClusterService {
         return eventClusterRepository.findAll();
     }
 
-    public List<EventCluster> list(String themeCode,
-                                   String status,
-                                   String noveltyState,
-                                   LocalDate dateFrom,
-                                   LocalDate dateTo) {
+    public List<EventCluster> list(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
         }

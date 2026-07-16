@@ -11,11 +11,13 @@ import {
 } from '../../shared/types';
 import { ResearchView } from './ResearchView';
 
-test('keeps breathing room between the archive heading and latest run card', () => {
+test('renders research runs as a telemetry list', () => {
   renderView(legacyDetail());
 
-  expect(screen.getByRole('button', { name: /最近一次/ })).toHaveClass('research-latest-run-card');
-  expect(screen.getByText('仅展示最新 · 隐藏 0 条')).toBeInTheDocument();
+  expect(screen.getByText('历次研究运行')).toBeInTheDocument();
+  expect(screen.getByText('共 1 次')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveClass('research-run-row');
+  expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
 });
 
 test('groups the report action inside a responsive research detail header', () => {
@@ -28,7 +30,7 @@ test('prioritizes one thesis decision summary over equal-weight output cards', a
   stubThesisDetail(thesisDetail());
   renderView(legacyDetail(), { theses: [thesis()] });
 
-  await userEvent.click(screen.getByRole('button', { name: /半导体设备/ }));
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
 
   expect(await screen.findByRole('region', { name: '命题决策摘要' })).toBeInTheDocument();
   expect(screen.getByText('中等置信')).toBeInTheDocument();
@@ -42,7 +44,7 @@ test('limits each evidence lane to two findings and reports the remainder', asyn
   stubThesisDetail(thesisDetail());
   renderView(legacyDetail(), { theses: [thesis()] });
 
-  await userEvent.click(screen.getByRole('button', { name: /半导体设备/ }));
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
   await screen.findByRole('region', { name: '命题决策摘要' });
 
   expect(screen.getByText('支持一')).toBeInTheDocument();
