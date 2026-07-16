@@ -11,10 +11,7 @@ import com.finscope.service.financials.FinancialRefreshService;
 import com.finscope.web.request.financials.FinancialRefreshRequest;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,7 +25,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 
 @RestController
@@ -86,14 +82,4 @@ public class FinancialsController {
         return ApiResponses.success(documents.listByReport(id));
     }
 
-    @GetMapping("/documents/{id}/content")
-    public ResponseEntity<Resource> documentContent(@PathVariable Long id) {
-        FinancialDocument document = documents.get(id);
-        Path path = documents.contentPath(id);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=\"" + document.getFileHash() + ".pdf\"")
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(new FileSystemResource(path.toFile()));
-    }
 }

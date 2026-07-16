@@ -12,6 +12,7 @@ import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
 import com.finscope.web.handler.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -22,6 +23,8 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDate;
 import java.util.Collections;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -33,9 +36,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(FinancialsController.class)
+@WebMvcTest({FinancialsController.class, FinancialDocumentContentController.class})
 @Import({ApiExceptionHandler.class, FinScopeProperties.class, CorsConfig.class})
 class FinancialsControllerTest {
+    @TempDir
+    Path tempDir;
     @Autowired
     private MockMvc mockMvc;
     @MockBean
@@ -100,5 +105,27 @@ class FinancialsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(11))
                 .andExpect(jsonPath("$.data.parseStatus").value("PARSED"));
+    }
+
+    @Test
+    void streamsPdfContentOutsideTheJsonEnvelopeContract() throws Exception {
+        byte[] bytes = "%PDF-1.4 content".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        Path path = tempDir.resolve("report.pdf");
+        Files.write(path, bytes);
+        FinancialDocument document = new FinancialDocument();
+        document.setId(11L);
+        document.setFileHash("abc123");
+        when(documents.get(11L)).thenReturn(document);
+        when(documents.contentPath(11L)).thenReturn(path);
+
+        mockMvc.perform(get("/api/financials/documents/11/content"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("Content-Disposition",
+                                "inline; filename=\"abc123.pdf\""))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .content().bytes(bytes));
     }
 }
