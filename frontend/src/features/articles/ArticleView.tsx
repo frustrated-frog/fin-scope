@@ -320,47 +320,58 @@ export function ArticleView({
   }
 
   const isIngesting = ingestStatus === 'loading';
+  const visibleStart = totalCount === 0 ? 0 : currentPage * pageSize + 1;
+  const visibleEnd = Math.min(totalCount, currentPage * pageSize + pagedArticles.length);
+  const selectedCount = selectedIds.size;
+  const primaryCategory = pagedArticles[0]?.category || '市场';
 
   return (
-    <section className="article-container">
-      <div className="card">
-        <div className="card-header">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>文章 Article</h3>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
-                URL / RSS / Web 抓取内容统一进入卡片化信息池
-              </p>
-            </div>
-            <span className="badge">{totalCount} items</span>
+    <section className="article-container article-command-center">
+      <aside className="article-signal-panel" aria-label="文章情报控制台">
+        <header className="article-control-hero">
+          <p className="eyebrow">Signal intake</p>
+          <h3>文章情报台</h3>
+          <p>把外部链接转化为可追踪、可沉淀的研究素材，先筛信号，再进入主题库。</p>
+          <div className="article-hero-readouts" aria-label="文章总览">
+            <span><small>当前队列</small><strong>{totalCount}</strong></span>
+            <span><small>本页信号</small><strong>{pagedArticles.length}</strong></span>
+            <span><small>已选择</small><strong>{selectedCount}</strong></span>
           </div>
-        </div>
-        <div className="card-content">
+        </header>
+
+        <div className="article-ingest-panel">
+          <div className="article-panel-heading">
+            <span>入口</span>
+            <strong>URL 采集</strong>
+          </div>
           <form className="url-ingest-form" onSubmit={ingestUrl}>
-            <input
-              type="url"
-              value={urlForm.url}
-              onChange={(event) => setUrlForm({ ...urlForm, url: event.target.value })}
-              placeholder="输入文章URL..."
-              disabled={isIngesting}
-              required
-            />
-            <div
-              className="article-category-segment"
-              aria-label="文章类型"
-            >
-              {ARTICLE_CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  className={`article-category-option${urlForm.category === category ? ' is-active' : ''}`}
-                  aria-pressed={urlForm.category === category}
-                  disabled={isIngesting}
-                  onClick={() => setUrlForm({ ...urlForm, category })}
-                >
-                  {category}
-                </button>
-              ))}
+            <label className="article-url-field">
+              <span>文章链接</span>
+              <input
+                type="url"
+                value={urlForm.url}
+                onChange={(event) => setUrlForm({ ...urlForm, url: event.target.value })}
+                placeholder="输入文章URL..."
+                disabled={isIngesting}
+                required
+              />
+            </label>
+            <div className="article-category-wrap">
+              <span>内容类型</span>
+              <div className="article-category-segment" aria-label="文章类型">
+                {ARTICLE_CATEGORIES.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`article-category-option${urlForm.category === category ? ' is-active' : ''}`}
+                    aria-pressed={urlForm.category === category}
+                    disabled={isIngesting}
+                    onClick={() => setUrlForm({ ...urlForm, category })}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
             </div>
             <button className="primary-button" type="submit" disabled={isIngesting}>
               {isIngesting ? '生成中...' : '生成情报卡片'}
@@ -399,101 +410,108 @@ export function ArticleView({
             </div>
           )}
         </div>
-      </div>
 
-      {pagedArticles.length > 0 && (
-        <div className="batch-toolbar card">
-          <div className="card-content" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                aria-label="全选文章"
-                checked={selectAll}
-                onChange={toggleSelectAll}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              <span>全选当前页</span>
-            </label>
-            {selectedIds.size > 0 && (
-              <>
-                <span className="badge selection-pill" style={{ background: 'var(--accent)' }}>
-                  已选 {selectedIds.size} 项
-                </span>
-                <button
-                  className="danger-button selection-pill"
-                  onClick={() => setShowBatchDeleteConfirm(true)}
-                >
-                  删除所选
-                </button>
-              </>
-            )}
+        <div className="article-queue-panel">
+          <div className="article-panel-heading">
+            <span>队列</span>
+            <strong>{totalCount ? `${visibleStart}-${visibleEnd}` : '0'} / {totalCount}</strong>
           </div>
+          <div className="article-queue-matrix">
+            <span><small>主分类</small><strong>{primaryCategory}</strong></span>
+            <span><small>页码</small><strong>{Math.max(1, currentPage + 1)} / {Math.max(1, totalPages)}</strong></span>
+          </div>
+          {pagedArticles.length > 0 && (
+            <div className="batch-toolbar">
+              <label className="article-select-all">
+                <input
+                  type="checkbox"
+                  aria-label="全选文章"
+                  checked={selectAll}
+                  onChange={toggleSelectAll}
+                />
+                <span>全选当前页</span>
+              </label>
+              {selectedIds.size > 0 && (
+                <>
+                  <span className="badge selection-pill">
+                    已选 {selectedIds.size} 项
+                  </span>
+                  <button
+                    className="danger-button selection-pill"
+                    onClick={() => setShowBatchDeleteConfirm(true)}
+                  >
+                    删除所选
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </aside>
 
-      <div className="articles-list">
-        {pagedArticles.length === 0 ? (
-          <div className="card">
-            <div className="card-content">
-              <div className="empty-state">
-                <p className="empty-state-text">暂无文章,添加URL开始抓取</p>
+      <main className="article-stream-panel">
+        <div className="article-stream-head">
+          <div>
+            <p className="eyebrow">Article signal stream</p>
+            <h3>情报卡片流</h3>
+          </div>
+          <span className="subtle-badge">{totalCount} active signals</span>
+        </div>
+
+        <div className="articles-list">
+          {pagedArticles.length === 0 ? (
+            <div className="article-empty-panel">
+              <strong>暂无文章</strong>
+              <p>添加 URL 后，系统会抓取正文并生成结构化情报卡片。</p>
+            </div>
+          ) : (
+            pagedArticles.map((article) => (
+              <div className="article-row-shell" key={article.id}>
+                <input
+                  type="checkbox"
+                  aria-label={`选择文章-${article.id}`}
+                  checked={selectedIds.has(article.id)}
+                  onChange={() => toggleSelect(article.id)}
+                />
+                <ArticleCard
+                  article={article}
+                  isExpanded={expandedArticleId === article.id}
+                  isHighlighted={highlightedArticleId === article.id}
+                  onToggle={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
+                  onCompound={() => compoundArticle(article.id)}
+                  onDelete={() => setShowDeleteConfirm(article.id)}
+                  categoryColor={getCategoryColor(article.category)}
+                />
               </div>
-            </div>
-          </div>
-        ) : (
-          pagedArticles.map((article) => (
-            <div key={article.id} style={{ position: 'relative' }}>
-              <input
-                type="checkbox"
-                checked={selectedIds.has(article.id)}
-                onChange={() => toggleSelect(article.id)}
-                style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  width: '18px',
-                  height: '18px',
-                  cursor: 'pointer',
-                  zIndex: 10
-                }}
-              />
-              <ArticleCard
-                article={article}
-                isExpanded={expandedArticleId === article.id}
-                isHighlighted={highlightedArticleId === article.id}
-                onToggle={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
-                onCompound={() => compoundArticle(article.id)}
-                onDelete={() => setShowDeleteConfirm(article.id)}
-                categoryColor={getCategoryColor(article.category)}
-              />
-            </div>
-          ))
-        )}
-      </div>
-
-      {totalPages > 1 && (
-        <div className="pagination-controls card">
-          <div className="card-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-            <button
-              className="secondary-button"
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage === 0}
-            >
-              上一页
-            </button>
-            <span style={{ color: 'var(--muted)' }}>
-              第 {currentPage + 1} / {totalPages} 页
-            </span>
-            <button
-              className="secondary-button"
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= totalPages - 1}
-            >
-              下一页
-            </button>
-          </div>
+            ))
+          )}
         </div>
-      )}
+
+        {totalPages > 1 && (
+          <div className="pagination-controls article-pagination">
+            <div>
+              <strong>第 {currentPage + 1} / {totalPages} 页</strong>
+              <span>显示 {visibleStart}-{visibleEnd}，共 {totalCount} 篇</span>
+            </div>
+            <div className="article-pagination-actions">
+              <button
+                className="secondary-button"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 0}
+              >
+                上一页
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage >= totalPages - 1}
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
 
       {showDeleteConfirm !== null && (
         <div className="modal-overlay">

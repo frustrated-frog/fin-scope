@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
@@ -88,6 +90,40 @@ test('updates article ingest phase from SSE and confirms completion from task AP
 
   expect(await screen.findByText('新生成的情报卡片')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/tasks/task-sse');
+});
+
+test('presents article workspace as a signal command center', async () => {
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/articles/paged')) {
+      return {
+        items: [firstArticle],
+        totalCount: 1,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1
+      };
+    }
+    return {};
+  });
+
+  const { container } = render(
+    <ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
+  );
+
+  expect(await screen.findByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
+  expect(container.querySelector('.article-command-center')).toBeTruthy();
+  expect(container.querySelector('.article-signal-panel')).toBeTruthy();
+  expect(container.querySelector('.article-stream-panel')).toBeTruthy();
+  expect(screen.getByText('1 active signals')).toBeInTheDocument();
+});
+
+test('article stylesheet keeps the command center responsive', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\.article-command-center\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*360px\)\s+minmax\(0,\s*1fr\)/s);
+  expect(styles).toMatch(/\.article-stream-panel\s*{[^}]*min-width:\s*0;/s);
+  expect(styles).toMatch(/@media\s*\(max-width:\s*1120px\)[\s\S]*\.article-command-center[\s\S]*grid-template-columns:\s*1fr;/);
 });
 
 test('does not create an SSE channel when the page unmounts during task submission', async () => {
