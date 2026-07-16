@@ -125,7 +125,8 @@ test('article stylesheet keeps the command center responsive', () => {
   expect(styles).toMatch(/\.article-command-center\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*340px\)\s+minmax\(0,\s*1fr\)/s);
   expect(styles).toMatch(/\.article-command-hero\s*{[^}]*grid-column:\s*1\s*\/\s*-1;/s);
   expect(styles).toMatch(/\.article-stream-panel\s*{[^}]*min-width:\s*0;/s);
-  expect(styles).toMatch(/\.article-command-center\s+\.article-card-header\s*{[^}]*grid-template-columns:\s*minmax\(96px,\s*120px\)\s+minmax\(0,\s*1fr\)\s+28px;/s);
+  expect(styles).toMatch(/\.article-command-center\s+\.article-card-header\s*{[^}]*grid-template-columns:\s*max-content\s+minmax\(0,\s*1fr\)\s+28px;/s);
+  expect(styles).toMatch(/\.article-command-center\s+\.article-tag-group\s*{[^}]*flex-wrap:\s*nowrap;/s);
   expect(styles).toMatch(/@media\s*\(max-width:\s*1120px\)[\s\S]*\.article-command-center[\s\S]*grid-template-columns:\s*1fr;/);
 });
 
