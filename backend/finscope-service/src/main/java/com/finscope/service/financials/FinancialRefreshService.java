@@ -22,8 +22,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class FinancialRefreshService {
@@ -31,15 +33,18 @@ public class FinancialRefreshService {
     private final FinancialReportRepository reports;
     private final StructuredFinancialDataGateway gateway;
     private final FinancialAnalysisEngine analysis;
+    private final QuarterDerivationEngine quarterDerivation;
 
     public FinancialRefreshService(InstrumentRepository instruments,
                                    FinancialReportRepository reports,
                                    StructuredFinancialDataGateway gateway,
-                                   FinancialAnalysisEngine analysis) {
+                                   FinancialAnalysisEngine analysis,
+                                   QuarterDerivationEngine quarterDerivation) {
         this.instruments = instruments;
         this.reports = reports;
         this.gateway = gateway;
         this.analysis = analysis;
+        this.quarterDerivation = quarterDerivation;
     }
 
     @Transactional
@@ -51,13 +56,18 @@ public class FinancialRefreshService {
         FinancialReport report = toReport(instrumentId, external);
         reports.saveReport(report);
         List<FinancialLineItem> lineItems = toLineItems(report.getId(), external);
+        List<String> dataGaps = new ArrayList<String>();
+        List<FinancialLineItem> priorCumulative = loadPriorCumulative(
+                instrument, periodEnd, reportType, external.getScope(), dataGaps);
+        lineItems.addAll(deriveSingleQuarter(
+                report.getId(), reportType, lineItems, priorCumulative));
         reports.replaceLineItems(report.getId(), external.getSourceCode(), lineItems);
 
-        List<FinancialLineItem> prior = reports.findReport(
-                        instrumentId, periodEnd.minusYears(1), reportType, external.getScope())
-                .map(value -> reports.findAllLineItems(value.getId()))
-                .orElseGet(ArrayList<FinancialLineItem>::new);
+        List<FinancialLineItem> prior = loadReference(
+                instrument, periodEnd.minusYears(1), reportType, external.getScope(),
+                "缺少上年同期财报，部分同比指标不可计算", dataGaps);
         FinancialAnalysisResult analyzed = analysis.analyze(lineItems, prior);
+        analyzed.getDataGaps().addAll(dataGaps);
         for (FinancialMetric metric : analyzed.getMetrics()) {
             metric.setReportId(report.getId());
         }
@@ -119,6 +129,110 @@ public class FinancialRefreshService {
             }
         }
         return result;
+    }
+
+    private List<FinancialLineItem> loadPriorCumulative(
+            Instrument instrument, LocalDate periodEnd, FinancialReportType reportType,
+            String scope, List<String> dataGaps) {
+        if (reportType == FinancialReportType.Q1) {
+            return new ArrayList<FinancialLineItem>();
+        }
+        LocalDate previousPeriod;
+        FinancialReportType previousType;
+        if (reportType == FinancialReportType.HALF_YEAR) {
+            previousPeriod = LocalDate.of(periodEnd.getYear(), 3, 31);
+            previousType = FinancialReportType.Q1;
+        } else if (reportType == FinancialReportType.Q3) {
+            previousPeriod = LocalDate.of(periodEnd.getYear(), 6, 30);
+            previousType = FinancialReportType.HALF_YEAR;
+        } else {
+            previousPeriod = LocalDate.of(periodEnd.getYear(), 9, 30);
+            previousType = FinancialReportType.Q3;
+        }
+        return loadReference(instrument, previousPeriod, previousType, scope,
+                "缺少前序累计报告，无法派生单季度值", dataGaps);
+    }
+
+    private List<FinancialLineItem> loadReference(
+            Instrument instrument, LocalDate periodEnd, FinancialReportType reportType,
+            String scope, String gapMessage, List<String> dataGaps) {
+        Optional<FinancialReport> local = reports.findReport(
+                instrument.getId(), periodEnd, reportType, scope);
+        if (local.isPresent()) {
+            return reports.findAllLineItems(local.get().getId());
+        }
+        try {
+            ExternalFinancialStatements external = gateway.fetch(instrument, periodEnd, reportType);
+            FinancialReport report = toReport(instrument.getId(), external);
+            reports.saveReport(report);
+            List<FinancialLineItem> lines = toLineItems(report.getId(), external);
+            reports.replaceLineItems(report.getId(), external.getSourceCode(), lines);
+            return lines;
+        } catch (RuntimeException error) {
+            dataGaps.add(gapMessage);
+            return new ArrayList<FinancialLineItem>();
+        }
+    }
+
+    private List<FinancialLineItem> deriveSingleQuarter(
+            Long reportId, FinancialReportType reportType,
+            List<FinancialLineItem> current, List<FinancialLineItem> priorCumulative) {
+        Map<String, FinancialLineItem> prior = index(priorCumulative);
+        List<FinancialLineItem> derived = new ArrayList<FinancialLineItem>();
+        for (FinancialLineItem item : current) {
+            if (!"CURRENT_YTD".equals(item.getPeriodRole())
+                    || (item.getStatementType() != FinancialStatementType.INCOME
+                    && item.getStatementType() != FinancialStatementType.CASH_FLOW)) {
+                continue;
+            }
+            BigDecimal singleQuarter;
+            FinancialValueOrigin origin;
+            if (reportType == FinancialReportType.Q1) {
+                singleQuarter = item.getNormalizedValue();
+                origin = FinancialValueOrigin.REPORTED;
+            } else {
+                FinancialLineItem previous = prior.get(key(item));
+                singleQuarter = quarterDerivation.singleQuarter(
+                        item.getNormalizedValue(),
+                        previous == null ? null : previous.getNormalizedValue());
+                origin = FinancialValueOrigin.DERIVED;
+            }
+            if (singleQuarter == null) {
+                continue;
+            }
+            FinancialLineItem value = new FinancialLineItem();
+            value.setReportId(reportId);
+            value.setStatementType(item.getStatementType());
+            value.setSourceLabel(item.getSourceLabel() + "（单季）");
+            value.setConceptCode(item.getConceptCode());
+            value.setPeriodRole("CURRENT_QUARTER");
+            value.setNormalizedValue(singleQuarter);
+            value.setCurrency(item.getCurrency());
+            value.setUnitMultiplier(BigDecimal.ONE);
+            value.setValueOrigin(origin);
+            value.setSourceField(item.getSourceField());
+            value.setSourceCode(item.getSourceCode());
+            value.setDisplayOrder(item.getDisplayOrder() + 10000);
+            value.setQualityStatus(item.getQualityStatus());
+            derived.add(value);
+        }
+        return derived;
+    }
+
+    private Map<String, FinancialLineItem> index(List<FinancialLineItem> items) {
+        Map<String, FinancialLineItem> result = new HashMap<String, FinancialLineItem>();
+        for (FinancialLineItem item : items) {
+            if ("CURRENT_YTD".equals(item.getPeriodRole())) {
+                result.put(key(item), item);
+            }
+        }
+        return result;
+    }
+
+    private String key(FinancialLineItem item) {
+        String identity = item.getConceptCode() == null
+                ? item.getSourceField() : item.getConceptCode();
+        return item.getStatementType().name() + "|" + identity;
     }
 
     private Map<FinancialStatementType, List<FinancialLineItem>> group(

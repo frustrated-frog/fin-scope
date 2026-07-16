@@ -23,10 +23,13 @@ export interface ApiResponse<T> {
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   let response: Response;
+  const headers = options?.body instanceof FormData
+    ? { ...(options?.headers ?? {}) }
+    : { 'Content-Type': 'application/json', ...(options?.headers ?? {}) };
   try {
     response = await fetch(path, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) }
+      headers
     });
   } catch (error) {
     throw new ApiError(0, '网络请求失败，请检查网络连接后重试', 'NETWORK_ERROR');

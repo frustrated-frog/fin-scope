@@ -22,6 +22,27 @@ test('treats HTTP 204 as no content', async () => {
   expect(response.text).not.toHaveBeenCalled();
 });
 
+test('lets the browser set multipart boundaries for FormData requests', async () => {
+  const response = new Response(JSON.stringify({
+    success: true,
+    code: 'FS-0000',
+    message: '成功',
+    data: { id: 11 },
+    traceId: 'trace-upload',
+    timestamp: '2026-07-17T10:00:00Z'
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+  const form = new FormData();
+  form.append('file', new Blob(['pdf'], { type: 'application/pdf' }), 'report.pdf');
+
+  await api('/api/financials/documents/upload', { method: 'POST', body: form });
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/financials/documents/upload', expect.objectContaining({
+    body: form,
+    headers: {}
+  }));
+});
+
 describe('api business errors', () => {
   it('surfaces the backend business error message', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({

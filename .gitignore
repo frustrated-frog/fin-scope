@@ -5,6 +5,7 @@ data/finance.db
 data/finance.db-*
 data/raw/
 data/exports/
+data/financials/
 !data/
 !data/.gitkeep
 !data/vault/
