@@ -94,7 +94,15 @@ function RecordCard({
   );
 }
 
-export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
+export function DragonTigerPanel({
+  view,
+  refreshing = false,
+  refreshError
+}: {
+  view: DragonTigerView;
+  refreshing?: boolean;
+  refreshError?: string | null;
+}) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const unavailable = view.health.status === 'UNAVAILABLE';
   const stale = view.health.status === 'STALE_FALLBACK';
@@ -119,6 +127,16 @@ export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
         <strong>近{view.range.days}日上榜 {view.records.length} 次</strong>
       </header>
 
+      {refreshing && (
+        <div className="dragon-tiger-health partial" role="status">
+          后台正在更新龙虎榜事实…
+        </div>
+      )}
+      {refreshError && (
+        <div className="dragon-tiger-health unavailable" role="alert">
+          {refreshError}
+        </div>
+      )}
       {(unavailable || stale) && (
         <div className={`dragon-tiger-health ${unavailable ? 'unavailable' : 'stale'}`} role="alert">
           {view.health.warnings.join('；') || (unavailable
@@ -126,7 +144,8 @@ export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
             : '龙虎榜在线刷新失败，正在显示最近成功数据')}
         </div>
       )}
-      {!unavailable && !stale && view.health.warnings.length > 0 && (
+      {!unavailable && !stale && view.health.warnings.length > 0
+      && !(refreshing && notRefreshed) && (
         <div className="dragon-tiger-health partial" role="status">
           {view.health.warnings.join('；')}
         </div>
@@ -146,7 +165,9 @@ export function DragonTigerPanel({ view }: { view: DragonTigerView }) {
       ) : !unavailable && (
         <p className="dragon-tiger-empty">
           {notRefreshed
-            ? '尚未刷新龙虎榜事实。点击“刷新市场数据”后，系统会查询当前窗口内的公开披露记录。'
+            ? refreshing
+              ? '系统正在后台查询当前窗口内的公开龙虎榜记录，完成后会自动更新。'
+              : '尚未刷新龙虎榜事实。点击“刷新市场数据”后，系统会查询当前窗口内的公开披露记录。'
             : `近 ${view.range.days} 日没有公开龙虎榜记录。这表示当前窗口内未发现满足公开披露条件的上榜事件。`}
         </p>
       )}

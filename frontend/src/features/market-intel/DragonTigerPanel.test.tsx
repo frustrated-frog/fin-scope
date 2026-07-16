@@ -111,3 +111,21 @@ test('shows stale and unavailable states', () => {
   }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('龙虎榜数据源暂不可用');
 });
+
+test('keeps existing facts visible while a background refresh is running or fails', () => {
+  const { rerender } = render(
+    <DragonTigerPanel view={dragonTigerView} refreshing />
+  );
+
+  expect(screen.getByText('后台正在更新龙虎榜事实…')).toBeInTheDocument();
+  expect(screen.getByText('日跌幅偏离值达到7%的前5只证券')).toBeInTheDocument();
+
+  rerender(
+    <DragonTigerPanel
+      view={dragonTigerView}
+      refreshError="后台更新失败，已保留当前龙虎榜数据"
+    />
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('后台更新失败');
+  expect(screen.getByText('日跌幅偏离值达到7%的前5只证券')).toBeInTheDocument();
+});

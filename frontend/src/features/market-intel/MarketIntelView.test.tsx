@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -98,7 +98,7 @@ const dragonTigerView = {
   health: {
     status: 'FRESH_PRIMARY',
     providerCode: 'EASTMONEY_DRAGON_TIGER',
-    asOf: '2026-07-14T16:00:00',
+    asOf: new Date().toISOString(),
     warnings: []
   }
 };
@@ -662,4 +662,160 @@ test('shows an explicit alert when capital analysis uses a stale snapshot', asyn
   expect(alert).toHaveTextContent('当前展示的是旧数据');
   expect(alert).toHaveTextContent('在线资金源均不可用');
   expect(alert).toHaveTextContent('请勿视为实时行情');
+});
+
+test('automatically refreshes an unrefreshed dragon tiger dimension in the background', async () => {
+  let resolveRefresh!: (value: unknown) => void;
+  const refreshResponse = new Promise((resolve) => { resolveRefresh = resolve; });
+  let dragonTigerQueries = 0;
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/dragon-tiger')) {
+      dragonTigerQueries += 1;
+      return Promise.resolve(dragonTigerQueries === 1 ? {
+        ...dragonTigerView,
+        records: [],
+        health: {
+          status: 'NOT_REFRESHED',
+          providerCode: '',
+          asOf: null,
+          warnings: ['尚未刷新龙虎榜数据']
+        }
+      } : dragonTigerView) as never;
+    }
+    if (path.endsWith('/refresh') && options?.method === 'POST') {
+      return refreshResponse as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText(/系统正在后台查询当前窗口/)).toBeInTheDocument();
+  expect(screen.getByText('后台正在更新龙虎榜事实…')).toBeInTheDocument();
+  await waitFor(() => expect(api).toHaveBeenCalledWith(
+    '/api/market-intel/instruments/7/refresh',
+    { method: 'POST' }
+  ));
+
+  await act(async () => {
+    resolveRefresh({
+      id: 61,
+      instrumentId: 7,
+      status: 'SUCCEEDED',
+      successCount: 2,
+      failureCount: 0
+    });
+  });
+
+  await waitFor(() => expect(dragonTigerQueries).toBe(2));
+  await waitFor(() => expect(screen.queryByText('后台正在更新龙虎榜事实…')).not.toBeInTheDocument());
+});
+
+test('keeps stale dragon tiger facts when the one background attempt fails', async () => {
+  const addToast = vi.fn();
+  const staleView = {
+    ...dragonTigerView,
+    records: [{
+      id: 701,
+      tradeDate: '2026-07-15',
+      externalId: 'stale-record',
+      reason: '日跌幅偏离值达到7%的前5只证券',
+      qualityStatus: 'COMPLETE' as const,
+      buySeats: [],
+      sellSeats: []
+    }],
+    health: {
+      status: 'STALE_FALLBACK' as const,
+      providerCode: 'EASTMONEY_DRAGON_TIGER',
+      asOf: '2026-07-15T16:00:00',
+      warnings: ['在线刷新失败，当前展示最近成功数据']
+    }
+  };
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(staleView) as never;
+    if (path.endsWith('/refresh') && options?.method === 'POST') {
+      return Promise.resolve({
+        id: 62,
+        instrumentId: 7,
+        status: 'FAILED',
+        successCount: 0,
+        failureCount: 2,
+        errorMessage: '龙虎榜数据源暂不可用'
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={addToast} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('日跌幅偏离值达到7%的前5只证券')).toBeInTheDocument();
+  expect(await screen.findByText(/后台更新失败.*龙虎榜数据源暂不可用/)).toBeInTheDocument();
+  expect(screen.getByText('日跌幅偏离值达到7%的前5只证券')).toBeInTheDocument();
+  expect(addToast).not.toHaveBeenCalled();
+  const refreshCalls = vi.mocked(api).mock.calls.filter(
+    ([path, options]) => String(path).endsWith('/refresh') && (options as RequestInit | undefined)?.method === 'POST'
+  );
+  expect(refreshCalls).toHaveLength(1);
+});
+
+test('clears the background failure notice when a manual retry succeeds', async () => {
+  const user = userEvent.setup();
+  let refreshAttempts = 0;
+  let dragonTigerQueries = 0;
+  const staleView = {
+    ...dragonTigerView,
+    records: [{
+      id: 702,
+      tradeDate: '2026-07-15',
+      externalId: 'stale-retry',
+      reason: '手动重试前的旧记录',
+      qualityStatus: 'COMPLETE' as const,
+      buySeats: [],
+      sellSeats: []
+    }],
+    health: {
+      status: 'STALE_FALLBACK' as const,
+      providerCode: 'EASTMONEY_DRAGON_TIGER',
+      asOf: '2026-07-15T16:00:00',
+      warnings: ['在线刷新失败，当前展示最近成功数据']
+    }
+  };
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/dragon-tiger')) {
+      dragonTigerQueries += 1;
+      return Promise.resolve(dragonTigerQueries === 1 ? staleView : dragonTigerView) as never;
+    }
+    if (path.endsWith('/refresh') && options?.method === 'POST') {
+      refreshAttempts += 1;
+      return Promise.resolve(refreshAttempts === 1 ? {
+        id: 63,
+        instrumentId: 7,
+        status: 'FAILED',
+        successCount: 0,
+        failureCount: 2,
+        errorMessage: '龙虎榜数据源暂不可用'
+      } : {
+        id: 64,
+        instrumentId: 7,
+        status: 'SUCCEEDED',
+        successCount: 2,
+        failureCount: 0
+      }) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText(/后台更新失败.*龙虎榜数据源暂不可用/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '刷新市场数据' }));
+
+  await waitFor(() => expect(refreshAttempts).toBe(2));
+  await waitFor(() => expect(screen.queryByText(/后台更新失败/)).not.toBeInTheDocument());
 });
