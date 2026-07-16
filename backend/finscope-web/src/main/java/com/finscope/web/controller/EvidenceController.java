@@ -77,7 +77,7 @@ public class EvidenceController {
             eventClusterService.detail(eventId);
         }
         if (page < 0 || pageSize < 1 || pageSize > 200) {
-            throw new BusinessException(com.finscope.common.exception.ErrorCode.BAD_REQUEST,
+            throw new BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID,
                     "page must be >= 0 and pageSize must be between 1 and 200");
         }
         return evidenceService.listPaged(eventId, sourceTier, evidenceType, minConfidence, page, pageSize);

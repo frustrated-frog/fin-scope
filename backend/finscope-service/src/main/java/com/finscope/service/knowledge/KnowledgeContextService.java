@@ -31,7 +31,7 @@ public class KnowledgeContextService {
     public List<EvidenceItem> evidenceForTask(long taskId) {
         LearningTask task = tasks.findById(taskId)
                 .orElseThrow(() -> new BusinessException(
-                        ErrorCode.NOT_FOUND, "学习任务不存在"));
+                        ErrorCode.RESOURCE_NOT_FOUND, "学习任务不存在"));
         if (task.getEventId() == null) {
             return Collections.emptyList();
         }

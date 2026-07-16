@@ -52,14 +52,14 @@ public class StrategyPlaybookService {
     @Transactional
     public StrategyPlaybook update(String code, String status, String note, long revision) {
         if (!known(code)) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "策略模板不存在");
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略模板不存在");
         }
         if (!STATUSES.contains(status)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "策略状态不合法");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略状态不合法");
         }
         repository.upsert(code, "RESEARCHING", null);
         if (!repository.updateStatus(code, status, note, revision)) {
-            throw new BusinessException(ErrorCode.CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
         }
         return repository.findByCode(code).orElseThrow(IllegalStateException::new);
     }

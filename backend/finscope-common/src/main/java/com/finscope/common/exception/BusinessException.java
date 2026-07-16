@@ -1,28 +1,31 @@
 package com.finscope.common.exception;
 
-import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
 
 @EqualsAndHashCode(callSuper = true)
-@Data
-@Getter
 public class BusinessException extends RuntimeException {
     private final ErrorCode errorCode;
 
     public BusinessException(ErrorCode errorCode) {
-        super(errorCode.getDefaultMessage());
-        this.errorCode = errorCode;
+        super(resolve(errorCode).getDefaultMessage());
+        this.errorCode = resolve(errorCode);
     }
 
     public BusinessException(ErrorCode errorCode, String message) {
         super(message);
-        this.errorCode = errorCode;
+        this.errorCode = resolve(errorCode);
     }
 
     public BusinessException(ErrorCode errorCode, String message, Throwable cause) {
         super(message, cause);
-        this.errorCode = errorCode;
+        this.errorCode = errorCode == null ? ErrorCode.INTERNAL_ERROR : errorCode;
     }
 
+    public ErrorCode getErrorCode() {
+        return errorCode;
+    }
+
+    private static ErrorCode resolve(ErrorCode errorCode) {
+        return errorCode == null ? ErrorCode.INTERNAL_ERROR : errorCode;
+    }
 }

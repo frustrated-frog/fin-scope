@@ -45,7 +45,7 @@ public class ContentIdeaController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "8") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                     "page must be >= 0 and pageSize must be between 1 and 100");
         }
         return contentIdeaService.listPaged(page, pageSize);

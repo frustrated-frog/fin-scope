@@ -202,7 +202,7 @@ public class EvidenceService {
 
     private void validateMinConfidence(Integer minConfidence) {
         if (minConfidence != null && (minConfidence < 0 || minConfidence > 100)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "minConfidence must be between 0 and 100");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "minConfidence must be between 0 and 100");
         }
     }
 

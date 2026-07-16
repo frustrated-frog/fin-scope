@@ -109,7 +109,7 @@ public class EventClusterService {
 
     public List<EventCluster> list(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "dateFrom must not be after dateTo");
         }
         return eventClusterRepository.findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo);
     }
@@ -117,7 +117,7 @@ public class EventClusterService {
     public PageResponse<EventCluster> listPaged(String themeCode, String status, String noveltyState,
                                                  LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "dateFrom must not be after dateTo");
         }
         return PageResponse.of(eventClusterRepository.findFilteredPage(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize),
                 eventClusterRepository.countFiltered(themeCode, status, noveltyState, dateFrom, dateTo), page, pageSize);
@@ -125,7 +125,7 @@ public class EventClusterService {
 
     public EventCluster detail(Long id) {
         return eventClusterRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Event not found: " + id));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Event not found: " + id));
     }
 
     public List<EventArticleLink> articles(Long eventId) {
@@ -137,7 +137,7 @@ public class EventClusterService {
         detail(eventId);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_EVENT_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported event status: " + status);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Unsupported event status: " + status);
         }
         return eventClusterRepository.updateStatus(eventId, normalizedStatus);
     }
@@ -145,10 +145,10 @@ public class EventClusterService {
     @Transactional
     public EventCluster merge(Long sourceEventId, Long targetEventId) {
         if (sourceEventId == null || targetEventId == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "sourceEventId and targetEventId are required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "sourceEventId and targetEventId are required");
         }
         if (sourceEventId.equals(targetEventId)) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Cannot merge an event into itself");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "Cannot merge an event into itself");
         }
         EventCluster source = detail(sourceEventId);
         EventCluster target = detail(targetEventId);
@@ -175,26 +175,26 @@ public class EventClusterService {
         EventCluster source = detail(sourceEventId);
         ensureGovernable(source, "source event");
         EventArticleLink link = eventClusterRepository.findLink(source.getId(), articleId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                         "Article link not found for event " + sourceEventId + " and article " + articleId));
         Article article = articleRepository.findById(articleId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Article not found: " + articleId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Article not found: " + articleId));
 
         boolean shouldCreateNewEvent = Boolean.TRUE.equals(createNewEvent);
         if (shouldCreateNewEvent == (targetEventId != null)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Specify either targetEventId or createNewEvent=true");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Specify either targetEventId or createNewEvent=true");
         }
 
         EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
         ensureGovernable(target, "target event");
         if (source.getId().equals(target.getId())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Cannot move article to the same event");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "Cannot move article to the same event");
         }
 
         int moved = eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
                 governanceReason(link.getNoveltyReason()));
         if (moved == 0) {
-            throw new BusinessException(ErrorCode.CONFLICT,
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
                     "Article link changed before move could be completed: " + articleId);
         }
         evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
@@ -249,7 +249,7 @@ public class EventClusterService {
 
     private void ensureGovernable(EventCluster event, String role) {
         if (ResearchEnums.EVENT_ARCHIVED.equals(event.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT,
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
                     "Cannot govern archived " + role + ": " + event.getId());
         }
     }

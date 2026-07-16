@@ -40,7 +40,7 @@ public class FactorResearchController {
     public ResponseEntity<QuantDataset> freeze(@PathVariable Long datasetId,
                                                @RequestBody(required = false) FreezeCapitalFlowRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结请求不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求不能为空");
         }
         request.validate();
         QuantDataset dataset = freezeService.freeze(datasetId, request.getFrom(), request.getTo(),

@@ -28,7 +28,7 @@ public class QuantStrategyController {
     @PostMapping("/strategy-drafts")
     public QuantStrategyDraft generate(@RequestBody GenerateQuantStrategyDraftRequest request) {
         if (request == null || request.getDatasetId() == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty())
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集和策略描述不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和策略描述不能为空");
         return quantStrategyService.generateDraft(request.getDatasetId(), request.getPrompt());
     }
 

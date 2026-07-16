@@ -31,7 +31,7 @@ public class CapitalResearchDraftRequest {
 
     private static void require(Object value, String message) {
         if (value == null || value instanceof String && ((String) value).trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, message);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, message);
         }
     }
 

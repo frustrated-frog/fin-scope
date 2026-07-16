@@ -84,7 +84,7 @@ class FactorResearchControllerTest {
     void returnsConflictWhenReadyDatasetCannotBeMutated() throws Exception {
         when(freezeService.freeze(eq(7L), eq(LocalDate.of(2024, 1, 1)),
                 eq(LocalDate.of(2024, 6, 30)), eq(LocalDateTime.of(2026, 7, 15, 15, 30))))
-                .thenThrow(new BusinessException(ErrorCode.CONFLICT, "已就绪数据集不可原地修改，请创建新版本"));
+                .thenThrow(new BusinessException(ErrorCode.BUSINESS_CONFLICT, "已就绪数据集不可原地修改，请创建新版本"));
 
         mockMvc.perform(post("/api/factor-research/datasets/7/capital-flow-freeze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -96,7 +96,7 @@ class FactorResearchControllerTest {
     @Test
     void returnsNotFoundForUnknownFactorVersion() throws Exception {
         when(catalog.get("capital", "UNKNOWN", "1.0.0"))
-                .thenThrow(new BusinessException(ErrorCode.NOT_FOUND, "研究因子版本不存在"));
+                .thenThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究因子版本不存在"));
 
         mockMvc.perform(get("/api/factor-research/factors/capital/UNKNOWN/versions/1.0.0"))
                 .andExpect(status().isNotFound())

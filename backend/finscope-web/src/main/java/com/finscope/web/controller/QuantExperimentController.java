@@ -49,7 +49,7 @@ public class QuantExperimentController {
     @PostMapping
     public ResponseEntity<QuantExperiment> create(@RequestBody CreateQuantExperimentRequest request) {
         if (request == null || request.getStrategyVersionId() == null)
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "策略版本不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略版本不能为空");
         return ResponseEntity.accepted().body(quantExperimentService.create(request.getStrategyVersionId()));
     }
 

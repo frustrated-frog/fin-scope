@@ -185,7 +185,7 @@ public class KnowledgeController {
 
     private void require(Object value, String field) {
         if (value == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                     "缺少必填字段: " + field);
         }
     }

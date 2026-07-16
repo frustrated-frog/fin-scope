@@ -46,7 +46,7 @@ public class AttributionService {
      */
     public AttributionStartResult startAttribution(String code, String type, String name, Double changePct, String quoteDate) {
         if (StringUtils.isBlank(code)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码不能为空");
         }
         String normalizedType = normalizeType(type);
         Instrument instrument = instrumentRepository.findByCodeAndType(code.trim(), normalizedType)
@@ -113,14 +113,14 @@ public class AttributionService {
 
     public AttributionReport getReport(Long reportId) {
         AttributionReport report = attributionRepository.findById(reportId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "归因报告不存在: " + reportId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "归因报告不存在: " + reportId));
         report.setEvidences(attributionRepository.findEvidenceByReportId(reportId));
         return report;
     }
 
     public AttributionResearchRunView getResearchRun(Long reportId) {
         AttributionResearchRun run = researchRunRepository.findByReportId(reportId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "归因研究运行不存在: " + reportId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "归因研究运行不存在: " + reportId));
         return new AttributionResearchRunView(run, researchRunRepository.findStepsByRunId(run.getId()));
     }
 

@@ -18,7 +18,7 @@ public class FactorResearchAgentController {
 
     @PostMapping
     public ResponseEntity<FactorResearchAgentRun> create(@RequestBody(required = false) CreateFactorResearchAgentRunRequest request) {
-        if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "研究 Agent 请求不能为空");
+        if (request == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究 Agent 请求不能为空");
         FactorResearchAgentRun value = service.createPlan(request.getDatasetId(), request.factor(), request.getResearchDraftId(), request.getQuestion());
         return ResponseEntity.created(URI.create("/api/factor-research/agent-runs/" + value.getId())).body(value);
     }

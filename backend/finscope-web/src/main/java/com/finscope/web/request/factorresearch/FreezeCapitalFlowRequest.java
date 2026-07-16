@@ -20,10 +20,10 @@ public class FreezeCapitalFlowRequest {
 
     public void validate() {
         if (from == null || to == null || asOfTime == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结请求必须提供 from、to 和 asOfTime");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求必须提供 from、to 和 asOfTime");
         }
         if (from.isAfter(to)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结开始日期不能晚于结束日期");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结开始日期不能晚于结束日期");
         }
     }
 }

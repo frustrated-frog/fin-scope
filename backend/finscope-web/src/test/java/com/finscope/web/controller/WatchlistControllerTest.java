@@ -65,7 +65,7 @@ class WatchlistControllerTest {
 
     @Test
     void rejectsSectorOnOrdinaryWatchlistEndpoint() throws Exception {
-        doThrow(new BusinessException(ErrorCode.BAD_REQUEST, "板块请使用板块关注接口"))
+        doThrow(new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块请使用板块关注接口"))
                 .when(watchlistService).addInvestment("BK1036", "SECTOR", null);
 
         mockMvc.perform(post("/api/watchlist").contentType(MediaType.APPLICATION_JSON)

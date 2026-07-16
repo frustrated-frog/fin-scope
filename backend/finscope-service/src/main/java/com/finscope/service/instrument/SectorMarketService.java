@@ -63,7 +63,7 @@ public class SectorMarketService {
     public SectorMarketSearchResult search(String query, SectorCategory category, int limit) {
         String normalized = query == null ? "" : query.trim();
         if (normalized.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "板块搜索词不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块搜索词不能为空");
         }
         validateLimit(limit, 20);
         List<SectorCategory> categories = category == null
@@ -117,12 +117,12 @@ public class SectorMarketService {
 
     private void validateLimit(int limit, int maximum) {
         if (limit < 1 || limit > maximum) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "limit 必须在 1 到 " + maximum + " 之间");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "limit 必须在 1 到 " + maximum + " 之间");
         }
     }
 
     private void requireCategory(SectorCategory category) {
-        if (category == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "板块分类不能为空");
+        if (category == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块分类不能为空");
     }
 
     private String mergeWarnings(String primary, List<String> secondary) {

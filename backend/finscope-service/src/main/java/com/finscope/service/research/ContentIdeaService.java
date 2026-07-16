@@ -109,14 +109,14 @@ public class ContentIdeaService {
 
     public ContentIdea detail(Long id) {
         return contentIdeaRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Content idea not found: " + id));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Content idea not found: " + id));
     }
 
     public ContentIdea updateStatus(Long id, String status) {
         ContentIdea existing = detail(id);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported content idea status: " + status);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Unsupported content idea status: " + status);
         }
         return contentIdeaRepository.updateStatus(existing.getId(), normalizedStatus);
     }

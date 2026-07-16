@@ -117,7 +117,7 @@ public class KnowledgeLearningService {
                 throw conflict();
             }
             draft = entries.findById(draft.getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "知识草稿不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "知识草稿不存在"));
         } else {
             if (expectedEntryRevision != null) {
                 throw conflict();
@@ -148,7 +148,7 @@ public class KnowledgeLearningService {
                 throw conflict();
             }
         } catch (DataAccessException error) {
-            throw new BusinessException(ErrorCode.CONFLICT, "该任务已存在最终答案", error);
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "该任务已存在最终答案", error);
         }
 
         if (!tasks.transition(taskId, task.getStatus(), "DONE", topicId,
@@ -160,7 +160,7 @@ public class KnowledgeLearningService {
         }
 
         KnowledgeEntry completed = entries.findById(draft.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "知识成果不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "知识成果不存在"));
         KnowledgeProjectionJob job = projectionJobs.enqueue(topicId, completed.getId());
         events.publishEvent(new KnowledgeProjectionRequested(job.getId(), topicId, completed.getId()));
         return completed;
@@ -197,7 +197,7 @@ public class KnowledgeLearningService {
             throw conflict();
         }
         return entries.findById(draft.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "知识草稿不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "知识草稿不存在"));
     }
 
     private KnowledgeEntry newDraft(LearningTask task, long topicId,
@@ -240,12 +240,12 @@ public class KnowledgeLearningService {
 
     private LearningTask requireTask(long taskId) {
         return tasks.findById(taskId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "学习任务不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "学习任务不存在"));
     }
 
     private Topic requireTopic(long topicId) {
         return topics.findById(topicId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "主题不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "主题不存在"));
     }
 
     private void requireRevision(LearningTask task, long expectedRevision) {
@@ -291,11 +291,11 @@ public class KnowledgeLearningService {
     }
 
     private BusinessException badRequest(String message) {
-        return new BusinessException(ErrorCode.BAD_REQUEST, message);
+        return new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, message);
     }
 
     private BusinessException conflict() {
-        return new BusinessException(ErrorCode.CONFLICT, "记录已更新，请刷新后重试");
+        return new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已更新，请刷新后重试");
     }
 
     private boolean isBlank(String value) {

@@ -29,7 +29,7 @@ public class StrategyStockThesisService {
         requireText(thesis, buyConditions, invalidationConditions, watchFocus);
         Instrument instrument = resolver.resolve(code, "STOCK");
         if (repository.existsByInstrumentId(instrument.getId())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "该股票已存在研究卡");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "该股票已存在研究卡");
         }
         StrategyStockThesis value = new StrategyStockThesis();
         value.setInstrumentId(instrument.getId());
@@ -63,7 +63,7 @@ public class StrategyStockThesisService {
 
     private StrategyStockThesis get(Long id) {
         return repository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "股票研究卡不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "股票研究卡不存在"));
     }
 
     private void requireTransition(String from, String to) {
@@ -71,23 +71,23 @@ public class StrategyStockThesisService {
             int current = StockThesisStage.valueOf(from).ordinal();
             int next = StockThesisStage.valueOf(to).ordinal();
             if (Math.abs(current - next) > 1) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "不能跳过研究阶段");
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不能跳过研究阶段");
             }
         } catch (IllegalArgumentException error) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "股票研究阶段不合法");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票研究阶段不合法");
         }
     }
 
     private void requireText(String... values) {
         for (String value : values) {
             if (value == null || value.trim().isEmpty()) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                         "投资逻辑、买入条件、失效条件和观察重点不能为空");
             }
         }
     }
 
     private void conflict() {
-        throw new BusinessException(ErrorCode.CONFLICT, "记录已被更新，请刷新后再试");
+        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "记录已被更新，请刷新后再试");
     }
 }

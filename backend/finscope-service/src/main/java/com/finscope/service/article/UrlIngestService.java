@@ -52,7 +52,7 @@ public class UrlIngestService {
             SourceAdapter adapter = adapterRegistry.get(source);
             List<RawItem> items = adapter.fetch(source);
             if (items.isEmpty()) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "No readable content found: " + url);
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "No readable content found: " + url);
             }
             log.info("手动链接抓取完成 url={} itemCount={}", safeUrl(url), items.size());
             RawItem item = items.get(0);
@@ -67,10 +67,10 @@ public class UrlIngestService {
             throw ex;
         } catch (IllegalArgumentException ex) {
             log.warn("手动链接入库被拒绝 url={} message={}", safeUrl(url), ex.getMessage());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, ex.getMessage(), ex);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, ex.getMessage(), ex);
         } catch (Exception ex) {
             log.error("手动链接入库失败 url={} durationMs={}", safeUrl(url), System.currentTimeMillis() - start, ex);
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Failed to ingest URL: " + ex.getMessage(), ex);
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "Failed to ingest URL: " + ex.getMessage(), ex);
         }
     }
 

@@ -13,10 +13,10 @@ import java.util.Set;
 public class QuantDataQualityService {
     public void assertValidBars(List<QuantDailyBar> values) {
         if (values == null || values.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "日行情不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "日行情不能为空");
         }
         if (values.size() > 100_000) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "单次最多导入 100000 条日行情");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "单次最多导入 100000 条日行情");
         }
         Set<String> keys = new HashSet<String>();
         for (QuantDailyBar value : values) {
@@ -34,7 +34,7 @@ public class QuantDataQualityService {
 
     public void assertValidFundamentals(List<QuantFundamentalSnapshot> values) {
         if (values == null || values.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "基本面快照不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "基本面快照不能为空");
         }
         for (QuantFundamentalSnapshot value : values) {
             require(value.getReportPeriod() != null && value.getDisclosedAt() != null,
@@ -44,7 +44,7 @@ public class QuantDataQualityService {
     }
 
     private void require(boolean valid, String message) {
-        if (!valid) throw new BusinessException(ErrorCode.BAD_REQUEST, message);
+        if (!valid) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, message);
     }
 
     private boolean positive(BigDecimal value) {

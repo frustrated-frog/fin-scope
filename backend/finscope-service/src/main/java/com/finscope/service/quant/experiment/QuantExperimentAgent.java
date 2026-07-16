@@ -23,13 +23,13 @@ public class QuantExperimentAgent {
 
     public String interpret(QuantExperiment experiment) {
         if (experiment == null || !"SUCCEEDED".equals(experiment.getStatus()) || experiment.getResult() == null) {
-            throw new BusinessException(ErrorCode.CONFLICT, "只有成功实验才能请求 Agent 解读");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有成功实验才能请求 Agent 解读");
         }
-        if (!llm.isConfigured()) throw new BusinessException(ErrorCode.BAD_REQUEST, "实验解读 Agent 尚未配置");
+        if (!llm.isConfigured()) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "实验解读 Agent 尚未配置");
         try {
             String raw = llm.complete(systemPrompt(), metricSummary(experiment.getResult()));
             String json = extractJson(raw); JsonNode root = mapper.readTree(json);
-            if (!root.isObject() || root.size() != 3) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段不符合协议");
+            if (!root.isObject() || root.size() != 3) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Agent 解读字段不符合协议");
             requireObservations(root.path("observations")); requireStringArray(root.path("risks"), "risks");
             requireNextExperiments(root.path("nextExperiments"));
             String normalized = mapper.writeValueAsString(root);
@@ -37,7 +37,7 @@ public class QuantExperimentAgent {
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "实验解读 Agent 返回内容无法通过校验", ex);
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "实验解读 Agent 返回内容无法通过校验", ex);
         }
     }
 
@@ -59,11 +59,11 @@ public class QuantExperimentAgent {
     }
     private void requireStringArray(JsonNode values, String field) {
         if (!values.isArray() || values.size() < 1 || values.size() > 8) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段数量不合规：" + field);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Agent 解读字段数量不合规：" + field);
         }
         for (JsonNode value : values) {
             if (!safeText(value)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读必须是非空短文本：" + field);
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Agent 解读必须是非空短文本：" + field);
             }
         }
     }
@@ -87,10 +87,10 @@ public class QuantExperimentAgent {
         return value.isTextual() && !value.textValue().trim().isEmpty() && value.textValue().length() <= 300
                 && !value.textValue().matches(".*[0-9０-９].*");
     }
-    private BusinessException bad(String field) { return new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读字段不符合协议：" + field); }
+    private BusinessException bad(String field) { return new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Agent 解读字段不符合协议：" + field); }
     private String extractJson(String value) {
         int start = value == null ? -1 : value.indexOf('{'); int end = value == null ? -1 : value.lastIndexOf('}');
-        if (start < 0 || end <= start) throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 解读不是合法 JSON");
+        if (start < 0 || end <= start) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "Agent 解读不是合法 JSON");
         return value.substring(start, end + 1);
     }
 }

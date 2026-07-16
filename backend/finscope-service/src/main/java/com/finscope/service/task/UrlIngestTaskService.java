@@ -48,7 +48,7 @@ public class UrlIngestTaskService {
 
     public TaskView get(String taskId) {
         AsyncTask task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Task not found: " + taskId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Task not found: " + taskId));
         ArticleCardView article = null;
         if (task.getArticleId() != null) {
             article = articleQueryService.detail(task.getArticleId());

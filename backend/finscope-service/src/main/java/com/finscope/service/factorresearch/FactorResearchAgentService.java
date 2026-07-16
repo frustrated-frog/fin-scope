@@ -56,15 +56,15 @@ public class FactorResearchAgentService {
     }
 
     public FactorResearchAgentRun createPlan(Long datasetId, FactorIdentity factor, Long draftId, String question) {
-        if (datasetId == null || factor == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "数据集和因子不能为空");
+        if (datasetId == null || factor == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和因子不能为空");
         QuantDataset dataset = datasets.get(datasetId);
         if (!"READY".equals(dataset.getStatus()) || dataset.getFingerprint() == null
                 || dataset.getFingerprint().trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.CONFLICT, "只有已冻结且具备指纹的数据集才能生成研究计划");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有已冻结且具备指纹的数据集才能生成研究计划");
         }
         catalog.get(factor.getNamespace(), factor.getCode(), factor.getVersion());
         if (draftId != null && !factor.equals(drafts.get(draftId).getFactor())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "研究草稿与本次因子身份不一致");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究草稿与本次因子身份不一致");
         }
         FactorResearchAgentRun run = new FactorResearchAgentRun();
         run.setDatasetId(datasetId); run.setDatasetFingerprint(dataset.getFingerprint() == null ? "" : dataset.getFingerprint());
@@ -91,10 +91,10 @@ public class FactorResearchAgentService {
     public FactorResearchAgentRun approveAndRun(Long id) {
         LocalDateTime now = LocalDateTime.now(clock);
         if (!runs.transition(id, "AWAITING_APPROVAL", "APPROVED", now)) {
-            throw new BusinessException(ErrorCode.CONFLICT, "研究计划已批准、已运行或状态已变化");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究计划已批准、已运行或状态已变化");
         }
         if (!runs.transition(id, "APPROVED", "RUNNING", now)) {
-            throw new BusinessException(ErrorCode.CONFLICT, "研究 Agent 无法进入运行状态");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究 Agent 无法进入运行状态");
         }
         FactorResearchAgentRun run = require(id); int calls = 0; long startedNanos = System.nanoTime();
         try {
@@ -103,7 +103,7 @@ public class FactorResearchAgentService {
                 enforceBudget(run, calls + 1, startedNanos); calls++;
                 com.finscope.domain.factorresearch.ResearchDraft draft = drafts.get(run.getResearchDraftId());
                 if (!run.getFactor().equals(draft.getFactor())) {
-                    throw new BusinessException(ErrorCode.CONFLICT, "RESEARCH_DRAFT_FACTOR_CHANGED");
+                    throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "RESEARCH_DRAFT_FACTOR_CHANGED");
                 }
                 evidence.set("researchDraft", json.valueToTree(draft));
                 enforceTimeBudget(run, startedNanos);
@@ -113,7 +113,7 @@ public class FactorResearchAgentService {
             QuantDataset dataset = datasets.get(run.getDatasetId());
             if (!"READY".equals(dataset.getStatus())
                     || !java.util.Objects.equals(run.getDatasetFingerprint(), dataset.getFingerprint())) {
-                throw new BusinessException(ErrorCode.CONFLICT, "DATASET_FINGERPRINT_CHANGED");
+                throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "DATASET_FINGERPRINT_CHANGED");
             }
             enforceTimeBudget(run, startedNanos);
             ObjectNode datasetEvidence = json.createObjectNode();
@@ -168,7 +168,7 @@ public class FactorResearchAgentService {
         value.setTrace(traces.findBySubject(SUBJECT_TYPE, id)); return value;
     }
 
-    private FactorResearchAgentRun require(Long id) { return runs.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "研究 Agent 运行不存在")); }
+    private FactorResearchAgentRun require(Long id) { return runs.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究 Agent 运行不存在")); }
     private List<FactorResearchAgentRun> completedHistory(FactorIdentity factor) {
         List<FactorResearchAgentRun> values = runs.findCompletedByFactor(factor, 5);
         return values == null ? java.util.Collections.<FactorResearchAgentRun>emptyList() : values;

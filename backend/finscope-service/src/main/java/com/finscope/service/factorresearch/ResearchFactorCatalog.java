@@ -281,11 +281,11 @@ public class ResearchFactorCatalog {
         try {
             identity = new FactorIdentity(namespace, code, version);
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "因子命名空间、编码和版本不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "因子命名空间、编码和版本不能为空");
         }
         ResearchFactorDefinition value = definitions.get(identity);
         if (value == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "研究因子版本不存在：" + identity);
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究因子版本不存在：" + identity);
         }
         return value;
     }

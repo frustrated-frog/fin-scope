@@ -173,9 +173,9 @@ class KnowledgeControllerTest {
     @Test
     void mapsInvalidMissingAndConflictRequests() throws Exception {
         when(learningService.startTask(eq(404L), anyLong()))
-                .thenThrow(new BusinessException(ErrorCode.NOT_FOUND, "学习任务不存在"));
+                .thenThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "学习任务不存在"));
         when(learningService.startTask(eq(7L), anyLong()))
-                .thenThrow(new BusinessException(ErrorCode.CONFLICT, "数据已更新"));
+                .thenThrow(new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据已更新"));
 
         mockMvc.perform(post("/api/knowledge/tasks/7/complete")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))

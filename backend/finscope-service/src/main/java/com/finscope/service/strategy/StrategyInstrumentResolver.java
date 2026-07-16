@@ -26,10 +26,10 @@ public class StrategyInstrumentResolver {
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
         String type = rawType == null ? "" : rawType.trim().toUpperCase(Locale.ROOT);
         if (!CODE.matcher(code).matches()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码必须是 6 位数字");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码必须是 6 位数字");
         }
         if (!"FUND".equals(type) && !"STOCK".equals(type)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "策略组合只支持基金和股票");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略组合只支持基金和股票");
         }
         return instrumentRepository.findByCodeAndType(code, type).orElseGet(() -> create(code, type));
     }

@@ -26,7 +26,7 @@ public class IntakeFetchTaskService {
     @Resource(name = "ingestTaskExecutor") private Executor executor;
 
     public TaskView submit(Long sourceId) {
-        if (sourceId == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "sourceId is required");
+        if (sourceId == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "sourceId is required");
         String taskId = UUID.randomUUID().toString();
         AsyncTask task = AsyncTask.queued(taskId, TASK_TYPE, "source:" + sourceId);
         task.setMessage("等待抓取信息源");

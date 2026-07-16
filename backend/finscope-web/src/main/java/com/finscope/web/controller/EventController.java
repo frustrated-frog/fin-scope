@@ -66,7 +66,7 @@ public class EventController {
                                                  @RequestParam(defaultValue = "0") int page,
                                                  @RequestParam(defaultValue = "50") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 200) {
-            throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.BAD_REQUEST,
+            throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID,
                     "page must be >= 0 and pageSize must be between 1 and 200");
         }
         return eventClusterService.listPaged(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize);

@@ -64,7 +64,7 @@ class KnowledgeLearningServiceTest {
     void acceptSuggestionRequiresTopic() {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.acceptSuggestion(1L, 0L, 0L));
-        assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
+        assertEquals(ErrorCode.REQUEST_PARAMETER_INVALID, error.getErrorCode());
     }
 
     @Test
@@ -76,7 +76,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.startTask(1L, 3L));
-        assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, error.getErrorCode());
     }
 
     @Test
@@ -85,7 +85,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(1L, 2L, "  ", "MEDIUM", Collections.emptyList(), 4L, null));
-        assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
+        assertEquals(ErrorCode.REQUEST_PARAMETER_INVALID, error.getErrorCode());
         verify(entries, never()).saveDraft(any());
     }
 
@@ -96,7 +96,7 @@ class KnowledgeLearningServiceTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
                         1L, 2L, "answer", "CERTAIN", Collections.emptyList(), 4L, null));
-        assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
+        assertEquals(ErrorCode.REQUEST_PARAMETER_INVALID, error.getErrorCode());
     }
 
     @Test
@@ -111,7 +111,7 @@ class KnowledgeLearningServiceTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
                         1L, 2L, "answer", "MEDIUM", Arrays.asList(8L), 4L, null));
-        assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
+        assertEquals(ErrorCode.REQUEST_PARAMETER_INVALID, error.getErrorCode());
         verify(entries, never()).saveDraft(any());
     }
 
@@ -164,7 +164,7 @@ class KnowledgeLearningServiceTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.completeTask(
                         1L, 2L, "answer", "HIGH", Collections.emptyList(), 4L, null));
-        assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, error.getErrorCode());
         verify(projectionJobs, never()).enqueue(anyLong(), anyLong());
         verify(events, never()).publishEvent(any());
     }
@@ -194,7 +194,7 @@ class KnowledgeLearningServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.dismissTask(1L, " ", 4L));
-        assertEquals(ErrorCode.BAD_REQUEST, error.getErrorCode());
+        assertEquals(ErrorCode.REQUEST_PARAMETER_INVALID, error.getErrorCode());
     }
 
     private LearningTask task(String status, long revision) {

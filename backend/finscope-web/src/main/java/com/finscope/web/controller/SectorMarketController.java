@@ -75,7 +75,7 @@ public class SectorMarketController {
             return SectorCategory.valueOf(normalized);
         } catch (IllegalArgumentException error) {
             String supported = allowAll ? "INDUSTRY、CONCEPT 或 ALL" : "INDUSTRY 或 CONCEPT";
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "板块分类必须是 " + supported);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块分类必须是 " + supported);
         }
     }
 }

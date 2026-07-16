@@ -28,7 +28,7 @@ public class ResearchDraftController {
     public ResponseEntity<ResearchDraft> createFromCapitalSignal(
             @RequestBody(required = false) CapitalResearchDraftRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "研究草稿请求不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
         }
         ResearchDraft value = service.createFromCapitalSignal(request.toCommand());
         return ResponseEntity.created(URI.create("/api/factor-research/research-drafts/" + value.getId()))

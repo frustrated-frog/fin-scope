@@ -23,13 +23,13 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        ErrorCode errorCode = isNotFound(ex.getMessage()) ? ErrorCode.NOT_FOUND : ErrorCode.BAD_REQUEST;
+        ErrorCode errorCode = isNotFound(ex.getMessage()) ? ErrorCode.RESOURCE_NOT_FOUND : ErrorCode.REQUEST_PARAMETER_INVALID;
         return buildResponse(errorCode, safeMessage(ex, errorCode), ex, request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        return buildResponse(ErrorCode.BAD_REQUEST, "Invalid request body", ex, request);
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_INVALID, "Invalid request body", ex, request);
     }
 
     @ExceptionHandler(Exception.class)
@@ -55,20 +55,7 @@ public class ApiExceptionHandler {
     }
 
     private HttpStatus statusFor(ErrorCode errorCode) {
-        switch (errorCode) {
-            case BAD_REQUEST:
-                return HttpStatus.BAD_REQUEST;
-            case NOT_FOUND:
-                return HttpStatus.NOT_FOUND;
-            case CONFLICT:
-                return HttpStatus.CONFLICT;
-            case EXTERNAL_SERVICE_ERROR:
-                return HttpStatus.BAD_GATEWAY;
-            case INTERNAL_ERROR:
-                return HttpStatus.INTERNAL_SERVER_ERROR;
-            default:
-                return HttpStatus.INTERNAL_SERVER_ERROR;
-        }
+        return HttpStatus.valueOf(errorCode.getHttpStatus());
     }
 
     private String safeMessage(Exception ex, ErrorCode errorCode) {

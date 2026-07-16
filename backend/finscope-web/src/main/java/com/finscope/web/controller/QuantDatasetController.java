@@ -32,7 +32,7 @@ public class QuantDatasetController {
      * @return 201 Created 响应，响应体为新创建的数据集。
      */
     @PostMapping public ResponseEntity<QuantDataset> create(@RequestBody CreateQuantDatasetRequest request) {
-        if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "请求不能为空");
+        if (request == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "请求不能为空");
         QuantDataset value = service.create(request.getName(), request.getDataKind());
         return ResponseEntity.created(URI.create("/api/quant/datasets/" + value.getId())).body(value);
     }
@@ -51,7 +51,7 @@ public class QuantDatasetController {
      */
     @PostMapping("/learning-sample")
     public ResponseEntity<QuantDataset> createLearningSample(@RequestBody CreateLearningDatasetRequest request) {
-        if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "请求不能为空");
+        if (request == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "请求不能为空");
         QuantDataset value = service.createLearningSample(request.getName());
         return ResponseEntity.created(URI.create("/api/quant/datasets/" + value.getId())).body(value);
     }

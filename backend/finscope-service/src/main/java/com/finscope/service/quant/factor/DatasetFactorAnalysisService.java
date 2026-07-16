@@ -37,9 +37,9 @@ public class DatasetFactorAnalysisService {
 
     public FactorAnalysis analyze(Long datasetId, String factorCode) {
         QuantDataset dataset = datasets.get(datasetId);
-        if (!providerRegistry().contains(factorCode)) throw new BusinessException(ErrorCode.BAD_REQUEST, "未知因子：" + factorCode);
-        if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.CONFLICT, "只有通过质量门禁的数据集才能运行因子诊断");
-        if (!datasets.availableFactorCodes(datasetId).contains(factorCode)) throw new BusinessException(ErrorCode.CONFLICT, "当前数据集不具备该因子的有效覆盖");
+        if (!providerRegistry().contains(factorCode)) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知因子：" + factorCode);
+        if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有通过质量门禁的数据集才能运行因子诊断");
+        if (!datasets.availableFactorCodes(datasetId).contains(factorCode)) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "当前数据集不具备该因子的有效覆盖");
         List<QuantDailyBar> bars = marketData.findBars(datasetId); List<QuantFundamentalSnapshot> fundamentals = marketData.findFundamentals(datasetId);
         List<QuantUniverseMember> events = marketData.findUniverseMembers(datasetId);
         Map<String, QuantCapitalFlowDaily> capital = capital(datasetId);

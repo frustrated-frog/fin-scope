@@ -84,7 +84,7 @@ public class KnowledgeReviewService {
         }
         String parsedConfidence = parseConfidence(confidence);
         topics.findById(topicId).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "主题不存在"));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "主题不存在"));
         TopicReviewState state = reviewStates.findByTopicId(topicId)
                 .orElseGet(() -> reviewStates.createIfAbsent(topicId));
         if (state.getRevision() != expectedRevision) {
@@ -113,7 +113,7 @@ public class KnowledgeReviewService {
             throw conflict();
         }
         KnowledgeEntry completed = entries.findById(draft.getId()).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "复习记录不存在"));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "复习记录不存在"));
         KnowledgeProjectionJob job = projectionJobs.enqueue(topicId, completed.getId());
         events.publishEvent(new KnowledgeProjectionRequested(
                 job.getId(), topicId, completed.getId()));
@@ -151,10 +151,10 @@ public class KnowledgeReviewService {
     }
 
     private BusinessException badRequest(String message) {
-        return new BusinessException(ErrorCode.BAD_REQUEST, message);
+        return new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, message);
     }
 
     private BusinessException conflict() {
-        return new BusinessException(ErrorCode.CONFLICT, "复习记录已更新，请刷新后重试");
+        return new BusinessException(ErrorCode.BUSINESS_CONFLICT, "复习记录已更新，请刷新后重试");
     }
 }
