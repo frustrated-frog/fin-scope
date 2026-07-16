@@ -112,6 +112,7 @@ test('presents article workspace as a signal command center', async () => {
 
   expect(await screen.findByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
   expect(container.querySelector('.article-command-center')).toBeTruthy();
+  expect(container.querySelector('.article-command-hero')).toBeTruthy();
   expect(container.querySelector('.article-signal-panel')).toBeTruthy();
   expect(container.querySelector('.article-stream-panel')).toBeTruthy();
   expect(screen.getByText('1 active signals')).toBeInTheDocument();
@@ -121,8 +122,10 @@ test('article stylesheet keeps the command center responsive', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
 
-  expect(styles).toMatch(/\.article-command-center\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*360px\)\s+minmax\(0,\s*1fr\)/s);
+  expect(styles).toMatch(/\.article-command-center\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*340px\)\s+minmax\(0,\s*1fr\)/s);
+  expect(styles).toMatch(/\.article-command-hero\s*{[^}]*grid-column:\s*1\s*\/\s*-1;/s);
   expect(styles).toMatch(/\.article-stream-panel\s*{[^}]*min-width:\s*0;/s);
+  expect(styles).toMatch(/\.article-command-center\s+\.article-card-header\s*{[^}]*grid-template-columns:\s*minmax\(96px,\s*120px\)\s+minmax\(0,\s*1fr\)\s+28px;/s);
   expect(styles).toMatch(/@media\s*\(max-width:\s*1120px\)[\s\S]*\.article-command-center[\s\S]*grid-template-columns:\s*1fr;/);
 });
 

@@ -3363,7 +3363,7 @@ textarea {
 
 .article-command-center {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   min-width: 0;
@@ -3389,14 +3389,20 @@ textarea {
 .article-control-hero {
   position: relative;
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 16px 24px;
+  align-items: end;
   overflow: hidden;
-  padding: 18px;
+  padding: 22px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
   border-radius: 8px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 54%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 92%, #3b82f6), var(--surface-2));
+}
+
+.article-command-hero {
+  grid-column: 1 / -1;
 }
 
 .article-control-hero::after {
@@ -3417,14 +3423,17 @@ textarea {
 }
 
 .article-control-hero h3 {
+  grid-column: 1;
   margin: 0;
   color: var(--ink);
-  font-size: 30px;
+  font-size: clamp(30px, 3.2vw, 44px);
   line-height: 1.16;
 }
 
 .article-control-hero p:not(.eyebrow) {
+  grid-column: 1;
   margin: 0;
+  max-width: 680px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
@@ -3439,6 +3448,11 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--line);
+}
+
+.article-hero-readouts {
+  grid-column: 2;
+  grid-row: 1 / span 3;
 }
 
 .article-queue-matrix {
@@ -3651,8 +3665,8 @@ textarea {
 
 .article-command-center .article-card-header {
   display: grid;
-  grid-template-columns: minmax(120px, .24fr) minmax(0, 1fr) 28px;
-  gap: 16px;
+  grid-template-columns: minmax(96px, 120px) minmax(0, 1fr) 28px;
+  gap: 14px;
   padding: 18px 48px 18px 18px;
 }
 
@@ -5233,6 +5247,15 @@ td {
 
   .article-signal-panel {
     position: static;
+  }
+
+  .article-control-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .article-hero-readouts {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .article-command-center .article-card-header {

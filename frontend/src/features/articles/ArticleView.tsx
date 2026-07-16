@@ -327,18 +327,18 @@ export function ArticleView({
 
   return (
     <section className="article-container article-command-center">
-      <aside className="article-signal-panel" aria-label="文章情报控制台">
-        <header className="article-control-hero">
-          <p className="eyebrow">Signal intake</p>
-          <h3>文章情报台</h3>
-          <p>把外部链接转化为可追踪、可沉淀的研究素材，先筛信号，再进入主题库。</p>
-          <div className="article-hero-readouts" aria-label="文章总览">
-            <span><small>当前队列</small><strong>{totalCount}</strong></span>
-            <span><small>本页信号</small><strong>{pagedArticles.length}</strong></span>
-            <span><small>已选择</small><strong>{selectedCount}</strong></span>
-          </div>
-        </header>
+      <header className="article-control-hero article-command-hero">
+        <p className="eyebrow">Signal intake</p>
+        <h3>文章情报台</h3>
+        <p>把外部链接转化为可追踪、可沉淀的研究素材，先筛信号，再进入主题库。</p>
+        <div className="article-hero-readouts" aria-label="文章总览">
+          <span><small>当前队列</small><strong>{totalCount}</strong></span>
+          <span><small>本页信号</small><strong>{pagedArticles.length}</strong></span>
+          <span><small>已选择</small><strong>{selectedCount}</strong></span>
+        </div>
+      </header>
 
+      <aside className="article-signal-panel" aria-label="文章情报控制台">
         <div className="article-ingest-panel">
           <div className="article-panel-heading">
             <span>入口</span>

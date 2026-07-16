@@ -44,13 +44,20 @@ public class CapitalFlowFreezeService {
     private static final String PARTITION_TYPE = "CAPITAL_FLOW_DAILY";
     private static final String FINGERPRINT_VERSION = "quant-dataset-v2";
 
-    @Resource private QuantDatasetRepository datasets;
-    @Resource private CapitalFlowRepository sourceFlows;
-    @Resource private InstrumentRepository instruments;
-    @Resource private QuantMarketDataRepository marketData;
-    @Resource private QuantCapitalFlowRepository capitalFlows;
-    @Resource private QuantDatasetPartitionRepository partitions;
-    @Resource private QuantDatasetFingerprint fingerprint;
+    @Resource
+    private QuantDatasetRepository datasets;
+    @Resource
+    private CapitalFlowRepository sourceFlows;
+    @Resource
+    private InstrumentRepository instruments;
+    @Resource
+    private QuantMarketDataRepository marketData;
+    @Resource
+    private QuantCapitalFlowRepository capitalFlows;
+    @Resource
+    private QuantDatasetPartitionRepository partitions;
+    @Resource
+    private QuantDatasetFingerprint fingerprint;
 
     @Transactional
     public QuantDataset freeze(Long datasetId, LocalDate from, LocalDate to, LocalDateTime asOfTime) {
@@ -205,7 +212,7 @@ public class CapitalFlowFreezeService {
     }
 
     private Map<LocalDate, Set<String>> activeUniverseByDate(List<QuantUniverseMember> universe,
-                                                              Set<LocalDate> requestedDates) {
+                                                             Set<LocalDate> requestedDates) {
         List<LocalDate> dates = new ArrayList<LocalDate>(requestedDates);
         Collections.sort(dates);
         Map<LocalDate, Set<String>> result = new LinkedHashMap<LocalDate, Set<String>>();
@@ -275,8 +282,8 @@ public class CapitalFlowFreezeService {
     }
 
     private QuantDatasetPartition partition(Long datasetId, List<QuantCapitalFlowDaily> rows,
-                                                String partitionFingerprint, String qualityStatus,
-                                                LocalDateTime createdAt) {
+                                            String partitionFingerprint, String qualityStatus,
+                                            LocalDateTime createdAt) {
         QuantDatasetPartition value = new QuantDatasetPartition();
         value.setDatasetId(datasetId);
         value.setPartitionType(PARTITION_TYPE);

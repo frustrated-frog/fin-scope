@@ -20,12 +20,8 @@ import java.util.concurrent.ConcurrentMap;
  */
 @Component
 public class ProviderRequestGuard {
-    public interface Sleeper { void sleep(long millis) throws InterruptedException; }
-    public interface Operation<T> { T run() throws Exception; }
-
     private static final double EWMA_ALPHA = 0.25d;
     private static final Duration FAMILY_FAILURE_WINDOW = Duration.ofSeconds(30);
-
     private final Clock clock;
     private final Sleeper sleeper;
     private final Duration legacyMinimumInterval;
@@ -36,11 +32,9 @@ public class ProviderRequestGuard {
             new ConcurrentHashMap<EndpointKey, EndpointState>();
     private final ConcurrentMap<String, FamilyState> families =
             new ConcurrentHashMap<String, FamilyState>();
-
     public ProviderRequestGuard() {
         this(Clock.systemUTC(), Thread::sleep, Duration.ofSeconds(1), 2, 3, Duration.ofSeconds(60));
     }
-
     public ProviderRequestGuard(Clock clock, Sleeper sleeper, Duration legacyMinimumInterval,
                                 int maxRetries, int failureThreshold, Duration openDuration) {
         this.clock = clock;
@@ -51,7 +45,13 @@ public class ProviderRequestGuard {
         this.openDuration = openDuration;
     }
 
-    /** 兼容底层 HTTP 客户端；新网关应使用携带完整元数据的重载。 */
+    private static long elapsedMillis(long startedNanos) {
+        return Duration.ofNanos(System.nanoTime() - startedNanos).toMillis();
+    }
+
+    /**
+     * 兼容底层 HTTP 客户端；新网关应使用携带完整元数据的重载。
+     */
     public <T> T execute(String providerCode, Operation<T> operation) {
         return execute(new LegacyProvider(providerCode, legacyMinimumInterval),
                 MarketDataCapability.REALTIME_STOCK_QUOTE, operation);
@@ -178,8 +178,12 @@ public class ProviderRequestGuard {
                 .recordFailure(capability, now, retryable, openDuration);
     }
 
-    private static long elapsedMillis(long startedNanos) {
-        return Duration.ofNanos(System.nanoTime() - startedNanos).toMillis();
+    public interface Sleeper {
+        void sleep(long millis) throws InterruptedException;
+    }
+
+    public interface Operation<T> {
+        T run() throws Exception;
     }
 
     private static final class EndpointKey {
@@ -267,9 +271,17 @@ public class ProviderRequestGuard {
             latencyMillis = EWMA_ALPHA * latency + (1.0d - EWMA_ALPHA) * latencyMillis;
         }
 
-        synchronized double successRate() { return successRate; }
-        synchronized double latencyMillis() { return latencyMillis; }
-        synchronized int consecutiveFailures() { return consecutiveFailures; }
+        synchronized double successRate() {
+            return successRate;
+        }
+
+        synchronized double latencyMillis() {
+            return latencyMillis;
+        }
+
+        synchronized int consecutiveFailures() {
+            return consecutiveFailures;
+        }
     }
 
     private static final class FamilyState {
@@ -316,14 +328,32 @@ public class ProviderRequestGuard {
             this.minimumInterval = minimumInterval;
         }
 
-        public String providerCode() { return code; }
-        public String providerFamily() { return code; }
+        public String providerCode() {
+            return code;
+        }
+
+        public String providerFamily() {
+            return code;
+        }
+
         public Set<MarketDataCapability> capabilities() {
             return Collections.singleton(MarketDataCapability.REALTIME_STOCK_QUOTE);
         }
-        public int priority() { return 100; }
-        public int batchLimit() { return 1; }
-        public Duration minimumInterval() { return minimumInterval; }
-        public Duration timeout() { return Duration.ofSeconds(10); }
+
+        public int priority() {
+            return 100;
+        }
+
+        public int batchLimit() {
+            return 1;
+        }
+
+        public Duration minimumInterval() {
+            return minimumInterval;
+        }
+
+        public Duration timeout() {
+            return Duration.ofSeconds(10);
+        }
     }
 }

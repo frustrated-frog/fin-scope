@@ -53,6 +53,55 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
         this.http = http;
     }
 
+    private static BigDecimal decimal(JsonNode node) {
+        if (node == null || node.isNull() || !node.isNumber()) return null;
+        return node.decimalValue();
+    }
+
+    private static String text(JsonNode node, String field) {
+        if (node == null) return null;
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() || !value.isValueNode() ? null : value.asText();
+    }
+
+    private static String defaultText(JsonNode node, String field, String fallback) {
+        String value = text(node, field);
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private static void appendWarnings(List<String> target, JsonNode values) {
+        if (!values.isArray()) return;
+        for (JsonNode value : values) {
+            if (value.isTextual() && !value.asText().trim().isEmpty()) target.add(value.asText());
+        }
+    }
+
+    private static LocalDateTime parseTime(String value, Instant fallback) {
+        if (value != null && !value.trim().isEmpty()) {
+            try {
+                return OffsetDateTime.parse(value).toLocalDateTime();
+            } catch (DateTimeParseException ignored) {
+                try {
+                    return LocalDateTime.parse(value);
+                } catch (DateTimeParseException ignoredAgain) {
+                    // Fall through to the HTTP retrieval time.
+                }
+            }
+        }
+        return LocalDateTime.ofInstant(fallback, ZoneId.systemDefault());
+    }
+
+    private static String trimTrailingSlash(String value) {
+        if (value == null || value.trim().isEmpty()) return "http://127.0.0.1:8000";
+        String normalized = value.trim();
+        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
+        return normalized;
+    }
+
+    private static String message(Exception error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
     @Override
     public String providerCode() {
         return "PYTHON_MARKET_DATA";
@@ -153,9 +202,9 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
     }
 
     private List<CapitalFlowPoint> parsePoints(JsonNode nodes, Instrument instrument,
-                                                FinanceHttpResponse response,
-                                                LocalDateTime retrievedAt,
-                                                boolean stale) {
+                                               FinanceHttpResponse response,
+                                               LocalDateTime retrievedAt,
+                                               boolean stale) {
         if (!nodes.isArray()) return Collections.emptyList();
         List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>();
         for (JsonNode node : nodes) {
@@ -188,55 +237,6 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
             result.add(point);
         }
         return result;
-    }
-
-    private static BigDecimal decimal(JsonNode node) {
-        if (node == null || node.isNull() || !node.isNumber()) return null;
-        return node.decimalValue();
-    }
-
-    private static String text(JsonNode node, String field) {
-        if (node == null) return null;
-        JsonNode value = node.get(field);
-        return value == null || value.isNull() || !value.isValueNode() ? null : value.asText();
-    }
-
-    private static String defaultText(JsonNode node, String field, String fallback) {
-        String value = text(node, field);
-        return value == null || value.trim().isEmpty() ? fallback : value;
-    }
-
-    private static void appendWarnings(List<String> target, JsonNode values) {
-        if (!values.isArray()) return;
-        for (JsonNode value : values) {
-            if (value.isTextual() && !value.asText().trim().isEmpty()) target.add(value.asText());
-        }
-    }
-
-    private static LocalDateTime parseTime(String value, Instant fallback) {
-        if (value != null && !value.trim().isEmpty()) {
-            try {
-                return OffsetDateTime.parse(value).toLocalDateTime();
-            } catch (DateTimeParseException ignored) {
-                try {
-                    return LocalDateTime.parse(value);
-                } catch (DateTimeParseException ignoredAgain) {
-                    // Fall through to the HTTP retrieval time.
-                }
-            }
-        }
-        return LocalDateTime.ofInstant(fallback, ZoneId.systemDefault());
-    }
-
-    private static String trimTrailingSlash(String value) {
-        if (value == null || value.trim().isEmpty()) return "http://127.0.0.1:8000";
-        String normalized = value.trim();
-        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
-        return normalized;
-    }
-
-    private static String message(Exception error) {
-        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
 }

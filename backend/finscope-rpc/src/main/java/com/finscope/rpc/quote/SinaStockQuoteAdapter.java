@@ -32,25 +32,39 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
             MarketDataCapability.REALTIME_STOCK_QUOTE);
 
     @Override
-    public String providerCode() { return "SINA_STOCK"; }
+    public String providerCode() {
+        return "SINA_STOCK";
+    }
 
     @Override
-    public String providerFamily() { return "SINA"; }
+    public String providerFamily() {
+        return "SINA";
+    }
 
     @Override
-    public Set<MarketDataCapability> capabilities() { return CAPABILITIES; }
+    public Set<MarketDataCapability> capabilities() {
+        return CAPABILITIES;
+    }
 
     @Override
-    public int priority() { return 20; }
+    public int priority() {
+        return 20;
+    }
 
     @Override
-    public int batchLimit() { return 100; }
+    public int batchLimit() {
+        return 100;
+    }
 
     @Override
-    public Duration minimumInterval() { return Duration.ofMillis(200); }
+    public Duration minimumInterval() {
+        return Duration.ofMillis(200);
+    }
 
     @Override
-    public Duration timeout() { return Duration.ofMillis(TIMEOUT_MS); }
+    public Duration timeout() {
+        return Duration.ofMillis(TIMEOUT_MS);
+    }
 
     @Override
     public boolean supports(String instrumentType) {
@@ -80,7 +94,9 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
         return quotes;
     }
 
-    /** 600519 -> sh600519；000001 -> sz000001 */
+    /**
+     * 600519 -> sh600519；000001 -> sz000001
+     */
     private String toSinaSymbol(String code) {
         String c = code.trim().toLowerCase(Locale.ROOT);
         if (c.startsWith("sh") || c.startsWith("sz") || c.startsWith("bj")) {
