@@ -1296,7 +1296,11 @@ class FinScopeApiIntegrationTest {
 
     private String emptyRss() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                + "<rss version=\"2.0\"><channel><title>Empty Feed</title></channel></rss>";
+                + "<rss version=\"2.0\"><channel>"
+                + "<title>Empty Feed</title>"
+                + "<link>https://example.com/empty</link>"
+                + "<description>用于验证空候选处理的合法空订阅源</description>"
+                + "</channel></rss>";
     }
 
     private String htmlArticle() {

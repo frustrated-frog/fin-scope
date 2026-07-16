@@ -971,7 +971,8 @@ test('inbox cards show detected source labels before the category tag', async ()
   await userEvent.click(screen.getByRole('button', { name: 'Article' }));
 
   const sourceTag = await screen.findByText('X（推特）');
-  const categoryTag = screen.getByText('宏观');
+  const articleCard = sourceTag.closest('.article-card') as HTMLElement;
+  const categoryTag = within(articleCard).getByText('宏观');
 
   expect(sourceTag).toHaveClass('article-source-tag');
   expect(sourceTag).toHaveClass('article-source-tag-social');

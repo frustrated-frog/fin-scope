@@ -1,6 +1,6 @@
 # FinScope Project Foundation Infrastructure Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 全量统一 FinScope 普通 JSON API 的响应、中文错误码、异常处理、请求日志和前端解包，并清除配置文件中的硬编码密钥。
 
@@ -78,7 +78,7 @@
 - Modify: `backend/finscope-common/src/main/java/com/finscope/common/exception/BusinessException.java`
 - Create: four semantic exception classes listed above
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 ```java
 @Test
@@ -102,7 +102,7 @@ void allDefaultMessagesAreChineseAndCodesAreUnique() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -113,7 +113,7 @@ mvn -pl finscope-common test
 
 Expected: compilation fails because `ApiResponse` and new error codes do not exist.
 
-- [ ] **Step 3: Implement the response and error model**
+- [x] **Step 3: Implement the response and error model**
 
 `ApiResponse<T>` must expose:
 
@@ -160,13 +160,13 @@ ASYNC_TASK_ERROR("FS-4003", "异步任务执行失败，请稍后重试", 500),
 INTERNAL_ERROR("FS-5000", "系统繁忙，请稍后重试", 500);
 ```
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run `mvn -pl finscope-common test`.
 
 Expected: all common tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/finscope-common
@@ -179,7 +179,7 @@ git commit -m "feat: 建立统一响应与中文错误码"
 - Create: `backend/finscope-web/src/test/java/com/finscope/web/handler/ApiResponseBodyAdviceTest.java`
 - Create: `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiResponseBodyAdvice.java`
 
-- [ ] **Step 1: Write failing MockMvc tests**
+- [x] **Step 1: Write failing MockMvc tests**
 
 Cover:
 
@@ -200,7 +200,7 @@ Also assert:
 - `SseEmitter` support returns false.
 - `ResponseEntity<Void>` with 204 remains empty.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -211,7 +211,7 @@ mvn -pl finscope-web -am -Dtest=ApiResponseBodyAdviceTest -Dsurefire.failIfNoSpe
 
 Expected: test fails because responses are still raw.
 
-- [ ] **Step 3: Implement `ApiResponseBodyAdvice`**
+- [x] **Step 3: Implement `ApiResponseBodyAdvice`**
 
 Use `@RestControllerAdvice(basePackages = "com.finscope.web.controller")` and `ResponseBodyAdvice<Object>`.
 
@@ -231,11 +231,11 @@ byte[].class.equals(returnType.getParameterType())
 ApiResponse.success(body, TraceId.current())
 ```
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the focused test and then `mvn -pl finscope-web -am -DskipTests package`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/finscope-web/src/main/java/com/finscope/web/handler/ApiResponseBodyAdvice.java \
@@ -251,7 +251,7 @@ git commit -m "feat: 统一包装 Web 成功响应"
 - Delete: `backend/finscope-web/src/main/java/com/finscope/web/handler/ApiErrorResponse.java`
 - Modify: `backend/finscope-web/pom.xml`
 
-- [ ] **Step 1: Write failing exception mapping tests**
+- [x] **Step 1: Write failing exception mapping tests**
 
 Create test endpoints that throw each exception and assert:
 
@@ -267,11 +267,11 @@ Create test endpoints that throw each exception and assert:
 
 Cover missing parameter, type mismatch, invalid JSON, method not allowed, unsupported media type, business conflict, data access failure and unknown exception.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the focused handler test. Expected: missing handlers and legacy fields fail.
 
-- [ ] **Step 3: Add validation dependency**
+- [x] **Step 3: Add validation dependency**
 
 Add:
 
@@ -282,7 +282,7 @@ Add:
 </dependency>
 ```
 
-- [ ] **Step 4: Implement the handler**
+- [x] **Step 4: Implement the handler**
 
 Every handler returns:
 
@@ -293,11 +293,11 @@ ResponseEntity.status(errorCode.getHttpStatus())
 
 Remove `isNotFound(message)`. Unknown exceptions return only `ErrorCode.INTERNAL_ERROR.getDefaultMessage()` to users and log the full exception.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run focused tests and all `finscope-web` handler tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/finscope-web/pom.xml backend/finscope-web/src/main/java/com/finscope/web/handler \
@@ -313,7 +313,7 @@ git commit -m "feat: 完善 Web 全局异常处理"
 - Modify: `backend/finscope-web/src/main/java/com/finscope/web/config/RequestLoggingFilter.java`
 - Modify: `backend/finscope-web/src/main/resources/application.yml`
 
-- [ ] **Step 1: Write failing filter tests**
+- [x] **Step 1: Write failing filter tests**
 
 Assert:
 
@@ -324,11 +324,11 @@ Assert:
 - `LogSanitizer.clean("a\\nb", 20)` returns `"a b"`.
 - Overlong values are truncated with `...`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `mvn -pl finscope-web -am -Dtest=RequestLoggingFilterTest -Dsurefire.failIfNoSpecifiedTests=false test`.
 
-- [ ] **Step 3: Implement the filter**
+- [x] **Step 3: Implement the filter**
 
 Emit one completion log with:
 
@@ -338,7 +338,7 @@ Emit one completion log with:
 
 Use warn for `durationMs >= 2000` or 4xx, info otherwise. Do not log bodies or sensitive headers.
 
-- [ ] **Step 4: Externalize configuration secrets**
+- [x] **Step 4: Externalize configuration secrets**
 
 Use:
 
@@ -355,13 +355,13 @@ finscope:
     api-key: ${FINSCOPE_SEARCH_API_KEY:}
 ```
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run the focused test and `rg -n 'api-key: \"[^$]' backend/finscope-web/src/main/resources`.
 
 Expected: test passes and search returns no hard-coded keys.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/finscope-web/src/main/java/com/finscope/web/config \
@@ -376,7 +376,7 @@ git commit -m "feat: 规范请求日志并移除硬编码密钥"
 - Modify targeted Service, DAO, RPC and Controller files listed in File Structure.
 - Modify their existing tests where applicable.
 
-- [ ] **Step 1: Add failing tests for typed not-found and conflict behavior**
+- [x] **Step 1: Add failing tests for typed not-found and conflict behavior**
 
 Examples:
 
@@ -386,11 +386,11 @@ assertEquals(ErrorCode.DATA_VERSION_CONFLICT,
     assertThrows(BusinessException.class, staleUpdate).getErrorCode());
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused module tests and confirm current generic exceptions fail expectations.
 
-- [ ] **Step 3: Replace brittle exceptions**
+- [x] **Step 3: Replace brittle exceptions**
 
 Required replacements:
 
@@ -402,7 +402,7 @@ throw new ExternalServiceException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "文�
 
 Convert current English user-facing messages in migrated paths to Chinese. Preserve technical provider codes in domain data where they are part of persisted machine-readable contracts.
 
-- [ ] **Step 4: Verify no message-based not-found routing remains**
+- [x] **Step 4: Verify no message-based not-found routing remains**
 
 Run:
 
@@ -412,7 +412,7 @@ rg -n 'isNotFound|toLowerCase\\(\\).*not found' backend
 
 Expected: no matches in Web exception handling.
 
-- [ ] **Step 5: Run module tests**
+- [x] **Step 5: Run module tests**
 
 Run:
 
@@ -423,7 +423,7 @@ mvn -pl finscope-service,finscope-web -am test
 
 Compare failures with the three recorded baseline failures.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend
@@ -437,7 +437,7 @@ git commit -m "refactor: 统一业务异常抛出语义"
 - Modify: `frontend/src/shared/api/client.ts`
 - Modify: real-fetch fixtures in `frontend/src/App.test.tsx`
 
-- [ ] **Step 1: Write failing client tests**
+- [x] **Step 1: Write failing client tests**
 
 Success:
 
@@ -471,11 +471,11 @@ Assert `ApiError` contains status, code and traceId.
 
 Also assert raw JSON on a 200 response throws `ApiError` with code `API_PROTOCOL_ERROR`, while 204 resolves `undefined`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `npm test -- src/shared/api/client.test.ts`.
 
-- [ ] **Step 3: Implement strict envelope parsing**
+- [x] **Step 3: Implement strict envelope parsing**
 
 Define:
 
@@ -492,7 +492,7 @@ export interface ApiResponse<T> {
 
 Extend `ApiError` with `traceId?: string`. Parse a body once, validate envelope fields, throw on HTTP failure or `success=false`, and return `envelope.data as T`.
 
-- [ ] **Step 4: Update real-fetch test fixtures**
+- [x] **Step 4: Update real-fetch test fixtures**
 
 Wrap backend mock bodies used through the actual `api` client with a shared test helper:
 
@@ -509,13 +509,13 @@ function success<T>(data: T) {
 }
 ```
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run focused client tests, then `npm test`.
 
 Expected: no new failures beyond the recorded `App.test.tsx` baseline unless that fixture is directly corrected during wrapping.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/shared/api frontend/src/App.test.tsx
@@ -527,7 +527,7 @@ git commit -m "feat: 前端统一解析 API 响应"
 **Files:**
 - Modify all Java tests under `backend/finscope-web/src/test/java`.
 
-- [ ] **Step 1: Add a contract assertion to an integration test**
+- [x] **Step 1: Add a contract assertion to an integration test**
 
 For one representative endpoint, assert:
 
@@ -540,13 +540,13 @@ For one representative endpoint, assert:
 .andExpect(jsonPath("$.timestamp").exists());
 ```
 
-- [ ] **Step 2: Run Web tests to capture RED**
+- [x] **Step 2: Run Web tests to capture RED**
 
 Run `mvn -pl finscope-web -am test`.
 
 Expected: legacy success JSON paths fail because data is nested.
 
-- [ ] **Step 3: Update success assertions**
+- [x] **Step 3: Update success assertions**
 
 For every successful JSON response:
 
@@ -565,11 +565,11 @@ When parsing IDs:
 objectMapper.readTree(body).path("data").path("id").asLong();
 ```
 
-- [ ] **Step 4: Ensure advice is imported in sliced tests**
+- [x] **Step 4: Ensure advice is imported in sliced tests**
 
 Add `ApiResponseBodyAdvice.class` to relevant `@Import` declarations where the slice does not auto-discover it.
 
-- [ ] **Step 5: Run Web tests**
+- [x] **Step 5: Run Web tests**
 
 Compare results to baseline:
 
@@ -578,7 +578,7 @@ Compare results to baseline:
 
 No additional failures are acceptable.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/finscope-web/src/test/java
@@ -592,11 +592,11 @@ git commit -m "test: 迁移 Web 接口统一响应断言"
 - Modify: `docs/架构说明.md`
 - Modify: `docs/superpowers/plans/2026-07-16-project-foundation-infrastructure.md`
 
-- [ ] **Step 1: Document the API contract and environment variables**
+- [x] **Step 1: Document the API contract and environment variables**
 
 Add a concise response example, error example, error-code categories, `X-Request-Id`, and required environment variables.
 
-- [ ] **Step 2: Run static checks**
+- [x] **Step 2: Run static checks**
 
 ```bash
 git diff --check
@@ -606,7 +606,7 @@ rg -n 'api-key: \"[^$]' backend/finscope-web/src/main/resources
 
 Expected: no legacy English default errors and no hard-coded keys.
 
-- [ ] **Step 3: Run backend verification**
+- [x] **Step 3: Run backend verification**
 
 ```bash
 cd backend
@@ -615,7 +615,7 @@ mvn test
 
 Expected: no new failures beyond the two recorded baseline integration failures.
 
-- [ ] **Step 4: Run frontend verification**
+- [x] **Step 4: Run frontend verification**
 
 ```bash
 cd frontend
@@ -625,7 +625,7 @@ npm run build
 
 Expected: no new test failures beyond the recorded baseline if it remains; production build passes.
 
-- [ ] **Step 5: Review the diff**
+- [x] **Step 5: Review the diff**
 
 ```bash
 git status --short
@@ -635,7 +635,7 @@ git diff --check main...HEAD
 
 Confirm SSE methods, 204 responses, status codes and `Location` headers remain intact.
 
-- [ ] **Step 6: Commit final docs**
+- [x] **Step 6: Commit final docs**
 
 ```bash
 git add README.md docs/架构说明.md docs/superpowers/plans/2026-07-16-project-foundation-infrastructure.md
