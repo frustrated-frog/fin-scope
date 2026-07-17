@@ -36,7 +36,7 @@ public class FinancialInterpretationAgent {
         List<String> errors = new ArrayList<String>();
         String output = null;
         try {
-            output = llm.complete(systemPrompt(), packet.getPayloadJson());
+            output = llm.complete(systemPrompt(), modelPayload(packet));
             try {
                 return success(packet, output, "LLM", errors);
             } catch (IllegalArgumentException first) {
@@ -102,25 +102,29 @@ public class FinancialInterpretationAgent {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("validationError", validationError);
         value.put("invalidOutput", shorten(invalidOutput, 8000));
-        value.put("evidencePacket", json.readTree(packet.getPayloadJson()));
+        value.put("evidencePacket", json.readTree(modelPayload(packet)));
         return json.writeValueAsString(value);
     }
 
     private String systemPrompt() {
         return "你是A股非金融企业财报解读Agent。只能使用evidence中的证据和数字，只能引用现有id；" +
-                "输出单个JSON对象，字段为operatingState、confidence、executiveSummary、dimensions、" +
-                "positiveSignals、risks、turningPoints、watchpoints、limitations、disclaimer。" +
-                "operatingState和confidence必须是字符串；executiveSummary必须是数组，数组元素必须是" +
-                "包含claim、claimType、refs的对象；positiveSignals、risks、turningPoints、watchpoints必须是数组，" +
-                "数组元素结构与executiveSummary相同；dimensions必须是数组，元素必须包含code、assessment、" +
-                "summary、refs；limitations必须是字符串数组，disclaimer必须是字符串。" +
+                "输出单个JSON对象，字段为operatingState、confidence、executiveSummary、periodChanges、" +
+                "crossStatementInsights、dimensions、positiveSignals、risks、turningPoints、watchpoints、" +
+                "limitations、disclaimer。所有Claim必须包含claim、claimType、refs；executiveSummary必须是数组，输出3至5条；" +
+                "periodChanges输出2至5条最重要的同比、环比或连续趋势，证据不足可为空；" +
+                "crossStatementInsights输出2至5条利润表、资产负债表、现金流量表之间的联动观察，证据不足可为空；" +
+                "positiveSignals、risks、turningPoints、watchpoints必须是数组，元素为Claim且各不超过5条。" +
+                "dimensions必须是数组，元素必须包含code、assessment、summary、refs、details；" +
+                "details为2至4条Claim，分别说明关键事实、趋势、驱动或反证；证据不足维度允许1条限制说明。" +
+                "limitations必须是字符串数组，disclaimer必须是字符串。" +
                 "operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE之一；" +
                 "confidence只能是HIGH、MEDIUM、LOW之一；每个dimension的assessment只能是POSITIVE、" +
                 "NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE之一。" +
                 "每条实质结论必须有refs；dimensions必须完整覆盖GROWTH、PROFITABILITY、" +
                 "EARNINGS_QUALITY、CASH_QUALITY、ASSET_QUALITY、SOLVENCY_CAPITAL_DISCIPLINE。" +
                 "不得重新计算、创造数字、给出买卖建议、目标价或收益承诺；事实、推断和观察项分别标记" +
-                "FACT、INFERENCE、WATCHPOINT；数据不足时使用INSUFFICIENT_EVIDENCE。只返回JSON。";
+                "FACT、INFERENCE、WATCHPOINT；原因和影响必须标为INFERENCE；单条claim不超过120个中文字符，" +
+                "维度summary不超过100个中文字符；数据不足时使用INSUFFICIENT_EVIDENCE。只返回JSON。";
     }
 
     private String repairPrompt() {
@@ -136,5 +140,10 @@ public class FinancialInterpretationAgent {
     private String shorten(String value, int limit) {
         if (value == null) return "";
         return value.length() <= limit ? value : value.substring(0, limit);
+    }
+
+    private String modelPayload(FinancialEvidencePacket packet) {
+        return packet.getModelPayloadJson() == null || packet.getModelPayloadJson().trim().isEmpty()
+                ? packet.getPayloadJson() : packet.getModelPayloadJson();
     }
 }

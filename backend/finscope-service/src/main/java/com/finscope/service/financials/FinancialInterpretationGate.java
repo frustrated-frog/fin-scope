@@ -55,11 +55,13 @@ public class FinancialInterpretationGate {
         if (result.getExecutiveSummary() == null || result.getExecutiveSummary().isEmpty()) {
             errors.add("executiveSummary 至少需要一条结论");
         }
-        validateClaims(result.getExecutiveSummary(), "executiveSummary", packet, errors);
-        validateClaims(result.getPositiveSignals(), "positiveSignals", packet, errors);
-        validateClaims(result.getRisks(), "risks", packet, errors);
-        validateClaims(result.getTurningPoints(), "turningPoints", packet, errors);
-        validateClaims(result.getWatchpoints(), "watchpoints", packet, errors);
+        validateClaims(result.getExecutiveSummary(), "executiveSummary", 5, packet, errors);
+        validateClaims(result.getPeriodChanges(), "periodChanges", 5, packet, errors);
+        validateClaims(result.getCrossStatementInsights(), "crossStatementInsights", 5, packet, errors);
+        validateClaims(result.getPositiveSignals(), "positiveSignals", 5, packet, errors);
+        validateClaims(result.getRisks(), "risks", 5, packet, errors);
+        validateClaims(result.getTurningPoints(), "turningPoints", 5, packet, errors);
+        validateClaims(result.getWatchpoints(), "watchpoints", 5, packet, errors);
         validateDimensions(result.getDimensions(), packet, errors);
         if (rank(result.getConfidence()) > rank(packet.getQualityCeiling())) {
             errors.add("置信度超过数据质量上限 " + packet.getQualityCeiling());
@@ -95,13 +97,19 @@ public class FinancialInterpretationGate {
             if (!actual.add(value.getCode())) errors.add("dimensions 包含重复维度 " + value.getCode());
             if (blank(value.getSummary())) errors.add("dimension.summary 不能为空");
             validateRefs(value.getRefs(), "dimension " + value.getCode(), packet, errors);
+            if (value.getDetails() == null || value.getDetails().isEmpty()) {
+                errors.add("dimension " + value.getCode() + " 至少需要一条详情");
+            }
+            validateClaims(value.getDetails(), "dimension " + value.getCode() + ".details",
+                    4, packet, errors);
         }
         if (!actual.equals(DIMENSIONS)) errors.add("dimensions 必须完整覆盖六个固定维度");
     }
 
-    private void validateClaims(List<FinancialInterpretation.Claim> values, String field,
+    private void validateClaims(List<FinancialInterpretation.Claim> values, String field, int max,
                                 FinancialEvidencePacket packet, List<String> errors) {
         if (values == null) return;
+        if (values.size() > max) errors.add(field + " 最多允许 " + max + " 条");
         for (FinancialInterpretation.Claim value : values) {
             if (value == null || blank(value.getClaim())) {
                 errors.add(field + " 包含空结论");
@@ -146,12 +154,17 @@ public class FinancialInterpretationGate {
     private List<String> narrative(FinancialInterpretation.Result result) {
         List<String> values = new ArrayList<String>();
         addClaims(values, result.getExecutiveSummary());
+        addClaims(values, result.getPeriodChanges());
+        addClaims(values, result.getCrossStatementInsights());
         addClaims(values, result.getPositiveSignals());
         addClaims(values, result.getRisks());
         addClaims(values, result.getTurningPoints());
         addClaims(values, result.getWatchpoints());
         if (result.getDimensions() != null) {
-            result.getDimensions().forEach(item -> values.add(item == null ? null : item.getSummary()));
+            result.getDimensions().forEach(item -> {
+                values.add(item == null ? null : item.getSummary());
+                if (item != null) addClaims(values, item.getDetails());
+            });
         }
         if (result.getLimitations() != null) values.addAll(result.getLimitations());
         values.add(result.getDisclaimer());

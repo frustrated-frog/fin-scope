@@ -29,6 +29,9 @@ class FinancialInterpretationAgentTest {
         assertEquals("LLM", result.getGenerationMode());
         assertEquals(1, llm.calls);
         assertEquals("IMPROVING", result.getResult().getOperatingState());
+        assertEquals(2, result.getResult().getPeriodChanges().size());
+        assertEquals(2, result.getResult().getCrossStatementInsights().size());
+        assertEquals(2, result.getResult().getDimensions().get(0).getDetails().size());
     }
 
     @Test
@@ -89,6 +92,24 @@ class FinancialInterpretationAgentTest {
         assertTrue(prompt.contains("claim、claimType、refs"));
         assertTrue(prompt.contains("operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE之一"));
         assertTrue(prompt.contains("assessment只能是POSITIVE、NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE之一"));
+        assertTrue(prompt.contains("periodChanges"));
+        assertTrue(prompt.contains("crossStatementInsights"));
+        assertTrue(prompt.contains("details"));
+    }
+
+    @Test
+    void sendsOnlyTheCompactModelPayloadToPrimaryAndRepairCalls() {
+        ProgrammableClient llm = new ProgrammableClient(true, "{}", validJson());
+        FinancialEvidencePacket packet = packet();
+        packet.setPayloadJson("{\"fullEvidence\":true}");
+        packet.setModelPayloadJson("{\"compactEvidence\":true}");
+
+        FinancialInterpretation result = agent(llm).interpret(packet);
+
+        assertEquals("SUCCESS", result.getStatus());
+        assertEquals("{\"compactEvidence\":true}", llm.userPrompts.get(0));
+        assertTrue(llm.userPrompts.get(1).contains("compactEvidence"));
+        assertFalse(llm.userPrompts.get(1).contains("fullEvidence"));
     }
 
     private FinancialInterpretationAgent agent(LlmChatClient llm) {
@@ -111,6 +132,7 @@ class FinancialInterpretationAgentTest {
         packet.setInputHash("input-hash");
         packet.setQualityCeiling("MEDIUM");
         packet.setPayloadJson("{\"qualityCeiling\":\"MEDIUM\"}");
+        packet.setModelPayloadJson("{\"qualityCeiling\":\"MEDIUM\",\"compact\":true}");
         packet.setEvidence(Arrays.asList(evidence));
         LinkedHashMap<String, FinancialEvidence> index = new LinkedHashMap<String, FinancialEvidence>();
         index.put(evidence.getId(), evidence);
@@ -123,6 +145,8 @@ class FinancialInterpretationAgentTest {
         return "```json\n{" +
                 "\"operatingState\":\"IMPROVING\",\"confidence\":\"MEDIUM\"," +
                 "\"executiveSummary\":[{\"claim\":\"营业收入同比12.30%\",\"claimType\":\"FACT\",\"refs\":[\"M_REVENUE_YOY\"]}]," +
+                "\"periodChanges\":[" + claim() + "," + claim() + "]," +
+                "\"crossStatementInsights\":[" + claim() + "," + claim() + "]," +
                 "\"dimensions\":[" + dimension("GROWTH") + "," + dimension("PROFITABILITY") + "," +
                 dimension("EARNINGS_QUALITY") + "," + dimension("CASH_QUALITY") + "," +
                 dimension("ASSET_QUALITY") + "," + dimension("SOLVENCY_CAPITAL_DISCIPLINE") + "]," +
@@ -133,7 +157,13 @@ class FinancialInterpretationAgentTest {
 
     private String dimension(String code) {
         return "{\"code\":\"" + code + "\",\"assessment\":\"NEUTRAL\"," +
-                "\"summary\":\"营业收入同比12.30%\",\"refs\":[\"M_REVENUE_YOY\"]}";
+                "\"summary\":\"营业收入同比12.30%\",\"refs\":[\"M_REVENUE_YOY\"]," +
+                "\"details\":[" + claim() + "," + claim() + "]}";
+    }
+
+    private String claim() {
+        return "{\"claim\":\"营业收入同比12.30%\",\"claimType\":\"FACT\"," +
+                "\"refs\":[\"M_REVENUE_YOY\"]}";
     }
 
     private static final class ProgrammableClient implements LlmChatClient {
@@ -141,6 +171,7 @@ class FinancialInterpretationAgentTest {
         private final List<Object> values = new ArrayList<Object>();
         private final List<Integer> timeouts = new ArrayList<Integer>();
         private final List<String> systemPrompts = new ArrayList<String>();
+        private final List<String> userPrompts = new ArrayList<String>();
         private int calls;
 
         private ProgrammableClient(boolean configured, Object... values) {
@@ -161,6 +192,7 @@ class FinancialInterpretationAgentTest {
         @Override
         public String complete(String systemPrompt, String userPrompt) throws Exception {
             systemPrompts.add(systemPrompt);
+            userPrompts.add(userPrompt);
             timeouts.add(null);
             return nextValue();
         }
@@ -168,6 +200,7 @@ class FinancialInterpretationAgentTest {
         @Override
         public String complete(String systemPrompt, String userPrompt, int timeoutMs) throws Exception {
             systemPrompts.add(systemPrompt);
+            userPrompts.add(userPrompt);
             timeouts.add(timeoutMs);
             return nextValue();
         }

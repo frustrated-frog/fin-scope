@@ -31,6 +31,8 @@ public class FinancialInterpretation {
         private String operatingState;
         private String confidence;
         private List<Claim> executiveSummary = new ArrayList<Claim>();
+        private List<Claim> periodChanges = new ArrayList<Claim>();
+        private List<Claim> crossStatementInsights = new ArrayList<Claim>();
         private List<Dimension> dimensions = new ArrayList<Dimension>();
         private List<Claim> positiveSignals = new ArrayList<Claim>();
         private List<Claim> risks = new ArrayList<Claim>();
@@ -65,5 +67,6 @@ public class FinancialInterpretation {
         private String assessment;
         private String summary;
         private List<String> refs = new ArrayList<String>();
+        private List<Claim> details = new ArrayList<Claim>();
     }
 }

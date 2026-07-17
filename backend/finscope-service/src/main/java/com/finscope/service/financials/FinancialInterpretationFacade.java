@@ -211,12 +211,17 @@ public class FinancialInterpretationFacade {
         Set<String> refs = new LinkedHashSet<String>();
         if (result == null) return refs;
         addClaimRefs(refs, result.getExecutiveSummary());
+        addClaimRefs(refs, result.getPeriodChanges());
+        addClaimRefs(refs, result.getCrossStatementInsights());
         addClaimRefs(refs, result.getPositiveSignals());
         addClaimRefs(refs, result.getRisks());
         addClaimRefs(refs, result.getTurningPoints());
         addClaimRefs(refs, result.getWatchpoints());
         if (result.getDimensions() != null) {
-            result.getDimensions().forEach(value -> refs.addAll(value.getRefs()));
+            result.getDimensions().forEach(value -> {
+                refs.addAll(value.getRefs());
+                addClaimRefs(refs, value.getDetails());
+            });
         }
         return refs;
     }

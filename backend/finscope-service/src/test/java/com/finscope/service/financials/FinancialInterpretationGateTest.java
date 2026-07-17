@@ -42,6 +42,9 @@ class FinancialInterpretationGateTest {
         assertEquals("IMPROVING", result.getOperatingState());
         assertEquals("MEDIUM", result.getConfidence());
         assertEquals(6, result.getDimensions().size());
+        assertEquals(2, result.getPeriodChanges().size());
+        assertEquals(2, result.getCrossStatementInsights().size());
+        assertEquals(2, result.getDimensions().get(0).getDetails().size());
         assertEquals("M_REVENUE_YOY", result.getExecutiveSummary().get(0).getRefs().get(0));
     }
 
@@ -53,6 +56,18 @@ class FinancialInterpretationGateTest {
     @Test
     void rejectsNumberOutsideEvidenceWhitelist() throws Exception {
         assertRejected(validJson().replace("12.30%", "99.90%"), "证据包外数字");
+    }
+
+    @Test
+    void rejectsUnknownReferenceInsideDimensionDetails() throws Exception {
+        JsonNode root = json.readTree(validJson());
+        ((com.fasterxml.jackson.databind.node.ArrayNode) root.path("dimensions").get(0)
+                .path("details").get(0).path("refs")).set(0, json.getNodeFactory().textNode("M_UNKNOWN"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> gate.apply(root, packet));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                error.getMessage().contains("引用不存在"), error.getMessage());
     }
 
     @Test
@@ -91,6 +106,8 @@ class FinancialInterpretationGateTest {
                 "\"operatingState\":\"IMPROVING\"," +
                 "\"confidence\":\"MEDIUM\"," +
                 "\"executiveSummary\":[{\"claim\":\"营业收入同比12.30%\",\"claimType\":\"FACT\",\"refs\":[\"M_REVENUE_YOY\"]}]," +
+                "\"periodChanges\":[" + claim() + "," + claim() + "]," +
+                "\"crossStatementInsights\":[" + claim() + "," + claim() + "]," +
                 "\"dimensions\":[" +
                 dimension("GROWTH") + "," + dimension("PROFITABILITY") + "," +
                 dimension("EARNINGS_QUALITY") + "," + dimension("CASH_QUALITY") + "," +
@@ -102,6 +119,12 @@ class FinancialInterpretationGateTest {
 
     private String dimension(String code) {
         return "{\"code\":\"" + code + "\",\"assessment\":\"NEUTRAL\"," +
-                "\"summary\":\"营业收入同比12.30%\",\"refs\":[\"M_REVENUE_YOY\"]}";
+                "\"summary\":\"营业收入同比12.30%\",\"refs\":[\"M_REVENUE_YOY\"]," +
+                "\"details\":[" + claim() + "," + claim() + "]}";
+    }
+
+    private String claim() {
+        return "{\"claim\":\"营业收入同比12.30%\",\"claimType\":\"FACT\"," +
+                "\"refs\":[\"M_REVENUE_YOY\"]}";
     }
 }

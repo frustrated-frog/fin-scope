@@ -22,7 +22,7 @@ import java.util.Map;
 
 @Component
 public class FinancialEvidencePacketAssembler {
-    public static final String PROMPT_VERSION = "financial-interpret-v2";
+    public static final String PROMPT_VERSION = "financial-interpret-v3";
     public static final String ALGORITHM_VERSION = "financial-analysis-v4";
     private static final BigDecimal TEN_THOUSAND = new BigDecimal("10000");
     private static final BigDecimal HUNDRED_MILLION = new BigDecimal("100000000");
