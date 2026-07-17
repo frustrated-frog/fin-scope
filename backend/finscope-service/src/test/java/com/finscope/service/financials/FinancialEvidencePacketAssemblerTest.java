@@ -14,6 +14,7 @@ import com.finscope.domain.instrument.Instrument;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
@@ -52,6 +53,14 @@ class FinancialEvidencePacketAssemblerTest {
         assertFalse(firstPacket.getModelPayloadJson().isEmpty());
         assertTrue(firstPacket.getModelPayloadJson().length() < firstPacket.getPayloadJson().length());
         assertTrue(firstPacket.getModelEvidence().size() <= FinancialEvidenceSelector.MAX_EVIDENCE);
+        try {
+            assertEquals(firstPacket.getModelEvidence().size(),
+                    json.readTree(firstPacket.getPayloadJson()).path("modelEvidenceCount").asInt());
+            assertEquals(firstPacket.getModelPayloadJson().getBytes(StandardCharsets.UTF_8).length,
+                    json.readTree(firstPacket.getPayloadJson()).path("modelInputBytes").asInt());
+        } catch (Exception error) {
+            throw new AssertionError(error);
+        }
     }
 
     @Test

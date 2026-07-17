@@ -71,7 +71,6 @@ public class FinancialEvidencePacketAssembler {
             List<String> modelEvidenceIds = new ArrayList<String>();
             for (FinancialEvidence item : modelEvidence) modelEvidenceIds.add(item.getId());
             payload.put("modelEvidenceIds", modelEvidenceIds);
-            String payloadJson = json.writeValueAsString(payload);
             Map<String, Object> modelPayload = new LinkedHashMap<String, Object>();
             modelPayload.put("report", report);
             modelPayload.put("qualityCeiling", quality);
@@ -79,6 +78,9 @@ public class FinancialEvidencePacketAssembler {
             modelPayload.put("algorithmVersion", ALGORITHM_VERSION);
             modelPayload.put("selectorVersion", FinancialEvidenceSelector.SELECTOR_VERSION);
             String modelPayloadJson = json.writeValueAsString(modelPayload);
+            payload.put("modelEvidenceCount", modelEvidence.size());
+            payload.put("modelInputBytes", modelPayloadJson.getBytes(StandardCharsets.UTF_8).length);
+            String payloadJson = json.writeValueAsString(payload);
             String sourceHash = sha256(json.writeValueAsString(sourceCanonical(current)));
 
             FinancialEvidencePacket packet = new FinancialEvidencePacket();
