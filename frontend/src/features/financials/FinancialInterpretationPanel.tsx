@@ -294,6 +294,29 @@ function InterpretationResult({
         prominent
       />
 
+      {(result.periodChanges?.length || result.crossStatementInsights?.length) ? (
+        <div className="financial-agent-claim-grid">
+          {result.periodChanges?.length ? (
+            <ClaimSection
+              title="核心变化"
+              kicker="Period changes"
+              claims={result.periodChanges}
+              evidenceById={evidenceById}
+              onEvidence={onEvidence}
+            />
+          ) : null}
+          {result.crossStatementInsights?.length ? (
+            <ClaimSection
+              title="三表联动"
+              kicker="Cross-statement reading"
+              claims={result.crossStatementInsights}
+              evidenceById={evidenceById}
+              onEvidence={onEvidence}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       <section className="financial-agent-dimensions">
         <header><div><p className="financials-section-kicker">Six-lens review</p><h4>六维分析</h4></div></header>
         <div>
@@ -332,6 +355,17 @@ function DimensionCard({
       <header><strong>{dimensionLabels[dimension.code] || dimension.code}</strong><span>{assessmentLabels[dimension.assessment]}</span></header>
       <p>{dimension.summary}</p>
       <EvidenceRefs refs={dimension.refs} evidenceById={evidenceById} onEvidence={onEvidence} />
+      {dimension.details?.length ? (
+        <div className="financial-agent-dimension-details">
+          {dimension.details.map((detail, index) => (
+            <div key={`${detail.claim}-${index}`}>
+              <span>{claimTypeLabel(detail.claimType)}</span>
+              <p>{detail.claim}</p>
+              <EvidenceRefs refs={detail.refs} evidenceById={evidenceById} onEvidence={onEvidence} />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -360,7 +394,7 @@ function ClaimSection({
         <div className="financial-agent-claim-list">
           {claims.map((claim, index) => (
             <article key={`${claim.claim}-${index}`}>
-              <span>{claim.claimType === 'FACT' ? '事实' : claim.claimType === 'INFERENCE' ? '推断' : '观察'}</span>
+              <span>{claimTypeLabel(claim.claimType)}</span>
               <div><p>{claim.claim}</p><EvidenceRefs refs={claim.refs} evidenceById={evidenceById} onEvidence={onEvidence} /></div>
             </article>
           ))}
@@ -368,6 +402,10 @@ function ClaimSection({
       ) : <p className="financial-agent-no-claim">当前证据未支持明确结论。</p>}
     </section>
   );
+}
+
+function claimTypeLabel(claimType: FinancialInterpretationClaim['claimType']) {
+  return claimType === 'FACT' ? '事实' : claimType === 'INFERENCE' ? '推断' : '观察';
 }
 
 function EvidenceRefs({

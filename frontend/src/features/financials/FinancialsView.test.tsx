@@ -197,6 +197,11 @@ test('offers an evidence-constrained Agent interpretation for the selected repor
   await user.click(screen.getByRole('button', { name: '生成 Agent 解读' }));
 
   expect(await screen.findByText('经营状态改善，收入保持增长。')).toBeInTheDocument();
+  expect(screen.getByText('核心变化')).toBeInTheDocument();
+  expect(screen.getByText('营收同比延续增长。')).toBeInTheDocument();
+  expect(screen.getByText('三表联动')).toBeInTheDocument();
+  expect(screen.getByText('收入增长与现金回收需要结合观察。')).toBeInTheDocument();
+  expect(screen.getByText('同比收入指标支持成长性判断。')).toBeInTheDocument();
   await user.click(screen.getAllByRole('button', { name: '营业收入同比证据' })[0]);
   expect(await screen.findByRole('dialog', { name: '证据详情' })).toHaveTextContent('12.30%');
 });
@@ -246,8 +251,22 @@ const interpretation = {
     executiveSummary: [
       { claim: '经营状态改善，收入保持增长。', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
     ],
+    periodChanges: [
+      { claim: '营收同比延续增长。', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
+    ],
+    crossStatementInsights: [
+      { claim: '收入增长与现金回收需要结合观察。', claimType: 'INFERENCE', refs: ['M_REVENUE_YOY'] }
+    ],
     dimensions: [
-      { code: 'GROWTH', assessment: 'POSITIVE', summary: '成长性改善。', refs: ['M_REVENUE_YOY'] }
+      {
+        code: 'GROWTH',
+        assessment: 'POSITIVE',
+        summary: '成长性改善。',
+        refs: ['M_REVENUE_YOY'],
+        details: [
+          { claim: '同比收入指标支持成长性判断。', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
+        ]
+      }
     ],
     positiveSignals: [],
     risks: [],

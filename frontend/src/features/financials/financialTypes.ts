@@ -111,12 +111,15 @@ export type FinancialInterpretationDimension = {
   assessment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'INSUFFICIENT_EVIDENCE';
   summary: string;
   refs: string[];
+  details?: FinancialInterpretationClaim[];
 };
 
 export type FinancialInterpretationResult = {
   operatingState: 'IMPROVING' | 'STABLE' | 'UNDER_PRESSURE' | 'INSUFFICIENT_EVIDENCE';
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   executiveSummary: FinancialInterpretationClaim[];
+  periodChanges?: FinancialInterpretationClaim[];
+  crossStatementInsights?: FinancialInterpretationClaim[];
   dimensions: FinancialInterpretationDimension[];
   positiveSignals: FinancialInterpretationClaim[];
   risks: FinancialInterpretationClaim[];

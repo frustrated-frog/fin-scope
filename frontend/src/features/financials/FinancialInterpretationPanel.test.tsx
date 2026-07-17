@@ -39,6 +39,11 @@ test('continues polling while the interpretation remains in the same pending sta
 
   expect(statusCalls).toBe(3);
   expect(screen.getByText('模型生成的经营叙事')).toBeInTheDocument();
+  expect(screen.getByText('核心变化')).toBeInTheDocument();
+  expect(screen.getByText('营业收入延续增长趋势')).toBeInTheDocument();
+  expect(screen.getByText('三表联动')).toBeInTheDocument();
+  expect(screen.getByText('利润增长但经营现金流偏弱')).toBeInTheDocument();
+  expect(screen.getByText('收入增长得到同比指标支持')).toBeInTheDocument();
 });
 
 function pending(status: 'QUEUED' | 'RUNNING'): FinancialInterpretation {
@@ -62,7 +67,21 @@ function completed(): FinancialInterpretation {
       operatingState: 'STABLE',
       confidence: 'MEDIUM',
       executiveSummary: [{ claim: '模型生成的经营叙事', claimType: 'FACT', refs: [] }],
-      dimensions: [],
+      periodChanges: [
+        { claim: '营业收入延续增长趋势', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
+      ],
+      crossStatementInsights: [
+        { claim: '利润增长但经营现金流偏弱', claimType: 'INFERENCE', refs: ['M_REVENUE_YOY'] }
+      ],
+      dimensions: [{
+        code: 'GROWTH',
+        assessment: 'POSITIVE',
+        summary: '成长趋势改善',
+        refs: ['M_REVENUE_YOY'],
+        details: [
+          { claim: '收入增长得到同比指标支持', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
+        ]
+      }],
       positiveSignals: [],
       risks: [],
       turningPoints: [],
