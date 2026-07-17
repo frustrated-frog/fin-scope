@@ -4,10 +4,14 @@ import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.financials.FinancialReport;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.financials.FinancialDocument;
+import com.finscope.domain.financials.FinancialEvidence;
+import com.finscope.domain.financials.FinancialInterpretation;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.service.financials.FinancialDocumentService;
 import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.financials.FinancialRefreshService;
+import com.finscope.service.financials.FinancialInterpretationFacade;
+import com.finscope.web.request.financials.FinancialInterpretationRequest;
 import com.finscope.web.request.financials.FinancialRefreshRequest;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.http.ResponseEntity;
@@ -34,13 +38,16 @@ public class FinancialsController {
     private final FinancialQueryService query;
     private final FinancialRefreshService refresh;
     private final FinancialDocumentService documents;
+    private final FinancialInterpretationFacade interpretations;
 
     public FinancialsController(FinancialQueryService query,
                                 FinancialRefreshService refresh,
-                                FinancialDocumentService documents) {
+                                FinancialDocumentService documents,
+                                FinancialInterpretationFacade interpretations) {
         this.query = query;
         this.refresh = refresh;
         this.documents = documents;
+        this.interpretations = interpretations;
     }
 
     @GetMapping("/instruments")
@@ -80,6 +87,37 @@ public class FinancialsController {
     @GetMapping("/reports/{id}/documents")
     public ApiResponse<List<FinancialDocument>> documents(@PathVariable Long id) {
         return ApiResponses.success(documents.listByReport(id));
+    }
+
+    @PostMapping("/reports/{id}/interpretations")
+    public ResponseEntity<ApiResponse<FinancialInterpretation>> interpret(
+            @PathVariable Long id,
+            @RequestBody(required = false) FinancialInterpretationRequest request) {
+        FinancialInterpretation result = interpretations.request(
+                id, request != null && request.isForce());
+        return ResponseEntity.accepted().body(ApiResponses.success(result));
+    }
+
+    @GetMapping("/reports/{id}/interpretations/latest")
+    public ApiResponse<FinancialInterpretation> latestInterpretation(@PathVariable Long id) {
+        return ApiResponses.success(interpretations.latest(id));
+    }
+
+    @GetMapping("/reports/{id}/interpretations")
+    public ApiResponse<List<FinancialInterpretation>> interpretationHistory(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ApiResponses.success(interpretations.history(id, limit));
+    }
+
+    @GetMapping("/interpretations/{id}")
+    public ApiResponse<FinancialInterpretation> interpretation(@PathVariable Long id) {
+        return ApiResponses.success(interpretations.get(id));
+    }
+
+    @GetMapping("/interpretations/{id}/evidence")
+    public ApiResponse<List<FinancialEvidence>> interpretationEvidence(@PathVariable Long id) {
+        return ApiResponses.success(interpretations.evidence(id));
     }
 
 }

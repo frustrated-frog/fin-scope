@@ -4,10 +4,13 @@ import com.finscope.domain.financials.FinancialReport;
 import com.finscope.domain.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.financials.FinancialDocument;
+import com.finscope.domain.financials.FinancialEvidence;
+import com.finscope.domain.financials.FinancialInterpretation;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.service.financials.FinancialDocumentService;
 import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.financials.FinancialRefreshService;
+import com.finscope.service.financials.FinancialInterpretationFacade;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
 import com.finscope.web.handler.ApiExceptionHandler;
@@ -49,6 +52,8 @@ class FinancialsControllerTest {
     private FinancialRefreshService refresh;
     @MockBean
     private FinancialDocumentService documents;
+    @MockBean
+    private FinancialInterpretationFacade interpretations;
 
     @Test
     void listsSupportedStockInstruments() throws Exception {
@@ -126,6 +131,37 @@ class FinancialsControllerTest {
                         .header().string("Content-Disposition",
                                 "inline; filename=\"abc123.pdf\""))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .content().bytes(bytes));
+                                .content().bytes(bytes));
+    }
+
+    @Test
+    void exposesAsyncInterpretationLatestHistoryDetailAndEvidenceContracts() throws Exception {
+        FinancialInterpretation value = new FinancialInterpretation();
+        value.setId(41L);
+        value.setReportId(9L);
+        value.setStatus("QUEUED");
+        when(interpretations.request(9L, false)).thenReturn(value);
+        when(interpretations.latest(9L)).thenReturn(value);
+        when(interpretations.history(9L, 20)).thenReturn(Collections.singletonList(value));
+        when(interpretations.get(41L)).thenReturn(value);
+        FinancialEvidence evidence = new FinancialEvidence();
+        evidence.setId("M_REVENUE_YOY");
+        when(interpretations.evidence(41L)).thenReturn(Collections.singletonList(evidence));
+
+        mockMvc.perform(post("/api/financials/reports/9/interpretations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"force\":false}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.id").value(41))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"));
+        mockMvc.perform(get("/api/financials/reports/9/interpretations/latest"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(41));
+        mockMvc.perform(get("/api/financials/reports/9/interpretations?limit=20"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value(41));
+        mockMvc.perform(get("/api/financials/interpretations/41"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.reportId").value(9));
+        mockMvc.perform(get("/api/financials/interpretations/41/evidence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("M_REVENUE_YOY"));
     }
 }

@@ -62,6 +62,10 @@ public class FinancialInterpretationAgent {
         }
     }
 
+    public String modelName() {
+        return llm.modelName();
+    }
+
     private FinancialInterpretation success(FinancialEvidencePacket packet, String output,
                                             String mode, List<String> priorErrors) {
         try {

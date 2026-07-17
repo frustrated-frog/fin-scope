@@ -146,4 +146,15 @@ public class AppConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "financialInterpretationExecutor")
+    public Executor financialInterpretationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("financial-interpretation-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(20);
+        executor.initialize();
+        return executor;
+    }
 }
