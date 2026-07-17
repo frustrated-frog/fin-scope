@@ -27,7 +27,7 @@ finscope:
     timeout-ms: 300000
     temperature: 0.2
   search:
-    enabled: ${FINSCOPE_SEARCH_ENABLED:true}
+    enabled: true
     provider: tavily
     api-key: "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"
   python-market-data:
