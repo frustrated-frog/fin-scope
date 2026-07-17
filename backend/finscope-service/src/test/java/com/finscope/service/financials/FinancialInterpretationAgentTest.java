@@ -87,6 +87,8 @@ class FinancialInterpretationAgentTest {
         assertTrue(prompt.contains("executiveSummary必须是数组"));
         assertTrue(prompt.contains("positiveSignals、risks、turningPoints、watchpoints必须是数组"));
         assertTrue(prompt.contains("claim、claimType、refs"));
+        assertTrue(prompt.contains("operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE之一"));
+        assertTrue(prompt.contains("assessment只能是POSITIVE、NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE之一"));
     }
 
     private FinancialInterpretationAgent agent(LlmChatClient llm) {

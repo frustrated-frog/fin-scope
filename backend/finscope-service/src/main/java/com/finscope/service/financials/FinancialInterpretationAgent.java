@@ -114,6 +114,9 @@ public class FinancialInterpretationAgent {
                 "包含claim、claimType、refs的对象；positiveSignals、risks、turningPoints、watchpoints必须是数组，" +
                 "数组元素结构与executiveSummary相同；dimensions必须是数组，元素必须包含code、assessment、" +
                 "summary、refs；limitations必须是字符串数组，disclaimer必须是字符串。" +
+                "operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE之一；" +
+                "confidence只能是HIGH、MEDIUM、LOW之一；每个dimension的assessment只能是POSITIVE、" +
+                "NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE之一。" +
                 "每条实质结论必须有refs；dimensions必须完整覆盖GROWTH、PROFITABILITY、" +
                 "EARNINGS_QUALITY、CASH_QUALITY、ASSET_QUALITY、SOLVENCY_CAPITAL_DISCIPLINE。" +
                 "不得重新计算、创造数字、给出买卖建议、目标价或收益承诺；事实、推断和观察项分别标记" +

@@ -29,6 +29,12 @@ public class FinancialInterpretationGate {
     private static final Pattern NUMBER = Pattern.compile("(?<![A-Za-z_])[-+]?\\d+(?:\\.\\d+)?");
     private static final Pattern INVESTMENT_ADVICE = Pattern.compile(
             "建议买入|建议卖出|应当买入|应当卖出|目标价|保证收益|收益承诺");
+    private static final Pattern NEGATED_INVESTMENT_ADVICE = Pattern.compile(
+            "(?:并?不|不得|不能|不可|未)(?:" +
+                    "建议买入(?:或卖出)?|建议卖出|应当买入|应当卖出|" +
+                    "(?:提供|给出|设定|涉及)?目标价|" +
+                    "保证收益(?:或(?:作出|做出)收益承诺)?|" +
+                    "(?:作出|做出|包含|涉及)?收益承诺)");
 
     private final ObjectMapper json;
 
@@ -60,7 +66,8 @@ public class FinancialInterpretationGate {
         }
         for (String text : narrative(result)) {
             if (text == null) continue;
-            if (INVESTMENT_ADVICE.matcher(text).find()) {
+            String adviceCheckText = NEGATED_INVESTMENT_ADVICE.matcher(text).replaceAll("");
+            if (INVESTMENT_ADVICE.matcher(adviceCheckText).find()) {
                 errors.add("输出包含投资建议或承诺性表达");
             }
             validateNumbers(text, packet, errors);

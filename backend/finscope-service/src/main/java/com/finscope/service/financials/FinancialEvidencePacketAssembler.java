@@ -10,6 +10,7 @@ import com.finscope.domain.financials.FinancialReportView;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -21,8 +22,10 @@ import java.util.Map;
 
 @Component
 public class FinancialEvidencePacketAssembler {
-    public static final String PROMPT_VERSION = "financial-interpret-v1";
-    public static final String ALGORITHM_VERSION = "financial-analysis-v2";
+    public static final String PROMPT_VERSION = "financial-interpret-v2";
+    public static final String ALGORITHM_VERSION = "financial-analysis-v3";
+    private static final BigDecimal TEN_THOUSAND = new BigDecimal("10000");
+    private static final BigDecimal HUNDRED_MILLION = new BigDecimal("100000000");
 
     private final ObjectMapper json;
     private final FinancialTrendEngine trends;
@@ -199,10 +202,30 @@ public class FinancialEvidencePacketAssembler {
             String raw = matcher.group();
             values.add(raw.startsWith("+") ? raw.substring(1) : raw);
             try {
-                values.add(new BigDecimal(raw).stripTrailingZeros().toPlainString());
+                BigDecimal number = new BigDecimal(raw);
+                addDisplayVariants(values, number);
+                if (number.abs().compareTo(TEN_THOUSAND) >= 0) {
+                    addDisplayVariants(values, number.divide(TEN_THOUSAND, 8, RoundingMode.HALF_UP));
+                    addDisplayVariants(values, number.divide(HUNDRED_MILLION, 8, RoundingMode.HALF_UP));
+                }
             } catch (NumberFormatException ignored) {
                 // 正则已限制格式；保留原始文本即可。
             }
+        }
+    }
+
+    private void addDisplayVariants(LinkedHashSet<String> values, BigDecimal number) {
+        addDisplayVariantsForSign(values, number);
+        if (number.signum() < 0) addDisplayVariantsForSign(values, number.abs());
+    }
+
+    private void addDisplayVariantsForSign(LinkedHashSet<String> values, BigDecimal number) {
+        values.add(number.stripTrailingZeros().toPlainString());
+        for (int scale = 0; scale <= 2; scale++) {
+            values.add(number.setScale(scale, RoundingMode.HALF_UP)
+                    .stripTrailingZeros().toPlainString());
+            values.add(number.setScale(scale, RoundingMode.DOWN)
+                    .stripTrailingZeros().toPlainString());
         }
     }
 

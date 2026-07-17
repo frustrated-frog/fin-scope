@@ -70,6 +70,16 @@ class FinancialInterpretationGateTest {
         assertThrows(IllegalArgumentException.class, () -> gate.apply(root, packet));
     }
 
+    @Test
+    void acceptsExplicitlyNegatedInvestmentAdviceInTheDisclaimer() throws Exception {
+        String disclaimer = "不建议买入或卖出，不提供目标价，也不保证收益或作出收益承诺。";
+        String raw = validJson().replace("仅用于研究，不构成投资建议。", disclaimer);
+
+        FinancialInterpretation.Result result = gate.apply(json.readTree(raw), packet);
+
+        assertEquals(disclaimer, result.getDisclaimer());
+    }
+
     private void assertRejected(String raw, String reason) throws Exception {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> gate.apply(json.readTree(raw), packet));

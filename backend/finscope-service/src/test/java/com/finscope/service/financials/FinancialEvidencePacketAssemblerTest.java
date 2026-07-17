@@ -52,6 +52,25 @@ class FinancialEvidencePacketAssemblerTest {
     }
 
     @Test
+    void allowsSafeDisplayRoundingAndChineseCurrencyUnitsWithoutAllowingInventedNumbers() {
+        FinancialReportView source = view(9L, 101L, new BigDecimal("11.119003"));
+        source.getStatements().get(FinancialStatementType.INCOME).get(0)
+                .setNormalizedValue(new BigDecimal("2202460295.29"));
+        source.getStatements().get(FinancialStatementType.INCOME).add(
+                line(102L, "OPERATING_CASH_FLOW", "CURRENT_YTD", "-277749501.36"));
+        source.getStatements().get(FinancialStatementType.INCOME).add(
+                line(103L, "SHORT_TERM_BORROWINGS", "CURRENT_YTD", "4049519274.67"));
+
+        FinancialEvidencePacket packet = assembler.assemble(source, Collections.emptyList());
+
+        assertTrue(packet.getAllowedNumbers().contains("11.12"));
+        assertTrue(packet.getAllowedNumbers().contains("22.02"));
+        assertTrue(packet.getAllowedNumbers().contains("2.78"));
+        assertTrue(packet.getAllowedNumbers().contains("40.49"));
+        assertFalse(packet.getAllowedNumbers().contains("9.99"));
+    }
+
+    @Test
     void trendEngineKeepsAnnualAndSingleQuarterSeriesSeparate() {
         FinancialReportView annual2025 = view(9L, 101L, new BigDecimal("12.30"));
         FinancialReportView annual2024 = view(8L, 100L, new BigDecimal("10.00"));
