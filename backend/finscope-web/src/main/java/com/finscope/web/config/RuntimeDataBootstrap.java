@@ -32,6 +32,10 @@ public final class RuntimeDataBootstrap {
         Path current = currentDirectory.toAbsolutePath().normalize();
         String configuredRoot = firstNonBlank(argument(args, "--" + DATA_ROOT_PROPERTY + "="),
                 systemProperties.getProperty(DATA_ROOT_PROPERTY), environment.get(DATA_ROOT_ENV));
+        if (configuredRoot != null && !Paths.get(configuredRoot).isAbsolute()) {
+            throw new IllegalStateException(DATA_ROOT_ENV + " 必须使用绝对路径，当前值为："
+                    + configuredRoot + "。相对路径会随启动目录变化并产生数据分叉。");
+        }
         Path dataRoot = configuredRoot == null
                 ? discoverDefaultDataRoot(current)
                 : absolute(current, configuredRoot);

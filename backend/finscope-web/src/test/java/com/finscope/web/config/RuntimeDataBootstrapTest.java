@@ -49,6 +49,22 @@ class RuntimeDataBootstrapTest {
     }
 
     @Test
+    void refusesARelativeExplicitDataRoot() throws Exception {
+        Path project = projectWithMainDatabase();
+        Path accidental = project.resolve("data");
+        Files.createDirectories(accidental);
+        Files.createFile(accidental.resolve("finance.db"));
+        Map<String, String> environment = new HashMap<String, String>();
+        environment.put("FINSCOPE_DATA_ROOT", "../data");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> RuntimeDataBootstrap.resolve(project.resolve("backend"), environment,
+                        new Properties(), new String[0]));
+
+        assertTrue(error.getMessage().contains("绝对路径"), error.getMessage());
+    }
+
+    @Test
     void refusesToSilentlyCreateAMissingDatabase() throws Exception {
         Path project = createProject();
 
