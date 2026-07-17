@@ -100,6 +100,13 @@ public class FinancialInterpretationRepository {
                 "ORDER BY id DESC LIMIT ?", this::map, reportId, safeLimit);
     }
 
+    public int failInterrupted() {
+        return jdbc.update("UPDATE financial_interpretation SET status='FAILED'," +
+                        "failure_code='INTERRUPTED',failure_message=?,completed_at=? " +
+                        "WHERE status IN ('QUEUED','RUNNING','VALIDATING')",
+                "服务重启中断了本次解读，请重新生成", LocalDateTime.now().toString());
+    }
+
     private Optional<FinancialInterpretation> first(String sql, Object argument) {
         List<FinancialInterpretation> rows = jdbc.query(sql, this::map, argument);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));

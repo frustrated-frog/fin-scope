@@ -77,6 +77,26 @@ class FinancialInterpretationPersistenceTest {
         assertNotNull(success.getCreatedAt());
     }
 
+    @Test
+    void startupRecoveryFailsOnlyInterruptedTasksAndKeepsCompletedResults() {
+        FinancialAnalysisSnapshot snapshot = snapshots.saveOrReuse(snapshot());
+        FinancialInterpretation queued = interpretations.save(interpretation(snapshot.getId(), "QUEUED", null));
+        FinancialInterpretation running = interpretations.save(interpretation(snapshot.getId(), "RUNNING", null));
+        FinancialInterpretation validating = interpretations.save(interpretation(snapshot.getId(), "VALIDATING", null));
+        FinancialInterpretation success = interpretations.save(interpretation(snapshot.getId(), "SUCCESS", "已完成"));
+
+        assertEquals(3, interpretations.failInterrupted());
+
+        for (FinancialInterpretation value : new FinancialInterpretation[]{queued, running, validating}) {
+            FinancialInterpretation recovered = interpretations.findById(value.getId()).orElseThrow(AssertionError::new);
+            assertEquals("FAILED", recovered.getStatus());
+            assertEquals("INTERRUPTED", recovered.getFailureCode());
+            assertNotNull(recovered.getCompletedAt());
+        }
+        assertEquals("SUCCESS", interpretations.findById(success.getId())
+                .orElseThrow(AssertionError::new).getStatus());
+    }
+
     private FinancialAnalysisSnapshot snapshot() {
         FinancialAnalysisSnapshot value = new FinancialAnalysisSnapshot();
         value.setReportId(1L);

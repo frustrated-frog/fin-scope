@@ -1,6 +1,7 @@
 package com.finscope.web.config;
 
 import com.finscope.service.brief.BriefGenerator;
+import com.finscope.dao.financials.FinancialInterpretationRepository;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.export.ExportService;
 import com.finscope.service.vault.VaultWriter;
@@ -10,6 +11,7 @@ import com.finscope.rpc.search.TavilyWebSearchClient;
 import com.finscope.rpc.search.WebSearchClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.annotation.Resource;
@@ -156,5 +158,11 @@ public class AppConfig {
         executor.setQueueCapacity(20);
         executor.initialize();
         return executor;
+    }
+
+    @Bean
+    public ApplicationRunner financialInterpretationRecovery(
+            FinancialInterpretationRepository interpretations) {
+        return arguments -> interpretations.failInterrupted();
     }
 }
