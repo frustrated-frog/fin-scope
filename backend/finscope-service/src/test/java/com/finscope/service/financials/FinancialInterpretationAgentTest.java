@@ -95,6 +95,9 @@ class FinancialInterpretationAgentTest {
         assertTrue(prompt.contains("periodChanges"));
         assertTrue(prompt.contains("crossStatementInsights"));
         assertTrue(prompt.contains("details"));
+        assertTrue(prompt.contains("页面会通过refs展示精确数值"));
+        assertTrue(prompt.contains("不得出现evidence未原样提供的数字"));
+        assertTrue(prompt.contains("details为1至2条Claim"));
     }
 
     @Test

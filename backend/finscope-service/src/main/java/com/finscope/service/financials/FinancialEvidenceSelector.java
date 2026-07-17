@@ -14,8 +14,8 @@ import java.util.Set;
 
 @Component
 public class FinancialEvidenceSelector {
-    public static final int MAX_EVIDENCE = 96;
-    public static final String SELECTOR_VERSION = "financial-evidence-selector-v1";
+    public static final int MAX_EVIDENCE = 72;
+    public static final String SELECTOR_VERSION = "financial-evidence-selector-v2";
 
     private static final Set<String> CORE_CONCEPTS = new LinkedHashSet<String>(Arrays.asList(
             "REVENUE", "OPERATING_REVENUE", "OPERATING_COST", "TOTAL_OPERATING_COST",
@@ -69,6 +69,7 @@ public class FinancialEvidenceSelector {
                               FinancialReportType reportType) {
         Set<String> ids = new LinkedHashSet<String>();
         for (FinancialEvidence value : values) ids.add(value.getId());
+        List<FinancialEvidence> eligible = new ArrayList<FinancialEvidence>();
         for (FinancialEvidence value : values) {
             if (!"LINE_ITEM".equals(value.getType()) || !isCore(value.getId())) continue;
             if (reportType == FinancialReportType.Q1
@@ -76,7 +77,25 @@ public class FinancialEvidenceSelector {
                     && ids.contains(value.getId().replace("_CURRENT_YTD", "_CURRENT_QUARTER"))) {
                 continue;
             }
+            eligible.add(value);
+        }
+        int remaining = Math.max(0, MAX_EVIDENCE - target.size());
+        int quota = Math.max(1, remaining / 3);
+        addStatementLines(target, eligible, "L_INCOME_", quota);
+        addStatementLines(target, eligible, "L_BALANCE_SHEET_", quota);
+        addStatementLines(target, eligible, "L_CASH_FLOW_", quota);
+        for (FinancialEvidence value : eligible) add(target, value);
+    }
+
+    private void addStatementLines(LinkedHashMap<String, FinancialEvidence> target,
+                                   List<FinancialEvidence> values,
+                                   String prefix, int limit) {
+        int added = 0;
+        for (FinancialEvidence value : values) {
+            if (!value.getId().startsWith(prefix) || added >= limit) continue;
+            int before = target.size();
             add(target, value);
+            if (target.size() > before) added++;
         }
     }
 

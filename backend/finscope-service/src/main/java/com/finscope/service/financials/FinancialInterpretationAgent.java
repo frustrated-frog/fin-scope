@@ -110,21 +110,23 @@ public class FinancialInterpretationAgent {
         return "你是A股非金融企业财报解读Agent。只能使用evidence中的证据和数字，只能引用现有id；" +
                 "输出单个JSON对象，字段为operatingState、confidence、executiveSummary、periodChanges、" +
                 "crossStatementInsights、dimensions、positiveSignals、risks、turningPoints、watchpoints、" +
-                "limitations、disclaimer。所有Claim必须包含claim、claimType、refs；executiveSummary必须是数组，输出3至5条；" +
-                "periodChanges输出2至5条最重要的同比、环比或连续趋势，证据不足可为空；" +
-                "crossStatementInsights输出2至5条利润表、资产负债表、现金流量表之间的联动观察，证据不足可为空；" +
-                "positiveSignals、risks、turningPoints、watchpoints必须是数组，元素为Claim且各不超过5条。" +
+                "limitations、disclaimer。所有Claim必须包含claim、claimType、refs；executiveSummary必须是数组，输出3条；" +
+                "periodChanges输出2至3条最重要的同比、环比或连续趋势，证据不足可为空；" +
+                "crossStatementInsights输出1至3条利润表、资产负债表、现金流量表之间的联动观察，证据不足可为空；" +
+                "positiveSignals、risks、turningPoints、watchpoints必须是数组；积极信号和风险各不超过3条，拐点和观察项各不超过2条。" +
                 "dimensions必须是数组，元素必须包含code、assessment、summary、refs、details；" +
-                "details为2至4条Claim，分别说明关键事实、趋势、驱动或反证；证据不足维度允许1条限制说明。" +
+                "details为1至2条Claim，分别说明最关键的事实、趋势、驱动或反证。" +
                 "limitations必须是字符串数组，disclaimer必须是字符串。" +
                 "operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE之一；" +
                 "confidence只能是HIGH、MEDIUM、LOW之一；每个dimension的assessment只能是POSITIVE、" +
                 "NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE之一。" +
                 "每条实质结论必须有refs；dimensions必须完整覆盖GROWTH、PROFITABILITY、" +
                 "EARNINGS_QUALITY、CASH_QUALITY、ASSET_QUALITY、SOLVENCY_CAPITAL_DISCIPLINE。" +
+                "优先描述方向、关系和经营含义，页面会通过refs展示精确数值；除非结论必须精确量化，否则不要复述数字。" +
+                "不得出现evidence未原样提供的数字，包括自行计算的比率、倍数、天数、预测值和序号。" +
                 "不得重新计算、创造数字、给出买卖建议、目标价或收益承诺；事实、推断和观察项分别标记" +
-                "FACT、INFERENCE、WATCHPOINT；原因和影响必须标为INFERENCE；单条claim不超过120个中文字符，" +
-                "维度summary不超过100个中文字符；数据不足时使用INSUFFICIENT_EVIDENCE。只返回JSON。";
+                "FACT、INFERENCE、WATCHPOINT；原因和影响必须标为INFERENCE；单条claim不超过80个中文字符，" +
+                "维度summary不超过60个中文字符；数据不足时使用INSUFFICIENT_EVIDENCE。只返回JSON。";
     }
 
     private String repairPrompt() {

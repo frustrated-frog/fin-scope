@@ -61,6 +61,29 @@ class FinancialEvidenceSelectorTest {
         assertEquals(sorted, ids);
     }
 
+    @Test
+    void reservesCompactPacketCapacityForAllThreeStatements() {
+        List<FinancialEvidence> input = new ArrayList<FinancialEvidence>();
+        for (int index = 0; index < 50; index++) {
+            input.add(evidence("M_METRIC_" + index, "METRIC", String.valueOf(index)));
+        }
+        for (int index = 0; index < 20; index++) {
+            input.add(evidence("L_INCOME_REVENUE_2026_Q1_ROLE_" + index,
+                    "LINE_ITEM", String.valueOf(index)));
+            input.add(evidence("L_BALANCE_SHEET_TOTAL_ASSETS_2026_Q1_ROLE_" + index,
+                    "LINE_ITEM", String.valueOf(index)));
+            input.add(evidence("L_CASH_FLOW_OPERATING_CASH_FLOW_2026_Q1_ROLE_" + index,
+                    "LINE_ITEM", String.valueOf(index)));
+        }
+
+        List<String> ids = selector.select(input, FinancialReportType.Q1).stream()
+                .map(FinancialEvidence::getId).collect(Collectors.toList());
+
+        assertTrue(ids.stream().anyMatch(id -> id.startsWith("L_INCOME_")));
+        assertTrue(ids.stream().anyMatch(id -> id.startsWith("L_BALANCE_SHEET_")));
+        assertTrue(ids.stream().anyMatch(id -> id.startsWith("L_CASH_FLOW_")));
+    }
+
     private FinancialEvidence evidence(String id, String type, String value) {
         FinancialEvidence evidence = new FinancialEvidence();
         evidence.setId(id);
