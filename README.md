@@ -9,7 +9,7 @@ FinScope 是一个本地优先的个人投研信息工作台。它用于建立�
 - 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS、站点专属抓取适配器
 - 市场数据服务：Python 3.11+、FastAPI、AkShare、pytdx、httpx
 - 前端：React、TypeScript、Vite
-- 存储：`data/finance.db` 与 `data/vault/` 下的 Markdown 文件
+- 存储：`$FINSCOPE_DATA_ROOT/finance.db` 与 `$FINSCOPE_DATA_ROOT/vault/` 下的 Markdown 文件
 - AI 扩展点：OpenAI 兼容 `LlmChatClient`、文章解读 Agent、`agent_run` 调用留痕
 
 ## 当前能力
@@ -46,9 +46,14 @@ fin-scope/
 后端：
 
 ```bash
+export FINSCOPE_DATA_ROOT="$(cd .. && pwd)/data"
 cd backend
 mvn -pl finscope-web -am spring-boot:run
 ```
+
+`FINSCOPE_DATA_ROOT` 是数据库与 Vault 的唯一位置配置，必须指向已经存在且包含
+`finance.db` 的目录。未显式配置时，源码启动会从项目位置定位工作区上层的 `data/`；
+无法定位或数据库不存在时应用会拒绝启动，不会由 SQLite 静默创建空库。启动日志会打印最终使用的数据库绝对路径。
 
 前端：
 
@@ -128,7 +133,7 @@ mvn -pl finscope-web -am spring-boot:run
 其他常用环境变量：
 
 ```bash
-export FINSCOPE_DATA_ROOT=../data
+export FINSCOPE_DATA_ROOT=/你的绝对路径/data
 export FINSCOPE_CORS_ORIGIN=http://localhost:5173
 export FINSCOPE_SLOW_REQUEST_MS=1000
 export FINSCOPE_SEARCH_ENABLED=false
@@ -149,4 +154,4 @@ cd frontend && npm run build
 
 ## 数据安全
 
-`data/finance.db`、抓取原文、导出包、本地环境文件和 API Key 都会被 Git 忽略。不要把公司内部数据、代码、凭证、专有 Prompt 或私有文档放进这个项目。
+`$FINSCOPE_DATA_ROOT/finance.db`、抓取原文、导出包、本地环境文件和 API Key 都不应进入 Git。不要把公司内部数据、代码、凭证、专有 Prompt 或私有文档放进这个项目。
