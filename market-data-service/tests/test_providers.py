@@ -136,6 +136,8 @@ def test_akshare_maps_three_financial_statements_with_stable_concepts() -> None:
                 **common,
                 "TOTAL_ASSETS": 3_400_000_000,
                 "TOTAL_LIABILITIES": 1_100_000_000,
+                "TOTAL_CURRENT_ASSETS": 1_500_000_000,
+                "TOTAL_CURRENT_LIAB": 620_000_000,
                 "ACCOUNTS_RECE": 220_000_000,
                 "INVENTORY": 180_000_000,
             }
@@ -167,6 +169,8 @@ def test_akshare_maps_three_financial_statements_with_stable_concepts() -> None:
     assert values["NET_PROFIT_PARENT"] == "210000000"
     assert values["ACCOUNTS_RECEIVABLE"] == "220000000"
     assert values["INVENTORY"] == "180000000"
+    assert values["TOTAL_CURRENT_ASSETS"] == "1500000000"
+    assert values["TOTAL_CURRENT_LIABILITIES"] == "620000000"
     assert values["OPERATING_CASH_FLOW"] == "180000000"
     assert values["CAPITAL_EXPENDITURE"] == "90000000"
 
