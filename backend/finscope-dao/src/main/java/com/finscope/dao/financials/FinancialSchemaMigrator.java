@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class FinancialSchemaMigrator implements InitializingBean {
     private static final int VERSION = 300;
     private static final int DOCUMENT_VERSION = 301;
+    private static final int INTERPRETATION_VERSION = 302;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -53,6 +54,19 @@ public class FinancialSchemaMigrator implements InitializingBean {
             jdbc.update(
                     "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     DOCUMENT_VERSION, "financial report pdf documents", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, INTERPRETATION_VERSION);
+            if (count != null && count > 0) {
+                return;
+            }
+            createInterpretationTables();
+            jdbc.update(
+                    "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    INTERPRETATION_VERSION, "financial interpretation snapshots and history",
+                    LocalDateTime.now().toString());
         });
     }
 
@@ -112,5 +126,30 @@ public class FinancialSchemaMigrator implements InitializingBean {
                 "FOREIGN KEY(report_id) REFERENCES financial_report(id) ON DELETE SET NULL)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_document_report ON " +
                 "financial_document(report_id,created_at DESC,id DESC)");
+    }
+
+    private void createInterpretationTables() {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS financial_analysis_snapshot (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,report_id INTEGER NOT NULL," +
+                "algorithm_version TEXT NOT NULL,source_hash TEXT NOT NULL,input_hash TEXT NOT NULL," +
+                "payload_json TEXT NOT NULL,quality_level TEXT NOT NULL,created_at TEXT NOT NULL," +
+                "UNIQUE(report_id,algorithm_version,input_hash)," +
+                "FOREIGN KEY(report_id) REFERENCES financial_report(id) ON DELETE CASCADE)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_snapshot_report ON " +
+                "financial_analysis_snapshot(report_id,id DESC)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS financial_interpretation (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,report_id INTEGER NOT NULL,snapshot_id INTEGER NOT NULL," +
+                "generation_key TEXT NOT NULL,prompt_version TEXT NOT NULL,model_name TEXT,status TEXT NOT NULL," +
+                "generation_mode TEXT,result_json TEXT,validation_errors_json TEXT NOT NULL DEFAULT '[]'," +
+                "failure_code TEXT,failure_message TEXT,duration_ms INTEGER,created_at TEXT NOT NULL," +
+                "started_at TEXT,completed_at TEXT," +
+                "FOREIGN KEY(report_id) REFERENCES financial_report(id) ON DELETE CASCADE," +
+                "FOREIGN KEY(snapshot_id) REFERENCES financial_analysis_snapshot(id) ON DELETE RESTRICT)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_interpretation_report ON " +
+                "financial_interpretation(report_id,id DESC)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_interpretation_snapshot ON " +
+                "financial_interpretation(snapshot_id,status,id DESC)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_interpretation_generation ON " +
+                "financial_interpretation(generation_key,status,id DESC)");
     }
 }
