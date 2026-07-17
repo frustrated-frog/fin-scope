@@ -19,7 +19,9 @@ public class FinancialEvidencePacket {
     private String inputHash;
     private String qualityCeiling;
     private String payloadJson;
+    private String modelPayloadJson;
     private List<FinancialEvidence> evidence = new ArrayList<FinancialEvidence>();
+    private List<FinancialEvidence> modelEvidence = new ArrayList<FinancialEvidence>();
     private Map<String, FinancialEvidence> evidenceIndex =
             new LinkedHashMap<String, FinancialEvidence>();
     private Set<String> allowedNumbers = new LinkedHashSet<String>();

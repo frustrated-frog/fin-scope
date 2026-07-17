@@ -23,16 +23,19 @@ import java.util.Map;
 @Component
 public class FinancialEvidencePacketAssembler {
     public static final String PROMPT_VERSION = "financial-interpret-v2";
-    public static final String ALGORITHM_VERSION = "financial-analysis-v3";
+    public static final String ALGORITHM_VERSION = "financial-analysis-v4";
     private static final BigDecimal TEN_THOUSAND = new BigDecimal("10000");
     private static final BigDecimal HUNDRED_MILLION = new BigDecimal("100000000");
 
     private final ObjectMapper json;
     private final FinancialTrendEngine trends;
+    private final FinancialEvidenceSelector selector;
 
-    public FinancialEvidencePacketAssembler(ObjectMapper json, FinancialTrendEngine trends) {
+    public FinancialEvidencePacketAssembler(ObjectMapper json, FinancialTrendEngine trends,
+                                            FinancialEvidenceSelector selector) {
         this.json = json;
         this.trends = trends;
+        this.selector = selector;
     }
 
     public FinancialEvidencePacket assemble(FinancialReportView current,
@@ -48,9 +51,10 @@ public class FinancialEvidencePacketAssembler {
             evidence.addAll(trends.build(all));
             evidence.addAll(gapEvidence(current));
             evidence.sort(Comparator.comparing(FinancialEvidence::getId));
+            List<FinancialEvidence> modelEvidence = selector.select(
+                    evidence, current.getReport().getReportType());
 
             String quality = qualityCeiling(current);
-            Map<String, Object> payload = new LinkedHashMap<String, Object>();
             Map<String, Object> report = new LinkedHashMap<String, Object>();
             report.put("stockCode", current.getInstrument().getCode());
             report.put("market", current.getInstrument().getMarket());
@@ -58,11 +62,23 @@ public class FinancialEvidencePacketAssembler {
             report.put("periodEnd", current.getReport().getPeriodEnd().toString());
             report.put("reportType", current.getReport().getReportType().name());
             report.put("scope", current.getReport().getScope());
+            Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("report", report);
             payload.put("qualityCeiling", quality);
             payload.put("evidence", evidence);
             payload.put("algorithmVersion", ALGORITHM_VERSION);
+            payload.put("selectorVersion", FinancialEvidenceSelector.SELECTOR_VERSION);
+            List<String> modelEvidenceIds = new ArrayList<String>();
+            for (FinancialEvidence item : modelEvidence) modelEvidenceIds.add(item.getId());
+            payload.put("modelEvidenceIds", modelEvidenceIds);
             String payloadJson = json.writeValueAsString(payload);
+            Map<String, Object> modelPayload = new LinkedHashMap<String, Object>();
+            modelPayload.put("report", report);
+            modelPayload.put("qualityCeiling", quality);
+            modelPayload.put("evidence", modelEvidence);
+            modelPayload.put("algorithmVersion", ALGORITHM_VERSION);
+            modelPayload.put("selectorVersion", FinancialEvidenceSelector.SELECTOR_VERSION);
+            String modelPayloadJson = json.writeValueAsString(modelPayload);
             String sourceHash = sha256(json.writeValueAsString(sourceCanonical(current)));
 
             FinancialEvidencePacket packet = new FinancialEvidencePacket();
@@ -73,10 +89,12 @@ public class FinancialEvidencePacketAssembler {
             packet.setInputHash(sha256(payloadJson));
             packet.setQualityCeiling(quality);
             packet.setPayloadJson(payloadJson);
+            packet.setModelPayloadJson(modelPayloadJson);
             packet.setEvidence(evidence);
+            packet.setModelEvidence(modelEvidence);
             LinkedHashMap<String, FinancialEvidence> index = new LinkedHashMap<String, FinancialEvidence>();
             LinkedHashSet<String> numbers = new LinkedHashSet<String>();
-            for (FinancialEvidence item : evidence) {
+            for (FinancialEvidence item : modelEvidence) {
                 index.put(item.getId(), item);
                 collectNumbers(numbers, item.getValue());
                 collectNumbers(numbers, item.getDetail());

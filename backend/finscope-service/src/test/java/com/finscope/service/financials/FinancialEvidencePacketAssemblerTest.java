@@ -30,7 +30,7 @@ class FinancialEvidencePacketAssemblerTest {
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final FinancialTrendEngine trends = new FinancialTrendEngine();
     private final FinancialEvidencePacketAssembler assembler =
-            new FinancialEvidencePacketAssembler(json, trends);
+            new FinancialEvidencePacketAssembler(json, trends, new FinancialEvidenceSelector());
 
     @Test
     void fingerprintAndEvidenceIdsIgnoreDatabaseIdsButTrackFinancialValues() {
@@ -49,6 +49,9 @@ class FinancialEvidencePacketAssemblerTest {
         assertTrue(firstPacket.getEvidenceIndex().containsKey("M_REVENUE_YOY"));
         assertTrue(firstPacket.getEvidenceIndex().containsKey("L_INCOME_REVENUE_2025_ANNUAL_CURRENT_YTD"));
         assertTrue(firstPacket.getAllowedNumbers().contains("12.30"));
+        assertFalse(firstPacket.getModelPayloadJson().isEmpty());
+        assertTrue(firstPacket.getModelPayloadJson().length() < firstPacket.getPayloadJson().length());
+        assertTrue(firstPacket.getModelEvidence().size() <= FinancialEvidenceSelector.MAX_EVIDENCE);
     }
 
     @Test
