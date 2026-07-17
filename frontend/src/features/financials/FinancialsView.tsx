@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { FinancialInterpretationPanel } from './FinancialInterpretationPanel';
 import { FinancialStatementTable } from './FinancialStatementTable';
 import {
   defaultReportPeriod,
@@ -20,13 +21,14 @@ import {
   FinancialUnit
 } from './financialTypes';
 
-type Tab = 'OVERVIEW' | FinancialStatementType | 'QUALITY' | 'DOCUMENTS';
+type Tab = 'OVERVIEW' | FinancialStatementType | 'AGENT' | 'QUALITY' | 'DOCUMENTS';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'OVERVIEW', label: '分析总览' },
   { id: 'INCOME', label: '利润表' },
   { id: 'BALANCE_SHEET', label: '资产负债表' },
   { id: 'CASH_FLOW', label: '现金流量表' },
+  { id: 'AGENT', label: 'Agent 解读' },
   { id: 'QUALITY', label: '数据质量' },
   { id: 'DOCUMENTS', label: '原文凭证' }
 ];
@@ -325,6 +327,7 @@ export function FinancialsView({
           {activeTab === 'CASH_FLOW' && (
             <FinancialStatementTable title={statementLabels.CASH_FLOW} items={view.statements.CASH_FLOW ?? []} unit={unit} periodMode={periodMode} />
           )}
+          {activeTab === 'AGENT' && <FinancialInterpretationPanel reportId={view.report.id} />}
           {activeTab === 'QUALITY' && <QualityPanel reportView={view} />}
           {activeTab === 'DOCUMENTS' && (
             <DocumentsPanel

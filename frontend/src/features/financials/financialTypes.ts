@@ -91,3 +91,68 @@ export type FinancialDocument = {
 };
 
 export type FinancialUnit = 'YUAN' | 'WAN' | 'YI';
+
+export type FinancialInterpretationStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'VALIDATING'
+  | 'SUCCESS'
+  | 'FALLBACK'
+  | 'FAILED';
+
+export type FinancialInterpretationClaim = {
+  claim: string;
+  claimType: 'FACT' | 'INFERENCE' | 'WATCHPOINT';
+  refs: string[];
+};
+
+export type FinancialInterpretationDimension = {
+  code: string;
+  assessment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'INSUFFICIENT_EVIDENCE';
+  summary: string;
+  refs: string[];
+};
+
+export type FinancialInterpretationResult = {
+  operatingState: 'IMPROVING' | 'STABLE' | 'UNDER_PRESSURE' | 'INSUFFICIENT_EVIDENCE';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  executiveSummary: FinancialInterpretationClaim[];
+  dimensions: FinancialInterpretationDimension[];
+  positiveSignals: FinancialInterpretationClaim[];
+  risks: FinancialInterpretationClaim[];
+  turningPoints: FinancialInterpretationClaim[];
+  watchpoints: FinancialInterpretationClaim[];
+  limitations: string[];
+  disclaimer: string;
+};
+
+export type FinancialInterpretation = {
+  id: number;
+  reportId: number;
+  snapshotId: number;
+  generationKey?: string;
+  promptVersion: string;
+  modelName?: string;
+  status: FinancialInterpretationStatus;
+  generationMode?: 'LLM' | 'REPAIRED' | 'DETERMINISTIC_FALLBACK';
+  result?: FinancialInterpretationResult;
+  validationErrors?: string[];
+  failureCode?: string;
+  failureMessage?: string;
+  durationMs?: number;
+  snapshotStale: boolean;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+export type FinancialEvidence = {
+  id: string;
+  type: string;
+  label: string;
+  value?: string;
+  unit?: string;
+  period?: string;
+  detail?: string;
+  sourceRefs?: string[];
+};

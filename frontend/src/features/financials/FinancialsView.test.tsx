@@ -164,6 +164,100 @@ test('uploads a PDF as report evidence using multipart form data', async () => {
   expect(await screen.findByText('report.pdf')).toBeInTheDocument();
 });
 
+test('offers an evidence-constrained Agent interpretation for the selected report', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/financials/reports/9/interpretations/latest') throw new Error('尚未生成');
+    if (path === '/api/financials/reports/9/interpretations?limit=20') return [];
+    if (path === '/api/financials/reports/9/interpretations' && options?.method === 'POST') {
+      return interpretation;
+    }
+    if (path === '/api/financials/interpretations/41/evidence') return [
+      {
+        id: 'M_REVENUE_YOY',
+        type: 'METRIC',
+        label: '营业收入同比',
+        value: '12.30%',
+        period: '2025-12-31',
+        detail: '营业收入同比增长率'
+      }
+    ];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+  await user.click(screen.getByRole('tab', { name: 'Agent 解读' }));
+
+  expect(await screen.findByRole('button', { name: '生成 Agent 解读' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '生成 Agent 解读' }));
+
+  expect(await screen.findByText('经营状态改善，收入保持增长。')).toBeInTheDocument();
+  await user.click(screen.getAllByRole('button', { name: '营业收入同比证据' })[0]);
+  expect(await screen.findByRole('dialog', { name: '证据详情' })).toHaveTextContent('12.30%');
+});
+
+test('keeps the previous successful interpretation visible when regeneration fails', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/financials/reports/9/interpretations/latest') return interpretation;
+    if (path === '/api/financials/reports/9/interpretations?limit=20') return [interpretation];
+    if (path === '/api/financials/reports/9/interpretations' && options?.method === 'POST') {
+      return { ...interpretation, id: 42, status: 'QUEUED', result: undefined };
+    }
+    if (path === '/api/financials/interpretations/42') {
+      return { ...interpretation, id: 42, status: 'FAILED', result: undefined, failureMessage: '模型服务暂不可用' };
+    }
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+  await user.click(screen.getByRole('tab', { name: 'Agent 解读' }));
+  expect(await screen.findByText('经营状态改善，收入保持增长。')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: '重新生成' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('模型服务暂不可用');
+  expect(screen.getByText('经营状态改善，收入保持增长。')).toBeInTheDocument();
+});
+
+const interpretation = {
+  id: 41,
+  reportId: 9,
+  snapshotId: 21,
+  promptVersion: 'financial-interpretation-v1',
+  modelName: 'test-model',
+  status: 'SUCCESS',
+  generationMode: 'LLM',
+  snapshotStale: false,
+  createdAt: '2026-07-17T10:00:00',
+  result: {
+    operatingState: 'IMPROVING',
+    confidence: 'HIGH',
+    executiveSummary: [
+      { claim: '经营状态改善，收入保持增长。', claimType: 'FACT', refs: ['M_REVENUE_YOY'] }
+    ],
+    dimensions: [
+      { code: 'GROWTH', assessment: 'POSITIVE', summary: '成长性改善。', refs: ['M_REVENUE_YOY'] }
+    ],
+    positiveSignals: [],
+    risks: [],
+    turningPoints: [],
+    watchpoints: [],
+    limitations: [],
+    disclaimer: '仅用于研究，不构成投资建议。'
+  }
+};
+
 function line(id: number, statementType: string, sourceLabel: string, conceptCode: string, normalizedValue: number) {
   return {
     id,
