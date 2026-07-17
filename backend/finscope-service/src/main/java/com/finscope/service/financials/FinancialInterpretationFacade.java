@@ -35,6 +35,7 @@ public class FinancialInterpretationFacade {
     private final FinancialQueryService query;
     private final FinancialAnalysisSnapshotRepository snapshots;
     private final FinancialInterpretationRepository interpretations;
+    private final FinancialAnalysisPreflight preflight;
     private final FinancialEvidencePacketAssembler assembler;
     private final FinancialInterpretationAgent agent;
     private final AgentHarness harness;
@@ -46,6 +47,7 @@ public class FinancialInterpretationFacade {
             FinancialQueryService query,
             FinancialAnalysisSnapshotRepository snapshots,
             FinancialInterpretationRepository interpretations,
+            FinancialAnalysisPreflight preflight,
             FinancialEvidencePacketAssembler assembler,
             FinancialInterpretationAgent agent,
             AgentHarness harness,
@@ -55,6 +57,7 @@ public class FinancialInterpretationFacade {
         this.query = query;
         this.snapshots = snapshots;
         this.interpretations = interpretations;
+        this.preflight = preflight;
         this.assembler = assembler;
         this.agent = agent;
         this.harness = harness;
@@ -65,7 +68,9 @@ public class FinancialInterpretationFacade {
 
     public synchronized FinancialInterpretation request(Long reportId, boolean force) {
         FinancialReportView current = query.view(reportId);
-        FinancialEvidencePacket packet = assembler.assemble(current, comparables(current));
+        List<FinancialReportView> comparables = comparables(current);
+        current = preflight.ensureCurrent(current, comparables);
+        FinancialEvidencePacket packet = assembler.assemble(current, comparables);
         FinancialAnalysisSnapshot snapshot = new FinancialAnalysisSnapshot();
         snapshot.setReportId(reportId);
         snapshot.setAlgorithmVersion(packet.getAlgorithmVersion());

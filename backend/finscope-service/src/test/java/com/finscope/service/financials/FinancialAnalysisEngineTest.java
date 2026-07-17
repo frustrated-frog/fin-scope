@@ -124,6 +124,24 @@ class FinancialAnalysisEngineTest {
         assertTrue(result.getDataGaps().contains("缺少资本开支，无法计算自由现金流"));
     }
 
+    @Test
+    void acceptsLegacyProviderConceptAliasesWhenRecalculatingStoredReports() {
+        FinancialAnalysisResult result = engine.analyze(
+                Arrays.asList(
+                        line("REVENUE", "1200", FinancialStatementType.INCOME),
+                        line("TOTAL_CURRENT_ASSETS", "900", FinancialStatementType.BALANCE_SHEET),
+                        line("TOTAL_CURRENT_LIAB", "600", FinancialStatementType.BALANCE_SHEET),
+                        line("INVENTORY", "180", FinancialStatementType.BALANCE_SHEET),
+                        line("CONTRACT_LIAB", "180", FinancialStatementType.BALANCE_SHEET)),
+                Arrays.asList(
+                        line("REVENUE", "1000", FinancialStatementType.INCOME),
+                        line("CONTRACT_LIAB", "120", FinancialStatementType.BALANCE_SHEET)));
+
+        assertEquals(new BigDecimal("150.000000"), metric(result, "CURRENT_RATIO"));
+        assertEquals(new BigDecimal("120.000000"), metric(result, "QUICK_RATIO"));
+        assertEquals(new BigDecimal("50.000000"), metric(result, "CONTRACT_LIABILITIES_YOY"));
+    }
+
     private BigDecimal metric(FinancialAnalysisResult result, String code) {
         return result.getMetrics().stream()
                 .filter(value -> code.equals(value.getMetricCode()))

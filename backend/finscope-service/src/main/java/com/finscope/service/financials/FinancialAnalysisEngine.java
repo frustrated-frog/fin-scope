@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Component
 public class FinancialAnalysisEngine {
-    private static final String FORMULA_VERSION = "financial-metrics-v2";
+    public static final String FORMULA_VERSION = "financial-metrics-v2";
     private static final String RULE_VERSION = "financial-rules-v2";
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
@@ -98,7 +98,8 @@ public class FinancialAnalysisEngine {
         }
 
         BigDecimal currentAssets = now.get("TOTAL_CURRENT_ASSETS");
-        BigDecimal currentLiabilities = now.get("TOTAL_CURRENT_LIABILITIES");
+        BigDecimal currentLiabilities = first(now,
+                "TOTAL_CURRENT_LIABILITIES", "TOTAL_CURRENT_LIAB");
         BigDecimal currentRatio = ratio(currentAssets, currentLiabilities);
         if (currentRatio != null) {
             result.getMetrics().add(metric("CURRENT_RATIO", "流动比率", currentRatio, "%"));
@@ -128,7 +129,8 @@ public class FinancialAnalysisEngine {
         }
 
         BigDecimal contractLiabilitiesYoy = percentageChange(
-                now.get("CONTRACT_LIABILITIES"), prior.get("CONTRACT_LIABILITIES"));
+                first(now, "CONTRACT_LIABILITIES", "CONTRACT_LIAB"),
+                first(prior, "CONTRACT_LIABILITIES", "CONTRACT_LIAB"));
         if (contractLiabilitiesYoy != null) {
             result.getMetrics().add(metric("CONTRACT_LIABILITIES_YOY", "合同负债同比",
                     contractLiabilitiesYoy, "%"));

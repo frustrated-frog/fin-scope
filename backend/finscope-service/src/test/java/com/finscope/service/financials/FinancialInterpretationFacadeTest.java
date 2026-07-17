@@ -33,6 +33,7 @@ class FinancialInterpretationFacadeTest {
     private FinancialQueryService query;
     private FinancialAnalysisSnapshotRepository snapshots;
     private FinancialInterpretationRepository interpretations;
+    private FinancialAnalysisPreflight preflight;
     private FinancialEvidencePacketAssembler assembler;
     private FinancialInterpretationAgent agent;
     private AgentTraceService traces;
@@ -43,11 +44,13 @@ class FinancialInterpretationFacadeTest {
         query = mock(FinancialQueryService.class);
         snapshots = mock(FinancialAnalysisSnapshotRepository.class);
         interpretations = mock(FinancialInterpretationRepository.class);
+        preflight = mock(FinancialAnalysisPreflight.class);
         assembler = mock(FinancialEvidencePacketAssembler.class);
         agent = mock(FinancialInterpretationAgent.class);
         traces = mock(AgentTraceService.class);
         when(query.view(9L)).thenReturn(view());
         when(query.listReports(7L)).thenReturn(Collections.singletonList(view().getReport()));
+        when(preflight.ensureCurrent(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(assembler.assemble(any(), any())).thenReturn(packet());
         when(snapshots.saveOrReuse(any())).thenAnswer(invocation -> {
             FinancialAnalysisSnapshot value = invocation.getArgument(0);
@@ -63,7 +66,7 @@ class FinancialInterpretationFacadeTest {
         });
         when(agent.modelName()).thenReturn("test-model");
         when(agent.interpret(any())).thenReturn(success());
-        facade = new FinancialInterpretationFacade(query, snapshots, interpretations,
+        facade = new FinancialInterpretationFacade(query, snapshots, interpretations, preflight,
                 assembler, agent, new AgentHarness(), traces, new ObjectMapper(), Runnable::run);
     }
 
