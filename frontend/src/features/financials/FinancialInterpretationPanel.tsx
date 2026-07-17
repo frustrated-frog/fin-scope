@@ -108,7 +108,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
       active = false;
       window.clearTimeout(timer);
     };
-  }, [task?.id, task?.status]);
+  }, [task]);
 
   async function generate(force: boolean) {
     setGenerating(true);

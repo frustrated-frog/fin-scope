@@ -15,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FinancialInterpretationAgentTest {
     private final ObjectMapper json = new ObjectMapper();
@@ -66,6 +67,28 @@ class FinancialInterpretationAgentTest {
         assertEquals("FALLBACK", timedOut.getStatus());
     }
 
+    @Test
+    void honorsTheConfiguredClientTimeoutForPrimaryAndRepairCalls() {
+        ProgrammableClient llm = new ProgrammableClient(true, "{}", validJson());
+
+        FinancialInterpretation result = agent(llm).interpret(packet());
+
+        assertEquals("SUCCESS", result.getStatus());
+        assertEquals(Arrays.asList((Integer) null, null), llm.timeouts);
+    }
+
+    @Test
+    void declaresCollectionAndClaimShapesInThePrimaryPrompt() {
+        ProgrammableClient llm = new ProgrammableClient(true, validJson());
+
+        agent(llm).interpret(packet());
+
+        String prompt = llm.systemPrompts.get(0);
+        assertTrue(prompt.contains("executiveSummary必须是数组"));
+        assertTrue(prompt.contains("positiveSignals、risks、turningPoints、watchpoints必须是数组"));
+        assertTrue(prompt.contains("claim、claimType、refs"));
+    }
+
     private FinancialInterpretationAgent agent(LlmChatClient llm) {
         FinancialInterpretationResponseParser parser = new FinancialInterpretationResponseParser(json);
         FinancialInterpretationGate gate = new FinancialInterpretationGate(json);
@@ -114,6 +137,8 @@ class FinancialInterpretationAgentTest {
     private static final class ProgrammableClient implements LlmChatClient {
         private final boolean configured;
         private final List<Object> values = new ArrayList<Object>();
+        private final List<Integer> timeouts = new ArrayList<Integer>();
+        private final List<String> systemPrompts = new ArrayList<String>();
         private int calls;
 
         private ProgrammableClient(boolean configured, Object... values) {
@@ -133,11 +158,19 @@ class FinancialInterpretationAgentTest {
 
         @Override
         public String complete(String systemPrompt, String userPrompt) throws Exception {
-            return complete(systemPrompt, userPrompt, 0);
+            systemPrompts.add(systemPrompt);
+            timeouts.add(null);
+            return nextValue();
         }
 
         @Override
         public String complete(String systemPrompt, String userPrompt, int timeoutMs) throws Exception {
+            systemPrompts.add(systemPrompt);
+            timeouts.add(timeoutMs);
+            return nextValue();
+        }
+
+        private String nextValue() throws Exception {
             Object value = values.get(calls++);
             if (value instanceof Exception) throw (Exception) value;
             return String.valueOf(value);

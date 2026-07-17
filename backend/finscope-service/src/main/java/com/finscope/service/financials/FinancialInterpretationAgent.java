@@ -14,9 +14,6 @@ import java.util.Map;
 
 @Service
 public class FinancialInterpretationAgent {
-    private static final int PRIMARY_TIMEOUT_MS = 60_000;
-    private static final int REPAIR_TIMEOUT_MS = 30_000;
-
     private final LlmChatClient llm;
     private final ObjectMapper json;
     private final FinancialInterpretationResponseParser parser;
@@ -39,14 +36,13 @@ public class FinancialInterpretationAgent {
         List<String> errors = new ArrayList<String>();
         String output = null;
         try {
-            output = llm.complete(systemPrompt(), packet.getPayloadJson(), PRIMARY_TIMEOUT_MS);
+            output = llm.complete(systemPrompt(), packet.getPayloadJson());
             try {
                 return success(packet, output, "LLM", errors);
             } catch (IllegalArgumentException first) {
                 errors.add("首次输出：" + message(first));
             }
-            output = llm.complete(repairPrompt(), repairInput(packet, output, errors.get(0)),
-                    REPAIR_TIMEOUT_MS);
+            output = llm.complete(repairPrompt(), repairInput(packet, output, errors.get(0)));
             try {
                 return success(packet, output, "REPAIRED", errors);
             } catch (IllegalArgumentException second) {
@@ -114,6 +110,10 @@ public class FinancialInterpretationAgent {
         return "你是A股非金融企业财报解读Agent。只能使用evidence中的证据和数字，只能引用现有id；" +
                 "输出单个JSON对象，字段为operatingState、confidence、executiveSummary、dimensions、" +
                 "positiveSignals、risks、turningPoints、watchpoints、limitations、disclaimer。" +
+                "operatingState和confidence必须是字符串；executiveSummary必须是数组，数组元素必须是" +
+                "包含claim、claimType、refs的对象；positiveSignals、risks、turningPoints、watchpoints必须是数组，" +
+                "数组元素结构与executiveSummary相同；dimensions必须是数组，元素必须包含code、assessment、" +
+                "summary、refs；limitations必须是字符串数组，disclaimer必须是字符串。" +
                 "每条实质结论必须有refs；dimensions必须完整覆盖GROWTH、PROFITABILITY、" +
                 "EARNINGS_QUALITY、CASH_QUALITY、ASSET_QUALITY、SOLVENCY_CAPITAL_DISCIPLINE。" +
                 "不得重新计算、创造数字、给出买卖建议、目标价或收益承诺；事实、推断和观察项分别标记" +
