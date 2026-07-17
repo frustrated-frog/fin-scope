@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Resource;
 import javax.validation.Valid;
 import java.io.IOException;
 import java.util.List;
@@ -35,20 +36,15 @@ import java.util.List;
 @RequestMapping("/api/financials")
 @Validated
 public class FinancialsController {
-    private final FinancialQueryService query;
-    private final FinancialRefreshService refresh;
-    private final FinancialDocumentService documents;
-    private final FinancialInterpretationFacade interpretations;
 
-    public FinancialsController(FinancialQueryService query,
-                                FinancialRefreshService refresh,
-                                FinancialDocumentService documents,
-                                FinancialInterpretationFacade interpretations) {
-        this.query = query;
-        this.refresh = refresh;
-        this.documents = documents;
-        this.interpretations = interpretations;
-    }
+    @Resource
+    private FinancialQueryService query;
+    @Resource
+    private FinancialRefreshService refresh;
+    @Resource
+    private FinancialDocumentService documents;
+    @Resource
+    private FinancialInterpretationFacade interpretations;
 
     @GetMapping("/instruments")
     public ApiResponse<List<Instrument>> instruments() {
@@ -69,8 +65,7 @@ public class FinancialsController {
     public ResponseEntity<ApiResponse<FinancialReportView>> refresh(
             @PathVariable Long id,
             @Valid @RequestBody FinancialRefreshRequest request) {
-        FinancialReportView result = refresh.refresh(
-                id, request.getPeriodEnd(), request.getReportType());
+        FinancialReportView result = refresh.refresh(id, request.getPeriodEnd(), request.getReportType());
         return ResponseEntity.accepted().body(ApiResponses.success(result));
     }
 
@@ -79,9 +74,7 @@ public class FinancialsController {
             @RequestParam Long instrumentId,
             @RequestParam(required = false) Long reportId,
             @RequestPart("file") MultipartFile file) throws IOException {
-        return ApiResponses.success(documents.store(
-                instrumentId, reportId, file.getOriginalFilename(),
-                file.getInputStream(), file.getSize()));
+        return ApiResponses.success(documents.store(instrumentId, reportId, file.getOriginalFilename(), file.getInputStream(), file.getSize()));
     }
 
     @GetMapping("/reports/{id}/documents")
