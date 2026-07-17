@@ -14,8 +14,8 @@ import java.util.Map;
 
 @Component
 public class FinancialAnalysisEngine {
-    private static final String FORMULA_VERSION = "financial-metrics-v1";
-    private static final String RULE_VERSION = "financial-rules-v1";
+    private static final String FORMULA_VERSION = "financial-metrics-v2";
+    private static final String RULE_VERSION = "financial-rules-v2";
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
     public FinancialAnalysisResult analyze(List<FinancialLineItem> current,
@@ -39,13 +39,43 @@ public class FinancialAnalysisEngine {
             result.getMetrics().add(metric("GROSS_MARGIN", "毛利率", grossMargin, "%"));
         }
 
+        BigDecimal priorCost = first(prior, "OPERATING_COST", "TOTAL_OPERATING_COST");
+        BigDecimal priorGrossMargin = ratio(subtract(priorRevenue, priorCost), priorRevenue);
+        if (grossMargin != null && priorGrossMargin != null) {
+            result.getMetrics().add(metric("GROSS_MARGIN_YOY_CHANGE", "毛利率同比变化",
+                    grossMargin.subtract(priorGrossMargin).setScale(6, RoundingMode.HALF_UP), "pct"));
+        }
+
         BigDecimal profit = first(now, "NET_PROFIT_PARENT", "NET_PROFIT");
+        BigDecimal priorProfit = first(prior, "NET_PROFIT_PARENT", "NET_PROFIT");
+        BigDecimal profitYoy = percentageChange(profit, priorProfit);
+        if (profitYoy != null) {
+            result.getMetrics().add(metric("NET_PROFIT_PARENT_YOY", "归母净利润同比", profitYoy, "%"));
+        }
         BigDecimal netMargin = ratio(profit, revenue);
         if (netMargin != null) {
             result.getMetrics().add(metric("NET_MARGIN", "净利率", netMargin, "%"));
         }
+        BigDecimal priorNetMargin = ratio(priorProfit, priorRevenue);
+        if (netMargin != null && priorNetMargin != null) {
+            result.getMetrics().add(metric("NET_MARGIN_YOY_CHANGE", "净利率同比变化",
+                    netMargin.subtract(priorNetMargin).setScale(6, RoundingMode.HALF_UP), "pct"));
+        }
+
+        BigDecimal periodExpenses = sum(now, "SELLING_EXPENSE", "ADMIN_EXPENSE",
+                "RND_EXPENSE", "FINANCE_EXPENSE");
+        BigDecimal periodExpenseRatio = ratio(periodExpenses, revenue);
+        if (periodExpenseRatio != null) {
+            result.getMetrics().add(metric("PERIOD_EXPENSE_RATIO", "期间费用率",
+                    periodExpenseRatio, "%"));
+        }
 
         BigDecimal operatingCash = now.get("OPERATING_CASH_FLOW");
+        BigDecimal operatingCashYoy = percentageChange(operatingCash, prior.get("OPERATING_CASH_FLOW"));
+        if (operatingCashYoy != null) {
+            result.getMetrics().add(metric("OPERATING_CASH_FLOW_YOY", "经营现金流同比",
+                    operatingCashYoy, "%"));
+        }
         BigDecimal cashToProfit = ratio(operatingCash, profit);
         if (cashToProfit != null) {
             result.getMetrics().add(metric(
@@ -65,6 +95,49 @@ public class FinancialAnalysisEngine {
         BigDecimal debtRatio = ratio(liabilities, assets);
         if (debtRatio != null) {
             result.getMetrics().add(metric("DEBT_TO_ASSETS", "资产负债率", debtRatio, "%"));
+        }
+
+        BigDecimal currentAssets = now.get("TOTAL_CURRENT_ASSETS");
+        BigDecimal currentLiabilities = now.get("TOTAL_CURRENT_LIABILITIES");
+        BigDecimal currentRatio = ratio(currentAssets, currentLiabilities);
+        if (currentRatio != null) {
+            result.getMetrics().add(metric("CURRENT_RATIO", "流动比率", currentRatio, "%"));
+        }
+        BigDecimal quickRatio = ratio(subtract(currentAssets, now.get("INVENTORY")), currentLiabilities);
+        if (quickRatio != null) {
+            result.getMetrics().add(metric("QUICK_RATIO", "速动比率", quickRatio, "%"));
+        }
+
+        BigDecimal interestBearingDebt = sum(now, "SHORT_TERM_BORROWINGS",
+                "CURRENT_PORTION_LONG_DEBT", "LONG_TERM_BORROWINGS", "BONDS_PAYABLE");
+        if (interestBearingDebt != null) {
+            result.getMetrics().add(metric("INTEREST_BEARING_DEBT", "有息负债",
+                    interestBearingDebt, "CNY"));
+        }
+
+        BigDecimal capitalExpenditure = now.get("CAPITAL_EXPENDITURE");
+        if (capitalExpenditure != null) {
+            result.getMetrics().add(metric("CAPITAL_EXPENDITURE", "资本开支",
+                    capitalExpenditure, "CNY"));
+            if (operatingCash != null) {
+                result.getMetrics().add(metric("FREE_CASH_FLOW", "自由现金流",
+                        operatingCash.subtract(capitalExpenditure), "CNY"));
+            }
+        } else if (operatingCash != null) {
+            result.getDataGaps().add("缺少资本开支，无法计算自由现金流");
+        }
+
+        BigDecimal contractLiabilitiesYoy = percentageChange(
+                now.get("CONTRACT_LIABILITIES"), prior.get("CONTRACT_LIABILITIES"));
+        if (contractLiabilitiesYoy != null) {
+            result.getMetrics().add(metric("CONTRACT_LIABILITIES_YOY", "合同负债同比",
+                    contractLiabilitiesYoy, "%"));
+        }
+
+        BigDecimal balanceGap = subtract(assets, sum(now, "TOTAL_LIABILITIES", "TOTAL_EQUITY"));
+        if (balanceGap != null) {
+            result.getMetrics().add(metric("BALANCE_SHEET_IDENTITY_GAP", "资产负债表恒等式差额",
+                    balanceGap, "CNY"));
         }
 
         BigDecimal receivableYoy = percentageChange(
@@ -172,5 +245,18 @@ public class FinancialAnalysisEngine {
             }
         }
         return null;
+    }
+
+    private BigDecimal sum(Map<String, BigDecimal> values, String... codes) {
+        BigDecimal result = BigDecimal.ZERO;
+        boolean found = false;
+        for (String code : codes) {
+            BigDecimal value = values.get(code);
+            if (value != null) {
+                result = result.add(value);
+                found = true;
+            }
+        }
+        return found ? result : null;
     }
 }
