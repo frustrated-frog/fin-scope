@@ -1,6 +1,6 @@
 # 技术方案：财报解读 Agent
 
-> 文档状态：待评审；版本：V1.0；日期：2026-07-17；关联 PRD：`docs/产品需求-财报解读Agent.md`
+> 文档状态：已实现；版本：V1.1；日期：2026-07-17；关联 PRD：`docs/产品需求-财报解读Agent.md`
 
 ## 一、目标与边界
 
@@ -201,12 +201,15 @@ AgentHarness -> FinancialInterpretationAgent -> LlmChatClient
       "refs": ["M_REVENUE_YOY"]
     }
   ],
+  "periodChanges": [],
+  "crossStatementInsights": [],
   "dimensions": [
     {
       "code": "GROWTH",
       "assessment": "POSITIVE | NEUTRAL | NEGATIVE | INSUFFICIENT_EVIDENCE",
       "summary": "...",
-      "refs": []
+      "refs": [],
+      "details": []
     }
   ],
   "positiveSignals": [],
@@ -260,9 +263,9 @@ AgentHarness -> FinancialInterpretationAgent -> LlmChatClient
 ### 8.2 修复与降级
 
 ```text
-主请求（最多 60 秒）
+主请求（使用模型客户端统一超时）
   -> 解析和门禁成功：保存 SUCCESS
-  -> 失败：带精简错误进行一次修复请求（最多 30 秒）
+  -> 失败：带精简错误和精简证据进行一次修复请求
       -> 成功：保存 SUCCESS，并记录 repaired=true
       -> 失败：保存 FALLBACK，使用确定性模板结果
 ```
