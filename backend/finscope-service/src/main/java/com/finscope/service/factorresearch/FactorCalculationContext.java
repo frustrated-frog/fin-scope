@@ -3,12 +3,14 @@ package com.finscope.service.factorresearch;
 import com.finscope.domain.quant.data.QuantCapitalFlowDaily;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
+import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
+@Data
 public final class FactorCalculationContext {
     private final String datasetId;
     private final String instrumentCode;
@@ -46,13 +48,4 @@ public final class FactorCalculationContext {
         this.capitalHistory = capitalHistory == null ? Collections.<QuantCapitalFlowDaily>emptyList()
                 : Collections.unmodifiableList(new java.util.ArrayList<QuantCapitalFlowDaily>(capitalHistory));
     }
-
-    public String getDatasetId() { return datasetId; }
-    public String getInstrumentCode() { return instrumentCode; }
-    public LocalDate getTradeDate() { return tradeDate; }
-    public LocalDateTime getAvailableAt() { return availableAt; }
-    public List<QuantDailyBar> getHistory() { return history; }
-    public QuantFundamentalSnapshot getFundamental() { return fundamental; }
-    public QuantCapitalFlowDaily getCapitalFlow() { return capitalFlow; }
-    public List<QuantCapitalFlowDaily> getCapitalHistory() { return capitalHistory; }
 }
