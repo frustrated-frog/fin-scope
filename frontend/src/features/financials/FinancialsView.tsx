@@ -8,6 +8,7 @@ import {
   formatMetric,
   qualityLabels,
   reportLabel,
+  reportPeriodEnd,
   reportTypeLabels,
   statementLabels
 } from './financialPresentation';
@@ -49,12 +50,18 @@ export function FinancialsView({
   const [activeTab, setActiveTab] = useState<Tab>('OVERVIEW');
   const [unit, setUnit] = useState<FinancialUnit>('YI');
   const [periodMode, setPeriodMode] = useState<'CUMULATIVE' | 'QUARTER'>('CUMULATIVE');
-  const [periodEnd, setPeriodEnd] = useState(initialPeriod.periodEnd);
+  const [reportYear, setReportYear] = useState(initialPeriod.periodEnd.slice(0, 4));
   const [reportType, setReportType] = useState<FinancialReportType>(initialPeriod.reportType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [file, setFile] = useState<File>();
   const loadSequence = useRef(0);
+  const currentYear = new Date().getFullYear();
+  const reportYearNumber = Number(reportYear);
+  const reportYearValid = /^\d{4}$/.test(reportYear)
+    && reportYearNumber >= 1990
+    && reportYearNumber <= currentYear;
+  const periodEnd = reportYearValid ? reportPeriodEnd(reportYear, reportType) : '';
 
   useEffect(() => {
     let active = true;
@@ -104,7 +111,7 @@ export function FinancialsView({
       if (sequence !== loadSequence.current) return;
       setView(detail);
       setDocuments(files);
-      setPeriodEnd(detail.report.periodEnd);
+      setReportYear(detail.report.periodEnd.slice(0, 4));
       setReportType(detail.report.reportType);
       setActiveTab('OVERVIEW');
       setPeriodMode('CUMULATIVE');
@@ -116,7 +123,7 @@ export function FinancialsView({
   }
 
   async function refreshReport() {
-    if (!instrumentId) return;
+    if (!instrumentId || !periodEnd) return;
     setBusy(true);
     setError('');
     setMessage('正在抓取并解析财报');
@@ -233,16 +240,23 @@ export function FinancialsView({
           <span>当前一期支持 A 股非金融企业，数据抓取后保存在本地。</span>
         </div>
         <label>
-          <span>报告期末</span>
+          <span className="financials-field-heading">
+            报告年度
+            <small>{periodEnd ? `将按 ${periodEnd} 查询` : `请输入 1990–${currentYear} 年`}</small>
+          </span>
           <input
-            aria-label="报告期末"
-            type="date"
-            value={periodEnd}
-            onChange={(event) => setPeriodEnd(event.target.value)}
+            aria-label="报告年度"
+            type="number"
+            min="1990"
+            max={currentYear}
+            step="1"
+            inputMode="numeric"
+            value={reportYear}
+            onChange={(event) => setReportYear(event.target.value)}
           />
         </label>
         <label>
-          <span>报告类型</span>
+          <span className="financials-field-heading">报告类型</span>
           <select
             aria-label="报告类型"
             value={reportType}

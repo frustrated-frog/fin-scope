@@ -19,6 +19,17 @@ export const reportTypeLabels: Record<FinancialReportType, string> = {
   ANNUAL: '年报'
 };
 
+const reportPeriodEndSuffix: Record<FinancialReportType, string> = {
+  Q1: '03-31',
+  HALF_YEAR: '06-30',
+  Q3: '09-30',
+  ANNUAL: '12-31'
+};
+
+export function reportPeriodEnd(year: string, type: FinancialReportType) {
+  return /^\d{4}$/.test(year) ? `${year}-${reportPeriodEndSuffix[type]}` : '';
+}
+
 export const originLabels: Record<FinancialValueOrigin, string> = {
   REPORTED: '披露',
   DERIVED: '单季派生',

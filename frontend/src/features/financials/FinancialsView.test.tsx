@@ -112,29 +112,35 @@ test('switches cumulative flow statements to explicitly derived single-quarter v
   expect(screen.queryByText('1,234.57亿')).not.toBeInTheDocument();
 });
 
-test('fetches a selected reporting period when the local archive is empty', async () => {
+test('derives the reporting period end from the selected year and report type', async () => {
   const user = userEvent.setup();
   const addToast = vi.fn();
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
     if (path === '/api/financials/instruments') return [instrument];
     if (path === '/api/financials/instruments/7/reports') return [];
-    if (path === '/api/financials/instruments/7/refresh' && options?.method === 'POST') return reportView;
+    if (path === '/api/financials/instruments/7/refresh' && options?.method === 'POST') {
+      return {
+        ...reportView,
+        report: { ...report, periodEnd: '2026-03-31', reportType: 'Q1' }
+      };
+    }
     if (path === '/api/financials/reports/9/documents') return [];
     throw new Error(`unexpected api call: ${path}`);
   });
 
   render(<FinancialsView addToast={addToast} setMessage={vi.fn()} />);
-  await user.clear(await screen.findByLabelText('报告期末'));
-  await user.type(screen.getByLabelText('报告期末'), '2025-12-31');
-  await user.selectOptions(screen.getByLabelText('报告类型'), 'ANNUAL');
+  await user.clear(await screen.findByLabelText('报告年度'));
+  await user.type(screen.getByLabelText('报告年度'), '2026');
+  await user.selectOptions(screen.getByLabelText('报告类型'), 'Q1');
+  expect(screen.getByText('将按 2026-03-31 查询')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '抓取并解析财报' }));
 
   expect(await screen.findByText('营业总收入')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/financials/instruments/7/refresh', {
     method: 'POST',
-    body: JSON.stringify({ periodEnd: '2025-12-31', reportType: 'ANNUAL' })
+    body: JSON.stringify({ periodEnd: '2026-03-31', reportType: 'Q1' })
   });
-  expect(addToast).toHaveBeenCalledWith('2025 年报已抓取并完成分析', 'success');
+  expect(addToast).toHaveBeenCalledWith('2026 一季报已抓取并完成分析', 'success');
 });
 
 test('uploads a PDF as report evidence using multipart form data', async () => {
