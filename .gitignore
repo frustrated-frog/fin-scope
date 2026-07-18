@@ -29,6 +29,7 @@ market-data-service/**/*.pyc
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+.playwright-cli/
 
 # IDE
 .idea/
