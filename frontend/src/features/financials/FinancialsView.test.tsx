@@ -170,6 +170,43 @@ test('uploads a PDF as report evidence using multipart form data', async () => {
   expect(await screen.findByText('report.pdf')).toBeInTheDocument();
 });
 
+test('opens research analysis for the selected company and financial period', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9'
+      && options?.method === 'POST') {
+      return {
+        status: 'SUCCESS',
+        sourceCode: 'EASTMONEY',
+        candidates: [],
+        importedReports: [],
+        importedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        errors: [],
+        completedAt: '2026-07-19T01:00:00Z'
+      };
+    }
+    if (path === '/api/financials/instruments/7/research-reports') return [];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+
+  await user.click(screen.getByRole('tab', { name: '研报分析' }));
+
+  expect(await screen.findByRole('heading', { name: '研报观点—财报事实验证台' })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/financials/instruments/7/research-reports/sync?financialReportId=9', {
+    method: 'POST'
+  });
+  expect(api).toHaveBeenCalledWith('/api/financials/instruments/7/research-reports');
+  expect(screen.getByText('暂未自动获取到公开研报')).toBeInTheDocument();
+});
+
 test('offers an evidence-constrained Agent interpretation for the selected report', async () => {
   const user = userEvent.setup();
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {

@@ -10635,3 +10635,681 @@ input[type="checkbox"] {
 @media (prefers-reduced-motion: reduce) {
   .financials-page * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+/* Broker research × financial statement learning desk */
+.broker-research-panel {
+  --border-color: var(--line);
+  --surface-strong: var(--surface-2);
+  --surface-panel: var(--surface);
+  --text-muted: var(--muted);
+  --text-primary: var(--ink);
+  --text-secondary: color-mix(in srgb, var(--ink) 78%, var(--muted));
+  --accent-blue: var(--accent-3);
+  --positive-color: var(--success);
+  --warning-color: var(--accent-2);
+  --research-blue: #4f8ee8;
+  --research-blue-deep: #356bc8;
+  --research-cyan: #31b7cf;
+  --research-mint: #36c5b2;
+  --research-midnight: #111b2b;
+  --research-shadow: #06101e;
+  display: grid;
+  gap: 18px;
+}
+
+.broker-research-header,
+.broker-research-identity,
+.broker-research-file-row,
+.broker-research-source-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.broker-research-header > div:first-child > p:last-child,
+.broker-research-identity p {
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+
+.broker-research-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: min(100%, 420px);
+}
+
+.broker-research-actions label {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+}
+
+.broker-research-actions label span,
+.broker-research-upload label span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.broker-research-actions select,
+.broker-research-upload input {
+  min-height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 8px 11px;
+}
+
+.broker-research-panel button.broker-research-button {
+  appearance: none;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--research-blue) 30%, var(--border-color));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--research-midnight) 72%, var(--surface-strong));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .055),
+    0 7px 18px rgba(6, 16, 30, .14);
+  color: var(--text-primary);
+  font: 760 13px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
+}
+
+.broker-research-panel button.broker-research-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--research-blue) 64%, var(--border-color));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    0 10px 24px rgba(6, 16, 30, .22);
+}
+
+.broker-research-panel button.broker-research-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow:
+    inset 0 1px 2px rgba(6, 16, 30, .28),
+    0 4px 10px rgba(6, 16, 30, .15);
+}
+
+.broker-research-panel button.broker-research-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--research-cyan) 82%, white);
+  outline-offset: 3px;
+}
+
+.broker-research-panel button.broker-research-button:disabled {
+  transform: none;
+  cursor: not-allowed;
+  opacity: .48;
+  box-shadow: none;
+}
+
+.broker-research-button-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .09);
+  color: inherit;
+  font: 800 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.broker-research-panel button.broker-research-button--sync {
+  min-width: 154px;
+  border-color: rgba(117, 178, 255, .48);
+  background: linear-gradient(135deg, var(--research-blue-deep), #4c71d4 58%, #557fe2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .2),
+    0 9px 22px rgba(53, 107, 200, .25);
+  color: #f8fbff;
+}
+
+.broker-research-panel button.broker-research-button--sync:hover:not(:disabled) {
+  border-color: rgba(158, 204, 255, .76);
+  background: linear-gradient(135deg, #4078d3, #587ce0 58%, #638beb);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 12px 28px rgba(53, 107, 200, .34);
+}
+
+.broker-research-panel button.broker-research-button--import {
+  min-width: 164px;
+  border-color: rgba(100, 227, 205, .46);
+  background: linear-gradient(135deg, #177e78, #238f86 55%, #2a9c8e);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .15),
+    0 8px 20px rgba(23, 126, 120, .22);
+  color: #f2fffc;
+}
+
+.broker-research-panel button.broker-research-button--import:hover:not(:disabled) {
+  border-color: rgba(124, 240, 218, .7);
+  background: linear-gradient(135deg, #1c8d85, #28a094 55%, #31ad9c);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 11px 25px rgba(23, 126, 120, .3);
+}
+
+.broker-research-panel button.broker-research-button--read {
+  min-width: 148px;
+  border-color: color-mix(in srgb, var(--research-blue) 42%, var(--border-color));
+  background: color-mix(in srgb, var(--research-blue) 7%, var(--surface-strong));
+  color: color-mix(in srgb, var(--research-blue) 64%, var(--text-primary));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.broker-research-panel button.broker-research-button--read:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--research-blue) 13%, var(--surface-strong));
+  color: var(--text-primary);
+}
+
+.broker-research-panel button.broker-research-button--read .broker-research-button-icon {
+  width: auto;
+  flex-basis: auto;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+}
+
+.broker-research-panel button.broker-research-button--reanalyze {
+  min-width: 150px;
+  align-self: end;
+  border-color: color-mix(in srgb, var(--research-blue) 30%, var(--border-color));
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--surface-strong) 96%, white),
+    color-mix(in srgb, var(--research-midnight) 22%, var(--surface-strong)));
+}
+
+.broker-research-panel button.broker-research-button--reanalyze:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--research-blue) 9%, var(--surface-strong));
+}
+
+.broker-research-button.is-loading .broker-research-button-icon {
+  animation: broker-research-button-spin .8s linear infinite;
+}
+
+@keyframes broker-research-button-spin {
+  to { transform: rotate(360deg); }
+}
+
+.broker-research-upload,
+.broker-research-identity,
+.broker-research-list-section,
+.broker-research-forecast,
+.broker-research-claims,
+.broker-research-learning-grid > section,
+.broker-research-source,
+.broker-research-empty {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--surface-panel);
+}
+
+.broker-research-upload {
+  padding: 14px 18px;
+}
+
+.broker-research-upload summary,
+.broker-research-source summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.broker-research-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.broker-research-upload-grid label {
+  display: grid;
+  gap: 5px;
+}
+
+.broker-research-file-row {
+  align-items: flex-end;
+}
+
+.broker-research-file-row .financials-file-input {
+  flex: 1;
+}
+
+.broker-research-error {
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 107, 90, .45);
+  border-radius: 12px;
+  color: #ff9385;
+  background: rgba(239, 107, 90, .08);
+}
+
+.broker-research-sync {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 36%, var(--border-color));
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(69, 142, 220, .11), rgba(32, 190, 150, .04)),
+    var(--surface-panel);
+}
+
+.broker-research-sync > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.broker-research-sync > header h4 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.broker-research-sync > header p:last-child,
+.broker-research-sync > footer {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.broker-research-sync-warnings {
+  display: grid;
+  gap: 4px;
+  color: var(--warning-color);
+  font-size: 12px;
+}
+
+.broker-research-candidates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 380px;
+  overflow: auto;
+}
+
+.broker-research-candidates article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.broker-research-candidates article > div {
+  min-width: 0;
+}
+
+.broker-research-candidates article > div span,
+.broker-research-candidates article small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.broker-research-candidates article h5 {
+  margin: 5px 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.broker-research-candidates article p {
+  margin: 0 0 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.broker-research-candidates article button {
+  flex: 0 0 auto;
+}
+
+.broker-research-candidates article .broker-research-button > span {
+  color: inherit;
+  font-size: inherit;
+}
+
+.broker-research-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 42px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.broker-research-empty strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.broker-research-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.broker-research-identity {
+  padding: 22px;
+  background: linear-gradient(135deg, rgba(69, 142, 220, .14), rgba(32, 190, 150, .06));
+}
+
+.broker-research-eyebrow {
+  color: var(--accent-blue);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.broker-research-identity h3 {
+  margin: 6px 0 0;
+  font-size: clamp(22px, 3vw, 30px);
+}
+
+.broker-research-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.broker-research-badges > * {
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.broker-research-badges strong {
+  color: var(--positive-color);
+  border-color: rgba(37, 188, 143, .35);
+}
+
+.broker-research-list-section,
+.broker-research-forecast,
+.broker-research-claims,
+.broker-research-learning-grid > section {
+  padding: 20px;
+}
+
+.broker-research-list-section header h4,
+.broker-research-forecast header h4,
+.broker-research-claims header h4,
+.broker-research-learning-grid header h4 {
+  margin: 0;
+}
+
+.broker-research-list-section ol {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding-left: 24px;
+}
+
+.broker-research-list-section li {
+  padding-left: 4px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+
+.broker-research-list-section li > span {
+  color: var(--text-primary);
+}
+
+.broker-research-list-section li blockquote {
+  margin: 6px 0 0;
+  padding: 7px 10px;
+  border-left: 2px solid rgba(79, 149, 255, .55);
+  background: rgba(79, 149, 255, .07);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.broker-research-core {
+  border-left: 4px solid var(--accent-blue);
+}
+
+.broker-research-reading-grid,
+.broker-research-learning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.broker-research-list-section.risk {
+  border-top: 2px solid #ef6b5a;
+}
+
+.broker-research-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.broker-research-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.broker-research-table-wrap th,
+.broker-research-table-wrap td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+
+.broker-research-table-wrap th {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.broker-research-table-wrap td small {
+  display: block;
+  max-width: 300px;
+  margin-top: 5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.broker-research-status {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.broker-research-status.verified,
+.broker-research-status.evidence_found {
+  border-color: rgba(37, 188, 143, .4);
+  color: var(--positive-color);
+}
+
+.broker-research-status.contradicted {
+  border-color: rgba(239, 107, 90, .45);
+  color: #ff9385;
+}
+
+.broker-research-claims > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(240px, .8fr);
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.broker-research-claim-main > span {
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.broker-research-claim-main h5 {
+  margin: 6px 0;
+  font-size: 17px;
+}
+
+.broker-research-claim-main p,
+.broker-research-evidence-card p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.broker-research-claim-main blockquote {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent-blue);
+  color: var(--text-muted);
+  background: rgba(69, 142, 220, .06);
+}
+
+.broker-research-evidence-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.broker-research-evidence-card > span:not(.broker-research-status) {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.broker-research-learning-grid dl {
+  display: grid;
+  gap: 10px;
+}
+
+.broker-research-learning-grid dl div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.broker-research-learning-grid dt {
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.broker-research-learning-grid dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.broker-research-source {
+  padding: 18px;
+}
+
+.broker-research-source-actions {
+  margin: 14px 0;
+  color: var(--text-muted);
+}
+
+.broker-research-source pre {
+  max-height: 680px;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+  font-family: inherit;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.broker-research-limitations {
+  display: grid;
+  gap: 6px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--warning-color);
+  color: var(--text-muted);
+  background: rgba(228, 169, 62, .06);
+}
+
+.broker-research-limitations strong {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 900px) {
+  .broker-research-header,
+  .broker-research-sync > header,
+  .broker-research-identity,
+  .broker-research-file-row {
+    flex-direction: column;
+  }
+
+  .broker-research-actions,
+  .broker-research-file-row .financials-file-input {
+    width: 100%;
+  }
+
+  .broker-research-upload-grid,
+  .broker-research-candidates,
+  .broker-research-reading-grid,
+  .broker-research-learning-grid,
+  .broker-research-claims > article {
+    grid-template-columns: 1fr;
+  }
+
+  .broker-research-badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .broker-research-actions,
+  .broker-research-candidates article {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .broker-research-panel button.broker-research-button,
+  .broker-research-sync > header .broker-research-button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .broker-research-panel button.broker-research-button {
+    transition: none;
+  }
+
+  .broker-research-panel button.broker-research-button:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .broker-research-button.is-loading .broker-research-button-icon {
+    animation: none;
+  }
+}

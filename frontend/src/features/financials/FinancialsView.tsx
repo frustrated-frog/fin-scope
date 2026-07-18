@@ -3,6 +3,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FinancialInterpretationPanel } from './FinancialInterpretationPanel';
 import { FinancialStatementTable } from './FinancialStatementTable';
+import { ResearchReportAnalysisPanel } from './ResearchReportAnalysisPanel';
 import {
   defaultReportPeriod,
   formatMetric,
@@ -22,7 +23,7 @@ import {
   FinancialUnit
 } from './financialTypes';
 
-type Tab = 'OVERVIEW' | FinancialStatementType | 'AGENT' | 'QUALITY' | 'DOCUMENTS';
+type Tab = 'OVERVIEW' | FinancialStatementType | 'AGENT' | 'RESEARCH' | 'QUALITY' | 'DOCUMENTS';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'OVERVIEW', label: '分析总览' },
@@ -30,6 +31,7 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'BALANCE_SHEET', label: '资产负债表' },
   { id: 'CASH_FLOW', label: '现金流量表' },
   { id: 'AGENT', label: 'Agent 解读' },
+  { id: 'RESEARCH', label: '研报分析' },
   { id: 'QUALITY', label: '数据质量' },
   { id: 'DOCUMENTS', label: '原文凭证' }
 ];
@@ -342,6 +344,9 @@ export function FinancialsView({
             <FinancialStatementTable title={statementLabels.CASH_FLOW} items={view.statements.CASH_FLOW ?? []} unit={unit} periodMode={periodMode} />
           )}
           {activeTab === 'AGENT' && <FinancialInterpretationPanel reportId={view.report.id} />}
+          {activeTab === 'RESEARCH' && (
+            <ResearchReportAnalysisPanel instrumentId={view.instrument.id} financialReportId={view.report.id} />
+          )}
           {activeTab === 'QUALITY' && <QualityPanel reportView={view} />}
           {activeTab === 'DOCUMENTS' && (
             <DocumentsPanel

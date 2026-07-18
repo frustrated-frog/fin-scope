@@ -159,3 +159,119 @@ export type FinancialEvidence = {
   detail?: string;
   sourceRefs?: string[];
 };
+
+export type BrokerResearchReport = {
+  id: number;
+  instrumentId: number;
+  linkedFinancialReportId?: number;
+  title: string;
+  institution?: string;
+  analyst?: string;
+  publishedDate?: string;
+  reportType?: string;
+  rating?: string;
+  targetPrice?: number | string;
+  targetPriceCurrency?: string;
+  sourceType: string;
+  sourceUrl?: string;
+  originalFileName?: string;
+  fileSize?: number;
+  fileHash?: string;
+  pageCount?: number;
+  parseStatus: string;
+  analysisStatus: string;
+  qualityLevel: string;
+  extractedText?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type BrokerResearchAnalysis = {
+  executiveSummary: string[];
+  investmentThesis: string[];
+  businessAnalysis: string[];
+  industryAnalysis: string[];
+  keyAssumptions: string[];
+  catalysts: string[];
+  risks: string[];
+  learningNotes: string[];
+  evidenceSections?: Record<string, Array<{
+    text: string;
+    sourceQuote: string;
+    sourcePage?: number;
+  }>>;
+  glossary: Array<{ term: string; explanation: string }>;
+  limitations: string[];
+  disclaimer: string;
+};
+
+export type BrokerResearchForecast = {
+  id?: number;
+  metricCode: string;
+  metricLabel: string;
+  forecastPeriod: string;
+  forecastValue?: number | string;
+  unit?: string;
+  sourceQuote?: string;
+  sourcePage?: number;
+  actualValue?: number | string;
+  actualUnit?: string;
+  actualPeriod?: string;
+  variancePercent?: number | string;
+  verificationStatus?: string;
+  verificationReason?: string;
+};
+
+export type BrokerResearchClaim = {
+  id?: number;
+  category: string;
+  title: string;
+  detail: string;
+  claimType: string;
+  sourceQuote?: string;
+  sourcePage?: number;
+  financialMetricCode?: string;
+  financialConceptCode?: string;
+  verificationStatus?: string;
+  verificationReason?: string;
+  evidenceLabel?: string;
+  evidenceValue?: string;
+  evidenceUnit?: string;
+  evidencePeriod?: string;
+};
+
+export type BrokerResearchReportView = {
+  report: BrokerResearchReport;
+  analysis: BrokerResearchAnalysis;
+  forecasts: BrokerResearchForecast[];
+  claims: BrokerResearchClaim[];
+};
+
+export type BrokerResearchCandidate = {
+  sourceCode: string;
+  externalId: string;
+  sourceUrl: string;
+  stockCode: string;
+  title: string;
+  institution?: string;
+  analyst?: string;
+  publishedDate?: string;
+  rating?: string;
+  reportType?: string;
+  pageCount?: number;
+  importedReportId?: number;
+  availability: 'AVAILABLE' | 'IMPORTED' | 'FAILED' | 'UNAVAILABLE';
+};
+
+export type BrokerResearchSyncResult = {
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  sourceCode?: string;
+  candidates: BrokerResearchCandidate[];
+  importedReports: BrokerResearchReport[];
+  importedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  errors: string[];
+  completedAt?: string;
+};
