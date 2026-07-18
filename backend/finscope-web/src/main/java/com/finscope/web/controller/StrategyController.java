@@ -12,6 +12,7 @@ import com.finscope.service.strategy.StrategyReviewService;
 import com.finscope.service.strategy.StrategyStockThesisService;
 import com.finscope.web.request.strategy.AddStrategyHoldingRequest;
 import com.finscope.web.request.strategy.CreateStrategyReviewRequest;
+import com.finscope.web.request.strategy.CreateStrategyPlaybookRequest;
 import com.finscope.web.request.strategy.CreateStrategyStockThesisRequest;
 import com.finscope.web.request.strategy.UpdateStrategyHoldingRequest;
 import com.finscope.web.request.strategy.UpdateStrategyPlaybookRequest;
@@ -75,8 +76,7 @@ public class StrategyController {
      * @return 更新后的策略持仓响应。
      */
     @PatchMapping("/holdings/{id}")
-    public ApiResponse<StrategyHoldingResponse> update(@PathVariable Long id,
-                                          @RequestBody UpdateStrategyHoldingRequest request) {
+    public ApiResponse<StrategyHoldingResponse> update(@PathVariable Long id, @RequestBody UpdateStrategyHoldingRequest request) {
         return ApiResponses.success(StrategyHoldingResponse.of(strategyHoldingService.update(id, request.getRole(),
                 request.getTargetWeight(), request.getCurrentWeight(), request.getNote(),
                 request.getRevision())));
@@ -105,6 +105,28 @@ public class StrategyController {
     }
 
     /**
+     * 查询单个策略执行手册及其规则。
+     *
+     * @param code 执行手册编码。
+     * @return 包含来源信息和有序规则的执行手册详情。
+     */
+    @GetMapping("/playbooks/{code}")
+    public ApiResponse<StrategyPlaybookView> playbook(@PathVariable String code) {
+        return ApiResponses.success(strategyPlaybookService.get(code));
+    }
+
+    /**
+     * 创建数据库驱动的策略执行手册。
+     *
+     * @param request 策略定义、来源信息及规则。
+     * @return 新创建的策略执行手册详情。
+     */
+    @PostMapping("/playbooks")
+    public ApiResponse<StrategyPlaybookView> createPlaybook(@RequestBody CreateStrategyPlaybookRequest request) {
+        return ApiResponses.success(strategyPlaybookService.create(request.toPlaybook(), request.getRules()));
+    }
+
+    /**
      * 更新策略执行手册状态。
      *
      * @param code 执行手册编码。
@@ -112,8 +134,7 @@ public class StrategyController {
      * @return 更新后的策略执行手册。
      */
     @PutMapping("/playbooks/{code}/status")
-    public ApiResponse<StrategyPlaybook> updatePlaybook(@PathVariable String code,
-                                           @RequestBody UpdateStrategyPlaybookRequest request) {
+    public ApiResponse<StrategyPlaybook> updatePlaybook(@PathVariable String code, @RequestBody UpdateStrategyPlaybookRequest request) {
         return ApiResponses.success(strategyPlaybookService.update(code, request.getStatus(), request.getNote(), request.getRevision()));
     }
 
@@ -147,8 +168,7 @@ public class StrategyController {
      * @return 更新后的股票研究命题。
      */
     @PatchMapping("/stock-theses/{id}")
-    public ApiResponse<StrategyStockThesis> updateThesis(@PathVariable Long id,
-                                            @RequestBody UpdateStrategyStockThesisRequest request) {
+    public ApiResponse<StrategyStockThesis> updateThesis(@PathVariable Long id, @RequestBody UpdateStrategyStockThesisRequest request) {
         return ApiResponses.success(strategyStockThesisService.update(id, request.getStage(), request.getThesis(),
                 request.getBuyConditions(), request.getInvalidationConditions(),
                 request.getWatchFocus(), request.getNote(), request.getRevision()));

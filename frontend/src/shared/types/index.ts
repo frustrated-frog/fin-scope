@@ -23,7 +23,37 @@ export type View =
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; note?: string; revision: number; updatedAt?: string };
 export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };
-export type StrategyPlaybook = { code: string; title: string; scope: string; summary: string; cadence: string; riskBoundary: string; status: 'RESEARCHING' | 'ACTIVE' | 'PAUSED'; note?: string; revision: number };
+export type StrategyPlaybookRule = {
+  id?: number;
+  playbookId?: number;
+  sectionCode: string;
+  sectionTitle: string;
+  ruleType: 'PRINCIPLE' | 'FILTER' | 'ENTRY' | 'EXIT' | 'CAUTION';
+  ruleText: string;
+  testability: 'QUALITATIVE' | 'CANDIDATE_RULE' | 'DETERMINISTIC';
+  sourcePage?: number;
+  parameterJson?: string;
+  sortOrder: number;
+};
+export type StrategyPlaybook = {
+  id?: number;
+  code: string;
+  title: string;
+  scope: string;
+  summary: string;
+  cadence: string;
+  riskBoundary: string;
+  author?: string;
+  sourceTitle?: string;
+  sourceType?: 'BOOK' | 'ARTICLE' | 'SYSTEM';
+  sourceRef?: string;
+  sourcePublishedAt?: string;
+  validationStatus: 'UNVALIDATED' | 'IN_RESEARCH' | 'SUPPORTED' | 'REFUTED' | 'INCONCLUSIVE';
+  status: 'RESEARCHING' | 'ACTIVE' | 'PAUSED';
+  note?: string;
+  revision: number;
+  rules?: StrategyPlaybookRule[];
+};
 export type StrategyStockThesis = { id: number; code: string; name: string; stage: string; thesis: string; buyConditions: string; invalidationConditions: string; watchFocus: string; note?: string; revision: number };
 export type StrategyReview = { id: number; reviewDate: string; facts: string; reasoning: string; nextAction: string; createdAt: string };
 
