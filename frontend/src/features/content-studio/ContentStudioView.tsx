@@ -5,6 +5,31 @@ import { ContentIdea, PageResponse } from '../../shared/types';
 
 const ideaStatuses = ['IDEA', 'DRAFTING', 'READY', 'PUBLISHED', 'ARCHIVED'];
 
+const formatLabels: Record<string, string> = {
+  LONG_ARTICLE: '长文章',
+  X_THREAD: 'X 长帖',
+  SHORT_POST: '短内容',
+  VIDEO_SCRIPT: '视频脚本',
+  NEWSLETTER: '邮件简报',
+  PODCAST_SCRIPT: '播客脚本'
+};
+
+const statusLabels: Record<string, string> = {
+  IDEA: '想法',
+  DRAFTING: '撰写中',
+  READY: '待发布',
+  PUBLISHED: '已发布',
+  ARCHIVED: '已归档'
+};
+
+function formatLabel(format: string) {
+  return formatLabels[format] || format.replace(/_/g, ' ');
+}
+
+function statusLabel(status: string) {
+  return statusLabels[status] || status.replace(/_/g, ' ');
+}
+
 export function ContentStudioView({
   contentIdeas,
   pagination,
@@ -155,9 +180,20 @@ export function ContentStudioView({
                 <article className="studio-card content-studio-card" key={idea.id}>
                   <div className="studio-card-top">
                     <span className="studio-score">{idea.score}</span>
-                    <span className="studio-card-tags">
-                      <span className="badge">{idea.format}</span>
-                      <span className={`studio-status-pill ${statusTone(status)}`}>{status}</span>
+                    <span className="studio-card-tags" aria-label="内容标签">
+                      <span
+                        className="studio-format-pill"
+                        aria-label={`内容形态：${formatLabel(idea.format)}`}
+                      >
+                        <i aria-hidden="true" />
+                        {formatLabel(idea.format)}
+                      </span>
+                      <span
+                        className={`studio-status-pill ${statusTone(status)}`}
+                        aria-label={`推进状态：${statusLabel(status)}`}
+                      >
+                        {statusLabel(status)}
+                      </span>
                     </span>
                   </div>
                   <div className="studio-card-body">

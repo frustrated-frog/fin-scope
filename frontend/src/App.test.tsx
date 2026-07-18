@@ -1080,7 +1080,7 @@ test('content studio shows idea score and outline for generated topics', async (
 
   expect(await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
   expect(screen.getByText('84')).toBeInTheDocument();
-  expect(screen.getByText('X_THREAD')).toBeInTheDocument();
+  expect(screen.getByText('X 长帖')).toBeInTheDocument();
   expect(screen.getByText('证据强度够高，而且能沉淀成长期有效的宏观解释框架。')).toBeInTheDocument();
   expect(screen.getByText(/1\. 先看降息预期/)).toBeInTheDocument();
 });

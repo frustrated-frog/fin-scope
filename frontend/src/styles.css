@@ -7859,25 +7859,64 @@ input[type="checkbox"] {
 }
 
 .studio-card-tags {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 2px;
   min-width: 0;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--studio-tone) 24%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    0 8px 24px rgba(2, 12, 24, .12);
+}
+
+.studio-format-pill {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+.studio-format-pill i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--studio-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-tone) 14%, transparent);
 }
 
 .studio-status-pill {
   --status-tone: var(--accent);
   display: inline-flex;
-  min-height: 28px;
+  min-height: 26px;
   align-items: center;
   justify-content: center;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--status-tone) 36%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--status-tone) 11%, var(--surface));
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-tone) 14%, var(--surface));
   color: color-mix(in srgb, var(--status-tone) 82%, var(--ink));
-  font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .02em;
+  white-space: nowrap;
 }
 
 .studio-status-pill.idea { --status-tone:#31b7cf; }
