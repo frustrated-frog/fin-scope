@@ -55,10 +55,7 @@ public class PythonFinancialDataClient implements StructuredFinancialDataGateway
         } catch (ProviderContractException error) {
             throw error;
         } catch (Exception error) {
-            throw new ProviderContractException(
-                    "PYTHON_FINANCIAL_SERVICE_ERROR",
-                    "Python 财报数据服务调用失败：" + message(error),
-                    true);
+            throw new ProviderContractException("PYTHON_FINANCIAL_SERVICE_ERROR", "Python 财报数据服务调用失败：" + message(error), true);
         }
     }
 

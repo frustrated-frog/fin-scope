@@ -16,6 +16,7 @@ import javax.annotation.Resource;
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
+
     @Resource
     private UrlIngestTaskService urlIngestTaskService;
     @Resource
