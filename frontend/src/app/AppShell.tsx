@@ -124,26 +124,48 @@ export function AppShell({
             <h2>{currentTitle}</h2>
           </div>
           <div className="topbar-actions">
-            <div className="market-chip topbar-pill">
-              <span>Articles</span>
-              <strong>{articlesCount}</strong>
+            <div className="topbar-readouts" role="group" aria-label="数据概览">
+              <div className="topbar-readout" aria-label={`文章数量 ${articlesCount}`}>
+                <span>Articles</span>
+                <strong>{articlesCount}</strong>
+              </div>
+              <div className="topbar-readout" aria-label={`主题数量 ${topicsCount}`}>
+                <span>Topics</span>
+                <strong>{topicsCount}</strong>
+              </div>
             </div>
-            <div className="market-chip topbar-pill">
-              <span>Topics</span>
-              <strong>{topicsCount}</strong>
+            <div className="topbar-controls" role="group" aria-label="界面控制">
+              <button
+                className="ghost-button topbar-control theme-toggle"
+                type="button"
+                aria-label={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
+                onClick={onToggleTheme}
+              >
+                {theme === 'dark' ? (
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3.5" />
+                    <path d="M12 2v2.2M12 19.8V22M4.93 4.93l1.56 1.56M17.51 17.51l1.56 1.56M2 12h2.2M19.8 12H22M4.93 19.07l1.56-1.56M17.51 6.49l1.56-1.56" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20.4 15.1A8.6 8.6 0 0 1 8.9 3.6 8.6 8.6 0 1 0 20.4 15.1Z" />
+                  </svg>
+                )}
+              </button>
+              <button className="ghost-button topbar-control topbar-refresh" type="button" onClick={onRefresh}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6v5h-5M4 18v-5h5" />
+                  <path d="M6.1 8.2A7 7 0 0 1 18.8 7M17.9 15.8A7 7 0 0 1 5.2 17" />
+                </svg>
+                <span>刷新</span>
+              </button>
             </div>
-            <button
-              className="ghost-button topbar-pill theme-toggle"
-              type="button"
-              aria-label={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
-              onClick={onToggleTheme}
-            >
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
-            <button className="ghost-button topbar-pill" type="button" onClick={onRefresh}>刷新</button>
-            <div className="status-pill topbar-pill">
-              <span className="status-dot" aria-hidden="true" />
-              {message}
+            <div className="topbar-status" role="status" aria-label="系统状态">
+              <span className="topbar-status-signal" aria-hidden="true" />
+              <span className="topbar-status-copy">
+                <small>系统状态</small>
+                <strong title={message}>{message}</strong>
+              </span>
             </div>
           </div>
         </header>

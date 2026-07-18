@@ -727,25 +727,26 @@ test('opens the unified knowledge workbench without globally loading learning ta
   expect(fetch).not.toHaveBeenCalledWith('/api/learning-tasks', expect.anything());
 });
 
-test('topbar status controls use matching pills and icon theme toggle', async () => {
+test('topbar separates data readouts, controls and system status', async () => {
   render(<App />);
 
   expect(await screen.findByText('Articles')).toBeInTheDocument();
 
   const topbarActions = document.querySelector('.topbar-actions') as HTMLElement;
   const topbar = within(topbarActions);
-  const articlesChip = topbar.getByText('Articles').closest('.topbar-pill');
-  const topicsChip = topbar.getByText('Topics').closest('.topbar-pill');
+  const readouts = topbar.getByRole('group', { name: '数据概览' });
   const themeButton = topbar.getByRole('button', { name: '切换为浅色模式' });
   const refreshButton = topbar.getByRole('button', { name: '刷新' });
-  const statusChip = topbar.getByText('准备就绪').closest('.topbar-pill');
+  const systemStatus = topbar.getByRole('status', { name: '系统状态' });
 
-  expect(articlesChip).toBeTruthy();
-  expect(topicsChip).toBeTruthy();
-  expect(themeButton).toHaveClass('topbar-pill');
-  expect(refreshButton).toHaveClass('topbar-pill');
-  expect(statusChip).toBeTruthy();
-  expect(themeButton).toHaveTextContent('☀');
+  expect(within(readouts).getByText('Articles')).toBeInTheDocument();
+  expect(within(readouts).getByText('Topics')).toBeInTheDocument();
+  expect(themeButton).toHaveClass('topbar-control', 'theme-toggle');
+  expect(refreshButton).toHaveClass('topbar-control', 'topbar-refresh');
+  expect(systemStatus).toHaveTextContent('系统状态');
+  expect(systemStatus).toHaveTextContent('准备就绪');
+  expect(themeButton.querySelector('svg')).toBeTruthy();
+  expect(refreshButton.querySelector('svg')).toBeTruthy();
   expect(themeButton).not.toHaveTextContent('浅色');
 });
 

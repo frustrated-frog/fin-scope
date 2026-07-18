@@ -191,7 +191,7 @@ export function ResearchView({
       </div>
 
       <div className="research-grid">
-        <div className="panel">
+        <section className="panel research-archive-panel" aria-label="研究运行档案">
           <div className="panel-head research-archive-head">
             <div>
               <p className="eyebrow">研究档案</p>
@@ -200,7 +200,7 @@ export function ResearchView({
             <span className="research-run-count">共 {runs.length} 次</span>
           </div>
           <ResearchRunList runs={runs} theses={theses} onOpenRun={onOpenRun} />
-        </div>
+        </section>
 
         <aside className="research-detail-panel">
           <div className="panel-head research-detail-head">
@@ -322,7 +322,7 @@ function ResearchRunRow({
         <strong>{thesisName}</strong>
         <small>{run.summary || '等待打开运行细节查看 agent trace'}</small>
       </span>
-      <span>
+      <span className="research-run-status-cell">
         <span className={`research-status-chip ${tone}`}>{presentRunStatus(run.status)}</span>
       </span>
       <span className="research-source-cell">

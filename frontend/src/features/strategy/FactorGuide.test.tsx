@@ -60,6 +60,19 @@ test('lets a beginner find one factor and read the manual before running diagnos
   expect(screen.queryByRole('button', { name: /盈利收益率/ })).not.toBeInTheDocument();
 });
 
+test('keeps the long factor directory focusable as its own scroll region', () => {
+  render(<FactorGuide
+    definitions={[definition()]}
+    selectedCode="EP"
+    onSelect={vi.fn()}
+    selectedDataset={{ id: 1, name: '学习样本', market: 'A_SHARE', dataKind: 'LEARNING_SAMPLE', status: 'READY' }}
+    availableFactors={new Set(['EP'])}
+    onAnalyze={vi.fn()}
+  />);
+
+  expect(screen.getByRole('navigation', { name: '可研究因子' })).toHaveAttribute('tabindex', '0');
+});
+
 test('blocks unsupported factors and explains a completed analysis before metrics', () => {
   const analysis = {
     datasetId: 2, datasetFingerprint: 'abcdef1234567890', factorCode: 'MAIN_FLOW_SHARE',

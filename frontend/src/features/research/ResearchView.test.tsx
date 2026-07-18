@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -19,6 +19,15 @@ test('renders research runs as a telemetry list', () => {
   expect(screen.getByText('共 1 次')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveClass('research-run-row');
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
+});
+
+test('isolates the run archive for container-responsive layout', () => {
+  renderView(legacyDetail());
+
+  const archive = screen.getByRole('region', { name: '研究运行档案' });
+
+  expect(within(archive).getByRole('button', { name: /打开研究运行/ })).toBeInTheDocument();
+  expect(screen.getByRole('complementary')).not.toContainElement(archive);
 });
 
 test('groups the report action inside a responsive research detail header', () => {
