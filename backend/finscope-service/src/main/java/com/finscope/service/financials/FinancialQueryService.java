@@ -41,6 +41,10 @@ public class FinancialQueryService {
         return reports.findReports(instrumentId);
     }
 
+    public Instrument instrument(Long instrumentId) {
+        return requireInstrument(instrumentId);
+    }
+
     public FinancialReportView view(Long reportId) {
         FinancialReport report = reports.findById(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("财报不存在：" + reportId));

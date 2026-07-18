@@ -6,11 +6,17 @@ import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.financials.FinancialDocument;
 import com.finscope.domain.financials.FinancialEvidence;
 import com.finscope.domain.financials.FinancialInterpretation;
+import com.finscope.domain.financials.BrokerResearchReport;
+import com.finscope.domain.financials.BrokerResearchReportView;
+import com.finscope.domain.financials.BrokerResearchSyncResult;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.service.financials.FinancialDocumentService;
 import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.financials.FinancialRefreshService;
 import com.finscope.service.financials.FinancialInterpretationFacade;
+import com.finscope.service.financials.BrokerResearchService;
+import com.finscope.service.financials.BrokerResearchSyncService;
+import com.finscope.web.request.financials.BrokerResearchImportRequest;
 import com.finscope.web.request.financials.FinancialInterpretationRequest;
 import com.finscope.web.request.financials.FinancialRefreshRequest;
 import com.finscope.web.response.ApiResponses;
@@ -25,12 +31,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.validation.Valid;
 import java.io.IOException;
 import java.util.List;
+import java.time.LocalDate;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/financials")
@@ -45,6 +54,10 @@ public class FinancialsController {
     private FinancialDocumentService documents;
     @Resource
     private FinancialInterpretationFacade interpretations;
+    @Resource
+    private BrokerResearchService brokerResearch;
+    @Resource
+    private BrokerResearchSyncService brokerResearchSync;
 
     @GetMapping("/instruments")
     public ApiResponse<List<Instrument>> instruments() {
@@ -101,6 +114,66 @@ public class FinancialsController {
             @PathVariable Long id,
             @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.success(interpretations.history(id, limit));
+    }
+
+    @GetMapping("/instruments/{id}/research-reports")
+    public ApiResponse<List<BrokerResearchReport>> researchReports(@PathVariable Long id) {
+        return ApiResponses.success(brokerResearch.list(id));
+    }
+
+    @PostMapping("/instruments/{id}/research-reports/sync")
+    public ApiResponse<BrokerResearchSyncResult> syncResearchReports(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long financialReportId) {
+        return ApiResponses.success(brokerResearchSync.sync(id, financialReportId));
+    }
+
+    @GetMapping("/instruments/{id}/research-reports/candidates")
+    public ApiResponse<BrokerResearchSyncResult> researchReportCandidates(
+            @PathVariable Long id) {
+        return ApiResponses.success(brokerResearchSync.candidates(id));
+    }
+
+    @PostMapping("/instruments/{id}/research-reports/import")
+    public ApiResponse<BrokerResearchReportView> importResearchReport(
+            @PathVariable Long id,
+            @Valid @RequestBody BrokerResearchImportRequest request) {
+        return ApiResponses.success(brokerResearchSync.importCandidate(
+                id, request.getFinancialReportId(),
+                request.getSourceCode(), request.getExternalId()));
+    }
+
+    @GetMapping("/research-reports/{id}")
+    public ApiResponse<BrokerResearchReportView> researchReport(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long financialReportId) {
+        return ApiResponses.success(brokerResearch.get(id, financialReportId));
+    }
+
+    @PostMapping(value = "/research-reports/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<BrokerResearchReportView> uploadResearchReport(
+            @RequestParam Long instrumentId,
+            @RequestParam(required = false) Long financialReportId,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String institution,
+            @RequestParam(required = false) String analyst,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate publishedDate,
+            @RequestParam(required = false) String rating,
+            @RequestParam(required = false) String reportType,
+            @RequestParam(required = false) BigDecimal targetPrice,
+            @RequestPart("file") MultipartFile file) throws IOException {
+        return ApiResponses.success(brokerResearch.upload(
+                instrumentId, financialReportId, title, institution, analyst, publishedDate,
+                rating, reportType, targetPrice, file.getOriginalFilename(),
+                file.getInputStream(), file.getSize()));
+    }
+
+    @PostMapping("/research-reports/{id}/reanalyze")
+    public ApiResponse<BrokerResearchReportView> reanalyzeResearchReport(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long financialReportId) {
+        return ApiResponses.success(brokerResearch.reanalyze(id, financialReportId));
     }
 
     @GetMapping("/interpretations/{id}")

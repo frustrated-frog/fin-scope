@@ -15,6 +15,8 @@ public class FinancialSchemaMigrator implements InitializingBean {
     private static final int VERSION = 300;
     private static final int DOCUMENT_VERSION = 301;
     private static final int INTERPRETATION_VERSION = 302;
+    private static final int BROKER_RESEARCH_VERSION = 303;
+    private static final int BROKER_RESEARCH_SOURCE_VERSION = 304;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -66,6 +68,33 @@ public class FinancialSchemaMigrator implements InitializingBean {
             jdbc.update(
                     "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     INTERPRETATION_VERSION, "financial interpretation snapshots and history",
+                    LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, BROKER_RESEARCH_VERSION);
+            if (count != null && count > 0) {
+                return;
+            }
+            createBrokerResearchTables();
+            jdbc.update(
+                    "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    BROKER_RESEARCH_VERSION, "external broker research reports and financial verification",
+                    LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, BROKER_RESEARCH_SOURCE_VERSION);
+            if (count != null && count > 0) {
+                return;
+            }
+            jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_broker_research_source_url ON " +
+                    "broker_research_report(source_type,source_url) WHERE source_url IS NOT NULL");
+            jdbc.update(
+                    "INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    BROKER_RESEARCH_SOURCE_VERSION, "unique public broker research source identity",
                     LocalDateTime.now().toString());
         });
     }
@@ -151,5 +180,36 @@ public class FinancialSchemaMigrator implements InitializingBean {
                 "financial_interpretation(snapshot_id,status,id DESC)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_financial_interpretation_generation ON " +
                 "financial_interpretation(generation_key,status,id DESC)");
+    }
+
+    private void createBrokerResearchTables() {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS broker_research_report (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL," +
+                "linked_financial_report_id INTEGER,title TEXT NOT NULL,institution TEXT,analyst TEXT," +
+                "published_date TEXT,report_type TEXT,rating TEXT,target_price TEXT," +
+                "target_price_currency TEXT,source_type TEXT NOT NULL,source_url TEXT," +
+                "original_file_name TEXT,relative_path TEXT,file_size INTEGER,file_hash TEXT NOT NULL UNIQUE," +
+                "page_count INTEGER,parse_status TEXT NOT NULL,analysis_status TEXT NOT NULL," +
+                "quality_level TEXT NOT NULL,extracted_text TEXT,analysis_json TEXT,error_message TEXT," +
+                "created_at TEXT NOT NULL,updated_at TEXT NOT NULL," +
+                "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT," +
+                "FOREIGN KEY(linked_financial_report_id) REFERENCES financial_report(id) ON DELETE SET NULL)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_broker_research_instrument_date ON " +
+                "broker_research_report(instrument_id,published_date DESC,id DESC)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS broker_research_forecast (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,research_report_id INTEGER NOT NULL," +
+                "metric_code TEXT NOT NULL,metric_label TEXT NOT NULL,forecast_period TEXT NOT NULL," +
+                "forecast_value TEXT,unit TEXT,source_quote TEXT,source_page INTEGER," +
+                "FOREIGN KEY(research_report_id) REFERENCES broker_research_report(id) ON DELETE CASCADE)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_broker_forecast_report ON " +
+                "broker_research_forecast(research_report_id,forecast_period,metric_code)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS broker_research_claim (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,research_report_id INTEGER NOT NULL," +
+                "category TEXT NOT NULL,title TEXT NOT NULL,detail TEXT NOT NULL,claim_type TEXT NOT NULL," +
+                "source_quote TEXT,source_page INTEGER,financial_metric_code TEXT," +
+                "financial_concept_code TEXT," +
+                "FOREIGN KEY(research_report_id) REFERENCES broker_research_report(id) ON DELETE CASCADE)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_broker_claim_report ON " +
+                "broker_research_claim(research_report_id,category,id)");
     }
 }
