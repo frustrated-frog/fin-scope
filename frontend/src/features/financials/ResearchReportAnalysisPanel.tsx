@@ -416,9 +416,30 @@ function ResearchDetail({ detail }: { detail: BrokerResearchReportView }) {
         </div>
       </section>
 
+      {report.analysisStatus !== 'LLM' && (
+        <aside className="broker-research-degraded" role="status">
+          <span className="broker-research-degraded-icon" aria-hidden="true">!</span>
+          <div>
+            <strong>研报解读已降级</strong>
+            <p>{friendlyAnalysisError(report.errorMessage)}</p>
+            <small>当前显示的是净化后的规则解析结果；可点击“重新详细解析”再次生成 Agent 解读。</small>
+          </div>
+        </aside>
+      )}
+      {report.analysisStatus === 'LLM' && report.errorMessage && (
+        <aside className="broker-research-degraded is-preserved" role="status">
+          <span className="broker-research-degraded-icon" aria-hidden="true">i</span>
+          <div>
+            <strong>已保留上一次 Agent 解读</strong>
+            <p>{friendlyAnalysisError(report.errorMessage)}</p>
+            <small>本次重新解析没有覆盖已有的高质量结果。</small>
+          </div>
+        </aside>
+      )}
+
       <ResearchListSection className="broker-research-core" title="研报核心结论" items={analysis.executiveSummary} evidence={analysis.evidenceSections?.executiveSummary} />
 
-      <div className="broker-research-reading-grid">
+      <div className="broker-research-reading-flow">
         <ResearchListSection title="投资逻辑与论证链" items={analysis.investmentThesis} evidence={analysis.evidenceSections?.investmentThesis} />
         <ResearchListSection title="业务与公司分析" items={analysis.businessAnalysis} evidence={analysis.evidenceSections?.businessAnalysis} />
         <ResearchListSection title="行业与竞争格局" items={analysis.industryAnalysis} evidence={analysis.evidenceSections?.industryAnalysis} />
@@ -457,7 +478,12 @@ function ResearchDetail({ detail }: { detail: BrokerResearchReportView }) {
               <span>{claim.claimType === 'RISK' ? '风险' : claim.claimType === 'FORECAST' ? '预测' : '研报观点'}</span>
               <h5>{claim.title}</h5>
               <p>{claim.detail}</p>
-              <blockquote>“{claim.sourceQuote}”{claim.sourcePage ? ` — 第 ${claim.sourcePage} 页` : ''}</blockquote>
+              {claim.sourceQuote && (
+                <details className="broker-research-evidence-disclosure">
+                  <summary>查看研报原文{claim.sourcePage ? ` · 第 ${claim.sourcePage} 页` : ''}</summary>
+                  <blockquote>“{claim.sourceQuote}”</blockquote>
+                </details>
+              )}
             </div>
             <div className="broker-research-evidence-card">
               <Status value={claim.verificationStatus} />
@@ -516,7 +542,12 @@ function ResearchListSection({ title, items, evidence, className = '' }: {
         return (
           <li key={`${index}-${item}`}>
             <span>{item}</span>
-            {source && <blockquote>“{source.sourceQuote}”{source.sourcePage ? ` — 第 ${source.sourcePage} 页` : ''}</blockquote>}
+            {source && (
+              <details className="broker-research-evidence-disclosure">
+                <summary>查看原文证据{source.sourcePage ? ` · 第 ${source.sourcePage} 页` : ''}</summary>
+                <blockquote>“{source.sourceQuote}”{source.sourcePage ? ` — 第 ${source.sourcePage} 页` : ''}</blockquote>
+              </details>
+            )}
           </li>
         );
       })}</ol> : <EmptyLine text="当前研报没有足够证据形成该部分结论。" />}
@@ -552,6 +583,12 @@ function varianceLabel(metricCode: string, value?: number | string) {
     : `${Number(value).toFixed(2)}%`;
 }
 function qualityLabel(value: string) { return value === 'HIGH' ? '高质量文本' : value === 'MEDIUM' ? '可阅读' : '证据有限'; }
+function friendlyAnalysisError(value?: string) {
+  if (!value) return 'Agent 未能产出可验证的结构化结果。';
+  if (/timed out|timeout|超时/i.test(value)) return '模型响应超时，系统已自动完成一次结构修复尝试。';
+  if (/JSON|结构|格式/i.test(value)) return '模型返回结构不完整，系统已自动尝试修复但仍未通过校验。';
+  return value;
+}
 function sourceLabel(value?: string) { return value === 'EASTMONEY' ? '东方财富公开研报' : value || '公开来源'; }
 function formatDateTime(value: string) {
   const parsed = new Date(value);

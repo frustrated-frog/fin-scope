@@ -122,6 +122,7 @@ test('renders a detailed research learning view linked to financial facts', asyn
 
   expect(await screen.findByRole('heading', { name: '研报核心结论' })).toBeInTheDocument();
   expect(screen.getByText('产品结构升级支撑盈利能力')).toBeInTheDocument();
+  expect(screen.getAllByText(/查看原文证据/).length).toBeGreaterThan(0);
   expect(screen.getAllByText('“产品结构持续升级” — 第 8 页').length).toBeGreaterThan(0);
   expect(screen.getByRole('heading', { name: '业务与公司分析' })).toBeInTheDocument();
   expect(screen.getByText('高端产品收入占比持续提升')).toBeInTheDocument();
@@ -134,6 +135,32 @@ test('renders a detailed research learning view linked to financial facts', asyn
   expect(screen.getByText('完整研报原文：公司业务、行业格局、盈利预测和风险分析。')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '重新详细解析' }))
     .toHaveClass('broker-research-button--reanalyze');
+});
+
+test('clearly explains degraded analysis and keeps long evidence folded', async () => {
+  const degradedDetail = {
+    ...detail,
+    report: {
+      ...detail.report,
+      analysisStatus: 'DETERMINISTIC_FALLBACK',
+      qualityLevel: 'LOW',
+      errorMessage: '模型响应超时（主调用 120 秒，结构修复 60 秒）'
+    }
+  };
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return emptySync;
+    if (path === '/api/financials/instruments/7/research-reports') return [degradedDetail.report];
+    if (path === '/api/financials/research-reports/12?financialReportId=9') return degradedDetail;
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  const view = render(<ResearchReportAnalysisPanel instrumentId={7} financialReportId={9} />);
+
+  expect(await screen.findByRole('status')).toHaveTextContent('研报解读已降级');
+  expect(screen.getByRole('status')).toHaveTextContent('模型响应超时');
+  const disclosure = screen.getAllByText(/查看原文证据/)[0].closest('details');
+  expect(disclosure).not.toHaveAttribute('open');
+  expect(view.container.querySelector('.broker-research-reading-flow')).toBeInTheDocument();
 });
 
 test('uploads a PDF with learning metadata and immediately displays the analysis', async () => {

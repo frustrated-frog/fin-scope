@@ -11046,6 +11046,53 @@ input[type="checkbox"] {
   border-color: rgba(37, 188, 143, .35);
 }
 
+.broker-research-degraded {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning-color) 44%, var(--border-color));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--warning-color) 8%, var(--surface-panel));
+}
+
+.broker-research-degraded.is-preserved {
+  border-color: color-mix(in srgb, var(--accent-blue) 38%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-blue) 7%, var(--surface-panel));
+}
+
+.broker-research-degraded-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--warning-color) 55%, transparent);
+  border-radius: 10px;
+  color: var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  font-weight: 800;
+}
+
+.broker-research-degraded.is-preserved .broker-research-degraded-icon {
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, transparent);
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+}
+
+.broker-research-degraded strong {
+  color: var(--text-primary);
+}
+
+.broker-research-degraded p {
+  margin: 3px 0;
+  color: var(--text-secondary);
+}
+
+.broker-research-degraded small {
+  color: var(--text-muted);
+}
+
 .broker-research-list-section,
 .broker-research-forecast,
 .broker-research-claims,
@@ -11062,36 +11109,89 @@ input[type="checkbox"] {
 
 .broker-research-list-section ol {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 14px 0 0;
-  padding-left: 24px;
+  padding: 0;
+  list-style: none;
+  counter-reset: broker-research-point;
 }
 
 .broker-research-list-section li {
-  padding-left: 4px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  border-radius: 12px;
   color: var(--text-secondary);
-  line-height: 1.75;
+  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  line-height: 1.72;
+  counter-increment: broker-research-point;
+}
+
+.broker-research-list-section li::before {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  content: counter(broker-research-point);
+  color: color-mix(in srgb, var(--accent-blue) 78%, var(--text-primary));
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .broker-research-list-section li > span {
   color: var(--text-primary);
+  font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
-.broker-research-list-section li blockquote {
-  margin: 6px 0 0;
-  padding: 7px 10px;
+.broker-research-evidence-disclosure {
+  grid-column: 2;
+  margin-top: 7px;
+}
+
+.broker-research-evidence-disclosure summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent-blue);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.broker-research-evidence-disclosure summary:hover {
+  color: var(--text-primary);
+}
+
+.broker-research-evidence-disclosure blockquote {
+  margin: 8px 0 0;
+  padding: 9px 11px;
   border-left: 2px solid rgba(79, 149, 255, .55);
   background: rgba(79, 149, 255, .07);
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .broker-research-core {
   border-left: 4px solid var(--accent-blue);
 }
 
-.broker-research-reading-grid,
+.broker-research-reading-flow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.broker-research-reading-flow .broker-research-list-section ol,
+.broker-research-core ol {
+  max-width: 1160px;
+}
+
 .broker-research-learning-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -11180,12 +11280,8 @@ input[type="checkbox"] {
   line-height: 1.7;
 }
 
-.broker-research-claim-main blockquote {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-left: 3px solid var(--accent-blue);
-  color: var(--text-muted);
-  background: rgba(69, 142, 220, .06);
+.broker-research-claim-main .broker-research-evidence-disclosure {
+  margin-top: 12px;
 }
 
 .broker-research-evidence-card {
@@ -11276,7 +11372,6 @@ input[type="checkbox"] {
 
   .broker-research-upload-grid,
   .broker-research-candidates,
-  .broker-research-reading-grid,
   .broker-research-learning-grid,
   .broker-research-claims > article {
     grid-template-columns: 1fr;
