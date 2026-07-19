@@ -21,22 +21,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class BrokerResearchSyncService {
     private static final int CATALOG_LIMIT = 20;
-    private static final int AUTO_IMPORT_LIMIT = 1;
     private static final int LOOKBACK_DAYS = 365;
     private final Map<String, BrokerResearchSource> sources;
     private final BrokerResearchReportRepository repository;
     private final BrokerResearchService reports;
     private final FinancialQueryService financials;
-    private final ConcurrentMap<Long, CompletableFuture<BrokerResearchSyncResult>> running =
-            new ConcurrentHashMap<Long, CompletableFuture<BrokerResearchSyncResult>>();
 
     public BrokerResearchSyncService(List<BrokerResearchSource> sources,
                                      BrokerResearchReportRepository repository,
@@ -52,26 +45,8 @@ public class BrokerResearchSyncService {
         this.financials = financials;
     }
 
-    public BrokerResearchSyncResult sync(Long instrumentId, Long financialReportId) {
-        CompletableFuture<BrokerResearchSyncResult> created =
-                new CompletableFuture<BrokerResearchSyncResult>();
-        CompletableFuture<BrokerResearchSyncResult> active =
-                running.putIfAbsent(instrumentId, created);
-        if (active != null) return join(active);
-        try {
-            BrokerResearchSyncResult result = synchronize(instrumentId, financialReportId, true);
-            created.complete(result);
-            return result;
-        } catch (RuntimeException error) {
-            created.completeExceptionally(error);
-            throw error;
-        } finally {
-            running.remove(instrumentId, created);
-        }
-    }
-
     public BrokerResearchSyncResult candidates(Long instrumentId) {
-        return synchronize(instrumentId, null, false);
+        return discover(instrumentId);
     }
 
     public BrokerResearchReportView importCandidate(Long instrumentId, Long financialReportId,
@@ -97,8 +72,7 @@ public class BrokerResearchSyncService {
                 candidate, source.download(candidate));
     }
 
-    private BrokerResearchSyncResult synchronize(Long instrumentId, Long financialReportId,
-                                                  boolean autoImport) {
+    private BrokerResearchSyncResult discover(Long instrumentId) {
         Instrument instrument = financials.instrument(instrumentId);
         BrokerResearchSyncResult result = new BrokerResearchSyncResult();
         result.setStatus("SUCCESS");
@@ -127,7 +101,6 @@ public class BrokerResearchSyncService {
         result.setCandidates(all);
         result.setSourceCode(sources.size() == 1
                 ? sources.values().iterator().next().sourceCode() : "MULTI");
-        if (autoImport) autoImport(instrumentId, financialReportId, all, result);
         if (!result.getErrors().isEmpty()) {
             result.setStatus(all.isEmpty() && result.getImportedCount() == 0 ? "FAILED" : "PARTIAL");
         }
@@ -152,30 +125,6 @@ public class BrokerResearchSyncService {
         }
     }
 
-    private void autoImport(Long instrumentId, Long financialReportId,
-                            List<BrokerResearchCandidate> values,
-                            BrokerResearchSyncResult result) {
-        int attempts = 0;
-        for (BrokerResearchCandidate candidate : values) {
-            if (attempts >= AUTO_IMPORT_LIMIT) break;
-            if (!"AVAILABLE".equals(candidate.getAvailability())) continue;
-            attempts++;
-            BrokerResearchSource source = requireSource(candidate.getSourceCode());
-            try {
-                BrokerResearchReportView imported = reports.importRemote(
-                        instrumentId, financialReportId, candidate, source.download(candidate));
-                candidate.setImportedReportId(imported.getReport().getId());
-                candidate.setAvailability("IMPORTED");
-                result.getImportedReports().add(imported.getReport());
-                result.setImportedCount(result.getImportedCount() + 1);
-            } catch (RuntimeException error) {
-                candidate.setAvailability("FAILED");
-                result.setFailedCount(result.getFailedCount() + 1);
-                result.getErrors().add(candidate.getTitle() + "：" + message(error));
-            }
-        }
-    }
-
     private BrokerResearchSource requireSource(String sourceCode) {
         BrokerResearchSource source = sourceCode == null ? null
                 : sources.get(sourceCode.toUpperCase(Locale.ROOT));
@@ -184,17 +133,6 @@ public class BrokerResearchSyncService {
                     "不支持的公开研报来源：" + sourceCode);
         }
         return source;
-    }
-
-    private BrokerResearchSyncResult join(CompletableFuture<BrokerResearchSyncResult> future) {
-        try {
-            return future.join();
-        } catch (CompletionException error) {
-            if (error.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) error.getCause();
-            }
-            throw error;
-        }
     }
 
     private String message(Throwable error) {

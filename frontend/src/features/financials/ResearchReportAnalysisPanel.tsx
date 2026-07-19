@@ -32,34 +32,20 @@ export function ResearchReportAnalysisPanel({
   const [rating, setRating] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const sequence = useRef(0);
+  const discoverySequence = useRef(0);
 
   useEffect(() => {
     const current = ++sequence.current;
+    discoverySequence.current += 1;
     setSyncResult(undefined);
-    void initialize(current);
+    setSyncError('');
+    setSyncing(false);
+    void loadStoredReports(current);
   }, [instrumentId, financialReportId]);
 
-  async function initialize(current = ++sequence.current) {
+  async function loadStoredReports(current = ++sequence.current) {
     setBusy(true);
-    setSyncing(true);
     setError('');
-    setSyncError('');
-    let synced: BrokerResearchSyncResult | undefined;
-    try {
-      const linkQuery = financialReportId ? `?financialReportId=${financialReportId}` : '';
-      synced = await api<BrokerResearchSyncResult>(
-        `/api/financials/instruments/${instrumentId}/research-reports/sync${linkQuery}`,
-        { method: 'POST' }
-      );
-      if (current === sequence.current) setSyncResult(synced);
-    } catch (reason) {
-      if (current === sequence.current) {
-        setSyncError(messageOf(reason, '公开研报自动同步失败，可继续使用已有研报或上传 PDF'));
-      }
-    } finally {
-      if (current === sequence.current) setSyncing(false);
-    }
-
     try {
       const items = await api<BrokerResearchReport[]>(
         `/api/financials/instruments/${instrumentId}/research-reports`
@@ -70,13 +56,29 @@ export function ResearchReportAnalysisPanel({
         setDetail(undefined);
         return;
       }
-      const imported = synced?.importedReports?.[0]?.id;
-      const preferred = items.find((item) => item.id === imported)?.id ?? items[0].id;
-      await loadDetail(preferred, current);
+      await loadDetail(items[0].id, current);
     } catch (reason) {
       if (current === sequence.current) setError(messageOf(reason, '研报列表加载失败'));
     } finally {
       if (current === sequence.current) setBusy(false);
+    }
+  }
+
+  async function checkCandidates() {
+    const current = ++discoverySequence.current;
+    setSyncing(true);
+    setSyncError('');
+    try {
+      const result = await api<BrokerResearchSyncResult>(
+        `/api/financials/instruments/${instrumentId}/research-reports/candidates`
+      );
+      if (current === discoverySequence.current) setSyncResult(result);
+    } catch (reason) {
+      if (current === discoverySequence.current) {
+        setSyncError(messageOf(reason, '公开研报目录检查失败，可继续阅读已有研报或上传 PDF'));
+      }
+    } finally {
+      if (current === discoverySequence.current) setSyncing(false);
     }
   }
 
@@ -221,7 +223,7 @@ export function ResearchReportAnalysisPanel({
         syncing={syncing}
         error={syncError}
         importingId={importingId}
-        onRefresh={() => initialize()}
+        onRefresh={checkCandidates}
         onImport={importCandidate}
         onOpen={(id) => loadDetail(id)}
       />
@@ -250,8 +252,10 @@ export function ResearchReportAnalysisPanel({
 
       {!busy && !reports.length && !detail && !syncResult?.candidates.length && (
         <div className="broker-research-empty">
-          <strong>暂未自动获取到公开研报</strong>
-          <span>可以稍后重新同步，或上传合法取得的 PDF 开始详细学习。</span>
+          <strong>{syncResult ? '本次检查未发现可用公开研报' : '暂未导入研报'}</strong>
+          <span>{syncResult
+            ? '可以稍后再次检查，或上传合法取得的 PDF 开始详细学习。'
+            : '可以检查公开目录，或上传合法取得的 PDF 开始详细学习。'}</span>
         </div>
       )}
 
@@ -274,14 +278,14 @@ function ResearchSync(props: {
     <section className="broker-research-sync">
       <header>
         <div>
-          <p className="financials-section-kicker">Public research auto sync</p>
-          <h4>自动获取公开研报</h4>
+          <p className="financials-section-kicker">Public research discovery</p>
+          <h4>发现公开研报</h4>
           <p>
             {props.syncing
-              ? '正在同步公开目录，并详细解读最新一篇…'
+              ? '正在查询公开目录，不会下载 PDF 或调用 Agent…'
               : props.result
-                ? `已自动导入 ${props.result.importedCount} 篇 · 发现 ${candidates.length} 篇公开研报`
-                : '进入页面后自动同步；手动上传仅作为补充。'}
+                ? `发现 ${candidates.length} 篇公开研报 · ${candidates.filter((item) => item.importedReportId).length} 篇已导入`
+                : '点击后查询公开目录；选择具体研报后才会下载并详细解读。'}
           </p>
         </div>
         <button
@@ -291,7 +295,7 @@ function ResearchSync(props: {
           disabled={props.syncing || Boolean(props.importingId)}
         >
           <span className="broker-research-button-icon" aria-hidden="true">↻</span>
-          <span>{props.syncing ? '同步中…' : '同步最新研报'}</span>
+          <span>{props.syncing ? '检查中…' : '检查最新研报'}</span>
         </button>
       </header>
 
@@ -346,7 +350,7 @@ function ResearchSync(props: {
 
       {props.result?.completedAt && (
         <footer>
-          来源：{sourceLabel(props.result.sourceCode)} · 最近同步 {formatDateTime(props.result.completedAt)}
+          来源：{sourceLabel(props.result.sourceCode)} · 最近检查 {formatDateTime(props.result.completedAt)}
           {props.result.failedCount > 0 ? ` · ${props.result.failedCount} 篇失败` : ''}
         </footer>
       )}

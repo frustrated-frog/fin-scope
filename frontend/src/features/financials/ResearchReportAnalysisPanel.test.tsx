@@ -112,7 +112,6 @@ beforeEach(() => vi.clearAllMocks());
 
 test('renders a detailed research learning view linked to financial facts', async () => {
   vi.mocked(api).mockImplementation(async (path: string) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return emptySync;
     if (path === '/api/financials/instruments/7/research-reports') return [report];
     if (path === '/api/financials/research-reports/12?financialReportId=9') return detail;
     throw new Error(`unexpected api call: ${path}`);
@@ -148,7 +147,6 @@ test('clearly explains degraded analysis and keeps long evidence folded', async 
     }
   };
   vi.mocked(api).mockImplementation(async (path: string) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return emptySync;
     if (path === '/api/financials/instruments/7/research-reports') return [degradedDetail.report];
     if (path === '/api/financials/research-reports/12?financialReportId=9') return degradedDetail;
     throw new Error(`unexpected api call: ${path}`);
@@ -166,14 +164,13 @@ test('clearly explains degraded analysis and keeps long evidence folded', async 
 test('uploads a PDF with learning metadata and immediately displays the analysis', async () => {
   const user = userEvent.setup();
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return emptySync;
     if (path === '/api/financials/instruments/7/research-reports') return [];
     if (path === '/api/financials/research-reports/upload' && options?.method === 'POST') return detail;
     throw new Error(`unexpected api call: ${path}`);
   });
 
   render(<ResearchReportAnalysisPanel instrumentId={7} financialReportId={9} />);
-  await screen.findByText('暂未自动获取到公开研报');
+  await screen.findByText('暂未导入研报');
   await user.type(screen.getByLabelText('研报标题'), '贵州茅台深度报告');
   await user.type(screen.getByLabelText('机构'), '测试证券');
   await user.upload(screen.getByLabelText('上传研报 PDF'),
@@ -194,7 +191,6 @@ test('does not let a stale reanalysis response overwrite a newly selected report
   let resolveReanalysis!: (value: typeof detail) => void;
   const pendingReanalysis = new Promise<typeof detail>((resolve) => { resolveReanalysis = resolve; });
   vi.mocked(api).mockImplementation(async (path: string) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return emptySync;
     if (path === '/api/financials/instruments/7/research-reports') return [report, otherReport];
     if (path === '/api/financials/research-reports/12?financialReportId=9') return detail;
     if (path === '/api/financials/research-reports/13?financialReportId=9') return otherDetail;
@@ -212,7 +208,7 @@ test('does not let a stale reanalysis response overwrite a newly selected report
   await waitFor(() => expect(screen.getByRole('heading', { name: '另一篇研报' })).toBeInTheDocument());
 });
 
-test('automatically syncs public reports and imports a selected candidate for detailed reading', async () => {
+test('checks public reports only after user action and imports a selected candidate', async () => {
   const user = userEvent.setup();
   const candidate = {
     sourceCode: 'EASTMONEY',
@@ -229,9 +225,8 @@ test('automatically syncs public reports and imports a selected candidate for de
   };
   const sync = { ...emptySync, candidates: [candidate] };
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9'
-        && options?.method === 'POST') return sync;
     if (path === '/api/financials/instruments/7/research-reports') return [];
+    if (path === '/api/financials/instruments/7/research-reports/candidates') return sync;
     if (path === '/api/financials/instruments/7/research-reports/import'
         && options?.method === 'POST') return detail;
     throw new Error('unexpected api call: ' + path);
@@ -239,10 +234,22 @@ test('automatically syncs public reports and imports a selected candidate for de
 
   render(<ResearchReportAnalysisPanel instrumentId={7} financialReportId={9} />);
 
+  expect(await screen.findByText('暂未导入研报')).toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith(
+    '/api/financials/instruments/7/research-reports/candidates'
+  );
+  expect(screen.getByText('点击后查询公开目录；选择具体研报后才会下载并详细解读。'))
+    .toBeInTheDocument();
+  const checkButton = screen.getByRole('button', { name: '检查最新研报' });
+  expect(checkButton).toHaveClass('broker-research-button--sync');
+  await user.click(checkButton);
+
   expect(await screen.findByText('贵州茅台公司点评')).toBeInTheDocument();
   expect(screen.getByText('公开证券 · 李四 · 2026-07-18')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '同步最新研报' }))
-    .toHaveClass('broker-research-button--sync');
+  expect(api).not.toHaveBeenCalledWith(
+    '/api/financials/instruments/7/research-reports/import',
+    expect.anything()
+  );
   const importButton = screen.getByRole('button', { name: '导入并详细解读' });
   expect(importButton).toHaveClass('broker-research-button--import');
   await user.click(importButton);
@@ -263,9 +270,10 @@ test('automatically syncs public reports and imports a selected candidate for de
     .toHaveClass('broker-research-button--read');
 });
 
-test('keeps manual upload available when automatic synchronization fails', async () => {
+test('keeps manual upload available when a user-initiated catalog check fails', async () => {
+  const user = userEvent.setup();
   vi.mocked(api).mockImplementation(async (path: string) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') {
+    if (path === '/api/financials/instruments/7/research-reports/candidates') {
       throw new Error('公开研报来源暂时不可用');
     }
     if (path === '/api/financials/instruments/7/research-reports') return [];
@@ -274,21 +282,21 @@ test('keeps manual upload available when automatic synchronization fails', async
 
   render(<ResearchReportAnalysisPanel instrumentId={7} financialReportId={9} />);
 
+  await screen.findByText('暂未导入研报');
+  await user.click(screen.getByRole('button', { name: '检查最新研报' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('公开研报来源暂时不可用');
   expect(screen.getByLabelText('上传研报 PDF')).toBeInTheDocument();
 });
 
-test('does not let an old company synchronization overwrite the newly selected company', async () => {
+test('does not let an old company local load overwrite the newly selected company', async () => {
   const nextReport = { ...report, id: 88, instrumentId: 8, title: '新公司研报' };
   const nextDetail = { ...detail, report: { ...detail.report, ...nextReport } };
-  let resolveOldSync!: (value: typeof emptySync) => void;
-  const oldSync = new Promise<typeof emptySync>((resolve) => { resolveOldSync = resolve; });
+  let resolveOldReports!: (value: (typeof report)[]) => void;
+  const oldReports = new Promise<(typeof report)[]>((resolve) => { resolveOldReports = resolve; });
   vi.mocked(api).mockImplementation(async (path: string) => {
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9') return oldSync;
-    if (path === '/api/financials/instruments/8/research-reports/sync?financialReportId=9') return emptySync;
     if (path === '/api/financials/instruments/8/research-reports') return [nextReport];
     if (path === '/api/financials/research-reports/88?financialReportId=9') return nextDetail;
-    if (path === '/api/financials/instruments/7/research-reports') return [];
+    if (path === '/api/financials/instruments/7/research-reports') return oldReports;
     throw new Error('unexpected api call: ' + path);
   });
 
@@ -296,7 +304,35 @@ test('does not let an old company synchronization overwrite the newly selected c
   view.rerender(<ResearchReportAnalysisPanel instrumentId={8} financialReportId={9} />);
 
   expect(await screen.findByRole('heading', { name: '新公司研报' })).toBeInTheDocument();
-  resolveOldSync(emptySync);
+  resolveOldReports([]);
   await waitFor(() =>
     expect(screen.getByRole('heading', { name: '新公司研报' })).toBeInTheDocument());
+});
+
+test('does not let an old manual catalog check overwrite a newly selected company', async () => {
+  const user = userEvent.setup();
+  const nextReport = { ...report, id: 88, instrumentId: 8, title: '新公司研报' };
+  const nextDetail = { ...detail, report: { ...detail.report, ...nextReport } };
+  let resolveOldCandidates!: (value: typeof emptySync) => void;
+  const oldCandidates = new Promise<typeof emptySync>((resolve) => {
+    resolveOldCandidates = resolve;
+  });
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments/7/research-reports') return [];
+    if (path === '/api/financials/instruments/7/research-reports/candidates') return oldCandidates;
+    if (path === '/api/financials/instruments/8/research-reports') return [nextReport];
+    if (path === '/api/financials/research-reports/88?financialReportId=9') return nextDetail;
+    throw new Error('unexpected api call: ' + path);
+  });
+
+  const view = render(<ResearchReportAnalysisPanel instrumentId={7} financialReportId={9} />);
+  await screen.findByText('暂未导入研报');
+  await user.click(screen.getByRole('button', { name: '检查最新研报' }));
+  view.rerender(<ResearchReportAnalysisPanel instrumentId={8} financialReportId={9} />);
+
+  expect(await screen.findByRole('heading', { name: '新公司研报' })).toBeInTheDocument();
+  resolveOldCandidates({ ...emptySync, sourceCode: 'OLD_COMPANY' });
+  await waitFor(() => expect(screen.queryByText(/OLD_COMPANY/)).not.toBeInTheDocument());
+  expect(screen.getByText('点击后查询公开目录；选择具体研报后才会下载并详细解读。'))
+    .toBeInTheDocument();
 });

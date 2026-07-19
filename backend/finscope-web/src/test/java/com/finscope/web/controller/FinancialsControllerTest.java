@@ -254,7 +254,7 @@ class FinancialsControllerTest {
     }
 
     @Test
-    void exposesAutomaticBrokerResearchSyncCandidatesAndImportContracts() throws Exception {
+    void exposesUserInitiatedBrokerResearchCandidatesAndImportContracts() throws Exception {
         BrokerResearchCandidate candidate = new BrokerResearchCandidate();
         candidate.setSourceCode("EASTMONEY");
         candidate.setExternalId("AP1");
@@ -262,9 +262,7 @@ class FinancialsControllerTest {
         candidate.setAvailability("AVAILABLE");
         BrokerResearchSyncResult sync = new BrokerResearchSyncResult();
         sync.setStatus("SUCCESS");
-        sync.setImportedCount(1);
         sync.setCandidates(Collections.singletonList(candidate));
-        when(brokerResearchSync.sync(7L, 9L)).thenReturn(sync);
         when(brokerResearchSync.candidates(7L)).thenReturn(sync);
         BrokerResearchReport report = new BrokerResearchReport();
         report.setId(81L);
@@ -273,11 +271,6 @@ class FinancialsControllerTest {
         when(brokerResearchSync.importCandidate(7L, 9L, "EASTMONEY", "AP1"))
                 .thenReturn(view);
 
-        mockMvc.perform(post("/api/financials/instruments/7/research-reports/sync")
-                        .param("financialReportId", "9"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.importedCount").value(1));
         mockMvc.perform(get("/api/financials/instruments/7/research-reports/candidates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.candidates[0].externalId").value("AP1"));

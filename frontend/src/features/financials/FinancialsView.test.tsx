@@ -177,20 +177,6 @@ test('opens research analysis for the selected company and financial period', as
     if (path === '/api/financials/instruments/7/reports') return [report];
     if (path === '/api/financials/reports/9') return reportView;
     if (path === '/api/financials/reports/9/documents') return [];
-    if (path === '/api/financials/instruments/7/research-reports/sync?financialReportId=9'
-      && options?.method === 'POST') {
-      return {
-        status: 'SUCCESS',
-        sourceCode: 'EASTMONEY',
-        candidates: [],
-        importedReports: [],
-        importedCount: 0,
-        skippedCount: 0,
-        failedCount: 0,
-        errors: [],
-        completedAt: '2026-07-19T01:00:00Z'
-      };
-    }
     if (path === '/api/financials/instruments/7/research-reports') return [];
     throw new Error(`unexpected api call: ${path}`);
   });
@@ -200,11 +186,9 @@ test('opens research analysis for the selected company and financial period', as
   await user.click(screen.getByRole('tab', { name: '研报分析' }));
 
   expect(await screen.findByRole('heading', { name: '研报观点—财报事实验证台' })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/financials/instruments/7/research-reports/sync?financialReportId=9', {
-    method: 'POST'
-  });
   expect(api).toHaveBeenCalledWith('/api/financials/instruments/7/research-reports');
-  expect(screen.getByText('暂未自动获取到公开研报')).toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith('/api/financials/instruments/7/research-reports/candidates');
+  expect(screen.getByText('暂未导入研报')).toBeInTheDocument();
 });
 
 test('offers an evidence-constrained Agent interpretation for the selected report', async () => {

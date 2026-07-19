@@ -121,13 +121,6 @@ public class FinancialsController {
         return ApiResponses.success(brokerResearch.list(id));
     }
 
-    @PostMapping("/instruments/{id}/research-reports/sync")
-    public ApiResponse<BrokerResearchSyncResult> syncResearchReports(
-            @PathVariable Long id,
-            @RequestParam(required = false) Long financialReportId) {
-        return ApiResponses.success(brokerResearchSync.sync(id, financialReportId));
-    }
-
     @GetMapping("/instruments/{id}/research-reports/candidates")
     public ApiResponse<BrokerResearchSyncResult> researchReportCandidates(
             @PathVariable Long id) {
