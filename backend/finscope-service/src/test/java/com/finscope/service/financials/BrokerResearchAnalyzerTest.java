@@ -5,6 +5,10 @@ import com.finscope.domain.financials.BrokerResearchAnalysisResult;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,6 +68,44 @@ class BrokerResearchAnalyzerTest {
         assertEquals(0, result.getForecasts().size());
     }
 
+    @Test
+    void cleansPdfLayoutNoiseAndLimitsFallbackPointsToReadableSentences() {
+        String longBody = repeat("公司产品已经进入头部客户供应链，企业级存储收入有望增长。", 12);
+        String source = "半导体行业\n" +
+                "深 （可公开）国内企业级存储领军企业\n" +
+                "SAC 执业证书编号：S0340521070002  " + longBody + "\n" +
+                "电话：0769-22110619\n" +
+                "邮箱：analyst@example.com\n" +
+                "风险提示：原材料价格上涨风险。\n" +
+                "请务必阅读末页声明。";
+
+        BrokerResearchAnalysisResult result = analyzer(new CapturingClient(false, ""))
+                .analyze(source, "企业级存储深度报告.pdf");
+
+        assertTrue(result.getAnalysis().getExecutiveSummary().stream()
+                .allMatch(value -> value.length() <= 180));
+        assertTrue(result.getAnalysis().getExecutiveSummary().stream()
+                .noneMatch(value -> value.contains("SAC") || value.contains("0769-")
+                        || value.contains("@example.com") || value.contains("末页声明")));
+        assertTrue(result.getAnalysis().getRisks().stream()
+                .anyMatch(value -> value.contains("原材料价格上涨风险")));
+    }
+
+    @Test
+    void usesLongReportTimeoutAndRepairsInvalidJsonOnce() {
+        CapturingClient llm = new CapturingClient(true, "{invalid-json", validJson());
+        String source = "公司增长来自产品结构升级，盈利能力保持韧性。" +
+                "品牌壁垒稳固，直营渠道提升经营效率。高端产品收入占比提升，渠道库存仍需跟踪。" +
+                "行业进入存量竞争阶段，高端需求保持稳定，新品放量。需求恢复不及预期。" +
+                "预计2026年收入2100亿元。产品结构持续升级。";
+
+        BrokerResearchAnalysisResult result = analyzer(llm).analyze(source, "原始文件.pdf");
+
+        assertEquals("LLM", result.getAnalysisMode());
+        assertEquals(Arrays.asList(120000, 60000), llm.timeouts);
+        assertEquals(2, llm.calls);
+    }
+
     private BrokerResearchAnalyzer analyzer(LlmChatClient llm) {
         return new BrokerResearchAnalyzer(llm, new ObjectMapper().findAndRegisterModules());
     }
@@ -94,21 +136,38 @@ class BrokerResearchAnalyzerTest {
         return "{\"text\":\"" + text + "\",\"sourceQuote\":\"" + text + "\",\"sourcePage\":1}";
     }
 
+    private String repeat(String value, int count) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < count; index++) result.append(value);
+        return result.toString();
+    }
+
     private static final class CapturingClient implements LlmChatClient {
         private final boolean configured;
-        private final String response;
+        private final List<String> responses;
+        private final List<Integer> timeouts = new ArrayList<Integer>();
         private String systemPrompt = "";
+        private int calls;
 
-        private CapturingClient(boolean configured, String response) {
+        private CapturingClient(boolean configured, String... responses) {
             this.configured = configured;
-            this.response = response;
+            this.responses = Arrays.asList(responses);
         }
 
         @Override public boolean isConfigured() { return configured; }
         @Override public String modelName() { return "test-model"; }
         @Override public String complete(String systemPrompt, String userPrompt) {
+            return complete(systemPrompt, userPrompt, null);
+        }
+        @Override public String complete(String systemPrompt, String userPrompt, int timeoutMs) {
+            return complete(systemPrompt, userPrompt, Integer.valueOf(timeoutMs));
+        }
+        private String complete(String systemPrompt, String userPrompt, Integer timeoutMs) {
             this.systemPrompt = systemPrompt;
-            return response;
+            if (timeoutMs != null) timeouts.add(timeoutMs);
+            int responseIndex = Math.min(calls, responses.size() - 1);
+            calls++;
+            return responses.isEmpty() ? "" : responses.get(responseIndex);
         }
     }
 }

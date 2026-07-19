@@ -3,6 +3,7 @@ package com.finscope.service.financials;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.financials.BrokerResearchReportRepository;
+import com.finscope.domain.financials.BrokerResearchAnalysisResult;
 import com.finscope.domain.financials.BrokerResearchReport;
 import com.finscope.domain.financials.BrokerResearchReportView;
 import com.finscope.domain.financials.FinancialReport;
@@ -184,6 +185,44 @@ class BrokerResearchServiceTest {
         assertThrows(BusinessException.class, () -> service.reanalyze(12L, 9L));
 
         verify(analyzer, never()).analyze(any(), any());
+        verify(repository, never()).replaceAnalysis(any(), anyList(), anyList());
+    }
+
+    @Test
+    void keepsExistingLlmAnalysisWhenReanalysisTemporarilyFallsBack() {
+        BrokerResearchReport report = new BrokerResearchReport();
+        report.setId(12L);
+        report.setInstrumentId(7L);
+        report.setExtractedText("公司原始研报文本");
+        report.setOriginalFileName("research.pdf");
+        report.setAnalysisStatus("LLM");
+        report.setQualityLevel("HIGH");
+        report.setAnalysisJson("{\"executiveSummary\":[\"此前成功生成的核心结论\"]," +
+                "\"investmentThesis\":[\"此前成功生成的投资逻辑\"]," +
+                "\"businessAnalysis\":[],\"industryAnalysis\":[],\"keyAssumptions\":[]," +
+                "\"catalysts\":[],\"risks\":[],\"learningNotes\":[],\"glossary\":[]," +
+                "\"limitations\":[],\"disclaimer\":\"仅供研究学习\"}");
+        BrokerResearchReportRepository repository = mock(BrokerResearchReportRepository.class);
+        when(repository.findById(12L)).thenReturn(Optional.of(report));
+        when(repository.findForecasts(12L)).thenReturn(Collections.emptyList());
+        when(repository.findClaims(12L)).thenReturn(Collections.emptyList());
+        BrokerResearchAnalysisResult fallback = new BrokerResearchAnalysisResult();
+        fallback.setAnalysisMode("DETERMINISTIC_FALLBACK");
+        fallback.setQualityLevel("MEDIUM");
+        fallback.setErrorMessage("模型响应超时（主调用 120 秒，结构修复 60 秒）");
+        fallback.getAnalysis().getExecutiveSummary().add("本次降级内容");
+        BrokerResearchAnalyzer analyzer = mock(BrokerResearchAnalyzer.class);
+        when(analyzer.analyze("公司原始研报文本", "research.pdf")).thenReturn(fallback);
+        ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+        BrokerResearchService service = new BrokerResearchService(repository,
+                new BrokerResearchDocumentParser(), analyzer, new BrokerResearchFinancialLinker(),
+                mock(FinancialQueryService.class), json, tempDir);
+
+        BrokerResearchReportView result = service.reanalyze(12L, null);
+
+        assertEquals("LLM", result.getReport().getAnalysisStatus());
+        assertEquals("此前成功生成的核心结论", result.getAnalysis().getExecutiveSummary().get(0));
+        assertTrue(result.getReport().getErrorMessage().contains("模型响应超时"));
         verify(repository, never()).replaceAnalysis(any(), anyList(), anyList());
     }
 

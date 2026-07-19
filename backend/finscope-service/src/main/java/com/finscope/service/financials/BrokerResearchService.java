@@ -218,6 +218,13 @@ public class BrokerResearchService {
         BrokerResearchAnalysisResult analyzed = analyzer.analyze(
                 report.getExtractedText(), report.getOriginalFileName());
         validateSourcePages(analyzed, report.getPageCount());
+        if ("LLM".equals(report.getAnalysisStatus())
+                && !"LLM".equals(analyzed.getAnalysisMode())) {
+            report.setErrorMessage(analyzed.getErrorMessage());
+            return view(report, analysis(report.getAnalysisJson()),
+                    repository.findForecasts(id), repository.findClaims(id),
+                    financialReportId == null ? report.getLinkedFinancialReportId() : financialReportId);
+        }
         try {
             report.setAnalysisStatus(analyzed.getAnalysisMode());
             report.setQualityLevel(analyzed.getQualityLevel());
