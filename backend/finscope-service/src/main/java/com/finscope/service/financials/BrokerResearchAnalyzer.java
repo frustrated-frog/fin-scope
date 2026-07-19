@@ -13,15 +13,19 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 @Service
 public class BrokerResearchAnalyzer {
-    private static final int MAX_INPUT = 60000;
+    private static final int MAX_INPUT = 5200;
     private static final int PRIMARY_TIMEOUT_MS = 120000;
     private static final int REPAIR_TIMEOUT_MS = 60000;
+    private static final int PRIMARY_MAX_OUTPUT_TOKENS = 6000;
+    private static final int REPAIR_MAX_OUTPUT_TOKENS = 4000;
     private static final int FALLBACK_POINT_LIMIT = 180;
     private static final Set<String> METRICS = new HashSet<String>(Arrays.asList(
             "REVENUE", "NET_PROFIT_PARENT", "EPS", "GROSS_MARGIN"));
@@ -42,14 +46,16 @@ public class BrokerResearchAnalyzer {
         String output = "";
         Exception primaryFailure;
         try {
-            output = llm.complete(systemPrompt(), userPrompt(source, title), PRIMARY_TIMEOUT_MS);
+            output = llm.complete(systemPrompt(), userPrompt(source, title),
+                    PRIMARY_TIMEOUT_MS, PRIMARY_MAX_OUTPUT_TOKENS);
             return accepted(parse(output, source));
         } catch (Exception error) {
             primaryFailure = error;
         }
         try {
             String repaired = llm.complete(repairSystemPrompt(),
-                    repairPrompt(output, source, title, primaryFailure), REPAIR_TIMEOUT_MS);
+                    repairPrompt(output, source, title, primaryFailure),
+                    REPAIR_TIMEOUT_MS, REPAIR_MAX_OUTPUT_TOKENS);
             return accepted(parse(repaired, source));
         } catch (Exception repairFailure) {
             String reason = failureReason(primaryFailure, repairFailure);
@@ -109,7 +115,11 @@ public class BrokerResearchAnalyzer {
         }
         if (analysis.getExecutiveSummary().isEmpty()
                 || (analysis.getInvestmentThesis().isEmpty() && analysis.getBusinessAnalysis().isEmpty())) {
-            throw new IllegalArgumentException("详细解读缺少核心观点或论证章节");
+            throw new IllegalArgumentException("详细解读缺少核心观点或论证章节（核心结论 "
+                    + analysis.getExecutiveSummary().size() + " 条，投资逻辑 "
+                    + analysis.getInvestmentThesis().size() + " 条，业务分析 "
+                    + analysis.getBusinessAnalysis().size() + " 条，拒绝证据 "
+                    + rejectedEvidence + " 条）");
         }
         return result;
     }
@@ -128,9 +138,11 @@ public class BrokerResearchAnalyzer {
                 String number = text(item, "forecastValue", "");
                 value.setForecastValue(number.isEmpty() ? null : new BigDecimal(number));
                 value.setUnit(text(item, "unit", defaultUnit(code)));
-                value.setSourceQuote(text(item, "sourceQuote", ""));
+                String sourceQuote = matchingEvidence(source,
+                        text(item, "sourceQuote", ""), value.getMetricLabel() + " " + number);
+                value.setSourceQuote(sourceQuote == null ? "" : sourceQuote);
                 value.setSourcePage(integer(item, "sourcePage"));
-                if (value.getForecastValue() != null && evidenceExists(source, value.getSourceQuote())) {
+                if (value.getForecastValue() != null && sourceQuote != null) {
                     target.add(value);
                 } else {
                     rejected++;
@@ -150,7 +162,8 @@ public class BrokerResearchAnalyzer {
             String title = text(item, "title", "");
             String detail = text(item, "detail", "");
             String quote = text(item, "sourceQuote", "");
-            if (title.isEmpty() || detail.isEmpty() || !evidenceExists(source, quote)) {
+            String sourceQuote = matchingEvidence(source, quote, title + " " + detail);
+            if (title.isEmpty() || detail.isEmpty() || sourceQuote == null) {
                 rejected++;
                 continue;
             }
@@ -159,7 +172,7 @@ public class BrokerResearchAnalyzer {
             value.setTitle(title);
             value.setDetail(detail);
             value.setClaimType(text(item, "claimType", "OPINION"));
-            value.setSourceQuote(quote);
+            value.setSourceQuote(sourceQuote);
             value.setSourcePage(integer(item, "sourcePage"));
             String metric = text(item, "financialMetricCode", "");
             value.setFinancialMetricCode(metric.isEmpty() ? null : metric);
@@ -176,8 +189,45 @@ public class BrokerResearchAnalyzer {
                 && normalizeEvidence(source).contains(normalizedQuote);
     }
 
+    private String matchingEvidence(String source, String quote, String point) {
+        if (evidenceExists(source, quote)) return quote;
+        String probe = clean(quote) + " " + clean(point);
+        String normalizedProbe = normalizeEvidence(probe);
+        if (normalizedProbe.length() < 6) return null;
+        Set<String> probePairs = characterPairs(normalizedProbe);
+        String best = null;
+        double bestScore = 0D;
+        int bestCommon = 0;
+        for (String segment : evidenceSegments(source)) {
+            String normalizedSegment = normalizeEvidence(segment);
+            Set<String> segmentPairs = characterPairs(normalizedSegment);
+            int common = 0;
+            for (String pair : probePairs) if (segmentPairs.contains(pair)) common++;
+            int denominator = Math.min(probePairs.size(), segmentPairs.size());
+            double score = denominator == 0 ? 0D : (double) common / denominator;
+            if (common > bestCommon || (common == bestCommon && score > bestScore)) {
+                best = segment;
+                bestCommon = common;
+                bestScore = score;
+            }
+        }
+        if (best != null && bestCommon >= 3 && (bestScore >= 0.20D || bestCommon >= 8)) {
+            return shorten(best, 300);
+        }
+        return null;
+    }
+
+    private Set<String> characterPairs(String value) {
+        Set<String> pairs = new LinkedHashSet<String>();
+        for (int index = 0; index + 1 < value.length(); index++) {
+            pairs.add(value.substring(index, index + 2));
+        }
+        return pairs;
+    }
+
     private String normalizeEvidence(String value) {
-        return clean(value).replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT);
+        return clean(value).replaceAll("[^\\p{L}\\p{N}]+", "")
+                .toLowerCase(java.util.Locale.ROOT);
     }
 
     private BrokerResearchAnalysisResult fallback(String source, String reason) {
@@ -254,15 +304,16 @@ public class BrokerResearchAnalyzer {
         JsonNode node = root.path(field);
         if (!node.isArray()) return result;
         for (JsonNode item : node) {
-            String point = item.isObject() ? text(item, "text", "") : "";
+            String point = item.isObject() ? text(item, "text", "") : item.asText("").trim();
             String quote = item.isObject() ? text(item, "sourceQuote", "") : "";
-            if (point.isEmpty() || !evidenceExists(source, quote)) {
+            String sourceQuote = matchingEvidence(source, quote, point);
+            if (point.isEmpty() || sourceQuote == null) {
                 result.rejected++;
                 continue;
             }
             BrokerResearchAnalysis.EvidencePoint evidence = new BrokerResearchAnalysis.EvidencePoint();
             evidence.setText(shorten(point, 800));
-            evidence.setSourceQuote(shorten(quote, 2000));
+            evidence.setSourceQuote(shorten(sourceQuote, 2000));
             evidence.setSourcePage(integer(item, "sourcePage"));
             result.values.add(evidence.getText());
             result.evidence.add(evidence);
@@ -304,6 +355,9 @@ public class BrokerResearchAnalyzer {
                 "executiveSummary、investmentThesis、businessAnalysis、industryAnalysis、keyAssumptions、" +
                 "catalysts、risks必须是对象数组，每项包含text、原文摘录sourceQuote，可提供sourcePage；" +
                 "learningNotes和limitations必须是字符串数组。分析内容应完整解释论据、因果链与需要核对的变量；" +
+                "严格控制规模：核心结论3-4条，投资逻辑和业务分析各3-5条，行业、假设、催化、风险各2-4条；" +
+                "每条text用50-120字写清判断、证据与因果，sourceQuote只摘录15-80字；" +
+                "learningNotes、glossary、forecasts、claims各不超过6条，不重复同一段内容。" +
                 "glossary元素包含term和explanation。forecasts只允许REVENUE、NET_PROFIT_PARENT、EPS、" +
                 "GROSS_MARGIN，必须包含forecastPeriod、forecastValue、unit和原文摘录sourceQuote，可提供sourcePage。" +
                 "claims必须包含category、title、detail、claimType和原文摘录sourceQuote，可关联financialMetricCode" +
@@ -361,10 +415,73 @@ public class BrokerResearchAnalyzer {
 
     private String promptSource(String source) {
         if (source.length() <= MAX_INPUT) return source;
-        int tailSize = 15000;
-        return source.substring(0, MAX_INPUT - tailSize)
-                + "\n[中间超长内容已省略，完整文本仍保留在学习区]\n"
-                + source.substring(source.length() - tailSize);
+        List<String> segments = evidenceSegments(source);
+        boolean[] selected = new boolean[segments.size()];
+        int budget = MAX_INPUT - 80;
+        int used = 0;
+        for (int index = 0; index < segments.size() && used < 900; index++) {
+            used = select(selected, segments, index, used, budget);
+        }
+        int tailAdded = 0;
+        for (int index = segments.size() - 1; index >= 0 && tailAdded < 700; index--) {
+            int before = used;
+            used = select(selected, segments, index, used, budget);
+            tailAdded += used - before;
+        }
+        List<Integer> ranked = new ArrayList<Integer>();
+        for (int index = 0; index < segments.size(); index++) ranked.add(index);
+        Collections.sort(ranked, (left, right) -> {
+            int compared = Integer.compare(evidenceScore(segments.get(right)),
+                    evidenceScore(segments.get(left)));
+            return compared == 0 ? Integer.compare(left, right) : compared;
+        });
+        for (Integer index : ranked) {
+            if (evidenceScore(segments.get(index)) <= 0) break;
+            used = select(selected, segments, index, used, budget);
+        }
+        for (int index = 0; index < segments.size() && used < budget; index++) {
+            used = select(selected, segments, index, used, budget);
+        }
+        StringBuilder result = new StringBuilder("[以下为从完整研报中按首尾与关键主题选取的证据片段]\n");
+        for (int index = 0; index < segments.size(); index++) {
+            if (!selected[index]) continue;
+            if (result.length() > 0) result.append('\n');
+            result.append(segments.get(index));
+        }
+        return result.toString();
+    }
+
+    private List<String> evidenceSegments(String source) {
+        List<String> result = new ArrayList<String>();
+        Set<String> seen = new HashSet<String>();
+        for (String raw : source.split("(?<=[。！？；])|\\r?\\n+")) {
+            String value = raw.replaceAll("\\s+", " ").trim();
+            if (value.length() < 6) continue;
+            for (int start = 0; start < value.length(); start += 500) {
+                String part = value.substring(start, Math.min(value.length(), start + 500)).trim();
+                if (part.length() >= 6 && seen.add(part)) result.add(part);
+            }
+        }
+        return result;
+    }
+
+    private int select(boolean[] selected, List<String> segments,
+                       int index, int used, int budget) {
+        if (selected[index]) return used;
+        int required = segments.get(index).length() + 1;
+        if (used + required > budget) return used;
+        selected[index] = true;
+        return used + required;
+    }
+
+    private int evidenceScore(String value) {
+        int score = 0;
+        if (contains(value, "风险", "不及预期", "下滑", "减值", "库存")) score += 7;
+        if (contains(value, "预计", "盈利预测", "EPS", "收入", "利润", "毛利", "现金流")) score += 6;
+        if (contains(value, "核心观点", "投资要点", "投资建议", "评级", "目标价", "催化")) score += 5;
+        if (contains(value, "行业", "竞争", "市场", "产品", "业务", "渠道", "客户", "公司")) score += 3;
+        if (contains(value, "增长", "下降", "份额", "价格", "产能", "需求", "假设")) score += 2;
+        return score;
     }
 
     private String stripFence(String value) {

@@ -50,6 +50,50 @@ class BrokerResearchAnalyzerTest {
     }
 
     @Test
+    void acceptsVerbatimEvidenceWhenOnlyPdfSpacingAndPunctuationDiffer() {
+        String json = validJson().replace("\"sourceQuote\":\"品牌壁垒稳固\"",
+                "\"sourceQuote\":\"品 牌壁垒……稳固\"");
+        BrokerResearchAnalysisResult result = analyzer(new CapturingClient(true, json)).analyze(
+                "贵州茅台深度报告原文。公司增长来自产品结构升级，盈利能力保持韧性。" +
+                        "品牌壁垒，稳固，直营渠道提升经营效率。高端产品收入占比提升，渠道库存仍需跟踪。" +
+                        "行业进入存量竞争阶段，高端需求保持稳定，新品放量。需求恢复不及预期。" +
+                        "预计2026年收入2100亿元。产品结构持续升级。", "原始文件.pdf");
+
+        assertEquals("LLM", result.getAnalysisMode());
+        assertEquals("品 牌壁垒……稳固",
+                result.getAnalysis().getEvidenceSections().get("investmentThesis").get(0).getSourceQuote());
+    }
+
+    @Test
+    void anchorsParaphrasedEvidenceToAnExactSourceExcerpt() {
+        String json = validJson().replace("\"sourceQuote\":\"品牌壁垒稳固\"",
+                "\"sourceQuote\":\"强品牌形成稳固竞争壁垒\"");
+        BrokerResearchAnalysisResult result = analyzer(new CapturingClient(true, json)).analyze(
+                "公司增长来自产品结构升级，盈利能力保持韧性。品牌壁垒稳固，直营渠道提升经营效率。" +
+                        "高端产品收入占比提升，渠道库存仍需跟踪。行业进入存量竞争阶段，高端需求保持稳定。" +
+                        "预计2026年收入2100亿元。需求恢复不及预期。", "原始文件.pdf");
+
+        assertEquals("LLM", result.getAnalysisMode());
+        assertTrue(result.getAnalysis().getEvidenceSections().get("investmentThesis").get(0)
+                .getSourceQuote().contains("品牌壁垒稳固"));
+    }
+
+    @Test
+    void acceptsStringSectionsAndAddsSourceAnchors() {
+        String json = validJson()
+                .replace("[{\"text\":\"公司增长来自产品结构升级\",\"sourceQuote\":\"产品结构升级\"}]",
+                        "[\"公司增长来自产品结构升级，盈利能力保持韧性\"]");
+        BrokerResearchAnalysisResult result = analyzer(new CapturingClient(true, json)).analyze(
+                "公司增长来自产品结构升级，盈利能力保持韧性。品牌壁垒稳固，直营渠道提升经营效率。" +
+                        "行业进入存量竞争阶段，高端需求保持稳定。预计2026年收入2100亿元。" +
+                        "产品结构持续升级。需求恢复不及预期。", "原始文件.pdf");
+
+        assertEquals("LLM", result.getAnalysisMode());
+        assertFalse(result.getAnalysis().getExecutiveSummary().isEmpty());
+        assertFalse(result.getAnalysis().getEvidenceSections().get("executiveSummary").isEmpty());
+    }
+
+    @Test
     void deterministicFallbackPreservesSubstantialSourceMaterialWhenLlmIsUnavailable() {
         String source = "核心观点：产品结构持续升级。\n\n" +
                 "公司分析：渠道改革继续推进，直营占比提高。\n\n" +
@@ -103,7 +147,27 @@ class BrokerResearchAnalyzerTest {
 
         assertEquals("LLM", result.getAnalysisMode());
         assertEquals(Arrays.asList(120000, 60000), llm.timeouts);
+        assertEquals(Arrays.asList(6000, 4000), llm.maxOutputTokens);
         assertEquals(2, llm.calls);
+    }
+
+    @Test
+    void selectsACompactCrossSectionOfLongReportsForFastAnalysis() {
+        CapturingClient llm = new CapturingClient(true, validJson());
+        String source = "公司增长来自产品结构升级，盈利能力保持韧性。" +
+                "品牌壁垒稳固，直营渠道提升经营效率。高端产品收入占比提升，渠道库存仍需跟踪。" +
+                repeat("一般背景资料与历史沿革说明，不包含关键投资判断。", 180) +
+                "行业进入存量竞争阶段，高端需求保持稳定，新品放量。" +
+                repeat("常规公司介绍与公开资料回顾。", 180) +
+                "预计2026年收入2100亿元。产品结构持续升级。需求恢复不及预期。";
+
+        BrokerResearchAnalysisResult result = analyzer(llm).analyze(source, "长篇研报.pdf");
+
+        assertEquals("LLM", result.getAnalysisMode());
+        assertTrue(llm.userPrompt.length() < 6500);
+        assertTrue(llm.userPrompt.contains("行业进入存量竞争阶段"));
+        assertTrue(llm.userPrompt.contains("预计2026年收入2100亿元"));
+        assertTrue(llm.userPrompt.contains("需求恢复不及预期"));
     }
 
     private BrokerResearchAnalyzer analyzer(LlmChatClient llm) {
@@ -146,7 +210,9 @@ class BrokerResearchAnalyzerTest {
         private final boolean configured;
         private final List<String> responses;
         private final List<Integer> timeouts = new ArrayList<Integer>();
+        private final List<Integer> maxOutputTokens = new ArrayList<Integer>();
         private String systemPrompt = "";
+        private String userPrompt = "";
         private int calls;
 
         private CapturingClient(boolean configured, String... responses) {
@@ -162,8 +228,14 @@ class BrokerResearchAnalyzerTest {
         @Override public String complete(String systemPrompt, String userPrompt, int timeoutMs) {
             return complete(systemPrompt, userPrompt, Integer.valueOf(timeoutMs));
         }
+        @Override public String complete(String systemPrompt, String userPrompt,
+                                         int timeoutMs, int outputTokens) {
+            maxOutputTokens.add(outputTokens);
+            return complete(systemPrompt, userPrompt, Integer.valueOf(timeoutMs));
+        }
         private String complete(String systemPrompt, String userPrompt, Integer timeoutMs) {
             this.systemPrompt = systemPrompt;
+            this.userPrompt = userPrompt;
             if (timeoutMs != null) timeouts.add(timeoutMs);
             int responseIndex = Math.min(calls, responses.size() - 1);
             calls++;
