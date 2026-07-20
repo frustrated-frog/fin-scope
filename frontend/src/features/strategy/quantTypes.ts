@@ -12,6 +12,14 @@ export interface QuantDatasetQuality {
   availableFactors: string[];
 }
 
+export interface QuantDataSyncRun {
+  id: number; datasetId: number; triggerType: 'MANUAL' | 'SCHEDULED';
+  status: 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  requestedInstruments: number; succeededInstruments: number; failedInstruments: number;
+  insertedRows: number; degradedInstruments: number; sourceSummary?: string;
+  warningSummary?: string; startedAt: string; finishedAt?: string;
+}
+
 export interface QuantFactor {
   code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
   description: string; lookbackDays: number; pointInTime: boolean;

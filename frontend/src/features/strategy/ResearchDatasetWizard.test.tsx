@@ -29,7 +29,7 @@ test('creates a truthful real dataset container and freezes only after explicit 
   const created = onChanged.mock.calls[0][0];
   rerender(<ResearchDatasetWizard dataset={created} suggestedIndex={1}
     onDatasetChanged={onChanged} addToast={vi.fn()} />);
-  expect(screen.getByText('导入真实日线')).toBeInTheDocument();
+  expect(screen.getByText('同步前复权真实日线')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '冻结资金分区' })).toBeDisabled();
   await user.type(screen.getByLabelText('研究开始日'), '2026-01-01');
   await user.type(screen.getByLabelText('研究结束日'), '2026-06-30');
@@ -64,4 +64,43 @@ test('imports complete OHLC rows but rejects a current-snapshot universe', async
   await user.click(screen.getByRole('button', { name: '校验并导入股票池' }));
   await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.stringContaining('POINT_IN_TIME'), 'error'));
   expect(vi.mocked(globalThis.fetch).mock.calls.some(([path]) => String(path).endsWith('/universe'))).toBe(false);
+});
+
+test('syncs daily bars from the PIT universe and explains partial degradation', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith('/market-data-sync-runs')) return apiResponse([]);
+    if (path.endsWith('/market-data-sync') && init?.method === 'POST') return apiResponse({
+      id: 19, datasetId: 8, triggerType: 'MANUAL', status: 'PARTIAL',
+      requestedInstruments: 30, succeededInstruments: 29, failedInstruments: 1,
+      insertedRows: 580, degradedInstruments: 1, sourceSummary: 'EASTMONEY_DIRECT',
+      warningSummary: '000001.SZ: upstream timeout', startedAt: '2026-07-20T14:00:00',
+      finishedAt: '2026-07-20T14:02:00'
+    });
+    if (path === '/api/quant/datasets/8') return apiResponse({
+      id: 8, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL', status: 'BUILDING',
+      qualitySummary: '{"barCount":580,"universeEventCount":30}'
+    });
+    return apiResponse({});
+  }));
+  const dataset = {
+    id: 8, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL' as const,
+    status: 'BUILDING', qualitySummary: '{"barCount":0,"universeEventCount":30}'
+  };
+  render(<ResearchDatasetWizard dataset={dataset} suggestedIndex={1}
+    onDatasetChanged={onChanged} addToast={vi.fn()} />);
+
+  await user.click(screen.getByRole('button', { name: '从市场数据同步日线' }));
+
+  await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
+    '/api/quant/datasets/8/market-data-sync', expect.objectContaining({ method: 'POST' })
+  ));
+  expect(await screen.findByText('成功 29 / 30 只 · 新增 580 条')).toBeInTheDocument();
+  expect(screen.getByText('部分数据源降级，已保留可用结果')).toBeInTheDocument();
+  expect(screen.getByText('000001.SZ: upstream timeout')).toBeInTheDocument();
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(
+    expect.objectContaining({ qualitySummary: expect.stringContaining('580') })
+  ));
 });
