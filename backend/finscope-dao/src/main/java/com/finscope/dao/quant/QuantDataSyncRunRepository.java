@@ -17,6 +17,7 @@ import java.util.Optional;
 
 @Repository
 public class QuantDataSyncRunRepository {
+    private static final int ACTIVE_LEASE_HOURS = 6;
     private final JdbcTemplate jdbc;
 
     private final RowMapper<QuantDataSyncRun> mapper = (rs, row) -> new QuantDataSyncRun(
@@ -34,6 +35,7 @@ public class QuantDataSyncRunRepository {
 
     public QuantDataSyncRun start(Long datasetId, String triggerType, int requested,
                                   LocalDateTime startedAt) {
+        recoverInterruptedRun(datasetId, startedAt);
         KeyHolder keys = new GeneratedKeyHolder();
         try {
             jdbc.update(connection -> {
@@ -82,5 +84,13 @@ public class QuantDataSyncRunRepository {
     private Optional<QuantDataSyncRun> findRunning(Long datasetId) {
         return jdbc.query("SELECT * FROM quant_data_sync_run WHERE dataset_id=? AND status='RUNNING' LIMIT 1",
                 mapper, datasetId).stream().findFirst();
+    }
+
+    private void recoverInterruptedRun(Long datasetId, LocalDateTime startedAt) {
+        jdbc.update("UPDATE quant_data_sync_run SET status='FAILED',finished_at=?,"
+                        + "warning_summary='previous sync was interrupted before completion' "
+                        + "WHERE dataset_id=? AND status='RUNNING' AND started_at<?",
+                startedAt.toString(), datasetId,
+                startedAt.minusHours(ACTIVE_LEASE_HOURS).toString());
     }
 }

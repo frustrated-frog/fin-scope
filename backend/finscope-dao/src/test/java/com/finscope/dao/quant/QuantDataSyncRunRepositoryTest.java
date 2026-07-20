@@ -57,6 +57,22 @@ class QuantDataSyncRunRepositoryTest {
         assertEquals(finished.getId(), runs.findByDatasetId(datasetId).get(0).getId());
     }
 
+    @Test
+    void recoversAnInterruptedRunAfterTheLeaseExpires() {
+        Long datasetId = datasets.save(dataset()).getId();
+        QuantDataSyncRun interrupted = runs.start(datasetId, "SCHEDULED", 30,
+                LocalDateTime.of(2026, 7, 20, 7, 0));
+
+        QuantDataSyncRun restarted = runs.start(datasetId, "SCHEDULED", 30,
+                LocalDateTime.of(2026, 7, 20, 14, 0));
+
+        assertEquals("RUNNING", restarted.getStatus());
+        QuantDataSyncRun recovered = runs.findByDatasetId(datasetId).get(1);
+        assertEquals("FAILED", recovered.getStatus());
+        assertEquals("previous sync was interrupted before completion", recovered.getWarningSummary());
+        assertEquals(interrupted.getId(), recovered.getId());
+    }
+
     private static QuantDataset dataset() {
         QuantDataset value = new QuantDataset();
         value.setName("sync target");

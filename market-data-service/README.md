@@ -40,6 +40,7 @@ uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 
 ```text
 GET /health
+GET /ready
 GET /v1/providers/health
 GET /v1/stocks/SH/600519/quote
 GET /v1/stocks/SH/600519/daily-bars?limit=120
@@ -48,6 +49,8 @@ GET /v1/stocks/SH/600519/capital-flow?require_minute=true
 GET /v1/stocks/SH/600519/profile
 GET /v1/stocks/SH/600519/overview
 ```
+
+`/health` 只表示进程存活；`/ready` 还会检查快照库可写且至少配置了一个 Provider。运维就绪探针应使用 `/ready`。
 
 ## Java 接入
 
