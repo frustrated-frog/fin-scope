@@ -86,6 +86,13 @@ public class QuantMarketDataRepository {
                 barMapper, datasetId);
     }
 
+    public LocalDate latestBarDate(Long datasetId, String instrumentCode) {
+        String value = jdbcTemplate.queryForObject(
+                "SELECT MAX(trade_date) FROM quant_daily_bar WHERE dataset_id=? AND instrument_code=?",
+                String.class, datasetId, instrumentCode);
+        return value == null ? null : LocalDate.parse(value);
+    }
+
     public Optional<QuantFundamentalSnapshot> latestVisibleFundamental(Long datasetId, String code, LocalDate signalDate) {
         List<QuantFundamentalSnapshot> values = jdbcTemplate.query("SELECT * FROM quant_fundamental_snapshot "
                         + "WHERE dataset_id=? AND instrument_code=? AND disclosed_at<=? "

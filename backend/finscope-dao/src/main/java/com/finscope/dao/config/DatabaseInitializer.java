@@ -734,6 +734,17 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_universe_date "
                 + "ON quant_universe_member(dataset_id,trade_date,member)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_data_sync_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,"
+                + "trigger_type TEXT NOT NULL,status TEXT NOT NULL,requested_instruments INTEGER NOT NULL DEFAULT 0,"
+                + "succeeded_instruments INTEGER NOT NULL DEFAULT 0,failed_instruments INTEGER NOT NULL DEFAULT 0,"
+                + "inserted_rows INTEGER NOT NULL DEFAULT 0,degraded_instruments INTEGER NOT NULL DEFAULT 0,"
+                + "source_summary TEXT,warning_summary TEXT,started_at TEXT NOT NULL,finished_at TEXT,"
+                + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_data_sync_dataset "
+                + "ON quant_data_sync_run(dataset_id,id DESC)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_quant_data_sync_active "
+                + "ON quant_data_sync_run(dataset_id) WHERE status='RUNNING'");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_dataset_issue ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,dataset_id INTEGER NOT NULL,severity TEXT NOT NULL,"
                 + "issue_code TEXT NOT NULL,trade_date TEXT,instrument_code TEXT,message TEXT NOT NULL,issue_count INTEGER NOT NULL,"
