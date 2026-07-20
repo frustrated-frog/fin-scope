@@ -1,9 +1,9 @@
 package com.finscope.web.request.quant;
 
+import lombok.Data;
+
+@Data
 public class CreateQuantDatasetRequest {
-    private String name; private String dataKind = "REAL";
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getDataKind() { return dataKind; }
-    public void setDataKind(String dataKind) { this.dataKind = dataKind; }
+    private String name;
+    private String dataKind = "REAL";
 }
