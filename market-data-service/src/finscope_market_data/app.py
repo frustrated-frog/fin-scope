@@ -58,6 +58,23 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "UP", "service": "finscope-market-data"}
 
+    @application.get("/ready")
+    async def readiness() -> JSONResponse:
+        current = _router(application)
+        snapshot_ready, snapshot_status = current.snapshots.check_ready()
+        providers_ready = bool(current.providers)
+        ready = snapshot_ready and providers_ready
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={
+                "status": "READY" if ready else "NOT_READY",
+                "checks": {
+                    "snapshot_store": snapshot_status,
+                    "providers": "UP" if providers_ready else "NO_PROVIDERS",
+                },
+            },
+        )
+
     @application.get("/v1/providers/health")
     async def provider_health() -> list[dict[str, Any]]:
         current = _router(application)

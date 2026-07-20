@@ -115,6 +115,20 @@ def test_health_and_provider_health_endpoints(tmp_path: Path) -> None:
     assert set(providers[0]["capabilities"]) == {item.value for item in DataCapability}
 
 
+def test_readiness_requires_writable_snapshot_store_and_a_provider(tmp_path: Path) -> None:
+    ready = client(tmp_path / "ready", [MultiCapabilityProvider()]).get("/ready")
+    unavailable = client(tmp_path / "empty", []).get("/ready")
+
+    assert ready.status_code == 200
+    assert ready.json() == {
+        "status": "READY",
+        "checks": {"snapshot_store": "UP", "providers": "UP"},
+    }
+    assert unavailable.status_code == 503
+    assert unavailable.json()["status"] == "NOT_READY"
+    assert unavailable.json()["checks"]["providers"] == "NO_PROVIDERS"
+
+
 def test_stock_data_endpoints_expose_normalized_rich_data(tmp_path: Path) -> None:
     api = client(tmp_path, [MultiCapabilityProvider()])
 

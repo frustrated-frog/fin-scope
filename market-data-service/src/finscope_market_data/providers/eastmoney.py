@@ -238,6 +238,7 @@ class EastmoneyProvider:
                     change_pct=_float_at(fields, 8),
                     change=_float_at(fields, 9),
                     turnover_rate=_float_at(fields, 10),
+                    adjustment="QFQ",
                 )
             )
         return result

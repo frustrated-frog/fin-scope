@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from time import perf_counter
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import (
     CapitalFlowData,
+    DailyBar,
     DataCapability,
     DataEnvelope,
     FinancialStatementsData,
@@ -159,4 +161,11 @@ class ProviderRouter:
             return max((point.observed_at for point in points), default=fallback)
         if isinstance(data, FinancialStatementsData):
             return data.report.published_at or fallback
+        if isinstance(data, list) and data and all(isinstance(item, DailyBar) for item in data):
+            last_trade_date = max(date.fromisoformat(item.trade_date) for item in data)
+            return datetime.combine(
+                last_trade_date,
+                time(hour=15),
+                tzinfo=ZoneInfo("Asia/Shanghai"),
+            )
         return fallback

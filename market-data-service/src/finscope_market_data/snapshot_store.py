@@ -74,5 +74,17 @@ class SnapshotStore:
         envelope_type = DataEnvelope[PAYLOAD_MODELS[capability]]
         return envelope_type.model_validate_json(row[0])
 
+    def check_ready(self) -> tuple[bool, str]:
+        try:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "UPDATE market_data_snapshot SET updated_at=updated_at WHERE 0"
+                )
+                connection.rollback()
+            return True, "UP"
+        except sqlite3.Error as error:
+            return False, f"SQLITE_{type(error).__name__.upper()}"
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(str(self.path), timeout=5)

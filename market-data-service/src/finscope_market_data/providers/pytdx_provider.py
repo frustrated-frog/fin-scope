@@ -122,6 +122,7 @@ class PytdxDailyProvider:
                     close=float(row["close"]),
                     volume=float(row.get("vol") or row.get("volume") or 0),
                     amount=float(row["amount"]) if row.get("amount") is not None else None,
+                    adjustment="NONE",
                 )
             )
         return result

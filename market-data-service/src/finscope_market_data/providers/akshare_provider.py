@@ -192,6 +192,7 @@ class AkshareProvider:
                 change_pct=_value(record.get("涨跌幅")),
                 change=_value(record.get("涨跌额")),
                 turnover_rate=_value(record.get("换手率")),
+                adjustment="QFQ",
             )
             for record in records
         ]

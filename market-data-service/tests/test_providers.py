@@ -65,6 +65,7 @@ def test_eastmoney_parser_maps_daily_bars_and_capital_flow() -> None:
     assert bars[0].close == 1481.5
     assert bars[0].amount == 1_800_000_000
     assert bars[0].turnover_rate == 3.21
+    assert bars[0].adjustment == "QFQ"
     assert flows[0].main_net_inflow == 180_000_000
     assert flows[0].super_large_net_inflow == 140_000_000
     assert flows[0].main_net_inflow_ratio == 12.5
@@ -105,6 +106,7 @@ def test_akshare_mapping_accepts_chinese_dataframe_columns() -> None:
 
     assert bars[0].close == 11.23
     assert bars[0].volume == 123456
+    assert bars[0].adjustment == "QFQ"
     assert flows[0].main_net_inflow == 1_000_000
     assert flows[0].small_net_inflow == -800_000
 

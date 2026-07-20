@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -107,6 +107,7 @@ class DailyBar(BaseModel):
     change_pct: float | None = None
     change: float | None = None
     turnover_rate: float | None = None
+    adjustment: Literal["QFQ", "NONE"] = "NONE"
 
 
 class CapitalFlowPoint(BaseModel):

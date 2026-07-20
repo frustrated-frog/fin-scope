@@ -10,6 +10,7 @@ import pytest
 
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import (
+    DailyBar,
     DataCapability,
     QualityStatus,
     StockProfile,
@@ -238,3 +239,33 @@ async def test_router_serializes_requests_within_same_provider_family(tmp_path: 
     )
 
     assert provider.max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_daily_bar_fact_time_uses_last_trade_date_instead_of_retrieval_time(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    bars = [
+        DailyBar(
+            symbol=symbol,
+            trade_date="2026-07-16",
+            open=1475,
+            high=1490,
+            low=1470,
+            close=1480.5,
+            volume=1000,
+            amount=1_480_500,
+            adjustment="QFQ",
+        )
+    ]
+    provider = FakeProvider("PRIMARY", "EASTMONEY", 10, [bars])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+
+    result = await make_router(tmp_path, [provider]).fetch(
+        DataCapability.DAILY_BARS,
+        symbol,
+    )
+
+    assert result.as_of is not None
+    assert result.as_of.isoformat() == "2026-07-16T15:00:00+08:00"
