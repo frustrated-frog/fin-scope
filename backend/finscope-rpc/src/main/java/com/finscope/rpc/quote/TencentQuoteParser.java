@@ -22,7 +22,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 腾讯批量行情文本的唯一网络与字段解析实现。 */
+/**
+ * 腾讯批量行情文本的唯一网络与字段解析实现。
+ */
 @Component
 public class TencentQuoteParser {
     private static final String ENDPOINT = "https://qt.gtimg.cn/q=";
@@ -30,10 +32,6 @@ public class TencentQuoteParser {
     private static final int TIMEOUT_MS = 8_000;
     private static final Pattern ROW = Pattern.compile("^v_([a-z]{2}\\d+)=\\\"(.*)\\\"$");
     private static final DateTimeFormatter TENCENT_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-
-    @FunctionalInterface
-    interface Fetcher { String get(String url) throws Exception; }
-
     private final Fetcher fetcher;
 
     public TencentQuoteParser() {
@@ -42,6 +40,32 @@ public class TencentQuoteParser {
 
     TencentQuoteParser(Fetcher fetcher) {
         this.fetcher = fetcher;
+    }
+
+    private static String requestGbk(String urlText) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(TIMEOUT_MS);
+        connection.setReadTimeout(TIMEOUT_MS);
+        connection.setRequestProperty("Referer", "https://gu.qq.com");
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
+        try {
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new ProviderContractException("HTTP_" + status,
+                        "Tencent quote returned HTTP " + status,
+                        status == 429 || status == 502 || status == 503 || status == 504);
+            }
+            try (InputStream input = connection.getInputStream();
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[4096];
+                int read;
+                while ((read = input.read(buffer)) >= 0) output.write(buffer, 0, read);
+                return new String(output.toByteArray(), GBK);
+            }
+        } finally {
+            connection.disconnect();
+        }
     }
 
     public List<Quote> fetch(List<String> symbols) throws Exception {
@@ -61,15 +85,23 @@ public class TencentQuoteParser {
         ProviderContractException firstError = null;
         for (String fragment : raw.split(";")) {
             String line = fragment.trim();
-            if (line.isEmpty()) continue;
+            if (line.isEmpty()) {
+                continue;
+            }
             Matcher matcher = ROW.matcher(line);
-            if (!matcher.matches()) continue;
+            if (!matcher.matches()) {
+                continue;
+            }
             String symbol = matcher.group(1).toLowerCase(Locale.ROOT);
-            if (!requested.contains(symbol)) continue;
+            if (!requested.contains(symbol)) {
+                continue;
+            }
             try {
                 parsed.put(symbol, parse(symbol, matcher.group(2)));
             } catch (ProviderContractException error) {
-                if (firstError == null) firstError = error;
+                if (firstError == null) {
+                    firstError = error;
+                }
             }
         }
         if (parsed.isEmpty()) {
@@ -131,29 +163,8 @@ public class TencentQuoteParser {
         }
     }
 
-    private static String requestGbk(String urlText) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
-        connection.setRequestProperty("Referer", "https://gu.qq.com");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try {
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) {
-                throw new ProviderContractException("HTTP_" + status,
-                        "Tencent quote returned HTTP " + status,
-                        status == 429 || status == 502 || status == 503 || status == 504);
-            }
-            try (InputStream input = connection.getInputStream();
-                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[4096];
-                int read;
-                while ((read = input.read(buffer)) >= 0) output.write(buffer, 0, read);
-                return new String(output.toByteArray(), GBK);
-            }
-        } finally {
-            connection.disconnect();
-        }
+    @FunctionalInterface
+    interface Fetcher {
+        String get(String url) throws Exception;
     }
 }
