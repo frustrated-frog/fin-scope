@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @WebMvcTest({QuantDatasetController.class, QuantFactorController.class,
-        QuantStrategyController.class, QuantExperimentController.class})
+        QuantController.class, QuantExperimentController.class})
 @Import({ApiExceptionHandler.class, FinScopeProperties.class, CorsConfig.class})
 class QuantPlatformControllerTest {
     @Autowired private MockMvc mockMvc;
