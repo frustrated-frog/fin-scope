@@ -77,6 +77,16 @@ public class QuantDatasetRepository {
         return jdbcTemplate.query("SELECT * FROM quant_dataset ORDER BY id DESC", mapper);
     }
 
+    public List<QuantDataset> findSyncEligible() {
+        return jdbcTemplate.query("SELECT d.* FROM quant_dataset d "
+                + "WHERE d.data_kind='REAL' AND d.dataset_level='RESEARCH' "
+                + "AND d.fingerprint_version='quant-dataset-v2' AND d.status='BUILDING' "
+                + "AND EXISTS (SELECT 1 FROM quant_universe_member u WHERE u.dataset_id=d.id "
+                + "AND u.member=1 AND u.source_kind='POINT_IN_TIME') "
+                + "AND NOT EXISTS (SELECT 1 FROM quant_universe_member u WHERE u.dataset_id=d.id "
+                + "AND u.source_kind<>'POINT_IN_TIME') ORDER BY d.id", mapper);
+    }
+
     public boolean updateSummary(Long id, LocalDate start, LocalDate end, String status,
                                  String fingerprint, String qualitySummary, long revision) {
         return jdbcTemplate.update("UPDATE quant_dataset SET start_date=?,end_date=?,status=?,fingerprint=?,"

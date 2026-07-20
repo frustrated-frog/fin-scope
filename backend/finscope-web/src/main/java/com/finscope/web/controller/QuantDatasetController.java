@@ -3,10 +3,12 @@ package com.finscope.web.controller;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.domain.quant.data.QuantDataSyncRun;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.data.QuantFundamentalSnapshot;
 import com.finscope.domain.quant.data.QuantUniverseMember;
 import com.finscope.service.quant.data.QuantDatasetService;
+import com.finscope.service.quant.data.QuantMarketDataSyncService;
 import com.finscope.web.request.quant.CreateLearningDatasetRequest;
 import com.finscope.web.request.quant.CreateQuantDatasetRequest;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,7 @@ import java.net.URI;
 @RequestMapping("/api/quant/datasets")
 public class QuantDatasetController {
     @Resource private QuantDatasetService service;
+    @Resource private QuantMarketDataSyncService marketDataSync;
     /**
      * 查询量化数据集列表。
      *
@@ -86,6 +89,14 @@ public class QuantDatasetController {
      */
     @PostMapping("/{id}/universe") public ApiResponse<QuantDataset> importUniverse(@PathVariable Long id, @RequestBody List<QuantUniverseMember> values) {
         return ApiResponses.success(service.importUniverse(id, values));
+    }
+    /** Incrementally synchronizes QFQ daily bars for the dataset's PIT universe. */
+    @PostMapping("/{id}/market-data-sync") public ApiResponse<QuantDataSyncRun> syncMarketData(@PathVariable Long id) {
+        return ApiResponses.success(marketDataSync.sync(id, "MANUAL"));
+    }
+    /** Returns durable synchronization history, newest first. */
+    @GetMapping("/{id}/market-data-sync-runs") public ApiResponse<List<QuantDataSyncRun>> marketDataSyncRuns(@PathVariable Long id) {
+        return ApiResponses.success(marketDataSync.runs(id));
     }
     /**
      * 查询数据集质量信息。

@@ -1,11 +1,13 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.quant.data.QuantDataset;
+import com.finscope.domain.quant.data.QuantDataSyncRun;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.service.quant.data.QuantDatasetService;
+import com.finscope.service.quant.data.QuantMarketDataSyncService;
 import com.finscope.service.quant.experiment.QuantExperimentService;
 import com.finscope.service.quant.factor.FactorRegistry;
 import com.finscope.service.quant.factor.DatasetFactorAnalysisService;
@@ -22,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
+import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -33,12 +36,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
-@WebMvcTest({QuantDatasetController.class, QuantFactorController.class,
-        QuantController.class, QuantExperimentController.class})
+@WebMvcTest({QuantDatasetController.class, QuantController.class})
 @Import({ApiExceptionHandler.class, FinScopeProperties.class, CorsConfig.class})
 class QuantPlatformControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private QuantDatasetService datasets;
+    @MockBean private QuantMarketDataSyncService marketDataSync;
     @MockBean private FactorRegistry factors;
     @MockBean private DatasetFactorAnalysisService factorAnalysis;
     @MockBean private QuantStrategyService strategies;
@@ -110,5 +113,22 @@ class QuantPlatformControllerTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("READY"));
         mockMvc.perform(post("/api/quant/experiments").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void startsAndListsAuditableDatasetMarketDataSyncs() throws Exception {
+        QuantDataSyncRun run = new QuantDataSyncRun(19L, 7L, "MANUAL", "SUCCESS",
+                30, 30, 0, 600, 0, "EASTMONEY_DIRECT", null,
+                LocalDateTime.of(2026, 7, 20, 14, 0), LocalDateTime.of(2026, 7, 20, 14, 2));
+        when(marketDataSync.sync(7L, "MANUAL")).thenReturn(run);
+        when(marketDataSync.runs(7L)).thenReturn(Collections.singletonList(run));
+
+        mockMvc.perform(post("/api/quant/datasets/7/market-data-sync"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.insertedRows").value(600));
+        mockMvc.perform(get("/api/quant/datasets/7/market-data-sync-runs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].sourceSummary").value("EASTMONEY_DIRECT"));
     }
 }
