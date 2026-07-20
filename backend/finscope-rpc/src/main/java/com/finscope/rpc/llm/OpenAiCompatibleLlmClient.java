@@ -96,11 +96,18 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     @Override
     public String complete(String systemPrompt, String userPrompt, int requestedTimeoutMs) throws Exception {
+        return complete(systemPrompt, userPrompt, requestedTimeoutMs, 0);
+    }
+
+    @Override
+    public String complete(String systemPrompt, String userPrompt,
+                           int requestedTimeoutMs, int maxOutputTokens) throws Exception {
         if (!isConfigured()) {
             throw new IllegalStateException("LLM is not configured");
         }
         int actualTimeoutMs = requestedTimeoutMs <= 0 ? timeoutMs : Math.min(timeoutMs, requestedTimeoutMs);
-        byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt));
+        byte[] requestBody = objectMapper.writeValueAsBytes(
+                request(systemPrompt, userPrompt, maxOutputTokens));
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
         connection.setRequestMethod("POST");
         connection.setConnectTimeout(actualTimeoutMs);
@@ -127,12 +134,15 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         return content.asText();
     }
 
-    private Map<String, Object> request(String systemPrompt, String userPrompt) {
+    private Map<String, Object> request(String systemPrompt, String userPrompt, int maxOutputTokens) {
         Map<String, Object> request = new LinkedHashMap<String, Object>();
         request.put("model", model);
         request.put("temperature", temperature);
         request.put("stream", false);
         request.put("messages", messages(systemPrompt, userPrompt));
+        if (maxOutputTokens > 0) {
+            request.put("max_tokens", maxOutputTokens);
+        }
         // 仅在明确开启 json 模式时才附带 response_format。
         // 部分模型（如 GLM-5）对 response_format=json_object 支持不佳，会提前 abort 返回残缺 JSON，
         // 此时由上层的 extractJson 从纯文本中提取 JSON 更稳妥。

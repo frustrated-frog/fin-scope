@@ -1,5 +1,8 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
@@ -8,6 +11,8 @@ import com.finscope.domain.marketintel.MarketIntelRefreshRun;
 import com.finscope.service.marketintel.CapitalInterpretationFacade;
 import com.finscope.service.marketintel.MarketIntelCapitalService;
 import com.finscope.service.marketintel.MarketIntelCapitalView;
+import com.finscope.service.marketintel.DragonTigerView;
+import com.finscope.service.marketintel.MarketIntelDragonTigerService;
 import com.finscope.service.marketintel.MarketIntelRefreshCoordinator;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,34 +39,45 @@ public class MarketIntelController {
     private CapitalInterpretationRepository interpretations;
     @Resource
     private MarketIntelRefreshRunRepository refreshRuns;
+    @Resource
+    private MarketIntelDragonTigerService dragonTiger;
 
     @GetMapping("/instruments")
-    public List<Instrument> instruments() {
-        return capital.listStockInstruments();
+    public ApiResponse<List<Instrument>> instruments() {
+        return ApiResponses.success(capital.listStockInstruments());
     }
 
     @PostMapping("/instruments/{id}/refresh")
-    public ResponseEntity<MarketIntelRefreshRun> refresh(@PathVariable Long id) {
-        return ResponseEntity.accepted().body(refresh.requestRefresh(id));
+    public ResponseEntity<ApiResponse<MarketIntelRefreshRun>> refresh(@PathVariable Long id) {
+        return ResponseEntity.accepted().body(ApiResponses.success(refresh.requestRefresh(id)));
     }
 
     @GetMapping("/refresh-runs/{id}")
-    public MarketIntelRefreshRun refreshRun(@PathVariable Long id) {
-        return refreshRuns.findRunById(id).orElseThrow(() -> new IllegalArgumentException("market intel refresh run not found: " + id));
+    public ApiResponse<MarketIntelRefreshRun> refreshRun(@PathVariable Long id) {
+        return ApiResponses.success(refreshRuns.findRunById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("市场情报刷新任务不存在：" + id)));
     }
 
     @GetMapping("/instruments/{id}/capital-behavior")
-    public MarketIntelCapitalView behavior(@PathVariable Long id, @RequestParam(defaultValue = "20d") String range, @RequestParam(defaultValue = "5m") String granularity) {
-        return capital.view(id, range, granularity);
+    public ApiResponse<MarketIntelCapitalView> behavior(@PathVariable Long id, @RequestParam(defaultValue = "20d") String range, @RequestParam(defaultValue = "5m") String granularity) {
+        return ApiResponses.success(capital.view(id, range, granularity));
+    }
+
+    @GetMapping("/instruments/{id}/dragon-tiger")
+    public ApiResponse<DragonTigerView> dragonTiger(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "120") int days) {
+        return ApiResponses.success(dragonTiger.view(id, days));
     }
 
     @PostMapping("/instruments/{id}/capital-interpretations")
-    public ResponseEntity<CapitalInterpretation> interpret(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean force) {
-        return ResponseEntity.accepted().body(agent.request(id, force));
+    public ResponseEntity<ApiResponse<CapitalInterpretation>> interpret(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean force) {
+        return ResponseEntity.accepted().body(ApiResponses.success(agent.request(id, force)));
     }
 
     @GetMapping("/capital-interpretations/{id}")
-    public CapitalInterpretation interpretation(@PathVariable Long id) {
-        return interpretations.findById(id).orElseThrow(() -> new IllegalArgumentException("capital interpretation not found: " + id));
+    public ApiResponse<CapitalInterpretation> interpretation(@PathVariable Long id) {
+        return ApiResponses.success(interpretations.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("资金行为解读不存在：" + id)));
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.service.agent.AgentRunService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +23,7 @@ public class AgentRunController {
      * @return 最近 50 条 AgentRun 记录，按服务层默认顺序返回。
      */
     @GetMapping
-    public List<AgentRun> list() {
-        return agentRunService.latest(50);
+    public ApiResponse<List<AgentRun>> list() {
+        return ApiResponses.success(agentRunService.latest(50));
     }
 }

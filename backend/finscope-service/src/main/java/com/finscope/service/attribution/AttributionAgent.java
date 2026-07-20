@@ -154,9 +154,7 @@ public class AttributionAgent {
             String searchStatus = failures.isEmpty() ? "SUCCESS" : successfulQueries == 0 ? "FAILED" : "PARTIAL_SUCCESS";
             String errorMessage = failures.isEmpty() ? null : shorten(String.join("；", failures), 300);
             if (!failures.isEmpty()) {
-                report.setWarningMessage(successfulQueries == 0
-                        ? "全网搜索暂不可用，本次归因仅基于本地新闻与行情信息。"
-                        : "部分全网搜索请求失败，报告已基于可获得的证据生成。");
+                report.setWarningMessage(successfulQueries == 0 ? "全网搜索暂不可用，本次归因仅基于本地新闻与行情信息。" : "部分全网搜索请求失败，报告已基于可获得的证据生成。");
             }
             agentRunRepository.record("attribution:web-search", searchStatus, String.join(" | ", questions),
                     "queries=" + questions.size() + ", successful=" + successfulQueries + ", uniqueHits=" + evidences.size(),
@@ -191,10 +189,8 @@ public class AttributionAgent {
         long t4 = System.currentTimeMillis();
         progressListener.stageStarted("evidence-rank");
         rankEvidences(evidences);
-        publisher.publish(taskId, AttributionProgressEvent.stage("evidence-rank",
-                "已整理 " + evidences.size() + " 条有效证据"));
-        agentRunRepository.record("attribution:evidence-rank", "SUCCESS", null,
-                "ranked=" + evidences.size(), null, System.currentTimeMillis() - t4);
+        publisher.publish(taskId, AttributionProgressEvent.stage("evidence-rank", "已整理 " + evidences.size() + " 条有效证据"));
+        agentRunRepository.record("attribution:evidence-rank", "SUCCESS", null, "ranked=" + evidences.size(), null, System.currentTimeMillis() - t4);
 
         // ⑥ attribution-synth
         long t5 = System.currentTimeMillis();

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.intake.FetchBatch;
 import com.finscope.domain.intake.IntakeCandidate;
 import com.finscope.domain.intake.PromoteIntakeCandidateResponse;
@@ -33,8 +35,8 @@ public class IntakeController {
      * @return 最近抓取批次列表。
      */
     @GetMapping("/batches")
-    public List<FetchBatch> batches() {
-        return intakeService.latestBatches();
+    public ApiResponse<List<FetchBatch>> batches() {
+        return ApiResponses.success(intakeService.latestBatches());
     }
 
     /**
@@ -44,8 +46,8 @@ public class IntakeController {
      * @return 指定抓取批次详情。
      */
     @GetMapping("/batches/{id}")
-    public FetchBatch batch(@PathVariable Long id) {
-        return intakeService.batch(id);
+    public ApiResponse<FetchBatch> batch(@PathVariable Long id) {
+        return ApiResponses.success(intakeService.batch(id));
     }
 
     /**
@@ -57,10 +59,10 @@ public class IntakeController {
      * @return 符合条件的摄入候选列表。
      */
     @GetMapping("/candidates")
-    public List<IntakeCandidate> candidates(@RequestParam(defaultValue = "PENDING") String status,
+    public ApiResponse<List<IntakeCandidate>> candidates(@RequestParam(defaultValue = "PENDING") String status,
                                             @RequestParam(required = false) Long batchId,
                                             @RequestParam(required = false) Long sourceId) {
-        return intakeService.candidates(status, batchId, sourceId);
+        return ApiResponses.success(intakeService.candidates(status, batchId, sourceId));
     }
 
     /**
@@ -70,8 +72,8 @@ public class IntakeController {
      * @return 指定摄入候选详情。
      */
     @GetMapping("/candidates/{id}")
-    public IntakeCandidate candidate(@PathVariable Long id) {
-        return intakeService.candidate(id);
+    public ApiResponse<IntakeCandidate> candidate(@PathVariable Long id) {
+        return ApiResponses.success(intakeService.candidate(id));
     }
 
     /**
@@ -82,9 +84,9 @@ public class IntakeController {
      * @return 更新后的摄入候选。
      */
     @PostMapping("/candidates/{id}/status")
-    public IntakeCandidate updateStatus(@PathVariable Long id,
+    public ApiResponse<IntakeCandidate> updateStatus(@PathVariable Long id,
                                         @RequestBody UpdateIntakeCandidateStatusRequest request) {
-        return intakeService.updateHumanStatus(id, request.getHumanStatus(), request.getHumanNote());
+        return ApiResponses.success(intakeService.updateHumanStatus(id, request.getHumanStatus(), request.getHumanNote()));
     }
 
     /**
@@ -94,8 +96,8 @@ public class IntakeController {
      * @return 提升结果，包含生成文章、事件或跳过原因等信息。
      */
     @PostMapping("/candidates/{id}/promote")
-    public PromoteIntakeCandidateResponse promote(@PathVariable Long id) {
-        return intakeService.promote(id);
+    public ApiResponse<PromoteIntakeCandidateResponse> promote(@PathVariable Long id) {
+        return ApiResponses.success(intakeService.promote(id));
     }
 
     /**
@@ -105,5 +107,5 @@ public class IntakeController {
      * @return 已创建的异步任务视图，用于查询提升进度。
      */
     @PostMapping("/candidates/{id}/promote-async")
-    public TaskView promoteAsync(@PathVariable Long id) { return intakePromotionTaskService.submit(id); }
+    public ApiResponse<TaskView> promoteAsync(@PathVariable Long id) { return ApiResponses.success(intakePromotionTaskService.submit(id)); }
 }

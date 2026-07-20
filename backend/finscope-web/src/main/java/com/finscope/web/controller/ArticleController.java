@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.request.DeleteArticlesRequest;
 import com.finscope.domain.request.IngestUrlRequest;
 import com.finscope.domain.response.PageResponse;
@@ -36,8 +38,8 @@ public class ArticleController {
      * @return 文章卡片视图列表，包含文章基础信息和摘要展示字段。
      */
     @GetMapping
-    public List<ArticleCardView> list() {
-        return articleQueryService.list();
+    public ApiResponse<List<ArticleCardView>> list() {
+        return ApiResponses.success(articleQueryService.list());
     }
 
     /**
@@ -48,10 +50,10 @@ public class ArticleController {
      * @return 分页后的文章卡片结果，包含记录列表和分页元数据。
      */
     @GetMapping("/paged")
-    public PageResponse<ArticleCardView> listPaged(
+    public ApiResponse<PageResponse<ArticleCardView>> listPaged(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return articleQueryService.listPaged(page, pageSize);
+        return ApiResponses.success(articleQueryService.listPaged(page, pageSize));
     }
 
     /**
@@ -61,8 +63,8 @@ public class ArticleController {
      * @return 指定文章的卡片详情视图。
      */
     @GetMapping("/{id}")
-    public ArticleCardView detail(@PathVariable Long id) {
-        return articleQueryService.detail(id);
+    public ApiResponse<ArticleCardView> detail(@PathVariable Long id) {
+        return ApiResponses.success(articleQueryService.detail(id));
     }
 
     /**
@@ -71,8 +73,9 @@ public class ArticleController {
      * @param id 文章主键 ID。
      */
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable Long id) {
         articleDeletionService.deleteById(id);
+        return ApiResponses.success(null);
     }
 
     /**
@@ -82,8 +85,8 @@ public class ArticleController {
      * @return 实际删除的文章数量。
      */
     @DeleteMapping("/batch")
-    public int deleteBatch(@RequestBody DeleteArticlesRequest request) {
-        return articleDeletionService.deleteByIds(request.getIds());
+    public ApiResponse<Integer> deleteBatch(@RequestBody DeleteArticlesRequest request) {
+        return ApiResponses.success(articleDeletionService.deleteByIds(request.getIds()));
     }
 
     /**
@@ -93,7 +96,7 @@ public class ArticleController {
      * @return 已创建的异步任务视图，用于查询任务状态和进度。
      */
     @PostMapping("/ingest-url")
-    public TaskView ingestUrl(@RequestBody IngestUrlRequest request) {
-        return urlIngestTaskService.submit(request);
+    public ApiResponse<TaskView> ingestUrl(@RequestBody IngestUrlRequest request) {
+        return ApiResponses.success(urlIngestTaskService.submit(request));
     }
 }

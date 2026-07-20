@@ -2,6 +2,7 @@ package com.finscope.service.brief;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.brief.BriefRepository;
@@ -64,7 +65,7 @@ public class BriefService {
     public Brief detail(LocalDate date) {
         syncVaultBrief(date);
         return briefRepository.findByDate(date)
-                .orElseThrow(() -> new IllegalArgumentException("Brief not found: " + date));
+                .orElseThrow(() -> new ResourceNotFoundException("简报不存在：" + date));
     }
 
     public BriefResearchContext researchContext(LocalDate date) {

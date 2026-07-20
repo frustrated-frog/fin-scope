@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
@@ -109,14 +110,14 @@ public class ContentIdeaService {
 
     public ContentIdea detail(Long id) {
         return contentIdeaRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Content idea not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("内容选题不存在：" + id));
     }
 
     public ContentIdea updateStatus(Long id, String status) {
         ContentIdea existing = detail(id);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported content idea status: " + status);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的内容选题状态：" + status);
         }
         return contentIdeaRepository.updateStatus(existing.getId(), normalizedStatus);
     }

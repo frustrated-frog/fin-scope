@@ -47,14 +47,14 @@ public class ThemeProfileService {
     public ThemeProfile getRequired(String code) {
         ThemeProfile profile = registry.get(code);
         if (profile == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unknown theme code: " + code);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知研究主题编码：" + code);
         }
         return profile;
     }
 
     public List<ThemeProfile> getRequired(List<String> codes) {
         if (codes == null || codes.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one theme code is required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "至少需要提供一个研究主题编码");
         }
         List<ThemeProfile> profiles = new ArrayList<ThemeProfile>();
         for (String code : codes) {

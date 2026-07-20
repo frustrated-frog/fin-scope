@@ -44,19 +44,26 @@ public class CapitalFlowFreezeService {
     private static final String PARTITION_TYPE = "CAPITAL_FLOW_DAILY";
     private static final String FINGERPRINT_VERSION = "quant-dataset-v2";
 
-    @Resource private QuantDatasetRepository datasets;
-    @Resource private CapitalFlowRepository sourceFlows;
-    @Resource private InstrumentRepository instruments;
-    @Resource private QuantMarketDataRepository marketData;
-    @Resource private QuantCapitalFlowRepository capitalFlows;
-    @Resource private QuantDatasetPartitionRepository partitions;
-    @Resource private QuantDatasetFingerprint fingerprint;
+    @Resource
+    private QuantDatasetRepository datasets;
+    @Resource
+    private CapitalFlowRepository sourceFlows;
+    @Resource
+    private InstrumentRepository instruments;
+    @Resource
+    private QuantMarketDataRepository marketData;
+    @Resource
+    private QuantCapitalFlowRepository capitalFlows;
+    @Resource
+    private QuantDatasetPartitionRepository partitions;
+    @Resource
+    private QuantDatasetFingerprint fingerprint;
 
     @Transactional
     public QuantDataset freeze(Long datasetId, LocalDate from, LocalDate to, LocalDateTime asOfTime) {
         validateRequest(datasetId, from, to, asOfTime);
         QuantDataset dataset = datasets.findById(datasetId).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "量化数据集不存在"));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "量化数据集不存在"));
         validateDataset(dataset);
 
         List<QuantUniverseMember> universe = marketData.findUniverseMembers(datasetId);
@@ -140,34 +147,34 @@ public class CapitalFlowFreezeService {
         String summary = qualitySummary(frozen.size(), expected.size(), issues);
         if (!datasets.updateResearchState(datasetId, from, to, state, asOfTime,
                 FINGERPRINT_VERSION, manifest, datasetFingerprint, summary, dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
         }
         return datasets.findById(datasetId).orElse(dataset);
     }
 
     private void validateRequest(Long datasetId, LocalDate from, LocalDate to, LocalDateTime asOfTime) {
         if (datasetId == null || from == null || to == null || asOfTime == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结请求缺少数据集、日期范围或信息截止时间");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求缺少数据集、日期范围或信息截止时间");
         }
         if (from.isAfter(to)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结开始日期不能晚于结束日期");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结开始日期不能晚于结束日期");
         }
         if (asOfTime.isBefore(to.atStartOfDay())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "信息截止时间不能早于研究区间结束日");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "信息截止时间不能早于研究区间结束日");
         }
     }
 
     private void validateDataset(QuantDataset dataset) {
         if ("READY".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "已就绪数据集不可原地修改，请创建新版本");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "已就绪数据集不可原地修改，请创建新版本");
         }
         if (!"REAL".equals(dataset.getDataKind()) || !"RESEARCH".equals(dataset.getDatasetLevel())
                 || !FINGERPRINT_VERSION.equals(dataset.getFingerprintVersion())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "仅专业研究数据集 v2 支持资金行为冻结");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "仅专业研究数据集 v2 支持资金行为冻结");
         }
         if (!"BUILDING".equals(dataset.getStatus()) && !"QUALITY_PENDING".equals(dataset.getStatus())
                 && !"BLOCKED".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "当前数据集状态不允许冻结资金行为");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "当前数据集状态不允许冻结资金行为");
         }
     }
 
@@ -205,7 +212,7 @@ public class CapitalFlowFreezeService {
     }
 
     private Map<LocalDate, Set<String>> activeUniverseByDate(List<QuantUniverseMember> universe,
-                                                              Set<LocalDate> requestedDates) {
+                                                             Set<LocalDate> requestedDates) {
         List<LocalDate> dates = new ArrayList<LocalDate>(requestedDates);
         Collections.sort(dates);
         Map<LocalDate, Set<String>> result = new LinkedHashMap<LocalDate, Set<String>>();
@@ -275,8 +282,8 @@ public class CapitalFlowFreezeService {
     }
 
     private QuantDatasetPartition partition(Long datasetId, List<QuantCapitalFlowDaily> rows,
-                                                String partitionFingerprint, String qualityStatus,
-                                                LocalDateTime createdAt) {
+                                            String partitionFingerprint, String qualityStatus,
+                                            LocalDateTime createdAt) {
         QuantDatasetPartition value = new QuantDatasetPartition();
         value.setDatasetId(datasetId);
         value.setPartitionType(PARTITION_TYPE);

@@ -2,6 +2,8 @@ package com.finscope.service.research;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.InfrastructureException;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
@@ -60,13 +62,14 @@ public class EventClusterService {
     @Transactional
     public synchronized EventCluster attachArticle(Article article) {
         if (article == null || article.getId() == null) {
-            throw new IllegalArgumentException("Article must be saved before attaching to event memory");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "文章必须先保存，才能关联事件");
         }
         java.util.Optional<EventArticleLink> existingLink = eventClusterRepository.findByArticleId(article.getId());
         if (existingLink.isPresent()) {
             Long eventId = existingLink.get().getEventId();
             return eventClusterRepository.findById(eventId)
-                    .orElseThrow(() -> new IllegalStateException("Event link points to missing event: " + eventId));
+                    .orElseThrow(() -> new InfrastructureException(
+                            ErrorCode.DATA_INTEGRITY_ERROR, "文章关联的事件不存在：" + eventId));
         }
 
         EventClassifier.EventSignature signature = eventClassifier.signature(article);
@@ -109,7 +112,7 @@ public class EventClusterService {
 
     public List<EventCluster> list(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "开始日期不能晚于结束日期");
         }
         return eventClusterRepository.findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo);
     }
@@ -117,7 +120,7 @@ public class EventClusterService {
     public PageResponse<EventCluster> listPaged(String themeCode, String status, String noveltyState,
                                                  LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "dateFrom must not be after dateTo");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "开始日期不能晚于结束日期");
         }
         return PageResponse.of(eventClusterRepository.findFilteredPage(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize),
                 eventClusterRepository.countFiltered(themeCode, status, noveltyState, dateFrom, dateTo), page, pageSize);
@@ -125,7 +128,7 @@ public class EventClusterService {
 
     public EventCluster detail(Long id) {
         return eventClusterRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Event not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("事件不存在：" + id));
     }
 
     public List<EventArticleLink> articles(Long eventId) {
@@ -137,7 +140,7 @@ public class EventClusterService {
         detail(eventId);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_EVENT_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported event status: " + status);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的事件状态：" + status);
         }
         return eventClusterRepository.updateStatus(eventId, normalizedStatus);
     }
@@ -145,15 +148,15 @@ public class EventClusterService {
     @Transactional
     public EventCluster merge(Long sourceEventId, Long targetEventId) {
         if (sourceEventId == null || targetEventId == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "sourceEventId and targetEventId are required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "源事件 ID 和目标事件 ID 不能为空");
         }
         if (sourceEventId.equals(targetEventId)) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Cannot merge an event into itself");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "事件不能合并到自身");
         }
         EventCluster source = detail(sourceEventId);
         EventCluster target = detail(targetEventId);
-        ensureGovernable(source, "source event");
-        ensureGovernable(target, "target event");
+        ensureGovernable(source, "源事件");
+        ensureGovernable(target, "目标事件");
 
         eventClusterRepository.moveLinks(source.getId(), target.getId());
         evidenceItemRepository.moveByEventId(source.getId(), target.getId());
@@ -173,29 +176,29 @@ public class EventClusterService {
                                     Long targetEventId,
                                     Boolean createNewEvent) {
         EventCluster source = detail(sourceEventId);
-        ensureGovernable(source, "source event");
+        ensureGovernable(source, "源事件");
         EventArticleLink link = eventClusterRepository.findLink(source.getId(), articleId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
-                        "Article link not found for event " + sourceEventId + " and article " + articleId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "事件 " + sourceEventId + " 中不存在文章关联：" + articleId));
         Article article = articleRepository.findById(articleId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Article not found: " + articleId));
+                .orElseThrow(() -> new ResourceNotFoundException("文章不存在：" + articleId));
 
         boolean shouldCreateNewEvent = Boolean.TRUE.equals(createNewEvent);
         if (shouldCreateNewEvent == (targetEventId != null)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Specify either targetEventId or createNewEvent=true");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "目标事件 ID 与新建事件选项必须且只能提供一个");
         }
 
         EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
-        ensureGovernable(target, "target event");
+        ensureGovernable(target, "目标事件");
         if (source.getId().equals(target.getId())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Cannot move article to the same event");
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "文章不能移动到原事件");
         }
 
         int moved = eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
                 governanceReason(link.getNoveltyReason()));
         if (moved == 0) {
-            throw new BusinessException(ErrorCode.CONFLICT,
-                    "Article link changed before move could be completed: " + articleId);
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT,
+                    "文章关联已被更新，请刷新后重试：" + articleId);
         }
         evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
         eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
@@ -249,8 +252,8 @@ public class EventClusterService {
 
     private void ensureGovernable(EventCluster event, String role) {
         if (ResearchEnums.EVENT_ARCHIVED.equals(event.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT,
-                    "Cannot govern archived " + role + ": " + event.getId());
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
+                    "已归档事件不能执行治理操作：" + event.getId() + "（" + role + "）");
         }
     }
 

@@ -99,9 +99,9 @@ class CapitalFactorResearchIntegrationTest {
                         .contentType("application/json")
                         .content("{\"from\":\"2026-07-01\",\"to\":\"2026-07-02\",\"asOfTime\":\"2026-07-03T09:00:00\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("READY"))
-                .andExpect(jsonPath("$.fingerprintVersion").value("quant-dataset-v2"))
-                .andExpect(jsonPath("$.partitionManifest").value(org.hamcrest.Matchers.containsString("CAPITAL_FLOW_DAILY")));
+                .andExpect(jsonPath("$.data.status").value("READY"))
+                .andExpect(jsonPath("$.data.fingerprintVersion").value("quant-dataset-v2"))
+                .andExpect(jsonPath("$.data.partitionManifest").value(org.hamcrest.Matchers.containsString("CAPITAL_FLOW_DAILY")));
 
         QuantDataset ready = datasets.findById(readyCandidate.getId()).orElseThrow(AssertionError::new);
         List<QuantCapitalFlowDaily> readyRows = frozenFlows.findByDatasetId(ready.getId());
@@ -122,9 +122,9 @@ class CapitalFactorResearchIntegrationTest {
 
         mvc.perform(get("/api/factor-research/factors/capital/MAIN_FLOW_SHARE/versions/1.0.0"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("EXPLORATORY"))
-                .andExpect(jsonPath("$.availableAtRule").value(org.hamcrest.Matchers.containsString("retrievedAt")))
-                .andExpect(jsonPath("$.interpretationBoundary").value(org.hamcrest.Matchers.containsString("不构成投资建议")));
+                .andExpect(jsonPath("$.data.status").value("EXPLORATORY"))
+                .andExpect(jsonPath("$.data.availableAtRule").value(org.hamcrest.Matchers.containsString("retrievedAt")))
+                .andExpect(jsonPath("$.data.interpretationBoundary").value(org.hamcrest.Matchers.containsString("不构成投资建议")));
 
         LocalDate historical = LocalDate.of(2024, 1, 2);
         QuantDataset blockedCandidate = dataset("回填资金研究集");
@@ -138,8 +138,8 @@ class CapitalFactorResearchIntegrationTest {
                         .contentType("application/json")
                         .content("{\"from\":\"2024-01-02\",\"to\":\"2024-01-02\",\"asOfTime\":\"2026-07-15T09:00:00\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("BLOCKED"))
-                .andExpect(jsonPath("$.qualitySummary").value(org.hamcrest.Matchers.containsString("backfilled")));
+                .andExpect(jsonPath("$.data.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.data.qualitySummary").value(org.hamcrest.Matchers.containsString("backfilled")));
 
         QuantDataset blocked = datasets.findById(blockedCandidate.getId()).orElseThrow(AssertionError::new);
         List<QuantCapitalFlowDaily> blockedRows = frozenFlows.findByDatasetId(blocked.getId());

@@ -54,10 +54,10 @@ public class WatchlistService {
         String normalizedCode = normalizeCode(code);
         String normalizedType = normalizeType(type);
         if ("SECTOR".equals(normalizedType)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "板块请使用板块关注接口");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块请使用板块关注接口");
         }
         if (!"STOCK".equals(normalizedType) && !"FUND".equals(normalizedType)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "普通自选类型只能是股票或基金");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "普通自选类型只能是股票或基金");
         }
         return addInternal(normalizedCode, normalizedType, groupName, false);
     }
@@ -84,9 +84,9 @@ public class WatchlistService {
         if (watchlistRepository.existsByInstrumentId(instrument.getId())) {
             if (idempotent) {
                 return watchlistRepository.findByCodeAndType(normalizedCode, normalizedType)
-                        .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "关注关系状态冲突"));
+                        .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_CONFLICT, "关注关系状态冲突"));
             }
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "该标的已在自选列表中");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "该标的已在自选列表中");
         }
 
         WatchlistItem item = new WatchlistItem();
@@ -108,7 +108,7 @@ public class WatchlistService {
 
     private void validateRequiredCode(String normalizedCode) {
         if (StringUtils.isBlank(normalizedCode)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码不能为空");
         }
     }
 
@@ -142,7 +142,7 @@ public class WatchlistService {
         validateRequiredCode(normalizedCode);
         validateCode(normalizedCode, "SECTOR");
         WatchlistItem item = watchlistRepository.findByCodeAndType(normalizedCode, "SECTOR")
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "关注板块不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "关注板块不存在"));
         return listWithQuotes(Collections.singletonList(item), false).get(0);
     }
 
@@ -200,15 +200,15 @@ public class WatchlistService {
 
     private WatchlistItem requireInvestmentItem(Long id) {
         if (id == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "自选条目 id 不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "自选条目 id 不能为空");
         }
         WatchlistItem item = watchlistRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "自选条目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "自选条目不存在"));
         if ("SECTOR".equals(item.getType())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "板块请使用板块关注接口");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块请使用板块关注接口");
         }
         if (!"STOCK".equals(item.getType()) && !"FUND".equals(item.getType())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "该条目不是普通股票或基金自选");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "该条目不是普通股票或基金自选");
         }
         return item;
     }
@@ -277,7 +277,7 @@ public class WatchlistService {
         boolean valid = "SECTOR".equals(type) ? SECTOR_CODE.matcher(code).matches() : SIX_DIGIT_CODE.matcher(code).matches();
         if (!valid) {
             String example = "SECTOR".equals(type) ? "BK0477" : "600519";
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "标的代码格式不正确，示例：" + example);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码格式不正确，示例：" + example);
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.ResearchFactorDefinition;
@@ -25,26 +27,26 @@ public class FactorResearchController {
     @Resource private CapitalFlowFreezeService freezeService;
 
     @GetMapping("/factors")
-    public List<ResearchFactorDefinition> factors() {
-        return catalog.list();
+    public ApiResponse<List<ResearchFactorDefinition>> factors() {
+        return ApiResponses.success(catalog.list());
     }
 
     @GetMapping("/factors/{namespace}/{code}/versions/{version}")
-    public ResearchFactorDefinition factor(@PathVariable String namespace,
+    public ApiResponse<ResearchFactorDefinition> factor(@PathVariable String namespace,
                                            @PathVariable String code,
                                            @PathVariable String version) {
-        return catalog.get(namespace, code, version);
+        return ApiResponses.success(catalog.get(namespace, code, version));
     }
 
     @PostMapping("/datasets/{datasetId}/capital-flow-freeze")
-    public ResponseEntity<QuantDataset> freeze(@PathVariable Long datasetId,
+    public ResponseEntity<ApiResponse<QuantDataset>> freeze(@PathVariable Long datasetId,
                                                @RequestBody(required = false) FreezeCapitalFlowRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "冻结请求不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求不能为空");
         }
         request.validate();
         QuantDataset dataset = freezeService.freeze(datasetId, request.getFrom(), request.getTo(),
                 request.getAsOfTime());
-        return ResponseEntity.ok(dataset);
+        return ResponseEntity.ok(ApiResponses.success(dataset));
     }
 }

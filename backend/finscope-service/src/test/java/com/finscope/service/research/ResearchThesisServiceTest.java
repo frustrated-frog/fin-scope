@@ -1,5 +1,6 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchThesis;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,6 @@ class ResearchThesisServiceTest {
         thesis.setSubjectType("FUND");
         thesis.setSubjectName("某基金");
 
-        assertThrows(IllegalArgumentException.class, () -> service.create(thesis));
+        assertThrows(BusinessException.class, () -> service.create(thesis));
     }
 }

@@ -18,6 +18,7 @@ class DataCapability(str, Enum):
     DAILY_BARS = "DAILY_BARS"
     CAPITAL_FLOW = "CAPITAL_FLOW"
     PROFILE = "PROFILE"
+    FINANCIAL_STATEMENTS = "FINANCIAL_STATEMENTS"
 
 
 class QualityStatus(str, Enum):
@@ -148,6 +149,42 @@ class StockProfile(BaseModel):
     total_shares: float | None = None
     circulating_shares: float | None = None
     fields: dict[str, str | float | None] = Field(default_factory=dict)
+
+
+class FinancialStatementType(str, Enum):
+    INCOME = "INCOME"
+    BALANCE_SHEET = "BALANCE_SHEET"
+    CASH_FLOW = "CASH_FLOW"
+
+
+class FinancialReportMeta(BaseModel):
+    symbol: StockSymbol
+    period_end: str
+    report_type: str
+    scope: str = "CONSOLIDATED"
+    published_at: datetime | None = None
+    audited: bool | None = None
+    currency: str = "CNY"
+
+
+class FinancialStatementValue(BaseModel):
+    source_label: str
+    concept_code: str | None = None
+    period_role: str
+    value: str | None = None
+    unit_multiplier: str = "1"
+    source_field: str | None = None
+
+
+class FinancialStatement(BaseModel):
+    statement_type: FinancialStatementType
+    values: list[FinancialStatementValue] = Field(default_factory=list)
+
+
+class FinancialStatementsData(BaseModel):
+    report: FinancialReportMeta
+    statements: list[FinancialStatement] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 PayloadT = TypeVar("PayloadT")

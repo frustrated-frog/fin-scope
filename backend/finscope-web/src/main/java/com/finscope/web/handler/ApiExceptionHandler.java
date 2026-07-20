@@ -1,85 +1,177 @@
 package com.finscope.web.handler;
 
+import com.finscope.common.api.ApiResponse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.web.config.RequestLoggingFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
-import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.ConstraintViolation;
+import javax.validation.ConstraintViolationException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
 
 @RestControllerAdvice
 @Slf4j
 public class ApiExceptionHandler {
+
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiErrorResponse> handleBusiness(BusinessException ex, HttpServletRequest request) {
-        return buildResponse(ex.getErrorCode(), safeMessage(ex, ex.getErrorCode()), ex, request);
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex,
+                                                            HttpServletRequest request) {
+        return buildResponse(ex.getErrorCode(), businessMessage(ex), ex, request);
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        ErrorCode errorCode = isNotFound(ex.getMessage()) ? ErrorCode.NOT_FOUND : ErrorCode.BAD_REQUEST;
-        return buildResponse(errorCode, safeMessage(ex, errorCode), ex, request);
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(
+            MissingServletRequestParameterException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_MISSING,
+                ErrorCode.REQUEST_PARAMETER_MISSING.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler({
+            MethodArgumentTypeMismatchException.class,
+            IllegalArgumentException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleInvalidParameter(
+            Exception ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_INVALID,
+                ErrorCode.REQUEST_PARAMETER_INVALID.getDefaultMessage(), ex, request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        return buildResponse(ErrorCode.BAD_REQUEST, "Invalid request body", ex, request);
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_BODY_INVALID,
+                ErrorCode.REQUEST_BODY_INVALID.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodValidation(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_INVALID,
+                fieldErrorMessage(ex.getBindingResult().getFieldErrors()), ex, request);
+    }
+
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBinding(
+            BindException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_INVALID,
+                fieldErrorMessage(ex.getBindingResult().getFieldErrors()), ex, request);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(
+            ConstraintViolationException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_PARAMETER_INVALID,
+                constraintMessage(ex.getConstraintViolations()), ex, request);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.REQUEST_METHOD_NOT_SUPPORTED,
+                ErrorCode.REQUEST_METHOD_NOT_SUPPORTED.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.MEDIA_TYPE_NOT_SUPPORTED,
+                ErrorCode.MEDIA_TYPE_NOT_SUPPORTED.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataAccess(
+            DataAccessException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.DATABASE_ERROR,
+                ErrorCode.DATABASE_ERROR.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAsyncTimeout(
+            AsyncRequestTimeoutException ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.ASYNC_TASK_ERROR,
+                ErrorCode.ASYNC_TASK_ERROR.getDefaultMessage(), ex, request);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
-        return buildResponse(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getDefaultMessage(), ex, request);
+    public ResponseEntity<ApiResponse<Void>> handleUnexpected(
+            Exception ex, HttpServletRequest request) {
+        return buildResponse(ErrorCode.INTERNAL_ERROR,
+                ErrorCode.INTERNAL_ERROR.getDefaultMessage(), ex, request);
     }
 
-    private ResponseEntity<ApiErrorResponse> buildResponse(ErrorCode errorCode,
-                                                           String message,
-                                                           Exception ex,
-                                                           HttpServletRequest request) {
-        HttpStatus status = statusFor(errorCode);
+    private ResponseEntity<ApiResponse<Void>> buildResponse(ErrorCode errorCode,
+                                                            String message,
+                                                            Exception ex,
+                                                            HttpServletRequest request) {
         String traceId = currentTraceId(request);
         String path = request == null ? "" : request.getRequestURI();
-        if (status.is5xxServerError()) {
-            log.error("接口错误 code={} status={} path={} traceId={} message={}",
-                    errorCode.getCode(), status.value(), path, traceId, ex.getMessage(), ex);
+        if (errorCode.getHttpStatus() >= 500) {
+            log.error("接口异常 code={} status={} path={} message={}",
+                    errorCode.getCode(), errorCode.getHttpStatus(), path, ex.getMessage(), ex);
         } else {
-            log.warn("接口错误 code={} status={} path={} traceId={} message={}",
-                    errorCode.getCode(), status.value(), path, traceId, ex.getMessage());
+            log.warn("接口异常 code={} status={} path={} message={}",
+                    errorCode.getCode(), errorCode.getHttpStatus(), path, ex.getMessage());
         }
-        return ResponseEntity.status(status).body(ApiErrorResponse.of(errorCode, message, traceId, path));
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode, message, traceId));
     }
 
-    private HttpStatus statusFor(ErrorCode errorCode) {
-        switch (errorCode) {
-            case BAD_REQUEST:
-                return HttpStatus.BAD_REQUEST;
-            case NOT_FOUND:
-                return HttpStatus.NOT_FOUND;
-            case CONFLICT:
-                return HttpStatus.CONFLICT;
-            case EXTERNAL_SERVICE_ERROR:
-                return HttpStatus.BAD_GATEWAY;
-            case INTERNAL_ERROR:
-                return HttpStatus.INTERNAL_SERVER_ERROR;
-            default:
-                return HttpStatus.INTERNAL_SERVER_ERROR;
-        }
-    }
-
-    private String safeMessage(Exception ex, ErrorCode errorCode) {
+    private String businessMessage(BusinessException ex) {
         if (ex.getMessage() == null || ex.getMessage().trim().isEmpty()) {
-            return errorCode.getDefaultMessage();
+            return ex.getErrorCode().getDefaultMessage();
         }
-        return ex.getMessage();
+        return ex.getMessage().trim();
     }
 
-    private boolean isNotFound(String message) {
-        return message != null && message.toLowerCase().contains("not found");
+    private String fieldErrorMessage(List<FieldError> errors) {
+        if (errors == null || errors.isEmpty()) {
+            return ErrorCode.REQUEST_PARAMETER_INVALID.getDefaultMessage();
+        }
+        List<FieldError> sorted = new ArrayList<FieldError>(errors);
+        Collections.sort(sorted, Comparator.comparing(FieldError::getField));
+        List<String> messages = new ArrayList<String>();
+        for (FieldError error : sorted) {
+            messages.add(error.getField() + "：" + safeValidationMessage(error.getDefaultMessage()));
+        }
+        return String.join("；", messages);
+    }
+
+    private String constraintMessage(Set<ConstraintViolation<?>> violations) {
+        if (violations == null || violations.isEmpty()) {
+            return ErrorCode.REQUEST_PARAMETER_INVALID.getDefaultMessage();
+        }
+        List<String> messages = new ArrayList<String>();
+        for (ConstraintViolation<?> violation : violations) {
+            messages.add(violation.getPropertyPath() + "："
+                    + safeValidationMessage(violation.getMessage()));
+        }
+        Collections.sort(messages);
+        return String.join("；", messages);
+    }
+
+    private String safeValidationMessage(String message) {
+        return message == null || message.trim().isEmpty()
+                ? ErrorCode.REQUEST_PARAMETER_INVALID.getDefaultMessage() : message.trim();
     }
 
     private String currentTraceId(HttpServletRequest request) {

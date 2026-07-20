@@ -89,7 +89,7 @@ export function FactorGuide({
           onClick={() => setCategory(item)}
         >{item}</button>)}
       </div>
-      <nav className="quant-factor-list" aria-label="可研究因子">
+      <nav className="quant-factor-list" aria-label="可研究因子" tabIndex={0}>
         {filtered.map(item => <button
           type="button"
           key={item.identity.namespace + item.identity.code}

@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.response.PageResponse;
@@ -37,12 +39,12 @@ public class EventController {
      * @return 符合过滤条件的事件聚类列表。
      */
     @GetMapping
-    public List<EventCluster> list(@RequestParam(required = false) String themeCode,
+    public ApiResponse<List<EventCluster>> list(@RequestParam(required = false) String themeCode,
                                    @RequestParam(required = false) String status,
                                    @RequestParam(required = false) String noveltyState,
                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
-        return eventClusterService.list(themeCode, status, noveltyState, dateFrom, dateTo);
+        return ApiResponses.success(eventClusterService.list(themeCode, status, noveltyState, dateFrom, dateTo));
     }
 
     /**
@@ -58,7 +60,7 @@ public class EventController {
      * @return 分页后的事件聚类结果，包含记录列表和分页元数据。
      */
     @GetMapping("/paged")
-    public PageResponse<EventCluster> listPaged(@RequestParam(required = false) String themeCode,
+    public ApiResponse<PageResponse<EventCluster>> listPaged(@RequestParam(required = false) String themeCode,
                                                  @RequestParam(required = false) String status,
                                                  @RequestParam(required = false) String noveltyState,
                                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
@@ -66,10 +68,10 @@ public class EventController {
                                                  @RequestParam(defaultValue = "0") int page,
                                                  @RequestParam(defaultValue = "50") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 200) {
-            throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.BAD_REQUEST,
-                    "page must be >= 0 and pageSize must be between 1 and 200");
+            throw new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID,
+                    "页码不能小于 0，且每页数量必须在 1 到 200 之间");
         }
-        return eventClusterService.listPaged(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize);
+        return ApiResponses.success(eventClusterService.listPaged(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize));
     }
 
     /**
@@ -79,8 +81,8 @@ public class EventController {
      * @return 指定事件聚类详情。
      */
     @GetMapping("/{id}")
-    public EventCluster detail(@PathVariable Long id) {
-        return eventClusterService.detail(id);
+    public ApiResponse<EventCluster> detail(@PathVariable Long id) {
+        return ApiResponses.success(eventClusterService.detail(id));
     }
 
     /**
@@ -90,8 +92,8 @@ public class EventController {
      * @return 该事件下的文章关联列表。
      */
     @GetMapping("/{id}/articles")
-    public List<EventArticleLink> articles(@PathVariable Long id) {
-        return eventClusterService.articles(id);
+    public ApiResponse<List<EventArticleLink>> articles(@PathVariable Long id) {
+        return ApiResponses.success(eventClusterService.articles(id));
     }
 
     /**
@@ -102,8 +104,8 @@ public class EventController {
      * @return 更新后的事件聚类。
      */
     @PostMapping("/{id}/status")
-    public EventCluster updateStatus(@PathVariable Long id, @RequestBody UpdateEventStatusRequest request) {
-        return eventClusterService.updateStatus(id, request == null ? null : request.getStatus());
+    public ApiResponse<EventCluster> updateStatus(@PathVariable Long id, @RequestBody UpdateEventStatusRequest request) {
+        return ApiResponses.success(eventClusterService.updateStatus(id, request == null ? null : request.getStatus()));
     }
 
     /**
@@ -114,8 +116,8 @@ public class EventController {
      * @return 合并后的目标事件聚类。
      */
     @PostMapping("/{sourceId}/merge")
-    public EventCluster merge(@PathVariable Long sourceId, @RequestBody MergeEventRequest request) {
-        return eventClusterService.merge(sourceId, request == null ? null : request.getTargetEventId());
+    public ApiResponse<EventCluster> merge(@PathVariable Long sourceId, @RequestBody MergeEventRequest request) {
+        return ApiResponses.success(eventClusterService.merge(sourceId, request == null ? null : request.getTargetEventId()));
     }
 
     /**
@@ -127,11 +129,11 @@ public class EventController {
      * @return 移动文章后受影响的事件聚类。
      */
     @PostMapping("/{sourceEventId}/articles/{articleId}/move")
-    public EventCluster moveArticle(@PathVariable Long sourceEventId,
+    public ApiResponse<EventCluster> moveArticle(@PathVariable Long sourceEventId,
                                     @PathVariable Long articleId,
                                     @RequestBody MoveEventArticleRequest request) {
-        return eventClusterService.moveArticle(sourceEventId, articleId,
+        return ApiResponses.success(eventClusterService.moveArticle(sourceEventId, articleId,
                 request == null ? null : request.getTargetEventId(),
-                request == null ? null : request.getCreateNewEvent());
+                request == null ? null : request.getCreateNewEvent()));
     }
 }

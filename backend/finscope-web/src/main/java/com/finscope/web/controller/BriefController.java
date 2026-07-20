@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.brief.Brief;
 import com.finscope.domain.research.BriefResearchContext;
 import com.finscope.service.brief.BriefService;
@@ -25,8 +27,8 @@ public class BriefController {
      * @return 新生成或更新后的当天简报内容。
      */
     @PostMapping("/generate")
-    public Brief generate() {
-        return briefService.generateToday();
+    public ApiResponse<Brief> generate() {
+        return ApiResponses.success(briefService.generateToday());
     }
 
     /**
@@ -35,8 +37,8 @@ public class BriefController {
      * @return 按服务层规则排序的简报列表。
      */
     @GetMapping
-    public List<Brief> list() {
-        return briefService.list();
+    public ApiResponse<List<Brief>> list() {
+        return ApiResponses.success(briefService.list());
     }
 
     /**
@@ -46,8 +48,8 @@ public class BriefController {
      * @return 指定日期的简报详情。
      */
     @GetMapping("/{date}")
-    public Brief detail(@PathVariable String date) {
-        return briefService.detail(LocalDate.parse(date));
+    public ApiResponse<Brief> detail(@PathVariable String date) {
+        return ApiResponses.success(briefService.detail(LocalDate.parse(date)));
     }
 
     /**
@@ -57,7 +59,7 @@ public class BriefController {
      * @return 研究上下文，包含可用于事件研究的主题、线索和文章信息。
      */
     @GetMapping("/{date}/research-context")
-    public BriefResearchContext researchContext(@PathVariable String date) {
-        return briefService.researchContext(LocalDate.parse(date));
+    public ApiResponse<BriefResearchContext> researchContext(@PathVariable String date) {
+        return ApiResponses.success(briefService.researchContext(LocalDate.parse(date)));
     }
 }

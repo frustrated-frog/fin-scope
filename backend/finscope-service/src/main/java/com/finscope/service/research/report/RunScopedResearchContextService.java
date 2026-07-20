@@ -1,5 +1,8 @@
 package com.finscope.service.research.report;
 
+import com.finscope.common.exception.InfrastructureException;
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.EventClusterRepository;
@@ -49,9 +52,10 @@ public class RunScopedResearchContextService {
 
     public RunScopedResearchContext load(Long runId) {
         ResearchRun run = runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("Research run not found: " + runId));
+                .orElseThrow(() -> new ResourceNotFoundException("研究运行不存在：" + runId));
         ResearchThesis thesis = run.getThesisId() == null ? null : thesisRepository.findById(run.getThesisId())
-                .orElseThrow(() -> new IllegalStateException("Research thesis not found: " + run.getThesisId()));
+                .orElseThrow(() -> new InfrastructureException(
+                        ErrorCode.DATA_INTEGRITY_ERROR, "研究运行关联的研究命题不存在：" + run.getThesisId()));
         List<Article> articles = new ArrayList<Article>();
         List<EventCluster> events = new ArrayList<EventCluster>();
         List<EvidenceItem> evidenceItems = new ArrayList<EvidenceItem>();

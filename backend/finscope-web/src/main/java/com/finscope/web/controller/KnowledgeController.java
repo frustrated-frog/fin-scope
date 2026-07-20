@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.knowledge.KnowledgeEntry;
@@ -60,119 +62,119 @@ public class KnowledgeController {
     }
 
     @GetMapping("/overview")
-    public KnowledgeOverview overview() {
-        return overviewService.load();
+    public ApiResponse<KnowledgeOverview> overview() {
+        return ApiResponses.success(overviewService.load());
     }
 
     @GetMapping("/topics")
-    public PageResponse<Topic> topics(
+    public ApiResponse<PageResponse<Topic>> topics(
             @RequestParam(required = false) String lifecycle,
             @RequestParam(required = false) String mastery,
             @RequestParam(defaultValue = "false") boolean dueOnly,
             @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return overviewService.topicsPage(
-                lifecycle, mastery, dueOnly, query, page, size);
+        return ApiResponses.success(overviewService.topicsPage(
+                lifecycle, mastery, dueOnly, query, page, size));
     }
 
     @GetMapping("/tasks")
-    public PageResponse<LearningTask> tasks(
+    public ApiResponse<PageResponse<LearningTask>> tasks(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long topicId,
             @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return overviewService.tasksPage(status, topicId, query, page, size);
+        return ApiResponses.success(overviewService.tasksPage(status, topicId, query, page, size));
     }
 
     @GetMapping("/reviews/due")
-    public PageResponse<Topic> dueReviews(
+    public ApiResponse<PageResponse<Topic>> dueReviews(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return overviewService.dueReviews(page, size);
+        return ApiResponses.success(overviewService.dueReviews(page, size));
     }
 
     @GetMapping("/tasks/{taskId}/evidence")
-    public List<EvidenceItem> taskEvidence(@PathVariable long taskId) {
-        return contextService.evidenceForTask(taskId);
+    public ApiResponse<List<EvidenceItem>> taskEvidence(@PathVariable long taskId) {
+        return ApiResponses.success(contextService.evidenceForTask(taskId));
     }
 
     @GetMapping("/topics/{topicId}")
-    public KnowledgeTopicWorkspace topicWorkspace(@PathVariable long topicId) {
-        return topicService.load(topicId);
+    public ApiResponse<KnowledgeTopicWorkspace> topicWorkspace(@PathVariable long topicId) {
+        return ApiResponses.success(topicService.load(topicId));
     }
 
     @PostMapping("/topics")
-    public Topic createTopic(@RequestBody Topic request) {
+    public ApiResponse<Topic> createTopic(@RequestBody Topic request) {
         require(request, "request");
-        return topicService.create(request.getName(), request.getDescription());
+        return ApiResponses.success(topicService.create(request.getName(), request.getDescription()));
     }
 
     @PostMapping("/topics/{topicId}/reviews")
-    public KnowledgeReviewResult review(@PathVariable long topicId,
+    public ApiResponse<KnowledgeReviewResult> review(@PathVariable long topicId,
                                         @RequestBody KnowledgeReviewRequest request) {
         require(request, "request");
         require(request.getConclusion(), "conclusion");
         require(request.getConfidence(), "confidence");
         require(request.getIntervalDays(), "intervalDays");
         require(request.getExpectedRevision(), "expectedRevision");
-        return reviewService.review(topicId, request.getConclusion(), request.getConfidence(),
-                request.getEvidenceIds(), request.getIntervalDays(), request.getExpectedRevision());
+        return ApiResponses.success(reviewService.review(topicId, request.getConclusion(), request.getConfidence(),
+                request.getEvidenceIds(), request.getIntervalDays(), request.getExpectedRevision()));
     }
 
     @PostMapping("/tasks/{taskId}/accept")
-    public LearningTask accept(@PathVariable long taskId,
+    public ApiResponse<LearningTask> accept(@PathVariable long taskId,
                                @RequestBody AcceptKnowledgeTaskRequest request) {
         require(request, "request");
         require(request.getTopicId(), "topicId");
         require(request.getExpectedRevision(), "expectedRevision");
-        return learningService.acceptSuggestion(
-                taskId, request.getTopicId(), request.getExpectedRevision());
+        return ApiResponses.success(learningService.acceptSuggestion(
+                taskId, request.getTopicId(), request.getExpectedRevision()));
     }
 
     @PostMapping("/tasks/{taskId}/start")
-    public LearningTask start(@PathVariable long taskId,
+    public ApiResponse<LearningTask> start(@PathVariable long taskId,
                               @RequestBody KnowledgeRevisionRequest request) {
         require(request, "request");
         require(request.getExpectedRevision(), "expectedRevision");
-        return learningService.startTask(taskId, request.getExpectedRevision());
+        return ApiResponses.success(learningService.startTask(taskId, request.getExpectedRevision()));
     }
 
     @PutMapping("/tasks/{taskId}/draft")
-    public KnowledgeEntry saveDraft(@PathVariable long taskId,
+    public ApiResponse<KnowledgeEntry> saveDraft(@PathVariable long taskId,
                                     @RequestBody KnowledgeEntryRequest request) {
         validateEntryRequest(request);
-        return learningService.saveDraft(taskId, request.getTopicId(),
+        return ApiResponses.success(learningService.saveDraft(taskId, request.getTopicId(),
                 request.getMarkdown(), request.getConfidence(),
                 request.getEvidenceIds(), request.getExpectedTaskRevision(),
-                request.getExpectedEntryRevision());
+                request.getExpectedEntryRevision()));
     }
 
     @GetMapping("/tasks/{taskId}/draft")
-    public ResponseEntity<KnowledgeEntry> draft(@PathVariable long taskId) {
+    public ResponseEntity<ApiResponse<KnowledgeEntry>> draft(@PathVariable long taskId) {
         return learningService.findDraft(taskId)
-                .map(ResponseEntity::ok)
+                .map(value -> ResponseEntity.ok(ApiResponses.success(value)))
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PostMapping("/tasks/{taskId}/complete")
-    public KnowledgeEntry complete(@PathVariable long taskId,
+    public ApiResponse<KnowledgeEntry> complete(@PathVariable long taskId,
                                    @RequestBody KnowledgeEntryRequest request) {
         validateEntryRequest(request);
-        return learningService.completeTask(taskId, request.getTopicId(),
+        return ApiResponses.success(learningService.completeTask(taskId, request.getTopicId(),
                 request.getMarkdown(), request.getConfidence(),
                 request.getEvidenceIds(), request.getExpectedTaskRevision(),
-                request.getExpectedEntryRevision());
+                request.getExpectedEntryRevision()));
     }
 
     @PostMapping("/tasks/{taskId}/dismiss")
-    public LearningTask dismiss(@PathVariable long taskId,
+    public ApiResponse<LearningTask> dismiss(@PathVariable long taskId,
                                 @RequestBody DismissKnowledgeTaskRequest request) {
         require(request, "request");
         require(request.getExpectedRevision(), "expectedRevision");
-        return learningService.dismissTask(
-                taskId, request.getReason(), request.getExpectedRevision());
+        return ApiResponses.success(learningService.dismissTask(
+                taskId, request.getReason(), request.getExpectedRevision()));
     }
 
     private void validateEntryRequest(KnowledgeEntryRequest request) {
@@ -185,7 +187,7 @@ public class KnowledgeController {
 
     private void require(Object value, String field) {
         if (value == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                     "缺少必填字段: " + field);
         }
     }

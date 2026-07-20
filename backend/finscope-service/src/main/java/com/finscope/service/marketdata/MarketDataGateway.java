@@ -10,10 +10,13 @@ import com.finscope.domain.instrument.SectorMarketSnapshot;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
+import com.finscope.domain.marketintel.DragonTigerRecord;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
+import com.finscope.rpc.marketintel.DragonTigerData;
+import com.finscope.rpc.marketintel.DragonTigerProvider;
 import com.finscope.rpc.quote.QuoteAdapter;
 import com.finscope.rpc.quote.SectorMarketProvider;
 import org.slf4j.Logger;
@@ -26,6 +29,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -51,6 +55,7 @@ public class MarketDataGateway {
     private final List<QuoteAdapter> quoteAdapters;
     private final List<SectorMarketProvider> sectorProviders;
     private final List<CapitalFlowProvider> capitalFlowProviders;
+    private final List<DragonTigerProvider> dragonTigerProviders;
     private final ProviderRoutePolicy routePolicy;
     private final ProviderRequestGuard guard;
     private final MarketDataSnapshotRepository snapshots;
@@ -70,6 +75,7 @@ public class MarketDataGateway {
     public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
                              List<SectorMarketProvider> sectorProviders,
                              List<CapitalFlowProvider> capitalFlowProviders,
+                             List<DragonTigerProvider> dragonTigerProviders,
                              ProviderRoutePolicy routePolicy,
                              ProviderRequestGuard guard,
                              MarketDataSnapshotRepository snapshots,
@@ -79,7 +85,8 @@ public class MarketDataGateway {
                              MarketDataSingleFlight singleFlight,
                              MarketDataGatewayProperties properties,
                              @Qualifier("marketDataGatewayExecutor") Executor executor) {
-        this(quoteAdapters, sectorProviders, capitalFlowProviders, routePolicy, guard, snapshots,
+        this(quoteAdapters, sectorProviders, capitalFlowProviders, dragonTigerProviders,
+                routePolicy, guard, snapshots,
                 refreshRuns, codec, validator,
                 singleFlight, properties, executor, Clock.systemDefaultZone());
     }
@@ -129,9 +136,29 @@ public class MarketDataGateway {
                              MarketDataGatewayProperties properties,
                              Executor executor,
                              Clock clock) {
+        this(quoteAdapters, sectorProviders, capitalFlowProviders,
+                Collections.<DragonTigerProvider>emptyList(), routePolicy, guard, snapshots,
+                refreshRuns, codec, validator, singleFlight, properties, executor, clock);
+    }
+
+    public MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                             List<SectorMarketProvider> sectorProviders,
+                             List<CapitalFlowProvider> capitalFlowProviders,
+                             List<DragonTigerProvider> dragonTigerProviders,
+                             ProviderRoutePolicy routePolicy,
+                             ProviderRequestGuard guard,
+                             MarketDataSnapshotRepository snapshots,
+                             MarketDataRefreshRunRepository refreshRuns,
+                             MarketDataSnapshotCodec codec,
+                             QuoteQualityValidator validator,
+                             MarketDataSingleFlight singleFlight,
+                             MarketDataGatewayProperties properties,
+                             Executor executor,
+                             Clock clock) {
         this.quoteAdapters = new ArrayList<QuoteAdapter>(quoteAdapters);
         this.sectorProviders = new ArrayList<SectorMarketProvider>(sectorProviders);
         this.capitalFlowProviders = new ArrayList<CapitalFlowProvider>(capitalFlowProviders);
+        this.dragonTigerProviders = new ArrayList<DragonTigerProvider>(dragonTigerProviders);
         this.routePolicy = routePolicy;
         this.guard = guard;
         this.snapshots = snapshots;
@@ -142,6 +169,145 @@ public class MarketDataGateway {
         this.properties = properties;
         this.executor = executor;
         this.clock = clock;
+    }
+
+    public DragonTigerGatewayResult fetchDragonTiger(
+            Instrument instrument, LocalDate startDate, LocalDate endDate) {
+        if (instrument == null || instrument.getId() == null) {
+            throw new IllegalArgumentException("instrument is required");
+        }
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("dragon tiger date range is invalid");
+        }
+        String flightKey = dragonTigerScopeKey(instrument.getId(), startDate, endDate);
+        return singleFlight.execute(flightKey,
+                () -> routeDragonTiger(instrument, startDate, endDate, flightKey));
+    }
+
+    private DragonTigerGatewayResult routeDragonTiger(
+            Instrument instrument, LocalDate startDate, LocalDate endDate, String scopeKey) {
+        MarketDataCapability capability = MarketDataCapability.DRAGON_TIGER;
+        String refreshId = UUID.randomUUID().toString();
+        LocalDateTime startedAt = LocalDateTime.now(clock);
+        Long runId = createAudit(capability,
+                instrument.getId() + ":" + startDate + ":" + endDate, startedAt);
+        Optional<MarketDataSnapshot> stored = findSnapshot(capability, scopeKey);
+        Optional<DragonTigerData> lastGood = stored.flatMap(codec::decodeDragonTiger);
+        List<DragonTigerProvider> candidates = new ArrayList<DragonTigerProvider>();
+        for (DragonTigerProvider provider : dragonTigerProviders) {
+            if (provider.supports(instrument)) {
+                candidates.add(provider);
+            }
+        }
+        List<DragonTigerProvider> ordered = routePolicy.order(candidates, capability);
+        String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
+        List<String> failures = new ArrayList<String>();
+        Set<String> attemptedSources = new LinkedHashSet<String>();
+        String lastErrorType = MarketDataQualityStatus.UNAVAILABLE.name();
+
+        for (DragonTigerProvider provider : ordered) {
+            attemptedSources.add(provider.providerCode());
+            try {
+                ProviderResult<DragonTigerData> fetched = guard.execute(provider, capability,
+                        () -> provider.fetch(instrument, startDate, endDate));
+                if (fetched == null || fetched.getData() == null) {
+                    throw new com.finscope.rpc.marketintel.ProviderContractException(
+                            "EMPTY_DRAGON_TIGER_RESULT", "龙虎榜 Provider 返回空对象", true);
+                }
+                DragonTigerData data = fetched.getData();
+                LocalDateTime dataAsOf = dragonTigerDataAsOf(data, endDate);
+                String warning = joinWarnings(fetched.getWarnings());
+                try {
+                    snapshots.upsert(codec.dragonTigerSnapshot(scopeKey, provider.providerCode(),
+                            provider.providerFamily(), data, dataAsOf, fetched.getRetrievedAt(),
+                            LocalDateTime.now(clock)));
+                } catch (RuntimeException persistenceError) {
+                    warning = appendWarning(warning, "本地龙虎榜兜底快照保存失败");
+                    log.warn("Failed to persist dragon tiger snapshot for {}", scopeKey, persistenceError);
+                }
+                boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
+                MarketDataQualityStatus status = fallback
+                        ? MarketDataQualityStatus.FRESH_FALLBACK
+                        : MarketDataQualityStatus.FRESH_PRIMARY;
+                if (fallback) {
+                    warning = appendWarning("主龙虎榜数据源不可用，系统已自动切换备用数据源。", warning);
+                }
+                DragonTigerGatewayResult result = new DragonTigerGatewayResult(
+                        data, status, provider.providerCode(), dataAsOf, fetched.getRetrievedAt(),
+                        null, warning, null, refreshId);
+                finishDragonTigerAudit(runId, result, attemptedSources, data.getRecords().size());
+                return result;
+            } catch (RuntimeException error) {
+                if (error instanceof com.finscope.rpc.marketintel.ProviderContractException) {
+                    lastErrorType = ((com.finscope.rpc.marketintel.ProviderContractException) error)
+                            .getErrorType();
+                }
+                failures.add(provider.providerCode() + "：" + message(error));
+            }
+        }
+
+        if (lastGood.isPresent() && stored.isPresent()) {
+            MarketDataSnapshot snapshot = stored.get();
+            long age = Math.max(0L, Duration.between(
+                    snapshot.getRetrievedAt(), LocalDateTime.now(clock)).getSeconds());
+            String reason = failures.isEmpty() ? "没有健康且支持该标的的数据源"
+                    : String.join("；", failures);
+            DragonTigerGatewayResult result = new DragonTigerGatewayResult(
+                    lastGood.get(), MarketDataQualityStatus.STALE_FALLBACK,
+                    snapshot.getProviderCode(), snapshot.getAsOf(), snapshot.getRetrievedAt(),
+                    age, "龙虎榜在线刷新失败，正在显示最近一次成功数据（已过期 "
+                    + age + " 秒）。原因：" + reason, lastErrorType, refreshId);
+            finishDragonTigerAudit(runId, result, attemptedSources,
+                    lastGood.get().getRecords().size());
+            return result;
+        }
+
+        String source = attemptedSources.isEmpty() ? null : String.join(",", attemptedSources);
+        String reason = failures.isEmpty() ? "没有可用的龙虎榜数据源" : String.join("；", failures);
+        DragonTigerGatewayResult result = new DragonTigerGatewayResult(
+                null, MarketDataQualityStatus.UNAVAILABLE, source, null, startedAt,
+                null, "龙虎榜刷新失败，且没有可用的历史快照。原因：" + reason,
+                lastErrorType, refreshId);
+        finishDragonTigerAudit(runId, result, attemptedSources, 0);
+        return result;
+    }
+
+    private String dragonTigerScopeKey(Long instrumentId, LocalDate startDate, LocalDate endDate) {
+        long windowDays = ChronoUnit.DAYS.between(startDate, endDate) + 1L;
+        return MarketDataCapability.DRAGON_TIGER.name() + ":" + instrumentId
+                + ":" + windowDays + "D";
+    }
+
+    private LocalDateTime dragonTigerDataAsOf(DragonTigerData data, LocalDate endDate) {
+        LocalDate latest = null;
+        for (DragonTigerRecord record : data.getRecords()) {
+            if (record.getTradeDate() != null
+                    && (latest == null || record.getTradeDate().isAfter(latest))) {
+                latest = record.getTradeDate();
+            }
+        }
+        return (latest == null ? endDate : latest).atTime(15, 30);
+    }
+
+    private void finishDragonTigerAudit(
+            Long runId, DragonTigerGatewayResult result,
+            Set<String> attemptedSources, int outputCount) {
+        if (runId == null) {
+            return;
+        }
+        boolean fresh = result.getQualityStatus() == MarketDataQualityStatus.FRESH_PRIMARY
+                || result.getQualityStatus() == MarketDataQualityStatus.FRESH_FALLBACK;
+        boolean stale = result.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK;
+        try {
+            refreshRuns.finish(runId, result.getQualityStatus().name(), 1,
+                    fresh ? 1 : 0, stale ? 1 : 0,
+                    result.getQualityStatus() == MarketDataQualityStatus.UNAVAILABLE ? 1 : 0,
+                    String.join(",", attemptedSources),
+                    appendWarning(result.getWarning(), "龙虎榜记录数：" + outputCount),
+                    LocalDateTime.now(clock));
+        } catch (RuntimeException error) {
+            log.warn("Failed to finish dragon tiger refresh audit {}", runId, error);
+        }
     }
 
     public CapitalFlowGatewayResult fetchCapitalFlow(Instrument instrument, LocalDate asOfDate) {

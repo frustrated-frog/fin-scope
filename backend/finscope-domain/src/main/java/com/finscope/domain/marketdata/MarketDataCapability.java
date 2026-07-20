@@ -7,5 +7,6 @@ public enum MarketDataCapability {
     REALTIME_FUND_ESTIMATE,
     REALTIME_SECTOR_QUOTE,
     SECTOR_CATALOG,
-    CAPITAL_FLOW_5M
+    CAPITAL_FLOW_5M,
+    DRAGON_TIGER
 }

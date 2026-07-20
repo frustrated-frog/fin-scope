@@ -10,6 +10,7 @@ from finscope_market_data.models import (
     CapitalFlowData,
     DataCapability,
     DataEnvelope,
+    FinancialStatementsData,
     ProviderAttempt,
     QualityStatus,
     StockQuote,
@@ -156,4 +157,6 @@ class ProviderRouter:
         if isinstance(data, CapitalFlowData):
             points = data.minute_points + data.daily_points
             return max((point.observed_at for point in points), default=fallback)
+        if isinstance(data, FinancialStatementsData):
+            return data.report.published_at or fallback
         return fallback

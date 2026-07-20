@@ -1,13 +1,17 @@
 package com.finscope.dao.config;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +32,7 @@ public class DatabaseInitializer implements InitializingBean {
         Files.createDirectories(Paths.get(dataRoot).resolve("raw"));
         Files.createDirectories(Paths.get(dataRoot).resolve("exports"));
         createSchema();
+        seedStrategyPlaybooks();
     }
 
     private void createSchema() {
@@ -567,12 +572,48 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_playbook ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "code TEXT NOT NULL UNIQUE,"
+                + "title TEXT NOT NULL,"
+                + "scope TEXT NOT NULL,"
+                + "summary TEXT NOT NULL,"
+                + "cadence TEXT NOT NULL,"
+                + "risk_boundary TEXT NOT NULL,"
+                + "author TEXT NOT NULL,"
+                + "source_title TEXT NOT NULL,"
+                + "source_type TEXT NOT NULL,"
+                + "source_ref TEXT,"
+                + "source_published_at TEXT,"
+                + "validation_status TEXT NOT NULL DEFAULT 'UNVALIDATED',"
                 + "status TEXT NOT NULL CHECK(status IN ('RESEARCHING','ACTIVE','PAUSED')),"
                 + "note TEXT,"
                 + "revision INTEGER NOT NULL DEFAULT 0,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
+        ensureColumn("strategy_playbook", "title", "TEXT");
+        ensureColumn("strategy_playbook", "scope", "TEXT");
+        ensureColumn("strategy_playbook", "summary", "TEXT");
+        ensureColumn("strategy_playbook", "cadence", "TEXT");
+        ensureColumn("strategy_playbook", "risk_boundary", "TEXT");
+        ensureColumn("strategy_playbook", "author", "TEXT");
+        ensureColumn("strategy_playbook", "source_title", "TEXT");
+        ensureColumn("strategy_playbook", "source_type", "TEXT");
+        ensureColumn("strategy_playbook", "source_ref", "TEXT");
+        ensureColumn("strategy_playbook", "source_published_at", "TEXT");
+        ensureColumn("strategy_playbook", "validation_status", "TEXT NOT NULL DEFAULT 'UNVALIDATED'");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_playbook_status ON strategy_playbook(status)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_playbook_rule ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "playbook_id INTEGER NOT NULL,"
+                + "section_code TEXT NOT NULL,"
+                + "section_title TEXT NOT NULL,"
+                + "rule_type TEXT NOT NULL,"
+                + "rule_text TEXT NOT NULL,"
+                + "testability TEXT NOT NULL,"
+                + "source_page INTEGER,"
+                + "parameter_json TEXT,"
+                + "sort_order INTEGER NOT NULL,"
+                + "FOREIGN KEY(playbook_id) REFERENCES strategy_playbook(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_playbook_rule_order "
+                + "ON strategy_playbook_rule(playbook_id,sort_order,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_stock_thesis ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "instrument_id INTEGER NOT NULL UNIQUE,"
@@ -760,6 +801,26 @@ public class DatabaseInitializer implements InitializingBean {
             }
         }
         jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+    }
+
+    private void seedStrategyPlaybooks() throws Exception {
+        ClassPathResource resource = new ClassPathResource("db/seed/strategy-playbooks-v1.json");
+        List<Map<String, Object>> seeds = new ObjectMapper().readValue(resource.getInputStream(),
+                new TypeReference<List<Map<String, Object>>>() { });
+        String now = LocalDateTime.now().toString();
+        for (Map<String, Object> seed : seeds) {
+            jdbcTemplate.update("INSERT INTO strategy_playbook(code,title,scope,summary,cadence,risk_boundary,"
+                            + "author,source_title,source_type,source_ref,source_published_at,validation_status,"
+                            + "status,note,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                            + "ON CONFLICT(code) DO UPDATE SET title=excluded.title,scope=excluded.scope,"
+                            + "summary=excluded.summary,cadence=excluded.cadence,risk_boundary=excluded.risk_boundary,"
+                            + "author=excluded.author,source_title=excluded.source_title,source_type=excluded.source_type,"
+                            + "source_ref=excluded.source_ref,source_published_at=excluded.source_published_at",
+                    seed.get("code"), seed.get("title"), seed.get("scope"), seed.get("summary"),
+                    seed.get("cadence"), seed.get("riskBoundary"), seed.get("author"), seed.get("sourceTitle"),
+                    seed.get("sourceType"), seed.get("sourceRef"), seed.get("sourcePublishedAt"),
+                    seed.get("validationStatus"), seed.get("status"), null, 0, now, now);
+        }
     }
 
     /**

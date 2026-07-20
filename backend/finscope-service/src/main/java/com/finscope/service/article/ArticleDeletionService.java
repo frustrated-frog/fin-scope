@@ -1,5 +1,6 @@
 package com.finscope.service.article;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.insight.InsightCardRepository;
 import com.finscope.dao.research.EventClusterRepository;
@@ -34,7 +35,7 @@ public class ArticleDeletionService {
         int deleted = articleRepository.deleteById(id);
 
         if (deleted == 0) {
-            throw new IllegalArgumentException("Article not found: " + id);
+            throw new ResourceNotFoundException("文章不存在：" + id);
         }
         eventClusterRepository.refreshCounts(eventIds);
         eventClusterRepository.archiveIfEmpty(eventIds);

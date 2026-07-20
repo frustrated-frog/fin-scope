@@ -240,14 +240,14 @@ class CapitalFlowFreezeServiceTest {
         when(datasets.findById(DATASET_ID)).thenReturn(Optional.of(ready));
         BusinessException immutable = assertThrows(BusinessException.class,
                 () -> service.freeze(DATASET_ID, DATE, DATE, AS_OF));
-        assertEquals(ErrorCode.CONFLICT, immutable.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, immutable.getErrorCode());
 
         QuantDataset legacy = researchDataset();
         legacy.setFingerprintVersion("quant-dataset-v1");
         when(datasets.findById(DATASET_ID)).thenReturn(Optional.of(legacy));
         BusinessException unsupported = assertThrows(BusinessException.class,
                 () -> service.freeze(DATASET_ID, DATE, DATE, AS_OF));
-        assertEquals(ErrorCode.CONFLICT, unsupported.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, unsupported.getErrorCode());
         verify(sourceFlows, never()).findDailyPointInTime(any(), any(), any(), any());
     }
 

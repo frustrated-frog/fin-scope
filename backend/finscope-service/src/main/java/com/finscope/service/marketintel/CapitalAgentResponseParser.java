@@ -14,9 +14,9 @@ public class CapitalAgentResponseParser {
     }
 
     public JsonNode parse(String output) throws Exception {
-        if (output == null) throw new IllegalArgumentException("empty model output");
+        if (output == null) throw new IllegalArgumentException("模型返回内容为空");
         int start = output.indexOf('{');
-        if (start < 0) throw new IllegalArgumentException("JSON object not found");
+        if (start < 0) throw new IllegalArgumentException("模型响应中未找到 JSON 对象");
         boolean quoted = false;
         boolean escaped = false;
         int depth = 0;
@@ -32,6 +32,6 @@ public class CapitalAgentResponseParser {
             else if (value == '{') depth++;
             else if (value == '}' && --depth == 0) return json.readTree(output.substring(start, i + 1));
         }
-        throw new IllegalArgumentException("incomplete JSON object");
+        throw new IllegalArgumentException("模型响应中的 JSON 对象不完整");
     }
 }

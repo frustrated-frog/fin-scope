@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.service.instrument.WatchlistService;
@@ -36,9 +38,9 @@ public class WatchlistController {
      * @return 自选响应列表，包含标的基础信息、分组和最新行情。
      */
     @GetMapping
-    public List<WatchlistItemResponse> list(@RequestParam(defaultValue = "false") boolean refresh) {
+    public ApiResponse<List<WatchlistItemResponse>> list(@RequestParam(defaultValue = "false") boolean refresh) {
         List<WatchlistItemView> views = watchlistService.listInvestmentItemsWithQuotes(refresh);
-        return views.stream().map(WatchlistItemResponse::of).collect(Collectors.toList());
+        return ApiResponses.success(views.stream().map(WatchlistItemResponse::of).collect(Collectors.toList()));
     }
 
     /**
@@ -48,9 +50,9 @@ public class WatchlistController {
      * @return 新添加的自选标的。
      */
     @PostMapping
-    public WatchlistItem add(@RequestBody AddWatchlistItemRequest request) {
+    public ApiResponse<WatchlistItem> add(@RequestBody AddWatchlistItemRequest request) {
         log.info("添加自选 code={} type={}", request.getCode(), request.getType());
-        return watchlistService.addInvestment(request.getCode(), request.getType(), request.getGroupName());
+        return ApiResponses.success(watchlistService.addInvestment(request.getCode(), request.getType(), request.getGroupName()));
     }
 
     /**

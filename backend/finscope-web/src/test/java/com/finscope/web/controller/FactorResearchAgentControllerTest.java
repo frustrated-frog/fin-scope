@@ -38,11 +38,11 @@ class FactorResearchAgentControllerTest {
         mvc.perform(post("/api/factor-research/agent-runs").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"datasetId\":7,\"factorNamespace\":\"capital\",\"factorCode\":\"MAIN_FLOW_SHARE\",\"factorVersion\":\"1.0.0\"}"))
                 .andExpect(status().isCreated()).andExpect(header().string("Location", "/api/factor-research/agent-runs/9"))
-                .andExpect(jsonPath("$.status").value("AWAITING_APPROVAL")).andExpect(jsonPath("$.maxLlmCalls").value(0));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_APPROVAL")).andExpect(jsonPath("$.data.maxLlmCalls").value(0));
         mvc.perform(post("/api/factor-research/agent-runs/9/approve"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
         mvc.perform(get("/api/factor-research/agent-runs/9"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.evidenceHash").value("abc"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.evidenceHash").value("abc"));
     }
 
     private FactorResearchAgentRun run(String status) { FactorResearchAgentRun value = new FactorResearchAgentRun(); value.setId(9L); value.setDatasetId(7L); value.setDatasetFingerprint("sha"); value.setFactor(new FactorIdentity("capital", "MAIN_FLOW_SHARE", "1.0.0")); value.setQuestion("可靠？"); value.setStatus(status); value.setPlan(Arrays.asList("检查数据")); value.setAllowedTools(Arrays.asList("inspect_dataset")); value.setMaxToolCalls(4); value.setMaxLlmCalls(0); value.setMaxRunSeconds(60); value.setEvidenceJson("{}"); value.setEvidenceHash("abc"); value.setFindingJson("{}"); return value; }

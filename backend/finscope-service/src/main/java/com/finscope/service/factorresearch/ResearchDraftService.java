@@ -51,13 +51,13 @@ public class ResearchDraftService {
 
     @Transactional
     public ResearchDraft createFromCapitalSignal(CapitalResearchDraftCommand command) {
-        if (command == null) throw new IllegalArgumentException("command is required");
+        if (command == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
         catalog.get(CAPITAL_FACTOR.getNamespace(), CAPITAL_FACTOR.getCode(), CAPITAL_FACTOR.getVersion());
         Long snapshotId = required(command.getSnapshotId(), "snapshotId");
         CapitalBehaviorSnapshot snapshot = snapshots.findById(snapshotId).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "资金行为快照不存在：" + snapshotId));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "资金行为快照不存在：" + snapshotId));
         Instrument instrument = instruments.findById(snapshot.getInstrumentId()).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "资金行为快照对应标的不存在：" + snapshot.getInstrumentId()));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "资金行为快照对应标的不存在：" + snapshot.getInstrumentId()));
         String authoritativeCode = InstrumentCodeCanonicalizer.canonical(instrument.getCode(), instrument.getMarket());
         requireMatch(authoritativeCode, required(command.getInstrumentCode(), "instrumentCode").toUpperCase(Locale.ROOT),
                 "INSTRUMENT_DOES_NOT_MATCH_SNAPSHOT");
@@ -95,19 +95,19 @@ public class ResearchDraftService {
 
     public ResearchDraft get(Long id) {
         return repository.findById(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "研究草稿不存在：" + id));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究草稿不存在：" + id));
     }
 
     private static <T> T required(T value, String field) {
         if (value == null || value instanceof String && ((String) value).trim().isEmpty()) {
-            throw new IllegalArgumentException(field + " is required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "必填字段不能为空：" + field);
         }
         return value;
     }
 
     private static void requireMatch(Object authoritative, Object requested, String reason) {
         if (!java.util.Objects.equals(authoritative, requested)) {
-            throw new BusinessException(ErrorCode.CONFLICT, reason);
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, reason);
         }
     }
 
@@ -117,7 +117,7 @@ public class ResearchDraftService {
         for (CapitalBehaviorSignal signal : snapshot.getSignals()) {
             if (requiredSignal.equals(signal.getType())) return signal.getType();
         }
-        throw new BusinessException(ErrorCode.CONFLICT, "SIGNAL_DOES_NOT_BELONG_TO_SNAPSHOT");
+        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "所选信号不属于当前资金行为快照");
     }
 
     private static List<String> authoritativeEvidenceRefs(CapitalBehaviorSnapshot snapshot) {

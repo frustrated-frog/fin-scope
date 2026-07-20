@@ -4,6 +4,7 @@ import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalFlowRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
+import com.finscope.dao.marketintel.DragonTigerRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
@@ -14,10 +15,12 @@ import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalRuleExplanation;
+import com.finscope.domain.marketintel.DragonTigerRecord;
 import com.finscope.domain.marketintel.MarketIntelRefreshRun;
 import com.finscope.domain.marketintel.MarketIntelRefreshStep;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.service.marketdata.CapitalFlowGatewayResult;
+import com.finscope.service.marketdata.DragonTigerGatewayResult;
 import com.finscope.service.marketdata.MarketDataGateway;
 import com.finscope.service.marketdata.QuoteGatewayResult;
 import org.springframework.stereotype.Service;
@@ -36,7 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-/** 资金行为刷新编排；数据源选择、切换和熔断统一由 MarketDataGateway 负责。 */
+/** Market Intel 多维度刷新编排；数据源选择、切换和熔断统一由 MarketDataGateway 负责。 */
 @Service
 public class MarketIntelRefreshCoordinator {
     private static final Logger log = LoggerFactory.getLogger(MarketIntelRefreshCoordinator.class);
@@ -54,6 +57,7 @@ public class MarketIntelRefreshCoordinator {
     private final MarketIntelRefreshRunRepository runs;
     private final CapitalFactorEvaluationService evaluationService;
     private final CapitalBehaviorEvaluationRepository evaluations;
+    private final DragonTigerRepository dragonTiger;
 
     @Resource(name = "marketIntelRefreshExecutor")
     private Executor executor;
@@ -69,7 +73,8 @@ public class MarketIntelRefreshCoordinator {
                                          CapitalFactAssembler facts,
                                          MarketIntelRefreshRunRepository runs,
                                          CapitalFactorEvaluationService evaluationService,
-                                         CapitalBehaviorEvaluationRepository evaluations) {
+                                         CapitalBehaviorEvaluationRepository evaluations,
+                                         DragonTigerRepository dragonTiger) {
         this.capital = capital;
         this.gateway = gateway;
         this.flows = flows;
@@ -82,6 +87,7 @@ public class MarketIntelRefreshCoordinator {
         this.runs = runs;
         this.evaluationService = evaluationService;
         this.evaluations = evaluations;
+        this.dragonTiger = dragonTiger;
     }
 
     public MarketIntelRefreshRun requestRefresh(Long instrumentId) {
@@ -97,48 +103,70 @@ public class MarketIntelRefreshCoordinator {
     }
 
     void refresh(MarketIntelRefreshRun run, Instrument instrument) {
-        CapitalFlowGatewayResult routed = gateway.fetchCapitalFlow(instrument, LocalDate.now());
-        String sourceCode = routed.getSourceCode() == null || routed.getSourceCode().trim().isEmpty()
-                ? "MARKET_DATA_GATEWAY" : routed.getSourceCode();
-        MarketIntelRefreshStep step = runs.createStep(run.getId(), "CAPITAL_FLOW", sourceCode, 1);
-        runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.RUNNING, 0, null, null);
+        DimensionOutcome capitalOutcome = refreshCapital(run, instrument);
+        DimensionOutcome dragonTigerOutcome = refreshDragonTiger(run, instrument);
+        int successCount = capitalOutcome.successCount + dragonTigerOutcome.successCount;
+        int failureCount = capitalOutcome.failureCount + dragonTigerOutcome.failureCount;
+        boolean degraded = capitalOutcome.degraded || dragonTigerOutcome.degraded;
+        MarketIntelRefreshRun.Status status;
+        if (failureCount == 2) {
+            status = MarketIntelRefreshRun.Status.FAILED;
+        } else if (failureCount > 0 || degraded) {
+            status = MarketIntelRefreshRun.Status.PARTIAL;
+        } else {
+            status = MarketIntelRefreshRun.Status.SUCCEEDED;
+        }
+        runs.finishRun(run.getId(), status, successCount, failureCount);
+    }
+
+    private DimensionOutcome refreshCapital(MarketIntelRefreshRun run, Instrument instrument) {
+        CapitalFlowGatewayResult routed;
+        MarketIntelRefreshStep step = null;
         try {
-            if (routed.getData() == null) {
-                finishUnavailable(run, instrument, step, routed);
-                return;
+            routed = gateway.fetchCapitalFlow(instrument, LocalDate.now());
+            step = createStep(run, "CAPITAL_FLOW", routed == null ? null : routed.getSourceCode());
+            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.RUNNING, 0, null, null);
+            if (routed == null) {
+                runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
+                        "EMPTY_GATEWAY_RESULT", "资金流网关返回空结果");
+                return DimensionOutcome.failed();
             }
-            persistFresh(run, instrument, step, routed);
+            if (routed.getData() == null) {
+                return finishUnavailable(instrument, step, routed);
+            }
+            return persistFresh(instrument, step, routed);
         } catch (RuntimeException error) {
-            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
-                    "INTERNAL_ERROR", error.getMessage());
-            runs.finishRun(run.getId(), MarketIntelRefreshRun.Status.FAILED, 0, 1);
+            if (step == null) {
+                step = createStep(run, "CAPITAL_FLOW", null);
+            }
+            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED,
+                    0, "INTERNAL_ERROR", error.getMessage());
+            return DimensionOutcome.failed();
         }
     }
 
-    private void finishUnavailable(MarketIntelRefreshRun run, Instrument instrument,
-                                   MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
+    private DimensionOutcome finishUnavailable(
+            Instrument instrument, MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
         String warning = routed.getWarning() == null
                 ? "资金流在线数据源不可用" : routed.getWarning();
         if (snapshots.findLatest(instrument.getId()).isPresent()) {
             runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SKIPPED, 0,
                     MarketDataQualityStatus.STALE_FALLBACK.name(), warning);
-            runs.finishRun(run.getId(), MarketIntelRefreshRun.Status.PARTIAL, 0, 0);
-            return;
+            return DimensionOutcome.degraded();
         }
         runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
                 routed.getErrorType() == null ? MarketDataQualityStatus.UNAVAILABLE.name() : routed.getErrorType(),
                 warning);
-        runs.finishRun(run.getId(), MarketIntelRefreshRun.Status.FAILED, 0, 1);
+        return DimensionOutcome.failed();
     }
 
-    private void persistFresh(MarketIntelRefreshRun run, Instrument instrument,
-                              MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
+    private DimensionOutcome persistFresh(
+            Instrument instrument, MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
         CapitalFlowData data = applyFallbacks(instrument, routed.getData());
         List<CapitalFlowPoint> points = data.allPoints();
         if (points.isEmpty()) {
             runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.EMPTY, 0, null, null);
-            runs.finishRun(run.getId(), MarketIntelRefreshRun.Status.PARTIAL, 0, 0);
-            return;
+            return DimensionOutcome.degraded();
         }
         List<String> warnings = new ArrayList<String>(
                 MarketIntelWarnings.merge(data.getWarnings(), routed.getWarning()));
@@ -162,8 +190,71 @@ public class MarketIntelRefreshCoordinator {
         boolean partial = !warnings.isEmpty();
         runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SUCCEEDED, points.size(),
                 partial ? "PARTIAL_DATA" : null, partial ? String.join("；", warnings) : null);
-        runs.finishRun(run.getId(), partial ? MarketIntelRefreshRun.Status.PARTIAL
-                : MarketIntelRefreshRun.Status.SUCCEEDED, 1, 0);
+        return partial ? DimensionOutcome.successDegraded() : DimensionOutcome.success();
+    }
+
+    private DimensionOutcome refreshDragonTiger(
+            MarketIntelRefreshRun run, Instrument instrument) {
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(119);
+        MarketIntelRefreshStep step = null;
+        try {
+            DragonTigerGatewayResult routed =
+                    gateway.fetchDragonTiger(instrument, startDate, endDate);
+            step = createStep(run, "DRAGON_TIGER",
+                    routed == null ? null : routed.getSourceCode());
+            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.RUNNING, 0, null, null);
+            if (routed == null || routed.getData() == null) {
+                String warning = routed == null || routed.getWarning() == null
+                        ? "龙虎榜在线数据源不可用" : routed.getWarning();
+                String errorType = routed == null || routed.getErrorType() == null
+                        ? MarketDataQualityStatus.UNAVAILABLE.name() : routed.getErrorType();
+                runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
+                        errorType, warning);
+                return DimensionOutcome.failed();
+            }
+            List<DragonTigerRecord> records = routed.getData().getRecords();
+            dragonTiger.saveAll(records);
+            if (routed.getQualityStatus() == MarketDataQualityStatus.STALE_FALLBACK) {
+                runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SKIPPED,
+                        records.size(), MarketDataQualityStatus.STALE_FALLBACK.name(),
+                        routed.getWarning());
+                return DimensionOutcome.degraded();
+            }
+            if (records.isEmpty()) {
+                runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.EMPTY,
+                        0, null, null);
+                return DimensionOutcome.success();
+            }
+            List<String> warnings = new ArrayList<String>(routed.getData().getWarnings());
+            if (routed.getWarning() != null && !routed.getWarning().trim().isEmpty()) {
+                warnings.add(routed.getWarning());
+            }
+            boolean incompleteRecord = records.stream()
+                    .anyMatch(record -> !"COMPLETE".equals(record.getQualityStatus()));
+            if (incompleteRecord && warnings.isEmpty()) {
+                warnings.add("部分龙虎榜席位数据缺失");
+            }
+            boolean partial = !warnings.isEmpty();
+            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SUCCEEDED,
+                    records.size(), partial ? "PARTIAL_DATA" : null,
+                    partial ? String.join("；", warnings) : null);
+            return partial ? DimensionOutcome.successDegraded() : DimensionOutcome.success();
+        } catch (RuntimeException error) {
+            if (step == null) {
+                step = createStep(run, "DRAGON_TIGER", null);
+            }
+            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
+                    "INTERNAL_ERROR", error.getMessage());
+            return DimensionOutcome.failed();
+        }
+    }
+
+    private MarketIntelRefreshStep createStep(
+            MarketIntelRefreshRun run, String dimension, String sourceCode) {
+        String source = sourceCode == null || sourceCode.trim().isEmpty()
+                ? "MARKET_DATA_GATEWAY" : sourceCode;
+        return runs.createStep(run.getId(), dimension, source, 1);
     }
 
     private String persistEvaluation(CapitalBehaviorSnapshot snapshot) {
@@ -331,5 +422,33 @@ public class MarketIntelRefreshCoordinator {
         value.setRuleVersion(rule.getRuleVersion());
         value.setInputHash(snapshot.getFingerprint());
         interpretations.save(value);
+    }
+
+    private static final class DimensionOutcome {
+        private final int successCount;
+        private final int failureCount;
+        private final boolean degraded;
+
+        private DimensionOutcome(int successCount, int failureCount, boolean degraded) {
+            this.successCount = successCount;
+            this.failureCount = failureCount;
+            this.degraded = degraded;
+        }
+
+        private static DimensionOutcome success() {
+            return new DimensionOutcome(1, 0, false);
+        }
+
+        private static DimensionOutcome successDegraded() {
+            return new DimensionOutcome(1, 0, true);
+        }
+
+        private static DimensionOutcome degraded() {
+            return new DimensionOutcome(0, 0, true);
+        }
+
+        private static DimensionOutcome failed() {
+            return new DimensionOutcome(0, 1, true);
+        }
     }
 }

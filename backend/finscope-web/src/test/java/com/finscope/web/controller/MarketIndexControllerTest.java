@@ -49,13 +49,13 @@ class MarketIndexControllerTest {
 
         mockMvc.perform(get("/api/market-indices"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].code").value("000001"))
-                .andExpect(jsonPath("$[0].name").value("上证指数"))
-                .andExpect(jsonPath("$[0].quoteValid").value(true))
-                .andExpect(jsonPath("$[0].qualityStatus").value("STALE_FALLBACK"))
-                .andExpect(jsonPath("$[0].sourceCode").value("TENCENT_INDEX"))
-                .andExpect(jsonPath("$[0].staleAgeSeconds").value(180))
-                .andExpect(jsonPath("$[0].warning").value("正在显示 3 分钟前的数据"))
-                .andExpect(jsonPath("$[0].refreshId").value("r-1"));
+                .andExpect(jsonPath("$.data[0].code").value("000001"))
+                .andExpect(jsonPath("$.data[0].name").value("上证指数"))
+                .andExpect(jsonPath("$.data[0].quoteValid").value(true))
+                .andExpect(jsonPath("$.data[0].qualityStatus").value("STALE_FALLBACK"))
+                .andExpect(jsonPath("$.data[0].sourceCode").value("TENCENT_INDEX"))
+                .andExpect(jsonPath("$.data[0].staleAgeSeconds").value(180))
+                .andExpect(jsonPath("$.data[0].warning").value("正在显示 3 分钟前的数据"))
+                .andExpect(jsonPath("$.data[0].refreshId").value("r-1"));
     }
 }

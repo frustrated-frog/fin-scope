@@ -29,7 +29,7 @@ public class QuantExperimentService {
     @Resource(name = "quantExperimentExecutor") private Executor executor;
 
     public QuantExperiment create(Long strategyVersionId) {
-        if (strategyVersionId == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "策略版本不能为空");
+        if (strategyVersionId == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略版本不能为空");
         QuantStrategyVersion version = strategies.getVersion(strategyVersionId);
         String requestFingerprint = sha256(version.getStrategyFingerprint() + "|" + version.getDatasetFingerprint() + "|" + version.getEngineVersion());
         java.util.Optional<QuantExperiment> active = repository.findActiveByRequestFingerprint(requestFingerprint);
@@ -52,7 +52,7 @@ public class QuantExperimentService {
         }
         return decorate(saved);
     }
-    public QuantExperiment get(Long id) { return decorate(repository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "量化实验不存在"))); }
+    public QuantExperiment get(Long id) { return decorate(repository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "量化实验不存在"))); }
     public List<QuantExperiment> list() { List<QuantExperiment> values = repository.findAll(); values.forEach(this::decorate); return values; }
     public QuantExperiment interpret(Long id) {
         QuantExperiment value = get(id);
@@ -61,7 +61,7 @@ public class QuantExperimentService {
     }
     private BusinessException rejected(QuantExperiment experiment, RuntimeException cause) {
         repository.markFailed(experiment.getId(), "实验队列已满，请稍后重试");
-        return new BusinessException(ErrorCode.CONFLICT, "实验队列已满，请稍后重试", cause);
+        return new BusinessException(ErrorCode.BUSINESS_CONFLICT, "实验队列已满，请稍后重试", cause);
     }
     private QuantExperiment decorate(QuantExperiment experiment) {
         QuantStrategyVersion version = strategies.getVersion(experiment.getStrategyVersionId());

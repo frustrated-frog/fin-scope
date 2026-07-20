@@ -21,7 +21,7 @@ public class StrategyReviewService {
 
     public StrategyReview create(LocalDate date, String facts, String reasoning, String action) {
         if (date == null || blank(facts) || blank(reasoning) || blank(action)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "复盘日期、事实、推理和行动不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "复盘日期、事实、推理和行动不能为空");
         }
         StrategyReview value = new StrategyReview();
         value.setReviewDate(date);

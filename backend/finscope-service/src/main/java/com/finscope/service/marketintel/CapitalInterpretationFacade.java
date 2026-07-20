@@ -1,5 +1,6 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.marketintel.CapitalBehaviorEvaluationRepository;
 import com.finscope.dao.marketintel.CapitalBehaviorSnapshotRepository;
 import com.finscope.dao.marketintel.CapitalInterpretationRepository;
@@ -54,7 +55,8 @@ public class CapitalInterpretationFacade {
     }
 
     public synchronized CapitalInterpretation request(Long instrumentId, boolean force) {
-        CapitalBehaviorSnapshot snapshot = snapshots.findLatest(instrumentId).orElseThrow(() -> new IllegalArgumentException("capital snapshot not found for instrument " + instrumentId));
+        CapitalBehaviorSnapshot snapshot = snapshots.findLatest(instrumentId)
+                .orElseThrow(() -> new ResourceNotFoundException("标的尚无资金行为快照：" + instrumentId));
         CapitalRuleExplanation explanation = rules.explain(snapshot.getFacts(), snapshot.getSignals());
         CapitalAgentEvidencePacket packet = evidenceAssembler.assemble(snapshot, explanation,
                 evaluations.findBySnapshotId(snapshot.getId()).orElse(null));

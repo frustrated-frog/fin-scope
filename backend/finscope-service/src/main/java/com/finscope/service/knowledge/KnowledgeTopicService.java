@@ -51,7 +51,7 @@ public class KnowledgeTopicService {
 
     public KnowledgeTopicWorkspace load(long topicId) {
         Topic topic = topics.findById(topicId).orElseThrow(() ->
-                new BusinessException(ErrorCode.NOT_FOUND, "主题不存在"));
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "主题不存在"));
         List<Long> allEventIds = links.findEventIds(topicId);
         List<Long> eventIds = new ArrayList<Long>(allEventIds.subList(
                 0, Math.min(allEventIds.size(), EVENT_LIMIT)));
@@ -68,7 +68,7 @@ public class KnowledgeTopicService {
     @Transactional
     public Topic create(String name, String description) {
         if (name == null || name.trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "主题名称不能为空");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "主题名称不能为空");
         }
         Topic topic = new Topic();
         topic.setName(name.trim());

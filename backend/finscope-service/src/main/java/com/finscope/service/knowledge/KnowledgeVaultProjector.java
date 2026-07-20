@@ -49,7 +49,7 @@ public class KnowledgeVaultProjector {
             KnowledgeEntry entry = entries.findById(job.getEntryId())
                     .orElseThrow(() -> new IllegalStateException("Knowledge entry not found"));
             Topic topic = topics.findById(job.getTopicId())
-                    .orElseThrow(() -> new IllegalStateException("Topic not found"));
+                    .orElseThrow(() -> new IllegalStateException("知识主题不存在"));
             writer.appendKnowledgeEntry(topic.getSlug(), entry.getId(), render(entry));
             jobs.markCompleted(jobId);
         } catch (Exception error) {

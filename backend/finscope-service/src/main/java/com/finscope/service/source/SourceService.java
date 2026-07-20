@@ -1,5 +1,6 @@
 package com.finscope.service.source;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.source.Source;
 import org.springframework.stereotype.Service;
@@ -52,7 +53,7 @@ public class SourceService {
 
     public void delete(Long id) {
         Source source = sourceRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("信息源不存在：" + id));
         source.setEnabled(false);
         source.setScheduledEnabled(false);
         sourceRepository.update(id, source);

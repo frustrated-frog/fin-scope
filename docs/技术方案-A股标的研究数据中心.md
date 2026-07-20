@@ -5,8 +5,19 @@
 - 项目：FinScope
 - 对应 PRD：`docs/产品需求-A股标的研究数据中心.md`
 - 日期：2026-07-14
-- 状态：待评审
+- 状态：实施中（资金行为与龙虎榜事实切片已实现）
 - 首期运行时：Java 8 + Spring Boot 2.7 + SQLite + React/TypeScript
+
+### 1.1 龙虎榜当前落地范围（2026-07-17）
+
+- 能力标识：`MarketDataCapability.DRAGON_TIGER`。
+- 主源：东方财富数据中心；摘要、买方席位、卖方席位分别使用独立结构化报表。
+- 查询范围：刷新默认最近 120 个自然日，查询接口允许 30、60、120 日。
+- 存储：迁移版本 107 建立龙虎榜主记录与席位表，按业务身份和负载指纹保存不可变版本。
+- 编排：资金行为与龙虎榜独立执行、独立记错，最终聚合为 `SUCCEEDED/PARTIAL/FAILED`。
+- 降级：成功空集不算失败；席位局部失败保留摘要；主源失败可回退最近成功快照并标记过期。
+- 页面：展示上榜事实、金额、换手率、买卖 TOP5、机构/北向显式标签和数据健康状态。
+- 边界：不做游资人物映射、账户身份推断、意图判断或投资建议。
 
 ## 2. 核心技术决策
 
@@ -136,7 +147,7 @@ public interface CapitalFlowProvider {
 
 public interface DragonTigerProvider {
     String providerCode();
-    ProviderResult<List<DragonTigerRecord>> fetch(
+    ProviderResult<DragonTigerData> fetch(
             Instrument instrument, LocalDate startDate, LocalDate endDate) throws Exception;
 }
 
@@ -355,11 +366,12 @@ UNIQUE(run_id, dimension, provider_code, attempt)
 
 5. `market_dragon_tiger_record`
    - 上榜日期、原因、成交额、买入、卖出、净买入、换手率；
-   - 唯一约束：`instrument_id + provider_code + trade_date + reason_code/explanation`。
+   - 版本身份：`instrument_id + provider_code + trade_date + external_id/reason`；
+   - 同一业务身份的不同负载指纹保存为新版本，查询只返回每个业务身份的最新版本。
 
 6. `market_dragon_tiger_seat`
    - `record_id`、席位名称、席位代码、买入、卖出、净额、方向、排名、机构标记；
-   - 外键 `record_id` 使用 `ON DELETE RESTRICT`，不覆盖历史记录。
+   - 外键关联不可变主记录，不覆盖历史版本。
 
 7. `market_lockup_event`
    - 解禁日期、类型、股数、占总股本/流通股比例、当前状态；
@@ -605,7 +617,7 @@ GET /api/market-intel/instruments
 GET /api/market-intel/instruments/{instrumentId}/overview
 GET /api/market-intel/instruments/{instrumentId}/capital-behavior?range=20d&granularity=5m
 GET /api/market-intel/capital-interpretations/{interpretationId}
-GET /api/market-intel/instruments/{instrumentId}/dragon-tiger
+GET /api/market-intel/instruments/{instrumentId}/dragon-tiger?days=120
 GET /api/market-intel/instruments/{instrumentId}/lockups
 GET /api/market-intel/instruments/{instrumentId}/classifications
 GET /api/market-intel/instruments/{instrumentId}/news
@@ -617,6 +629,8 @@ GET /api/market-intel/refresh-runs/{runId}
 `overview` 返回页面首屏所需的已保存摘要、每个维度的健康状态和最后刷新时间，不在 GET 请求中隐式访问外部网络。
 
 `capital-behavior` 返回 `summary`、`intradayTimeline`、`multiDayTrend`、`signals`、`ruleExplanation` 和 `health`。一分钟记录是保存的规范化数据，五分钟记录由服务端按版本化规则聚合；前端不自行重算资金指标。
+
+`dragon-tiger` 仅查询已保存事实，不在 GET 中访问上游。`days` 仅允许 30、60、120；响应包含 `records`、买卖席位、来源、抓取时间、告警和 `NOT_REFRESHED/FRESH_PRIMARY/PARTIAL_FRESH/STALE_FALLBACK/UNAVAILABLE` 健康状态。
 
 ### 13.2 命令
 
@@ -796,7 +810,7 @@ finscope.market-intel.interpretation.timeout-ms=20000
 4. 实现版本化的客观资金异常标签；规则层排除暗盘、拆单、吸筹和出货意图判断。
 5. 实现 `CapitalBehaviorSnapshot`、确定性规则解释和 metric reference。
 6. 泛化 Agent Trace subject，复用 `AgentHarness/LlmChatClient` 实现点击触发的资金解读 Agent 与置信度 Gate。
-7. 实现龙虎榜、解禁、行业排名以及一个概念/行业归属 Provider。
+7. 龙虎榜事实 Provider、持久化、刷新、查询与页面已实现；继续实现解禁、行业排名以及一个概念/行业归属 Provider。
 8. 实现刷新 run/step、查询 Service、REST API 和重启失败恢复。
 9. 增加 Market Intel Tab、选择器、健康条、刷新进度和四类主面板，资金行为与规则解释默认位于首屏。
 10. 完成 fixture、时间对齐/聚合、规则/Agent/Trace、Repository、Service、Controller、前端测试和构建。

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
 import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleCard } from './features/articles/ArticleCard';
+import { mockApiResponse } from './test/apiEnvelope';
 
 const responses: Record<string, unknown> = {
   '/api/strategy/overview': { holdings: [], targetWeight: 0, currentWeight: 0 },
@@ -546,47 +547,29 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/articles/ingest-url' && String(init?.body).includes('x-shell')) {
-      return {
-        ok: true,
-        json: async () => ({ taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' })
-      } as Response;
+      return mockApiResponse({ taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' });
     }
     if (url === '/api/learning-tasks/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       state['/api/learning-tasks'][0].status = payload.status;
-      return {
-        ok: true,
-        json: async () => state['/api/learning-tasks'][0]
-      } as Response;
+      return mockApiResponse(state['/api/learning-tasks'][0]);
     }
     if (url === '/api/content-ideas/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       state['/api/content-ideas'][0].status = payload.status;
-      return {
-        ok: true,
-        json: async () => state['/api/content-ideas'][0]
-      } as Response;
+      return mockApiResponse(state['/api/content-ideas'][0]);
     }
     if (url === '/api/events/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       state['/api/events'][0].status = payload.status;
-      return {
-        ok: true,
-        json: async () => state['/api/events'][0]
-      } as Response;
+      return mockApiResponse(state['/api/events'][0]);
     }
     if (url === '/api/events/1/merge' && init?.method === 'POST') {
       state['/api/events'][1].status = 'ARCHIVED';
-      return {
-        ok: true,
-        json: async () => state['/api/events'][0]
-      } as Response;
+      return mockApiResponse(state['/api/events'][0]);
     }
     if (url === '/api/events/1/articles/2/move' && init?.method === 'POST') {
-      return {
-        ok: true,
-        json: async () => ({ ...state['/api/events'][1], articleCount: 2 })
-      } as Response;
+      return mockApiResponse({ ...state['/api/events'][1], articleCount: 2 });
     }
     if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
@@ -594,23 +577,14 @@ beforeEach(() => {
       candidate.humanStatus = payload.humanStatus;
       state['/api/intake/candidates?status=PENDING'] = [];
       state[`/api/intake/candidates?status=${payload.humanStatus}`] = [candidate];
-      return {
-        ok: true,
-        json: async () => candidate
-      } as Response;
+      return mockApiResponse(candidate);
     }
     if (url === '/api/sources/1/intake-fetch' && init?.method === 'POST') {
-      return {
-        ok: true,
-        json: async () => state['/api/intake/batches'][0]
-      } as Response;
+      return mockApiResponse(state['/api/intake/batches'][0]);
     }
     if (url === '/api/topics/1' && init?.method === 'DELETE') {
       state['/api/topics'] = state['/api/topics'].filter((topic: { id: number }) => topic.id !== 1);
-      return {
-        ok: true,
-        json: async () => ({})
-      } as Response;
+      return mockApiResponse({});
     }
     if (url === '/api/research/runs' && init?.method === 'POST') {
       const run = {
@@ -712,10 +686,7 @@ beforeEach(() => {
           ]
         }
       };
-      return {
-        ok: true,
-        json: async () => run
-      } as Response;
+      return mockApiResponse(run);
     }
     if (url === '/api/research/runs/2' && state[url]) {
       const progress = state[url];
@@ -727,15 +698,9 @@ beforeEach(() => {
           ...state['/api/research/runs'].filter((item: { id: number }) => item.id !== detail.run.id)
         ];
       }
-      return {
-        ok: true,
-        json: async () => detail
-      } as Response;
+      return mockApiResponse(detail);
     }
-    return {
-      ok: true,
-      json: async () => state[url] ?? {}
-    } as Response;
+    return mockApiResponse(state[url] ?? {});
   }));
 });
 
@@ -762,25 +727,26 @@ test('opens the unified knowledge workbench without globally loading learning ta
   expect(fetch).not.toHaveBeenCalledWith('/api/learning-tasks', expect.anything());
 });
 
-test('topbar status controls use matching pills and icon theme toggle', async () => {
+test('topbar separates data readouts, controls and system status', async () => {
   render(<App />);
 
   expect(await screen.findByText('Articles')).toBeInTheDocument();
 
   const topbarActions = document.querySelector('.topbar-actions') as HTMLElement;
   const topbar = within(topbarActions);
-  const articlesChip = topbar.getByText('Articles').closest('.topbar-pill');
-  const topicsChip = topbar.getByText('Topics').closest('.topbar-pill');
+  const readouts = topbar.getByRole('group', { name: '数据概览' });
   const themeButton = topbar.getByRole('button', { name: '切换为浅色模式' });
   const refreshButton = topbar.getByRole('button', { name: '刷新' });
-  const statusChip = topbar.getByText('准备就绪').closest('.topbar-pill');
+  const systemStatus = topbar.getByRole('status', { name: '系统状态' });
 
-  expect(articlesChip).toBeTruthy();
-  expect(topicsChip).toBeTruthy();
-  expect(themeButton).toHaveClass('topbar-pill');
-  expect(refreshButton).toHaveClass('topbar-pill');
-  expect(statusChip).toBeTruthy();
-  expect(themeButton).toHaveTextContent('☀');
+  expect(within(readouts).getByText('Articles')).toBeInTheDocument();
+  expect(within(readouts).getByText('Topics')).toBeInTheDocument();
+  expect(themeButton).toHaveClass('topbar-control', 'theme-toggle');
+  expect(refreshButton).toHaveClass('topbar-control', 'topbar-refresh');
+  expect(systemStatus).toHaveTextContent('系统状态');
+  expect(systemStatus).toHaveTextContent('准备就绪');
+  expect(themeButton.querySelector('svg')).toBeTruthy();
+  expect(refreshButton.querySelector('svg')).toBeTruthy();
   expect(themeButton).not.toHaveTextContent('浅色');
 });
 
@@ -818,23 +784,24 @@ test('sources workspace shows failed intake batches as errors', async () => {
   vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/sources/1/intake-fetch-async' && init?.method === 'POST') {
-      return {
-        ok: true,
-        json: async () => ({
-          taskId: 'task-intake-failed',
-          status: 'QUEUED',
-          phase: 'QUEUED',
-          message: '等待抓取信息源'
-        })
-      } as Response;
+      return mockApiResponse({
+        taskId: 'task-intake-failed',
+        status: 'QUEUED',
+        phase: 'QUEUED',
+        message: '等待抓取信息源'
+      });
     }
     if (url === '/api/tasks/task-intake-failed') {
-      return { ok: true, json: async () => ({ taskId: 'task-intake-failed', status: 'FAILED', phase: 'FAILED', errorMessage: '没有产出候选内容' }) } as Response;
+      return mockApiResponse({
+        taskId: 'task-intake-failed',
+        status: 'FAILED',
+        phase: 'FAILED',
+        errorMessage: '没有产出候选内容'
+      });
     }
-    return {
-      ok: true,
-      json: async () => (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? {}
-    } as Response;
+    return mockApiResponse(
+      (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? {}
+    );
   });
 
   render(<App />);
@@ -1005,7 +972,8 @@ test('inbox cards show detected source labels before the category tag', async ()
   await userEvent.click(screen.getByRole('button', { name: 'Article' }));
 
   const sourceTag = await screen.findByText('X（推特）');
-  const categoryTag = screen.getByText('宏观');
+  const articleCard = sourceTag.closest('.article-card') as HTMLElement;
+  const categoryTag = within(articleCard).getByText('宏观');
 
   expect(sourceTag).toHaveClass('article-source-tag');
   expect(sourceTag).toHaveClass('article-source-tag-social');
@@ -1112,7 +1080,7 @@ test('content studio shows idea score and outline for generated topics', async (
 
   expect(await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
   expect(screen.getByText('84')).toBeInTheDocument();
-  expect(screen.getByText('X_THREAD')).toBeInTheDocument();
+  expect(screen.getByText('X 长帖')).toBeInTheDocument();
   expect(screen.getByText('证据强度够高，而且能沉淀成长期有效的宏观解释框架。')).toBeInTheDocument();
   expect(screen.getByText(/1\. 先看降息预期/)).toBeInTheDocument();
 });
@@ -1162,17 +1130,11 @@ test('agent runs view refreshes itself while visible', async () => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/agent-runs') {
       agentRunRequests += 1;
-      return {
-        ok: true,
-        json: async () => agentRunRequests > 1
-          ? [{ id: 2, nodeName: 'article-interpret', status: 'SUCCESS', durationMs: 88, createdAt: '2026-07-08T22:10:00' }]
-          : []
-      } as Response;
+      return mockApiResponse(agentRunRequests > 1
+        ? [{ id: 2, nodeName: 'article-interpret', status: 'SUCCESS', durationMs: 88, createdAt: '2026-07-08T22:10:00' }]
+        : []);
     }
-    return {
-      ok: true,
-      json: async () => state[url] ?? {}
-    } as Response;
+    return mockApiResponse(state[url] ?? {});
   });
 
   render(<App />);

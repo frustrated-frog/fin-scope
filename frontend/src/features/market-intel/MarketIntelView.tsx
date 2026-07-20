@@ -7,7 +7,9 @@ import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
 import { CapitalResearchBridge } from './CapitalResearchBridge';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
 import { CapitalHistoricalEvaluationCard } from './CapitalHistoricalEvaluationCard';
+import { DragonTigerPanel } from './DragonTigerPanel';
 import { capitalAgentStatusMessage } from './agentWaitPresentation';
+import { shouldAutoRefreshDragonTiger } from './dragonTigerRefreshPolicy';
 import {
   marketDataProviderLabel,
   marketDataStatusLabel,
@@ -15,6 +17,7 @@ import {
 } from './marketIntelPresentation';
 import {
   CapitalInterpretation,
+  DragonTigerView,
   MarketIntelCapitalOverview,
   MarketIntelInstrument,
   MarketIntelRefreshRun
@@ -24,6 +27,9 @@ import { QuantResearchEntryIntent } from '../strategy/quantTypes';
 const POLL_DELAY_MS = 650;
 const AGENT_MAX_POLL_ATTEMPTS = 185;
 const TERMINAL_AGENT_STATUSES = new Set(['SUCCEEDED', 'FALLBACK', 'INSUFFICIENT_DATA', 'FAILED']);
+type RefreshMode = 'manual' | 'auto';
+type AutoRefreshState = { instrumentId: number; selectionVersion: number } | null;
+
 function delay(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
@@ -40,9 +46,13 @@ export function MarketIntelView({
   const [instruments, setInstruments] = useState<MarketIntelInstrument[]>([]);
   const [instrumentId, setInstrumentId] = useState<number | null>(null);
   const [overview, setOverview] = useState<MarketIntelCapitalOverview | null>(null);
+  const [dragonTiger, setDragonTiger] = useState<DragonTigerView | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [dragonTigerError, setDragonTigerError] = useState<string | null>(null);
+  const [autoRefreshState, setAutoRefreshState] = useState<AutoRefreshState>(null);
+  const [autoRefreshError, setAutoRefreshError] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<CapitalInterpretation | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
   const selectionVersion = useRef(0);
@@ -50,6 +60,12 @@ export function MarketIntelView({
   async function fetchOverview(id: number) {
     return api<MarketIntelCapitalOverview>(
       `/api/market-intel/instruments/${id}/capital-behavior?range=20d&granularity=5m`
+    );
+  }
+
+  async function fetchDragonTiger(id: number) {
+    return api<DragonTigerView>(
+      `/api/market-intel/instruments/${id}/dragon-tiger?days=120`
     );
   }
 
@@ -77,52 +93,121 @@ export function MarketIntelView({
     const version = ++selectionVersion.current;
     setLoading(true);
     setInterpretation(null);
-    fetchOverview(instrumentId)
-      .then((value) => {
+    setOverview(null);
+    setDragonTiger(null);
+    setAutoRefreshError(null);
+    Promise.allSettled([fetchOverview(instrumentId), fetchDragonTiger(instrumentId)])
+      .then(([capitalResult, dragonTigerResult]) => {
         if (version !== selectionVersion.current) return;
-        setOverview(value);
-        setLoadError(null);
-      })
-      .catch((error) => {
-        if (version !== selectionVersion.current) return;
-        setOverview(null);
-        setLoadError(error instanceof Error ? error.message : '资金数据加载失败');
+        if (capitalResult.status === 'fulfilled') {
+          setOverview(capitalResult.value);
+          setLoadError(null);
+        } else {
+          setLoadError(capitalResult.reason instanceof Error
+            ? capitalResult.reason.message : '资金数据加载失败');
+        }
+        if (dragonTigerResult.status === 'fulfilled') {
+          const value = dragonTigerResult.value;
+          setDragonTiger(value);
+          setDragonTigerError(null);
+          if (shouldAutoRefreshDragonTiger(value, new Date())) {
+            void refreshMarketData(instrumentId, 'auto', version);
+          }
+        } else {
+          setDragonTigerError(dragonTigerResult.reason instanceof Error
+            ? dragonTigerResult.reason.message : '龙虎榜数据加载失败');
+        }
       })
       .finally(() => {
-        if (version === selectionVersion.current) setLoading(false);
+        if (version === selectionVersion.current) {
+          setLoading(false);
+        }
       });
   }, [instrumentId]);
 
-  async function refreshCapitalData() {
-    if (!instrumentId || refreshing) return;
-    setRefreshing(true);
-    setMessage('正在刷新资金数据');
+  async function refreshMarketData(targetInstrumentId: number, mode: RefreshMode, version: number) {
+    const automatic = mode === 'auto';
+    if (automatic) {
+      setAutoRefreshState({ instrumentId: targetInstrumentId, selectionVersion: version });
+      setAutoRefreshError(null);
+    } else {
+      setRefreshing(true);
+      setAutoRefreshError(null);
+      setMessage('正在刷新市场数据');
+    }
     try {
       let run = await api<MarketIntelRefreshRun>(
-        `/api/market-intel/instruments/${instrumentId}/refresh`,
+        `/api/market-intel/instruments/${targetInstrumentId}/refresh`,
         { method: 'POST' }
       );
       for (let attempt = 0; attempt < 20 && !['SUCCEEDED', 'PARTIAL', 'FAILED'].includes(run.status); attempt++) {
         await delay(POLL_DELAY_MS);
         run = await api<MarketIntelRefreshRun>(`/api/market-intel/refresh-runs/${run.id}`);
       }
-      if (run.status === 'FAILED') throw new Error(run.errorMessage || '资金源刷新失败，原有快照已保留');
+      if (run.status === 'FAILED') throw new Error(run.errorMessage || '市场数据刷新失败，原有快照已保留');
       if (!['SUCCEEDED', 'PARTIAL'].includes(run.status)) throw new Error('刷新任务仍在运行，可稍后再查看');
-      const latest = await fetchOverview(instrumentId);
-      setOverview(latest);
-      // Agent 结论严格绑定生成它的快照；新快照加载后必须由用户重新运行。
-      setInterpretation(null);
-      setLoadError(null);
-      const message = run.status === 'PARTIAL' ? (run.errorMessage || '资金流已刷新，部分辅助行情暂不可用') : '资金数据已刷新';
+      const [latestCapital, latestDragonTiger] = await Promise.allSettled([
+        fetchOverview(targetInstrumentId),
+        fetchDragonTiger(targetInstrumentId)
+      ]);
+      if (version === selectionVersion.current) {
+        if (latestCapital.status === 'fulfilled') {
+          setOverview(latestCapital.value);
+          setLoadError(null);
+        } else {
+          setLoadError(latestCapital.reason instanceof Error
+            ? latestCapital.reason.message : '资金数据读取失败');
+        }
+        if (latestDragonTiger.status === 'fulfilled') {
+          setDragonTiger(latestDragonTiger.value);
+          setDragonTigerError(null);
+        } else {
+          setDragonTigerError(latestDragonTiger.reason instanceof Error
+            ? latestDragonTiger.reason.message : '龙虎榜数据读取失败');
+        }
+        // Agent 结论严格绑定生成它的快照；新快照加载后必须由用户重新运行。
+        setInterpretation(null);
+      }
+      if (latestCapital.status === 'rejected' && latestDragonTiger.status === 'rejected') {
+        throw new Error('刷新已完成，但两个事实维度都读取失败');
+      }
+      if (automatic && latestDragonTiger.status === 'rejected') {
+        throw new Error(latestDragonTiger.reason instanceof Error
+          ? latestDragonTiger.reason.message : '龙虎榜数据读取失败');
+      }
+      if (automatic) return;
+      const readPartial = latestCapital.status === 'rejected' || latestDragonTiger.status === 'rejected';
+      const message = readPartial
+        ? '市场数据已刷新，但部分页面数据读取失败'
+        : run.status === 'PARTIAL'
+          ? (run.errorMessage || '市场数据已刷新，部分维度暂不可用')
+          : '市场数据已刷新';
       setMessage(message);
-      addToast(message, run.status === 'PARTIAL' ? 'info' : 'success');
+      addToast(message, run.status === 'PARTIAL' || readPartial ? 'info' : 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '资金数据刷新失败';
-      setMessage(message);
-      addToast(message, 'error');
+      const message = error instanceof Error ? error.message : '市场数据刷新失败';
+      if (automatic) {
+        if (version === selectionVersion.current) {
+          setAutoRefreshError(`后台更新失败：${message}。已保留当前龙虎榜数据，可手动重试。`);
+        }
+      } else {
+        setMessage(message);
+        addToast(message, 'error');
+      }
     } finally {
-      setRefreshing(false);
+      if (automatic) {
+        setAutoRefreshState((current) =>
+          current?.instrumentId === targetInstrumentId
+          && current.selectionVersion === version ? null : current);
+      } else {
+        setRefreshing(false);
+      }
     }
+  }
+
+  async function refreshCapitalData() {
+    if (!instrumentId || refreshing || autoRefreshState?.instrumentId === instrumentId) return;
+    await refreshMarketData(instrumentId, 'manual', selectionVersion.current);
   }
 
   async function runAgent() {
@@ -170,11 +255,24 @@ export function MarketIntelView({
     if (!instrumentId) return;
     setLoading(true);
     try {
-      const value = await fetchOverview(instrumentId);
-      setOverview(value);
-      setLoadError(null);
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '资金数据读取失败');
+      const [capitalResult, dragonTigerResult] = await Promise.allSettled([
+        fetchOverview(instrumentId),
+        fetchDragonTiger(instrumentId)
+      ]);
+      if (capitalResult.status === 'fulfilled') {
+        setOverview(capitalResult.value);
+        setLoadError(null);
+      } else {
+        setLoadError(capitalResult.reason instanceof Error
+          ? capitalResult.reason.message : '资金数据读取失败');
+      }
+      if (dragonTigerResult.status === 'fulfilled') {
+        setDragonTiger(dragonTigerResult.value);
+        setDragonTigerError(null);
+      } else {
+        setDragonTigerError(dragonTigerResult.reason instanceof Error
+          ? dragonTigerResult.reason.message : '龙虎榜数据读取失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -203,8 +301,14 @@ export function MarketIntelView({
               ))}
             </select>
           </label>
-          <button className="ghost-button" type="button" disabled={refreshing || !instrumentId} onClick={refreshCapitalData}>
-            {refreshing ? '刷新任务执行中…' : '刷新资金数据'}
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={refreshing || autoRefreshState?.instrumentId === instrumentId || !instrumentId}
+            onClick={refreshCapitalData}
+          >
+            {refreshing || autoRefreshState?.instrumentId === instrumentId
+              ? '刷新任务执行中…' : '刷新市场数据'}
           </button>
         </div>
         {overview && (
@@ -228,7 +332,7 @@ export function MarketIntelView({
         )}
       </section>
 
-      {loading && <p className="market-intel-loading" role="status">正在读取资金快照…</p>}
+      {loading && <p className="market-intel-loading" role="status">正在读取市场情报…</p>}
       {!loading && loadError && !overview && (
         <section className="market-intel-first-run" role="alert">
           <div><strong>资金数据读取失败</strong><p>{loadError}</p></div>
@@ -239,6 +343,12 @@ export function MarketIntelView({
         <section className="market-intel-first-run">
           <div><strong>这个标的还没有资金快照</strong><p>首次刷新后会保存成交额、换手率与资金时间线，后续解读都基于这份可追溯事实。</p></div>
           <button className="primary-button" type="button" onClick={refreshCapitalData}>生成第一份资金快照</button>
+        </section>
+      )}
+      {!loading && dragonTigerError && !dragonTiger && (
+        <section className="market-intel-first-run" role="alert">
+          <div><strong>龙虎榜数据读取失败</strong><p>{dragonTigerError}</p></div>
+          <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
         </section>
       )}
       {overview?.snapshot && overview.ruleExplanation && (
@@ -264,6 +374,13 @@ export function MarketIntelView({
             />
           </aside>
         </div>
+      )}
+      {dragonTiger && (
+        <DragonTigerPanel
+          view={dragonTiger}
+          refreshing={autoRefreshState?.instrumentId === instrumentId}
+          refreshError={autoRefreshError}
+        />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 package com.finscope.service.article;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.insight.InsightCardRepository;
 import com.finscope.domain.article.Article;
@@ -51,7 +52,7 @@ public class ArticleQueryService {
 
     public ArticleCardView detail(Long id) {
         Article article = articleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Article not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("文章不存在：" + id));
         InsightCard card = insightCardRepository.findByArticleId(id).orElse(null);
         return new ArticleCardView(article, card);
     }

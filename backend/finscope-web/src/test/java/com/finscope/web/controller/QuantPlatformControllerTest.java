@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @WebMvcTest({QuantDatasetController.class, QuantFactorController.class,
-        QuantStrategyController.class, QuantExperimentController.class})
+        QuantController.class, QuantExperimentController.class})
 @Import({ApiExceptionHandler.class, FinScopeProperties.class, CorsConfig.class})
 class QuantPlatformControllerTest {
     @Autowired private MockMvc mockMvc;
@@ -51,8 +51,8 @@ class QuantPlatformControllerTest {
 
         mockMvc.perform(get("/api/quant/factors"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].code").value("EP"))
-                .andExpect(jsonPath("$[0].pointInTime").value(true));
+                .andExpect(jsonPath("$.data[0].code").value("EP"))
+                .andExpect(jsonPath("$.data[0].pointInTime").value(true));
     }
 
     @Test
@@ -65,9 +65,9 @@ class QuantPlatformControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"多因子学习样本\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(7))
-                .andExpect(jsonPath("$.dataKind").value("LEARNING_SAMPLE"))
-                .andExpect(jsonPath("$.status").value("READY"));
+                .andExpect(jsonPath("$.data.id").value(7))
+                .andExpect(jsonPath("$.data.dataKind").value("LEARNING_SAMPLE"))
+                .andExpect(jsonPath("$.data.status").value("READY"));
     }
 
     @Test
@@ -76,7 +76,7 @@ class QuantPlatformControllerTest {
         when(datasets.create("我的真实研究集", "REAL")).thenReturn(value);
         mockMvc.perform(post("/api/quant/datasets").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"我的真实研究集\",\"dataKind\":\"REAL\"}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.dataKind").value("REAL")).andExpect(jsonPath("$.status").value("EMPTY"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.dataKind").value("REAL")).andExpect(jsonPath("$.data.status").value("EMPTY"));
     }
 
     @Test
@@ -92,14 +92,14 @@ class QuantPlatformControllerTest {
         mockMvc.perform(post("/api/quant/strategy-drafts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"datasetId\":7,\"prompt\":\"低估值高质量策略\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("VALIDATED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("VALIDATED"));
         mockMvc.perform(post("/api/quant/strategy-drafts/11/confirm"))
-                .andExpect(status().isCreated()).andExpect(header().string("Location", "/api/quant/strategies/12")).andExpect(jsonPath("$.id").value(12));
-        mockMvc.perform(get("/api/quant/strategies/12")).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(12));
+                .andExpect(status().isCreated()).andExpect(header().string("Location", "/api/quant/strategies/12")).andExpect(jsonPath("$.data.id").value(12));
+        mockMvc.perform(get("/api/quant/strategies/12")).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(12));
         mockMvc.perform(post("/api/quant/experiments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"strategyVersionId\":12}"))
-                .andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("QUEUED"));
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.data.status").value("QUEUED"));
     }
 
     @Test
@@ -107,7 +107,7 @@ class QuantPlatformControllerTest {
         QuantDataset value = new QuantDataset(); value.setId(7L); value.setStatus("READY");
         when(datasets.importBars(org.mockito.ArgumentMatchers.eq(7L), anyList())).thenReturn(value);
         mockMvc.perform(post("/api/quant/datasets/7/bars").contentType(MediaType.APPLICATION_JSON).content("[]"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("READY"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("READY"));
         mockMvc.perform(post("/api/quant/experiments").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
     }

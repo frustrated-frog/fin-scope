@@ -5,6 +5,7 @@ data/finance.db
 data/finance.db-*
 data/raw/
 data/exports/
+data/financials/
 !data/
 !data/.gitkeep
 !data/vault/
@@ -28,6 +29,7 @@ market-data-service/**/*.pyc
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+.playwright-cli/
 
 # IDE
 .idea/

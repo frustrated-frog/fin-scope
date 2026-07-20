@@ -1,5 +1,8 @@
 package com.finscope.service.fetch;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.fetch.FetchRunRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.fetch.FetchRun;
@@ -33,7 +36,7 @@ public class FetchService {
 
     public FetchRun fetch(Long sourceId) {
         Source source = sourceRepository.findById(sourceId)
-                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+                .orElseThrow(() -> new ResourceNotFoundException("信息源不存在：" + sourceId));
         return fetch(source);
     }
 
@@ -42,7 +45,7 @@ public class FetchService {
      */
     public FetchRun fetch(Source source) {
         if (source == null || source.getName() == null || source.getUrl() == null) {
-            throw new IllegalArgumentException("Transient source name and url are required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "临时信息源名称和 URL 不能为空");
         }
         long start = System.currentTimeMillis();
         log.info("信息源抓取开始 sourceId={} sourceName={} type={}", source.getId(), source.getName(), source.getType());

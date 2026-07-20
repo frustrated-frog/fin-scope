@@ -2,6 +2,7 @@ package com.finscope.service.article;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ExternalServiceException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
@@ -52,7 +53,7 @@ public class UrlIngestService {
             SourceAdapter adapter = adapterRegistry.get(source);
             List<RawItem> items = adapter.fetch(source);
             if (items.isEmpty()) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "No readable content found: " + url);
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未读取到可用内容：" + url);
             }
             log.info("手动链接抓取完成 url={} itemCount={}", safeUrl(url), items.size());
             RawItem item = items.get(0);
@@ -67,27 +68,27 @@ public class UrlIngestService {
             throw ex;
         } catch (IllegalArgumentException ex) {
             log.warn("手动链接入库被拒绝 url={} message={}", safeUrl(url), ex.getMessage());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, ex.getMessage(), ex);
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, ex.getMessage(), ex);
         } catch (Exception ex) {
             log.error("手动链接入库失败 url={} durationMs={}", safeUrl(url), System.currentTimeMillis() - start, ex);
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Failed to ingest URL: " + ex.getMessage(), ex);
+            throw new ExternalServiceException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, "URL 摄入失败，请稍后重试", ex);
         }
     }
 
     public void validateUrl(String url) {
         if (StringUtils.isBlank(url)) {
-            throw new IllegalArgumentException("URL must not be empty");
+            throw new IllegalArgumentException("URL 不能为空");
         }
         try {
             URI uri = new URI(url.trim());
             String scheme = uri.getScheme();
             if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                throw new IllegalArgumentException("Only http/https URL is supported");
+                throw new IllegalArgumentException("仅支持 HTTP 或 HTTPS URL");
             }
         } catch (IllegalArgumentException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid URL: " + url, ex);
+            throw new IllegalArgumentException("URL 格式不正确：" + url, ex);
         }
     }
 

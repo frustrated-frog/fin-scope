@@ -40,7 +40,7 @@ class EventClusterServiceTest {
         assertEquals(ResearchEnums.EVENT_COOLING, updated.getStatus());
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository).updateStatus(1L, "BROKEN"));
-        assertEquals("Unsupported event status: BROKEN", error.getMessage());
+        assertEquals("不支持的事件状态：BROKEN", error.getMessage());
     }
 
     @Test
@@ -80,7 +80,7 @@ class EventClusterServiceTest {
         BusinessException sourceError = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository).merge(1L, 2L));
 
-        assertEquals(ErrorCode.CONFLICT, sourceError.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, sourceError.getErrorCode());
         verify(eventClusterRepository, never()).moveLinks(any(), any());
 
         EventCluster activeSource = event(3L, ResearchEnums.EVENT_ACTIVE);
@@ -91,7 +91,7 @@ class EventClusterServiceTest {
         BusinessException targetError = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository).merge(3L, 4L));
 
-        assertEquals(ErrorCode.CONFLICT, targetError.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, targetError.getErrorCode());
     }
 
     @Test
@@ -150,7 +150,7 @@ class EventClusterServiceTest {
                         mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
 
-        assertEquals(ErrorCode.CONFLICT, sourceError.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, sourceError.getErrorCode());
 
         EventCluster activeSource = event(4L, ResearchEnums.EVENT_ACTIVE);
         EventCluster archivedTarget = event(5L, ResearchEnums.EVENT_ARCHIVED);
@@ -163,7 +163,7 @@ class EventClusterServiceTest {
                         mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(4L, 2L, 5L, null));
 
-        assertEquals(ErrorCode.CONFLICT, targetError.getErrorCode());
+        assertEquals(ErrorCode.BUSINESS_CONFLICT, targetError.getErrorCode());
     }
 
     @Test
@@ -185,7 +185,7 @@ class EventClusterServiceTest {
                         mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
 
-        assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
+        assertEquals(ErrorCode.DATA_VERSION_CONFLICT, error.getErrorCode());
         verify(evidenceItemRepository, never()).moveByEventIdAndArticleId(any(), any(), any());
     }
 

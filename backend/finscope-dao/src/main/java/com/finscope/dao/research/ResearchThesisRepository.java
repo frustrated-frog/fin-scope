@@ -93,7 +93,7 @@ public class ResearchThesisRepository {
                 thesis.getStatus(), thesis.getConclusion(), thesis.getConfidence(), thesis.getNextValidation(),
                 TimeUtil.text(thesis.getUpdatedAt()), thesis.getId());
         return findById(thesis.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Research thesis not found: " + thesis.getId()));
+                .orElseThrow(() -> new IllegalStateException("更新后的研究命题不存在：" + thesis.getId()));
     }
 
     public List<ResearchThesis> findAll() {

@@ -18,6 +18,7 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
     private static final int AGENT_EVIDENCE_VERSION = 104;
     private static final int CAPITAL_EVALUATION_VERSION = 105;
     private static final int CAPITAL_EVALUATION_QUALITY_VERSION = 106;
+    private static final int DRAGON_TIGER_VERSION = 107;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -106,6 +107,36 @@ public class MarketIntelSchemaMigrator implements InitializingBean {
             jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     CAPITAL_EVALUATION_QUALITY_VERSION,
                     "资金行为历史评价保存数据质量与覆盖率", LocalDateTime.now().toString());
+        });
+        transaction.executeWithoutResult(status -> {
+            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=?",
+                    Integer.class, DRAGON_TIGER_VERSION);
+            if (count != null && count > 0) return;
+            jdbc.execute("CREATE TABLE IF NOT EXISTS market_dragon_tiger_record (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL," +
+                    "provider_code TEXT NOT NULL,trade_date TEXT NOT NULL,external_id TEXT NOT NULL," +
+                    "reason_code TEXT,reason TEXT NOT NULL,provider_explanation TEXT,close_price TEXT," +
+                    "change_rate TEXT,buy_amount TEXT,sell_amount TEXT,net_amount TEXT,billboard_amount TEXT," +
+                    "market_amount TEXT,net_amount_ratio TEXT,billboard_amount_ratio TEXT,turnover_rate TEXT," +
+                    "free_market_cap TEXT,retrieved_at TEXT NOT NULL,payload_hash TEXT NOT NULL," +
+                    "quality_status TEXT NOT NULL," +
+                    "UNIQUE(instrument_id,provider_code,trade_date,external_id,payload_hash)," +
+                    "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_dragon_tiger_record_range ON " +
+                    "market_dragon_tiger_record(instrument_id,trade_date DESC,id DESC)");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS market_dragon_tiger_seat (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT,record_id INTEGER NOT NULL," +
+                    "external_trade_id TEXT,seat_code TEXT NOT NULL DEFAULT '',seat_name TEXT NOT NULL," +
+                    "direction TEXT NOT NULL,rank INTEGER NOT NULL,buy_amount TEXT,sell_amount TEXT," +
+                    "net_amount TEXT,buy_ratio TEXT,sell_ratio TEXT,seat_type TEXT," +
+                    "institutional INTEGER NOT NULL DEFAULT 0,northbound INTEGER NOT NULL DEFAULT 0," +
+                    "retrieved_at TEXT NOT NULL,payload_hash TEXT NOT NULL," +
+                    "UNIQUE(record_id,direction,rank,seat_code,seat_name)," +
+                    "FOREIGN KEY(record_id) REFERENCES market_dragon_tiger_record(id) ON DELETE CASCADE)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_dragon_tiger_seat_record ON " +
+                    "market_dragon_tiger_seat(record_id,direction,rank)");
+            jdbc.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
+                    DRAGON_TIGER_VERSION, "龙虎榜事实与席位版本化存储", LocalDateTime.now().toString());
         });
     }
 

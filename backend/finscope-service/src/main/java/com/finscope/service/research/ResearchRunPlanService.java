@@ -1,5 +1,6 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.ResearchRunPlanRepository;
 import com.finscope.domain.research.ResearchRunPlanStep;
 import org.springframework.stereotype.Service;
@@ -47,14 +48,14 @@ public class ResearchRunPlanService {
 
     public ResearchRunPlanStep findStep(List<ResearchRunPlanStep> steps, String stepId) {
         if (steps == null) {
-            throw new IllegalArgumentException("Research run plan steps are missing");
+            throw new ResourceNotFoundException("研究运行计划不存在");
         }
         for (ResearchRunPlanStep step : steps) {
             if (stepId.equals(step.getStepId())) {
                 return step;
             }
         }
-        throw new IllegalArgumentException("Research run plan step not found: " + stepId);
+        throw new ResourceNotFoundException("研究运行计划步骤不存在：" + stepId);
     }
 
     public ResearchRunPlanStep start(ResearchRunPlanStep step) {

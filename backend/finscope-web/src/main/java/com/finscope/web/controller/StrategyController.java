@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.strategy.StrategyPlaybook;
 import com.finscope.domain.strategy.StrategyReview;
 import com.finscope.domain.strategy.StrategyStockThesis;
@@ -10,6 +12,7 @@ import com.finscope.service.strategy.StrategyReviewService;
 import com.finscope.service.strategy.StrategyStockThesisService;
 import com.finscope.web.request.strategy.AddStrategyHoldingRequest;
 import com.finscope.web.request.strategy.CreateStrategyReviewRequest;
+import com.finscope.web.request.strategy.CreateStrategyPlaybookRequest;
 import com.finscope.web.request.strategy.CreateStrategyStockThesisRequest;
 import com.finscope.web.request.strategy.UpdateStrategyHoldingRequest;
 import com.finscope.web.request.strategy.UpdateStrategyPlaybookRequest;
@@ -49,8 +52,8 @@ public class StrategyController {
      * @return 策略总览响应，包含持仓配置和组合层面的汇总信息。
      */
     @GetMapping("/overview")
-    public StrategyOverviewResponse overview() {
-        return StrategyOverviewResponse.of(strategyHoldingService.list());
+    public ApiResponse<StrategyOverviewResponse> overview() {
+        return ApiResponses.success(StrategyOverviewResponse.of(strategyHoldingService.list()));
     }
 
     /**
@@ -60,9 +63,9 @@ public class StrategyController {
      * @return 新增后的策略持仓响应。
      */
     @PostMapping("/holdings")
-    public StrategyHoldingResponse add(@RequestBody AddStrategyHoldingRequest request) {
-        return StrategyHoldingResponse.of(strategyHoldingService.add(request.getCode(), request.getType(),
-                request.getRole(), request.getTargetWeight(), request.getCurrentWeight(), request.getNote()));
+    public ApiResponse<StrategyHoldingResponse> add(@RequestBody AddStrategyHoldingRequest request) {
+        return ApiResponses.success(StrategyHoldingResponse.of(strategyHoldingService.add(request.getCode(), request.getType(),
+                request.getRole(), request.getTargetWeight(), request.getCurrentWeight(), request.getNote())));
     }
 
     /**
@@ -73,11 +76,10 @@ public class StrategyController {
      * @return 更新后的策略持仓响应。
      */
     @PatchMapping("/holdings/{id}")
-    public StrategyHoldingResponse update(@PathVariable Long id,
-                                          @RequestBody UpdateStrategyHoldingRequest request) {
-        return StrategyHoldingResponse.of(strategyHoldingService.update(id, request.getRole(),
+    public ApiResponse<StrategyHoldingResponse> update(@PathVariable Long id, @RequestBody UpdateStrategyHoldingRequest request) {
+        return ApiResponses.success(StrategyHoldingResponse.of(strategyHoldingService.update(id, request.getRole(),
                 request.getTargetWeight(), request.getCurrentWeight(), request.getNote(),
-                request.getRevision()));
+                request.getRevision())));
     }
 
     /**
@@ -87,8 +89,9 @@ public class StrategyController {
      * @param revision 当前版本号，用于并发更新校验。
      */
     @DeleteMapping("/holdings/{id}")
-    public void delete(@PathVariable Long id, @RequestParam long revision) {
+    public ApiResponse<Void> delete(@PathVariable Long id, @RequestParam long revision) {
         strategyHoldingService.delete(id, revision);
+        return ApiResponses.success(null);
     }
 
     /**
@@ -97,8 +100,30 @@ public class StrategyController {
      * @return 策略执行手册视图列表。
      */
     @GetMapping("/playbooks")
-    public List<StrategyPlaybookView> playbooks() {
-        return strategyPlaybookService.list();
+    public ApiResponse<List<StrategyPlaybookView>> playbooks() {
+        return ApiResponses.success(strategyPlaybookService.list());
+    }
+
+    /**
+     * 查询单个策略执行手册及其规则。
+     *
+     * @param code 执行手册编码。
+     * @return 包含来源信息和有序规则的执行手册详情。
+     */
+    @GetMapping("/playbooks/{code}")
+    public ApiResponse<StrategyPlaybookView> playbook(@PathVariable String code) {
+        return ApiResponses.success(strategyPlaybookService.get(code));
+    }
+
+    /**
+     * 创建数据库驱动的策略执行手册。
+     *
+     * @param request 策略定义、来源信息及规则。
+     * @return 新创建的策略执行手册详情。
+     */
+    @PostMapping("/playbooks")
+    public ApiResponse<StrategyPlaybookView> createPlaybook(@RequestBody CreateStrategyPlaybookRequest request) {
+        return ApiResponses.success(strategyPlaybookService.create(request.toPlaybook(), request.getRules()));
     }
 
     /**
@@ -109,9 +134,8 @@ public class StrategyController {
      * @return 更新后的策略执行手册。
      */
     @PutMapping("/playbooks/{code}/status")
-    public StrategyPlaybook updatePlaybook(@PathVariable String code,
-                                           @RequestBody UpdateStrategyPlaybookRequest request) {
-        return strategyPlaybookService.update(code, request.getStatus(), request.getNote(), request.getRevision());
+    public ApiResponse<StrategyPlaybook> updatePlaybook(@PathVariable String code, @RequestBody UpdateStrategyPlaybookRequest request) {
+        return ApiResponses.success(strategyPlaybookService.update(code, request.getStatus(), request.getNote(), request.getRevision()));
     }
 
     /**
@@ -120,8 +144,8 @@ public class StrategyController {
      * @return 股票研究命题列表。
      */
     @GetMapping("/stock-theses")
-    public List<StrategyStockThesis> theses() {
-        return strategyStockThesisService.list();
+    public ApiResponse<List<StrategyStockThesis>> theses() {
+        return ApiResponses.success(strategyStockThesisService.list());
     }
 
     /**
@@ -131,9 +155,9 @@ public class StrategyController {
      * @return 新创建的股票研究命题。
      */
     @PostMapping("/stock-theses")
-    public StrategyStockThesis createThesis(@RequestBody CreateStrategyStockThesisRequest request) {
-        return strategyStockThesisService.create(request.getCode(), request.getThesis(), request.getBuyConditions(),
-                request.getInvalidationConditions(), request.getWatchFocus(), request.getNote());
+    public ApiResponse<StrategyStockThesis> createThesis(@RequestBody CreateStrategyStockThesisRequest request) {
+        return ApiResponses.success(strategyStockThesisService.create(request.getCode(), request.getThesis(), request.getBuyConditions(),
+                request.getInvalidationConditions(), request.getWatchFocus(), request.getNote()));
     }
 
     /**
@@ -144,11 +168,10 @@ public class StrategyController {
      * @return 更新后的股票研究命题。
      */
     @PatchMapping("/stock-theses/{id}")
-    public StrategyStockThesis updateThesis(@PathVariable Long id,
-                                            @RequestBody UpdateStrategyStockThesisRequest request) {
-        return strategyStockThesisService.update(id, request.getStage(), request.getThesis(),
+    public ApiResponse<StrategyStockThesis> updateThesis(@PathVariable Long id, @RequestBody UpdateStrategyStockThesisRequest request) {
+        return ApiResponses.success(strategyStockThesisService.update(id, request.getStage(), request.getThesis(),
                 request.getBuyConditions(), request.getInvalidationConditions(),
-                request.getWatchFocus(), request.getNote(), request.getRevision());
+                request.getWatchFocus(), request.getNote(), request.getRevision()));
     }
 
     /**
@@ -158,8 +181,9 @@ public class StrategyController {
      * @param revision 当前版本号，用于并发更新校验。
      */
     @DeleteMapping("/stock-theses/{id}")
-    public void deleteThesis(@PathVariable Long id, @RequestParam long revision) {
+    public ApiResponse<Void> deleteThesis(@PathVariable Long id, @RequestParam long revision) {
         strategyStockThesisService.delete(id, revision);
+        return ApiResponses.success(null);
     }
 
     /**
@@ -168,8 +192,8 @@ public class StrategyController {
      * @return 策略复盘记录列表。
      */
     @GetMapping("/reviews")
-    public List<StrategyReview> reviews() {
-        return strategyReviewService.list();
+    public ApiResponse<List<StrategyReview>> reviews() {
+        return ApiResponses.success(strategyReviewService.list());
     }
 
     /**
@@ -179,9 +203,9 @@ public class StrategyController {
      * @return 新创建的策略复盘记录。
      */
     @PostMapping("/reviews")
-    public StrategyReview createReview(@RequestBody CreateStrategyReviewRequest request) {
-        return strategyReviewService.create(request.getReviewDate(), request.getFacts(), request.getReasoning(),
-                request.getNextAction());
+    public ApiResponse<StrategyReview> createReview(@RequestBody CreateStrategyReviewRequest request) {
+        return ApiResponses.success(strategyReviewService.create(request.getReviewDate(), request.getFacts(), request.getReasoning(),
+                request.getNextAction()));
     }
 
     /**
@@ -190,7 +214,8 @@ public class StrategyController {
      * @param id 策略复盘记录 ID。
      */
     @DeleteMapping("/reviews/{id}")
-    public void deleteReview(@PathVariable Long id) {
+    public ApiResponse<Void> deleteReview(@PathVariable Long id) {
         strategyReviewService.delete(id);
+        return ApiResponses.success(null);
     }
 }

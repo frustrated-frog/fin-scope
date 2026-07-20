@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.service.attribution.AttributionService;
 import com.finscope.web.request.StartAttributionRequest;
@@ -36,13 +38,13 @@ public class AttributionController {
      * @return 包含 taskId 和 reportId 的结果；taskId 用于订阅进度，reportId 用于读取报告。
      */
     @PostMapping("/start")
-    public Map<String, String> start(@RequestBody StartAttributionRequest request) {
+    public ApiResponse<Map<String, String>> start(@RequestBody StartAttributionRequest request) {
         AttributionService.AttributionStartResult started = attributionService.startAttribution(
                 request.getCode(), request.getType(), request.getName(), request.getChangePct(), request.getQuoteDate());
         Map<String, String> result = new HashMap<>();
         result.put("taskId", started.getTaskId());
         result.put("reportId", String.valueOf(started.getReportId()));
-        return result;
+        return ApiResponses.success(result);
     }
 
     /**
@@ -63,8 +65,8 @@ public class AttributionController {
      * @return 归因报告详情，包含驱动因素、证据和结论。
      */
     @GetMapping("/reports/{reportId}")
-    public AttributionReport report(@PathVariable Long reportId) {
-        return attributionService.getReport(reportId);
+    public ApiResponse<AttributionReport> report(@PathVariable Long reportId) {
+        return ApiResponses.success(attributionService.getReport(reportId));
     }
 
     /**
@@ -74,8 +76,8 @@ public class AttributionController {
      * @return 归因研究运行视图，包含整体状态和各研究轨道步骤。
      */
     @GetMapping("/reports/{reportId}/run")
-    public AttributionService.AttributionResearchRunView researchRun(@PathVariable Long reportId) {
-        return attributionService.getResearchRun(reportId);
+    public ApiResponse<AttributionService.AttributionResearchRunView> researchRun(@PathVariable Long reportId) {
+        return ApiResponses.success(attributionService.getResearchRun(reportId));
     }
 
     /**
@@ -86,8 +88,8 @@ public class AttributionController {
      * @return 最新归因报告；若不存在则由服务层返回空结果。
      */
     @GetMapping("/latest")
-    public AttributionReport latest(@RequestParam String code, @RequestParam String type) {
-        return attributionService.getLatestByIdentity(code, type);
+    public ApiResponse<AttributionReport> latest(@RequestParam String code, @RequestParam String type) {
+        return ApiResponses.success(attributionService.getLatestByIdentity(code, type));
     }
 
     /**
@@ -99,10 +101,10 @@ public class AttributionController {
      * @return 归因报告历史列表；服务层无结果时返回空列表。
      */
     @GetMapping("/history")
-    public List<AttributionReport> history(@RequestParam String code,
+    public ApiResponse<List<AttributionReport>> history(@RequestParam String code,
                                            @RequestParam String type,
                                            @RequestParam(defaultValue = "10") int limit) {
         List<AttributionReport> list = attributionService.getHistory(code, type, limit);
-        return list == null ? Collections.emptyList() : list;
+        return ApiResponses.success(list == null ? Collections.emptyList() : list);
     }
 }

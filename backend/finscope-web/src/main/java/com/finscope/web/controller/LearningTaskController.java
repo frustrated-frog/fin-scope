@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.api.ApiResponse;
+import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.research.LearningTask;
 import com.finscope.service.research.LearningTaskService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,8 +23,8 @@ public class LearningTaskController {
      * @return 学习任务列表。
      */
     @GetMapping
-    public List<LearningTask> list() {
-        return learningTaskService.list();
+    public ApiResponse<List<LearningTask>> list() {
+        return ApiResponses.success(learningTaskService.list());
     }
 
 }

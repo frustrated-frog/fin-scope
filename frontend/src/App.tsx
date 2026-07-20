@@ -9,6 +9,7 @@ import { ContentStudioView } from './features/content-studio/ContentStudioView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
+import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { LearningView } from './features/learning/LearningView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
@@ -267,6 +268,8 @@ export default function App() {
         return 'Watchlist';
       case 'marketIntel':
         return 'Market Intel · 资金行为';
+      case 'financials':
+        return 'Financials · 公司财报';
       case 'strategy':
         return 'Strategy Workbench';
       default:
@@ -657,6 +660,7 @@ export default function App() {
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
+      {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
       {topicDeleteTarget && (
         <div className="modal-overlay">

@@ -21,7 +21,7 @@ public class QuantStrategySpecValidator {
 
     public void validateOrThrow(QuantStrategySpec spec) {
         List<String> issues = validate(spec);
-        if (!issues.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, String.join("；", issues));
+        if (!issues.isEmpty()) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, String.join("；", issues));
     }
 
     public List<String> validate(QuantStrategySpec spec) {

@@ -108,7 +108,7 @@ public class ResearchRunRepository {
         LocalDateTime updatedAt = LocalDateTime.now();
         jdbcTemplate.update("UPDATE research_run SET status = ?, summary = ?, error_message = ?, updated_at = ? WHERE id = ?",
                 status, summary, errorMessage, TimeUtil.text(updatedAt), id);
-        return findById(id).orElseThrow(() -> new IllegalArgumentException("Research run not found: " + id));
+        return findById(id).orElseThrow(() -> new IllegalStateException("更新后的研究运行不存在：" + id));
     }
 
     public int failRunningRuns(String errorMessage) {
@@ -128,7 +128,7 @@ public class ResearchRunRepository {
                 value(run.getEvidenceCount()), value(run.getLearningTaskCount()), value(run.getContentIdeaCount()),
                 run.getBriefDate() == null ? null : run.getBriefDate().toString(), run.getStatus(), run.getSummary(),
                 run.getErrorMessage(), TimeUtil.text(run.getUpdatedAt()), run.getId());
-        return findById(run.getId()).orElseThrow(() -> new IllegalArgumentException("Research run not found: " + run.getId()));
+        return findById(run.getId()).orElseThrow(() -> new IllegalStateException("更新后的研究运行不存在：" + run.getId()));
     }
 
     public List<ResearchRun> findAll() {

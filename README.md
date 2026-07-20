@@ -9,7 +9,7 @@ FinScope 是一个本地优先的个人投研信息工作台。它用于建立�
 - 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS、站点专属抓取适配器
 - 市场数据服务：Python 3.11+、FastAPI、AkShare、pytdx、httpx
 - 前端：React、TypeScript、Vite
-- 存储：`data/finance.db` 与 `data/vault/` 下的 Markdown 文件
+- 存储：`$FINSCOPE_DATA_ROOT/finance.db` 与 `$FINSCOPE_DATA_ROOT/vault/` 下的 Markdown 文件
 - AI 扩展点：OpenAI 兼容 `LlmChatClient`、文章解读 Agent、`agent_run` 调用留痕
 
 ## 当前能力
@@ -46,9 +46,14 @@ fin-scope/
 后端：
 
 ```bash
+export FINSCOPE_DATA_ROOT="$(cd .. && pwd)/data"
 cd backend
 mvn -pl finscope-web -am spring-boot:run
 ```
+
+`FINSCOPE_DATA_ROOT` 是数据库与 Vault 的唯一位置配置，必须指向已经存在且包含
+`finance.db` 的目录。未显式配置时，源码启动会从项目位置定位工作区上层的 `data/`；
+无法定位或数据库不存在时应用会拒绝启动，不会由 SQLite 静默创建空库。启动日志会打印最终使用的数据库绝对路径。
 
 前端：
 
@@ -70,6 +75,46 @@ uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 
 Java 接入方式和数据接口说明见 [market-data-service/README.md](market-data-service/README.md)。
 
+## API 响应约定
+
+除 SSE、文件/二进制流和 `204 No Content` 外，所有 `/api/**` JSON 接口都返回统一信封：
+
+Controller 方法签名必须显式声明 `ApiResponse<T>` 或 `ResponseEntity<ApiResponse<T>>`，不依赖运行时隐式包装；契约测试会阻止裸实体返回。
+
+```json
+{
+  "success": true,
+  "code": "FS-0000",
+  "message": "成功",
+  "data": {
+    "id": 1
+  },
+  "traceId": "4b6f...",
+  "timestamp": "2026-07-16T10:00:00Z"
+}
+```
+
+失败响应使用相同结构，`success=false`、`data=null`，并保留正确的 HTTP 状态。错误码按领域分段：
+
+```json
+{
+  "success": false,
+  "code": "FS-2001",
+  "message": "文章不存在：999",
+  "data": null,
+  "traceId": "4b6f...",
+  "timestamp": "2026-07-16T10:00:00Z"
+}
+```
+
+- `FS-1xxx`：请求参数、认证、权限和限流。
+- `FS-2xxx`：资源不存在、业务状态冲突、重复操作和数据版本冲突。
+- `FS-3xxx`：外部服务、市场数据和模型服务异常。
+- `FS-4xxx`：数据库、文件、异步任务和数据完整性异常。
+- `FS-5000`：未分类的系统内部异常。
+
+客户端可以传入 `X-Request-Id`；服务端会校验并回传，也会在响应 `traceId` 和日志 MDC 中使用它。未传入时由服务端生成。前端统一客户端只向业务代码返回 `data`，并在失败时抛出带 `status`、`code`、`traceId` 的 `ApiError`。
+
 ## Agent / LLM 配置
 
 FinScope 使用 OpenAI 兼容 Chat Completions 接口，不绑定具体服务商。API Key 只从本地环境变量读取，不写入代码和仓库。
@@ -85,6 +130,20 @@ mvn -pl finscope-web -am spring-boot:run
 
 启用后，新增文章生成情报卡片、从文章沉淀主题时会走 `article-interpret` Agent 节点。每次调用会在 Agent Runs 页面留下节点、状态、耗时和错误信息；如果模型调用失败，系统会保留抓取链路并使用确定性兜底，不会阻断 Inbox。
 
+其他常用环境变量：
+
+```bash
+export FINSCOPE_DATA_ROOT=/你的绝对路径/data
+export FINSCOPE_CORS_ORIGIN=http://localhost:5173
+export FINSCOPE_SLOW_REQUEST_MS=1000
+export FINSCOPE_SEARCH_ENABLED=false
+export FINSCOPE_SEARCH_PROVIDER=tavily
+export FINSCOPE_SEARCH_API_KEY=你的搜索服务密钥
+export FINSCOPE_MARKET_DATA_PYTHON_BASE_URL=http://127.0.0.1:8000
+```
+
+仓库配置文件不保存任何 API Key。默认关闭 LLM 和搜索服务，只有显式配置环境变量后才启用。
+
 ## 验证命令
 
 ```bash
@@ -95,4 +154,4 @@ cd frontend && npm run build
 
 ## 数据安全
 
-`data/finance.db`、抓取原文、导出包、本地环境文件和 API Key 都会被 Git 忽略。不要把公司内部数据、代码、凭证、专有 Prompt 或私有文档放进这个项目。
+`$FINSCOPE_DATA_ROOT/finance.db`、抓取原文、导出包、本地环境文件和 API Key 都不应进入 Git。不要把公司内部数据、代码、凭证、专有 Prompt 或私有文档放进这个项目。

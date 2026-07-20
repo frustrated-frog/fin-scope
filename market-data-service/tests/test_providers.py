@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from finscope_market_data.models import DataCapability, StockSymbol
+from finscope_market_data.models import DataCapability, FinancialStatementType, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.base import ProviderError
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
@@ -107,6 +107,72 @@ def test_akshare_mapping_accepts_chinese_dataframe_columns() -> None:
     assert bars[0].volume == 123456
     assert flows[0].main_net_inflow == 1_000_000
     assert flows[0].small_net_inflow == -800_000
+
+
+def test_akshare_maps_three_financial_statements_with_stable_concepts() -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    common = {
+        "REPORT_DATE": "2026-06-30 00:00:00",
+        "REPORT_TYPE": "中报",
+        "NOTICE_DATE": "2026-08-20 00:00:00",
+        "CURRENCY": "CNY",
+    }
+
+    result = AkshareProvider.map_financial_records(
+        symbol=symbol,
+        period_end="2026-06-30",
+        report_type="HALF_YEAR",
+        scope="CONSOLIDATED",
+        income_records=[
+            {
+                **common,
+                "TOTAL_OPERATE_INCOME": 1_200_000_000.12,
+                "PARENT_NETPROFIT": 210_000_000,
+                "SALE_EXPENSE": 80_000_000,
+            }
+        ],
+        balance_records=[
+            {
+                **common,
+                "TOTAL_ASSETS": 3_400_000_000,
+                "TOTAL_LIABILITIES": 1_100_000_000,
+                "TOTAL_CURRENT_ASSETS": 1_500_000_000,
+                "TOTAL_CURRENT_LIAB": 620_000_000,
+                "ACCOUNTS_RECE": 220_000_000,
+                "INVENTORY": 180_000_000,
+            }
+        ],
+        cash_flow_records=[
+            {
+                **common,
+                "NETCASH_OPERATE": 180_000_000,
+                "CONSTRUCT_LONG_ASSET": 90_000_000,
+                "END_CCE": 520_000_000,
+            }
+        ],
+    )
+
+    assert result.report.period_end == "2026-06-30"
+    assert result.report.report_type == "HALF_YEAR"
+    assert result.report.published_at is not None
+    assert {item.statement_type for item in result.statements} == {
+        FinancialStatementType.INCOME,
+        FinancialStatementType.BALANCE_SHEET,
+        FinancialStatementType.CASH_FLOW,
+    }
+    values = {
+        value.concept_code: value.value
+        for statement in result.statements
+        for value in statement.values
+    }
+    assert values["REVENUE"] == "1200000000.12"
+    assert values["NET_PROFIT_PARENT"] == "210000000"
+    assert values["ACCOUNTS_RECEIVABLE"] == "220000000"
+    assert values["INVENTORY"] == "180000000"
+    assert values["TOTAL_CURRENT_ASSETS"] == "1500000000"
+    assert values["TOTAL_CURRENT_LIABILITIES"] == "620000000"
+    assert values["OPERATING_CASH_FLOW"] == "180000000"
+    assert values["CAPITAL_EXPENDITURE"] == "90000000"
 
 
 @pytest.mark.asyncio

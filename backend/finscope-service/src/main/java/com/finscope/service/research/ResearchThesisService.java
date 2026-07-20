@@ -1,5 +1,8 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.ThesisFinding;
@@ -43,13 +46,13 @@ public class ResearchThesisService {
 
     public ResearchThesis detail(Long id) {
         return researchThesisRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Research thesis not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("研究命题不存在：" + id));
     }
 
     public ThesisFinding addFinding(Long thesisId, ThesisFinding finding) {
         detail(thesisId);
         if (finding == null || isBlank(finding.getStance()) || isBlank(finding.getSummary())) {
-            throw new IllegalArgumentException("Finding stance and summary are required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究发现的立场和摘要不能为空");
         }
         finding.setThesisId(thesisId);
         return researchThesisRepository.saveFinding(finding);
@@ -72,11 +75,12 @@ public class ResearchThesisService {
     private void validate(ResearchThesis thesis) {
         if (thesis == null || isBlank(thesis.getQuestion()) || isBlank(thesis.getSubjectType())
                 || isBlank(thesis.getSubjectName())) {
-            throw new IllegalArgumentException("Thesis question, subject type and subject name are required");
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究问题、主体类型和主体名称不能为空");
         }
         if (!"COMPANY".equals(thesis.getSubjectType()) && !"INDUSTRY".equals(thesis.getSubjectType())
                 && !"WATCHLIST".equals(thesis.getSubjectType())) {
-            throw new IllegalArgumentException("Unsupported thesis subject type: " + thesis.getSubjectType());
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
+                    "不支持的研究主体类型：" + thesis.getSubjectType());
         }
     }
 

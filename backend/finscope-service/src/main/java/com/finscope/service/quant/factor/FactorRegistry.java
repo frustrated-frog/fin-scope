@@ -33,7 +33,7 @@ public class FactorRegistry {
     public List<FactorDefinition> list() { return new ArrayList<FactorDefinition>(values.values()); }
     public FactorDefinition get(String code) {
         FactorDefinition value = values.get(code);
-        if (value == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "未知因子：" + code);
+        if (value == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知因子：" + code);
         return value;
     }
     public boolean contains(String code) { return values.containsKey(code); }

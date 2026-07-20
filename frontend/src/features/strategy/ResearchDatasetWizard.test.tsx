@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
+import { apiResponse } from '../../test/apiEnvelope';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -10,15 +11,15 @@ test('creates a truthful real dataset container and freezes only after explicit 
   const onChanged = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if (path === '/api/quant/datasets') return new Response(JSON.stringify({
+    if (path === '/api/quant/datasets') return apiResponse({
       id: 8, name: '资金行为研究集', market: 'A_SHARE', dataKind: 'REAL', datasetLevel: 'RESEARCH',
       fingerprintVersion: 'quant-dataset-v2', status: 'BUILDING', qualitySummary: '{"barCount":0}'
-    }), { status: 201 });
-    if (path.endsWith('/capital-flow-freeze')) return new Response(JSON.stringify({
+    }, { status: 201 });
+    if (path.endsWith('/capital-flow-freeze')) return apiResponse({
       id: 8, name: '资金行为研究集', market: 'A_SHARE', dataKind: 'REAL', datasetLevel: 'RESEARCH',
       fingerprintVersion: 'quant-dataset-v2', status: 'BLOCKED', qualitySummary: '{"issueCodes":["missingCapitalFlow"]}'
-    }));
-    return new Response(JSON.stringify({}), { status: 200 });
+    });
+    return apiResponse({}, { status: 200 });
   }));
 
   const { rerender } = render(<ResearchDatasetWizard dataset={undefined} suggestedIndex={1}
@@ -43,9 +44,9 @@ test('creates a truthful real dataset container and freezes only after explicit 
 test('imports complete OHLC rows but rejects a current-snapshot universe', async () => {
   const user = userEvent.setup();
   const addToast = vi.fn();
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify({
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => apiResponse({
     id: 8, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL', status: 'BUILDING'
-  }))));
+  })));
   const dataset = { id: 8, name: '真实研究集', market: 'A_SHARE', dataKind: 'REAL' as const, status: 'BUILDING' };
   render(<ResearchDatasetWizard dataset={dataset} suggestedIndex={1} onDatasetChanged={vi.fn()} addToast={addToast} />);
   const bars = new File([JSON.stringify([{
