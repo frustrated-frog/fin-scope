@@ -5331,15 +5331,163 @@ td {
 
 .intake-candidate-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 12%, var(--line));
+}
+
+.intake-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 13%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    0 8px 24px rgba(4, 13, 24, .08);
+  backdrop-filter: blur(12px);
+}
+
+.intake-action-decisions {
+  border-color: color-mix(in srgb, var(--accent) 23%, var(--line));
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 68%),
+    color-mix(in srgb, var(--surface-2) 88%, transparent);
+}
+
+.intake-action-button {
+  position: relative;
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: .015em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    background .18s ease,
+    color .18s ease,
+    box-shadow .18s ease;
+}
+
+.intake-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.intake-action-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, white);
+  outline-offset: 2px;
+}
+
+.intake-action-button:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.intake-action-muted {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 88%, var(--ink));
+}
+
+.intake-action-muted:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #31b7cf 30%, var(--line));
+  background: color-mix(in srgb, #31b7cf 8%, var(--surface));
+  color: color-mix(in srgb, #31b7cf 72%, var(--ink));
+}
+
+.intake-action-danger {
+  border-color: color-mix(in srgb, #ef6a72 28%, var(--line));
+  background: color-mix(in srgb, #ef6a72 7%, transparent);
+  color: color-mix(in srgb, #ef6a72 78%, var(--ink));
+}
+
+.intake-action-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #ef6a72 52%, var(--line));
+  background: color-mix(in srgb, #ef6a72 13%, var(--surface));
+  color: color-mix(in srgb, #ff8a91 88%, var(--ink));
+  box-shadow: 0 8px 22px rgba(196, 55, 67, .12);
+}
+
+.intake-action-primary {
+  min-width: 112px;
+  border-color: color-mix(in srgb, #35d6ae 42%, var(--line));
+  background: linear-gradient(135deg, #138a6c, #0b6f61);
+  color: #effffb;
+  box-shadow:
+    inset 0 1px 0 rgba(203, 255, 239, .18),
+    0 8px 24px rgba(13, 118, 91, .2);
+}
+
+.intake-action-primary::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #7df7d3;
+  box-shadow: 0 0 0 3px rgba(125, 247, 211, .11), 0 0 12px rgba(125, 247, 211, .55);
+  content: "";
+}
+
+.intake-action-primary:hover:not(:disabled) {
+  border-color: rgba(104, 244, 207, .7);
+  background: linear-gradient(135deg, #19a17d, #0d7c6b);
+  box-shadow:
+    inset 0 1px 0 rgba(203, 255, 239, .24),
+    0 11px 30px rgba(13, 139, 105, .28);
 }
 
 .intake-source-link {
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+}
+
+.intake-source-link::after {
+  color: color-mix(in srgb, #31b7cf 72%, var(--muted));
+  font: 760 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  content: "↗";
+}
+
+@media (max-width: 720px) {
+  .intake-candidate-actions {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .intake-action-group {
+    display: grid;
+    width: 100%;
+  }
+
+  .intake-action-utility {
+    grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  }
+
+  .intake-action-decisions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .intake-action-primary {
+    min-width: 0;
+  }
 }
 
 /* Form Container */

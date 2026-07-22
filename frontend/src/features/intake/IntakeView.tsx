@@ -188,56 +188,65 @@ export function IntakeView({
                 </div>
               </div>
 
-              <div className="intake-candidate-actions">
-                <a className="ghost-button intake-source-link" href={candidate.originalUrl} target="_blank" rel="noreferrer">
-                  原文
-                </a>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  aria-label={`稍后看-${candidate.id}`}
-                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
-                  onClick={() => updateStatus(candidate.id, 'SAVED_FOR_LATER')}
-                >
-                  稍后看
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
-                  onClick={() => updateStatus(candidate.id, 'SKIPPED')}
-                >
-                  跳过
-                </button>
-                {(candidate.humanStatus === 'SKIPPED' || candidate.humanStatus === 'REJECTED') && (
+              <div className="intake-candidate-actions" role="toolbar" aria-label="候选决策操作">
+                <div className="intake-action-group intake-action-utility" role="group" aria-label="辅助操作">
+                  <a
+                    className="intake-action-button intake-action-muted intake-source-link"
+                    href={candidate.originalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    原文
+                  </a>
                   <button
                     type="button"
-                    className="ghost-button"
-                    disabled={busyCandidateId === candidate.id}
-                    onClick={() => updateStatus(candidate.id, 'PENDING')}
+                    className="intake-action-button intake-action-muted"
+                    aria-label={`稍后看-${candidate.id}`}
+                    disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
+                    onClick={() => updateStatus(candidate.id, 'SAVED_FOR_LATER')}
                   >
-                    恢复待处理
+                    稍后看
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="danger-button"
-                  disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
-                  onClick={() => updateStatus(candidate.id, 'REJECTED')}
-                >
-                  拒绝
-                </button>
-                <button
-                  type="button"
-                  className="compact-button"
-                  aria-label={`入文章库-${candidate.id}`}
-                  disabled={busyCandidateId === candidate.id || (candidate.humanStatus === 'PROMOTED' && !candidate.promotedArticleId)}
-                  onClick={() => promote(candidate.id)}
-                >
-                  {busyCandidateId === candidate.id
-                    ? '正在入库…'
-                    : candidate.humanStatus === 'PROMOTED' ? '重试工作包' : '入文章库'}
-                </button>
+                  <button
+                    type="button"
+                    className="intake-action-button intake-action-muted"
+                    disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
+                    onClick={() => updateStatus(candidate.id, 'SKIPPED')}
+                  >
+                    跳过
+                  </button>
+                  {(candidate.humanStatus === 'SKIPPED' || candidate.humanStatus === 'REJECTED') && (
+                    <button
+                      type="button"
+                      className="intake-action-button intake-action-muted"
+                      disabled={busyCandidateId === candidate.id}
+                      onClick={() => updateStatus(candidate.id, 'PENDING')}
+                    >
+                      恢复待处理
+                    </button>
+                  )}
+                </div>
+                <div className="intake-action-group intake-action-decisions" role="group" aria-label="决策操作">
+                  <button
+                    type="button"
+                    className="intake-action-button intake-action-danger"
+                    disabled={busyCandidateId === candidate.id || isTerminalStatus(candidate.humanStatus)}
+                    onClick={() => updateStatus(candidate.id, 'REJECTED')}
+                  >
+                    拒绝
+                  </button>
+                  <button
+                    type="button"
+                    className="intake-action-button intake-action-primary"
+                    aria-label={`入文章库-${candidate.id}`}
+                    disabled={busyCandidateId === candidate.id || (candidate.humanStatus === 'PROMOTED' && !candidate.promotedArticleId)}
+                    onClick={() => promote(candidate.id)}
+                  >
+                    {busyCandidateId === candidate.id
+                      ? '正在入库…'
+                      : candidate.humanStatus === 'PROMOTED' ? '重试工作包' : '入文章库'}
+                  </button>
+                </div>
               </div>
               {busyCandidateId === candidate.id && (
                 <div className="intake-candidate-progress" role="status" aria-live="polite">

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -26,6 +26,25 @@ const candidate = {
 beforeEach(() => {
   vi.mocked(api).mockReset();
   vi.mocked(createIngestTaskChannel).mockReset();
+});
+
+test('groups candidate actions into utility and decision controls', () => {
+  render(
+    <IntakeView
+      batches={[]}
+      candidates={[candidate]}
+      status="PENDING"
+      onStatusChange={vi.fn().mockResolvedValue([])}
+      onChanged={vi.fn().mockResolvedValue(undefined)}
+      addToast={vi.fn()}
+    />
+  );
+
+  const toolbar = screen.getByRole('toolbar', { name: '候选决策操作' });
+  expect(within(toolbar).getByRole('group', { name: '辅助操作' })).toBeInTheDocument();
+  expect(within(toolbar).getByRole('group', { name: '决策操作' })).toBeInTheDocument();
+  expect(screen.getByLabelText('入文章库-7')).toHaveClass('intake-action-primary');
+  expect(screen.getByRole('button', { name: '拒绝' })).toHaveClass('intake-action-danger');
 });
 
 test('shows in-card progress immediately after promoting a candidate', async () => {
