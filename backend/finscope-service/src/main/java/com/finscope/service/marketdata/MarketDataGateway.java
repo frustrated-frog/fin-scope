@@ -45,7 +45,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /** 现有页面访问外部行情的统一高可用入口。 */
 @Service
@@ -65,6 +64,7 @@ public class MarketDataGateway {
     private final MarketDataSingleFlight singleFlight;
     private final MarketDataGatewayProperties properties;
     private final Executor executor;
+    private final Executor fallbackExecutor;
     private final Clock clock;
     private final Map<String, CacheEntry> freshCache =
             new java.util.concurrent.ConcurrentHashMap<String, CacheEntry>();
@@ -84,11 +84,12 @@ public class MarketDataGateway {
                              QuoteQualityValidator validator,
                              MarketDataSingleFlight singleFlight,
                              MarketDataGatewayProperties properties,
-                             @Qualifier("marketDataGatewayExecutor") Executor executor) {
+                             @Qualifier("marketDataGatewayExecutor") Executor executor,
+                             @Qualifier("marketDataFallbackExecutor") Executor fallbackExecutor) {
         this(quoteAdapters, sectorProviders, capitalFlowProviders, dragonTigerProviders,
                 routePolicy, guard, snapshots,
                 refreshRuns, codec, validator,
-                singleFlight, properties, executor, Clock.systemDefaultZone());
+                singleFlight, properties, executor, fallbackExecutor, Clock.systemDefaultZone());
     }
 
     /** 保留给聚焦行情测试和非 Spring 调用方的兼容构造器。 */
@@ -155,6 +156,26 @@ public class MarketDataGateway {
                              MarketDataGatewayProperties properties,
                              Executor executor,
                              Clock clock) {
+        this(quoteAdapters, sectorProviders, capitalFlowProviders, dragonTigerProviders,
+                routePolicy, guard, snapshots, refreshRuns, codec, validator, singleFlight,
+                properties, executor, executor, clock);
+    }
+
+    private MarketDataGateway(List<QuoteAdapter> quoteAdapters,
+                              List<SectorMarketProvider> sectorProviders,
+                              List<CapitalFlowProvider> capitalFlowProviders,
+                              List<DragonTigerProvider> dragonTigerProviders,
+                              ProviderRoutePolicy routePolicy,
+                              ProviderRequestGuard guard,
+                              MarketDataSnapshotRepository snapshots,
+                              MarketDataRefreshRunRepository refreshRuns,
+                              MarketDataSnapshotCodec codec,
+                              QuoteQualityValidator validator,
+                              MarketDataSingleFlight singleFlight,
+                              MarketDataGatewayProperties properties,
+                              Executor executor,
+                              Executor fallbackExecutor,
+                              Clock clock) {
         this.quoteAdapters = new ArrayList<QuoteAdapter>(quoteAdapters);
         this.sectorProviders = new ArrayList<SectorMarketProvider>(sectorProviders);
         this.capitalFlowProviders = new ArrayList<CapitalFlowProvider>(capitalFlowProviders);
@@ -168,6 +189,7 @@ public class MarketDataGateway {
         this.singleFlight = singleFlight;
         this.properties = properties;
         this.executor = executor;
+        this.fallbackExecutor = fallbackExecutor;
         this.clock = clock;
     }
 
@@ -584,43 +606,49 @@ public class MarketDataGateway {
                                                  List<String> codes) {
         if (ordered.isEmpty() || codes.isEmpty()) return Collections.emptyList();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(properties.getRequestBudgetMs());
+        long hedgeDelayNanos = TimeUnit.MILLISECONDS.toNanos(properties.getHedgeDelayMs());
         List<ProviderAttempt> completed = new ArrayList<ProviderAttempt>();
         List<PendingAttempt> pending = new ArrayList<PendingAttempt>();
         int next = 0;
         pending.add(start(ordered.get(next), next++, capability, codes));
+        long nextHedgeAt = System.nanoTime() + hedgeDelayNanos;
 
-        ProviderAttempt early = await(pending.get(0).future,
-                Math.min(properties.getHedgeDelayMs(), remainingMillis(deadline)));
-        if (early != null) {
-            completed.add(early);
-            pending.clear();
-        }
-        if (!coversAll(completed, codes) && next < ordered.size()) {
-            pending.add(start(ordered.get(next), next++, capability, codes));
-        }
-
-        while (!coversAll(completed, codes) && remainingMillis(deadline) > 0L) {
+        while (!coverageSatisfied(completed, codes, next, ordered.size())
+                && remainingMillis(deadline) > 0L) {
             drainCompleted(pending, completed);
-            if (coversAll(completed, codes)) break;
+            if (coverageSatisfied(completed, codes, next, ordered.size())) break;
             if (pending.isEmpty()) {
                 if (next >= ordered.size()) break;
                 pending.add(start(ordered.get(next), next++, capability, codes));
+                nextHedgeAt = System.nanoTime() + hedgeDelayNanos;
+                continue;
             }
-            ProviderAttempt done = awaitAny(pending, remainingMillis(deadline));
-            if (done == null) break;
-            drainCompleted(pending, completed);
-            if (!coversAll(completed, codes) && next < ordered.size() && pending.isEmpty()) {
+
+            long now = System.nanoTime();
+            if (next < ordered.size() && now >= nextHedgeAt) {
                 pending.add(start(ordered.get(next), next++, capability, codes));
+                nextHedgeAt = now + hedgeDelayNanos;
+                continue;
             }
+
+            long waitMillis = remainingMillis(deadline);
+            if (next < ordered.size()) {
+                long untilHedgeMillis = Math.max(1L,
+                        TimeUnit.NANOSECONDS.toMillis(nextHedgeAt - now));
+                waitMillis = Math.min(waitMillis, untilHedgeMillis);
+            }
+            awaitAny(pending, waitMillis);
         }
         drainCompleted(pending, completed);
+        cancelPending(pending);
         return completed;
     }
 
     private PendingAttempt start(QuoteAdapter adapter, int order,
                                  MarketDataCapability capability, List<String> codes) {
         CompletableFuture<ProviderAttempt> future = CompletableFuture.supplyAsync(
-                () -> fetchProvider(adapter, order, capability, codes), executor);
+                () -> fetchProvider(adapter, order, capability, codes),
+                adapter.isTerminalFallback() ? fallbackExecutor : executor);
         return new PendingAttempt(future);
     }
 
@@ -743,16 +771,38 @@ public class MarketDataGateway {
             for (Quote quote : attempt.quotes) {
                 String code = quote == null || quote.getInstrumentCode() == null
                         ? "" : quote.getInstrumentCode().trim().toUpperCase(Locale.ROOT);
-                if (!requested.contains(code) || accepted.containsKey(code)) continue;
-                validator.accept(code, quote).ifPresent(value -> accepted.put(code,
-                        new AcceptedQuote(value, attempt.provider, attempt.retrievedAt)));
+                if (!requested.contains(code)) continue;
+                validator.accept(code, quote).ifPresent(value -> {
+                    AcceptedQuote existing = accepted.get(code);
+                    if (existing == null || (existing.quote.getPrice() == null
+                            && value.getPrice() != null)) {
+                        accepted.put(code,
+                                new AcceptedQuote(value, attempt.provider, attempt.retrievedAt));
+                    }
+                });
             }
         }
         return accepted;
     }
 
-    private boolean coversAll(List<ProviderAttempt> attempts, List<String> codes) {
-        return acceptedQuotes(attempts, codes).size() == codes.size();
+    private boolean coverageSatisfied(List<ProviderAttempt> attempts, List<String> codes,
+                                      int startedProviderCount, int providerCount) {
+        Map<String, AcceptedQuote> accepted = acceptedQuotes(attempts, codes);
+        if (accepted.size() != codes.size()) return false;
+        boolean everyQuoteHasLivePrice = true;
+        for (AcceptedQuote value : accepted.values()) {
+            if (value.quote.getPrice() == null) {
+                everyQuoteHasLivePrice = false;
+                break;
+            }
+        }
+        if (everyQuoteHasLivePrice) return true;
+        if (startedProviderCount < providerCount) return false;
+        int terminalOrder = providerCount - 1;
+        for (ProviderAttempt attempt : attempts) {
+            if (attempt.order == terminalOrder) return true;
+        }
+        return false;
     }
 
     private Optional<MarketDataSnapshot> findSnapshot(MarketDataCapability capability, String scopeKey) {
@@ -829,17 +879,6 @@ public class MarketDataGateway {
         }
     }
 
-    private ProviderAttempt await(CompletableFuture<ProviderAttempt> future, long timeoutMillis) {
-        if (timeoutMillis <= 0L) return null;
-        try {
-            return future.get(timeoutMillis, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException error) {
-            return null;
-        } catch (Exception error) {
-            return null;
-        }
-    }
-
     private ProviderAttempt awaitAny(List<PendingAttempt> pending, long timeoutMillis) {
         if (pending.isEmpty() || timeoutMillis <= 0L) return null;
         CompletableFuture<?>[] values = pending.stream()
@@ -862,6 +901,13 @@ public class MarketDataGateway {
                 iterator.remove();
             }
         }
+    }
+
+    private void cancelPending(List<PendingAttempt> pending) {
+        for (PendingAttempt value : pending) {
+            value.future.cancel(true);
+        }
+        pending.clear();
     }
 
     private long remainingMillis(long deadlineNanos) {

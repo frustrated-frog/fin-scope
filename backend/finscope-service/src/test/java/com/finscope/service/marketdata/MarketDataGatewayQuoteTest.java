@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketDataGatewayQuoteTest {
@@ -103,6 +104,51 @@ class MarketDataGatewayQuoteTest {
         assertEquals("EASTMONEY_FUND_VALUATION_BACKUP", quote.getSourceCode());
         assertEquals(2.6322, quote.getPrice());
         assertTrue(quote.getWarning().contains("备用数据源"));
+    }
+
+    @Test
+    void prefersBackupIntradayEstimateWhenPrimaryOnlyHasConfirmedNav() {
+        FakeQuoteAdapter fundPrimary = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION", 10);
+        FakeQuoteAdapter fundBackup = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION_BACKUP", 20);
+        fundPrimary.result = Collections.singletonList(confirmedFund("021894"));
+        fundBackup.result = Collections.singletonList(validFund("021894", 2.6322));
+
+        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(fundPrimary, fundBackup))
+                .fetchQuotes("FUND", Collections.singletonList("021894"), true)
+                .getQuotes().get(0);
+
+        assertEquals("EASTMONEY_FUND_VALUATION_BACKUP", quote.getSourceCode());
+        assertEquals(2.6322, quote.getPrice());
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
+    }
+
+    @Test
+    void startsConfirmedNavHedgeWhileBothFundValuationProvidersAreStillBlocked() {
+        FakeQuoteAdapter fundPrimary = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION", 10);
+        FakeQuoteAdapter fundBackup = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION_BACKUP", 20);
+        FakeQuoteAdapter confirmedNav = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_CONFIRMED_NAV", 30);
+        fundPrimary.block();
+        fundBackup.block();
+        confirmedNav.result = Collections.singletonList(confirmedFund("021894"));
+
+        long started = System.nanoTime();
+        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(
+                        fundPrimary, fundBackup, confirmedNav))
+                .fetchQuotes("FUND", Collections.singletonList("021894"), true)
+                .getQuotes().get(0);
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
+        assertEquals("EASTMONEY_FUND_CONFIRMED_NAV", quote.getSourceCode());
+        assertEquals(2.6222, quote.getConfirmedNav());
+        assertEquals("2026-07-13", quote.getConfirmedNavDate());
+        assertNull(quote.getPrice());
+        assertTrue(elapsedMillis < 500L);
     }
 
     @Test
@@ -190,6 +236,17 @@ class MarketDataGatewayQuoteTest {
         return quote;
     }
 
+    private Quote confirmedFund(String code) {
+        Quote quote = new Quote();
+        quote.setInstrumentCode(code);
+        quote.setConfirmedNav(2.6222);
+        quote.setConfirmedNavDate("2026-07-13");
+        quote.setConfirmedNavChangePct(14.6);
+        quote.setQuoteTime(LocalDateTime.of(2026, 7, 13, 15, 0));
+        quote.setValid(true);
+        return quote;
+    }
+
     private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
@@ -259,6 +316,9 @@ class MarketDataGatewayQuoteTest {
         public Duration minimumInterval() { return Duration.ZERO; }
         public Duration timeout() { return Duration.ofMillis(500); }
         public boolean supports(String type) { return instrumentType.equals(type); }
+        public boolean isTerminalFallback() {
+            return "EASTMONEY_FUND_CONFIRMED_NAV".equals(code);
+        }
         public List<Quote> fetch(List<String> codes) throws Exception {
             calls.incrementAndGet();
             started.countDown();

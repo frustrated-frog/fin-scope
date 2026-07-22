@@ -198,7 +198,8 @@ test('shows the intraday fund estimate in a compact secondary row', async () => 
       confirmedNavChangePct: 14.6,
       price: 2.6322,
       changePct: 0.38,
-      asOf: '2026-07-22T10:33:00',
+      asOf: '2026-07-22T02:33:00',
+      quoteTime: '2026-07-22T10:33:00',
       quoteDate: '2026-07-21'
     }] : []
   ) as never);

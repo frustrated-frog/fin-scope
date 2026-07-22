@@ -6,15 +6,16 @@ import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,7 +32,10 @@ public class FundQuoteAdapter implements QuoteAdapter {
             "https://fundcomapi.tiantianfunds.com/mm/newCore/FundValuationLast";
     static final String FIELDS =
             "FCODE,SHORTNAME,GSZZL,GZTIME,GSZ,NAV,PDATE,NAVCHGRT";
-    private static final int TIMEOUT_MS = 8000;
+    private static final int TIMEOUT_MS = 2500;
+    private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Duration MAX_ESTIMATE_AGE = Duration.ofHours(16);
+    private static final long MAX_CONFIRMED_NAV_AGE_DAYS = 14L;
     private static final DateTimeFormatter ESTIMATE_TIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
@@ -42,25 +46,39 @@ public class FundQuoteAdapter implements QuoteAdapter {
     private final String providerCode;
     private final int priority;
     private final FundDataRequester requester;
+    private final Clock clock;
 
     public FundQuoteAdapter() {
-        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10, null);
+        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10, null,
+                Clock.systemDefaultZone());
     }
 
     protected FundQuoteAdapter(String endpoint, String providerCode, int priority) {
-        this(endpoint, providerCode, priority, null);
+        this(endpoint, providerCode, priority, null, Clock.systemDefaultZone());
     }
 
     FundQuoteAdapter(FundDataRequester requester) {
-        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10, requester);
+        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10, requester,
+                Clock.systemDefaultZone());
+    }
+
+    FundQuoteAdapter(FundDataRequester requester, Clock clock) {
+        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10, requester, clock);
     }
 
     FundQuoteAdapter(String endpoint, String providerCode, int priority,
                      FundDataRequester requester) {
+        this(endpoint, providerCode, priority, requester, Clock.systemDefaultZone());
+    }
+
+    FundQuoteAdapter(String endpoint, String providerCode, int priority,
+                     FundDataRequester requester, Clock clock) {
         this.endpoint = endpoint;
         this.providerCode = providerCode;
         this.priority = priority;
-        this.requester = requester == null ? this::request : requester;
+        this.requester = requester == null
+                ? url -> EastmoneyFundHttpClient.get(url, TIMEOUT_MS) : requester;
+        this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
     @Override
@@ -123,13 +141,27 @@ public class FundQuoteAdapter implements QuoteAdapter {
         quote.setConfirmedNav(number(item, "NAV"));
         quote.setConfirmedNavChangePct(number(item, "NAVCHGRT"));
         quote.setConfirmedNavDate(text(item, "PDATE"));
-        quote.setPrice(number(item, "GSZ"));
-        quote.setChangePct(number(item, "GSZZL"));
+        LocalDate confirmedDate = parseConfirmedDate(quote.getConfirmedNavDate());
+        boolean confirmedAvailable = validPositive(quote.getConfirmedNav())
+                && isAcceptableConfirmedDate(confirmedDate);
         String estimateAt = text(item, "GZTIME");
-        LocalDateTime parsedEstimateAt = parseEstimateTime(estimateAt);
-        quote.setQuoteTime(parsedEstimateAt == null ? LocalDateTime.now() : parsedEstimateAt);
-        boolean estimateAvailable = validPositive(quote.getPrice());
-        quote.setValid(estimateAvailable || validPositive(quote.getConfirmedNav()));
+        ZonedDateTime parsedEstimateAt = parseEstimateTime(estimateAt);
+        boolean estimateAvailable = confirmedAvailable
+                && validPositive(number(item, "GSZ"))
+                && isCurrentEstimate(parsedEstimateAt);
+        if (estimateAvailable) {
+            quote.setPrice(number(item, "GSZ"));
+            quote.setChangePct(number(item, "GSZZL"));
+            quote.setQuoteTime(parsedEstimateAt.toLocalDateTime());
+            quote.setAsOf(toClockTime(parsedEstimateAt.toInstant()));
+        } else {
+            quote.setPrice(null);
+            quote.setChangePct(null);
+            quote.setQuoteTime(confirmedDate == null ? null : confirmedDate.atTime(15, 0));
+            quote.setAsOf(confirmedDate == null ? null
+                    : toClockTime(confirmedDate.atTime(15, 0).atZone(MARKET_ZONE).toInstant()));
+        }
+        quote.setValid(confirmedAvailable);
         quote.setNote(estimateAvailable
                 ? "盘中估值 " + estimateAt
                 : "最新确认净值 " + quote.getConfirmedNavDate() + "；盘中估值暂未提供");
@@ -178,39 +210,45 @@ public class FundQuoteAdapter implements QuoteAdapter {
         }
     }
 
-    private LocalDateTime parseEstimateTime(String value) {
+    private ZonedDateTime parseEstimateTime(String value) {
         try {
             return value == null || value.isEmpty() ? null
-                    : LocalDateTime.parse(value, ESTIMATE_TIME);
+                    : LocalDateTime.parse(value, ESTIMATE_TIME).atZone(MARKET_ZONE);
         } catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    private LocalDate parseConfirmedDate(String value) {
+        try {
+            return value == null || value.isEmpty() ? null : LocalDate.parse(value);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isCurrentEstimate(ZonedDateTime estimateAt) {
+        if (estimateAt == null) return false;
+        Instant now = clock.instant();
+        Duration age = Duration.between(estimateAt.toInstant(), now);
+        return estimateAt.toLocalDate().equals(LocalDate.now(clock.withZone(MARKET_ZONE)))
+                && !estimateAt.toInstant().isAfter(now.plus(Duration.ofMinutes(2)))
+                && !age.isNegative() && age.compareTo(MAX_ESTIMATE_AGE) <= 0;
+    }
+
+    private boolean isAcceptableConfirmedDate(LocalDate date) {
+        if (date == null) return false;
+        LocalDate today = LocalDate.now(clock.withZone(MARKET_ZONE));
+        long ageDays = java.time.temporal.ChronoUnit.DAYS.between(date, today);
+        return ageDays >= 0L && ageDays <= MAX_CONFIRMED_NAV_AGE_DAYS;
+    }
+
+    private LocalDateTime toClockTime(Instant instant) {
+        return LocalDateTime.ofInstant(instant, clock.getZone());
     }
 
     private boolean validPositive(Double value) {
         return value != null && Double.isFinite(value) && value > 0.0d;
     }
 
-    private String request(String urlText) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
-        connection.setRequestProperty("Referer", "https://fund.eastmoney.com");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        int status = connection.getResponseCode();
-        if (status < 200 || status >= 300) {
-            connection.disconnect();
-            throw new IOException("FundValuationLast HTTP " + status);
-        }
-        try (InputStream in = connection.getInputStream()) {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[4096];
-            int read;
-            while ((read = in.read(chunk)) != -1) buffer.write(chunk, 0, read);
-            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
-        } finally {
-            connection.disconnect();
-        }
-    }
 }

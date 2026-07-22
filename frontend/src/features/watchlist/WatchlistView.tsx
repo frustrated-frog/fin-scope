@@ -529,8 +529,10 @@ export function WatchlistView({
                                     <div className={`fund-estimate-row ${changeClass(item.changePct)}`}>
                                       <div className="fund-estimate-label-row">
                                         <small>盘中估值</small>
-                                        {item.price != null && compactQuoteTime(item.asOf) && (
-                                          <time dateTime={item.asOf}>{compactQuoteTime(item.asOf)}</time>
+                                        {item.price != null && compactQuoteTime(item.quoteTime ?? item.asOf) && (
+                                          <time dateTime={item.quoteTime ?? item.asOf}>
+                                            {compactQuoteTime(item.quoteTime ?? item.asOf)}
+                                          </time>
                                         )}
                                       </div>
                                       <span className="fund-estimate-values">

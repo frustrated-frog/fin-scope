@@ -39,7 +39,7 @@ if (!root.path("success").asBoolean(false) || !root.path("data").isArray()) {
 }
 ```
 
-逐条映射 `FCODE/SHORTNAME/NAV/NAVCHGRT/PDATE/GSZ/GSZZL/GZTIME`，估值字段可以为空，但确认净值必须为正数。
+逐条映射 `FCODE/SHORTNAME/NAV/NAVCHGRT/PDATE/GSZ/GSZZL/GZTIME`，估值字段可以为空，但确认净值必须为正数。`GZTIME` 按上海时区解析并校验当天与年龄窗口，确认净值日期校验 14 天窗口；异常时间不得回填当前时间。
 
 - [ ] **Step 4: 运行测试确认 GREEN**
 
@@ -59,7 +59,7 @@ Expected: PASS。
 
 - [ ] **Step 1: 写 Provider 身份与故障切换测试**
 
-断言主源编码为 `EASTMONEY_FUND_VALUATION`、优先级 10；备用源编码为 `EASTMONEY_FUND_VALUATION_BACKUP`、优先级 20；确认净值源编码为 `EASTMONEY_FUND_CONFIRMED_NAV`、优先级 30。网关测试让主源抛错、备用源返回完整 Quote，断言结果为 `FRESH_FALLBACK` 且 sourceCode 为备用编码。
+断言主源编码为 `EASTMONEY_FUND_VALUATION`、优先级 10；备用源编码为 `EASTMONEY_FUND_VALUATION_BACKUP`、优先级 20；确认净值源编码为 `EASTMONEY_FUND_CONFIRMED_NAV`、优先级 30。网关测试让主源抛错、备用源返回完整 Quote，断言结果为 `FRESH_FALLBACK` 且 sourceCode 为备用编码；再让两个估值源持续阻塞，断言确认净值源仍会在总预算内被主动启动并返回。
 
 - [ ] **Step 2: 运行测试确认 RED**
 

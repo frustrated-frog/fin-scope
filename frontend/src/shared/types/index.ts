@@ -603,6 +603,7 @@ export type WatchlistItem = MarketDataQuality & {
   quoteValid: boolean;
   quoteNote?: string;
   quoteDate?: string;
+  quoteTime?: string;
   attributionSummary?: string;
   attributionReportId?: number;
   attributionReportDate?: string;

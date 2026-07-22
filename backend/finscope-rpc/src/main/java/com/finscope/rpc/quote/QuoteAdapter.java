@@ -23,6 +23,9 @@ public interface QuoteAdapter extends MarketDataProvider {
      */
     List<Quote> fetch(List<String> codes) throws Exception;
 
+    /** 是否为应使用独立执行容量保障的末级事实兜底。 */
+    default boolean isTerminalFallback() { return false; }
+
     default ProviderResult<List<Quote>> fetchResult(List<String> codes) throws Exception {
         List<Quote> data = fetch(codes);
         return ProviderResult.of(data, LocalDateTime.now(), ProviderResult.hashOf(data),

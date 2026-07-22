@@ -94,6 +94,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "marketDataFallbackExecutor")
+    public Executor marketDataFallbackExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("market-data-fallback-");
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(32);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "attributionTaskExecutor")
     public Executor attributionTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

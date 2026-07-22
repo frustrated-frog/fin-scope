@@ -19,9 +19,9 @@
 - 确认净值兜底：`https://fund.eastmoney.com/pingzhongdata/{code}.js`
 - 最终兜底：MarketDataGateway 已有的最近成功快照
 
-主源和热备实现为两个独立 `QuoteAdapter`，复用同一个严格解析器。MarketDataGateway 继续负责延迟对冲、按基金代码补齐、质量状态标记和快照降级。这样主源失败时返回 `FRESH_FALLBACK`；两源都失败时只展示带日期的确认净值或明确标记的旧快照。
+主源和热备实现为两个独立 `QuoteAdapter`，复用同一个严格解析器。MarketDataGateway 按固定延迟逐级启动主估值、备用估值和确认净值请求，不等待前一层超时才启动下一层，并在获得完整结果或耗尽总预算后取消未完成任务。网关继续负责按基金代码补齐、质量状态标记和快照降级。这样主源失败时返回 `FRESH_FALLBACK`；两源都失败或阻塞时仍能展示带日期的确认净值或明确标记的旧快照。
 
-接口按基金组批量请求，字段限定为 `FCODE,SHORTNAME,GSZZL,GZTIME,GSZ,NAV,PDATE,NAVCHGRT`。只有 `success=true`、基金代码匹配、数值合法时才接纳数据。估值缺失不会使确认净值失效。
+接口按基金组批量请求，字段限定为 `FCODE,SHORTNAME,GSZZL,GZTIME,GSZ,NAV,PDATE,NAVCHGRT`。只有 `success=true`、基金代码匹配、确认净值为正且确认日期不超过 14 天时才接纳数据。`GZTIME` 固定按 `Asia/Shanghai` 解释；仅当天、非未来且不超过 16 小时的时间可驱动盘中估值，异常或过旧时间会清空估值字段但保留可信确认净值。确认净值兜底的 `asOf` 使用净值观察日期，不使用请求完成时间。
 
 ## 卡片布局
 

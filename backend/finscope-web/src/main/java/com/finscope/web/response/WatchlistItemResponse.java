@@ -5,6 +5,8 @@ import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.dao.attribution.AttributionRepository;
 
+import java.time.LocalDateTime;
+
 /**
  * 自选面板响应：标的元信息 + 行情扁平化，方便前端直接渲染。
  */
@@ -30,6 +32,7 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
     private boolean quoteValid;
     private String quoteNote;
     private String quoteDate;
+    private LocalDateTime quoteTime;
     private String attributionSummary;
     private Long attributionReportId;
     private String attributionReportDate;
@@ -67,6 +70,7 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
             response.amplitude = quote.getAmplitude();
             response.quoteValid = quote.isValid();
             response.quoteNote = quote.getNote();
+            response.quoteTime = quote.getQuoteTime();
             response.quoteDate = "FUND".equals(item.getType()) && quote.getConfirmedNavDate() != null
                     ? quote.getConfirmedNavDate()
                     : quote.getQuoteTime() == null ? null : quote.getQuoteTime().toLocalDate().toString();
@@ -144,6 +148,8 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
     public String getQuoteNote() {
         return quoteNote;
     }
+
+    public LocalDateTime getQuoteTime() { return quoteTime; }
 
     public String getAttributionSummary() {
         return attributionSummary;
