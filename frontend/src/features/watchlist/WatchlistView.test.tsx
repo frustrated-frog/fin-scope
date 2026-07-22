@@ -159,6 +159,30 @@ test('uses deep attribution when the latest report belongs to an older quote dat
   expect(screen.getByRole('button', { name: /深度归因/ })).toBeInTheDocument();
 });
 
+test('uses the latest confirmed fund return when an intraday estimate is unavailable', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1,
+      code: '021894',
+      type: 'FUND',
+      name: '易方达半导体设备ETF联接C',
+      quoteValid: true,
+      confirmedNav: 2.6222,
+      confirmedNavDate: '2026-07-21',
+      confirmedNavChangePct: 14.6,
+      quoteDate: '2026-07-21',
+      quoteNote: '最新确认净值 2026-07-21；盘中估值暂不可用'
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('易方达半导体设备ETF联接C')).toBeInTheDocument();
+  expect(screen.getByText('2026-07-21')).toBeInTheDocument();
+  expect(screen.getByText('均 +14.60%')).toHaveClass('watchlist-up');
+  expect(screen.getByText('盘中估值暂不可用')).toBeInTheDocument();
+});
+
 test('places a separate sector market panel between indices and investment watchlist', async () => {
   vi.mocked(api).mockImplementation((path: string) => {
     if (path === '/api/market-indices') return Promise.resolve(indexQuotes) as never;

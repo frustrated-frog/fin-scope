@@ -25,7 +25,8 @@ public class QuoteQualityValidator {
                 || !requestedCode.equalsIgnoreCase(quote.getInstrumentCode()) || !quote.isValid()) {
             return Optional.empty();
         }
-        if (quote.getPrice() == null || !Double.isFinite(quote.getPrice()) || quote.getPrice() <= 0.0d) {
+        Double validationPrice = quote.getPrice() == null ? quote.getConfirmedNav() : quote.getPrice();
+        if (validationPrice == null || !Double.isFinite(validationPrice) || validationPrice <= 0.0d) {
             return Optional.empty();
         }
         if (invalidNumber(quote.getHigh()) || invalidNumber(quote.getLow())

@@ -37,8 +37,18 @@ public class FundQuoteAdapter implements QuoteAdapter {
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.REALTIME_FUND_ESTIMATE);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Requester requester;
     @Resource(name = "quoteTaskExecutor")
     private Executor quoteTaskExecutor;
+
+    public FundQuoteAdapter() {
+        this.requester = this::request;
+    }
+
+    FundQuoteAdapter(Requester requester, Executor quoteTaskExecutor) {
+        this.requester = requester;
+        this.quoteTaskExecutor = quoteTaskExecutor;
+    }
 
     @Override
     public String providerCode() { return "EASTMONEY_FUND_ESTIMATE"; }
@@ -85,34 +95,50 @@ public class FundQuoteAdapter implements QuoteAdapter {
     private Quote fetchOne(String code) {
         Quote quote = new Quote();
         quote.setInstrumentCode(code);
-        try {
-            String raw = request(BASE_URL + code + ".js");
-            String json = extractJson(raw);
-            if (json == null) {
-                quote.setValid(false);
-                quote.setNote("未取到基金估值");
-                return quote;
-            }
-            JsonNode node = objectMapper.readTree(json);
-            quote.setName(node.path("name").asText(""));
-            quote.setConfirmedNav(parseDouble(node.path("dwjz").asText("")));
-            quote.setConfirmedNavDate(node.path("jzrq").asText(""));
-            enrichLatestConfirmedNav(quote, code);
-            quote.setPrice(parseDouble(node.path("gsz").asText("")));
-            quote.setChangePct(parseDouble(node.path("gszzl").asText("")));
-            quote.setQuoteTime(LocalDateTime.now());
-            quote.setNote("盘中估值 " + node.path("gztime").asText(""));
-            quote.setValid(quote.getPrice() != null && quote.getPrice() > 0);
-        } catch (Exception ex) {
-            quote.setValid(false);
-            quote.setNote("基金估值获取失败：" + ex.getMessage());
+        enrichLatestConfirmedNav(quote, code);
+        boolean estimateAvailable = enrichIntradayEstimate(quote, code);
+        quote.setQuoteTime(LocalDateTime.now());
+        quote.setValid(validPositive(quote.getPrice()) || validPositive(quote.getConfirmedNav()));
+        if (estimateAvailable) {
+            return quote;
+        }
+        if (validPositive(quote.getConfirmedNav())) {
+            quote.setNote("最新确认净值 " + quote.getConfirmedNavDate() + "；盘中估值暂不可用");
+        } else {
+            quote.setNote("基金净值获取失败");
         }
         return quote;
     }
 
+    private boolean enrichIntradayEstimate(Quote quote, String code) {
+        try {
+            String raw = requester.get(BASE_URL + code + ".js");
+            String json = extractJson(raw);
+            if (json == null) {
+                return false;
+            }
+            JsonNode node = objectMapper.readTree(json);
+            if (quote.getName() == null || quote.getName().trim().isEmpty()) {
+                quote.setName(node.path("name").asText(""));
+            }
+            if (!validPositive(quote.getConfirmedNav())) {
+                quote.setConfirmedNav(parseDouble(node.path("dwjz").asText("")));
+                quote.setConfirmedNavDate(node.path("jzrq").asText(""));
+            }
+            quote.setPrice(parseDouble(node.path("gsz").asText("")));
+            quote.setChangePct(parseDouble(node.path("gszzl").asText("")));
+            quote.setNote("盘中估值 " + node.path("gztime").asText(""));
+            return validPositive(quote.getPrice());
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
     private void enrichLatestConfirmedNav(Quote quote, String code) {
         try {
-            String raw = request(NAV_HISTORY_URL + code + ".js");
+            String raw = requester.get(NAV_HISTORY_URL + code + ".js");
+            String name = extractVariable(raw, "fS_name");
+            if (name != null) quote.setName(name);
             int key = raw.indexOf("Data_netWorthTrend");
             int start = key < 0 ? -1 : raw.indexOf('[', key);
             int end = start < 0 ? -1 : raw.indexOf("];", start);
@@ -126,6 +152,18 @@ public class FundQuoteAdapter implements QuoteAdapter {
         } catch (Exception ignored) {
             // Keep the lightweight estimate endpoint's last confirmed NAV as a fallback.
         }
+    }
+
+    private String extractVariable(String raw, String variable) {
+        if (raw == null) return null;
+        int key = raw.indexOf("var " + variable);
+        int firstQuote = key < 0 ? -1 : raw.indexOf('"', key);
+        int secondQuote = firstQuote < 0 ? -1 : raw.indexOf('"', firstQuote + 1);
+        return firstQuote < 0 || secondQuote <= firstQuote ? null : raw.substring(firstQuote + 1, secondQuote);
+    }
+
+    private boolean validPositive(Double value) {
+        return value != null && Double.isFinite(value) && value > 0.0d;
     }
 
     private String extractJson(String raw) {
@@ -166,5 +204,10 @@ public class FundQuoteAdapter implements QuoteAdapter {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    @FunctionalInterface
+    interface Requester {
+        String get(String url) throws Exception;
     }
 }

@@ -13,6 +13,7 @@ type AttributionInstrument = {
   type: 'STOCK' | 'FUND' | 'SECTOR';
   name?: string;
   changePct?: number;
+  confirmedNavChangePct?: number;
   quoteDate?: string;
   attributionReportId?: number;
   attributionReportDate?: string;
@@ -51,6 +52,10 @@ function formatChangeAmount(value?: number) {
 // 异动：涨跌幅绝对值超过阈值
 function isAbnormal(value?: number) {
   return value !== undefined && value !== null && Math.abs(value) >= 5;
+}
+
+function latestChangePct(item: AttributionInstrument) {
+  return item.changePct ?? (item.type === 'FUND' ? item.confirmedNavChangePct : undefined);
 }
 
 const DEFAULT_GROUP_LABEL = '未分组';
@@ -100,6 +105,7 @@ export function WatchlistView({
   }
 
   async function startAttribution(item: AttributionInstrument) {
+    const changePct = latestChangePct(item);
     setAttributing(item.code);
     try {
       const res = await api<{ taskId: string; reportId: string | number }>('/api/attribution/start', {
@@ -108,7 +114,7 @@ export function WatchlistView({
           code: item.code,
           type: item.type,
           name: item.name,
-          changePct: item.changePct,
+          changePct,
           quoteDate: item.quoteDate
         })
       });
@@ -118,7 +124,7 @@ export function WatchlistView({
         code: item.code,
         type: item.type,
         name: item.name,
-        changePct: item.changePct
+        changePct
       });
     } catch (error) {
       addToast(error instanceof Error ? error.message : '归因启动失败', 'error');
@@ -150,7 +156,7 @@ export function WatchlistView({
   const sortedItems = useMemo(() => {
     const clone = [...items];
     if (sortByChange) {
-      clone.sort((a, b) => (b.changePct ?? -999) - (a.changePct ?? -999));
+      clone.sort((a, b) => (latestChangePct(b) ?? -999) - (latestChangePct(a) ?? -999));
     }
     return clone;
   }, [items, sortByChange]);
@@ -168,11 +174,11 @@ export function WatchlistView({
       }
     }
     return Array.from(map.entries()).map(([name, list]) => {
-      const valid = list.filter((it) => it.changePct !== undefined && it.changePct !== null);
+      const valid = list.filter((it) => latestChangePct(it) !== undefined);
       const avgChange = valid.length
-        ? valid.reduce((sum, it) => sum + (it.changePct ?? 0), 0) / valid.length
+        ? valid.reduce((sum, it) => sum + (latestChangePct(it) ?? 0), 0) / valid.length
         : undefined;
-      const abnormalCount = list.filter((it) => isAbnormal(it.changePct)).length;
+      const abnormalCount = list.filter((it) => isAbnormal(latestChangePct(it))).length;
       return { name, list, avgChange, abnormalCount };
     });
   }, [sortedItems]);
@@ -465,7 +471,7 @@ export function WatchlistView({
                     <div className="watchlist-grid">
                       {groupBlock.list.map((item) => (
                         <article
-                          className={`panel watchlist-card${isAbnormal(item.changePct) ? ' watchlist-card-abnormal' : ''}`}
+                          className={`panel watchlist-card${isAbnormal(latestChangePct(item)) ? ' watchlist-card-abnormal' : ''}`}
                           key={item.id}
                         >
                           <button
@@ -480,7 +486,7 @@ export function WatchlistView({
                           <div className="watchlist-card-head">
                             <strong className="watchlist-name">
                               {item.name || item.code}
-                              {isAbnormal(item.changePct) && <span className="watchlist-abnormal-tag">异动</span>}
+                              {isAbnormal(latestChangePct(item)) && <span className="watchlist-abnormal-tag">异动</span>}
                               {['STALE_FALLBACK', 'UNAVAILABLE'].includes(item.qualityStatus || '')
                                 && <span className="market-data-old-badge">旧数据</span>}
                             </strong>
@@ -490,11 +496,17 @@ export function WatchlistView({
                           </div>
                           {item.quoteValid ? (
                             <>
-                              <div className={`watchlist-quote ${changeClass(item.changePct)}`}>
+                              <div className={`watchlist-quote ${changeClass(latestChangePct(item))}`}>
                                 {item.type === 'FUND' ? (
                                   <div className="fund-quote-values">
-                                    <span><small>确认净值</small><strong>{formatPrice(item.confirmedNav, 4)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong></span>
-                                    <span><small>盘中估值</small><strong>{formatPrice(item.price, 4)} <em>{formatPct(item.changePct)}</em></strong></span>
+                                    <span>
+                                      <small>确认净值 {item.confirmedNavDate && <time>{item.confirmedNavDate}</time>}</small>
+                                      <strong>{formatPrice(item.confirmedNav, 4)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong>
+                                    </span>
+                                    <span>
+                                      <small>{item.price == null ? '盘中估值暂不可用' : '盘中估值'}</small>
+                                      <strong>{formatPrice(item.price, 4)} <em>{formatPct(item.changePct)}</em></strong>
+                                    </span>
                                   </div>
                                 ) : <><span className="watchlist-price">{formatPrice(item.price)}</span><span className="watchlist-change">{formatPct(item.changePct)}</span></>}
                               </div>
