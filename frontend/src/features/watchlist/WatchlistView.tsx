@@ -58,6 +58,15 @@ function latestChangePct(item: AttributionInstrument) {
   return item.changePct ?? (item.type === 'FUND' ? item.confirmedNavChangePct : undefined);
 }
 
+function compactNavDate(value?: string) {
+  const match = value?.match(/^\d{4}-(\d{2}-\d{2})$/);
+  return match?.[1] ?? value;
+}
+
+function compactQuoteTime(value?: string) {
+  return value?.match(/[T ](\d{2}:\d{2})/)?.[1];
+}
+
 const DEFAULT_GROUP_LABEL = '未分组';
 const COLLAPSE_STORAGE_KEY = 'watchlist.collapsedGroups';
 
@@ -496,17 +505,45 @@ export function WatchlistView({
                           </div>
                           {item.quoteValid ? (
                             <>
-                              <div className={`watchlist-quote ${changeClass(latestChangePct(item))}`}>
+                              <div className={`watchlist-quote${item.type === 'FUND'
+                                ? ' watchlist-fund-quote'
+                                : ` ${changeClass(latestChangePct(item))}`}`}>
                                 {item.type === 'FUND' ? (
-                                  <div className="fund-quote-values">
-                                    <span>
-                                      <small>确认净值 {item.confirmedNavDate && <time>{item.confirmedNavDate}</time>}</small>
-                                      <strong>{formatPrice(item.confirmedNav, 4)} <em>{formatPct(item.confirmedNavChangePct)}</em></strong>
-                                    </span>
-                                    <span>
-                                      <small>{item.price == null ? '盘中估值暂不可用' : '盘中估值'}</small>
-                                      <strong>{formatPrice(item.price, 4)} <em>{formatPct(item.changePct)}</em></strong>
-                                    </span>
+                                  <div className="fund-nav-block">
+                                    <div className="fund-nav-label-row">
+                                      <small>确认净值</small>
+                                      {item.confirmedNavDate && (
+                                        <time
+                                          className="fund-nav-date"
+                                          dateTime={item.confirmedNavDate}
+                                          title={`确认净值日期 ${item.confirmedNavDate}`}
+                                        >
+                                          {compactNavDate(item.confirmedNavDate)}
+                                        </time>
+                                      )}
+                                    </div>
+                                    <div className={`fund-nav-main-row ${changeClass(item.confirmedNavChangePct)}`}>
+                                      <strong>{formatPrice(item.confirmedNav, 4)}</strong>
+                                      <em>{formatPct(item.confirmedNavChangePct)}</em>
+                                    </div>
+                                    <div className={`fund-estimate-row ${changeClass(item.changePct)}`}>
+                                      <div className="fund-estimate-label-row">
+                                        <small>盘中估值</small>
+                                        {item.price != null && compactQuoteTime(item.asOf) && (
+                                          <time dateTime={item.asOf}>{compactQuoteTime(item.asOf)}</time>
+                                        )}
+                                      </div>
+                                      <span className="fund-estimate-values">
+                                        {item.price == null ? (
+                                          <strong>--</strong>
+                                        ) : (
+                                          <>
+                                            <strong>{formatPrice(item.price, 4)}</strong>
+                                            <em>{formatPct(item.changePct)}</em>
+                                          </>
+                                        )}
+                                      </span>
+                                    </div>
                                   </div>
                                 ) : <><span className="watchlist-price">{formatPrice(item.price)}</span><span className="watchlist-change">{formatPct(item.changePct)}</span></>}
                               </div>

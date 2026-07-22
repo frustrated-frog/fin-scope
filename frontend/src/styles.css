@@ -9009,12 +9009,99 @@ input[type="checkbox"] {
   letter-spacing: -0.02em;
 }
 
-.watchlist-quote:has(.fund-quote-values) { display:block; }
-.fund-quote-values { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:flex-end; gap:18px; }
-.fund-quote-values span { display:grid; gap:3px; min-width:0; }
-.fund-quote-values small { color:var(--muted); font-size:11px; }
-.fund-quote-values strong { color:inherit; font-size:16px; }
-.fund-quote-values em { margin-left:5px; font-style:normal; font-size:12px; }
+.watchlist-fund-quote {
+  display: block;
+  margin-top: auto;
+}
+
+.fund-nav-block {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-nav-label-row,
+.fund-nav-main-row,
+.fund-estimate-label-row,
+.fund-estimate-values {
+  display: flex;
+  align-items: baseline;
+}
+
+.fund-nav-label-row,
+.fund-nav-main-row,
+.fund-estimate-label-row,
+.fund-estimate-values {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fund-nav-label-row small,
+.fund-estimate-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.fund-nav-date {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.fund-nav-main-row strong {
+  font-size: 20px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.fund-nav-main-row em,
+.fund-estimate-values em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.fund-nav-main-row em {
+  font-size: 13px;
+}
+
+.fund-estimate-row {
+  display: grid;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line, rgba(120, 130, 128, 0.18));
+}
+
+.fund-estimate-values {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.fund-estimate-values > :only-child {
+  margin-left: auto;
+}
+
+.fund-estimate-values strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.fund-estimate-values em {
+  font-size: 11px;
+}
+
+.fund-estimate-label-row time {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
 
 .watchlist-change {
   font-size: 15px;

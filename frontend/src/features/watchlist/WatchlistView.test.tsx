@@ -178,9 +178,39 @@ test('uses the latest confirmed fund return when an intraday estimate is unavail
   render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByText('易方达半导体设备ETF联接C')).toBeInTheDocument();
-  expect(screen.getByText('2026-07-21')).toBeInTheDocument();
+  expect(screen.getByText('07-21')).toHaveAttribute('datetime', '2026-07-21');
+  expect(screen.getByText('07-21')).toHaveAttribute('title', '确认净值日期 2026-07-21');
   expect(screen.getByText('均 +14.60%')).toHaveClass('watchlist-up');
-  expect(screen.getByText('盘中估值暂不可用')).toBeInTheDocument();
+  expect(screen.getByText('盘中估值')).toBeInTheDocument();
+  expect(screen.getAllByText('--')).toHaveLength(1);
+});
+
+test('shows the intraday fund estimate in a compact secondary row', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1,
+      code: '021894',
+      type: 'FUND',
+      name: '易方达半导体设备ETF联接C',
+      quoteValid: true,
+      confirmedNav: 2.6222,
+      confirmedNavDate: '2026-07-21',
+      confirmedNavChangePct: 14.6,
+      price: 2.6322,
+      changePct: 0.38,
+      asOf: '2026-07-22T10:33:00',
+      quoteDate: '2026-07-21'
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('易方达半导体设备ETF联接C')).toBeInTheDocument();
+  expect(screen.getByText('2.6222')).toBeInTheDocument();
+  expect(screen.getByText('+14.60%')).toBeInTheDocument();
+  expect(screen.getByText('2.6322')).toBeInTheDocument();
+  expect(screen.getByText('+0.38%')).toBeInTheDocument();
+  expect(screen.getByText('10:33')).toBeInTheDocument();
 });
 
 test('places a separate sector market panel between indices and investment watchlist', async () => {

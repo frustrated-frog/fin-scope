@@ -48,6 +48,7 @@ class MarketDataGatewayQuoteTest {
     private FakeQuoteAdapter backup;
     private MarketDataGateway gateway;
     private MarketDataSnapshotRepository snapshots;
+    private MarketDataRefreshRunRepository runs;
     private MarketDataSnapshotCodec codec;
 
     @BeforeEach
@@ -57,16 +58,11 @@ class MarketDataGatewayQuoteTest {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         createTables(jdbc);
         snapshots = new MarketDataSnapshotRepository(jdbc);
-        MarketDataRefreshRunRepository runs = new MarketDataRefreshRunRepository(jdbc);
-        ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
-                Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+        runs = new MarketDataRefreshRunRepository(jdbc);
         primary = new FakeQuoteAdapter("TENCENT_STOCK", "TENCENT", 10);
         backup = new FakeQuoteAdapter("SINA_STOCK", "SINA", 20);
         codec = new MarketDataSnapshotCodec(new ObjectMapper().findAndRegisterModules());
-        gateway = new MarketDataGateway(Arrays.<QuoteAdapter>asList(primary, backup),
-                new ProviderRoutePolicy(guard), guard, snapshots, runs, codec,
-                new QuoteQualityValidator(clock), new MarketDataSingleFlight(),
-                new MarketDataGatewayProperties(30_000, 30, 800), providerExecutor, clock);
+        gateway = gatewayFor(Arrays.<QuoteAdapter>asList(primary, backup));
     }
 
     @AfterEach
@@ -88,6 +84,25 @@ class MarketDataGatewayQuoteTest {
         assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, result.getQualityStatus());
         assertEquals("TENCENT_STOCK", result.getQuotes().get(0).getSourceCode());
         assertEquals("SINA_STOCK", result.getQuotes().get(1).getSourceCode());
+    }
+
+    @Test
+    void switchesToBackupFundValuationProviderWhenPrimaryFails() {
+        FakeQuoteAdapter fundPrimary = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION", 10);
+        FakeQuoteAdapter fundBackup = FakeQuoteAdapter.fund(
+                "EASTMONEY_FUND_VALUATION_BACKUP", 20);
+        fundPrimary.failure = new ProviderContractException("CONNECTION_ERROR", "primary down", true);
+        fundBackup.result = Collections.singletonList(validFund("021894", 2.6322));
+
+        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(fundPrimary, fundBackup))
+                .fetchQuotes("FUND", Collections.singletonList("021894"), true)
+                .getQuotes().get(0);
+
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
+        assertEquals("EASTMONEY_FUND_VALUATION_BACKUP", quote.getSourceCode());
+        assertEquals(2.6322, quote.getPrice());
+        assertTrue(quote.getWarning().contains("备用数据源"));
     }
 
     @Test
@@ -162,6 +177,28 @@ class MarketDataGatewayQuoteTest {
         return quote;
     }
 
+    private Quote validFund(String code, double estimate) {
+        Quote quote = new Quote();
+        quote.setInstrumentCode(code);
+        quote.setPrice(estimate);
+        quote.setChangePct(0.38);
+        quote.setConfirmedNav(2.6222);
+        quote.setConfirmedNavDate("2026-07-21");
+        quote.setConfirmedNavChangePct(14.6);
+        quote.setQuoteTime(LocalDateTime.of(2026, 7, 14, 10, 0));
+        quote.setValid(true);
+        return quote;
+    }
+
+    private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters) {
+        ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
+                Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+        return new MarketDataGateway(adapters, new ProviderRoutePolicy(guard), guard,
+                snapshots, runs, codec, new QuoteQualityValidator(clock),
+                new MarketDataSingleFlight(), new MarketDataGatewayProperties(30_000, 30, 800),
+                providerExecutor, clock);
+    }
+
     private List<String> codes(List<Quote> quotes) {
         return quotes.stream().map(Quote::getInstrumentCode).collect(Collectors.toList());
     }
@@ -182,6 +219,8 @@ class MarketDataGatewayQuoteTest {
         private final String code;
         private final String family;
         private final int priority;
+        private final String instrumentType;
+        private final MarketDataCapability capability;
         private final AtomicInteger calls = new AtomicInteger();
         private final CountDownLatch started = new CountDownLatch(1);
         private volatile CountDownLatch release;
@@ -190,9 +229,21 @@ class MarketDataGatewayQuoteTest {
         private volatile long delayMillis;
 
         private FakeQuoteAdapter(String code, String family, int priority) {
+            this(code, family, priority, "STOCK", MarketDataCapability.REALTIME_STOCK_QUOTE);
+        }
+
+        private FakeQuoteAdapter(String code, String family, int priority,
+                                 String instrumentType, MarketDataCapability capability) {
             this.code = code;
             this.family = family;
             this.priority = priority;
+            this.instrumentType = instrumentType;
+            this.capability = capability;
+        }
+
+        static FakeQuoteAdapter fund(String code, int priority) {
+            return new FakeQuoteAdapter(code, "EASTMONEY", priority,
+                    "FUND", MarketDataCapability.REALTIME_FUND_ESTIMATE);
         }
 
         void block() { release = new CountDownLatch(1); }
@@ -201,13 +252,13 @@ class MarketDataGatewayQuoteTest {
         public String providerCode() { return code; }
         public String providerFamily() { return family; }
         public Set<MarketDataCapability> capabilities() {
-            return Collections.singleton(MarketDataCapability.REALTIME_STOCK_QUOTE);
+            return Collections.singleton(capability);
         }
         public int priority() { return priority; }
         public int batchLimit() { return 100; }
         public Duration minimumInterval() { return Duration.ZERO; }
         public Duration timeout() { return Duration.ofMillis(500); }
-        public boolean supports(String instrumentType) { return "STOCK".equals(instrumentType); }
+        public boolean supports(String type) { return instrumentType.equals(type); }
         public List<Quote> fetch(List<String> codes) throws Exception {
             calls.incrementAndGet();
             started.countDown();

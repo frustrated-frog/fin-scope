@@ -4,7 +4,7 @@
 
 **Goal:** 恢复基金盘中估值的双主机故障切换，并重排自选基金卡片的信息层级。
 
-**Architecture:** 将当前基金适配器改为可配置端点的 `FundValuationLast` 批量 Provider，注册主、备两个 Spring 适配器，由现有 MarketDataGateway 完成对冲与按代码补齐。前端基金卡片改为确认净值主行加盘中估值辅助行，避免窄卡片中的日期换行。
+**Architecture:** 将当前基金适配器改为可配置端点的 `FundValuationLast` 批量 Provider，注册主、备两个估值适配器和一个确认净值兜底适配器，由现有 MarketDataGateway 完成对冲与按代码补齐。前端基金卡片改为确认净值主行加盘中估值辅助行，避免窄卡片中的日期换行。
 
 **Tech Stack:** Java 8、Spring Boot 2.7、Jackson、JUnit 5、React、TypeScript、Vitest、Testing Library、CSS Grid/Flexbox。
 
@@ -51,13 +51,15 @@ Expected: PASS。
 
 **Files:**
 - Create: `backend/finscope-rpc/src/main/java/com/finscope/rpc/quote/FundQuoteBackupAdapter.java`
+- Create: `backend/finscope-rpc/src/main/java/com/finscope/rpc/quote/FundNavHistoryAdapter.java`
+- Create: `backend/finscope-rpc/src/main/java/com/finscope/rpc/quote/FundDataRequester.java`
 - Modify: `backend/finscope-rpc/src/main/java/com/finscope/rpc/quote/FundQuoteAdapter.java`
 - Modify: `backend/finscope-rpc/src/test/java/com/finscope/rpc/marketdata/MarketDataProviderContractTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/marketdata/MarketDataGatewayQuoteTest.java`
 
 - [ ] **Step 1: 写 Provider 身份与故障切换测试**
 
-断言主源编码为 `EASTMONEY_FUND_VALUATION`、优先级 10；备用源编码为 `EASTMONEY_FUND_VALUATION_BACKUP`、优先级 20。网关测试让主源抛错、备用源返回完整 Quote，断言结果为 `FRESH_FALLBACK` 且 sourceCode 为备用编码。
+断言主源编码为 `EASTMONEY_FUND_VALUATION`、优先级 10；备用源编码为 `EASTMONEY_FUND_VALUATION_BACKUP`、优先级 20；确认净值源编码为 `EASTMONEY_FUND_CONFIRMED_NAV`、优先级 30。网关测试让主源抛错、备用源返回完整 Quote，断言结果为 `FRESH_FALLBACK` 且 sourceCode 为备用编码。
 
 - [ ] **Step 2: 运行测试确认 RED**
 
@@ -78,7 +80,7 @@ protected FundQuoteAdapter(String endpoint, String providerCode, int priority) {
 }
 ```
 
-备用组件使用 `fundcomapi.eastmoney.com`，并覆写独立 Provider 编码与更低优先级。
+备用组件使用 `fundcomapi.eastmoney.com`，并覆写独立 Provider 编码与更低优先级。确认净值组件独立解析 `pingzhongdata`，避免主估值失败时过早终止网关的热备切换。
 
 - [ ] **Step 4: 运行测试确认 GREEN**
 
@@ -105,7 +107,7 @@ Expected: FAIL，因为当前完整日期嵌在标签中且估值仍为双列。
 
 - [ ] **Step 3: 实现纵向布局**
 
-使用 `.fund-nav-block`、`.fund-nav-label-row`、`.fund-nav-main-row` 和 `.fund-estimate-row`，日期显示为 `MM-DD` 并设置 `white-space: nowrap`。估值行将值、涨跌和时间放在同一条可换位但不拆词的辅助行中。
+使用 `.fund-nav-block`、`.fund-nav-label-row`、`.fund-nav-main-row`、`.fund-estimate-label-row` 和 `.fund-estimate-values`，日期显示为 `MM-DD` 并设置 `white-space: nowrap`。盘中时间位于辅助标签行，估值和涨跌位于下一行，使 200px 级卡片仍能完整展示。
 
 - [ ] **Step 4: 运行测试确认 GREEN**
 
