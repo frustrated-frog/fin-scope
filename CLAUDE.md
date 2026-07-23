@@ -109,12 +109,13 @@ Frontend proxies `/api` to `http://localhost:8080`.
 
 ### LLM/Agent Configuration
 
-The project uses OpenAI-compatible Chat Completions interface, not bound to specific providers. Configuration via environment variables:
+The project uses OpenAI-compatible Chat Completions interface, not bound to specific providers. The LLM and search API keys are intentionally fixed in `backend/finscope-web/src/main/resources/application.yml` for the current local deployment. Do not replace either `api-key` with an environment-variable expression unless the user explicitly asks for that migration.
+
+Other runtime settings can still be overridden through environment variables:
 
 ```bash
 export FINSCOPE_LLM_ENABLED=true
 export FINSCOPE_LLM_BASE_URL=https://your-model-service/v1
-export FINSCOPE_LLM_API_KEY=your_api_key
 export FINSCOPE_LLM_MODEL=your_model_name
 ```
 
@@ -166,9 +167,9 @@ Markdown files stored in `data/vault/`:
 - `data/raw/` (raw fetched content)
 - `data/exports/` (export packages)
 - `.env` and `*.local` files
-- API keys
+- Additional API keys outside the two intentionally fixed local LLM/search entries
 
-**Never commit:** Company internal data, code, credentials, proprietary prompts, or private documents.
+**Never commit:** Company internal data, code, credentials, proprietary prompts, or private documents. The two existing fixed local LLM/search keys are an explicit project convention; do not print, duplicate, or relocate their values.
 
 ## Important Notes
 
