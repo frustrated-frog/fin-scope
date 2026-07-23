@@ -201,7 +201,10 @@ export function AttributionReaderView({
   return (
     <section className="panel wide attribution-panel">
       <div className="attribution-head">
-        <button className="ghost-button" type="button" onClick={onBack}>← 返回自选</button>
+        <button className="attribution-back-button" type="button" onClick={onBack}>
+          <span className="attribution-back-icon" aria-hidden="true">←</span>
+          <span className="attribution-back-label">返回自选</span>
+        </button>
         <div className="attribution-title">
           <strong>{name || code}</strong>
           <span className="watchlist-meta">{code}</span>

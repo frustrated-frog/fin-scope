@@ -1242,6 +1242,16 @@ test('events stylesheet prevents long article urls from widening the workbench',
   expect(styles).toMatch(/\.event-timeline-list\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
 });
 
+test('dark theme keeps ghost buttons visually subordinate', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\[data-theme="dark"\]\s+\.ghost-button\s*{[^}]*background:/s);
+  expect(styles).toMatch(/\[data-theme="dark"\]\s+\.ghost-button:hover:not\(:disabled\)\s*{/s);
+  expect(styles).toMatch(/\[data-theme="dark"\]\s+\.ghost-button:focus-visible\s*{/s);
+  expect(styles).not.toMatch(/\[data-theme="dark"\]\s+\.ghost-button\s*{[^}]*background:\s*(?:#fff(?:fff)?|white)\b/is);
+});
+
 test('events governance panel updates status, merges events and moves articles', async () => {
   render(<App />);
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
@@ -28,6 +28,25 @@ beforeEach(() => {
   vi.mocked(api).mockReset();
   eventSource = new MockEventSource();
   vi.stubGlobal('EventSource', vi.fn(() => eventSource));
+});
+
+test('uses a dedicated compact control to return to the watchlist', () => {
+  vi.mocked(api).mockResolvedValue({
+    id: 200,
+    status: 'COMPLETED',
+    summary: '归因完成',
+    drivers: []
+  });
+  const onBack = vi.fn();
+
+  render(<AttributionReaderView reportId={200} code="600519" name="贵州茅台" onBack={onBack} />);
+
+  const backButton = screen.getByRole('button', { name: '返回自选' });
+  expect(backButton).toHaveClass('attribution-back-button');
+  expect(backButton.querySelector('.attribution-back-icon')).toHaveAttribute('aria-hidden', 'true');
+
+  fireEvent.click(backButton);
+  expect(onBack).toHaveBeenCalledTimes(1);
 });
 
 test('marks web search as reached when a live search clue arrives', async () => {

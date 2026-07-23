@@ -141,7 +141,7 @@ test('opens a persisted attribution report from the clickable card summary', asy
   expect(screen.getByRole('button', { name: /重新归因/ })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: /查看贵州茅台的完整归因报告/ }));
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/attribution/reports/88'));
-  expect(screen.getByRole('button', { name: '← 返回自选' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '返回自选' })).toBeInTheDocument();
 });
 
 test('uses deep attribution when the latest report belongs to an older quote date', async () => {
