@@ -48,7 +48,8 @@ fin-scope/
 ```bash
 export FINSCOPE_DATA_ROOT="$(cd .. && pwd)/data"
 cd backend
-mvn -pl finscope-web -am spring-boot:run
+mvn -pl finscope-web -am package -DskipTests
+java -jar finscope-web/target/finscope-web-0.1.0-SNAPSHOT.jar
 ```
 
 `FINSCOPE_DATA_ROOT` 是数据库与 Vault 的唯一位置配置，必须指向已经存在且包含
