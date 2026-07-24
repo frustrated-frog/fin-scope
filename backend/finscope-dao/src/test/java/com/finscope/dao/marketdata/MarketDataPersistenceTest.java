@@ -3,6 +3,7 @@ package com.finscope.dao.marketdata;
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataRefreshRun;
+import com.finscope.domain.marketdata.MarketDataProviderAttempt;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class MarketDataPersistenceTest {
     private JdbcTemplate jdbc;
     private MarketDataSnapshotRepository snapshots;
     private MarketDataRefreshRunRepository refreshRuns;
+    private MarketDataProviderAttemptRepository providerAttempts;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -35,6 +37,7 @@ class MarketDataPersistenceTest {
         initializer.afterPropertiesSet();
         snapshots = new MarketDataSnapshotRepository(jdbc);
         refreshRuns = new MarketDataRefreshRunRepository(jdbc);
+        providerAttempts = new MarketDataProviderAttemptRepository(jdbc);
     }
 
     @Test
@@ -61,6 +64,21 @@ class MarketDataPersistenceTest {
         assertEquals(1, refreshRuns.deleteFinishedBefore(LocalDateTime.now().minusDays(30)));
         assertTrue(refreshRuns.find(recent).isPresent());
         assertEquals("RUNNING", refreshRuns.find(recent).map(MarketDataRefreshRun::getStatus).orElse(""));
+    }
+
+    @Test
+    void appendsProviderAttemptsForOneRefreshRun() {
+        long runId = refreshRuns.create(MarketDataCapability.REALTIME_STOCK_QUOTE,
+                "STOCK:1", "MANUAL", LocalDateTime.now());
+        providerAttempts.append(new MarketDataProviderAttempt(0L, runId,
+                MarketDataCapability.REALTIME_STOCK_QUOTE, "TENCENT_STOCK", "TENCENT",
+                "FAILED", "TIMEOUT", 0, 41L, 1, 0,
+                LocalDateTime.now().minusNanos(41_000_000L), LocalDateTime.now()));
+
+        MarketDataProviderAttempt loaded = providerAttempts.findByRun(runId).get(0);
+        assertEquals("TENCENT_STOCK", loaded.getProviderCode());
+        assertEquals("TIMEOUT", loaded.getErrorType());
+        assertTrue(loaded.getLatencyMs() >= 0L);
     }
 
     private MarketDataSnapshot snapshot(String providerCode, String providerFamily,

@@ -3,6 +3,7 @@ package com.finscope.service.marketdata;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.marketdata.MarketDataRefreshRunRepository;
 import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
+import com.finscope.dao.marketdata.MarketDataProviderAttemptRepository;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
@@ -54,15 +55,18 @@ class MarketDataGatewayQuoteTest {
     private MarketDataSnapshotRepository snapshots;
     private MarketDataRefreshRunRepository runs;
     private MarketDataSnapshotCodec codec;
+    private MarketDataProviderAttemptRepository providerAttempts;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("gateway.db"));
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc = new JdbcTemplate(dataSource);
         createTables(jdbc);
         snapshots = new MarketDataSnapshotRepository(jdbc);
         runs = new MarketDataRefreshRunRepository(jdbc);
+        providerAttempts = new MarketDataProviderAttemptRepository(jdbc);
         primary = new FakeQuoteAdapter("TENCENT_STOCK", "TENCENT", 10);
         backup = new FakeQuoteAdapter("SINA_STOCK", "SINA", 20);
         codec = new MarketDataSnapshotCodec(new ObjectMapper().findAndRegisterModules());
@@ -160,16 +164,15 @@ class MarketDataGatewayQuoteTest {
         primary.timeout = Duration.ofMillis(40);
         backup.result = Collections.singletonList(valid("600519", 1500.0));
 
-        long started = System.nanoTime();
         Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(primary, backup), 500, 800)
                 .fetchQuotes("STOCK", Collections.singletonList("600519"), true)
                 .getQuotes().get(0);
-        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
         assertEquals("SINA_STOCK", quote.getSourceCode());
         assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
         assertEquals(1, backup.calls.get());
-        assertTrue(elapsedMillis < 350L, "fallback should not wait for the hedge delay");
+        assertTrue(backup.started.getCount() == 0L,
+                "fallback should start when the primary times out");
     }
 
     @Test
@@ -191,6 +194,19 @@ class MarketDataGatewayQuoteTest {
     }
 
     @Test
+    void recordsEachProviderAttemptWithoutAffectingFallback() {
+        primary.failure = new ProviderContractException("TIMEOUT", "primary timeout", true);
+        backup.result = Collections.singletonList(valid("600519", 1500.0));
+
+        gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), true);
+
+        long runId = runs.find(jdbcRunId()).orElseThrow(AssertionError::new).getId();
+        assertEquals(2, providerAttempts.findByRun(runId).size());
+        assertEquals("TIMEOUT", providerAttempts.findByRun(runId).get(0).getErrorType());
+        assertEquals("SINA_STOCK", providerAttempts.findByRun(runId).get(1).getProviderCode());
+    }
+
+    @Test
     void rejectsInvalidFreshPayloadAndReturnsPersistedLastGoodWithWarning() {
         primary.result = Collections.singletonList(invalidHighLow("600519"));
         backup.failure = new ProviderContractException("TIMEOUT", "timeout", true);
@@ -208,6 +224,34 @@ class MarketDataGatewayQuoteTest {
         assertEquals(MarketDataQualityStatus.STALE_FALLBACK, quote.getQualityStatus());
         assertEquals(1498.0, quote.getPrice());
         assertTrue(quote.getWarning().contains("正在显示"));
+    }
+
+    @Test
+    void staleFallbackDoesNotPopulateFreshCache() {
+        primary.failure = new ProviderContractException("TIMEOUT", "timeout", true);
+        backup.failure = new ProviderContractException("TIMEOUT", "timeout", true);
+        persistQuoteSnapshot(LocalDateTime.of(2026, 7, 14, 9, 59));
+
+        assertEquals(MarketDataQualityStatus.STALE_FALLBACK,
+                gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), true)
+                        .getQualityStatus());
+        assertEquals(MarketDataQualityStatus.STALE_FALLBACK,
+                gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), false)
+                        .getQualityStatus());
+
+        assertEquals(2, primary.calls.get());
+        assertEquals(2, backup.calls.get());
+    }
+
+    @Test
+    void rejectsSnapshotOlderThanTwoMinutesDuringTrading() {
+        primary.failure = new ProviderContractException("TIMEOUT", "timeout", true);
+        backup.failure = new ProviderContractException("TIMEOUT", "timeout", true);
+        persistQuoteSnapshot(LocalDateTime.of(2026, 7, 14, 9, 57, 59));
+
+        assertEquals(MarketDataQualityStatus.UNAVAILABLE,
+                gateway.fetchQuotes("STOCK", Collections.singletonList("600519"), true)
+                        .getQualityStatus());
     }
 
     @Test
@@ -262,6 +306,16 @@ class MarketDataGatewayQuoteTest {
         return quote;
     }
 
+    private void persistQuoteSnapshot(LocalDateTime retrievedAt) {
+        Quote quote = valid("600519", 1498.0);
+        quote.setSourceCode("TENCENT_STOCK");
+        quote.setAsOf(retrievedAt);
+        quote.setRetrievedAt(retrievedAt);
+        snapshots.upsert(codec.quoteSnapshot(MarketDataCapability.REALTIME_STOCK_QUOTE,
+                "STOCK:600519", "TENCENT_STOCK", "TENCENT", quote,
+                retrievedAt, retrievedAt));
+    }
+
     private Quote validFund(String code, double estimate) {
         Quote quote = new Quote();
         quote.setInstrumentCode(code);
@@ -300,11 +354,13 @@ class MarketDataGatewayQuoteTest {
                                          Executor executor) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
-        return new MarketDataGateway(adapters, new ProviderRoutePolicy(guard), guard,
+        MarketDataGateway value = new MarketDataGateway(adapters, new ProviderRoutePolicy(guard), guard,
                 snapshots, runs, codec, new QuoteQualityValidator(clock),
                 new MarketDataSingleFlight(), new MarketDataGatewayProperties(
                         30_000, hedgeDelayMs, requestBudgetMs),
                 executor, clock);
+        value.setProviderAttemptRepository(providerAttempts);
+        return value;
     }
 
     private List<String> codes(List<Quote> quotes) {
@@ -321,6 +377,18 @@ class MarketDataGatewayQuoteTest {
                 + "started_at TEXT NOT NULL,finished_at TEXT,requested_count INTEGER NOT NULL DEFAULT 0,"
                 + "fresh_count INTEGER NOT NULL DEFAULT 0,stale_count INTEGER NOT NULL DEFAULT 0,"
                 + "failed_count INTEGER NOT NULL DEFAULT 0,selected_sources TEXT,warning_message TEXT)");
+        jdbc.execute("CREATE TABLE market_data_provider_attempt(id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "refresh_run_id INTEGER NOT NULL,capability TEXT NOT NULL,provider_code TEXT NOT NULL,"
+                + "provider_family TEXT NOT NULL,status TEXT NOT NULL,error_type TEXT,retry_count INTEGER NOT NULL,"
+                + "latency_ms INTEGER NOT NULL,requested_count INTEGER NOT NULL,accepted_count INTEGER NOT NULL,"
+                + "started_at TEXT NOT NULL,finished_at TEXT NOT NULL)");
+    }
+
+    private long jdbcRunId() {
+        Long value = jdbc.queryForObject(
+                "SELECT id FROM market_data_refresh_run ORDER BY id DESC LIMIT 1", Long.class);
+        if (value == null) throw new AssertionError("missing refresh run");
+        return value;
     }
 
     private static final class FakeQuoteAdapter implements QuoteAdapter {

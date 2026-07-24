@@ -6,12 +6,12 @@ import org.springframework.stereotype.Component;
 /** 仅供后台网关使用的可靠性参数。 */
 @Component
 public class MarketDataGatewayProperties {
-    @Value("${finscope.market-data.fresh-cache-ms:30000}")
-    private long freshCacheMs = 30_000L;
-    @Value("${finscope.market-data.hedge-delay-ms:800}")
-    private long hedgeDelayMs = 800L;
-    @Value("${finscope.market-data.request-budget-ms:10000}")
-    private long requestBudgetMs = 10_000L;
+    @Value("${finscope.market-data.fresh-cache-ms:15000}")
+    private long freshCacheMs = 15_000L;
+    @Value("${finscope.market-data.hedge-delay-ms:300}")
+    private long hedgeDelayMs = 300L;
+    @Value("${finscope.market-data.request-budget-ms:5000}")
+    private long requestBudgetMs = 5_000L;
 
     public MarketDataGatewayProperties() { }
 

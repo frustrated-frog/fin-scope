@@ -25,7 +25,10 @@ public final class ProviderCallDeadline {
     public static <T> Supplier<T> propagate(Supplier<T> operation) {
         Deque<Long> deadlines = DEADLINES.get();
         Long captured = deadlines.isEmpty() ? null : deadlines.peek();
-        if (captured == null) return operation;
+        if (captured == null) {
+            DEADLINES.remove();
+            return operation;
+        }
         return () -> {
             try (Scope ignored = openAt(captured)) {
                 return operation.get();

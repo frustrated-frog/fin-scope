@@ -75,6 +75,26 @@ uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 
 Java 接入方式和数据接口说明见 [market-data-service/README.md](market-data-service/README.md)。
 
+### 行情可靠性配置
+
+Java 行情网关会在交易时段每 10 秒预热自选、指数和行业/概念板块；在线请求使用
+15 秒新鲜缓存、300ms 备用源竞速延迟和 5 秒总预算。盘中在线源全部失败时，只允许
+回退到最近 120 秒内成功保存的快照；午休和收盘后可以继续展示最后收盘事实，并明确
+标记数据时间与降级状态。每次 Provider 尝试都会记录成功/失败、错误类型和耗时，便于
+持续核对成功率。
+
+这些数据源当前均为免费公开接口，没有服务商 SLA；系统通过多源路由、有界重试、能力级
+熔断、截止时间和快照兜底提升成功率，但不会把陈旧数据伪装成实时数据。可通过以下环境变量调节：
+
+```bash
+export FINSCOPE_MARKET_DATA_FRESH_CACHE_MS=15000
+export FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS=300
+export FINSCOPE_MARKET_DATA_REQUEST_BUDGET_MS=5000
+export FINSCOPE_MARKET_DATA_MAX_FALLBACK_AGE_SECONDS=120
+export FINSCOPE_MARKET_DATA_WARMUP_ENABLED=true
+export FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS=10000
+```
+
 ## API 响应约定
 
 除 SSE、文件/二进制流和 `204 No Content` 外，所有 `/api/**` JSON 接口都返回统一信封：

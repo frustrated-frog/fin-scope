@@ -8,6 +8,7 @@ import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
+import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.quote.QuoteAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,12 @@ class MarketDataGatewayReliabilityTest {
                 quote.setLow(110.0);
             }
             return Collections.singletonList(quote);
+        }
+
+        public ProviderResult<List<Quote>> fetchResult(List<String> codes) throws Exception {
+            List<Quote> values = fetch(codes);
+            return ProviderResult.of(values, LocalDateTime.of(2026, 7, 14, 10, 0),
+                    ProviderResult.hashOf(values), Collections.<String>emptyList());
         }
 
         private Quote quote(String instrumentCode) {

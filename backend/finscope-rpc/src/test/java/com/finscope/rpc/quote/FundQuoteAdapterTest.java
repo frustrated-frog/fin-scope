@@ -143,7 +143,7 @@ class FundQuoteAdapterTest {
         FundQuoteBackupAdapter adapter = new FundQuoteBackupAdapter(url -> {
             requestedUrls.add(url);
             return payload;
-        });
+        }, fixedClock("2026-07-22T02:34:00Z", "UTC"));
 
         Quote quote = adapter.fetch(Collections.singletonList("021894")).get(0);
 

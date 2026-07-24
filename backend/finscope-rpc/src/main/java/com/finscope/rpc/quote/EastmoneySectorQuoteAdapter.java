@@ -74,14 +74,20 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
             futures.add(CompletableFuture.supplyAsync(
                     ProviderCallDeadline.propagate(() -> fetchOne(code)), quoteTaskExecutor));
         }
-        for (CompletableFuture<Quote> future : futures) {
-            try {
-                quotes.add(future.join());
-            } catch (CompletionException error) {
-                if (error.getCause() instanceof RuntimeException) {
-                    throw (RuntimeException) error.getCause();
+        try {
+            for (CompletableFuture<Quote> future : futures) {
+                try {
+                    quotes.add(future.join());
+                } catch (CompletionException error) {
+                    if (error.getCause() instanceof RuntimeException) {
+                        throw (RuntimeException) error.getCause();
+                    }
+                    throw error;
                 }
-                throw error;
+            }
+        } finally {
+            for (CompletableFuture<Quote> future : futures) {
+                if (!future.isDone()) future.cancel(true);
             }
         }
         return quotes;

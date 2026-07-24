@@ -105,6 +105,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "marketDataWarmupExecutor")
+    public Executor marketDataWarmupExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("market-data-warmup-");
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(8);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "attributionTaskExecutor")
     public Executor attributionTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

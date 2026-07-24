@@ -2,6 +2,7 @@ package com.finscope.service.marketdata;
 
 import com.finscope.dao.marketdata.MarketDataRefreshRunRepository;
 import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
+import com.finscope.dao.marketdata.MarketDataProviderAttemptRepository;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.SectorCategory;
@@ -10,6 +11,7 @@ import com.finscope.domain.instrument.SectorMarketSnapshot;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
+import com.finscope.domain.marketdata.MarketDataProviderAttempt;
 import com.finscope.domain.marketintel.DragonTigerRecord;
 import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.finscope.rpc.marketdata.ProviderResult;
@@ -52,6 +54,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** 现有页面访问外部行情的统一高可用入口。 */
 @Service
@@ -73,6 +76,8 @@ public class MarketDataGateway {
     private final Executor executor;
     private final Executor fallbackExecutor;
     private final Clock clock;
+    private volatile MarketTradingSession tradingSession;
+    private volatile MarketDataProviderAttemptRepository providerAttemptRepository;
     private final Map<String, CacheEntry> freshCache =
             new java.util.concurrent.ConcurrentHashMap<String, CacheEntry>();
     private final Map<String, SectorCacheEntry> sectorFreshCache =
@@ -198,6 +203,17 @@ public class MarketDataGateway {
         this.executor = executor;
         this.fallbackExecutor = fallbackExecutor;
         this.clock = clock;
+        this.tradingSession = new MarketTradingSession(clock, 120L);
+    }
+
+    @Autowired(required = false)
+    public void setProviderAttemptRepository(MarketDataProviderAttemptRepository repository) {
+        this.providerAttemptRepository = repository;
+    }
+
+    @Autowired
+    public void setTradingSession(MarketTradingSession tradingSession) {
+        this.tradingSession = tradingSession;
     }
 
     public DragonTigerGatewayResult fetchDragonTiger(
@@ -444,7 +460,7 @@ public class MarketDataGateway {
         }
         return singleFlight.execute(key, () -> {
             SectorCatalogGatewayResult result = routeSectorCatalog(category);
-            if (result.getQualityStatus() != MarketDataQualityStatus.UNAVAILABLE) {
+            if (cacheable(result.getQualityStatus())) {
                 sectorFreshCache.put(key, new SectorCacheEntry(result, clock.millis()));
             }
             return result;
@@ -501,7 +517,8 @@ public class MarketDataGateway {
             }
         }
 
-        if (lastGood.isPresent() && stored.isPresent()) {
+        if (lastGood.isPresent() && stored.isPresent()
+                && tradingSession.canServeFallback(stored.get().getRetrievedAt(), LocalDateTime.now(clock))) {
             SectorMarketSnapshot stale = lastGood.get();
             long age = Math.max(0L, Duration.between(stored.get().getRetrievedAt(),
                     LocalDateTime.now(clock)).getSeconds());
@@ -605,7 +622,7 @@ public class MarketDataGateway {
         }
         return singleFlight.execute(flightKey, () -> {
             QuoteGatewayResult result = routeQuotes(capability, normalizedType, normalizedCodes);
-            if (result.getQualityStatus() != MarketDataQualityStatus.UNAVAILABLE) {
+            if (cacheable(result.getQualityStatus())) {
                 freshCache.put(flightKey, new CacheEntry(result, clock.millis()));
             }
             return result;
@@ -625,7 +642,7 @@ public class MarketDataGateway {
         List<ProviderAttempt> attempts = fetchWithHedge(ordered, capability, codes);
         QuoteGatewayResult result = composeResult(
                 capability, type, codes, ordered, attempts, refreshId, startedAt);
-        finishAudit(runId, result, attempts, codes.size());
+        finishAudit(runId, capability, result, attempts, codes.size());
         return result;
     }
 
@@ -671,7 +688,7 @@ public class MarketDataGateway {
         }
         drainCompleted(pending, completed);
         expireTimedOut(pending, completed);
-        cancelPending(pending);
+        cancelPending(pending, completed);
         return completed;
     }
 
@@ -681,8 +698,10 @@ public class MarketDataGateway {
         CompletableFuture<ProviderAttempt> completion = new CompletableFuture<ProviderAttempt>();
         CompletableFuture<Void> started = new CompletableFuture<Void>();
         AtomicLong startedAtNanos = new AtomicLong(-1L);
+        AtomicReference<LocalDateTime> startedAt = new AtomicReference<LocalDateTime>();
         FutureTask<Void> task = new FutureTask<Void>(() -> {
             startedAtNanos.set(System.nanoTime());
+            startedAt.set(LocalDateTime.now(clock));
             started.complete(null);
             try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(
                     remainingDuration(requestDeadlineNanos))) {
@@ -693,11 +712,13 @@ public class MarketDataGateway {
         long timeoutNanos = providerTimeoutNanos(adapter);
         (adapter.isTerminalFallback() ? fallbackExecutor : executor).execute(task);
         return new PendingAttempt(adapter, order, completion, started, task,
-                startedAtNanos, timeoutNanos);
+                startedAtNanos, startedAt, timeoutNanos);
     }
 
     private ProviderAttempt fetchProvider(QuoteAdapter adapter, int order,
                                           MarketDataCapability capability, List<String> codes) {
+        LocalDateTime attemptStartedAt = LocalDateTime.now(clock);
+        long attemptStartedNanos = System.nanoTime();
         List<Quote> quotes = new ArrayList<Quote>();
         List<String> warnings = new ArrayList<String>();
         LocalDateTime retrievedAt = null;
@@ -715,11 +736,14 @@ public class MarketDataGateway {
                 }
             }
             return ProviderAttempt.success(adapter, order, quotes,
-                    retrievedAt == null ? LocalDateTime.now(clock) : retrievedAt, warnings);
+                    retrievedAt == null ? LocalDateTime.now(clock) : retrievedAt, warnings,
+                    attemptStartedAt, LocalDateTime.now(clock), elapsedMillis(attemptStartedNanos));
         } catch (RuntimeException error) {
-            return ProviderAttempt.failure(adapter, order, error);
+            return ProviderAttempt.failure(adapter, order, error, attemptStartedAt,
+                    LocalDateTime.now(clock), elapsedMillis(attemptStartedNanos));
         } catch (Exception error) {
-            return ProviderAttempt.failure(adapter, order, error);
+            return ProviderAttempt.failure(adapter, order, error, attemptStartedAt,
+                    LocalDateTime.now(clock), elapsedMillis(attemptStartedNanos));
         }
     }
 
@@ -816,7 +840,8 @@ public class MarketDataGateway {
             Optional<MarketDataSnapshot> stored = findSnapshot(capability, scopeKey(type, code));
             Optional<Quote> stale = stored.flatMap(codec::decodeQuote)
                     .flatMap(quote -> validator.accept(code, quote));
-            if (stale.isPresent()) {
+            if (stale.isPresent() && tradingSession.canServeFallback(
+                    stored.get().getRetrievedAt(), LocalDateTime.now(clock))) {
                 MarketDataSnapshot snapshot = stored.get();
                 Quote quote = stale.get();
                 long age = Math.max(0L, Duration.between(snapshot.getRetrievedAt(),
@@ -863,7 +888,8 @@ public class MarketDataGateway {
                 String code = quote == null || quote.getInstrumentCode() == null
                         ? "" : quote.getInstrumentCode().trim().toUpperCase(Locale.ROOT);
                 if (!requested.contains(code)) continue;
-                validator.accept(code, quote).ifPresent(value -> {
+                validator.accept(quoteCapabilityForAttempt(attempt.provider), code, quote)
+                        .ifPresent(value -> {
                     AcceptedQuote existing = accepted.get(code);
                     if (existing == null || (existing.quote.getPrice() == null
                             && value.getPrice() != null)) {
@@ -874,6 +900,23 @@ public class MarketDataGateway {
             }
         }
         return accepted;
+    }
+
+    private MarketDataCapability quoteCapabilityForAttempt(QuoteAdapter provider) {
+        for (MarketDataCapability capability : provider.capabilities()) {
+            if (capability == MarketDataCapability.REALTIME_STOCK_QUOTE
+                    || capability == MarketDataCapability.REALTIME_INDEX_QUOTE
+                    || capability == MarketDataCapability.REALTIME_FUND_ESTIMATE
+                    || capability == MarketDataCapability.REALTIME_SECTOR_QUOTE) {
+                return capability;
+            }
+        }
+        return MarketDataCapability.REALTIME_STOCK_QUOTE;
+    }
+
+    private boolean cacheable(MarketDataQualityStatus status) {
+        return status == MarketDataQualityStatus.FRESH_PRIMARY
+                || status == MarketDataQualityStatus.FRESH_FALLBACK;
     }
 
     private boolean coverageSatisfied(List<ProviderAttempt> attempts, List<String> codes,
@@ -949,7 +992,8 @@ public class MarketDataGateway {
         }
     }
 
-    private void finishAudit(Long runId, QuoteGatewayResult result,
+    private void finishAudit(Long runId, MarketDataCapability capability,
+                             QuoteGatewayResult result,
                              List<ProviderAttempt> attempts, int requestedCount) {
         if (runId == null) return;
         int fresh = 0;
@@ -963,10 +1007,33 @@ public class MarketDataGateway {
         Set<String> selected = new LinkedHashSet<String>();
         for (ProviderAttempt attempt : attempts) selected.add(attempt.provider.providerCode());
         try {
+            persistProviderAttempts(runId, capability, attempts, requestedCount);
             refreshRuns.finish(runId, result.getQualityStatus().name(), requestedCount, fresh, stale, failed,
                     String.join(",", selected), result.getWarning(), LocalDateTime.now(clock));
         } catch (RuntimeException error) {
             log.warn("Failed to finish market data refresh audit {}", runId, error);
+        }
+    }
+
+    private void persistProviderAttempts(long runId, MarketDataCapability capability,
+                                         List<ProviderAttempt> attempts, int requestedCount) {
+        MarketDataProviderAttemptRepository repository = providerAttemptRepository;
+        if (repository == null) return;
+        for (ProviderAttempt attempt : attempts) {
+            Throwable error = attempt.error;
+            String errorType = error instanceof com.finscope.rpc.marketintel.ProviderContractException
+                    ? ((com.finscope.rpc.marketintel.ProviderContractException) error).getErrorType()
+                    : error == null ? null : error.getClass().getSimpleName();
+            try {
+                repository.append(new MarketDataProviderAttempt(0L, runId, capability,
+                        attempt.provider.providerCode(), attempt.provider.providerFamily(),
+                        error == null ? "SUCCESS" : "FAILED", errorType, 0,
+                        attempt.latencyMs, requestedCount, attempt.quotes.size(),
+                        attempt.startedAt, attempt.finishedAt));
+            } catch (RuntimeException auditError) {
+                log.warn("Failed to persist provider attempt for {}",
+                        attempt.provider.providerCode(), auditError);
+            }
         }
     }
 
@@ -1000,13 +1067,17 @@ public class MarketDataGateway {
         Iterator<PendingAttempt> iterator = pending.iterator();
         while (iterator.hasNext()) {
             PendingAttempt value = iterator.next();
-            long startedAt = value.startedAtNanos.get();
-            if (!value.future.isDone() && startedAt >= 0L
-                    && now >= safeDeadline(startedAt, value.timeoutNanos)) {
+            long startedAtNanos = value.startedAtNanos.get();
+            if (!value.future.isDone() && startedAtNanos >= 0L
+                    && now >= safeDeadline(startedAtNanos, value.timeoutNanos)) {
+                LocalDateTime finishedAt = LocalDateTime.now(clock);
+                LocalDateTime startedAt = value.startedAt.get() == null
+                        ? finishedAt : value.startedAt.get();
                 ProviderAttempt timeout = ProviderAttempt.failure(value.provider, value.order,
                         new com.finscope.rpc.marketintel.ProviderContractException(
                                 "TIMEOUT", value.provider.providerCode()
-                                + " exceeded provider timeout", true));
+                                + " exceeded provider timeout", true), startedAt, finishedAt,
+                        Math.max(0L, Duration.between(startedAt, finishedAt).toMillis()));
                 if (value.future.complete(timeout)) {
                     completed.add(timeout);
                 }
@@ -1056,8 +1127,21 @@ public class MarketDataGateway {
                 ? Long.MAX_VALUE : startedNanos + timeoutNanos;
     }
 
-    private void cancelPending(List<PendingAttempt> pending) {
+    private void cancelPending(List<PendingAttempt> pending, List<ProviderAttempt> completed) {
         for (PendingAttempt value : pending) {
+            if (value.future.isDone()) {
+                ProviderAttempt finished = value.future.getNow(null);
+                if (finished != null) completed.add(finished);
+                continue;
+            }
+            LocalDateTime finishedAt = LocalDateTime.now(clock);
+            LocalDateTime startedAt = value.startedAt.get() == null
+                    ? finishedAt : value.startedAt.get();
+            completed.add(ProviderAttempt.failure(value.provider, value.order,
+                    new com.finscope.rpc.marketintel.ProviderContractException(
+                            "REQUEST_BUDGET_EXCEEDED", "market data request budget exhausted", true),
+                    startedAt, finishedAt,
+                    Math.max(0L, Duration.between(startedAt, finishedAt).toMillis())));
             value.task.cancel(true);
             value.future.cancel(true);
         }
@@ -1066,6 +1150,10 @@ public class MarketDataGateway {
 
     private long remainingMillis(long deadlineNanos) {
         return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos));
     }
 
     private String normalizeType(String type) {
@@ -1126,12 +1214,14 @@ public class MarketDataGateway {
         private final CompletableFuture<Void> started;
         private final FutureTask<Void> task;
         private final AtomicLong startedAtNanos;
+        private final AtomicReference<LocalDateTime> startedAt;
         private final long timeoutNanos;
 
         private PendingAttempt(QuoteAdapter provider, int order,
                                CompletableFuture<ProviderAttempt> future,
                                CompletableFuture<Void> started,
                                FutureTask<Void> task, AtomicLong startedAtNanos,
+                               AtomicReference<LocalDateTime> startedAt,
                                long timeoutNanos) {
             this.provider = provider;
             this.order = order;
@@ -1139,6 +1229,7 @@ public class MarketDataGateway {
             this.started = started;
             this.task = task;
             this.startedAtNanos = startedAtNanos;
+            this.startedAt = startedAt;
             this.timeoutNanos = timeoutNanos;
         }
     }
@@ -1150,25 +1241,38 @@ public class MarketDataGateway {
         private final LocalDateTime retrievedAt;
         private final List<String> warnings;
         private final Throwable error;
+        private final LocalDateTime startedAt;
+        private final LocalDateTime finishedAt;
+        private final long latencyMs;
 
         private ProviderAttempt(QuoteAdapter provider, int order, List<Quote> quotes,
-                                LocalDateTime retrievedAt, List<String> warnings, Throwable error) {
+                                LocalDateTime retrievedAt, List<String> warnings, Throwable error,
+                                LocalDateTime startedAt, LocalDateTime finishedAt, long latencyMs) {
             this.provider = provider;
             this.order = order;
             this.quotes = quotes;
             this.retrievedAt = retrievedAt;
             this.warnings = warnings;
             this.error = error;
+            this.startedAt = startedAt;
+            this.finishedAt = finishedAt;
+            this.latencyMs = latencyMs;
         }
 
         static ProviderAttempt success(QuoteAdapter provider, int order, List<Quote> quotes,
-                                       LocalDateTime retrievedAt, List<String> warnings) {
-            return new ProviderAttempt(provider, order, quotes, retrievedAt, warnings, null);
+                                       LocalDateTime retrievedAt, List<String> warnings,
+                                       LocalDateTime startedAt, LocalDateTime finishedAt,
+                                       long latencyMs) {
+            return new ProviderAttempt(provider, order, quotes, retrievedAt, warnings, null,
+                    startedAt, finishedAt, latencyMs);
         }
 
-        static ProviderAttempt failure(QuoteAdapter provider, int order, Throwable error) {
+        static ProviderAttempt failure(QuoteAdapter provider, int order, Throwable error,
+                                       LocalDateTime startedAt, LocalDateTime finishedAt,
+                                       long latencyMs) {
             return new ProviderAttempt(provider, order, Collections.<Quote>emptyList(),
-                    null, Collections.<String>emptyList(), error);
+                    null, Collections.<String>emptyList(), error,
+                    startedAt, finishedAt, latencyMs);
         }
     }
 

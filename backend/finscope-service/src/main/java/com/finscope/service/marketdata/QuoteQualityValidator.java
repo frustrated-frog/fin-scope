@@ -1,6 +1,7 @@
 package com.finscope.service.marketdata;
 
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.marketdata.MarketDataCapability;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -11,6 +12,7 @@ import java.util.Optional;
 @Component
 public class QuoteQualityValidator {
     private final Clock clock;
+    private final MarketTradingSession tradingSession;
 
     public QuoteQualityValidator() {
         this(Clock.systemDefaultZone());
@@ -18,9 +20,15 @@ public class QuoteQualityValidator {
 
     public QuoteQualityValidator(Clock clock) {
         this.clock = clock;
+        this.tradingSession = new MarketTradingSession(clock, 120L);
     }
 
     public Optional<Quote> accept(String requestedCode, Quote quote) {
+        return accept(null, requestedCode, quote);
+    }
+
+    public Optional<Quote> accept(MarketDataCapability capability,
+                                  String requestedCode, Quote quote) {
         if (quote == null || requestedCode == null
                 || !requestedCode.equalsIgnoreCase(quote.getInstrumentCode()) || !quote.isValid()) {
             return Optional.empty();
@@ -44,6 +52,10 @@ public class QuoteQualityValidator {
         }
         LocalDateTime asOf = quote.getAsOf() == null ? quote.getQuoteTime() : quote.getAsOf();
         if (asOf != null && asOf.isAfter(LocalDateTime.now(clock).plusMinutes(2))) {
+            return Optional.empty();
+        }
+        if (capability != null && quote.getPrice() != null && asOf != null
+                && !tradingSession.canServeFallback(asOf, LocalDateTime.now(clock))) {
             return Optional.empty();
         }
         quote.setAsOf(asOf);

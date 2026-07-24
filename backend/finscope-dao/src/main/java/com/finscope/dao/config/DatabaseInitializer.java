@@ -696,6 +696,25 @@ public class DatabaseInitializer implements InitializingBean {
                 + "warning_message TEXT)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_market_data_refresh_started "
                 + "ON market_data_refresh_run(started_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS market_data_provider_attempt ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "refresh_run_id INTEGER NOT NULL,"
+                + "capability TEXT NOT NULL,"
+                + "provider_code TEXT NOT NULL,"
+                + "provider_family TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "error_type TEXT,"
+                + "retry_count INTEGER NOT NULL DEFAULT 0,"
+                + "latency_ms INTEGER NOT NULL DEFAULT 0,"
+                + "requested_count INTEGER NOT NULL DEFAULT 0,"
+                + "accepted_count INTEGER NOT NULL DEFAULT 0,"
+                + "started_at TEXT NOT NULL,"
+                + "finished_at TEXT NOT NULL,"
+                + "FOREIGN KEY(refresh_run_id) REFERENCES market_data_refresh_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_market_data_attempt_provider_started "
+                + "ON market_data_provider_attempt(provider_code,started_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_market_data_attempt_run "
+                + "ON market_data_provider_attempt(refresh_run_id)");
     }
 
     private void initializeQuantSchema() {
