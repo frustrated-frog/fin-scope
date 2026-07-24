@@ -1,49 +1,169 @@
 # FinScope
 
-FinScope 是一个本地优先的个人投研信息工作台。它用于建立稳定的信息获取渠道，在 Inbox 中检查抓取文章，识别跨天重复内容，生成每日投研简报，并把有价值的信息沉淀为可长期维护的 Markdown 知识笔记。
+FinScope 是一个本地优先的个人投资研究工作台。它把公开信息获取、候选筛选、文章研究、事件与证据整理、命题研究、知识沉淀，以及自选股、财报、资金行为和量化实验放在同一个可追溯的工作流中。
 
-这个项目有意避开公共热点榜单、运营干预后台和企业发布链路。它的定位是服务个人学习、秋招项目展示，以及未来自媒体素材积累。
+项目面向个人学习、求职项目展示和长期研究素材积累，不是行情交易终端，也不包含公共热点榜单、运营后台、多用户协作或企业发布链路。研究结论和模型输出仅用于辅助分析，不构成投资建议。
 
-## 技术栈
+## 当前产品范围
 
-- 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS、站点专属抓取适配器
-- 市场数据服务：Python 3.11+、FastAPI、AkShare、pytdx、httpx
-- 前端：React、TypeScript、Vite
-- 存储：`$FINSCOPE_DATA_ROOT/finance.db` 与 `$FINSCOPE_DATA_ROOT/vault/` 下的 Markdown 文件
-- AI 扩展点：OpenAI 兼容 `LlmChatClient`、文章解读 Agent、`agent_run` 调用留痕
+### 信息获取与研究
 
-## 当前能力
+- 管理 RSS、普通网页等信息源，支持定时抓取、批次记录和推荐新闻源。
+- 在 Intake 中审阅候选内容，再决定是否提升为正式文章；耗时任务可异步执行并查看进度。
+- 手动录入普通网页或 X/Twitter status URL 时，按 URL 选择合适的 `SourceAdapter`。X 长文优先通过公开 JSON 适配器解析正文。
+- 使用 URL 指纹、标题归一化和正文 SimHash 识别重复内容，并记录重复、后续进展或新事件的判断依据。
+- 将文章转换为金融资讯、研究论文或社媒长文情报卡；模型不可用时使用确定性规则兜底，不阻断入库。
+- 生成每日 Markdown 简报，并围绕研究命题执行异步研究、保存发现和证据、合成研究报告。
+- 将文章聚类为事件档案，维护事件状态、关联文章和证据账本。
 
-- 配置 RSS/Web 信息源，并手动抓取公开文章进入 Inbox。
-- 手动粘贴普通网页或 X/Twitter status URL 时，系统会根据 URL 自动选择更合适的抓取适配器；X 长文会优先通过公开 JSON 适配器解析真实正文。
-- 对重复 URL、标题和正文进行去重，并记录新意判断原因。
-- 生成不同类型的情报卡片：金融资讯卡片、研究论文卡片、社媒长文卡片。
-- 可接入 OpenAI 兼容模型，对抓取文章做结构化解读、主题命名、术语提取和学习问题整理；模型不可用时回到确定性兜底。
-- 按固定栏目生成每日 Markdown 简报，优先使用情报卡片内容。
-- 将文章或简报沉淀为主题卡片，保留术语、学习问题、关联来源和 Markdown 笔记。
-- 在 Learning 页面把个人理解追加到 `data/vault/topics/`。
-- 导出包含 SQLite、Vault 文件和 manifest 的本地备份包。
+### 知识与内容沉淀
 
-## 项目结构
+- 从文章、简报和研究结果生成主题、术语、学习问题与待办任务。
+- 在 Knowledge 中管理知识主题、复习计划、证据和学习草稿。
+- 将长期内容投影为 `vault/` 下的 Markdown，包括每日简报、主题笔记和研究报告。
+- 在 Studio 中管理内容选题及其流转状态。
+
+### 标的、行情与决策研究
+
+- Watchlist：维护股票、基金等关注标的，展示行情、指数和板块信息，并运行标的归因研究。
+- Market Intel：刷新个股资金流、资金行为信号和龙虎榜信息，生成带证据引用的结构化解读。
+- Financials：维护公司报告期数据，上传财报或研报文档，生成财报解读并回溯原文证据。
+- Strategy：管理持仓、策略手册、个股研究命题和复盘记录。
+- Quant：管理研究数据集、行情同步、数据质量、因子分析、策略草稿和实验结果；资金信号可以冻结为可复现的因子研究输入。
+
+### 可靠性与可观测性
+
+- Agent Runs 保存模型节点、输入指纹、状态、耗时和错误信息。
+- 异步任务和研究运行提供状态查询或 SSE 进度流，并在进程重启后处理被中断的运行。
+- `/api/**` 使用统一响应信封、业务错误码和 `traceId`；请求日志通过 MDC 串联。
+- 行情网关记录 Provider 尝试、数据来源、时间戳和降级状态，使用缓存、备用源竞速、总预算、熔断和快照兜底控制免费数据源的不稳定性。
+
+## 技术栈与存储选择
+
+- 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS。
+- 前端：React 18、TypeScript、Vite 5、Vitest。
+- 行情侧车：Python 3.11+、FastAPI、AkShare、pytdx、httpx，推荐通过 Docker 运行。
+- AI：OpenAI 兼容 Chat Completions 客户端、多个领域 Agent、统一运行留痕。
+- 持久化：SQLite 主库、Markdown Vault、抓取原文与上传文档。
+
+当前继续使用 SQLite，不引入 MySQL。FinScope 是单用户、本机运行的应用，SQLite 的单文件迁移、低运维成本和本地优先特性更适合当前阶段；项目已经启用 WAL、外键、连接池限制和 busy timeout。只有未来出现多用户并发写入、远程共享数据库或独立服务扩容需求时，才有必要评估 PostgreSQL/MySQL。
+
+Docker 当前只用于隔离 Python 行情数据服务及其依赖，Java 主应用仍直接读取本机 SQLite。这样既保留数据目录的可见性和可迁移性，也避免为了单机数据库额外维护容器网络与卷。
+
+## 系统结构
+
+```text
+Browser :5173
+    │ /api proxy
+    ▼
+Spring Boot :8080
+    ├── SQLite: $FINSCOPE_DATA_ROOT/finance.db
+    ├── Markdown/files: $FINSCOPE_DATA_ROOT/vault|raw|financials|exports
+    ├── RSS / Web / X / search / model providers
+    └── Python market-data :8000
+            ├── Tencent / Sina / Eastmoney / AkShare / pytdx
+            └── provider snapshot SQLite in Docker volume
+```
+
+后端是模块化单体，依赖方向为 `web -> service -> dao/rpc -> domain/common`。Controller 不直接调用 Repository，外部访问统一放在 `finscope-rpc` 或独立行情服务中。
 
 ```text
 fin-scope/
-  backend/   Spring Boot 模块化单体
-    finscope-common/   通用底层工具
-    finscope-domain/   领域模型和 DTO 风格对象
-    finscope-dao/      SQLite 仓储与表结构初始化
-    finscope-rpc/      RSS/Web/X 等外部信息源适配器
-    finscope-service/  业务编排、去重、简报、Vault、导出
-    finscope-web/      REST 控制器与应用装配
-  frontend/  React/Vite Web 工作台
-  market-data-service/  Python A 股数据获取、多源降级与快照服务
-  data/      本地个人数据目录，除 Vault 占位文件外默认忽略
-  docs/      PRD、架构说明和路线图
+  backend/
+    finscope-common/    通用工具、API 响应模型
+    finscope-domain/    领域模型与跨层数据结构
+    finscope-dao/       SQLite Repository、Schema 初始化
+    finscope-rpc/       RSS/Web/X、行情、搜索和模型适配器
+    finscope-service/   业务编排、Agent、研究、Vault 与导出
+    finscope-web/       REST API、配置与应用装配
+  frontend/             React/Vite 工作台
+  market-data-service/  Python A 股行情获取、标准化与多源降级
+  docs/                 产品需求、技术方案、架构说明与路线图
+  data/                 仓库内保留的静态目录；不是当前默认运行数据库位置
+
+../data/                默认本地运行数据，位于仓库同级
+  finance.db
+  vault/
+  raw/
+  financials/
+  exports/
 ```
 
-## 本地运行
+更细的后端调用关系见 [docs/架构说明.md](docs/架构说明.md)，行情服务契约见 [market-data-service/README.md](market-data-service/README.md)。
 
-后端：
+## 本地启动
+
+### 环境要求
+
+- JDK 8。项目当前以 Java 8 为统一的编译和运行基线。
+- Maven 3.8+。
+- Node.js 20+，推荐 Node.js 22；使用仓库内 `package-lock.json` 安装依赖。
+- Docker Desktop，用于 Python 行情服务。
+- 可选：Python 3.11-3.13 与 `uv`，仅在不使用 Docker 运行行情服务时需要。
+
+以下命令均假设终端当前位于仓库根目录 `fin-scope/`。
+
+macOS 安装了多个 JDK 时，先让当前终端和 Maven 都使用 JDK 8，并用 `mvn -version` 确认实际运行时：
+
+```bash
+export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+mvn -version
+```
+
+如果 Maven 使用 JDK 17 等高版本，本项目中的 `javax.annotation` 依赖可能在编译阶段报错。
+
+### 1. 准备本地数据目录
+
+当前默认布局将实时数据放在仓库同级的 `../data/`。在本机对应：
+
+```text
+/Users/你的用户名/code/javaProject/
+  fin-scope/
+  data/
+    finance.db
+```
+
+已有数据库时，将整个数据目录迁移到这里。首次空白运行可以先创建数据库文件，Schema 会在应用启动时自动初始化：
+
+```bash
+mkdir -p ../data
+sqlite3 ../data/finance.db 'PRAGMA journal_mode=WAL;'
+```
+
+也可以显式指定现有数据目录；该变量必须是绝对路径：
+
+```bash
+export FINSCOPE_DATA_ROOT="$(cd .. && pwd)/data"
+```
+
+启动器会从仓库根目录或其子目录识别项目位置，并默认解析到仓库同级 `data/`。如果目录或 `finance.db` 不存在，应用会拒绝启动，避免 SQLite 在错误位置静默创建第二个空库；启动日志会打印最终数据库绝对路径。
+
+### 2. 启动行情服务（Docker，推荐）
+
+首次构建并启动：
+
+```bash
+docker build -t finscope-market-data:local ./market-data-service
+docker run -d \
+  --name finscope-market-data \
+  --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 \
+  -v finscope-market-data:/app/data \
+  finscope-market-data:local
+curl http://127.0.0.1:8000/ready
+```
+
+容器已创建时只需：
+
+```bash
+docker start finscope-market-data
+```
+
+`/health` 只检查进程存活，`/ready` 还会检查快照库可写和 Provider 配置。端口只绑定本机，持久卷保存最近成功快照。
+
+### 3. 启动后端
 
 ```bash
 export FINSCOPE_DATA_ROOT="$(cd .. && pwd)/data"
@@ -52,21 +172,28 @@ mvn -pl finscope-web -am package -DskipTests
 java -jar finscope-web/target/finscope-web-0.1.0-SNAPSHOT.jar
 ```
 
-`FINSCOPE_DATA_ROOT` 是数据库与 Vault 的唯一位置配置，必须指向已经存在且包含
-`finance.db` 的目录。未显式配置时，源码启动会从项目位置定位工作区上层的 `data/`；
-无法定位或数据库不存在时应用会拒绝启动，不会由 SQLite 静默创建空库。启动日志会打印最终使用的数据库绝对路径。
+后端地址为 `http://localhost:8080`。打包后运行可避免 Maven 多模块场景中直接执行 `spring-boot:run` 时选错模块入口。
 
-前端：
+在 IntelliJ IDEA 中运行时：
+
+- Project SDK 和 Maven Runner JRE 都选择 JDK 8。
+- Main class 使用 `com.finscope.web.FinScopeApplication`。
+- Working directory 可以设为仓库根目录或 `backend/`。
+- 建议在 Run Configuration 中加入绝对路径 `FINSCOPE_DATA_ROOT`，避免不同启动配置指向不同数据目录。
+
+### 4. 启动前端
+
+打开另一个终端：
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-默认打开 `http://localhost:5173`；如果 Vite 提示端口被占用并切换到 `5174` 或其他端口，以终端输出为准。前端会把 `/api` 代理到 `http://localhost:8080`。
+默认访问 `http://localhost:5173`。如果端口占用，Vite 会选择下一个可用端口；前端将 `/api` 代理到 `http://localhost:8080`。
 
-Python 市场数据服务：
+### 不使用 Docker 运行行情服务
 
 ```bash
 cd market-data-service
@@ -74,18 +201,26 @@ uv sync --extra ecosystem --extra dev
 uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 ```
 
-Java 接入方式和数据接口说明见 [market-data-service/README.md](market-data-service/README.md)。
+## 模型、搜索与行情配置
 
-### 行情可靠性配置
+FinScope 使用 OpenAI 兼容 Chat Completions 接口，不绑定具体模型服务商。当前个人本地部署的 LLM 和搜索凭证沿用 `backend/finscope-web/src/main/resources/application.yml` 中的既有配置约定，README 不记录或复制凭证值。若要公开分发项目，应先轮换凭证并单独设计密钥管理方案。
 
-Java 行情网关会在交易时段每 10 秒预热自选、指数和行业/概念板块；在线请求使用
-15 秒新鲜缓存、300ms 备用源竞速延迟和 5 秒总预算。盘中在线源全部失败时，只允许
-回退到最近 120 秒内成功保存的快照；午休和收盘后可以继续展示最后收盘事实，并明确
-标记数据时间与降级状态。每次 Provider 尝试都会记录成功/失败、错误类型和耗时，便于
-持续核对成功率。
+常用运行参数可以通过环境变量覆盖：
 
-这些数据源当前均为免费公开接口，没有服务商 SLA；系统通过多源路由、有界重试、能力级
-熔断、截止时间和快照兜底提升成功率，但不会把陈旧数据伪装成实时数据。可通过以下环境变量调节：
+```bash
+export FINSCOPE_LLM_ENABLED=true
+export FINSCOPE_LLM_BASE_URL=https://你的模型服务/v1
+export FINSCOPE_LLM_MODEL=你的模型名
+export FINSCOPE_SEARCH_ENABLED=true
+export FINSCOPE_SEARCH_PROVIDER=tavily
+export FINSCOPE_PYTHON_MARKET_DATA_BASE_URL=http://127.0.0.1:8000
+export FINSCOPE_CORS_ORIGIN=http://localhost:5173
+export FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON='0 30 18 * * MON-FRI'
+```
+
+模型调用失败时，文章入库等主流程会保留结果并使用确定性兜底。搜索或行情外部服务不可用时，接口会返回明确的失败、部分成功或快照降级状态，不用空数据伪装成功。
+
+行情可靠性参数：
 
 ```bash
 export FINSCOPE_MARKET_DATA_FRESH_CACHE_MS=15000
@@ -96,75 +231,32 @@ export FINSCOPE_MARKET_DATA_WARMUP_ENABLED=true
 export FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS=10000
 ```
 
-## API 响应约定
+免费公开行情源没有 SLA。盘中在线源全部失败时，只接受规定时间内的快照；午休和收盘后可以展示最后收盘事实，但会保留数据时间和降级标记。
 
-除 SSE、文件/二进制流和 `204 No Content` 外，所有 `/api/**` JSON 接口都返回统一信封：
+## API 约定
 
-Controller 方法签名必须显式声明 `ApiResponse<T>` 或 `ResponseEntity<ApiResponse<T>>`，不依赖运行时隐式包装；契约测试会阻止裸实体返回。
+除 SSE、文件流和 `204 No Content` 外，所有 `/api/**` JSON 接口都返回统一信封：
 
 ```json
 {
   "success": true,
   "code": "FS-0000",
   "message": "成功",
-  "data": {
-    "id": 1
-  },
+  "data": {},
   "traceId": "4b6f...",
-  "timestamp": "2026-07-16T10:00:00Z"
+  "timestamp": "2026-07-24T12:00:00Z"
 }
 ```
 
-失败响应使用相同结构，`success=false`、`data=null`，并保留正确的 HTTP 状态。错误码按领域分段：
+错误响应使用相同结构，并保留正确的 HTTP 状态：
 
-```json
-{
-  "success": false,
-  "code": "FS-2001",
-  "message": "文章不存在：999",
-  "data": null,
-  "traceId": "4b6f...",
-  "timestamp": "2026-07-16T10:00:00Z"
-}
-```
-
-- `FS-1xxx`：请求参数、认证、权限和限流。
-- `FS-2xxx`：资源不存在、业务状态冲突、重复操作和数据版本冲突。
-- `FS-3xxx`：外部服务、市场数据和模型服务异常。
+- `FS-1xxx`：参数、认证、权限和限流。
+- `FS-2xxx`：资源不存在、业务冲突、重复操作和版本冲突。
+- `FS-3xxx`：外部服务、行情和模型服务异常。
 - `FS-4xxx`：数据库、文件、异步任务和数据完整性异常。
 - `FS-5000`：未分类的系统内部异常。
 
-客户端可以传入 `X-Request-Id`；服务端会校验并回传，也会在响应 `traceId` 和日志 MDC 中使用它。未传入时由服务端生成。前端统一客户端只向业务代码返回 `data`，并在失败时抛出带 `status`、`code`、`traceId` 的 `ApiError`。
-
-## Agent / LLM 配置
-
-FinScope 使用 OpenAI 兼容 Chat Completions 接口，不绑定具体服务商。API Key 只从本地环境变量读取，不写入代码和仓库。
-
-```bash
-export FINSCOPE_LLM_ENABLED=true
-export FINSCOPE_LLM_BASE_URL=https://你的模型服务/v1
-export FINSCOPE_LLM_API_KEY=你的_api_key
-export FINSCOPE_LLM_MODEL=你的模型名
-cd backend
-mvn -pl finscope-web -am spring-boot:run
-```
-
-启用后，新增文章生成情报卡片、从文章沉淀主题时会走 `article-interpret` Agent 节点。每次调用会在 Agent Runs 页面留下节点、状态、耗时和错误信息；如果模型调用失败，系统会保留抓取链路并使用确定性兜底，不会阻断 Inbox。
-
-其他常用环境变量：
-
-```bash
-export FINSCOPE_DATA_ROOT=/你的绝对路径/data
-export FINSCOPE_CORS_ORIGIN=http://localhost:5173
-export FINSCOPE_SLOW_REQUEST_MS=1000
-export FINSCOPE_SEARCH_ENABLED=false
-export FINSCOPE_SEARCH_PROVIDER=tavily
-export FINSCOPE_SEARCH_API_KEY=你的搜索服务密钥
-export FINSCOPE_PYTHON_MARKET_DATA_BASE_URL=http://127.0.0.1:8000
-export FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON='0 30 18 * * MON-FRI'
-```
-
-仓库配置文件不保存任何 API Key。默认关闭 LLM 和搜索服务，只有显式配置环境变量后才启用。
+客户端可传入 `X-Request-Id`；服务端校验后将其用于响应 `traceId` 和日志 MDC，未传入时自动生成。
 
 ## 验证命令
 
@@ -172,8 +264,17 @@ export FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON='0 30 18 * * MON-FRI'
 cd backend && mvn test
 cd frontend && npm test
 cd frontend && npm run build
+cd market-data-service && uv run pytest -q
 ```
 
-## 数据安全
+Python Provider 单元测试使用固定响应，不依赖外网；真实免费接口只适合作为手工冒烟测试。
 
-`$FINSCOPE_DATA_ROOT/finance.db`、抓取原文、导出包、本地环境文件和 API Key 都不应进入 Git。不要把公司内部数据、代码、凭证、专有 Prompt 或私有文档放进这个项目。
+## 数据迁移与安全
+
+- 实时主数据位于 `$FINSCOPE_DATA_ROOT`，不要只复制仓库目录后就认为数据已经迁移。
+- 迁移前先停止 Java 后端，再复制整个数据目录；SQLite 使用 WAL 时，运行中只复制 `finance.db` 可能遗漏尚未 checkpoint 的数据。
+- Settings 可以导出包含 SQLite、Vault 和 manifest 的 ZIP；导入接口当前仍是 MVP 占位能力，不能依赖它自动恢复。
+- `finance.db`、WAL/SHM、抓取原文、上传文档、导出包、本地环境文件和凭证不应新增到 Git。
+- 不要把公司内部数据、代码、专有 Prompt、私有文档或新的密钥提交到仓库。
+
+项目内更详细的产品和技术背景位于 [docs/](docs/)。
