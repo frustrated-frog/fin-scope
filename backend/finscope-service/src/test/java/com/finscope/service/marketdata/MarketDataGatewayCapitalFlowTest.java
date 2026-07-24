@@ -22,6 +22,10 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,7 +51,32 @@ class MarketDataGatewayCapitalFlowTest {
         assertTrue(result.getWarning().contains("自动切换备用数据源"));
     }
 
+    @Test
+    void appliesProviderTimeoutBeforeTryingTheNextCapitalFlowSource() {
+        FakeCapitalProvider primary = new FakeCapitalProvider("PRIMARY_FLOW", "PRIMARY", 10);
+        primary.delayMillis = 500;
+        primary.timeout = Duration.ofMillis(40);
+        FakeCapitalProvider backup = new FakeCapitalProvider("BACKUP_FLOW", "BACKUP", 20);
+        backup.data = data("BACKUP_FLOW");
+        ExecutorService providerExecutor = Executors.newFixedThreadPool(2);
+        try {
+            long started = System.nanoTime();
+            CapitalFlowGatewayResult result = gateway(providerExecutor, primary, backup)
+                    .fetchCapitalFlow(instrument(), LocalDate.of(2026, 7, 14));
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+            assertEquals("BACKUP_FLOW", result.getSourceCode());
+            assertTrue(elapsedMillis < 300L);
+        } finally {
+            providerExecutor.shutdownNow();
+        }
+    }
+
     private MarketDataGateway gateway(CapitalFlowProvider... providers) {
+        return gateway(Runnable::run, providers);
+    }
+
+    private MarketDataGateway gateway(Executor executor, CapitalFlowProvider... providers) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         return new MarketDataGateway(Collections.emptyList(), Collections.emptyList(), Arrays.asList(providers),
@@ -55,7 +84,7 @@ class MarketDataGatewayCapitalFlowTest {
                 mock(MarketDataRefreshRunRepository.class),
                 new MarketDataSnapshotCodec(new ObjectMapper().findAndRegisterModules()),
                 new QuoteQualityValidator(clock), new MarketDataSingleFlight(),
-                new MarketDataGatewayProperties(30_000, 30, 800), Runnable::run, clock);
+                new MarketDataGatewayProperties(30_000, 30, 800), executor, clock);
     }
 
     private Instrument instrument() {
@@ -86,6 +115,8 @@ class MarketDataGatewayCapitalFlowTest {
         private final int priority;
         private CapitalFlowData data;
         private RuntimeException failure;
+        private long delayMillis;
+        private Duration timeout = Duration.ofSeconds(1);
 
         private FakeCapitalProvider(String code, String family, int priority) {
             this.code = code;
@@ -101,10 +132,18 @@ class MarketDataGatewayCapitalFlowTest {
         public int priority() { return priority; }
         public int batchLimit() { return 1; }
         public Duration minimumInterval() { return Duration.ZERO; }
-        public Duration timeout() { return Duration.ofSeconds(1); }
+        public Duration timeout() { return timeout; }
         public boolean supports(Instrument instrument) { return true; }
         public CapitalFlowData fetch(Instrument instrument, LocalDate asOfDate) {
             if (failure != null) throw failure;
+            if (delayMillis > 0L) {
+                try {
+                    Thread.sleep(delayMillis);
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new ProviderContractException("INTERRUPTED", "interrupted", false, error);
+                }
+            }
             return data;
         }
     }

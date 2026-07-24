@@ -59,11 +59,13 @@ class ProviderRequestGuardTest {
     }
 
     @Test
-    void endpointFailureDoesNotBlockAnotherFamilyAndFamilyFailureSpansCapabilities() {
+    void familyCircuitIsSharedWithinCapabilityButIsolatedAcrossCapabilities() {
         ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 millis -> { }, Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         SinaStockQuoteAdapter sina = new SinaStockQuoteAdapter();
         EastmoneySectorMarketProvider sector = new EastmoneySectorMarketProvider(null);
+        TestProvider sectorBackup = new TestProvider("EASTMONEY_SECTOR_BACKUP", "EASTMONEY",
+                MarketDataCapability.SECTOR_CATALOG);
         TestProvider flow = new TestProvider("EASTMONEY_CAPITAL_FLOW", "EASTMONEY",
                 MarketDataCapability.CAPITAL_FLOW_5M);
 
@@ -73,12 +75,14 @@ class ProviderRequestGuardTest {
                     () -> { throw new ProviderContractException("HTTP_503", "busy", true); }));
         }
         assertFalse(guard.isAvailable(sector, MarketDataCapability.SECTOR_CATALOG));
+        assertFalse(guard.isAvailable(sectorBackup, MarketDataCapability.SECTOR_CATALOG));
         assertTrue(guard.isAvailable(sina, MarketDataCapability.REALTIME_STOCK_QUOTE));
+        assertTrue(guard.isAvailable(flow, MarketDataCapability.CAPITAL_FLOW_5M));
+        assertFalse(guard.isFamilyAvailable(MarketDataCapability.SECTOR_CATALOG, "EASTMONEY"));
+        assertTrue(guard.isFamilyAvailable(MarketDataCapability.CAPITAL_FLOW_5M, "EASTMONEY"));
 
-        assertThrows(ProviderContractException.class, () -> guard.execute(flow,
-                MarketDataCapability.CAPITAL_FLOW_5M,
-                () -> { throw new ProviderContractException("HTTP_503", "busy", true); }));
-        assertFalse(guard.isFamilyAvailable("EASTMONEY"));
+        assertEquals("ok", guard.execute(MarketDataCapability.CAPITAL_FLOW_5M,
+                "EASTMONEY", () -> "ok"));
     }
 
     private static final class TestProvider implements com.finscope.rpc.marketdata.MarketDataProvider {

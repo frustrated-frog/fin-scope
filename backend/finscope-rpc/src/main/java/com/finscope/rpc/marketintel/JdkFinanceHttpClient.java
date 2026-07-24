@@ -18,21 +18,21 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
     private final int maxBytes;
-    private final ProviderRequestGuard requestGuard;
 
     public JdkFinanceHttpClient() {
         this(5000, 10000, 2 * 1024 * 1024);
     }
 
     public JdkFinanceHttpClient(int connectTimeoutMs, int readTimeoutMs, int maxBytes) {
-        this(connectTimeoutMs, readTimeoutMs, maxBytes, new ProviderRequestGuard());
-    }
-
-    JdkFinanceHttpClient(int connectTimeoutMs, int readTimeoutMs, int maxBytes, ProviderRequestGuard requestGuard) {
         this.connectTimeoutMs = connectTimeoutMs;
         this.readTimeoutMs = readTimeoutMs;
         this.maxBytes = maxBytes;
-        this.requestGuard = requestGuard;
+    }
+
+    /** @deprecated 请求治理由 MarketDataGateway 统一负责。 */
+    @Deprecated
+    JdkFinanceHttpClient(int connectTimeoutMs, int readTimeoutMs, int maxBytes, ProviderRequestGuard requestGuard) {
+        this(connectTimeoutMs, readTimeoutMs, maxBytes);
     }
 
     public static String sha256(String value) {
@@ -48,7 +48,7 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
 
     @Override
     public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers) throws Exception {
-        return requestGuard.execute(provider, () -> getOnce(provider, uri, headers));
+        return getOnce(provider, uri, headers);
     }
 
     private FinanceHttpResponse getOnce(String provider, URI uri, Map<String, String> headers) throws Exception {

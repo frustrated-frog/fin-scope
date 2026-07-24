@@ -8,8 +8,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.EnumMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -21,7 +19,6 @@ import java.util.concurrent.ConcurrentMap;
 @Component
 public class ProviderRequestGuard {
     private static final double EWMA_ALPHA = 0.25d;
-    private static final Duration FAMILY_FAILURE_WINDOW = Duration.ofSeconds(30);
     private final Clock clock;
     private final Sleeper sleeper;
     private final Duration legacyMinimumInterval;
@@ -30,10 +27,10 @@ public class ProviderRequestGuard {
     private final Duration openDuration;
     private final ConcurrentMap<EndpointKey, EndpointState> endpoints =
             new ConcurrentHashMap<EndpointKey, EndpointState>();
-    private final ConcurrentMap<String, FamilyState> families =
-            new ConcurrentHashMap<String, FamilyState>();
+    private final ConcurrentMap<FamilyKey, FamilyState> families =
+            new ConcurrentHashMap<FamilyKey, FamilyState>();
     public ProviderRequestGuard() {
-        this(Clock.systemUTC(), Thread::sleep, Duration.ofSeconds(1), 2, 3, Duration.ofSeconds(60));
+        this(Clock.systemUTC(), Thread::sleep, Duration.ofSeconds(1), 1, 3, Duration.ofSeconds(60));
     }
     public ProviderRequestGuard(Clock clock, Sleeper sleeper, Duration legacyMinimumInterval,
                                 int maxRetries, int failureThreshold, Duration openDuration) {
@@ -53,8 +50,16 @@ public class ProviderRequestGuard {
      * 兼容底层 HTTP 客户端；新网关应使用携带完整元数据的重载。
      */
     public <T> T execute(String providerCode, Operation<T> operation) {
-        return execute(new LegacyProvider(providerCode, legacyMinimumInterval),
-                MarketDataCapability.REALTIME_STOCK_QUOTE, operation);
+        return execute(MarketDataCapability.REALTIME_STOCK_QUOTE, providerCode, operation);
+    }
+
+    /**
+     * 兼容没有完整 Provider 元数据的调用方，同时显式隔离能力故障域。
+     */
+    public <T> T execute(MarketDataCapability capability, String providerCode,
+                         Operation<T> operation) {
+        return execute(new LegacyProvider(providerCode, legacyMinimumInterval, capability),
+                capability, operation);
     }
 
     public <T> T execute(MarketDataProvider provider, MarketDataCapability capability,
@@ -65,7 +70,8 @@ public class ProviderRequestGuard {
         }
         EndpointKey key = new EndpointKey(provider.providerCode(), capability);
         EndpointState endpoint = endpoints.computeIfAbsent(key, ignored -> new EndpointState());
-        FamilyState family = families.computeIfAbsent(provider.providerFamily(), ignored -> new FamilyState());
+        FamilyKey familyKey = new FamilyKey(capability, provider.providerFamily());
+        FamilyState family = families.computeIfAbsent(familyKey, ignored -> new FamilyState());
         acquirePermission(provider, endpoint, family);
 
         for (int attempt = 0; ; attempt++) {
@@ -84,6 +90,13 @@ public class ProviderRequestGuard {
                         elapsedMillis(started), error.isRetryable());
                 throw error;
             } catch (Exception error) {
+                if (error instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                    recordFailure(key, provider.providerFamily(), capability,
+                            elapsedMillis(started), false);
+                    throw new ProviderContractException("INTERRUPTED",
+                            "provider call interrupted", false, error);
+                }
                 if (attempt < maxRetries) {
                     continue;
                 }
@@ -99,14 +112,18 @@ public class ProviderRequestGuard {
             return false;
         }
         EndpointState endpoint = endpoints.get(new EndpointKey(provider.providerCode(), capability));
-        FamilyState family = families.get(provider.providerFamily());
+        FamilyState family = families.get(new FamilyKey(capability, provider.providerFamily()));
         Instant now = clock.instant();
         return (endpoint == null || endpoint.isAvailable(now))
                 && (family == null || family.isAvailable(now));
     }
 
     public boolean isFamilyAvailable(String providerFamily) {
-        FamilyState family = families.get(providerFamily);
+        return isFamilyAvailable(MarketDataCapability.REALTIME_STOCK_QUOTE, providerFamily);
+    }
+
+    public boolean isFamilyAvailable(MarketDataCapability capability, String providerFamily) {
+        FamilyState family = families.get(new FamilyKey(capability, providerFamily));
         return family == null || family.isAvailable(clock.instant());
     }
 
@@ -115,7 +132,8 @@ public class ProviderRequestGuard {
         EndpointState endpoint = endpoints.computeIfAbsent(
                 new EndpointKey(providerCode, capability), ignored -> new EndpointState());
         endpoint.recordSuccess(Math.max(0L, latencyMillis));
-        families.computeIfAbsent(providerFamily, ignored -> new FamilyState()).recordSuccess();
+        families.computeIfAbsent(new FamilyKey(capability, providerFamily),
+                ignored -> new FamilyState()).recordSuccess();
     }
 
     public double successRateEwma(MarketDataProvider provider, MarketDataCapability capability) {
@@ -174,8 +192,9 @@ public class ProviderRequestGuard {
         endpoints.computeIfAbsent(key, ignored -> new EndpointState())
                 .recordFailure(now, Math.max(0L, latencyMillis), retryable,
                         failureThreshold, openDuration);
-        families.computeIfAbsent(providerFamily, ignored -> new FamilyState())
-                .recordFailure(capability, now, retryable, openDuration);
+        families.computeIfAbsent(new FamilyKey(capability, providerFamily),
+                        ignored -> new FamilyState())
+                .recordFailure(now, retryable, failureThreshold, openDuration);
     }
 
     public interface Sleeper {
@@ -206,6 +225,29 @@ public class ProviderRequestGuard {
         @Override
         public int hashCode() {
             return 31 * providerCode.hashCode() + capability.hashCode();
+        }
+    }
+
+    private static final class FamilyKey {
+        private final MarketDataCapability capability;
+        private final String providerFamily;
+
+        private FamilyKey(MarketDataCapability capability, String providerFamily) {
+            this.capability = capability;
+            this.providerFamily = providerFamily;
+        }
+
+        @Override
+        public boolean equals(Object value) {
+            if (this == value) return true;
+            if (!(value instanceof FamilyKey)) return false;
+            FamilyKey other = (FamilyKey) value;
+            return capability == other.capability && providerFamily.equals(other.providerFamily);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * capability.hashCode() + providerFamily.hashCode();
         }
     }
 
@@ -285,10 +327,9 @@ public class ProviderRequestGuard {
     }
 
     private static final class FamilyState {
-        private final Map<MarketDataCapability, Instant> recentFailures =
-                new EnumMap<MarketDataCapability, Instant>(MarketDataCapability.class);
         private Instant openUntil;
         private boolean probeInFlight;
+        private int consecutiveFailures;
 
         synchronized boolean tryAcquire(Instant now) {
             if (openUntil == null) return true;
@@ -304,16 +345,15 @@ public class ProviderRequestGuard {
         synchronized void recordSuccess() {
             openUntil = null;
             probeInFlight = false;
+            consecutiveFailures = 0;
         }
 
-        synchronized void recordFailure(MarketDataCapability capability, Instant now,
-                                        boolean retryable, Duration duration) {
+        synchronized void recordFailure(Instant now, boolean retryable,
+                                        int threshold, Duration duration) {
             probeInFlight = false;
             if (!retryable) return;
-            recentFailures.entrySet().removeIf(entry ->
-                    Duration.between(entry.getValue(), now).compareTo(FAMILY_FAILURE_WINDOW) > 0);
-            recentFailures.put(capability, now);
-            if (recentFailures.size() >= 2) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= threshold) {
                 openUntil = now.plus(duration);
             }
         }
@@ -322,10 +362,13 @@ public class ProviderRequestGuard {
     private static final class LegacyProvider implements MarketDataProvider {
         private final String code;
         private final Duration minimumInterval;
+        private final MarketDataCapability capability;
 
-        private LegacyProvider(String code, Duration minimumInterval) {
+        private LegacyProvider(String code, Duration minimumInterval,
+                               MarketDataCapability capability) {
             this.code = code;
             this.minimumInterval = minimumInterval;
+            this.capability = capability;
         }
 
         public String providerCode() {
@@ -337,7 +380,7 @@ public class ProviderRequestGuard {
         }
 
         public Set<MarketDataCapability> capabilities() {
-            return Collections.singleton(MarketDataCapability.REALTIME_STOCK_QUOTE);
+            return Collections.singleton(capability);
         }
 
         public int priority() {

@@ -11,6 +11,7 @@ import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
 import com.finscope.rpc.marketintel.CapitalFlowData;
@@ -44,7 +45,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** 现有页面访问外部行情的统一高可用入口。 */
 @Service
@@ -230,7 +234,7 @@ public class MarketDataGateway {
         for (DragonTigerProvider provider : ordered) {
             attemptedSources.add(provider.providerCode());
             try {
-                ProviderResult<DragonTigerData> fetched = guard.execute(provider, capability,
+                ProviderResult<DragonTigerData> fetched = executeProvider(provider, capability,
                         () -> provider.fetch(instrument, startDate, endDate));
                 if (fetched == null || fetched.getData() == null) {
                     throw new com.finscope.rpc.marketintel.ProviderContractException(
@@ -360,7 +364,7 @@ public class MarketDataGateway {
         for (CapitalFlowProvider provider : ordered) {
             attemptedSources.add(provider.providerCode());
             try {
-                ProviderResult<CapitalFlowData> fetched = guard.execute(provider, capability, () -> {
+                ProviderResult<CapitalFlowData> fetched = executeProvider(provider, capability, () -> {
                     CapitalFlowData data = provider.fetch(instrument, asOfDate);
                     if (data == null || data.getMinutePoints().isEmpty()) {
                         throw new com.finscope.rpc.marketintel.ProviderContractException(
@@ -447,7 +451,7 @@ public class MarketDataGateway {
 
         for (SectorMarketProvider provider : ordered) {
             try {
-                ProviderResult<SectorMarketSnapshot> fetched = guard.execute(provider, capability,
+                ProviderResult<SectorMarketSnapshot> fetched = executeProvider(provider, capability,
                         () -> validateSectorCatalog(provider.fetchResult(category), category, lastGood));
                 SectorMarketSnapshot fresh = fetched.getData();
                 boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
@@ -616,6 +620,7 @@ public class MarketDataGateway {
         while (!coverageSatisfied(completed, codes, next, ordered.size())
                 && remainingMillis(deadline) > 0L) {
             drainCompleted(pending, completed);
+            expireTimedOut(pending, completed);
             if (coverageSatisfied(completed, codes, next, ordered.size())) break;
             if (pending.isEmpty()) {
                 if (next >= ordered.size()) break;
@@ -637,19 +642,26 @@ public class MarketDataGateway {
                         TimeUnit.NANOSECONDS.toMillis(nextHedgeAt - now));
                 waitMillis = Math.min(waitMillis, untilHedgeMillis);
             }
+            waitMillis = Math.min(waitMillis, millisUntilProviderTimeout(pending));
             awaitAny(pending, waitMillis);
         }
         drainCompleted(pending, completed);
+        expireTimedOut(pending, completed);
         cancelPending(pending);
         return completed;
     }
 
     private PendingAttempt start(QuoteAdapter adapter, int order,
                                  MarketDataCapability capability, List<String> codes) {
-        CompletableFuture<ProviderAttempt> future = CompletableFuture.supplyAsync(
-                () -> fetchProvider(adapter, order, capability, codes),
-                adapter.isTerminalFallback() ? fallbackExecutor : executor);
-        return new PendingAttempt(future);
+        CompletableFuture<ProviderAttempt> completion = new CompletableFuture<ProviderAttempt>();
+        FutureTask<Void> task = new FutureTask<Void>(() -> {
+            completion.complete(fetchProvider(adapter, order, capability, codes));
+            return null;
+        });
+        long timeoutMillis = providerTimeoutMillis(adapter);
+        (adapter.isTerminalFallback() ? fallbackExecutor : executor).execute(task);
+        return new PendingAttempt(adapter, order, completion, task,
+                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis));
     }
 
     private ProviderAttempt fetchProvider(QuoteAdapter adapter, int order,
@@ -676,6 +688,34 @@ public class MarketDataGateway {
             return ProviderAttempt.failure(adapter, order, error);
         } catch (Exception error) {
             return ProviderAttempt.failure(adapter, order, error);
+        }
+    }
+
+    /**
+     * 串行路由在调用线程外执行 Provider，使声明的 timeout 成为可观测硬边界。
+     * Quote 路由已经在独立任务中执行，由 PendingAttempt 直接管理超时，避免执行器嵌套等待。
+     */
+    private <T> T executeProvider(MarketDataProvider provider,
+                                  MarketDataCapability capability,
+                                  ProviderRequestGuard.Operation<T> operation) {
+        FutureTask<T> task = new FutureTask<T>(() -> guard.execute(provider, capability, operation));
+        executor.execute(task);
+        try {
+            return task.get(providerTimeoutMillis(provider), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException error) {
+            task.cancel(true);
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "TIMEOUT", provider.providerCode() + " exceeded provider timeout", true, error);
+        } catch (InterruptedException error) {
+            task.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "INTERRUPTED", "provider call interrupted", false, error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            throw new com.finscope.rpc.marketintel.ProviderContractException(
+                    "CONNECTION_ERROR", message(cause), true, cause);
         }
     }
 
@@ -903,8 +943,46 @@ public class MarketDataGateway {
         }
     }
 
+    private void expireTimedOut(List<PendingAttempt> pending, List<ProviderAttempt> completed) {
+        long now = System.nanoTime();
+        Iterator<PendingAttempt> iterator = pending.iterator();
+        while (iterator.hasNext()) {
+            PendingAttempt value = iterator.next();
+            if (!value.future.isDone() && now >= value.deadlineNanos) {
+                ProviderAttempt timeout = ProviderAttempt.failure(value.provider, value.order,
+                        new com.finscope.rpc.marketintel.ProviderContractException(
+                                "TIMEOUT", value.provider.providerCode()
+                                + " exceeded provider timeout", true));
+                if (value.future.complete(timeout)) {
+                    completed.add(timeout);
+                }
+                value.task.cancel(true);
+                iterator.remove();
+            }
+        }
+    }
+
+    private long millisUntilProviderTimeout(List<PendingAttempt> pending) {
+        long now = System.nanoTime();
+        long remaining = Long.MAX_VALUE;
+        for (PendingAttempt value : pending) {
+            remaining = Math.min(remaining, value.deadlineNanos - now);
+        }
+        if (remaining == Long.MAX_VALUE) return Long.MAX_VALUE;
+        return Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remaining));
+    }
+
+    private long providerTimeoutMillis(MarketDataProvider provider) {
+        Duration timeout = provider.timeout();
+        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+            return Math.max(1L, properties.getRequestBudgetMs());
+        }
+        return Math.max(1L, timeout.toMillis());
+    }
+
     private void cancelPending(List<PendingAttempt> pending) {
         for (PendingAttempt value : pending) {
+            value.task.cancel(true);
             value.future.cancel(true);
         }
         pending.clear();
@@ -966,8 +1044,21 @@ public class MarketDataGateway {
     }
 
     private static final class PendingAttempt {
+        private final QuoteAdapter provider;
+        private final int order;
         private final CompletableFuture<ProviderAttempt> future;
-        private PendingAttempt(CompletableFuture<ProviderAttempt> future) { this.future = future; }
+        private final FutureTask<Void> task;
+        private final long deadlineNanos;
+
+        private PendingAttempt(QuoteAdapter provider, int order,
+                               CompletableFuture<ProviderAttempt> future,
+                               FutureTask<Void> task, long deadlineNanos) {
+            this.provider = provider;
+            this.order = order;
+            this.future = future;
+            this.task = task;
+            this.deadlineNanos = deadlineNanos;
+        }
     }
 
     private static final class ProviderAttempt {

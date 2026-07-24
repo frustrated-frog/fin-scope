@@ -152,6 +152,24 @@ class MarketDataGatewayQuoteTest {
     }
 
     @Test
+    void timesOutOneProviderAtItsDeclaredLimitAndStartsFallbackImmediately() {
+        primary.block();
+        primary.timeout = Duration.ofMillis(40);
+        backup.result = Collections.singletonList(valid("600519", 1500.0));
+
+        long started = System.nanoTime();
+        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(primary, backup), 250, 800)
+                .fetchQuotes("STOCK", Collections.singletonList("600519"), true)
+                .getQuotes().get(0);
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        assertEquals("SINA_STOCK", quote.getSourceCode());
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
+        assertEquals(1, backup.calls.get());
+        assertTrue(elapsedMillis < 180L, "fallback should not wait for the hedge delay");
+    }
+
+    @Test
     void rejectsInvalidFreshPayloadAndReturnsPersistedLastGoodWithWarning() {
         primary.result = Collections.singletonList(invalidHighLow("600519"));
         backup.failure = new ProviderContractException("TIMEOUT", "timeout", true);
@@ -248,11 +266,17 @@ class MarketDataGatewayQuoteTest {
     }
 
     private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters) {
+        return gatewayFor(adapters, 30, 800);
+    }
+
+    private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters,
+                                         long hedgeDelayMs, long requestBudgetMs) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         return new MarketDataGateway(adapters, new ProviderRoutePolicy(guard), guard,
                 snapshots, runs, codec, new QuoteQualityValidator(clock),
-                new MarketDataSingleFlight(), new MarketDataGatewayProperties(30_000, 30, 800),
+                new MarketDataSingleFlight(), new MarketDataGatewayProperties(
+                        30_000, hedgeDelayMs, requestBudgetMs),
                 providerExecutor, clock);
     }
 
@@ -284,6 +308,7 @@ class MarketDataGatewayQuoteTest {
         private volatile List<Quote> result = new ArrayList<Quote>();
         private volatile RuntimeException failure;
         private volatile long delayMillis;
+        private volatile Duration timeout = Duration.ofMillis(500);
 
         private FakeQuoteAdapter(String code, String family, int priority) {
             this(code, family, priority, "STOCK", MarketDataCapability.REALTIME_STOCK_QUOTE);
@@ -314,7 +339,7 @@ class MarketDataGatewayQuoteTest {
         public int priority() { return priority; }
         public int batchLimit() { return 100; }
         public Duration minimumInterval() { return Duration.ZERO; }
-        public Duration timeout() { return Duration.ofMillis(500); }
+        public Duration timeout() { return timeout; }
         public boolean supports(String type) { return instrumentType.equals(type); }
         public boolean isTerminalFallback() {
             return "EASTMONEY_FUND_CONFIRMED_NAV".equals(code);
