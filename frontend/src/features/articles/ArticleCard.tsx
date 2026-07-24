@@ -52,7 +52,8 @@ export function ArticleCard({
   onCompound,
   onDelete,
   categoryColor,
-  isHighlighted = false
+  isHighlighted = false,
+  isCompounding = false
 }: {
   article: Article;
   isExpanded: boolean;
@@ -61,6 +62,7 @@ export function ArticleCard({
   onDelete: () => void;
   categoryColor: string;
   isHighlighted?: boolean;
+  isCompounding?: boolean;
 }) {
   const detectedSourceTag = detectSourceTag(article);
 
@@ -118,8 +120,14 @@ export function ArticleCard({
           )}
 
           <div className="article-card-actions">
-            <button className="primary-button" onClick={(event) => { event.stopPropagation(); onCompound(); }}>
-              沉淀到主题库
+            <button
+              className="primary-button"
+              type="button"
+              aria-busy={isCompounding}
+              disabled={isCompounding}
+              onClick={(event) => { event.stopPropagation(); onCompound(); }}
+            >
+              {isCompounding ? '沉淀中...' : '沉淀到主题库'}
             </button>
             {article.url && (
               <a href={article.url} target="_blank" rel="noopener noreferrer" className="link-button">

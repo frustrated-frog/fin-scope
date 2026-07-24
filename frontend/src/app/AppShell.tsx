@@ -85,7 +85,7 @@ export function AppShell({
         </div>
         <div className="sidebar-signal">
           <span className="signal-label">Pipeline</span>
-          <strong>Sources / Intake / Article / Brief / Topics</strong>
+          <strong>Sources / Intake / Article / Brief / Knowledge</strong>
           <div className="signal-flow" aria-hidden="true">
             <span />
             <span />

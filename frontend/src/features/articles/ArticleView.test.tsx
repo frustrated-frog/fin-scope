@@ -80,7 +80,7 @@ test('updates article ingest phase from SSE and confirms completion from task AP
     }
     return {};
   });
-  render(<ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />);
+  render(<ArticleView onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />);
   await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), generatedArticle.url);
   await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
 
@@ -107,7 +107,7 @@ test('presents article workspace as a signal command center', async () => {
   });
 
   const { container } = render(
-    <ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
+    <ArticleView onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
   );
 
   expect(await screen.findByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
@@ -116,6 +116,57 @@ test('presents article workspace as a signal command center', async () => {
   expect(container.querySelector('.article-signal-panel')).toBeTruthy();
   expect(container.querySelector('.article-stream-panel')).toBeTruthy();
   expect(screen.getByText('1 active signals')).toBeInTheDocument();
+});
+
+test('shows topic compounding progress and stays in the article workspace after success', async () => {
+  let resolveCompound!: (value: unknown) => void;
+  const compoundRequest = new Promise((resolve) => { resolveCompound = resolve; });
+  const addToast = vi.fn();
+  const onWorkspaceChanged = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      return { items: [firstArticle], totalCount: 1, page: 0, pageSize: 20, totalPages: 1 };
+    }
+    if (path === '/api/topics/from-article/1' && options?.method === 'POST') {
+      return compoundRequest;
+    }
+    return {};
+  });
+
+  render(<ArticleView onWorkspaceChanged={onWorkspaceChanged} addToast={addToast} />);
+  await userEvent.click(await screen.findByText('已有文章'));
+  await userEvent.click(screen.getByRole('button', { name: '沉淀到主题库' }));
+
+  expect(screen.getByRole('button', { name: '沉淀中...' })).toBeDisabled();
+  expect(addToast).toHaveBeenCalledWith('正在将文章沉淀到主题库', 'info');
+
+  resolveCompound({ id: 9, name: '利率预期', status: 'LEARNING' });
+
+  expect(await screen.findByRole('button', { name: '沉淀到主题库' })).toBeEnabled();
+  expect(addToast).toHaveBeenCalledWith('文章已沉淀到主题「利率预期」', 'success');
+  expect(onWorkspaceChanged).toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
+});
+
+test('restores the topic action and reports an error when compounding fails', async () => {
+  const addToast = vi.fn();
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path.startsWith('/api/articles/paged')) {
+      return { items: [firstArticle], totalCount: 1, page: 0, pageSize: 20, totalPages: 1 };
+    }
+    if (path === '/api/topics/from-article/1' && options?.method === 'POST') {
+      throw new Error('主题生成失败');
+    }
+    return {};
+  });
+
+  render(<ArticleView onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={addToast} />);
+  await userEvent.click(await screen.findByText('已有文章'));
+  await userEvent.click(screen.getByRole('button', { name: '沉淀到主题库' }));
+
+  expect(await screen.findByRole('button', { name: '沉淀到主题库' })).toBeEnabled();
+  expect(addToast).toHaveBeenCalledWith('主题生成失败', 'error');
+  expect(screen.getByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
 });
 
 test('article stylesheet keeps the command center responsive', () => {
@@ -143,7 +194,7 @@ test('does not create an SSE channel when the page unmounts during task submissi
     return {};
   });
   const rendered = render(
-    <ArticleView setView={vi.fn()} onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
+    <ArticleView onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)} addToast={vi.fn()} />
   );
   await userEvent.type(await screen.findByPlaceholderText('输入文章URL...'), 'https://example.com/slow-submit');
   await userEvent.click(screen.getByRole('button', { name: '生成情报卡片' }));
@@ -192,7 +243,6 @@ test('shows ingest progress while a pasted url is generating and highlights the 
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
       addToast={vi.fn()}
     />
@@ -244,7 +294,6 @@ test('submits the selected article category when generating an intelligence card
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
       addToast={vi.fn()}
     />
@@ -295,7 +344,6 @@ test('keeps the pasted url and offers retry when generation fails', async () => 
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
       addToast={vi.fn()}
     />
@@ -342,7 +390,6 @@ test('keeps generation successful when workspace refresh fails after task comple
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockRejectedValue(new Error('Agent Runs 刷新失败'))}
       addToast={addToast}
     />
@@ -383,7 +430,6 @@ test('does not treat a polling timeout as successful without a completed task co
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
       addToast={vi.fn()}
     />
@@ -454,7 +500,6 @@ test('keeps the latest generated card highlighted when generations finish close 
 
   render(
     <ArticleView
-      setView={vi.fn()}
       onWorkspaceChanged={vi.fn().mockResolvedValue(undefined)}
       addToast={vi.fn()}
     />

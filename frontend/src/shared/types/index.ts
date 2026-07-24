@@ -10,9 +10,6 @@ export type View =
   | 'eventDetail'
   | 'evidence'
   | 'knowledge'
-  | 'topics'
-  | 'topicReader'
-  | 'learning'
   | 'contentStudio'
   | 'agents'
   | 'settings'
@@ -400,26 +397,6 @@ export type ResearchRunDetail = {
   reportStatus?: string;
   reportGenerationMode?: string;
   canRegenerateReport: boolean;
-};
-
-export type Topic = {
-  id: number;
-  name: string;
-  slug?: string;
-  status: string;
-  description?: string;
-  markdownPath?: string;
-  terms?: string;
-  learningQuestions?: string;
-  articleCount?: number;
-  briefCount?: number;
-};
-
-export type TopicDetail = {
-  topic: Topic;
-  linkedArticles: Article[];
-  linkedBriefs: Brief[];
-  markdown: string;
 };
 
 export type AgentRun = {

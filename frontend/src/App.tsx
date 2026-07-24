@@ -11,14 +11,12 @@ import { EvidenceView } from './features/evidence/EvidenceView';
 import { EventsView } from './features/events/EventsView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
-import { LearningView } from './features/learning/LearningView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
 import { KnowledgeView } from './features/knowledge/KnowledgeView';
+import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
-import { TopicReaderView } from './features/topics/TopicReaderView';
 import { SourcesView } from './features/sources/SourcesView';
-import { TopicsView } from './features/topics/TopicsView';
 import { WatchlistView } from './features/watchlist/WatchlistView';
 import { StrategyView } from './features/strategy/StrategyView';
 import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
@@ -42,8 +40,6 @@ import {
   ResearchThesis,
   Source,
   ToastItem,
-  Topic,
-  TopicDetail,
   View
 } from './shared/types';
 
@@ -73,7 +69,7 @@ export default function App() {
   const [events, setEvents] = useState<EventCluster[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [focusedEventId, setFocusedEventId] = useState<number | null>(null);
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [activeTopicCount, setActiveTopicCount] = useState(0);
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
   const [contentIdeaPage, setContentIdeaPage] = useState<PageResponse<ContentIdea> | null>(null);
@@ -84,9 +80,7 @@ export default function App() {
   const [researchReport, setResearchReport] = useState<ResearchReport | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchReportBusy, setResearchReportBusy] = useState(false);
-  const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
-  const [topicDeleteTarget, setTopicDeleteTarget] = useState<Topic | null>(null);
-  const [deletingTopicId, setDeletingTopicId] = useState<number | null>(null);
+  const [compoundingBriefDates, setCompoundingBriefDates] = useState<Set<string>>(new Set());
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -112,7 +106,7 @@ export default function App() {
       api<Brief[]>('/api/briefs'),
       api<EventCluster[]>('/api/events'),
       api<EvidenceItem[]>('/api/evidence'),
-      api<Topic[]>('/api/topics'),
+      api<KnowledgeOverview>('/api/knowledge/overview'),
       api<ContentIdea[]>('/api/content-ideas'),
       api<ResearchRun[]>('/api/research/runs'),
       api<ResearchThesis[]>('/api/research/theses'),
@@ -130,7 +124,8 @@ export default function App() {
     const briefData = value<Brief[]>(3); if (briefData) setBriefs(briefData);
     const eventData = value<EventCluster[]>(4); if (eventData) setEvents(eventData);
     const evidenceData = value<EvidenceItem[]>(5); if (evidenceData) setEvidenceItems(evidenceData);
-    const topicData = value<Topic[]>(6); if (topicData) setTopics(topicData);
+    const knowledgeOverview = value<KnowledgeOverview>(6);
+    if (knowledgeOverview) setActiveTopicCount(knowledgeOverview.activeTopicCount ?? 0);
     const contentIdeaData = value<ContentIdea[]>(7); if (contentIdeaData) setContentIdeas(contentIdeaData);
     const researchRunData = value<ResearchRun[]>(8); if (researchRunData) setResearchRuns(researchRunData);
     const researchThesisData = value<ResearchThesis[]>(9); if (Array.isArray(researchThesisData)) setResearchTheses(researchThesisData);
@@ -252,12 +247,6 @@ export default function App() {
         return 'Evidence Ledger';
       case 'knowledge':
         return '知识工作台';
-      case 'topics':
-        return 'Topics';
-      case 'topicReader':
-        return 'Topic Reader';
-      case 'learning':
-        return 'Learning';
       case 'contentStudio':
         return 'Studio';
       case 'agents':
@@ -276,44 +265,6 @@ export default function App() {
         return 'Dashboard';
     }
   }, [view]);
-
-  async function loadTopicDetail(topicId: number) {
-    const detail = await api<TopicDetail>(`/api/topics/${topicId}`);
-    setTopicDetail(detail);
-    return detail;
-  }
-
-  async function openTopicReader(topicId: number) {
-    await loadTopicDetail(topicId);
-    setView('topicReader');
-  }
-
-  async function openTopicForLearning(topicId: number) {
-    await loadTopicDetail(topicId);
-    setView('learning');
-  }
-
-  async function deleteTopic(topic: Topic) {
-    setMessage('正在删除主题');
-    setDeletingTopicId(topic.id);
-    try {
-      await api<void>(`/api/topics/${topic.id}`, { method: 'DELETE' });
-      if (topicDetail?.topic.id === topic.id) {
-        setTopicDetail(null);
-        setView('topics');
-      }
-      setTopicDeleteTarget(null);
-      await refresh();
-      setMessage('主题已删除');
-      addToast('主题已删除', 'success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '主题删除失败';
-      setMessage(message);
-      addToast(message, 'error');
-    } finally {
-      setDeletingTopicId(null);
-    }
-  }
 
   function openEvent(eventId: number) {
     setFocusedEventId(eventId);
@@ -449,19 +400,28 @@ export default function App() {
   }
 
   async function compoundBriefToTopics(date: string) {
-    await api(`/api/topics/from-brief/${date}`, { method: 'POST' });
-    setMessage('简报已沉淀到主题库');
-    await refresh();
-    setView('topics');
-  }
-
-  async function updateLearningTaskStatus(taskId: number, status: string) {
-    await api(`/api/learning-tasks/${taskId}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ status })
-    });
-    setMessage(`学习任务已更新为 ${status}`);
-    await refresh();
+    if (compoundingBriefDates.has(date)) {
+      return;
+    }
+    setCompoundingBriefDates((current) => new Set(current).add(date));
+    setMessage('正在将简报沉淀到主题库');
+    addToast('正在将简报沉淀到主题库', 'info');
+    try {
+      await api(`/api/topics/from-brief/${date}`, { method: 'POST' });
+      await refresh();
+      setMessage('简报已沉淀到主题库');
+      addToast('简报已沉淀到主题库', 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '简报沉淀失败，请稍后重试';
+      setMessage(errorMessage);
+      addToast(errorMessage, 'error');
+    } finally {
+      setCompoundingBriefDates((current) => {
+        const next = new Set(current);
+        next.delete(date);
+        return next;
+      });
+    }
   }
 
   async function updateContentIdeaStatus(ideaId: number, status: string) {
@@ -512,7 +472,7 @@ export default function App() {
       currentTitle={currentTitle}
       theme={theme}
       articlesCount={articles.length}
-      topicsCount={topics.length}
+      topicsCount={activeTopicCount}
       message={message}
       toasts={toasts}
       onChangeView={setView}
@@ -540,7 +500,6 @@ export default function App() {
       )}
       {view === 'article' && (
         <ArticleView
-          setView={setView}
           onWorkspaceChanged={refresh}
           addToast={addToast}
         />
@@ -551,7 +510,8 @@ export default function App() {
           onChanged={refresh}
           setMessage={setMessage}
           onOpenBrief={openBrief}
-          onAfterCompound={() => setView('knowledge')}
+          onCompound={compoundBriefToTopics}
+          compoundingBriefDates={compoundingBriefDates}
         />
       )}
       {view === 'briefReader' && (
@@ -560,6 +520,7 @@ export default function App() {
           researchContext={selectedBriefContext}
           onBack={() => setView('briefs')}
           onCompound={compoundBriefToTopics}
+          isCompounding={compoundingBriefDates.has(selectedBrief?.briefDate ?? '')}
         />
       )}
       {view === 'research' && (
@@ -617,36 +578,6 @@ export default function App() {
       {view === 'knowledge' && (
         <KnowledgeView addToast={addToast} setMessage={setMessage} />
       )}
-      {view === 'topics' && (
-        <TopicsView
-          topics={topics}
-          onChanged={refresh}
-          onOpenTopicReader={openTopicReader}
-          onDeleteTopic={(topic) => {
-            setTopicDeleteTarget(topic);
-          }}
-        />
-      )}
-      {view === 'topicReader' && (
-        <TopicReaderView
-          topicDetail={topicDetail}
-          onBack={() => setView('topics')}
-          onRecordLearning={openTopicForLearning}
-        />
-      )}
-      {view === 'learning' && (
-        <LearningView
-          topics={topics}
-          learningTasks={learningTasks}
-          topicDetail={topicDetail}
-          onOpenTopic={openTopicForLearning}
-          onOpenEvent={openEvent}
-          onChanged={refresh}
-          onTaskStatusChange={updateLearningTaskStatus}
-          setMessage={setMessage}
-          addToast={addToast}
-        />
-      )}
       {view === 'contentStudio' && (
         <ContentStudioView
           contentIdeas={contentIdeaPage?.items ?? contentIdeas}
@@ -662,36 +593,6 @@ export default function App() {
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
-      {topicDeleteTarget && (
-        <div className="modal-overlay">
-          <div className="modal topic-delete-modal" role="dialog" aria-modal="true" aria-labelledby="topic-delete-title">
-            <div className="modal-header topic-delete-header">
-              <span className="topic-delete-mark" aria-hidden="true">!</span>
-              <div>
-                <p className="modal-kicker">Confirm action</p>
-                <h4 id="topic-delete-title">删除主题</h4>
-              </div>
-            </div>
-            <div className="modal-content topic-delete-content">
-              <p className="topic-delete-name">{topicDeleteTarget.name}</p>
-              <p>关联文章、简报和原始内容不会被删除。</p>
-            </div>
-            <div className="modal-actions">
-              <button className="secondary-button" type="button" onClick={() => setTopicDeleteTarget(null)}>
-                取消
-              </button>
-              <button
-                className="danger-button topic-delete-confirm-button"
-                type="button"
-                disabled={deletingTopicId === topicDeleteTarget.id}
-                onClick={() => deleteTopic(topicDeleteTarget)}
-              >
-                {deletingTopicId === topicDeleteTarget.id ? '删除中' : '确认删除'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   );
 }

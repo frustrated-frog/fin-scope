@@ -8,12 +8,14 @@ export function BriefReaderView({
   brief,
   researchContext,
   onBack,
-  onCompound
+  onCompound,
+  isCompounding = false
 }: {
   brief: Brief | null;
   researchContext: BriefResearchContext | null;
   onBack: () => void;
   onCompound: (date: string) => Promise<void>;
+  isCompounding?: boolean;
 }) {
   const markdown = brief?.content ?? '';
   const metadata = parseBriefMarkdown(markdown, brief);
@@ -40,7 +42,15 @@ export function BriefReaderView({
         {metadata.positioning && <p>{metadata.positioning}</p>}
         <div className="brief-reader-actions">
           <button className="ghost-button" type="button" onClick={onBack}>返回简报列表</button>
-          <button className="primary-button" type="button" onClick={() => onCompound(brief.briefDate)}>沉淀主题</button>
+          <button
+            className="primary-button"
+            type="button"
+            aria-busy={isCompounding}
+            disabled={isCompounding}
+            onClick={() => onCompound(brief.briefDate)}
+          >
+            {isCompounding ? '沉淀中...' : '沉淀主题'}
+          </button>
         </div>
       </header>
 

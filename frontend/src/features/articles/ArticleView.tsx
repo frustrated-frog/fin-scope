@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { Article, AsyncTask, PageResponse, View } from '../../shared/types';
+import { Article, AsyncTask, PageResponse } from '../../shared/types';
 import { ArticleCard } from './ArticleCard';
 import { createIngestTaskChannel, IngestTaskChannel } from './ingestTaskChannel';
 
@@ -10,11 +10,9 @@ type IngestStatus = 'idle' | 'loading' | 'success' | 'error';
 const ARTICLE_CATEGORIES = ['金融', '市场', '自我提升', '前沿技术'];
 
 export function ArticleView({
-  setView,
   onWorkspaceChanged,
   addToast
 }: {
-  setView: (view: View) => void;
   onWorkspaceChanged: () => Promise<void>;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }) {
@@ -33,6 +31,7 @@ export function ArticleView({
   const [ingestError, setIngestError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [compoundingArticleIds, setCompoundingArticleIds] = useState<Set<number>>(new Set());
   const highlightClearTimerRef = useRef<number | null>(null);
   const ingestChannelRef = useRef<IngestTaskChannel | null>(null);
   const ingestGenerationRef = useRef(0);
@@ -201,11 +200,30 @@ export function ArticleView({
   }
 
   async function compoundArticle(articleId: number) {
-    await api(`/api/topics/from-article/${articleId}`, { method: 'POST' });
-    addToast('文章已沉淀到主题库', 'success');
-    await fetchArticles();
-    await onWorkspaceChanged();
-    setView('topics');
+    if (compoundingArticleIds.has(articleId)) {
+      return;
+    }
+    setCompoundingArticleIds((current) => new Set(current).add(articleId));
+    addToast('正在将文章沉淀到主题库', 'info');
+    try {
+      const topic = await api<{ id: number; name: string }>(`/api/topics/from-article/${articleId}`, { method: 'POST' });
+      addToast(topic?.name ? `文章已沉淀到主题「${topic.name}」` : '文章已沉淀到主题库', 'success');
+      await Promise.all([
+        fetchArticles(),
+        onWorkspaceChanged().catch((error) => {
+          const message = error instanceof Error ? error.message : '工作区刷新失败';
+          addToast(`主题已创建，但工作区刷新失败：${message}`, 'error');
+        })
+      ]);
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '文章沉淀失败，请稍后重试', 'error');
+    } finally {
+      setCompoundingArticleIds((current) => {
+        const next = new Set(current);
+        next.delete(articleId);
+        return next;
+      });
+    }
   }
 
   async function deleteArticle(id: number) {
@@ -477,6 +495,7 @@ export function ArticleView({
                   article={article}
                   isExpanded={expandedArticleId === article.id}
                   isHighlighted={highlightedArticleId === article.id}
+                  isCompounding={compoundingArticleIds.has(article.id)}
                   onToggle={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
                   onCompound={() => compoundArticle(article.id)}
                   onDelete={() => setShowDeleteConfirm(article.id)}

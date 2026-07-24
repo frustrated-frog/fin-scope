@@ -18,9 +18,10 @@ const responses: Record<string, unknown> = {
     actions: [],
     activeTopics: [],
     recentEntries: [],
-    suggestionCount: 0,
-    inProgressCount: 0,
-    dueReviewCount: 0
+    acceptedTaskCount: 0,
+    suggestedTaskCount: 0,
+    dueReviewCount: 0,
+    activeTopicCount: 1
   },
   '/api/sources': [
     {
@@ -273,45 +274,6 @@ const responses: Record<string, unknown> = {
   '/api/topics/from-brief/2026-06-25': [
     { id: 1, name: '每日简报主题', status: 'LEARNING' }
   ],
-  '/api/topics': [
-    {
-      id: 1,
-      name: '降息交易',
-      status: 'LEARNING',
-      description: '围绕利率预期的资产定价主题',
-      articleCount: 2,
-      briefCount: 1,
-      terms: '美联储,降息,黄金',
-      learningQuestions: '为什么降息会影响黄金？\n如何判断预期差？',
-      markdownPath: 'data/vault/topics/jiang-xi-jiao-yi.md'
-    }
-  ],
-  '/api/topics/1': {
-    topic: {
-      id: 1,
-      name: '降息交易',
-      status: 'LEARNING',
-      description: '围绕利率预期的资产定价主题',
-      articleCount: 2,
-      briefCount: 1,
-      terms: '美联储,降息,黄金',
-      learningQuestions: '为什么降息会影响黄金？\n如何判断预期差？',
-      markdownPath: 'data/vault/topics/jiang-xi-jiao-yi.md'
-    },
-    linkedArticles: [
-      {
-        id: 1,
-        title: '美联储释放降息信号 黄金走强',
-        url: 'https://x.com/tester/status/123',
-        sourceName: '测试财经RSS',
-        noveltyType: 'NEW'
-      }
-    ],
-    linkedBriefs: [
-      { id: 1, briefDate: '2026-06-23', title: 'FinScope Daily Brief - 2026-06-23', markdownPath: 'data/vault/daily-briefs/2026-06-23.md' }
-    ],
-    markdown: '# 降息交易\n\n- 状态：LEARNING\n- 描述：跟踪利率预期如何影响黄金和风险资产。\n\n## 关键术语\n\n- 美联储\n- 实际利率\n- 黄金\n\n## 学习问题\n\n- 为什么降息会影响黄金？\n- 如何判断预期差？\n\n## 关联文章\n\n- [美联储释放降息信号 黄金走强](https://x.com/tester/status/123)\n\n## 文章解读\n\n### 一句话摘要\n\n美联储释放偏鸽信号，市场重新交易降息预期。'
-  },
   '/api/events': [
     {
       id: 1,
@@ -385,26 +347,6 @@ const responses: Record<string, unknown> = {
     { id: 1, eventId: 1, sourceTier: 'MEDIA', evidenceType: 'DATA', claim: '黄金ETF单周流入12亿美元。', confidence: 75 },
     { id: 2, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'TIMELINE', claim: '美联储官员释放偏鸽措辞。', confidence: 90 },
     { id: 3, eventId: 2, sourceTier: 'COMPANY', evidenceType: 'FACT', claim: '官方文档公布了多代理工作流能力。', confidence: 85 }
-  ],
-  '/api/learning-tasks': [
-    {
-      id: 1,
-      eventId: 1,
-      themeCode: 'china_macro',
-      question: '为什么实际利率下行会推升黄金配置需求？',
-      concepts: '实际利率,黄金,预期差',
-      difficulty: 'INTERMEDIATE',
-      status: 'TODO'
-    },
-    {
-      id: 2,
-      eventId: 2,
-      themeCode: 'ai_startup',
-      question: '这个 agent workflow 更依赖模型能力还是开发者生态？',
-      concepts: 'agent,工作流,开发者生态',
-      difficulty: 'INTERMEDIATE',
-      status: 'TODO'
-    }
   ],
   '/api/content-ideas': [
     {
@@ -549,11 +491,6 @@ beforeEach(() => {
     if (url === '/api/articles/ingest-url' && String(init?.body).includes('x-shell')) {
       return mockApiResponse({ taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' });
     }
-    if (url === '/api/learning-tasks/1/status' && init?.method === 'POST') {
-      const payload = JSON.parse(String(init.body));
-      state['/api/learning-tasks'][0].status = payload.status;
-      return mockApiResponse(state['/api/learning-tasks'][0]);
-    }
     if (url === '/api/content-ideas/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       state['/api/content-ideas'][0].status = payload.status;
@@ -585,10 +522,6 @@ beforeEach(() => {
     if (url === '/api/sources/1' && init?.method === 'DELETE') {
       state['/api/sources'] = state['/api/sources'].filter((source: { id: number }) => source.id !== 1);
       return mockApiResponse(null);
-    }
-    if (url === '/api/topics/1' && init?.method === 'DELETE') {
-      state['/api/topics'] = state['/api/topics'].filter((topic: { id: number }) => topic.id !== 1);
-      return mockApiResponse({});
     }
     if (url === '/api/research/runs' && init?.method === 'POST') {
       const run = {
@@ -728,6 +661,7 @@ test('opens the unified knowledge workbench without globally loading learning ta
 
   expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith('/api/knowledge/overview', expect.any(Object));
+  expect(fetch).not.toHaveBeenCalledWith('/api/topics', expect.anything());
   expect(fetch).not.toHaveBeenCalledWith('/api/learning-tasks', expect.anything());
 });
 
@@ -745,6 +679,7 @@ test('topbar separates data readouts, controls and system status', async () => {
 
   expect(within(readouts).getByText('Articles')).toBeInTheDocument();
   expect(within(readouts).getByText('Topics')).toBeInTheDocument();
+  expect(within(readouts).getByLabelText('主题数量 1')).toBeInTheDocument();
   expect(themeButton).toHaveClass('topbar-control', 'theme-toggle');
   expect(refreshButton).toHaveClass('topbar-control', 'topbar-refresh');
   expect(systemStatus).toHaveTextContent('系统状态');
@@ -972,6 +907,8 @@ test('can compound an inbox article into a topic', async () => {
   await userEvent.click(await screen.findByText('沉淀到主题库'));
 
   expect(fetch).toHaveBeenCalledWith('/api/topics/from-article/1', expect.objectContaining({ method: 'POST' }));
+  expect(await screen.findByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
+  expect(screen.queryByText('主题库')).not.toBeInTheDocument();
 });
 
 test('batch selection controls use the same compact pill shape', async () => {
@@ -1024,6 +961,21 @@ test('opens a magazine-style brief reader from the briefs list', async () => {
   expect(screen.getAllByText('中国观察').length).toBeGreaterThan(0);
   expect(screen.getAllByText('今日思考题').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: '返回简报列表' })).toBeInTheDocument();
+});
+
+test('compounds a brief in place without opening a removed topic page', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Briefs' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看简报' }));
+  await userEvent.click(await screen.findByRole('button', { name: '沉淀主题' }));
+
+  expect(fetch).toHaveBeenCalledWith(
+    '/api/topics/from-brief/2026-06-25',
+    expect.objectContaining({ method: 'POST' })
+  );
+  expect(await screen.findByRole('button', { name: '返回简报列表' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '主题库' })).not.toBeInTheDocument();
 });
 
 test('brief reader places the outline overview above the document body', async () => {
