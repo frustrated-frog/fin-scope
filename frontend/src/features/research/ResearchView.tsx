@@ -56,43 +56,120 @@ export function ResearchView({
   const [subjectName, setSubjectName] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
   const [thesisDetail, setThesisDetail] = useState<ResearchThesisDetail | null>(null);
-  useEffect(() => { if (!selectedThesisId) { setThesisDetail(null); return; } api<ResearchThesisDetail>(`/api/research/theses/${selectedThesisId}`).then(setThesisDetail).catch(() => setThesisDetail(null)); }, [selectedThesisId]);
+  const [thesisDetailLoading, setThesisDetailLoading] = useState(false);
+  const [creatingThesis, setCreatingThesis] = useState(false);
+  const [thesisFormError, setThesisFormError] = useState('');
+
+  useEffect(() => {
+    if (!selectedThesisId) {
+      setThesisDetail(null);
+      setThesisDetailLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setThesisDetailLoading(true);
+    api<ResearchThesisDetail>(`/api/research/theses/${selectedThesisId}`)
+      .then((nextDetail) => {
+        if (!cancelled) setThesisDetail(nextDetail);
+      })
+      .catch(() => {
+        if (!cancelled) setThesisDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setThesisDetailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedThesisId]);
 
   async function submit() {
     await onRun({ thesisId: selectedThesisId || undefined, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
   }
 
   async function createThesis() {
-    if (!question.trim() || !subjectName.trim()) return;
-    const thesis = await onCreateThesis({
-      question: question.trim(),
-      subjectType,
-      subjectName: subjectName.trim(),
-      subjectCode: subjectCode.trim() || undefined,
-      conclusion: undefined,
-      confidence: undefined,
-      nextValidation: undefined
-    });
-    setSelectedThesisId(thesis.id);
-    setQuestion('');
-    setSubjectName('');
-    setSubjectCode('');
+    if (!question.trim() || !subjectName.trim() || creatingThesis) return;
+    setCreatingThesis(true);
+    setThesisFormError('');
+    try {
+      const thesis = await onCreateThesis({
+        question: question.trim(),
+        subjectType,
+        subjectName: subjectName.trim(),
+        subjectCode: subjectCode.trim() || undefined,
+        conclusion: undefined,
+        confidence: undefined,
+        nextValidation: undefined
+      });
+      setSelectedThesisId(thesis.id);
+      setQuestion('');
+      setSubjectName('');
+      setSubjectCode('');
+    } catch (error) {
+      setThesisFormError(error instanceof Error ? error.message : '命题创建失败，请稍后重试');
+    } finally {
+      setCreatingThesis(false);
+    }
   }
 
   if (report) {
     return <ResearchReportReader report={report} onBack={onCloseReport} />;
   }
 
+  const openThesisCount = theses.filter((item) => item.status === 'OPEN').length;
+  const selectedThesis = theses.find((thesis) => thesis.id === selectedThesisId);
+  const latestRun = runs[0];
+
   return (
-    <section className="research-workbench">
-      <div className="research-thesis-layout">
+    <section className="research-workbench research-apple-workbench">
+      <header className="research-command-hero">
+        <div className="research-command-copy">
+          <p className="research-command-kicker">Research intelligence</p>
+          <h2>把判断变成可验证的研究</h2>
+          <p>先写下值得验证的命题，再决定研究范围。每次运行都留下证据、过程和下一步，而不是只给一个答案。</p>
+        </div>
+        <div className="research-command-metrics" aria-label="研究工作台概览">
+          <article>
+            <span>开放命题</span>
+            <strong>{openThesisCount}</strong>
+            <small>持续验证</small>
+          </article>
+          <article>
+            <span>研究运行</span>
+            <strong>{runs.length}</strong>
+            <small>完整留痕</small>
+          </article>
+          <article>
+            <span>最近状态</span>
+            <strong className={`research-command-status ${latestRun ? runStatusTone(latestRun.status) : 'neutral'}`}>
+              {latestRun ? presentRunStatus(latestRun.status) : '待启动'}
+            </strong>
+            <small>{latestRun?.runDate || '尚无运行'}</small>
+          </article>
+        </div>
+      </header>
+
+      <ol className="research-workflow-rail" aria-label="研究流程">
+        <li className="active">
+          <span>01</span>
+          <div><strong>定义命题</strong><small>明确要验证什么</small></div>
+        </li>
+        <li className={selectedThesisId ? 'active' : ''}>
+          <span>02</span>
+          <div><strong>执行研究</strong><small>配置范围并收集证据</small></div>
+        </li>
+        <li className={detail ? 'active' : ''}>
+          <span>03</span>
+          <div><strong>形成判断</strong><small>阅读过程、报告与反证</small></div>
+        </li>
+      </ol>
+
+      <div className="research-thesis-layout research-material" aria-label="研究命题工作区">
         <div className="research-thesis-panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Research thesis</p>
+              <p className="eyebrow">01 · Research thesis</p>
               <h3>研究命题</h3>
             </div>
-            <span className="subtle-badge">{theses.filter((item) => item.status === 'OPEN').length} open</span>
+            <span className="subtle-badge">{openThesisCount} open</span>
           </div>
           <p className="research-thesis-hint">把公司、行业或自选组合的核心判断写成可验证的问题；一次运行只是为命题补充证据，不等于直接给出结论。</p>
           <div className="research-thesis-form">
@@ -118,10 +195,23 @@ export function ResearchView({
                 <input value={subjectCode} placeholder="NVDA" onChange={(event) => setSubjectCode(event.target.value)} />
               </label>
             </div>
-            <button className="secondary-button" type="button" disabled={!question.trim() || !subjectName.trim()} onClick={createThesis}>新建命题</button>
+            {thesisFormError && <p className="research-form-error" role="alert">{thesisFormError}</p>}
+            <button
+              className="secondary-button research-create-thesis-button"
+              type="button"
+              aria-busy={creatingThesis}
+              disabled={creatingThesis || !question.trim() || !subjectName.trim()}
+              onClick={createThesis}
+            >
+              {creatingThesis ? '正在建立命题…' : '新建命题'}
+            </button>
           </div>
         </div>
         <div className="research-thesis-list" aria-label="研究命题列表">
+          <div className="research-thesis-list-heading">
+            <span>最近命题</span>
+            <small>选择后查看判断并继续研究</small>
+          </div>
           {theses.length ? theses.slice(0, 5).map((thesis) => {
             const findingCount = thesisDetail?.thesis.id === thesis.id ? thesisDetail.findings.length : 0;
             const stage = presentThesisStage(thesis, findingCount);
@@ -130,6 +220,7 @@ export function ResearchView({
                 key={thesis.id}
                 className={selectedThesisId === thesis.id ? 'research-thesis-card active' : 'research-thesis-card'}
                 type="button"
+                aria-pressed={selectedThesisId === thesis.id}
                 onClick={() => setSelectedThesisId(thesis.id)}
               >
                 <span>{thesis.subjectType === 'COMPANY' ? '公司' : thesis.subjectType === 'INDUSTRY' ? '行业' : '自选'} · {thesis.subjectName}</span>
@@ -140,16 +231,22 @@ export function ResearchView({
           }) : <p className="empty-state compact">还没有命题。先把你想验证的公司或行业判断写下来。</p>}
         </div>
       </div>
+      {thesisDetailLoading && (
+        <div className="research-selection-feedback" role="status">
+          <span aria-hidden="true" />
+          正在读取命题判断与证据…
+        </div>
+      )}
       {thesisDetail && <ThesisDecisionSummary detail={thesisDetail} />}
-      <div className="research-control-panel">
+      <div className="research-control-panel research-material">
         <div className="research-run-heading">
           <div>
-            <p className="eyebrow">研究执行台</p>
+            <p className="eyebrow">02 · Research execution</p>
             <h3>{selectedThesisId ? '为命题补充证据' : '启动探索性研究'}</h3>
           </div>
           <div className="research-run-context">
             <span>当前命题</span>
-            <strong>{selectedThesisId ? theses.find((thesis) => thesis.id === selectedThesisId)?.subjectName || '已选命题' : '未绑定命题'}</strong>
+            <strong>{selectedThesis?.subjectName || '未绑定命题'}</strong>
           </div>
         </div>
         <div className="research-execution-scope">
@@ -180,18 +277,26 @@ export function ResearchView({
           </div>
         </div>
         <p className="research-scope-note">默认覆盖：中国宏观、AI 创业、公司 / IPO。研究范围将随命题和来源配置逐步细化。</p>
-        <button
-          className="primary-button"
-          type="button"
-          disabled={busy || themeCodes.length === 0}
-          onClick={submit}
-        >
-          {busy ? '正在启动研究' : selectedThesisId ? '开始补充研究' : '开始探索研究'}
-        </button>
+        <div className="research-run-action">
+          <div>
+            <span>{selectedThesisId ? '本次运行将写回当前命题' : '本次运行将作为探索档案保存'}</span>
+            <small>启动后可离开页面，运行进度会持续记录。</small>
+          </div>
+          <button
+            className="primary-button research-start-button"
+            type="button"
+            aria-busy={busy}
+            disabled={busy || themeCodes.length === 0}
+            onClick={submit}
+          >
+            <span aria-hidden="true">{busy ? '◌' : '→'}</span>
+            {busy ? '正在启动研究' : selectedThesisId ? '开始补充研究' : '开始探索研究'}
+          </button>
+        </div>
       </div>
 
       <div className="research-grid">
-        <section className="panel research-archive-panel" aria-label="研究运行档案">
+        <section className="panel research-archive-panel research-material" aria-label="研究运行档案">
           <div className="panel-head research-archive-head">
             <div>
               <p className="eyebrow">研究档案</p>
@@ -199,10 +304,10 @@ export function ResearchView({
             </div>
             <span className="research-run-count">共 {runs.length} 次</span>
           </div>
-          <ResearchRunList runs={runs} theses={theses} onOpenRun={onOpenRun} />
+          <ResearchRunList runs={runs} theses={theses} selectedRunId={detail?.run.id} onOpenRun={onOpenRun} />
         </section>
 
-        <aside className="research-detail-panel">
+        <aside className="research-detail-panel research-material">
           <div className="panel-head research-detail-head">
             <div>
               <p className="eyebrow">Trace</p>
@@ -258,10 +363,12 @@ function runStatusTone(status: string) {
 function ResearchRunList({
   runs,
   theses,
+  selectedRunId,
   onOpenRun
 }: {
   runs: ResearchRun[];
   theses: ResearchThesis[];
+  selectedRunId?: number;
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
 }) {
   if (runs.length === 0) {
@@ -285,6 +392,7 @@ function ResearchRunList({
             key={run.id}
             run={run}
             thesisName={researchRunThesisName(run, theses)}
+            isSelected={selectedRunId === run.id}
             onOpen={() => onOpenRun(run.id)}
           />
         ))}
@@ -296,10 +404,12 @@ function ResearchRunList({
 function ResearchRunRow({
   run,
   thesisName,
+  isSelected,
   onOpen
 }: {
   run: ResearchRun;
   thesisName: string;
+  isSelected: boolean;
   onOpen: () => void;
 }) {
   const fetchedSources = run.fetchedSourceCount ?? 0;
@@ -309,9 +419,10 @@ function ResearchRunRow({
 
   return (
     <button
-      className={`research-run-row ${tone}`}
+      className={`research-run-row ${tone}${isSelected ? ' selected' : ''}`}
       type="button"
       onClick={onOpen}
+      aria-current={isSelected ? 'true' : undefined}
       aria-label={`打开研究运行 ${run.runDate} ${thesisName} ${presentRunStatus(run.status)}`}
     >
       <span className="research-run-date-cell">

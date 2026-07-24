@@ -9622,6 +9622,644 @@ input[type="checkbox"] {
   .research-decision-meta span + span::before { content: none; }
 }
 
+/* Research workbench — calm, spatial and immediately responsive. */
+.research-apple-workbench {
+  --research-blue: #5e8cff;
+  --research-cyan: #58d2c8;
+  --research-green: #65c98a;
+  --research-warm: #e6b66a;
+  gap: 1.25rem;
+  padding-bottom: 2.5rem;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+.research-command-hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(390px, .65fr);
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: end;
+  overflow: hidden;
+  padding: clamp(1.65rem, 3.5vw, 3rem);
+  border: 1px solid color-mix(in srgb, var(--research-blue) 23%, var(--line));
+  border-top-color: color-mix(in srgb, white 26%, var(--line));
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 88% -25%, color-mix(in srgb, var(--research-blue) 22%, transparent) 0, transparent 48%),
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 91%, transparent), color-mix(in srgb, var(--surface-2) 78%, transparent));
+  box-shadow: 0 1.5rem 4rem color-mix(in srgb, #08111f 16%, transparent), inset 0 1px rgba(255, 255, 255, .07);
+  backdrop-filter: blur(26px) saturate(145%);
+  -webkit-backdrop-filter: blur(26px) saturate(145%);
+}
+
+.research-command-hero::after {
+  position: absolute;
+  z-index: -1;
+  width: 20rem;
+  height: 20rem;
+  right: -10rem;
+  bottom: -14rem;
+  border: 1px solid color-mix(in srgb, var(--research-cyan) 24%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.4rem color-mix(in srgb, var(--research-blue) 3%, transparent),
+    0 0 0 5.2rem color-mix(in srgb, var(--research-cyan) 2.5%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.research-command-copy {
+  min-width: 0;
+}
+
+.research-command-kicker {
+  margin: 0 0 .8rem;
+  color: color-mix(in srgb, var(--research-cyan) 86%, var(--ink));
+  font-size: .68rem;
+  font-weight: 720;
+  letter-spacing: .14em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.research-command-copy h2 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(2rem, 4.3vw, 4.35rem);
+  font-weight: 690;
+  letter-spacing: -.045em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.research-command-copy > p:last-child {
+  max-width: 44rem;
+  margin: 1.15rem 0 0;
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
+  font-size: clamp(.9rem, 1.25vw, 1.02rem);
+  font-weight: 460;
+  line-height: 1.75;
+}
+
+.research-command-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, white 12%, var(--line));
+  border-radius: 1.05rem;
+  background: color-mix(in srgb, var(--surface) 58%, transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .055);
+}
+
+.research-command-metrics article {
+  display: grid;
+  align-content: space-between;
+  min-width: 0;
+  min-height: 7.8rem;
+  padding: 1rem;
+}
+
+.research-command-metrics article + article {
+  border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.research-command-metrics span,
+.research-command-metrics small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 620;
+  letter-spacing: .02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-command-metrics strong {
+  margin: .65rem 0 .35rem;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -.035em;
+  line-height: 1;
+}
+
+.research-command-metrics .research-command-status {
+  overflow: hidden;
+  font-size: .82rem;
+  letter-spacing: -.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-command-status.success { color: var(--research-green); }
+.research-command-status.active { color: var(--research-cyan); }
+.research-command-status.danger { color: #ef7d75; }
+.research-command-status.neutral { color: var(--muted); }
+
+.research-workflow-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 1.05rem;
+  background: var(--line);
+  list-style: none;
+}
+
+.research-workflow-rail li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  min-width: 0;
+  padding: .9rem 1.1rem;
+  background: color-mix(in srgb, var(--surface) 95%, var(--surface-2));
+}
+
+.research-workflow-rail li::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: transparent;
+  content: "";
+}
+
+.research-workflow-rail li.active::after {
+  background: linear-gradient(90deg, var(--research-blue), var(--research-cyan));
+}
+
+.research-workflow-rail li > span {
+  display: grid;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  font: 680 .65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.research-workflow-rail li.active > span {
+  border-color: color-mix(in srgb, var(--research-blue) 46%, var(--line));
+  background: color-mix(in srgb, var(--research-blue) 12%, transparent);
+  color: color-mix(in srgb, var(--research-blue) 80%, var(--ink));
+}
+
+.research-workflow-rail div {
+  display: grid;
+  min-width: 0;
+  gap: .18rem;
+}
+
+.research-workflow-rail strong {
+  font-size: .8rem;
+  font-weight: 680;
+}
+
+.research-workflow-rail small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-apple-workbench .research-material {
+  border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  border-top-color: color-mix(in srgb, white 15%, var(--line));
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--surface) 89%, transparent);
+  box-shadow: 0 .8rem 2.4rem color-mix(in srgb, #08111f 8%, transparent), inset 0 1px rgba(255, 255, 255, .035);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.research-apple-workbench .research-thesis-layout {
+  grid-template-columns: minmax(0, 1.15fr) minmax(19rem, .85fr);
+  gap: 1.6rem;
+  padding: clamp(1.2rem, 2.4vw, 1.75rem);
+}
+
+.research-apple-workbench .panel-head h3,
+.research-apple-workbench .research-run-heading h3,
+.research-apple-workbench .research-detail-head h3 {
+  margin: .2rem 0 0;
+  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
+  font-weight: 680;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+}
+
+.research-apple-workbench .eyebrow {
+  color: color-mix(in srgb, var(--research-blue) 78%, var(--muted));
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+}
+
+.research-apple-workbench .research-thesis-hint {
+  font-size: .85rem;
+  line-height: 1.72;
+}
+
+.research-apple-workbench .research-thesis-form {
+  gap: .9rem;
+}
+
+.research-apple-workbench .research-thesis-form label {
+  gap: .42rem;
+  font-size: .7rem;
+  font-weight: 620;
+  letter-spacing: .015em;
+}
+
+.research-apple-workbench .research-thesis-form input,
+.research-apple-workbench .research-thesis-form select,
+.research-apple-workbench .research-execution-scope input {
+  min-height: 2.65rem;
+  border-color: color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: .72rem;
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .035);
+  font: inherit;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.research-apple-workbench .research-thesis-form input:focus,
+.research-apple-workbench .research-thesis-form select:focus,
+.research-apple-workbench .research-execution-scope input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--research-blue) 66%, var(--line));
+  background: color-mix(in srgb, var(--surface) 94%, var(--research-blue));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--research-blue) 12%, transparent);
+}
+
+.research-create-thesis-button {
+  justify-self: start;
+  min-height: 2.55rem;
+  border-radius: .75rem;
+}
+
+.research-form-error {
+  margin: 0;
+  border-left: 2px solid #ef7d75;
+  padding: .4rem .65rem;
+  color: #ef7d75;
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.research-thesis-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .1rem;
+}
+
+.research-thesis-list-heading span {
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.research-thesis-list-heading small {
+  color: var(--muted);
+  font-size: .66rem;
+  text-align: right;
+}
+
+.research-apple-workbench .research-thesis-card {
+  position: relative;
+  gap: .4rem;
+  min-height: 5.6rem;
+  padding: .9rem 1rem .9rem 1.1rem;
+  border-color: color-mix(in srgb, var(--line) 86%, transparent);
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
+  transition: transform 160ms cubic-bezier(.2, .8, .2, 1), border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.research-apple-workbench .research-thesis-card::before {
+  position: absolute;
+  inset: .75rem auto .75rem .35rem;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+
+.research-apple-workbench .research-thesis-card.active {
+  border-color: color-mix(in srgb, var(--research-blue) 48%, var(--line));
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--research-blue));
+  box-shadow: 0 .6rem 1.4rem color-mix(in srgb, var(--research-blue) 10%, transparent);
+}
+
+.research-apple-workbench .research-thesis-card.active::before {
+  background: linear-gradient(var(--research-blue), var(--research-cyan));
+}
+
+.research-selection-feedback {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  width: fit-content;
+  min-height: 2.25rem;
+  margin: -.4rem 0;
+  padding: .45rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--research-blue) 22%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  color: var(--muted);
+  font-size: .72rem;
+  backdrop-filter: blur(12px);
+}
+
+.research-selection-feedback > span {
+  width: .85rem;
+  height: .85rem;
+  border: 2px solid color-mix(in srgb, var(--research-blue) 22%, transparent);
+  border-top-color: var(--research-blue);
+  border-radius: 50%;
+  animation: research-selection-spin .8s linear infinite;
+}
+
+@keyframes research-selection-spin {
+  to { transform: rotate(360deg); }
+}
+
+.research-apple-workbench .research-control-panel {
+  gap: 1rem;
+  padding: clamp(1.2rem, 2.4vw, 1.65rem);
+}
+
+.research-apple-workbench .research-run-context {
+  min-width: 11rem;
+  border: 1px solid color-mix(in srgb, var(--research-blue) 20%, var(--line));
+  border-left: 2px solid var(--research-blue);
+  border-radius: .7rem;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+}
+
+.research-apple-workbench .research-execution-scope {
+  gap: 1rem;
+  padding: 1rem 0;
+  border-color: color-mix(in srgb, var(--line) 76%, transparent);
+}
+
+.research-apple-workbench .scope-label {
+  font-weight: 680;
+}
+
+.research-run-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding-top: .15rem;
+}
+
+.research-run-action > div {
+  display: grid;
+  gap: .2rem;
+  min-width: 0;
+}
+
+.research-run-action > div span {
+  color: var(--ink);
+  font-size: .76rem;
+  font-weight: 640;
+}
+
+.research-run-action > div small {
+  color: var(--muted);
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.research-start-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  min-width: 10.5rem;
+  min-height: 2.8rem;
+  border-radius: .85rem;
+  box-shadow: 0 .6rem 1.4rem color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.research-start-button > span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.research-apple-workbench .research-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(20rem, .75fr);
+  gap: 1.25rem;
+}
+
+.research-apple-workbench .research-archive-panel,
+.research-apple-workbench .research-detail-panel {
+  padding: clamp(1.15rem, 2vw, 1.45rem);
+}
+
+.research-apple-workbench .research-detail-panel {
+  position: sticky;
+  top: 5.5rem;
+}
+
+.research-apple-workbench .research-run-row {
+  border-radius: .8rem;
+  transition: transform 160ms cubic-bezier(.2, .8, .2, 1), border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.research-apple-workbench .research-run-row.selected {
+  border-color: color-mix(in srgb, var(--run-tone) 58%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--run-tone) 15%, transparent), transparent 34%),
+    color-mix(in srgb, var(--surface) 84%, var(--surface-2));
+  box-shadow: 0 .75rem 1.8rem color-mix(in srgb, var(--run-tone) 12%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--run-tone) 11%, transparent);
+}
+
+.research-apple-workbench .research-decision-summary {
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  box-shadow: 0 .8rem 2.4rem color-mix(in srgb, #08111f 8%, transparent), inset 0 1px rgba(255, 255, 255, .035);
+}
+
+.research-apple-workbench .research-finding-lane {
+  border-radius: .85rem;
+}
+
+.research-apple-workbench button:focus-visible,
+.research-apple-workbench input:focus-visible,
+.research-apple-workbench select:focus-visible,
+.research-apple-workbench summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--research-blue) 75%, white);
+  outline-offset: 3px;
+}
+
+.research-apple-workbench .research-thesis-card:active:not(:disabled),
+.research-apple-workbench .research-run-row:active:not(:disabled),
+.research-apple-workbench .research-start-button:active:not(:disabled),
+.research-apple-workbench .research-create-thesis-button:active:not(:disabled),
+.research-apple-workbench .research-detail-panel button:active:not(:disabled) {
+  transform: scale(.975);
+  transition-duration: 80ms;
+}
+
+@media (hover: hover) {
+  .research-apple-workbench .research-thesis-card:hover:not(.active) {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--research-blue) 28%, var(--line));
+    background: color-mix(in srgb, var(--surface-2) 88%, var(--research-blue));
+  }
+}
+
+@media (max-width: 1180px) {
+  .research-command-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .research-command-copy h2 {
+    max-width: 18ch;
+  }
+
+  .research-command-metrics {
+    max-width: 44rem;
+  }
+
+  .research-apple-workbench .research-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .research-apple-workbench .research-detail-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .research-apple-workbench .research-thesis-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .research-workflow-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .research-workflow-rail small {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 680px) {
+  .research-command-hero {
+    padding: 1.35rem;
+    border-radius: 1.15rem;
+  }
+
+  .research-command-copy h2 {
+    max-width: none;
+    font-size: clamp(2rem, 11vw, 3rem);
+  }
+
+  .research-command-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .research-command-metrics article {
+    grid-template-columns: 1fr auto;
+    min-height: 0;
+    align-items: baseline;
+    gap: .3rem .8rem;
+    padding: .85rem 1rem;
+  }
+
+  .research-command-metrics article + article {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .research-command-metrics strong {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+
+  .research-command-metrics small {
+    grid-column: 1;
+  }
+
+  .research-apple-workbench .research-thesis-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .research-apple-workbench .research-run-heading,
+  .research-run-action,
+  .research-apple-workbench .research-execution-scope {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .research-apple-workbench .research-run-context,
+  .research-start-button {
+    width: 100%;
+  }
+
+  .research-apple-workbench .research-execution-scope .research-controls,
+  .research-apple-workbench .research-execution-scope .inline-select {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .research-apple-workbench .research-execution-scope .inline-select input {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .research-apple-workbench *,
+  .research-apple-workbench *::before,
+  .research-apple-workbench *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .research-apple-workbench button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .research-command-hero,
+  .research-apple-workbench .research-material,
+  .research-selection-feedback {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .research-command-hero,
+  .research-workflow-rail,
+  .research-apple-workbench .research-material,
+  .research-apple-workbench .research-thesis-card,
+  .research-apple-workbench .research-run-row {
+    border-color: currentColor;
+  }
+}
+
 /* ===== Strategy workbench / 复利轨道 ===== */
 .strategy-workspace { --tide:#36c5b2; --amber:#e7b65a; --coral:#f07d6a; display:grid; gap:22px; padding-bottom:40px; }
 .strategy-hero { position:relative; overflow:hidden; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; padding:30px; border:1px solid rgba(54,197,178,.22); border-radius:20px; background:linear-gradient(135deg,rgba(54,197,178,.1),rgba(231,182,90,.035) 55%,rgba(16,25,35,.1)); }

@@ -15,9 +15,12 @@ import { apiResponse } from '../../test/apiEnvelope';
 test('renders research runs as a telemetry list', () => {
   renderView(legacyDetail());
 
+  expect(screen.getByRole('heading', { name: '把判断变成可验证的研究' })).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: '研究流程' })).toBeInTheDocument();
   expect(screen.getByText('历次研究运行')).toBeInTheDocument();
   expect(screen.getByText('共 1 次')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveClass('research-run-row');
+  expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveAttribute('aria-current', 'true');
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
 });
 
@@ -42,6 +45,7 @@ test('prioritizes one thesis decision summary over equal-weight output cards', a
 
   await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
 
+  expect(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))).toHaveAttribute('aria-pressed', 'true');
   expect(await screen.findByRole('region', { name: '命题决策摘要' })).toBeInTheDocument();
   expect(screen.getByText('中等置信')).toBeInTheDocument();
   expect(screen.getByText('下一验证点')).toBeInTheDocument();
