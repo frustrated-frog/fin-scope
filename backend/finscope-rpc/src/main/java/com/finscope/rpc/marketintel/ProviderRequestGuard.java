@@ -68,6 +68,14 @@ public class ProviderRequestGuard {
             throw new ProviderContractException("UNSUPPORTED_CAPABILITY",
                     provider.providerCode() + " does not support " + capability, false);
         }
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(provider.timeout())) {
+            return executeWithinDeadline(provider, capability, operation);
+        }
+    }
+
+    private <T> T executeWithinDeadline(MarketDataProvider provider,
+                                        MarketDataCapability capability,
+                                        Operation<T> operation) {
         EndpointKey key = new EndpointKey(provider.providerCode(), capability);
         EndpointState endpoint = endpoints.computeIfAbsent(key, ignored -> new EndpointState());
         FamilyKey familyKey = new FamilyKey(capability, provider.providerFamily());

@@ -85,6 +85,24 @@ class ProviderRequestGuardTest {
                 "EASTMONEY", () -> "ok"));
     }
 
+    @Test
+    void providerDeadlineIsNestedAndAlwaysCleanedUp() {
+        ProviderRequestGuard guard = new ProviderRequestGuard(Clock.systemUTC(), millis -> { },
+                Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+        TestProvider provider = new TestProvider("FLOW", "LOCAL",
+                MarketDataCapability.CAPITAL_FLOW_5M);
+
+        assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofSeconds(2))) {
+            guard.execute(provider, MarketDataCapability.CAPITAL_FLOW_5M, () -> {
+                assertTrue(ProviderCallDeadline.remainingMillis() <= 1_000L);
+                return "ok";
+            });
+            assertTrue(ProviderCallDeadline.remainingMillis() <= 2_000L);
+        }
+        assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
+    }
+
     private static final class TestProvider implements com.finscope.rpc.marketdata.MarketDataProvider {
         private final String code;
         private final String family;

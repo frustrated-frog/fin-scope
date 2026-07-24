@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -158,7 +161,7 @@ class MarketDataGatewayQuoteTest {
         backup.result = Collections.singletonList(valid("600519", 1500.0));
 
         long started = System.nanoTime();
-        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(primary, backup), 250, 800)
+        Quote quote = gatewayFor(Arrays.<QuoteAdapter>asList(primary, backup), 500, 800)
                 .fetchQuotes("STOCK", Collections.singletonList("600519"), true)
                 .getQuotes().get(0);
         long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
@@ -166,7 +169,25 @@ class MarketDataGatewayQuoteTest {
         assertEquals("SINA_STOCK", quote.getSourceCode());
         assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, quote.getQualityStatus());
         assertEquals(1, backup.calls.get());
-        assertTrue(elapsedMillis < 180L, "fallback should not wait for the hedge delay");
+        assertTrue(elapsedMillis < 350L, "fallback should not wait for the hedge delay");
+    }
+
+    @Test
+    void providerTimeoutStartsWhenQueuedTaskActuallyBegins() throws Exception {
+        QueueingExecutor queue = new QueueingExecutor();
+        primary.timeout = Duration.ofMillis(40);
+        primary.result = Collections.singletonList(valid("600519", 1500.0));
+        CompletableFuture<QuoteGatewayResult> result = CompletableFuture.supplyAsync(
+                () -> gatewayFor(Collections.<QuoteAdapter>singletonList(primary),
+                        30, 500, queue).fetchQuotes(
+                        "STOCK", Collections.singletonList("600519"), true), callers);
+
+        Thread.sleep(100L);
+        assertFalse(result.isDone(), "executor queue time must not consume provider timeout");
+        queue.runNext();
+
+        assertEquals(MarketDataQualityStatus.FRESH_PRIMARY,
+                result.get(1, TimeUnit.SECONDS).getQualityStatus());
     }
 
     @Test
@@ -271,13 +292,19 @@ class MarketDataGatewayQuoteTest {
 
     private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters,
                                          long hedgeDelayMs, long requestBudgetMs) {
+        return gatewayFor(adapters, hedgeDelayMs, requestBudgetMs, providerExecutor);
+    }
+
+    private MarketDataGateway gatewayFor(List<QuoteAdapter> adapters,
+                                         long hedgeDelayMs, long requestBudgetMs,
+                                         Executor executor) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         return new MarketDataGateway(adapters, new ProviderRoutePolicy(guard), guard,
                 snapshots, runs, codec, new QuoteQualityValidator(clock),
                 new MarketDataSingleFlight(), new MarketDataGatewayProperties(
                         30_000, hedgeDelayMs, requestBudgetMs),
-                providerExecutor, clock);
+                executor, clock);
     }
 
     private List<String> codes(List<Quote> quotes) {
@@ -352,6 +379,18 @@ class MarketDataGatewayQuoteTest {
             if (delayMillis > 0) Thread.sleep(delayMillis);
             if (failure != null) throw failure;
             return result;
+        }
+    }
+
+    private static final class QueueingExecutor implements Executor {
+        private final ConcurrentLinkedQueue<Runnable> tasks = new ConcurrentLinkedQueue<Runnable>();
+
+        public void execute(Runnable command) { tasks.add(command); }
+
+        void runNext() {
+            Runnable task = tasks.poll();
+            if (task == null) throw new AssertionError("expected a queued provider task");
+            new Thread(task, "queued-provider-test").start();
         }
     }
 }

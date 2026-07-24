@@ -1,12 +1,19 @@
 package com.finscope.rpc.marketintel;
 
+import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -69,5 +76,60 @@ class JdkFinanceHttpClientTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void appliesProviderDeadlineToTheUnderlyingHttpRead() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/slow", exchange -> {
+            attempts.incrementAndGet();
+            try {
+                Thread.sleep(250L);
+                byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            } catch (Exception ignored) {
+                // Client deadline may close the exchange before the delayed response is written.
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            JdkFinanceHttpClient client = new JdkFinanceHttpClient(1000, 1000, 1024);
+            ProviderRequestGuard guard = new ProviderRequestGuard(
+                    Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), millis -> { },
+                    Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+            MarketDataProvider provider = new TestProvider(Duration.ofMillis(40));
+            URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + "/slow");
+
+            long started = System.nanoTime();
+            ProviderContractException error = assertThrows(ProviderContractException.class,
+                    () -> guard.execute(provider, MarketDataCapability.REALTIME_STOCK_QUOTE,
+                            () -> client.get(provider.providerCode(), uri, Collections.emptyMap())));
+            long elapsedMillis = (System.nanoTime() - started) / 1_000_000L;
+
+            assertEquals("TIMEOUT", error.getErrorType());
+            assertEquals(1, attempts.get());
+            assertTrue(elapsedMillis < 180L, "socket read must inherit the provider deadline");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static final class TestProvider implements MarketDataProvider {
+        private final Duration timeout;
+
+        private TestProvider(Duration timeout) { this.timeout = timeout; }
+        public String providerCode() { return "LOCAL_HTTP"; }
+        public String providerFamily() { return "LOCAL"; }
+        public Set<MarketDataCapability> capabilities() {
+            return Collections.singleton(MarketDataCapability.REALTIME_STOCK_QUOTE);
+        }
+        public int priority() { return 1; }
+        public int batchLimit() { return 1; }
+        public Duration minimumInterval() { return Duration.ZERO; }
+        public Duration timeout() { return timeout; }
     }
 }

@@ -26,6 +26,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,11 +73,41 @@ class MarketDataGatewayCapitalFlowTest {
         }
     }
 
+    @Test
+    void sharesOneRequestBudgetAcrossAllSequentialProviders() {
+        FakeCapitalProvider primary = new FakeCapitalProvider("PRIMARY_FLOW", "PRIMARY", 10);
+        primary.delayMillis = 500;
+        primary.timeout = Duration.ofSeconds(1);
+        FakeCapitalProvider backup = new FakeCapitalProvider("BACKUP_FLOW", "BACKUP", 20);
+        backup.delayMillis = 500;
+        backup.timeout = Duration.ofSeconds(1);
+        backup.data = data("BACKUP_FLOW");
+        ExecutorService providerExecutor = Executors.newFixedThreadPool(2);
+        try {
+            MarketDataGateway gateway = gateway(providerExecutor, 100, primary, backup);
+            long started = System.nanoTime();
+            CapitalFlowGatewayResult result = gateway
+                    .fetchCapitalFlow(instrument(), LocalDate.of(2026, 7, 14));
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+            assertEquals(MarketDataQualityStatus.UNAVAILABLE, result.getQualityStatus());
+            assertEquals(0, backup.calls.get(), "budget exhaustion must not start another provider");
+            assertTrue(elapsedMillis < 300L);
+        } finally {
+            providerExecutor.shutdownNow();
+        }
+    }
+
     private MarketDataGateway gateway(CapitalFlowProvider... providers) {
         return gateway(Runnable::run, providers);
     }
 
     private MarketDataGateway gateway(Executor executor, CapitalFlowProvider... providers) {
+        return gateway(executor, 800, providers);
+    }
+
+    private MarketDataGateway gateway(Executor executor, long requestBudgetMs,
+                                      CapitalFlowProvider... providers) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         return new MarketDataGateway(Collections.emptyList(), Collections.emptyList(), Arrays.asList(providers),
@@ -84,7 +115,7 @@ class MarketDataGatewayCapitalFlowTest {
                 mock(MarketDataRefreshRunRepository.class),
                 new MarketDataSnapshotCodec(new ObjectMapper().findAndRegisterModules()),
                 new QuoteQualityValidator(clock), new MarketDataSingleFlight(),
-                new MarketDataGatewayProperties(30_000, 30, 800), executor, clock);
+                new MarketDataGatewayProperties(30_000, 30, requestBudgetMs), executor, clock);
     }
 
     private Instrument instrument() {
@@ -115,6 +146,7 @@ class MarketDataGatewayCapitalFlowTest {
         private final int priority;
         private CapitalFlowData data;
         private RuntimeException failure;
+        private final AtomicInteger calls = new AtomicInteger();
         private long delayMillis;
         private Duration timeout = Duration.ofSeconds(1);
 
@@ -135,6 +167,7 @@ class MarketDataGatewayCapitalFlowTest {
         public Duration timeout() { return timeout; }
         public boolean supports(Instrument instrument) { return true; }
         public CapitalFlowData fetch(Instrument instrument, LocalDate asOfDate) {
+            calls.incrementAndGet();
             if (failure != null) throw failure;
             if (delayMillis > 0L) {
                 try {

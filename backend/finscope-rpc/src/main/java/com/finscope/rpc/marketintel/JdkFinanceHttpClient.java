@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -54,21 +55,34 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
     private FinanceHttpResponse getOnce(String provider, URI uri, Map<String, String> headers) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         try {
-            connection.setConnectTimeout(connectTimeoutMs);
-            connection.setReadTimeout(readTimeoutMs);
+            connection.setConnectTimeout(boundedTimeout(connectTimeoutMs, provider));
+            connection.setReadTimeout(boundedTimeout(readTimeoutMs, provider));
             connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
             connection.setRequestProperty("Connection", "close");
             for (Map.Entry<String, String> header : headers.entrySet())
                 connection.setRequestProperty(header.getKey(), header.getValue());
             int status = connection.getResponseCode();
+            connection.setReadTimeout(boundedTimeout(readTimeoutMs, provider));
             InputStream input = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
             String body = read(input);
             if (status < 200 || status >= 300) throw new ProviderContractException("HTTP_" + status,
                     provider + " returned HTTP " + status, status == 429 || status == 502 || status == 503 || status == 504);
             return new FinanceHttpResponse(status, body, Instant.now(), sha256(body));
+        } catch (SocketTimeoutException error) {
+            throw new ProviderContractException("TIMEOUT",
+                    provider + " exceeded provider deadline", true, error);
         } finally {
             connection.disconnect();
         }
+    }
+
+    private int boundedTimeout(int configuredTimeoutMs, String provider) {
+        long remaining = ProviderCallDeadline.remainingMillis();
+        if (remaining <= 0L) {
+            throw new ProviderContractException("TIMEOUT",
+                    provider + " exceeded provider deadline", true);
+        }
+        return (int) Math.max(1L, Math.min((long) configuredTimeoutMs, remaining));
     }
 
     private String read(InputStream input) throws Exception {

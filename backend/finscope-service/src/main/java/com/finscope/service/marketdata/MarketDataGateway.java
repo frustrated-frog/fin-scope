@@ -13,6 +13,7 @@ import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.domain.marketintel.DragonTigerRecord;
 import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.finscope.rpc.marketdata.ProviderResult;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
@@ -44,11 +45,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** 现有页面访问外部行情的统一高可用入口。 */
 @Service
@@ -227,14 +230,21 @@ public class MarketDataGateway {
         }
         List<DragonTigerProvider> ordered = routePolicy.order(candidates, capability);
         String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
+        long requestDeadline = requestDeadlineNanos();
         List<String> failures = new ArrayList<String>();
         Set<String> attemptedSources = new LinkedHashSet<String>();
         String lastErrorType = MarketDataQualityStatus.UNAVAILABLE.name();
 
         for (DragonTigerProvider provider : ordered) {
+            if (remainingMillis(requestDeadline) <= 0L) {
+                lastErrorType = "REQUEST_BUDGET_EXCEEDED";
+                failures.add("行情请求总预算已耗尽");
+                break;
+            }
             attemptedSources.add(provider.providerCode());
             try {
-                ProviderResult<DragonTigerData> fetched = executeProvider(provider, capability,
+                ProviderResult<DragonTigerData> fetched = executeProvider(
+                        provider, capability, requestDeadline,
                         () -> provider.fetch(instrument, startDate, endDate));
                 if (fetched == null || fetched.getData() == null) {
                     throw new com.finscope.rpc.marketintel.ProviderContractException(
@@ -360,11 +370,19 @@ public class MarketDataGateway {
         List<String> attempts = new ArrayList<String>();
         String lastErrorType = MarketDataQualityStatus.UNAVAILABLE.name();
         String lastErrorMessage = null;
+        long requestDeadline = requestDeadlineNanos();
         Set<String> attemptedSources = new LinkedHashSet<String>();
         for (CapitalFlowProvider provider : ordered) {
+            if (remainingMillis(requestDeadline) <= 0L) {
+                lastErrorType = "REQUEST_BUDGET_EXCEEDED";
+                lastErrorMessage = "行情请求总预算已耗尽";
+                attempts.add(lastErrorMessage);
+                break;
+            }
             attemptedSources.add(provider.providerCode());
             try {
-                ProviderResult<CapitalFlowData> fetched = executeProvider(provider, capability, () -> {
+                ProviderResult<CapitalFlowData> fetched = executeProvider(
+                        provider, capability, requestDeadline, () -> {
                     CapitalFlowData data = provider.fetch(instrument, asOfDate);
                     if (data == null || data.getMinutePoints().isEmpty()) {
                         throw new com.finscope.rpc.marketintel.ProviderContractException(
@@ -448,10 +466,16 @@ public class MarketDataGateway {
         List<SectorMarketProvider> ordered = routePolicy.order(candidates, capability);
         String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
         List<String> failures = new ArrayList<String>();
+        long requestDeadline = requestDeadlineNanos();
 
         for (SectorMarketProvider provider : ordered) {
+            if (remainingMillis(requestDeadline) <= 0L) {
+                failures.add("行情请求总预算已耗尽");
+                break;
+            }
             try {
-                ProviderResult<SectorMarketSnapshot> fetched = executeProvider(provider, capability,
+                ProviderResult<SectorMarketSnapshot> fetched = executeProvider(
+                        provider, capability, requestDeadline,
                         () -> validateSectorCatalog(provider.fetchResult(category), category, lastGood));
                 SectorMarketSnapshot fresh = fetched.getData();
                 boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
@@ -609,12 +633,12 @@ public class MarketDataGateway {
                                                  MarketDataCapability capability,
                                                  List<String> codes) {
         if (ordered.isEmpty() || codes.isEmpty()) return Collections.emptyList();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(properties.getRequestBudgetMs());
+        long deadline = requestDeadlineNanos();
         long hedgeDelayNanos = TimeUnit.MILLISECONDS.toNanos(properties.getHedgeDelayMs());
         List<ProviderAttempt> completed = new ArrayList<ProviderAttempt>();
         List<PendingAttempt> pending = new ArrayList<PendingAttempt>();
         int next = 0;
-        pending.add(start(ordered.get(next), next++, capability, codes));
+        pending.add(start(ordered.get(next), next++, capability, codes, deadline));
         long nextHedgeAt = System.nanoTime() + hedgeDelayNanos;
 
         while (!coverageSatisfied(completed, codes, next, ordered.size())
@@ -624,14 +648,14 @@ public class MarketDataGateway {
             if (coverageSatisfied(completed, codes, next, ordered.size())) break;
             if (pending.isEmpty()) {
                 if (next >= ordered.size()) break;
-                pending.add(start(ordered.get(next), next++, capability, codes));
+                pending.add(start(ordered.get(next), next++, capability, codes, deadline));
                 nextHedgeAt = System.nanoTime() + hedgeDelayNanos;
                 continue;
             }
 
             long now = System.nanoTime();
             if (next < ordered.size() && now >= nextHedgeAt) {
-                pending.add(start(ordered.get(next), next++, capability, codes));
+                pending.add(start(ordered.get(next), next++, capability, codes, deadline));
                 nextHedgeAt = now + hedgeDelayNanos;
                 continue;
             }
@@ -652,16 +676,24 @@ public class MarketDataGateway {
     }
 
     private PendingAttempt start(QuoteAdapter adapter, int order,
-                                 MarketDataCapability capability, List<String> codes) {
+                                 MarketDataCapability capability, List<String> codes,
+                                 long requestDeadlineNanos) {
         CompletableFuture<ProviderAttempt> completion = new CompletableFuture<ProviderAttempt>();
+        CompletableFuture<Void> started = new CompletableFuture<Void>();
+        AtomicLong startedAtNanos = new AtomicLong(-1L);
         FutureTask<Void> task = new FutureTask<Void>(() -> {
-            completion.complete(fetchProvider(adapter, order, capability, codes));
+            startedAtNanos.set(System.nanoTime());
+            started.complete(null);
+            try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(
+                    remainingDuration(requestDeadlineNanos))) {
+                completion.complete(fetchProvider(adapter, order, capability, codes));
+            }
             return null;
         });
-        long timeoutMillis = providerTimeoutMillis(adapter);
+        long timeoutNanos = providerTimeoutNanos(adapter);
         (adapter.isTerminalFallback() ? fallbackExecutor : executor).execute(task);
-        return new PendingAttempt(adapter, order, completion, task,
-                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis));
+        return new PendingAttempt(adapter, order, completion, started, task,
+                startedAtNanos, timeoutNanos);
     }
 
     private ProviderAttempt fetchProvider(QuoteAdapter adapter, int order,
@@ -697,11 +729,30 @@ public class MarketDataGateway {
      */
     private <T> T executeProvider(MarketDataProvider provider,
                                   MarketDataCapability capability,
+                                  long requestDeadlineNanos,
                                   ProviderRequestGuard.Operation<T> operation) {
-        FutureTask<T> task = new FutureTask<T>(() -> guard.execute(provider, capability, operation));
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicLong startedAtNanos = new AtomicLong(-1L);
+        FutureTask<T> task = new FutureTask<T>(() -> {
+            startedAtNanos.set(System.nanoTime());
+            started.countDown();
+            try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(
+                    remainingDuration(requestDeadlineNanos))) {
+                return guard.execute(provider, capability, operation);
+            }
+        });
         executor.execute(task);
         try {
-            return task.get(providerTimeoutMillis(provider), TimeUnit.MILLISECONDS);
+            long queueBudget = remainingMillis(requestDeadlineNanos);
+            if (queueBudget <= 0L || !started.await(queueBudget, TimeUnit.MILLISECONDS)) {
+                throw new TimeoutException("request budget exhausted before provider started");
+            }
+            long providerDeadline = safeDeadline(
+                    startedAtNanos.get(), providerTimeoutNanos(provider));
+            long effectiveDeadline = Math.min(requestDeadlineNanos, providerDeadline);
+            long waitMillis = remainingMillis(effectiveDeadline);
+            if (waitMillis <= 0L) throw new TimeoutException("provider deadline expired");
+            return task.get(waitMillis, TimeUnit.MILLISECONDS);
         } catch (TimeoutException error) {
             task.cancel(true);
             throw new com.finscope.rpc.marketintel.ProviderContractException(
@@ -921,8 +972,9 @@ public class MarketDataGateway {
 
     private ProviderAttempt awaitAny(List<PendingAttempt> pending, long timeoutMillis) {
         if (pending.isEmpty() || timeoutMillis <= 0L) return null;
-        CompletableFuture<?>[] values = pending.stream()
-                .map(value -> value.future).toArray(CompletableFuture[]::new);
+        CompletableFuture<?>[] values = pending.stream().map(value ->
+                value.startedAtNanos.get() < 0L ? value.started : value.future)
+                .toArray(CompletableFuture[]::new);
         try {
             return (ProviderAttempt) CompletableFuture.anyOf(values)
                     .get(timeoutMillis, TimeUnit.MILLISECONDS);
@@ -948,7 +1000,9 @@ public class MarketDataGateway {
         Iterator<PendingAttempt> iterator = pending.iterator();
         while (iterator.hasNext()) {
             PendingAttempt value = iterator.next();
-            if (!value.future.isDone() && now >= value.deadlineNanos) {
+            long startedAt = value.startedAtNanos.get();
+            if (!value.future.isDone() && startedAt >= 0L
+                    && now >= safeDeadline(startedAt, value.timeoutNanos)) {
                 ProviderAttempt timeout = ProviderAttempt.failure(value.provider, value.order,
                         new com.finscope.rpc.marketintel.ProviderContractException(
                                 "TIMEOUT", value.provider.providerCode()
@@ -966,7 +1020,11 @@ public class MarketDataGateway {
         long now = System.nanoTime();
         long remaining = Long.MAX_VALUE;
         for (PendingAttempt value : pending) {
-            remaining = Math.min(remaining, value.deadlineNanos - now);
+            long startedAt = value.startedAtNanos.get();
+            if (startedAt >= 0L) {
+                remaining = Math.min(remaining,
+                        safeDeadline(startedAt, value.timeoutNanos) - now);
+            }
         }
         if (remaining == Long.MAX_VALUE) return Long.MAX_VALUE;
         return Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remaining));
@@ -978,6 +1036,24 @@ public class MarketDataGateway {
             return Math.max(1L, properties.getRequestBudgetMs());
         }
         return Math.max(1L, timeout.toMillis());
+    }
+
+    private long providerTimeoutNanos(MarketDataProvider provider) {
+        return TimeUnit.MILLISECONDS.toNanos(providerTimeoutMillis(provider));
+    }
+
+    private long requestDeadlineNanos() {
+        return safeDeadline(System.nanoTime(),
+                TimeUnit.MILLISECONDS.toNanos(Math.max(1L, properties.getRequestBudgetMs())));
+    }
+
+    private Duration remainingDuration(long deadlineNanos) {
+        return Duration.ofNanos(Math.max(1L, deadlineNanos - System.nanoTime()));
+    }
+
+    private long safeDeadline(long startedNanos, long timeoutNanos) {
+        return timeoutNanos >= Long.MAX_VALUE - startedNanos
+                ? Long.MAX_VALUE : startedNanos + timeoutNanos;
     }
 
     private void cancelPending(List<PendingAttempt> pending) {
@@ -1047,17 +1123,23 @@ public class MarketDataGateway {
         private final QuoteAdapter provider;
         private final int order;
         private final CompletableFuture<ProviderAttempt> future;
+        private final CompletableFuture<Void> started;
         private final FutureTask<Void> task;
-        private final long deadlineNanos;
+        private final AtomicLong startedAtNanos;
+        private final long timeoutNanos;
 
         private PendingAttempt(QuoteAdapter provider, int order,
                                CompletableFuture<ProviderAttempt> future,
-                               FutureTask<Void> task, long deadlineNanos) {
+                               CompletableFuture<Void> started,
+                               FutureTask<Void> task, AtomicLong startedAtNanos,
+                               long timeoutNanos) {
             this.provider = provider;
             this.order = order;
             this.future = future;
+            this.started = started;
             this.task = task;
-            this.deadlineNanos = deadlineNanos;
+            this.startedAtNanos = startedAtNanos;
+            this.timeoutNanos = timeoutNanos;
         }
     }
 
