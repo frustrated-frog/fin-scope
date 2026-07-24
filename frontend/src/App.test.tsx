@@ -705,6 +705,10 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
 
   await userEvent.click(screen.getByRole('button', { name: 'Sources' }));
 
+  expect(await screen.findByRole('heading', { name: '建立稳定、可信的信息入口' })).toBeInTheDocument();
+  expect(screen.getByLabelText('信息源健康概览')).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: '信息源状态筛选' })).toBeInTheDocument();
+  expect(screen.getByRole('searchbox', { name: '搜索信息源' })).toBeInTheDocument();
   expect(await screen.findByLabelText('每次抓取条数')).toBeInTheDocument();
   expect(screen.getByLabelText('每天抓取时间')).toBeInTheDocument();
   expect(screen.getByLabelText('开启定时抓取')).toBeInTheDocument();
@@ -717,6 +721,25 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
 
   expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch-async', expect.objectContaining({ method: 'POST' }));
   expect(fetch).not.toHaveBeenCalledWith('/api/sources/1/fetch', expect.objectContaining({ method: 'POST' }));
+});
+
+test('sources workspace filters the directory without changing configured sources', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Sources' }));
+  const search = await screen.findByRole('searchbox', { name: '搜索信息源' });
+
+  await userEvent.type(search, '不存在的来源');
+  expect(screen.getByText('没有匹配的信息源')).toBeInTheDocument();
+  expect(screen.queryByText('测试财经RSS')).not.toBeInTheDocument();
+
+  await userEvent.clear(search);
+  await userEvent.click(screen.getByRole('button', { name: '停用' }));
+  expect(screen.getByText('没有匹配的信息源')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '启用' }));
+  expect(await screen.findByText('测试财经RSS')).toBeInTheDocument();
+  expect(fetch).not.toHaveBeenCalledWith('/api/sources', expect.objectContaining({ method: 'POST' }));
 });
 
 test('sources workspace confirms and permanently deletes a source', async () => {

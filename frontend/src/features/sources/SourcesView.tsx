@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { AsyncTask, FetchBatch, Source } from '../../shared/types';
@@ -54,21 +54,29 @@ export function SourcesView({
 }) {
   const [form, setForm] = useState<Source>(EMPTY_SOURCE);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
   const [busySourceId, setBusySourceId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null);
   const [fetchTask, setFetchTask] = useState<AsyncTask | null>(null);
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [sourceStatus, setSourceStatus] = useState<'ALL' | 'ENABLED' | 'DISABLED'>('ALL');
   const fetchChannelRef = useRef<IngestTaskChannel | null>(null);
+  const formPanelRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => () => fetchChannelRef.current?.dispose(), []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (saving) {
+      return;
+    }
     const payload = {
       ...form,
       maxItemsPerRun: Number(form.maxItemsPerRun || 10),
       credibility: Number(form.credibility || 3),
       fetchFrequencyMinutes: Number(form.fetchFrequencyMinutes || 60)
     };
+    setSaving(true);
     try {
       await api<Source>(editingId ? `/api/sources/${editingId}` : '/api/sources', {
         method: editingId ? 'PUT' : 'POST',
@@ -80,6 +88,8 @@ export function SourcesView({
       await onChanged();
     } catch (error) {
       addToast(error instanceof Error ? error.message : '信息源保存失败', 'error');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -143,6 +153,9 @@ export function SourcesView({
       scheduleTimes: source.scheduleTimes || '08:30',
       scheduledEnabled: Boolean(source.scheduledEnabled)
     });
+    if (window.matchMedia?.('(max-width: 1180px)').matches) {
+      window.requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
   }
 
   function recentBatch(sourceId?: number) {
@@ -166,10 +179,46 @@ export function SourcesView({
   const activeCount = sources.filter((source) => source.enabled).length;
   const scheduledCount = sources.filter((source) => source.enabled && source.scheduledEnabled).length;
   const typeCount = new Set(sources.map((source) => source.type)).size;
+  const latestBatch = fetchBatches[0];
+  const filteredSources = useMemo(() => {
+    const normalizedQuery = sourceQuery.trim().toLowerCase();
+    return sources.filter((source) => {
+      const matchesStatus = sourceStatus === 'ALL'
+        || (sourceStatus === 'ENABLED' ? source.enabled : !source.enabled);
+      const searchable = [source.name, source.type, source.url, source.tags].filter(Boolean).join(' ').toLowerCase();
+      return matchesStatus && (!normalizedQuery || searchable.includes(normalizedQuery));
+    });
+  }, [sourceQuery, sourceStatus, sources]);
 
   return (
-    <section className="source-workspace">
-      <form className="panel source-form-panel" onSubmit={submit}>
+    <section className="source-page">
+      <header className="source-command-hero">
+        <div className="source-command-copy">
+          <p className="source-command-kicker">Source intelligence</p>
+          <h2>建立稳定、可信的信息入口</h2>
+          <p>让每个来源都有清晰的可信度、抓取节奏和运行记录。少追热点，多维护真正值得长期跟踪的渠道。</p>
+        </div>
+        <div className="source-command-overview" aria-label="信息源健康概览">
+          <article>
+            <span>启用来源</span>
+            <strong>{activeCount}<small>/{sources.length}</small></strong>
+            <p>当前参与采集</p>
+          </article>
+          <article>
+            <span>定时运行</span>
+            <strong>{scheduledCount}</strong>
+            <p>已配置自动节奏</p>
+          </article>
+          <article>
+            <span>来源类型</span>
+            <strong>{typeCount}</strong>
+            <p>{latestBatch ? `最近批次 ${latestBatch.status}` : '等待首次抓取'}</p>
+          </article>
+        </div>
+      </header>
+
+      <div className="source-workspace">
+      <form ref={formPanelRef} className="panel source-form-panel source-material" onSubmit={submit} aria-busy={saving}>
         <div className="source-form-head">
           <div>
             <span>采集入口</span>
@@ -309,35 +358,68 @@ export function SourcesView({
               取消编辑
             </button>
           )}
-          <button className="primary-button" type="submit">{editingId ? '更新信息源' : '保存信息源'}</button>
+          <button className="primary-button source-save-button" type="submit" disabled={saving} aria-busy={saving}>
+            <span aria-hidden="true">{saving ? '◌' : editingId ? '✓' : '+'}</span>
+            {saving ? '正在保存…' : editingId ? '更新信息源' : '保存信息源'}
+          </button>
         </div>
       </form>
 
-      <section className="panel source-directory-panel">
+      <section className="panel source-directory-panel source-material">
         <div className="source-directory-head">
           <div>
             <span>信源池</span>
             <h3>已配置信息源</h3>
           </div>
-          <div className="source-board-metrics" aria-label="信息源概览">
-            <span><strong>{activeCount}</strong> 启用</span>
-            <span><strong>{scheduledCount}</strong> 定时</span>
-            <span><strong>{typeCount}</strong> 类型</span>
+          <span className="source-directory-count">显示 {filteredSources.length} / {sources.length}</span>
+        </div>
+        <div className="source-directory-toolbar">
+          <label className="source-search-field">
+            <span className="sr-only">搜索信息源</span>
+            <span className="source-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              value={sourceQuery}
+              placeholder="搜索名称、标签或 URL"
+              onChange={(event) => setSourceQuery(event.target.value)}
+            />
+          </label>
+          <div className="source-status-filter" role="group" aria-label="信息源状态筛选">
+            {([
+              ['ALL', '全部'],
+              ['ENABLED', '启用'],
+              ['DISABLED', '停用']
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={sourceStatus === value}
+                className={sourceStatus === value ? 'is-active' : ''}
+                onClick={() => setSourceStatus(value)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="item-list source-list">
-          {sources.length === 0 ? (
+          {filteredSources.length === 0 ? (
             <div className="empty-state">
-              <p className="empty-state-text">暂无信息源</p>
+              <p className="empty-state-text">{sources.length ? '没有匹配的信息源' : '暂无信息源'}</p>
+              <p className="muted">{sources.length ? '试试其他关键词或状态。' : '从左侧添加第一个长期跟踪渠道。'}</p>
             </div>
           ) : (
-            sources.map((source) => {
+            filteredSources.map((source) => {
               const batch = recentBatch(source.id);
               const tags = splitTags(source.tags);
               const isBusy = busySourceId === source.id;
 
               return (
-                <div key={source.id} className={`source-item${source.enabled ? '' : ' is-disabled'}${isBusy ? ' is-busy' : ''}`}>
+                <article
+                  key={source.id}
+                  className={`source-item${source.enabled ? '' : ' is-disabled'}${isBusy ? ' is-busy' : ''}`}
+                  aria-busy={isBusy}
+                >
                   <div className="source-status-rail" aria-hidden="true">
                     <span />
                   </div>
@@ -385,7 +467,7 @@ export function SourcesView({
                       disabled={busySourceId !== null || !source.enabled}
                       onClick={() => intakeFetchSource(source.id)}
                     >
-                      抓取
+                      {isBusy ? '抓取中…' : '抓取'}
                     </button>
                     <button
                       className="secondary-button source-action-button source-action-edit"
@@ -406,14 +488,14 @@ export function SourcesView({
                       删除
                     </button>
                   </div>
-                </div>
+                </article>
               );
             })
           )}
         </div>
       </section>
       {deleteTarget && (
-        <div className="modal-overlay">
+        <div className="modal-overlay source-modal-overlay">
           <div className="modal source-delete-modal" role="dialog" aria-modal="true" aria-labelledby="source-delete-title">
             <div className="modal-header source-delete-header">
               <span className="source-delete-mark" aria-hidden="true">!</span>
@@ -447,6 +529,7 @@ export function SourcesView({
           </div>
         </div>
       )}
+      </div>
     </section>
   );
 }
