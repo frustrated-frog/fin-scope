@@ -55,6 +55,7 @@ export function SourcesView({
   const [form, setForm] = useState<Source>(EMPTY_SOURCE);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busySourceId, setBusySourceId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Source | null>(null);
   const [fetchTask, setFetchTask] = useState<AsyncTask | null>(null);
   const fetchChannelRef = useRef<IngestTaskChannel | null>(null);
 
@@ -111,13 +112,19 @@ export function SourcesView({
     }
   }
 
-  async function deleteSource(id?: number) {
+  async function deleteSource(source: Source) {
+    const id = source.id;
     if (!id) {
       return;
     }
     setBusySourceId(id);
     try {
       await api<void>(`/api/sources/${id}`, { method: 'DELETE' });
+      if (editingId === id) {
+        setEditingId(null);
+        setForm(EMPTY_SOURCE);
+      }
+      setDeleteTarget(null);
       addToast('信息源已删除', 'success');
       await onChanged();
     } catch (error) {
@@ -384,18 +391,19 @@ export function SourcesView({
                       className="secondary-button source-action-button source-action-edit"
                       type="button"
                       aria-label={`编辑-${source.id}`}
+                      disabled={busySourceId !== null}
                       onClick={() => editSource(source)}
                     >
                       编辑
                     </button>
                     <button
-                      className="danger-button source-action-button source-action-archive"
+                      className="danger-button source-action-button source-action-delete"
                       type="button"
                       aria-label={`删除-${source.id}`}
-                      disabled={busySourceId === source.id}
-                      onClick={() => deleteSource(source.id)}
+                      disabled={busySourceId !== null}
+                      onClick={() => setDeleteTarget(source)}
                     >
-                      归档
+                      删除
                     </button>
                   </div>
                 </div>
@@ -404,6 +412,41 @@ export function SourcesView({
           )}
         </div>
       </section>
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal source-delete-modal" role="dialog" aria-modal="true" aria-labelledby="source-delete-title">
+            <div className="modal-header source-delete-header">
+              <span className="source-delete-mark" aria-hidden="true">!</span>
+              <div>
+                <p className="modal-kicker">Confirm action</p>
+                <h4 id="source-delete-title">删除信息源</h4>
+              </div>
+            </div>
+            <div className="modal-content source-delete-content">
+              <p className="source-delete-name">{deleteTarget.name}</p>
+              <p>删除后不会再抓取该信息源；已抓取的文章和研究历史仍会保留。</p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busySourceId === deleteTarget.id}
+                onClick={() => setDeleteTarget(null)}
+              >
+                取消
+              </button>
+              <button
+                className="danger-button source-delete-confirm-button"
+                type="button"
+                disabled={busySourceId === deleteTarget.id}
+                onClick={() => deleteSource(deleteTarget)}
+              >
+                {busySourceId === deleteTarget.id ? '删除中' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 // @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
 import { readFileSync } from 'node:fs';
@@ -582,6 +582,10 @@ beforeEach(() => {
     if (url === '/api/sources/1/intake-fetch' && init?.method === 'POST') {
       return mockApiResponse(state['/api/intake/batches'][0]);
     }
+    if (url === '/api/sources/1' && init?.method === 'DELETE') {
+      state['/api/sources'] = state['/api/sources'].filter((source: { id: number }) => source.id !== 1);
+      return mockApiResponse(null);
+    }
     if (url === '/api/topics/1' && init?.method === 'DELETE') {
       state['/api/topics'] = state['/api/topics'].filter((topic: { id: number }) => topic.id !== 1);
       return mockApiResponse({});
@@ -778,6 +782,23 @@ test('sources workspace exposes intake configuration and manual candidate fetch'
 
   expect(fetch).toHaveBeenCalledWith('/api/sources/1/intake-fetch-async', expect.objectContaining({ method: 'POST' }));
   expect(fetch).not.toHaveBeenCalledWith('/api/sources/1/fetch', expect.objectContaining({ method: 'POST' }));
+});
+
+test('sources workspace confirms and permanently deletes a source', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Sources' }));
+  const sourceCard = (await screen.findByText('测试财经RSS')).closest('.source-item') as HTMLElement;
+  await userEvent.click(within(sourceCard).getByRole('button', { name: '删除-1' }));
+
+  expect(screen.getByRole('dialog', { name: '删除信息源' })).toHaveTextContent('已抓取的文章和研究历史仍会保留');
+  expect(fetch).not.toHaveBeenCalledWith('/api/sources/1', expect.objectContaining({ method: 'DELETE' }));
+
+  await userEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+  expect(fetch).toHaveBeenCalledWith('/api/sources/1', expect.objectContaining({ method: 'DELETE' }));
+  await waitFor(() => expect(screen.queryByText('测试财经RSS')).not.toBeInTheDocument());
+  expect(await screen.findByText('信息源已删除')).toBeInTheDocument();
 });
 
 test('sources workspace shows failed intake batches as errors', async () => {

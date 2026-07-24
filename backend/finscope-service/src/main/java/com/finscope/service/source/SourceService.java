@@ -52,11 +52,9 @@ public class SourceService {
     }
 
     public void delete(Long id) {
-        Source source = sourceRepository.findById(id)
+        sourceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("信息源不存在：" + id));
-        source.setEnabled(false);
-        source.setScheduledEnabled(false);
-        sourceRepository.update(id, source);
+        sourceRepository.delete(id);
     }
 
     private List<Source> recommendedNewsSources() {

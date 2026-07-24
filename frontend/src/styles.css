@@ -5098,20 +5098,20 @@ td {
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
 }
 
-.source-actions .source-action-archive {
+.source-actions .source-action-delete {
   border-color: rgba(239, 68, 68, 0.32);
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
   box-shadow: none;
 }
 
-.source-actions .source-action-archive:hover {
+.source-actions .source-action-delete:hover {
   border-color: rgba(248, 113, 113, 0.54);
   background: rgba(239, 68, 68, 0.15);
   box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
 }
 
-.source-actions .source-action-archive:focus-visible {
+.source-actions .source-action-delete:focus-visible {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
 }
 
@@ -6271,19 +6271,22 @@ td {
   justify-content: flex-end;
 }
 
-.topic-delete-modal {
+.topic-delete-modal,
+.source-delete-modal {
   max-width: 440px;
   overflow: hidden;
 }
 
-.topic-delete-header {
+.topic-delete-header,
+.source-delete-header {
   display: flex;
   align-items: center;
   gap: 12px;
   background: linear-gradient(180deg, rgba(180, 79, 55, 0.1), transparent);
 }
 
-.topic-delete-mark {
+.topic-delete-mark,
+.source-delete-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6304,12 +6307,14 @@ td {
   text-transform: uppercase;
 }
 
-.topic-delete-content {
+.topic-delete-content,
+.source-delete-content {
   display: grid;
   gap: 10px;
 }
 
-.topic-delete-content .topic-delete-name {
+.topic-delete-content .topic-delete-name,
+.source-delete-content .source-delete-name {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
@@ -6322,7 +6327,8 @@ td {
   overflow-wrap: anywhere;
 }
 
-.topic-delete-confirm-button {
+.topic-delete-confirm-button,
+.source-delete-confirm-button {
   min-height: 34px;
   border-radius: 8px;
   padding: 0 16px;
