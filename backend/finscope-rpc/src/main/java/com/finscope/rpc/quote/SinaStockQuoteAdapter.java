@@ -2,9 +2,9 @@ package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -193,18 +193,14 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
     private String request(String urlText) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
         connection.setRequestMethod("GET");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
+        DeadlineAwareHttpConnection.configure(connection, TIMEOUT_MS, TIMEOUT_MS, providerCode());
         connection.setRequestProperty("Referer", "https://finance.sina.com.cn");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try (InputStream in = connection.getInputStream()) {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[4096];
-            int read;
-            while ((read = in.read(chunk)) != -1) {
-                buffer.write(chunk, 0, read);
-            }
-            return new String(buffer.toByteArray(), GBK);
+        try {
+            InputStream input = DeadlineAwareHttpConnection.inputStream(
+                    connection, TIMEOUT_MS, providerCode());
+            return new String(DeadlineAwareHttpConnection.readAll(
+                    connection, input, TIMEOUT_MS, 0, providerCode()), GBK);
         } finally {
             connection.disconnect();
         }

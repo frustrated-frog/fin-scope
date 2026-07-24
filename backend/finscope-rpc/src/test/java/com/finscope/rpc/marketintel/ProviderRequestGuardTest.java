@@ -9,7 +9,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,6 +102,21 @@ class ProviderRequestGuardTest {
             });
             assertTrue(ProviderCallDeadline.remainingMillis() <= 2_000L);
         }
+        assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
+    }
+
+    @Test
+    void providerDeadlineCanBePropagatedToAWorkerThread() {
+        Supplier<Long> operation;
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofSeconds(1))) {
+            operation = ProviderCallDeadline.propagate(ProviderCallDeadline::remainingMillis);
+        }
+
+        assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
+        long workerRemainingMillis = CompletableFuture.supplyAsync(operation).join();
+
+        assertTrue(workerRemainingMillis > 0L);
+        assertTrue(workerRemainingMillis <= 1_000L);
         assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
     }
 

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -91,7 +93,9 @@ public class FundNavHistoryAdapter implements QuoteAdapter {
         List<CompletableFuture<FetchOutcome>> futures = new ArrayList<CompletableFuture<FetchOutcome>>();
         for (String code : codes) {
             futures.add(CompletableFuture.supplyAsync(
-                    () -> fetchOne(code == null ? "" : code.trim()), quoteTaskExecutor));
+                    ProviderCallDeadline.propagate(
+                            () -> fetchOne(code == null ? "" : code.trim())),
+                    quoteTaskExecutor));
         }
         boolean timedOut = false;
         try {
@@ -123,6 +127,9 @@ public class FundNavHistoryAdapter implements QuoteAdapter {
             if (outcome.failure != null) lastFailure = outcome.failure;
         }
         if (successfulRequests == 0 && (timedOut || lastFailure != null)) {
+            if (lastFailure instanceof ProviderContractException) {
+                throw (ProviderContractException) lastFailure;
+            }
             throw new IOException("Fund history provider failed for all requested funds", lastFailure);
         }
 

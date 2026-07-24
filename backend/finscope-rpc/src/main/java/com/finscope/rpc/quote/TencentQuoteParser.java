@@ -1,10 +1,10 @@
 package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.Quote;
+import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -42,27 +42,25 @@ public class TencentQuoteParser {
         this.fetcher = fetcher;
     }
 
-    private static String requestGbk(String urlText) throws Exception {
+    static String requestGbk(String urlText) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
         connection.setRequestMethod("GET");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
+        DeadlineAwareHttpConnection.configure(
+                connection, TIMEOUT_MS, TIMEOUT_MS, "TENCENT");
         connection.setRequestProperty("Referer", "https://gu.qq.com");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
         try {
-            int status = connection.getResponseCode();
+            int status = DeadlineAwareHttpConnection.responseCode(
+                    connection, TIMEOUT_MS, "TENCENT");
             if (status < 200 || status >= 300) {
                 throw new ProviderContractException("HTTP_" + status,
                         "Tencent quote returned HTTP " + status,
                         status == 429 || status == 502 || status == 503 || status == 504);
             }
-            try (InputStream input = connection.getInputStream();
-                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[4096];
-                int read;
-                while ((read = input.read(buffer)) >= 0) output.write(buffer, 0, read);
-                return new String(output.toByteArray(), GBK);
-            }
+            InputStream input = DeadlineAwareHttpConnection.inputStream(
+                    connection, TIMEOUT_MS, "TENCENT");
+            return new String(DeadlineAwareHttpConnection.readAll(
+                    connection, input, TIMEOUT_MS, 0, "TENCENT"), GBK);
         } finally {
             connection.disconnect();
         }

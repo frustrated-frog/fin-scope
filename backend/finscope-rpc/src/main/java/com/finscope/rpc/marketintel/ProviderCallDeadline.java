@@ -4,8 +4,9 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
-/** 将 Provider 截止时间传递到同线程的底层网络客户端。 */
+/** 将 Provider 截止时间传递到底层网络客户端和显式包装的异步任务。 */
 public final class ProviderCallDeadline {
     private static final ThreadLocal<Deque<Long>> DEADLINES =
             ThreadLocal.withInitial(ArrayDeque::new);
@@ -17,6 +18,22 @@ public final class ProviderCallDeadline {
         long timeoutNanos = toPositiveNanos(timeout);
         long candidate = timeoutNanos >= Long.MAX_VALUE - now
                 ? Long.MAX_VALUE : now + timeoutNanos;
+        return openAt(candidate);
+    }
+
+    /** 捕获当前绝对截止时间，并显式传播到线程池任务。 */
+    public static <T> Supplier<T> propagate(Supplier<T> operation) {
+        Deque<Long> deadlines = DEADLINES.get();
+        Long captured = deadlines.isEmpty() ? null : deadlines.peek();
+        if (captured == null) return operation;
+        return () -> {
+            try (Scope ignored = openAt(captured)) {
+                return operation.get();
+            }
+        };
+    }
+
+    private static Scope openAt(long candidate) {
         Deque<Long> deadlines = DEADLINES.get();
         long effective = deadlines.isEmpty() ? candidate
                 : Math.min(candidate, deadlines.peek());

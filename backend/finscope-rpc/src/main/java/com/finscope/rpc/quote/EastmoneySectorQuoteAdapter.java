@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 /** 东方财富板块行情适配器，板块代码格式为 BK 加四位数字。 */
@@ -68,10 +71,18 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
         }
         List<CompletableFuture<Quote>> futures = new ArrayList<>();
         for (String code : codes) {
-            futures.add(CompletableFuture.supplyAsync(() -> fetchOne(code), quoteTaskExecutor));
+            futures.add(CompletableFuture.supplyAsync(
+                    ProviderCallDeadline.propagate(() -> fetchOne(code)), quoteTaskExecutor));
         }
         for (CompletableFuture<Quote> future : futures) {
-            quotes.add(future.join());
+            try {
+                quotes.add(future.join());
+            } catch (CompletionException error) {
+                if (error.getCause() instanceof RuntimeException) {
+                    throw (RuntimeException) error.getCause();
+                }
+                throw error;
+            }
         }
         return quotes;
     }
@@ -107,6 +118,8 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
             if (!quote.isValid()) {
                 quote.setNote("未取到有效板块行情");
             }
+        } catch (ProviderContractException error) {
+            throw error;
         } catch (Exception ex) {
             quote.setValid(false);
             quote.setNote("板块行情获取失败：" + ex.getMessage());
@@ -127,18 +140,14 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
     private String request(String urlText) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
         connection.setRequestMethod("GET");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
+        DeadlineAwareHttpConnection.configure(connection, TIMEOUT_MS, TIMEOUT_MS, providerCode());
         connection.setRequestProperty("Referer", "https://quote.eastmoney.com");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try (InputStream in = connection.getInputStream()) {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[4096];
-            int read;
-            while ((read = in.read(chunk)) != -1) {
-                buffer.write(chunk, 0, read);
-            }
-            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+        try {
+            InputStream input = DeadlineAwareHttpConnection.inputStream(
+                    connection, TIMEOUT_MS, providerCode());
+            return new String(DeadlineAwareHttpConnection.readAll(
+                    connection, input, TIMEOUT_MS, 0, providerCode()), StandardCharsets.UTF_8);
         } finally {
             connection.disconnect();
         }

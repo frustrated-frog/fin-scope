@@ -1,6 +1,7 @@
 package com.finscope.rpc.quote;
 
-import java.io.ByteArrayOutputStream;
+import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -14,22 +15,21 @@ final class EastmoneyFundHttpClient {
     static String get(String urlText, int timeoutMillis) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
         connection.setRequestMethod("GET");
-        connection.setConnectTimeout(timeoutMillis);
-        connection.setReadTimeout(timeoutMillis);
+        DeadlineAwareHttpConnection.configure(
+                connection, timeoutMillis, timeoutMillis, "EASTMONEY_FUND");
         connection.setRequestProperty("Referer", "https://fund.eastmoney.com");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
         try {
-            int status = connection.getResponseCode();
+            int status = DeadlineAwareHttpConnection.responseCode(
+                    connection, timeoutMillis, "EASTMONEY_FUND");
             if (status < 200 || status >= 300) {
                 throw new IOException("Eastmoney fund HTTP " + status);
             }
-            try (InputStream in = connection.getInputStream()) {
-                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                byte[] chunk = new byte[4096];
-                int read;
-                while ((read = in.read(chunk)) != -1) buffer.write(chunk, 0, read);
-                return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
-            }
+            InputStream input = DeadlineAwareHttpConnection.inputStream(
+                    connection, timeoutMillis, "EASTMONEY_FUND");
+            return new String(DeadlineAwareHttpConnection.readAll(
+                    connection, input, timeoutMillis, 0, "EASTMONEY_FUND"),
+                    StandardCharsets.UTF_8);
         } finally {
             connection.disconnect();
         }
