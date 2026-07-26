@@ -75,13 +75,13 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/tool/ResearchToolDispatcherTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/tool/PublicNewsSearchToolTest.java`
 
-- [ ] Write failing tests for dynamic lookup, arguments, success deltas, no-progress classification, retryable errors and unknown tool rejection.
-- [ ] Run focused tests and verify RED.
-- [ ] Implement the typed registry and dispatcher without reflection.
-- [ ] Reuse `ResearchSearchSourceFactory`, `FetchService` and run-scoped output counts in the news tool.
-- [ ] Convert `ResearchMissionService.assess` results into an evidence observation.
-- [ ] Run focused tests and verify GREEN.
-- [ ] Commit and push: `feat: 增加可执行研究工具与Observation`.
+- [x] Write failing tests for dynamic lookup, arguments, success deltas, no-progress classification, retryable errors and unknown tool rejection.
+- [x] Run focused tests and verify RED.
+- [x] Implement the typed registry and dispatcher without reflection.
+- [x] Reuse `ResearchSearchSourceFactory`, `FetchService` and run-scoped output counts in the news tool.
+- [x] Convert `ResearchMissionService.assess` results into an evidence observation.
+- [x] Run focused tests and verify GREEN.
+- [x] Commit and push: `feat: 增加可执行研究工具与Observation`.
 
 ### Task 5: Implement state reduction, local replan and finish verification
 
