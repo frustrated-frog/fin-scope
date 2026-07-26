@@ -21,12 +21,12 @@
 - Modify: `backend/finscope-dao/src/main/java/com/finscope/dao/config/DatabaseInitializer.java`
 - Test: `backend/finscope-dao/src/test/java/com/finscope/dao/research/agent/ResearchAgentRepositoryTest.java`
 
-- [ ] Write a failing repository test covering initialization, optimistic state updates, append-only decisions and one observation per decision.
-- [ ] Run `cd backend && mvn -q -pl finscope-dao -am -Dtest=ResearchAgentRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test` and verify RED.
-- [ ] Add the three SQLite tables and domain/repository mappings from the technical design.
-- [ ] Verify state versions reject stale updates and decision iterations are unique per run.
-- [ ] Run the focused DAO test and verify GREEN.
-- [ ] Commit and push: `feat: 增加研究智能体状态与轨迹持久化`.
+- [x] Write a failing repository test covering initialization, optimistic state updates, append-only decisions and one observation per decision.
+- [x] Run `cd backend && mvn -q -pl finscope-dao -am -Dtest=ResearchAgentRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test` and verify RED.
+- [x] Add the three SQLite tables and domain/repository mappings from the technical design.
+- [x] Verify state versions reject stale updates and decision iterations are unique per run.
+- [x] Run the focused DAO test and verify GREEN.
+- [x] Commit and push: `feat: 增加研究智能体状态与轨迹持久化`.
 
 ### Task 2: Define the decision protocol and strict validation
 
