@@ -133,12 +133,12 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchTrajectoryEvaluatorTest.java`
 - Test: `backend/finscope-web/src/test/java/com/finscope/web/response/ResearchRunDetailResponseTest.java`
 
-- [ ] Write failing metric tests for validity, follow-up, duplicate, no-progress, replan, finish and fallback rates.
-- [ ] Write a failing response test for populated and legacy-null Agent Core traces.
-- [ ] Implement deterministic trajectory scoring and append metrics to the existing evaluation.
-- [ ] Aggregate state, decisions, observations and metrics into run detail without N+1 queries.
-- [ ] Run focused service/web tests and verify GREEN.
-- [ ] Commit and push: `feat: 开放研究智能体轨迹与过程评测`.
+- [x] Write failing metric tests for validity, follow-up, duplicate, no-progress, replan, finish and fallback rates.
+- [x] Write a failing response test for populated and legacy-null Agent Core traces.
+- [x] Implement deterministic trajectory scoring and append metrics to the existing evaluation.
+- [x] Aggregate state, decisions, observations and metrics into run detail without N+1 queries.
+- [x] Run focused service/web tests and verify GREEN.
+- [x] Commit and push: `feat: 开放研究智能体轨迹与过程评测`.
 
 ### Task 8: Build the Agent decision-flow UI
 
@@ -147,16 +147,16 @@
 - Create: `frontend/src/features/research/ResearchAgentDecisionFlow.test.tsx`
 - Modify: `frontend/src/shared/types/index.ts`
 - Modify: `frontend/src/features/research/ResearchView.tsx`
-- Modify: `frontend/src/styles/components.css`
+- Modify: `frontend/src/styles.css`
 - Modify: `frontend/src/features/research/ResearchView.test.tsx`
 
-- [ ] Write failing component tests for current subgoal, remaining actions, Decision/Observation pairing, plan patch, fallback and finish rejection.
-- [ ] Run `cd frontend && npm test -- ResearchAgentDecisionFlow.test.tsx ResearchView.test.tsx` and verify RED.
-- [ ] Implement the server-driven decision flow between Mission Map and legacy diagnostics.
-- [ ] Add restrained state transitions and a complete reduced-motion override.
-- [ ] Verify keyboard and screen-reader structure with region labels and semantic timeline markup.
-- [ ] Run focused frontend tests and `npm run build`.
-- [ ] Commit and push: `feat: 增加研究智能体决策过程可视化`.
+- [x] Write failing component tests for current subgoal, remaining actions, Decision/Observation pairing, plan patch, fallback and finish rejection.
+- [x] Run `cd frontend && npm test -- ResearchAgentDecisionFlow.test.tsx ResearchView.test.tsx` and verify RED.
+- [x] Implement the server-driven decision flow between Mission Map and legacy diagnostics.
+- [x] Add restrained state transitions and a complete reduced-motion override.
+- [x] Verify keyboard and screen-reader structure with region labels and semantic timeline markup.
+- [x] Run focused frontend tests and `npm run build`.
+- [x] Commit and push: `feat: 增加研究智能体决策过程可视化`.
 
 ### Task 9: Regression, documentation status and final delivery
 
@@ -166,10 +166,10 @@
 - Modify: `docs/技术方案-研究智能体决策内核.md`
 - Modify: `docs/superpowers/plans/2026-07-27-research-agent-core.md`
 
-- [ ] Run `cd backend && mvn test`.
-- [ ] Run `cd frontend && npm test`.
-- [ ] Run `cd frontend && npm run build`.
-- [ ] Inspect `git diff --check`, `git status --short` and confirm no database, private documents or credentials were added.
-- [ ] Mark implemented requirements and plan checkboxes accurately; update README architecture and feature descriptions.
-- [ ] Commit and push: `docs: 完善研究智能体决策内核说明`.
-- [ ] Confirm `origin/codex/research-agent-core` points to the final commit.
+- [x] Run `cd backend && mvn test`.
+- [x] Run `cd frontend && npm test`.
+- [x] Run `cd frontend && npm run build`.
+- [x] Inspect `git diff --check`, `git status --short` and confirm no database, private documents or credentials were added.
+- [x] Mark implemented requirements and plan checkboxes accurately; update README architecture and feature descriptions.
+- [x] Commit and push: `docs: 完善研究智能体决策内核说明`.
+- [x] Confirm `origin/codex/research-agent-core` points to the final commit.
