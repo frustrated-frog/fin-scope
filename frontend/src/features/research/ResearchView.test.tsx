@@ -24,6 +24,32 @@ test('renders research runs as a telemetry list', () => {
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
 });
 
+test('places the research mission map before legacy run diagnostics', () => {
+  const detail = legacyDetail();
+  detail.mission = {
+    mission: {
+      researchRunId: 15,
+      goal: '验证半导体设备景气度',
+      subject: '半导体设备',
+      scopeSummary: '同时寻找支持证据与反方风险',
+      successCriteria: ['至少六条有效证据', '至少两个独立来源'],
+      status: 'PLANNING',
+      planningMode: 'PENDING',
+      planVersion: 1,
+      maxActions: 12
+    },
+    tasks: [],
+    gaps: [],
+    tools: []
+  };
+
+  renderView(detail);
+
+  const missionMap = screen.getByRole('region', { name: '研究作战图' });
+  const diagnostics = screen.getByText('研究过程与来源').closest('details');
+  expect(missionMap.compareDocumentPosition(diagnostics!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test('isolates the run archive for container-responsive layout', () => {
   renderView(legacyDetail());
 

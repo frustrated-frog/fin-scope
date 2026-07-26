@@ -400,6 +400,82 @@ export type ResearchRunDetail = {
   canRegenerateReport: boolean;
   runtime?: ResearchRuntimeView;
   latestEvaluation?: ResearchEvaluation;
+  mission?: ResearchMissionView;
+};
+
+export type ResearchMission = {
+  researchRunId: number;
+  goal: string;
+  subject?: string;
+  scopeSummary: string;
+  successCriteria: string[];
+  status: string;
+  planningMode: 'LLM_VALIDATED' | 'DETERMINISTIC' | 'PENDING';
+  planVersion: number;
+  maxActions: number;
+  activeTaskKey?: string;
+  fallbackReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ResearchMissionTask = {
+  id?: number;
+  researchRunId: number;
+  taskKey: string;
+  title: string;
+  question: string;
+  taskType: string;
+  toolCode: string;
+  intent: string;
+  status: string;
+  dependencies: string[];
+  parallelGroup?: string;
+  queryText?: string;
+  rationale?: string;
+  expectedEvidence?: string;
+  outputSummary?: string;
+  evidenceDelta: number;
+  sourceDelta: number;
+  skipReason?: string;
+  startedAt?: string;
+  endedAt?: string;
+};
+
+export type ResearchMissionGap = {
+  id?: number;
+  researchRunId: number;
+  assessmentIndex: number;
+  afterTaskKey?: string;
+  sufficient: boolean;
+  evidenceCount: number;
+  sourceCount: number;
+  supportCount: number;
+  counterCount: number;
+  warnings: string[];
+  recommendedIntent: string;
+  stateHash: string;
+  createdAt?: string;
+};
+
+export type ResearchToolDescriptor = {
+  code: string;
+  name: string;
+  description: string;
+  inputSchema: Record<string, string>;
+  outputSchema: Record<string, string>;
+  timeoutMs: number;
+  readOnly: boolean;
+  parallelizable: boolean;
+  riskLevel: string;
+  budgetType: string;
+};
+
+export type ResearchMissionView = {
+  mission: ResearchMission;
+  tasks: ResearchMissionTask[];
+  gaps: ResearchMissionGap[];
+  tools: ResearchToolDescriptor[];
 };
 
 export type ResearchRuntimeCheckpoint = {

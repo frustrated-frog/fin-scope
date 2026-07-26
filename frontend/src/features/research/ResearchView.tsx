@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
 import { ResearchProgressPanel } from './ResearchProgressPanel';
+import { ResearchMissionMap } from './ResearchMissionMap';
 import { ResearchReportReader } from './ResearchReportReader';
 import {
   groupThesisFindings,
@@ -309,6 +310,8 @@ export function ResearchView({
           </button>
         </div>
       </div>
+
+      {detail?.mission && <ResearchMissionMap mission={detail.mission} />}
 
       <div className="research-grid">
         <section className="panel research-archive-panel research-material" aria-label="研究运行档案">
