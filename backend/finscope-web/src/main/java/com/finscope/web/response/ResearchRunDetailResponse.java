@@ -5,6 +5,8 @@ import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.SourceProfile;
+import com.finscope.domain.research.evaluation.ResearchEvaluation;
+import com.finscope.domain.research.runtime.ResearchRuntimeView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,12 +21,24 @@ public class ResearchRunDetailResponse {
     private String reportStatus;
     private String reportGenerationMode;
     private boolean canRegenerateReport;
+    private ResearchRuntimeView runtime;
+    private ResearchEvaluation latestEvaluation;
 
     public ResearchRunDetailResponse(ResearchRun run,
                                      List<SourceProfile> plannedSources,
                                      List<ResearchRunPlanStep> planSteps,
                                      List<AgentRun> agentRuns,
                                      ResearchReport report) {
+        this(run, plannedSources, planSteps, agentRuns, report, null, null);
+    }
+
+    public ResearchRunDetailResponse(ResearchRun run,
+                                     List<SourceProfile> plannedSources,
+                                     List<ResearchRunPlanStep> planSteps,
+                                     List<AgentRun> agentRuns,
+                                     ResearchReport report,
+                                     ResearchRuntimeView runtime,
+                                     ResearchEvaluation latestEvaluation) {
         this.run = run;
         setPlannedSources(plannedSources);
         setPlanSteps(planSteps);
@@ -33,6 +47,8 @@ public class ResearchRunDetailResponse {
         this.reportStatus = report == null ? null : report.getStatus();
         this.reportGenerationMode = report == null ? null : report.getGenerationMode();
         this.canRegenerateReport = run != null && run.getThesisId() != null && !"RUNNING".equals(run.getStatus());
+        this.runtime = runtime;
+        this.latestEvaluation = latestEvaluation;
     }
 
     public ResearchRun getRun() {
@@ -84,4 +100,7 @@ public class ResearchRunDetailResponse {
     public boolean isCanRegenerateReport() {
         return canRegenerateReport;
     }
+
+    public ResearchRuntimeView getRuntime() { return runtime; }
+    public ResearchEvaluation getLatestEvaluation() { return latestEvaluation; }
 }

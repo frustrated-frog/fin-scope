@@ -24,6 +24,8 @@ export function ResearchView({
   onOpenRun,
   onOpenReport,
   onRegenerateReport,
+  onResumeRun,
+  onEvaluateRun,
   onCloseReport
 }: {
   runs: ResearchRun[];
@@ -43,6 +45,8 @@ export function ResearchView({
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
   onOpenReport: (runId: number) => Promise<void>;
   onRegenerateReport: (runId: number) => Promise<void>;
+  onResumeRun: (runId: number) => Promise<void>;
+  onEvaluateRun: (runId: number) => Promise<void>;
   onCloseReport: () => void;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -59,6 +63,17 @@ export function ResearchView({
   const [thesisDetailLoading, setThesisDetailLoading] = useState(false);
   const [creatingThesis, setCreatingThesis] = useState(false);
   const [thesisFormError, setThesisFormError] = useState('');
+  const [runtimeAction, setRuntimeAction] = useState<'resume' | 'evaluate' | null>(null);
+
+  async function runRuntimeAction(action: 'resume' | 'evaluate', runId: number) {
+    if (runtimeAction) return;
+    setRuntimeAction(action);
+    try {
+      await (action === 'resume' ? onResumeRun(runId) : onEvaluateRun(runId));
+    } finally {
+      setRuntimeAction(null);
+    }
+  }
 
   useEffect(() => {
     if (!selectedThesisId) {
@@ -334,6 +349,12 @@ export function ResearchView({
                 <strong>{presentRunStatus(detail.run.status)}</strong>
                 <span>{detail.run.summary || '-'}</span>
               </div>
+              <ResearchRuntimeEvaluationPanel
+                detail={detail}
+                busyAction={runtimeAction}
+                onResume={() => runRuntimeAction('resume', detail.run.id)}
+                onEvaluate={() => runRuntimeAction('evaluate', detail.run.id)}
+              />
               <ResearchDiagnostics detail={detail} />
             </>
           ) : (
@@ -343,6 +364,91 @@ export function ResearchView({
       </div>
     </section>
   );
+}
+
+function ResearchRuntimeEvaluationPanel({
+  detail,
+  busyAction,
+  onResume,
+  onEvaluate
+}: {
+  detail: ResearchRunDetail;
+  busyAction: 'resume' | 'evaluate' | null;
+  onResume: () => void;
+  onEvaluate: () => void;
+}) {
+  const runtime = detail.runtime;
+  const evaluation = detail.latestEvaluation;
+  const checkpoint = runtime?.checkpoint;
+  const budgetPercent = checkpoint?.maxActions
+    ? Math.min(100, Math.round((checkpoint.consumedActions / checkpoint.maxActions) * 100)) : 0;
+
+  return (
+    <section className="research-runtime-eval" aria-label="研究运行时与评测">
+      <header>
+        <div><span>Runtime &amp; eval</span><strong>可恢复、可评测的研究执行</strong></div>
+        {evaluation && <span className={`research-eval-gate ${evaluation.gateStatus.toLowerCase()}`}>{evaluation.gateStatus}</span>}
+      </header>
+      <div className="research-runtime-eval-grid">
+        <article>
+          <span>动作预算</span>
+          <strong>{checkpoint ? `${checkpoint.consumedActions} / ${checkpoint.maxActions}` : '未记录'}</strong>
+          <div className="research-runtime-budget" aria-label="动作预算使用率"><span style={{ width: `${budgetPercent}%` }} /></div>
+          <small>{checkpoint ? `${checkpoint.phase} · ${checkpoint.currentNode}` : '旧运行暂无检查点'}</small>
+        </article>
+        <article>
+          <span>离线评测</span>
+          <strong>{evaluation ? evaluation.score : '—'}</strong>
+          <small>{evaluation ? `${evaluation.metrics.length} 项指标 · ${evaluation.evaluatorVersion}` : '尚未建立评测基线'}</small>
+        </article>
+      </div>
+      {evaluation?.criticalIssues.length ? (
+        <p className="research-eval-issues">关键问题：{evaluation.criticalIssues.join('、')}</p>
+      ) : checkpoint?.lastError ? <p className="research-eval-issues">最近中断：{checkpoint.lastError}</p> : null}
+      <div className="research-runtime-detail-grid">
+        {evaluation?.metrics.length ? (
+          <section aria-label="评测指标">
+            <strong>评测指标</strong>
+            {evaluation.metrics.map((metric) => (
+              <div className="research-eval-metric" key={metric.metricCode}>
+                <span>{metric.label}</span>
+                <strong>{metric.score}/{metric.maxScore}</strong>
+              </div>
+            ))}
+          </section>
+        ) : null}
+        {runtime?.events.length ? (
+          <section aria-label="最近运行事件">
+            <strong>最近事件</strong>
+            {[...runtime.events].slice(-3).reverse().map((event) => (
+              <div className="research-runtime-event" key={`${event.sequenceNo}-${event.eventType}-${event.nodeId || ''}`}>
+                <span>{presentRuntimeEvent(event.eventType)}</span>
+                <small>#{event.sequenceNo} · {event.nodeId || 'runtime'}</small>
+              </div>
+            ))}
+          </section>
+        ) : null}
+      </div>
+      <footer>
+        {runtime?.recoverable && (
+          <button className="secondary-button compact" type="button" disabled={Boolean(busyAction)} onClick={onResume}>
+            {busyAction === 'resume' ? '正在恢复…' : '从检查点恢复'}
+          </button>
+        )}
+        <button className="secondary-button compact" type="button" disabled={Boolean(busyAction)} onClick={onEvaluate}>
+          {busyAction === 'evaluate' ? '正在评测…' : evaluation ? '重新评测' : '运行离线评测'}
+        </button>
+      </footer>
+    </section>
+  );
+}
+
+function presentRuntimeEvent(type: string) {
+  const labels: Record<string, string> = {
+    RUN_CREATED: '运行创建', NODE_STARTED: '节点开始', NODE_COMPLETED: '节点完成', NODE_FAILED: '节点失败',
+    RESUMED: '恢复执行', GUARD_TRIGGERED: '触发安全护栏', TERMINATED: '运行结束', RUNTIME_INTERRUPTED: '进程中断'
+  };
+  return labels[type] || type;
 }
 
 function presentRunStatus(status: string) {

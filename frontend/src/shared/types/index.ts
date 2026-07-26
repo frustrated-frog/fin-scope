@@ -398,6 +398,67 @@ export type ResearchRunDetail = {
   reportStatus?: string;
   reportGenerationMode?: string;
   canRegenerateReport: boolean;
+  runtime?: ResearchRuntimeView;
+  latestEvaluation?: ResearchEvaluation;
+};
+
+export type ResearchRuntimeCheckpoint = {
+  researchRunId: number;
+  stateVersion: number;
+  phase: string;
+  currentNode: string;
+  status: string;
+  iteration: number;
+  consumedActions: number;
+  maxActions: number;
+  noProgressCount: number;
+  lastStateHash?: string;
+  resumeCount: number;
+  terminationReason?: string;
+  lastError?: string;
+};
+
+export type ResearchRuntimeEvent = {
+  id?: number;
+  researchRunId: number;
+  sequenceNo: number;
+  eventType: string;
+  nodeId?: string;
+  status?: string;
+  progressDelta: number;
+  errorType?: string;
+  errorMessage?: string;
+  createdAt?: string;
+};
+
+export type ResearchRuntimeView = {
+  checkpoint: ResearchRuntimeCheckpoint;
+  events: ResearchRuntimeEvent[];
+  recoverable: boolean;
+};
+
+export type ResearchEvaluationMetric = {
+  evaluationId?: number;
+  metricCode: string;
+  label: string;
+  score: number;
+  maxScore: number;
+  status: string;
+  evidence?: string;
+  recommendation?: string;
+};
+
+export type ResearchEvaluation = {
+  id?: number;
+  researchRunId: number;
+  evaluatorVersion: string;
+  inputFingerprint: string;
+  score: number;
+  gateStatus: 'PASS' | 'BLOCK';
+  summary: string;
+  criticalIssues: string[];
+  metrics: ResearchEvaluationMetric[];
+  createdAt?: string;
 };
 
 export type AgentRun = {

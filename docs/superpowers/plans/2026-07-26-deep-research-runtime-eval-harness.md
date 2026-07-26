@@ -184,7 +184,7 @@ Run: `cd backend && mvn -q -pl finscope-service -am -Dtest=ResearchServiceHarnes
 
 - [ ] **Step 3: Wrap real nodes**
 
-Initialize runtime immediately after `research_run` persistence. Use stable node IDs: `plan_sources`, `collect_source:{sourceId}:{index}`, `assess_evidence:{round}`, `expand_query:{round}:{index}`, `compose_report`, `verify_output`, `complete`. Check `RuntimeNodeStart.isAlreadyCompleted()` before side effects. The state hash is `articleCount:eventCount:evidenceCount:reportAvailable`.
+Initialize runtime immediately after `research_run` persistence. Use stable node IDs: `plan_sources`, `collect_source:{sourceId}:{index}`, `assess_evidence:{round}`, `expand_query:{round}:{index}`, `compose_report`, `verify_output`, `complete`. Check `RuntimeNodeStart.isAlreadyCompleted()` before side effects. The state hash is `articleCount:eventCount:evidenceCount:reportAvailable:independentSourceCount`.
 
 - [ ] **Step 4: Change startup recovery semantics**
 
@@ -232,11 +232,11 @@ Run: `cd backend && mvn -q -pl finscope-service -am -Dtest=ResearchEvaluationSco
 
 - [ ] **Step 3: Implement scoring formulas**
 
-Use integer scores and fixed version `deep-research-rules-v1`: completion 20, evidence 25, source diversity 15, trace integrity 20, budget safety 10, recovery 10. Persist `inputFingerprint`; repository returns the existing evaluation for the same `(research_run_id, evaluator_version, input_fingerprint)`.
+Use integer scores and fixed version `deep-research-rules-v2`: completion 20, evidence 25, source diversity 15, trace integrity 20, budget safety 10, recovery 10. Score evidence and source diversity from run-scoped outputs, validate report claims and the event state machine, and persist `inputFingerprint`; repository returns the existing evaluation for the same `(research_run_id, evaluator_version, input_fingerprint)`.
 
 - [ ] **Step 4: Add persistence tests and implementation**
 
-Add `research_eval_run` and `research_eval_metric` tables, then run the DAO test directly. Expected: repeated upsert returns one eval run and six metric rows.
+Add `research_evaluation` and `research_evaluation_metric` tables, then run the DAO test directly. Expected: repeated upsert returns one evaluation and six metric rows.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -259,7 +259,7 @@ mvc.perform(get("/api/research/runs/1/runtime"))
 
 mvc.perform(post("/api/research/runs/1/evaluations"))
    .andExpect(status().isOk())
-   .andExpect(jsonPath("$.data.evaluatorVersion").value("deep-research-rules-v1"))
+   .andExpect(jsonPath("$.data.evaluatorVersion").value("deep-research-rules-v2"))
    .andExpect(jsonPath("$.data.metrics.length()").value(6));
 ```
 

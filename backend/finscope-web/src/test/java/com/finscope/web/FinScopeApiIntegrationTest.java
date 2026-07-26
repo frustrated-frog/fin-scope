@@ -10,8 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.annotation.Resource;
 import java.io.OutputStream;
@@ -25,12 +28,14 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 import java.util.zip.ZipFile;
 import java.time.LocalDate;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -43,18 +48,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = {
-        "finscope.data-root=target/test-data/api",
-        "spring.datasource.url=jdbc:sqlite:target/test-data/api/finance.db"
-})
+@SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class FinScopeApiIntegrationTest {
+    @DynamicPropertySource
+    static void isolatedDatabase(DynamicPropertyRegistry registry) {
+        String testId = UUID.randomUUID().toString();
+        registry.add("finscope.data-root", () -> "target/test-data/api-" + testId);
+        registry.add("spring.datasource.url",
+                () -> "jdbc:sqlite:target/test-data/api-" + testId + "/finance.db");
+    }
+
     @Resource
     private MockMvc mvc;
 
     @Resource
     private JdbcTemplate jdbcTemplate;
+
+    @Value("${finscope.data-root}")
+    private String dataRoot;
 
     @MockBean
     private LlmChatClient llmChatClient;
@@ -73,6 +86,10 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("event_cluster");
         deleteIfExists("research_run_output");
         deleteIfExists("research_report");
+        deleteIfExists("research_evaluation_metric");
+        deleteIfExists("research_evaluation");
+        deleteIfExists("research_runtime_event");
+        deleteIfExists("research_runtime_checkpoint");
         deleteIfExists("thesis_finding");
         deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
@@ -371,7 +388,7 @@ class FinScopeApiIntegrationTest {
 
     @Test
     void vaultBriefMarkdownIsIndexedWhenDatabaseIsEmpty() throws Exception {
-        Path dailyBriefs = Paths.get("target/test-data/api/vault/daily-briefs");
+        Path dailyBriefs = Paths.get(dataRoot, "vault/daily-briefs");
         Files.createDirectories(dailyBriefs);
         Files.write(dailyBriefs.resolve("2026-06-25.md"), (
                 "# 每日金融、投资、创业学习简报 - 2026-06-25\n\n"
@@ -943,6 +960,22 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.reportAvailable").value(true))
                 .andExpect(jsonPath("$.data.reportStatus", containsString("COMPLETED")));
 
+        mvc.perform(get("/api/research/runs/1/runtime"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.checkpoint.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.events.length()").value(greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$.data.recoverable").value(false));
+
+        mvc.perform(post("/api/research/runs/1/evaluations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.score").isNumber())
+                .andExpect(jsonPath("$.data.gateStatus").value("PASS"))
+                .andExpect(jsonPath("$.data.metrics.length()").value(6));
+
+        mvc.perform(get("/api/research/runs/1/evaluations/latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.inputFingerprint").value(matchesPattern("[0-9a-f]{64}")));
+
         mvc.perform(get("/api/research/runs/1/report"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.researchRunId").value(1))
@@ -951,6 +984,14 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.title").isNotEmpty())
                 .andExpect(jsonPath("$.data.contentMarkdown").isNotEmpty())
                 .andExpect(jsonPath("$.data.evidenceCount").value(greaterThanOrEqualTo(1)));
+
+        jdbcTemplate.update("UPDATE research_runtime_checkpoint SET status='INTERRUPTED',last_error='test restart' "
+                + "WHERE research_run_id=1");
+        jdbcTemplate.update("UPDATE research_run SET status='FAILED' WHERE id=1");
+        mvc.perform(post("/api/research/runs/1/resume"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RUNNING"));
+        assertTrue(waitForResearchRun(1L).contains("\"status\":\"COMPLETED\""));
     }
 
     @Test
@@ -1136,7 +1177,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("REVIEWING"))
                 .andExpect(jsonPath("$.data.markdownPath", containsString("vault/topics")));
-        boolean noteWritten = Files.walk(Paths.get("target/test-data/api/vault/topics"))
+        boolean noteWritten = Files.walk(Paths.get(dataRoot, "vault/topics"))
                 .filter(Files::isRegularFile)
                 .anyMatch(path -> {
                     try {

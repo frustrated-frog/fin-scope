@@ -67,7 +67,7 @@ PLAN
 事件表只追加不修改：
 
 - `sequence_no` 在单个 run 内唯一且递增。
-- `event_type` 包括 `RUN_CREATED`、`NODE_STARTED`、`NODE_COMPLETED`、`NODE_FAILED`、`CHECKPOINT_SAVED`、`RESUMED`、`TERMINATED`。
+- `event_type` 包括 `RUN_CREATED`、`NODE_STARTED`、`NODE_COMPLETED`、`NODE_FAILED`、`GUARD_TRIGGERED`、`RUNTIME_INTERRUPTED`、`RESUMED`、`TERMINATED`。
 - 保存节点、动作指纹、状态哈希、进度增量、输入/输出摘要和结构化错误类型。
 
 Runtime 页面和 Eval Harness 都以该事件流为事实来源，应用日志仅作为补充诊断。
@@ -106,7 +106,7 @@ Runtime 页面和 Eval Harness 都以该事件流为事实来源，应用日志�
 - `ResearchRun` 与 `ResearchReport`。
 - runtime checkpoint 与完整事件流。
 - run-scoped article/event/evidence outputs。
-- 评测器版本 `deep-research-rules-v1`。
+- 评测器版本 `deep-research-rules-v2`；证据数和独立来源数以 run-scoped 真实产物为准，并校验报告自报数量与轨迹状态机。
 
 ### 6.2 评测流程
 
@@ -123,9 +123,9 @@ Load immutable snapshot
 
 ### 6.3 持久化
 
-`research_eval_run` 保存 run、evaluator version、input fingerprint、score、gate status、summary 和时间。
+`research_evaluation` 保存 run、evaluator version、input fingerprint、score、gate status、summary 和时间。
 
-`research_eval_metric` 以 `(eval_run_id, metric_code)` 为主键，保存 score、weight、status、evidence 和 recommendation。
+`research_evaluation_metric` 以 `(evaluation_id, metric_code)` 为主键，保存 score、max score、status、evidence 和 recommendation。
 
 ## 7. API
 

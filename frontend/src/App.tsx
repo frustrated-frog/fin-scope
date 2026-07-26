@@ -36,6 +36,7 @@ import {
   PageResponse,
   ResearchRun,
   ResearchRunDetail,
+  ResearchEvaluation,
   ResearchReport,
   ResearchThesis,
   Source,
@@ -340,6 +341,37 @@ export default function App() {
     }
   }
 
+  async function resumeResearchRun(id: number) {
+    setResearchBusy(true);
+    setMessage('正在从检查点恢复研究');
+    try {
+      await api<ResearchRun>(`/api/research/runs/${id}/resume`, { method: 'POST' });
+      await loadResearchRunProgress(id);
+      setMessage('研究已从检查点恢复');
+      addToast('研究已从检查点恢复，正在继续执行', 'success');
+    } catch (error) {
+      const nextMessage = error instanceof Error ? error.message : '研究恢复失败';
+      setMessage(nextMessage);
+      addToast(nextMessage, 'error');
+    } finally {
+      setResearchBusy(false);
+    }
+  }
+
+  async function evaluateResearchRun(id: number) {
+    setMessage('正在运行离线评测');
+    try {
+      const evaluation = await api<ResearchEvaluation>(`/api/research/runs/${id}/evaluations`, { method: 'POST' });
+      await loadResearchRunProgress(id);
+      setMessage(`离线评测完成：${evaluation.score} 分`);
+      addToast(`离线评测 ${evaluation.score} 分 · ${evaluation.gateStatus}`, evaluation.gateStatus === 'PASS' ? 'success' : 'error');
+    } catch (error) {
+      const nextMessage = error instanceof Error ? error.message : '离线评测失败';
+      setMessage(nextMessage);
+      addToast(nextMessage, 'error');
+    }
+  }
+
   async function runResearch(input: {
     thesisId?: number;
     runDate: string;
@@ -536,6 +568,8 @@ export default function App() {
           onOpenRun={openResearchRun}
           onOpenReport={openResearchReport}
           onRegenerateReport={regenerateResearchReport}
+          onResumeRun={resumeResearchRun}
+          onEvaluateRun={evaluateResearchRun}
           onCloseReport={() => setResearchReport(null)}
         />
       )}

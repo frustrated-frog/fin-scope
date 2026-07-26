@@ -29,6 +29,8 @@ import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.report.ThesisQueryExpansionService;
+import com.finscope.service.research.runtime.ResearchRuntimeService;
+import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -77,6 +79,8 @@ public class ResearchService {
     private ResearchRunPlanService researchRunPlanService;
     @Resource
     private ResearchRunOutputService researchRunOutputService;
+    @Resource
+    private ResearchRuntimeService researchRuntimeService;
     @Resource(name = "researchTaskExecutor")
     private Executor researchTaskExecutor;
 
@@ -123,6 +127,7 @@ public class ResearchService {
         run.setErrorMessage(null);
 
         ResearchRun saved = researchRunRepository.save(run);
+        researchRuntimeService.initialize(saved.getId(), ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
         researchRunRepository.replaceSources(saved.getId(), plannedSources);
         List<ResearchRunPlanStep> planSteps = researchRunPlanService.initializeDefaultPlan(saved.getId(), plannedSources.size());
         startStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES);
@@ -166,6 +171,23 @@ public class ResearchService {
     public List<SourceProfile> plannedSources(Long id) {
         detail(id);
         return researchRunRepository.findSourcesByRunId(id);
+    }
+
+    public ResearchRunPlan resume(Long id) {
+        ResearchRun run = detail(id);
+        researchRuntimeService.resume(id);
+        run.setStatus(ResearchEnums.RUN_STATUS_RUNNING);
+        run.setErrorMessage(null);
+        run.setSummary("Research runtime resumed from the latest checkpoint.");
+        researchRunRepository.updateResult(run);
+        List<SourceProfile> sources = plannedSources(id);
+        List<ResearchRunPlanStep> steps = researchRunPlanService.findByRunId(id);
+        scheduleExecution(run, sources, steps);
+        ResearchRunPlan plan = new ResearchRunPlan();
+        plan.setRun(run);
+        plan.setPlannedSources(sources);
+        plan.setPlanSteps(steps);
+        return plan;
     }
 
     public ResearchReport regenerateReport(Long runId) {
@@ -214,6 +236,8 @@ public class ResearchService {
         agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
                 "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                 null, ex.getMessage(), 0L);
+        safeRuntimeFailure(run.getId(), ResearchRunPlanService.STEP_FETCH_SOURCES,
+                "RESEARCH_EXECUTOR_REJECTED", ex.getMessage());
     }
 
     private ResearchRun execute(ResearchRun run, List<SourceProfile> plannedSources, List<ResearchRunPlanStep> planSteps) {
@@ -223,19 +247,35 @@ public class ResearchService {
         int evidenceBefore = evidenceItemRepository.countAll();
         int learningBefore = learningTaskRepository.countAll();
         int ideaBefore = contentIdeaRepository.countAll();
-        int fetchedSources = 0;
+        int fetchedSources = value(run.getFetchedSourceCount());
         int dynamicQueries = 0;
         List<String> errors = new ArrayList<String>();
         ResearchRunPlanStep currentStep = null;
         try {
             ResearchRunContext.setCurrentRunId(run.getId());
             AgentRunContext context = ResearchRunContext.currentContext();
+            completeSystemNode(run, ResearchRunPlanService.STEP_PLAN_SOURCES, "PLAN",
+                    "plannedSources=" + plannedSources.size(), plannedSources.size());
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES);
-            for (SourceProfile plannedSource : plannedSources) {
+            boolean runtimeStopped = false;
+            for (int sourceIndex = 0; sourceIndex < plannedSources.size(); sourceIndex++) {
+                SourceProfile plannedSource = plannedSources.get(sourceIndex);
                 Long sourceId = plannedSource.getSourceId();
                 if (sourceId == null) {
                     continue;
                 }
+                String runtimeNode = "collect_source:" + sourceId + ":" + sourceIndex;
+                RuntimeNodeStart runtimeStart = researchRuntimeService.startNode(run.getId(), runtimeNode, "COLLECT",
+                        "fetch:source:" + sourceId, sourceFetchInput(sourceId, plannedSource));
+                if (runtimeStart.isAlreadyCompleted()) {
+                    continue;
+                }
+                if (!runtimeStart.isStarted()) {
+                    errors.add("Runtime terminated: " + runtimeStart.getTerminationReason());
+                    runtimeStopped = true;
+                    break;
+                }
+                int progressBefore = researchProgress(run.getId());
                 long sourceStart = System.currentTimeMillis();
                 AgentActionFingerprint fingerprint = actionFingerprintService.sourceFetch(sourceId);
                 AgentNodeResult<FetchRun> nodeResult = agentHarness.runNode(context, fingerprint,
@@ -257,19 +297,49 @@ public class ResearchService {
                 agentTraceService.recordNode(null, null, context, fingerprint, nodeResult,
                         System.currentTimeMillis() - sourceStart, sourceFetchMetadata(sourceId));
                 persistRunningProgress(run, fetchedSources);
+                int progressAfter = researchProgress(run.getId());
+                researchRuntimeService.completeNode(run.getId(), runtimeNode, runtimeStateHash(run.getId()),
+                        Math.max(0, progressAfter - progressBefore), sourceFetchOutput(fetchRun));
             }
 
-            if (run.getThesisId() != null) {
+            if (run.getThesisId() != null && !runtimeStopped) {
                 com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
                         .orElseThrow(() -> new IllegalStateException("研究命题不存在：" + run.getThesisId()));
-                for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(run.getId()).isSufficient(); round++) {
-                    for (Source querySource : thesisQueryExpansionService.queries(thesis, round)) {
+                for (int round = 1; round <= 3; round++) {
+                    String assessmentNode = "assess_evidence:" + round;
+                    completeSystemNode(run, assessmentNode, "ASSESS",
+                            "round=" + round + ", evidence="
+                                    + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE), 0);
+                    if (researchReportService.assessSufficiency(run.getId()).isSufficient()) {
+                        break;
+                    }
+                    List<Source> querySources = thesisQueryExpansionService.queries(thesis, round);
+                    for (int queryIndex = 0; queryIndex < querySources.size(); queryIndex++) {
+                        Source querySource = querySources.get(queryIndex);
+                        String runtimeNode = "expand_query:" + round + ":" + queryIndex;
+                        RuntimeNodeStart runtimeStart = researchRuntimeService.startNode(run.getId(), runtimeNode,
+                                "EXPAND", "query:" + querySource.getUrl(), "round=" + round + ", name=" + querySource.getName());
+                        if (runtimeStart.isAlreadyCompleted()) {
+                            continue;
+                        }
+                        if (!runtimeStart.isStarted()) {
+                            errors.add("Runtime terminated: " + runtimeStart.getTerminationReason());
+                            runtimeStopped = true;
+                            break;
+                        }
+                        int progressBefore = researchProgress(run.getId());
                         FetchRun queryRun = fetchService.fetch(querySource);
                         dynamicQueries++;
                         if (!"SUCCESS".equals(queryRun.getStatus())) {
                             errors.add(querySource.getName() + ": " + queryRun.getErrorMessage());
                         }
                         persistRunningProgress(run, fetchedSources);
+                        int progressAfter = researchProgress(run.getId());
+                        researchRuntimeService.completeNode(run.getId(), runtimeNode, runtimeStateHash(run.getId()),
+                                Math.max(0, progressAfter - progressBefore), sourceFetchOutput(queryRun));
+                    }
+                    if (runtimeStopped) {
+                        break;
                     }
                 }
             }
@@ -278,15 +348,31 @@ public class ResearchService {
                     "fetchedSources=" + fetchedSources + ", dynamicQueries=" + dynamicQueries
                             + ", errors=" + errors.size(), fetchedSources + dynamicQueries);
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS);
+            completeSystemNode(run, ResearchRunPlanService.STEP_CLASSIFY_EVENTS, "ASSESS",
+                    "events=" + outputCount(run.getId(), ResearchRunOutputService.EVENT),
+                    outputCount(run.getId(), ResearchRunOutputService.EVENT));
             completeStep(planSteps, ResearchRunPlanService.STEP_CLASSIFY_EVENTS,
                     "events=" + outputCount(run.getId(), ResearchRunOutputService.EVENT),
                     outputCount(run.getId(), ResearchRunOutputService.EVENT));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE);
+            completeSystemNode(run, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE, "ASSESS",
+                    "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
+                    outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             completeStep(planSteps, ResearchRunPlanService.STEP_EXTRACT_EVIDENCE,
                     "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
                     outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT);
-            ResearchReport report = researchReportService.generate(run.getId());
+            RuntimeNodeStart reportStart = researchRuntimeService.startNode(run.getId(),
+                    ResearchRunPlanService.STEP_COMPOSE_REPORT, "SYNTHESIZE", null, "runId=" + run.getId());
+            ResearchReport report = reportStart.isAlreadyCompleted()
+                    ? researchReportService.findByRunId(run.getId()).orElseThrow(
+                    () -> new IllegalStateException("Runtime marked report complete but report is missing"))
+                    : researchReportService.generate(run.getId());
+            if (reportStart.isStarted()) {
+                researchRuntimeService.completeNode(run.getId(), ResearchRunPlanService.STEP_COMPOSE_REPORT,
+                        runtimeStateHash(run.getId()), 1,
+                        "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount());
+            }
             completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT,
                     "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount()
                             + ", chars=" + report.getCharacterCount(), 1);
@@ -301,11 +387,13 @@ public class ResearchService {
                     : ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS);
             run.setSummary(resultSummary(run));
             run.setErrorMessage(errors.isEmpty() ? null : String.join("; ", errors));
+            completeSystemNode(run, "verify_output", "VERIFY", run.getSummary(), 1);
             completeStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN, run.getSummary(), 1);
             agentRunRepository.record(run.getId(), null, null, "research-orchestrate", run.getStatus(),
                     "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                     run.getSummary(), run.getErrorMessage(), System.currentTimeMillis() - start);
             ResearchRun updated = researchRunRepository.updateResult(run);
+            researchRuntimeService.complete(run.getId());
             return updated;
         } catch (Exception ex) {
             run.setFetchedSourceCount(fetchedSources);
@@ -320,6 +408,8 @@ public class ResearchService {
             agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
                     "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                     null, ex.getMessage(), System.currentTimeMillis() - start);
+            safeRuntimeFailure(run.getId(), currentStep == null ? "research-orchestrate" : currentStep.getStepId(),
+                    "UNKNOWN", ex.getMessage());
             return updated;
         } finally {
             ResearchRunContext.clear();
@@ -349,6 +439,44 @@ public class ResearchService {
         run.setArticleCount(outputCount(run.getId(), ResearchRunOutputService.ARTICLE));
         run.setEventCount(outputCount(run.getId(), ResearchRunOutputService.EVENT));
         run.setEvidenceCount(outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
+    }
+
+    private int researchProgress(Long runId) {
+        return outputCount(runId, ResearchRunOutputService.ARTICLE)
+                + outputCount(runId, ResearchRunOutputService.EVENT)
+                + outputCount(runId, ResearchRunOutputService.EVIDENCE);
+    }
+
+    private String runtimeStateHash(Long runId) {
+        return outputCount(runId, ResearchRunOutputService.ARTICLE) + ":"
+                + outputCount(runId, ResearchRunOutputService.EVENT) + ":"
+                + outputCount(runId, ResearchRunOutputService.EVIDENCE) + ":"
+                + outputCount(runId, ResearchRunOutputService.REPORT) + ":"
+                + (researchRunOutputService == null ? 0
+                : researchRunOutputService.countDistinctArticleSources(runId));
+    }
+
+    private void completeSystemNode(ResearchRun run,
+                                    String nodeId,
+                                    String phase,
+                                    String outputSummary,
+                                    int progressDelta) {
+        RuntimeNodeStart start = researchRuntimeService.startNode(run.getId(), nodeId, phase, null,
+                "runId=" + run.getId());
+        if (start.isStarted()) {
+            researchRuntimeService.completeNode(run.getId(), nodeId, runtimeStateHash(run.getId()),
+                    progressDelta, outputSummary);
+        }
+    }
+
+    private void safeRuntimeFailure(Long runId, String nodeId, String errorType, String message) {
+        try {
+            if (researchRuntimeService.findCheckpoint(runId).isPresent()) {
+                researchRuntimeService.failNode(runId, nodeId, errorType, message);
+            }
+        } catch (RuntimeException ignored) {
+            // Preserve the original orchestration failure; runtime persistence is best-effort here.
+        }
     }
 
     private List<String> extractCodes(List<ThemeProfile> themes) {
@@ -391,6 +519,9 @@ public class ResearchService {
     }
 
     private String sourceFetchOutput(FetchRun fetchRun) {
+        if (fetchRun == null) {
+            return "fetchResult=unavailable";
+        }
         return "success=" + fetchRun.getSuccessCount() + ", duplicate=" + fetchRun.getDuplicateCount();
     }
 
@@ -421,6 +552,8 @@ public class ResearchService {
         agentRunRepository.record(run.getId(), null, null, "research-orchestrate", "FAILED",
                 "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                 null, message, 0L);
+        safeRuntimeFailure(run.getId(), ResearchRunPlanService.STEP_PLAN_SOURCES,
+                "NO_PLANNED_SOURCES", message);
         return updated;
     }
 

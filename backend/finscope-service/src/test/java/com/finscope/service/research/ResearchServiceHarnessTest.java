@@ -25,6 +25,9 @@ import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.report.EvidenceSufficiency;
+import com.finscope.service.research.runtime.ResearchRuntimeService;
+import com.finscope.service.research.runtime.RuntimeNodeStart;
+import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -44,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.atLeastOnce;
@@ -70,6 +74,7 @@ class ResearchServiceHarnessTest {
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
         ResearchRunOutputService researchRunOutputService = mock(ResearchRunOutputService.class);
+        ResearchRuntimeService researchRuntimeService = runtimeService();
         CapturingExecutor researchTaskExecutor = new CapturingExecutor();
 
         ReflectionTestUtils.setField(service, "themeProfileService", themeProfileService);
@@ -89,6 +94,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", researchRunOutputService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", researchRuntimeService);
         ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
 
         LocalDate runDate = LocalDate.of(2026, 7, 9);
@@ -128,6 +134,7 @@ class ResearchServiceHarnessTest {
         assertEquals(ResearchEnums.RUN_STATUS_RUNNING, plan.getRun().getStatus());
         assertEquals(6, plan.getPlanSteps().size());
         verify(fetchService, never()).fetch(anyLong());
+        verify(researchRuntimeService).initialize(501L, ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
 
         researchTaskExecutor.runCaptured();
 
@@ -171,6 +178,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", researchRunOutputService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
         ReflectionTestUtils.setField(service, "researchTaskExecutor", researchTaskExecutor);
 
         LocalDate runDate = LocalDate.of(2026, 7, 3);
@@ -255,6 +263,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "agentTraceService", mock(AgentTraceService.class));
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
         ReflectionTestUtils.setField(service, "researchTaskExecutor", executor);
 
         LocalDate runDate = LocalDate.of(2026, 7, 13);
@@ -343,6 +352,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
         ReflectionTestUtils.setField(service, "agentTraceService", agentTraceService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", researchRunPlanService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
 
         LocalDate runDate = LocalDate.of(2026, 7, 9);
         List<ResearchRunPlanStep> defaultSteps = defaultSteps();
@@ -406,6 +416,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "researchThesisRepository", thesisRepository);
         ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
         when(runRepository.findById(15L)).thenReturn(java.util.Optional.of(run));
         when(thesisRepository.findById(1L)).thenReturn(java.util.Optional.of(thesis));
         when(reportService.assessSufficiency(15L)).thenReturn(sufficiency);
@@ -490,5 +501,19 @@ class ResearchServiceHarnessTest {
         void runCaptured() {
             captured.run();
         }
+    }
+
+    private ResearchRuntimeService runtimeService() {
+        ResearchRuntimeService runtime = mock(ResearchRuntimeService.class);
+        ResearchRuntimeCheckpoint checkpoint = new ResearchRuntimeCheckpoint();
+        checkpoint.setResearchRunId(501L);
+        checkpoint.setStatus("RUNNING");
+        checkpoint.setMaxActions(12);
+        when(runtime.startNode(anyLong(), anyString(), anyString(), any(), anyString()))
+                .thenReturn(RuntimeNodeStart.started(checkpoint));
+        when(runtime.completeNode(anyLong(), anyString(), anyString(), anyInt(), anyString()))
+                .thenReturn(checkpoint);
+        when(runtime.complete(anyLong())).thenReturn(checkpoint);
+        return runtime;
     }
 }

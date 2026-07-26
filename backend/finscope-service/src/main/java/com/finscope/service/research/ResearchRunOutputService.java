@@ -22,6 +22,7 @@ public class ResearchRunOutputService {
         if (runId != null && outputId != null) repository.record(runId, type, outputId);
     }
     public int count(Long runId, String type) { return repository.countByRunIdAndType(runId, type); }
+    public int countDistinctArticleSources(Long runId) { return repository.countDistinctArticleSources(runId); }
     public List<ResearchRunOutput> list(Long runId) { return repository.findByRunId(runId); }
     public int deleteByType(Long runId, String type) {
         return repository.deleteByRunIdAndType(runId, type);

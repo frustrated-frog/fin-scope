@@ -82,11 +82,45 @@ test('keeps sources and traces collapsed and limits the expanded source preview'
 
 test('offers report recovery for a terminal legacy run without promising a missing report', async () => {
   const onRegenerateReport = vi.fn().mockResolvedValue(undefined);
-  renderView(legacyDetail(), { onRegenerateReport });
+  const onEvaluateRun = vi.fn().mockResolvedValue(undefined);
+  renderView(legacyDetail(), { onRegenerateReport, onEvaluateRun });
 
   expect(screen.queryByRole('button', { name: '阅读研究报告' })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '补建研究报告' }));
   expect(onRegenerateReport).toHaveBeenCalledWith(15);
+  await userEvent.click(screen.getByRole('button', { name: '运行离线评测' }));
+  expect(onEvaluateRun).toHaveBeenCalledWith(15);
+});
+
+test('shows runtime guardrails and eval gate with explicit recovery controls', async () => {
+  const onResumeRun = vi.fn().mockResolvedValue(undefined);
+  const onEvaluateRun = vi.fn().mockResolvedValue(undefined);
+  const detail = legacyDetail();
+  detail.runtime = {
+    checkpoint: {
+      researchRunId: 15, stateVersion: 8, phase: 'COLLECT', currentNode: 'collect_source:2:1',
+      status: 'INTERRUPTED', iteration: 2, consumedActions: 4, maxActions: 12,
+      noProgressCount: 0, resumeCount: 1, lastError: 'process stopped'
+    },
+    events: [{ researchRunId: 15, sequenceNo: 8, eventType: 'NODE_COMPLETED', nodeId: 'collect_source:2:1', progressDelta: 2 }],
+    recoverable: true
+  };
+  detail.latestEvaluation = {
+    id: 4, researchRunId: 15, evaluatorVersion: 'deep-research-rules-v1', inputFingerprint: 'a'.repeat(64),
+    score: 86, gateStatus: 'PASS', summary: 'score=86', criticalIssues: [],
+    metrics: [{ metricCode: 'evidence', label: '证据覆盖', score: 21, maxScore: 25, status: 'WARN' }]
+  };
+  renderView(detail, { onResumeRun, onEvaluateRun });
+
+  expect(screen.getByRole('region', { name: '研究运行时与评测' })).toBeInTheDocument();
+  expect(screen.getByText('4 / 12')).toBeInTheDocument();
+  expect(screen.getByText('86')).toBeInTheDocument();
+  expect(screen.getByText('证据覆盖')).toBeInTheDocument();
+  expect(screen.getByText('节点完成')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '从检查点恢复' }));
+  expect(onResumeRun).toHaveBeenCalledWith(15);
+  await userEvent.click(screen.getByRole('button', { name: '重新评测' }));
+  expect(onEvaluateRun).toHaveBeenCalledWith(15);
 });
 
 test('uses a dedicated reader when a report is open', () => {
@@ -115,6 +149,8 @@ function renderView(
       onOpenRun={vi.fn()}
       onOpenReport={vi.fn()}
       onRegenerateReport={vi.fn()}
+      onResumeRun={vi.fn()}
+      onEvaluateRun={vi.fn()}
       onCloseReport={vi.fn()}
       {...overrides}
     />

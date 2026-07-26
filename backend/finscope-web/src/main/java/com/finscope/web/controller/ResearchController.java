@@ -5,10 +5,14 @@ import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRunPlan;
+import com.finscope.domain.research.evaluation.ResearchEvaluation;
+import com.finscope.domain.research.runtime.ResearchRuntimeView;
 import com.finscope.service.agent.AgentRunService;
+import com.finscope.service.research.evaluation.ResearchEvaluationService;
 import com.finscope.service.research.ResearchRunPlanService;
 import com.finscope.service.research.ResearchService;
 import com.finscope.service.research.report.ResearchReportService;
+import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.web.request.CreateResearchRunRequest;
 import com.finscope.web.response.ResearchRunDetailResponse;
 import com.finscope.web.response.ResearchRunResponse;
@@ -34,6 +38,10 @@ public class ResearchController {
     private ResearchRunPlanService researchRunPlanService;
     @Resource
     private ResearchReportService researchReportService;
+    @Resource
+    private ResearchRuntimeService researchRuntimeService;
+    @Resource
+    private ResearchEvaluationService researchEvaluationService;
 
     /**
      * 创建研究运行计划。
@@ -70,12 +78,16 @@ public class ResearchController {
      */
     @GetMapping("/{id}")
     public ApiResponse<ResearchRunDetailResponse> detail(@PathVariable Long id) {
+        ResearchRuntimeView runtime = researchRuntimeService.findCheckpoint(id).isPresent()
+                ? researchRuntimeService.view(id) : null;
         return ApiResponses.success(new ResearchRunDetailResponse(
                 researchService.detail(id),
                 researchService.plannedSources(id),
                 researchRunPlanService.findByRunId(id),
                 agentRunService.findByResearchRunId(id),
-                researchReportService.findByRunId(id).orElse(null)));
+                researchReportService.findByRunId(id).orElse(null),
+                runtime,
+                researchEvaluationService.findLatest(id).orElse(null)));
     }
 
     @GetMapping("/{id}/report")
@@ -86,5 +98,25 @@ public class ResearchController {
     @PostMapping("/{id}/report/regenerate")
     public ApiResponse<ResearchReport> regenerateReport(@PathVariable Long id) {
         return ApiResponses.success(researchService.regenerateReport(id));
+    }
+
+    @GetMapping("/{id}/runtime")
+    public ApiResponse<ResearchRuntimeView> runtime(@PathVariable Long id) {
+        return ApiResponses.success(researchRuntimeService.view(id));
+    }
+
+    @PostMapping("/{id}/resume")
+    public ApiResponse<ResearchRunResponse> resume(@PathVariable Long id) {
+        return ApiResponses.success(ResearchRunResponse.of(researchService.resume(id)));
+    }
+
+    @PostMapping("/{id}/evaluations")
+    public ApiResponse<ResearchEvaluation> evaluate(@PathVariable Long id) {
+        return ApiResponses.success(researchEvaluationService.evaluate(id));
+    }
+
+    @GetMapping("/{id}/evaluations/latest")
+    public ApiResponse<ResearchEvaluation> latestEvaluation(@PathVariable Long id) {
+        return ApiResponses.success(researchEvaluationService.findLatest(id).orElse(null));
     }
 }
