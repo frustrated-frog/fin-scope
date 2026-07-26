@@ -1,5 +1,7 @@
 package com.finscope.service.research.report;
 
+import com.finscope.domain.research.ResearchSourceIdentity;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;

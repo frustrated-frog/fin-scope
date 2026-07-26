@@ -2,11 +2,14 @@ package com.finscope.dao.research;
 
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.ResearchRunOutput;
+import com.finscope.domain.research.ResearchSourceIdentity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 @Repository
 public class ResearchRunOutputRepository {
@@ -20,12 +23,15 @@ public class ResearchRunOutputRepository {
         return count == null ? 0 : count;
     }
     public int countDistinctArticleSources(Long runId) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(DISTINCT CASE WHEN a.source_id IS NOT NULL "
-                        + "THEN 'id:' || a.source_id ELSE 'name:' || COALESCE(a.source_name,'unknown') END) "
-                        + "FROM research_run_output o JOIN article a ON a.id=o.output_id "
+        List<String> identities = jdbcTemplate.query(
+                "SELECT a.title,a.source_name FROM research_run_output o "
+                        + "JOIN article a ON a.id=o.output_id "
                         + "WHERE o.research_run_id=? AND o.output_type='ARTICLE'",
-                Integer.class, runId);
-        return count == null ? 0 : count;
+                (rs, rowNum) -> ResearchSourceIdentity.resolve(
+                        rs.getString("title"), rs.getString("source_name")),
+                runId);
+        Set<String> distinct = new HashSet<String>(identities);
+        return distinct.size();
     }
     public List<ResearchRunOutput> findByRunId(Long runId) {
         return jdbcTemplate.query("SELECT * FROM research_run_output WHERE research_run_id=? ORDER BY id ASC", (rs, row) -> {

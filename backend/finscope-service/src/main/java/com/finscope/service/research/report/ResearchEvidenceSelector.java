@@ -3,6 +3,7 @@ package com.finscope.service.research.report;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.ResearchSourceIdentity;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

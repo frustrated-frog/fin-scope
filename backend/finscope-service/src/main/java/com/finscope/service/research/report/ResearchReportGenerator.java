@@ -1,5 +1,6 @@
 package com.finscope.service.research.report;
 
+import com.finscope.domain.research.ResearchSourceIdentity;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.ResearchThesis;
 import org.springframework.stereotype.Component;

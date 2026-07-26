@@ -4,6 +4,7 @@ import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.ResearchReportRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchReport;
+import com.finscope.domain.research.ResearchSourceIdentity;
 import com.finscope.domain.research.ThesisFinding;
 import com.finscope.service.research.ResearchRunOutputService;
 import com.finscope.service.vault.VaultWriter;
