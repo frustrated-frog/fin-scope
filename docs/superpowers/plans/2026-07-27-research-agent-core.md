@@ -55,13 +55,13 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchDecisionAgentTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/DeterministicResearchPolicyTest.java`
 
-- [ ] Write failing tests for a valid model decision, strict JSON rejection, timeout, disabled model, gap-directed fallback and exhausted-action abort.
-- [ ] Run focused tests and verify RED.
-- [ ] Implement a bounded prompt, strict Jackson parser, 8-second timeout and 1,200-token output cap.
-- [ ] Implement deterministic priority: counter -> support -> primary -> assess -> finish -> abort, excluding attempted fingerprints.
-- [ ] Persist explicit `MODEL` or `DETERMINISTIC` decision mode and safe fallback reason.
-- [ ] Run focused tests and verify GREEN.
-- [ ] Commit and push: `feat: 实现观察驱动的研究决策Agent`.
+- [x] Write failing tests for a valid model decision, strict JSON rejection, timeout, disabled model, gap-directed fallback and exhausted-action abort.
+- [x] Run focused tests and verify RED.
+- [x] Implement a bounded prompt, strict Jackson parser, 8-second timeout and 1,200-token output cap.
+- [x] Implement deterministic priority: counter -> support -> primary -> assess -> finish -> abort, excluding attempted fingerprints.
+- [x] Persist explicit `MODEL` or `DETERMINISTIC` decision mode and safe fallback reason.
+- [x] Run focused tests and verify GREEN.
+- [x] Commit and push: `feat: 实现观察驱动的研究决策Agent`.
 
 ### Task 4: Add executable tools and structured observations
 
