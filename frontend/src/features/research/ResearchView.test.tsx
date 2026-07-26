@@ -50,6 +50,43 @@ test('places the research mission map before legacy run diagnostics', () => {
   expect(missionMap.compareDocumentPosition(diagnostics!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+test('places the Agent decision flow between the mission map and legacy diagnostics', () => {
+  const detail = legacyDetail();
+  detail.mission = {
+    mission: {
+      researchRunId: 15, goal: '验证半导体设备景气度', subject: '半导体设备',
+      scopeSummary: '寻找支持与反方证据', successCriteria: ['至少两个独立来源'],
+      status: 'RUNNING', planningMode: 'LLM_VALIDATED', planVersion: 2, maxActions: 12
+    },
+    tasks: [], gaps: [], tools: []
+  };
+  detail.runtime = {
+    checkpoint: {
+      researchRunId: 15, stateVersion: 3, phase: 'COLLECT', currentNode: 'agent_tool:1',
+      status: 'RUNNING', iteration: 1, consumedActions: 4, maxActions: 12,
+      noProgressCount: 0, resumeCount: 0
+    },
+    events: [], recoverable: false
+  };
+  detail.agentCore = {
+    state: {
+      researchRunId: 15, status: 'RUNNING', stateVersion: 2, currentSubgoal: '寻找订单转弱信号',
+      attemptedFingerprints: [], decisionCount: 1, replanCount: 0, noProgressCount: 0,
+      finishRejectionCount: 0, fallbackCount: 0
+    },
+    decisions: [], observations: []
+  };
+
+  renderView(detail);
+
+  const missionMap = screen.getByRole('region', { name: '研究作战图' });
+  const agentFlow = screen.getByRole('region', { name: 'Agent 决策流' });
+  const diagnostics = screen.getByText('研究过程与来源').closest('details');
+  expect(missionMap.compareDocumentPosition(agentFlow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(agentFlow.compareDocumentPosition(diagnostics!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText('8 次')).toBeInTheDocument();
+});
+
 test('isolates the run archive for container-responsive layout', () => {
   renderView(legacyDetail());
 

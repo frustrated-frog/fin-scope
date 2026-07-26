@@ -3,6 +3,7 @@ import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, Researc
 import { api } from '../../shared/api/client';
 import { ResearchProgressPanel } from './ResearchProgressPanel';
 import { ResearchMissionMap } from './ResearchMissionMap';
+import { ResearchAgentDecisionFlow } from './ResearchAgentDecisionFlow';
 import { ResearchReportReader } from './ResearchReportReader';
 import {
   groupThesisFindings,
@@ -312,6 +313,16 @@ export function ResearchView({
       </div>
 
       {detail?.mission && <ResearchMissionMap mission={detail.mission} />}
+      {detail?.agentCore && (
+        <ResearchAgentDecisionFlow
+          agentCore={detail.agentCore}
+          planVersion={detail.mission?.mission.planVersion || 1}
+          remainingActions={detail.runtime
+            ? detail.runtime.checkpoint.maxActions - detail.runtime.checkpoint.consumedActions
+            : (detail.mission?.mission.maxActions || 0)
+              - detail.agentCore.decisions.filter((decision) => decision.decisionType === 'TOOL_CALL').length}
+        />
+      )}
 
       <div className="research-grid">
         <section className="panel research-archive-panel research-material" aria-label="研究运行档案">
