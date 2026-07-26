@@ -177,7 +177,8 @@ public class ResearchRuntimeService {
     }
 
     private boolean isBudgetedNode(String nodeId) {
-        return nodeId != null && (nodeId.startsWith("mission:") || nodeId.startsWith("expand_query:"));
+        return nodeId != null && (nodeId.startsWith("mission:") || nodeId.startsWith("expand_query:")
+                || nodeId.startsWith("agent_tool:"));
     }
 
     private ResearchRuntimeCheckpoint required(Long runId) {

@@ -75,6 +75,7 @@ class ResearchAgentRepositoryTest {
         observation.setStateHash("5:3:4:1");
         repository.appendObservation(observation);
         assertNotNull(observation.getId());
+        assertTrue(repository.updateDecisionStatus(decision.getId(), "COMPLETED", null));
 
         ResearchAgentState saved = repository.findState(91L).get();
         assertEquals(1, saved.getStateVersion());
@@ -82,6 +83,7 @@ class ResearchAgentRepositoryTest {
         assertEquals(Arrays.asList("public_news_search:counter:v1"), saved.getAttemptedFingerprints());
         assertEquals(1, repository.findDecisions(91L).size());
         assertEquals("MODEL", repository.findDecisions(91L).get(0).getDecisionMode());
+        assertEquals("COMPLETED", repository.findDecisions(91L).get(0).getStatus());
         assertEquals(1, repository.findObservations(91L).size());
         assertEquals(Arrays.asList("article:501", "evidence:701"),
                 repository.findObservations(91L).get(0).getDataRefs());
@@ -102,6 +104,16 @@ class ResearchAgentRepositoryTest {
         repository.appendObservation(observation);
         assertThrows(DataAccessException.class,
                 () -> repository.appendObservation(observation(first.getId())));
+    }
+
+    @Test
+    void interruptsOnlyNonTerminalAgentStatesDuringStartupRecovery() {
+        repository.initialize(91L, "计划");
+
+        assertEquals(1, repository.interruptRunning("process shutdown"));
+        assertEquals("INTERRUPTED", repository.findState(91L).get().getStatus());
+        assertEquals("process shutdown", repository.findState(91L).get().getMemorySummary());
+        assertEquals(0, repository.interruptRunning("second recovery"));
     }
 
     private ResearchAgentDecision decision(Long runId, int iteration) {

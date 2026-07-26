@@ -50,6 +50,23 @@ class ResearchAgentStateReducerTest {
         assertTrue(state.getEvidenceSummary().contains("evidenceDelta=2"));
     }
 
+    @Test
+    void recordsSafeAbortAsTerminalWorkingState() {
+        ResearchAgentRepository repository = mock(ResearchAgentRepository.class);
+        ResearchAgentStateReducer reducer = new ResearchAgentStateReducer(repository);
+        ResearchAgentState state = state();
+        ResearchAgentDecision decision = decision("DETERMINISTIC");
+        decision.setDecisionType("ABORT");
+        decision.setDecisionSummary("动作预算耗尽，安全终止");
+        when(repository.updateState(state, 3)).thenReturn(true);
+
+        reducer.recordAbort(state, decision);
+
+        assertEquals("FAILED", state.getStatus());
+        assertTrue(state.getMemorySummary().contains("动作预算耗尽"));
+        verify(repository).updateState(state, 3);
+    }
+
     private ResearchAgentState state() {
         ResearchAgentState value = new ResearchAgentState();
         value.setResearchRunId(11L);

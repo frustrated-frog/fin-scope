@@ -43,11 +43,19 @@ public class ResearchDecisionValidator {
                 throw rejected("外部动作预算已用尽");
             }
             validateToolCall(draft);
+            if (!empty(draft.getPlanPatch())) {
+                throw rejected("TOOL_CALL 不得同时携带 planPatch");
+            }
+        } else if ("PLAN_PATCH".equals(type)) {
+            if (hasText(draft.getToolCode()) || !empty(draft.getArguments())) {
+                throw rejected("PLAN_PATCH 不得携带工具调用参数");
+            }
+            validatePlanPatch(draft.getPlanPatch());
         } else if (hasText(draft.getToolCode()) || !empty(draft.getArguments())) {
             throw rejected(type + " 不得携带工具或工具参数");
         }
 
-        String argumentsJson = json(draft.getArguments());
+        String argumentsJson = json("PLAN_PATCH".equals(type) ? draft.getPlanPatch() : draft.getArguments());
         String fingerprint = "TOOL_CALL".equals(type)
                 ? fingerprint(draft.getToolCode(), argumentsJson, draft.getTargetGap())
                 : null;
@@ -100,6 +108,37 @@ public class ResearchDecisionValidator {
             return;
         }
         throw rejected("工具不在 Agent 可执行白名单中：" + tool);
+    }
+
+    private void validatePlanPatch(Map<String, Object> patch) {
+        Set<String> fields = new HashSet<String>(Arrays.asList(
+                "operation", "taskKey", "title", "question", "toolCode", "intent", "queryText", "reason"));
+        if (patch == null || patch.size() != fields.size() || !fields.equals(patch.keySet())) {
+            throw rejected("planPatch 字段不完整或包含未知字段");
+        }
+        if (!"ADD_OR_REPLACE_PENDING_TASK".equals(text(patch.get("operation")))) {
+            throw rejected("planPatch operation 不受支持");
+        }
+        String taskKey = text(patch.get("taskKey"));
+        if (taskKey == null || !taskKey.matches("adaptive_[a-z0-9_]{1,48}")) {
+            throw rejected("planPatch taskKey 必须使用 adaptive_ 前缀");
+        }
+        if (!"public_news_search".equals(text(patch.get("toolCode")))) {
+            throw rejected("planPatch 工具不在白名单中");
+        }
+        String intent = upper(text(patch.get("intent")));
+        if (!SEARCH_INTENTS.contains(intent)) {
+            throw rejected("planPatch intent 不在白名单中");
+        }
+        requireText(text(patch.get("title")), "planPatch.title", 100);
+        requireText(text(patch.get("question")), "planPatch.question", 240);
+        String query = text(patch.get("queryText"));
+        requireText(query, "planPatch.queryText", 180);
+        if (query.contains("://")) {
+            throw rejected("planPatch.queryText 不能包含 URL");
+        }
+        requireText(text(patch.get("reason")), "planPatch.reason", 240);
+        patch.put("intent", intent);
     }
 
     private String fingerprint(String toolCode, String argumentsJson, String targetGap) {

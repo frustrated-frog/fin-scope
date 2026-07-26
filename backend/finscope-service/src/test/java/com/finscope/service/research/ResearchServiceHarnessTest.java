@@ -29,7 +29,8 @@ import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.report.EvidenceSufficiency;
 import com.finscope.service.research.mission.ResearchMissionService;
-import com.finscope.service.research.mission.ResearchSearchSourceFactory;
+import com.finscope.service.research.agent.ResearchAgentLoopResult;
+import com.finscope.service.research.agent.ResearchAgentLoopService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
@@ -449,7 +450,7 @@ class ResearchServiceHarnessTest {
         FetchService fetches = mock(FetchService.class);
         ResearchReportService reports = mock(ResearchReportService.class);
         ResearchMissionService missions = mock(ResearchMissionService.class);
-        ResearchSearchSourceFactory searchSources = mock(ResearchSearchSourceFactory.class);
+        ResearchAgentLoopService agentLoop = mock(ResearchAgentLoopService.class);
         ResearchRunPlanService plans = mock(ResearchRunPlanService.class);
         ResearchRunOutputService outputs = mock(ResearchRunOutputService.class);
         CapturingExecutor executor = new CapturingExecutor();
@@ -473,7 +474,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "fetchService", fetches);
         ReflectionTestUtils.setField(service, "researchReportService", reports);
         ReflectionTestUtils.setField(service, "researchMissionService", missions);
-        ReflectionTestUtils.setField(service, "researchSearchSourceFactory", searchSources);
+        ReflectionTestUtils.setField(service, "researchAgentLoopService", agentLoop);
         ReflectionTestUtils.setField(service, "articleRepository", mock(ArticleRepository.class));
         ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
         ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
@@ -515,17 +516,10 @@ class ResearchServiceHarnessTest {
             gap.setSufficient(false);
             return gap;
         });
-        when(searchSources.create(any(ResearchMissionTask.class))).thenAnswer(invocation -> {
-            ResearchMissionTask task = invocation.getArgument(0);
-            Source source = new Source();
-            source.setName(task.getTitle());
-            source.setType("RSS");
-            source.setUrl("https://news.google.com/rss/search?q=" + task.getTaskKey());
-            return source;
-        });
         when(fetches.fetch(12L)).thenReturn(fetchRun());
         when(fetches.fetch(any(Source.class))).thenReturn(fetchRun());
         when(reports.generate(501L)).thenReturn(report(501L));
+        when(agentLoop.run(501L)).thenReturn(ResearchAgentLoopResult.finished(2, 1));
 
         service.createRun(3L, LocalDate.of(2026, 7, 26),
                 Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
@@ -536,11 +530,8 @@ class ResearchServiceHarnessTest {
         verify(missions).plan(any(ResearchRun.class), eq(thesis));
         verify(missions).startTask(501L, "scan_context");
         verify(missions).assess(501L, "scan_context");
-        verify(missions).startTask(501L, "search_counter");
-        verify(missions).startTask(501L, "judge_evidence");
+        verify(agentLoop).run(501L);
         verify(missions).startTask(501L, "write_report");
-        verify(fetches).fetch(org.mockito.ArgumentMatchers.<Source>argThat(
-                source -> source.getName().contains("反方")));
         verify(missions).completeMission(501L, false, null);
     }
 

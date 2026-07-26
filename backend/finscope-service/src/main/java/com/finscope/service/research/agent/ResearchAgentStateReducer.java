@@ -86,6 +86,21 @@ public class ResearchAgentStateReducer {
         return state;
     }
 
+    public ResearchAgentState recordAbort(ResearchAgentState state, ResearchAgentDecision decision) {
+        int expectedVersion = state.getStateVersion();
+        state.setDecisionCount(Math.max(state.getDecisionCount(), decision.getIteration()));
+        state.setStatus("FAILED");
+        if ("DETERMINISTIC".equals(decision.getDecisionMode())) {
+            state.setFallbackCount(state.getFallbackCount() + 1);
+        }
+        state.setMemorySummary(limit(safe(state.getMemorySummary()) + " | Abort："
+                + safe(decision.getDecisionSummary()), MAX_MEMORY_CHARACTERS));
+        if (!repository.updateState(state, expectedVersion)) {
+            throw new IllegalStateException("研究 Agent 终止状态发生并发更新");
+        }
+        return state;
+    }
+
     private String memory(String previous,
                           ResearchAgentDecision decision,
                           ResearchToolObservation observation) {

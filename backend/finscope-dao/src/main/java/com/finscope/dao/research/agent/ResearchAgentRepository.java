@@ -183,6 +183,20 @@ public class ResearchAgentRepository {
         return observation;
     }
 
+    public boolean updateDecisionStatus(Long decisionId, String status, String validationError) {
+        return jdbcTemplate.update("UPDATE research_agent_decision SET status=?,validation_error=?,updated_at=? "
+                        + "WHERE id=?",
+                status, validationError, TimeUtil.text(LocalDateTime.now()), decisionId) == 1;
+    }
+
+    public int interruptRunning(String message) {
+        LocalDateTime now = LocalDateTime.now();
+        return jdbcTemplate.update("UPDATE research_agent_state SET status='INTERRUPTED',"
+                        + "state_version=state_version+1,memory_summary=?,updated_at=? "
+                        + "WHERE status IN ('READY','DECIDING','EXECUTING','REPLANNING','VERIFYING')",
+                message, TimeUtil.text(now));
+    }
+
     public Optional<ResearchAgentState> findState(Long runId) {
         List<ResearchAgentState> rows = jdbcTemplate.query(
                 "SELECT * FROM research_agent_state WHERE research_run_id=?", stateMapper, runId);

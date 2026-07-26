@@ -73,6 +73,30 @@ class ResearchDecisionValidatorTest {
                 () -> validator.validate(searchDraft(), context, "MODEL"));
     }
 
+    @Test
+    void validatesLocalPlanPatchAsPersistedDecisionArguments() {
+        ResearchDecisionDraft patch = new ResearchDecisionDraft();
+        patch.setDecisionType("PLAN_PATCH");
+        patch.setCurrentSubgoal("改用一手材料补齐反方证据");
+        patch.setDecisionSummary("连续搜索无进展，局部替换未执行任务");
+        patch.setConfidence(0.75D);
+        Map<String, Object> values = new LinkedHashMap<String, Object>();
+        values.put("operation", "ADD_OR_REPLACE_PENDING_TASK");
+        values.put("taskKey", "adaptive_counter_2");
+        values.put("title", "寻找需求下修的一手材料");
+        values.put("question", "是否存在指引下修？");
+        values.put("toolCode", "public_news_search");
+        values.put("intent", "COUNTER");
+        values.put("queryText", "光模块 指引 下调 公司公告");
+        values.put("reason", "原查询没有新增独立来源");
+        patch.setPlanPatch(values);
+
+        ResearchAgentDecision decision = validator.validate(patch, context, "MODEL");
+
+        assertEquals("PLAN_PATCH", decision.getDecisionType());
+        assertTrue(decision.getArgumentsJson().contains("adaptive_counter_2"));
+    }
+
     private ResearchDecisionDraft searchDraft() {
         ResearchDecisionDraft draft = new ResearchDecisionDraft();
         draft.setDecisionType("TOOL_CALL");

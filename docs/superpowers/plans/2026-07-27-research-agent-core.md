@@ -113,14 +113,14 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/ResearchServiceHarnessTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/ResearchStartupRecoveryServiceTest.java`
 
-- [ ] Write an integration-style failing test proving the second decision context contains the first Observation and may select another tool.
-- [ ] Add failing tests for repeated-action rejection, finish rejection continuation, action budget exhaustion and resume without duplicate execution.
-- [ ] Run focused tests and verify RED.
-- [ ] Implement one-decision-per-iteration orchestration and Runtime event/checkpoint integration.
-- [ ] Replace only the thesis run's hard-coded public-search loop; preserve non-thesis legacy execution.
-- [ ] Verify report synthesis occurs only after Finish Verifier acceptance.
-- [ ] Run focused service tests and verify GREEN.
-- [ ] Commit and push: `feat: 接入观察驱动研究智能体循环`.
+- [x] Write an integration-style failing test proving the second decision context contains the first Observation and may select another tool.
+- [x] Add failing tests for repeated-action rejection, finish rejection continuation, action budget exhaustion and resume without duplicate execution.
+- [x] Run focused tests and verify RED.
+- [x] Implement one-decision-per-iteration orchestration and Runtime event/checkpoint integration.
+- [x] Replace only the thesis run's hard-coded public-search loop; preserve non-thesis legacy execution.
+- [x] Verify report synthesis occurs only after Finish Verifier acceptance.
+- [x] Run focused service tests and verify GREEN.
+- [x] Commit and push: `feat: 接入观察驱动研究智能体循环`.
 
 ### Task 7: Expose Agent Core and trajectory evaluation
 
