@@ -121,6 +121,24 @@ class ResearchMissionRepositoryTest {
         assertNull(repository.findMission(9L).get().getActiveTaskKey());
     }
 
+    @Test
+    void upsertsOnlyMutableAdaptiveTaskAndIncrementsPlanVersion() {
+        repository.initialize(9L, "目标", "对象", "范围", Arrays.asList("标准"), 8);
+        repository.replacePlan(9L, "DETERMINISTIC", "范围", Arrays.asList("标准"), Arrays.asList(
+                task("baseline_scan", "基线扫描", "source_scan", "BASELINE")), "MODEL_DISABLED", null);
+        ResearchMissionTask adaptive = task("adaptive_counter_2", "反方补充", "public_news_search", "COUNTER");
+
+        assertTrue(repository.upsertAdaptiveTask(9L, adaptive));
+        adaptive.setQueryText("更新后的反方查询");
+        assertTrue(repository.upsertAdaptiveTask(9L, adaptive));
+        assertEquals("更新后的反方查询", repository.findTask(9L, "adaptive_counter_2").get().getQueryText());
+        assertEquals(3, repository.findMission(9L).get().getPlanVersion());
+
+        repository.startTask(9L, "adaptive_counter_2");
+        repository.completeTask(9L, "adaptive_counter_2", "已完成", 1, 1);
+        assertFalse(repository.upsertAdaptiveTask(9L, adaptive));
+    }
+
     private ResearchMissionTask task(String key, String title, String toolCode, String intent) {
         ResearchMissionTask task = new ResearchMissionTask();
         task.setTaskKey(key);

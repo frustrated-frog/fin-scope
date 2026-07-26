@@ -188,6 +188,32 @@ public class ResearchMissionRepository {
     }
 
     @Transactional
+    public boolean upsertAdaptiveTask(Long runId, ResearchMissionTask task) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = jdbcTemplate.update("INSERT INTO research_mission_task(research_run_id,task_key,title,question,"
+                        + "task_type,tool_code,intent,status,dependencies,parallel_group,query_text,rationale,"
+                        + "expected_evidence,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'PENDING',?,?,?,?,?,?,?) "
+                        + "ON CONFLICT(research_run_id,task_key) DO UPDATE SET title=excluded.title,"
+                        + "question=excluded.question,task_type=excluded.task_type,tool_code=excluded.tool_code,"
+                        + "intent=excluded.intent,status='PENDING',dependencies=excluded.dependencies,"
+                        + "parallel_group=excluded.parallel_group,query_text=excluded.query_text,"
+                        + "rationale=excluded.rationale,expected_evidence=excluded.expected_evidence,"
+                        + "output_summary=NULL,evidence_delta=0,source_delta=0,skip_reason=NULL,"
+                        + "started_at=NULL,ended_at=NULL,updated_at=excluded.updated_at "
+                        + "WHERE research_mission_task.status IN ('PENDING','FAILED','INTERRUPTED')",
+                runId, task.getTaskKey(), task.getTitle(), task.getQuestion(), task.getTaskType(),
+                task.getToolCode(), task.getIntent(), joinList(task.getDependencies()), task.getParallelGroup(),
+                task.getQueryText(), task.getRationale(), task.getExpectedEvidence(),
+                TimeUtil.text(now), TimeUtil.text(now));
+        if (updated == 1) {
+            jdbcTemplate.update("UPDATE research_mission SET plan_version=plan_version+1,updated_at=? "
+                            + "WHERE research_run_id=?",
+                    TimeUtil.text(now), runId);
+        }
+        return updated == 1;
+    }
+
+    @Transactional
     public int skipUnfinishedTasks(Long runId, String reason) {
         LocalDateTime now = LocalDateTime.now();
         int updated = jdbcTemplate.update("UPDATE research_mission_task SET status='SKIPPED',skip_reason=?,"

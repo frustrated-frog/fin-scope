@@ -95,13 +95,13 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchFinishVerifierTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/mission/ResearchMissionServiceTest.java`
 
-- [ ] Write failing tests for memory updates, no-progress counters, fallback counts, accepted/rejected finish and allowed/forbidden plan patches.
-- [ ] Run focused tests and verify RED.
-- [ ] Implement compact working-memory reduction and optimistic state updates.
-- [ ] Add `applyPatch` that only changes pending/failed/interrupted adaptive tasks and increments plan version.
-- [ ] Implement an independent finish gate using current evidence sufficiency and runtime consistency.
-- [ ] Run focused tests and verify GREEN.
-- [ ] Commit and push: `feat: 实现工作记忆局部重规划与完成校验`.
+- [x] Write failing tests for memory updates, no-progress counters, fallback counts, accepted/rejected finish and allowed/forbidden plan patches.
+- [x] Run focused tests and verify RED.
+- [x] Implement compact working-memory reduction and optimistic state updates.
+- [x] Add `applyPatch` that only changes pending/failed/interrupted adaptive tasks and increments plan version.
+- [x] Implement an independent finish gate using current evidence sufficiency and runtime consistency.
+- [x] Run focused tests and verify GREEN.
+- [x] Commit and push: `feat: 实现工作记忆局部重规划与完成校验`.
 
 ### Task 6: Integrate the Agent loop with the research runtime
 
