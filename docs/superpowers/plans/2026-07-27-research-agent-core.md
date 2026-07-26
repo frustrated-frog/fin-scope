@@ -38,13 +38,13 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchDecisionValidatorTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchAgentContextBuilderTest.java`
 
-- [ ] Write failing tests for legal `TOOL_CALL`, illegal tool, unknown argument, invalid confidence, malformed `FINISH`, repeated fingerprint and context size bounding.
-- [ ] Run the two focused tests and verify RED.
-- [ ] Implement strict field/tool/argument policy validation and stable action fingerprints.
-- [ ] Build context from mission, state, latest gap, recent trace, attempted actions, tool contracts and finish rejection.
-- [ ] Verify old trace compaction retains the latest four Decision/Observation pairs.
-- [ ] Run focused tests and verify GREEN.
-- [ ] Commit and push: `feat: 建立研究智能体决策协议与上下文`.
+- [x] Write failing tests for legal `TOOL_CALL`, illegal tool, unknown argument, invalid confidence, malformed `FINISH`, repeated fingerprint and context size bounding.
+- [x] Run the two focused tests and verify RED.
+- [x] Implement strict field/tool/argument policy validation and stable action fingerprints.
+- [x] Build context from mission, state, latest gap, recent trace, attempted actions, tool contracts and finish rejection.
+- [x] Verify old trace compaction retains the latest four Decision/Observation pairs.
+- [x] Run focused tests and verify GREEN.
+- [x] Commit and push: `feat: 建立研究智能体决策协议与上下文`.
 
 ### Task 3: Implement model decisions and deterministic fallback
 
