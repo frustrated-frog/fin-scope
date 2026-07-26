@@ -14,6 +14,9 @@ FinScope 是一个本地优先的个人投资研究工作台。它把公开信�
 - 使用 URL 指纹、标题归一化和正文 SimHash 识别重复内容，并记录重复、后续进展或新事件的判断依据。
 - 将文章转换为金融资讯、研究论文或社媒长文情报卡；模型不可用时使用确定性规则兜底，不阻断入库。
 - 生成每日 Markdown 简报，并围绕研究命题执行异步研究、保存发现和证据、合成研究报告。
+- 自适应研究智能体先建立 Research Contract，再由受校验的 Planning Agent 生成任务 DAG；模型计划不合法或不可用时自动切换到确定性计划。
+- 类型化 Research Tool Registry 只开放来源扫描、公开新闻搜索、证据判断和报告合成四种受控能力，模型不能直接执行 SQL、Shell 或任意 HTTP。
+- Evidence Gap 根据有效证据、独立来源和正反覆盖决定继续搜索或提前收束，不再依赖固定轮次；ResearchTab 用真实持久化状态展示任务图、活动节点和缺口变化。
 - Deep Research Runtime 为命题研究保存 SQLite 检查点与单调事件流，限制动作预算、重复动作和无进展循环；进程中断后可从已完成节点继续。
 - Eval Harness 对运行状态、报告、证据、来源和执行轨迹做确定性离线评分，输出可复现的输入指纹、六项指标和 PASS/BLOCK 门禁。
 - 将文章聚类为事件档案，维护事件状态、关联文章和证据账本。
@@ -93,16 +96,25 @@ fin-scope/
 
 更细的后端调用关系见 [docs/架构说明.md](docs/架构说明.md)，行情服务契约见 [market-data-service/README.md](market-data-service/README.md)。
 
-### Deep Research Runtime 与 Eval Harness
+### Adaptive Research Agent、Runtime 与 Eval Harness
 
-ResearchTab 中的深度研究仍使用 Java 原生编排，不额外引入 Python Agent 框架。主流程是确定性的六阶段图，来源抓取和命题检索是受动作预算约束的动态循环：
+ResearchTab 中的深度研究使用 Java 原生编排，不额外引入 Python Agent 框架。LLM 只提出候选任务图，服务端在执行前完成字段、工具白名单、依赖和 DAG 校验；Validator、Tool Registry、Runtime 和 Evidence Gate 共同掌握执行权：
 
 ```text
 ResearchService
+  -> ResearchPlanningAgent
+       -> validated task DAG or deterministic fallback
+  -> ResearchMissionService
+       -> contract / task state / gap snapshots
+  -> ResearchToolRegistry
+       -> source_scan / public_news_search
+       -> evidence_assess / report_synthesis
   -> ResearchRuntimeService
        -> checkpoint（当前阶段、节点、版本、预算、恢复次数）
        -> event stream（节点开始/完成/失败、状态哈希、进展量）
        -> guard（预算耗尽、重复动作、连续无进展）
+  -> ResearchEvidenceGapAnalyzer
+       -> evidence / source / support / counter gates
   -> ResearchReport
   -> ResearchEvaluationService
        -> completion / evidence / source diversity
@@ -110,14 +122,16 @@ ResearchService
        -> input fingerprint + PASS/BLOCK
 ```
 
-运行详情会显示当前节点、动作预算、恢复入口和最近一次评测。相关接口：
+运行详情中的“研究作战图”会显示研究合同、计划来源、当前任务、证据增量、最近三次缺口判断和工具预算属性；页面轮询的都是 SQLite 中的真实任务状态。相关接口：
 
+- `GET /api/research/tools`：读取允许进入研究计划的类型化工具契约。
+- `GET /api/research/runs/{id}/mission`：读取合同、任务 DAG、Gap Snapshot 和本次工具摘要。
 - `GET /api/research/runs/{id}/runtime`：检查点与事件序列。
 - `POST /api/research/runs/{id}/resume`：通过版本检查抢占恢复权，从未完成节点继续。
 - `POST /api/research/runs/{id}/evaluations`：对当前持久化快照执行离线评测。
 - `GET /api/research/runs/{id}/evaluations/latest`：读取最近评测结果。
 
-详细产品边界、状态机、数据模型和实施记录见 [产品需求](docs/产品需求-Deep-Research-Runtime与Eval-Harness.md)、[技术方案](docs/superpowers/specs/2026-07-26-deep-research-runtime-eval-harness-design.md) 与 [实施计划](docs/superpowers/plans/2026-07-26-deep-research-runtime-eval-harness.md)。
+自适应规划、证据闭环和过程可视化见 [产品需求](docs/产品需求-自适应研究智能体与过程可视化.md)、[技术方案](docs/技术方案-自适应研究智能体与过程可视化.md) 与 [实施计划](docs/superpowers/plans/2026-07-26-adaptive-research-agent.md)。Runtime 和 Eval 的设计边界见 [Runtime 产品需求](docs/产品需求-Deep-Research-Runtime与Eval-Harness.md)、[Runtime 技术方案](docs/superpowers/specs/2026-07-26-deep-research-runtime-eval-harness-design.md)。
 
 ## 本地启动
 
