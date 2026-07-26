@@ -57,6 +57,12 @@ public class AgentRunContext {
         this.llmCallCount++;
     }
 
+    public void recordLlmCalls(int count) {
+        if (count > 0) {
+            this.llmCallCount += count;
+        }
+    }
+
     public ActionRecord recordAction(AgentActionFingerprint fingerprint) {
         String value = fingerprint == null ? "" : fingerprint.getFingerprint();
         Integer current = actionCounts.get(value);

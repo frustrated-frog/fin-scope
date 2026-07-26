@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
 import { MarketIntelView } from './MarketIntelView';
+import type { CapitalInterpretation } from './marketIntelTypes';
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -169,6 +170,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -317,7 +319,7 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
   await user.click(await screen.findByRole('button', { name: '运行 Agent 解读' }));
 
   await waitFor(() => expect(api).toHaveBeenCalledWith(
-    '/api/market-intel/instruments/7/capital-interpretations?force=true',
+    '/api/market-intel/instruments/7/capital-interpretations?force=false',
     { method: 'POST' }
   ));
   expect(await screen.findByText('目前只能确认量价资金出现背离，拆单仍是假设。')).toBeInTheDocument();
@@ -332,6 +334,62 @@ test('runs agent analysis only after click and labels constrained hypotheses', a
   expect(screen.getByText('观察项引用了未知因子')).toBeInTheDocument();
   expect(screen.getByText('低置信度')).toBeInTheDocument();
   expect(screen.getByText('缺少逐笔明细')).toBeInTheDocument();
+});
+
+test('restores a pending interpretation and survives a transient polling failure', async () => {
+  let statusCalls = 0;
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') return Promise.resolve([overview.instrument]) as never;
+    if (path.includes('/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
+    if (path.endsWith('/capital-interpretations/latest')) {
+      return Promise.resolve(agentInterpretation('PENDING', '正在恢复历史任务')) as never;
+    }
+    if (path === '/api/market-intel/capital-interpretations/33') {
+      statusCalls += 1;
+      if (statusCalls === 1) return Promise.reject(new Error('temporary network failure')) as never;
+      return Promise.resolve(agentInterpretation('SUCCEEDED', '恢复后的当前快照解读')) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('正在恢复历史任务')).toBeInTheDocument();
+  expect(await screen.findByText('恢复后的当前快照解读', {}, { timeout: 4_000 })).toBeInTheDocument();
+  expect(statusCalls).toBe(2);
+});
+
+test('does not let a slow interpretation response overwrite the newly selected instrument', async () => {
+  const user = userEvent.setup();
+  const secondInstrument = { ...overview.instrument, id: 8, code: '000001', name: '平安银行', market: 'SZ' };
+  let resolveFirstLatest!: (value: CapitalInterpretation) => void;
+  const firstLatest = new Promise<CapitalInterpretation>((resolve) => { resolveFirstLatest = resolve; });
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/market-intel/instruments') {
+      return Promise.resolve([overview.instrument, secondInstrument]) as never;
+    }
+    if (path.includes('/instruments/7/capital-behavior')) return Promise.resolve(overview) as never;
+    if (path.includes('/instruments/8/capital-behavior')) {
+      return Promise.resolve({ ...overview, instrument: secondInstrument }) as never;
+    }
+    if (path.includes('/dragon-tiger')) return Promise.resolve(dragonTigerView) as never;
+    if (path.includes('/instruments/7/capital-interpretations/latest')) return firstLatest as never;
+    if (path.includes('/instruments/8/capital-interpretations/latest')) {
+      return Promise.resolve(agentInterpretation('SUCCEEDED', '平安银行当前快照解读')) as never;
+    }
+    return Promise.reject(new Error(`unexpected api call: ${path}`));
+  });
+
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+  const selector = await screen.findByRole('combobox');
+  await user.selectOptions(selector, '8');
+
+  expect(await screen.findByRole('heading', { name: '平安银行' })).toBeInTheDocument();
+  expect(await screen.findByText('平安银行当前快照解读')).toBeInTheDocument();
+  await act(async () => { resolveFirstLatest(agentInterpretation('SUCCEEDED', '贵州茅台迟到的旧解读')); });
+  expect(screen.queryByText('贵州茅台迟到的旧解读')).not.toBeInTheDocument();
+  expect(screen.getByText('平安银行当前快照解读')).toBeInTheDocument();
 });
 
 test('clearly labels rule fallback instead of presenting it as model analysis', async () => {
@@ -819,3 +877,29 @@ test('clears the background failure notice when a manual retry succeeds', async 
   await waitFor(() => expect(refreshAttempts).toBe(2));
   await waitFor(() => expect(screen.queryByText(/后台更新失败/)).not.toBeInTheDocument());
 });
+
+function agentInterpretation(
+  status: CapitalInterpretation['status'],
+  summary: string
+): CapitalInterpretation {
+  return {
+    id: 33,
+    status,
+    interpretationType: 'AGENT',
+    plainSummary: summary,
+    executiveSummary: summary,
+    marketState: status === 'PENDING' ? undefined : 'NEUTRAL',
+    facts: [],
+    hypotheses: [],
+    dataGaps: [],
+    observationPoints: [],
+    observations: [],
+    counterEvidence: [],
+    watchConditionRefs: [],
+    confidence: status === 'PENDING' ? undefined : 'LOW',
+    evidenceRefs: [],
+    rejectedOutputCount: 0,
+    rejectionReasons: [],
+    disclaimer: '仅用于研究，不构成投资建议'
+  };
+}

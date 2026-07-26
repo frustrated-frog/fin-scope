@@ -113,6 +113,36 @@ class OpenAiCompatibleLlmClientTest {
         assertTrue(System.currentTimeMillis() - startedAt < 1000L);
     }
 
+    @Test
+    void boundsProviderErrorBodiesBeforeTheyReachTracesAndUi() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            byte[] body = repeat("provider-secret-detail", 400).getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(500, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "test-model", 3000, 0.2);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> client.complete("system", "user"));
+
+        assertTrue(error.getMessage().contains("HTTP 500"));
+        assertTrue(error.getMessage().endsWith("…"));
+        assertTrue(error.getMessage().length() < 4100);
+    }
+
+    private String repeat(String value, int times) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < times; index++) result.append(value);
+        return result.toString();
+    }
+
     private byte[] readAll(InputStream inputStream) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         byte[] chunk = new byte[1024];

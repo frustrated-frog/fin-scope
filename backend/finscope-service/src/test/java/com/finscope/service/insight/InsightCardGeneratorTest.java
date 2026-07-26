@@ -30,6 +30,7 @@ class InsightCardGeneratorTest {
         InsightCard card = new InsightCardGenerator().generate(article);
 
         assertEquals(42L, card.getArticleId());
+        assertEquals("FALLBACK", card.getInterpretationSource());
         assertEquals("美联储暗示降息 黄金ETF获得资金流入", card.getTitle());
         assertTrue(card.getOneSentenceSummary().contains("美联储"));
         assertTrue(card.getCoreEvent().contains("降息"));
@@ -152,6 +153,7 @@ class InsightCardGeneratorTest {
         article.setCategory("前沿技术");
 
         ArticleInterpretation interpretation = new ArticleInterpretation();
+        interpretation.setSource("LLM");
         interpretation.setOneSentenceSummary("OpenAI 发布了面向开发者工作流的新 coding agent。");
         interpretation.setCoreEvent("OpenAI 发布 coding agent。");
         interpretation.setImportance("它把代码编辑、测试和审查流程进一步产品化。");
@@ -164,6 +166,7 @@ class InsightCardGeneratorTest {
 
         InsightCard card = new InsightCardGenerator().generate(article, interpretation);
 
+        assertEquals("LLM", card.getInterpretationSource());
         assertTrue(hasSection(card.getAnalysisSections(), "中文译文摘要"));
         assertTrue(card.getCardMarkdown().contains("### 中文译文摘要"));
         assertTrue(card.getCardMarkdown().contains("编程代理"));

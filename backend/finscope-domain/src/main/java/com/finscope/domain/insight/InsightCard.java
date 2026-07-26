@@ -64,6 +64,8 @@ public class InsightCard {
      * 卡片 Markdown 内容。
      */
     private String cardMarkdown;
+    /** 解读生成来源：LLM、FALLBACK 或 UNKNOWN。 */
+    private String interpretationSource;
 
     // 新增字段：深度解读
     private String background;           // 背景是什么

@@ -55,6 +55,7 @@ export function MarketIntelView({
   const [autoRefreshError, setAutoRefreshError] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<CapitalInterpretation | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
+  const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
   const selectionVersion = useRef(0);
 
   async function fetchOverview(id: number) {
@@ -93,11 +94,17 @@ export function MarketIntelView({
     const version = ++selectionVersion.current;
     setLoading(true);
     setInterpretation(null);
+    setAgentBusy(false);
+    setAgentLoadError(null);
     setOverview(null);
     setDragonTiger(null);
     setAutoRefreshError(null);
-    Promise.allSettled([fetchOverview(instrumentId), fetchDragonTiger(instrumentId)])
-      .then(([capitalResult, dragonTigerResult]) => {
+    Promise.allSettled([
+      fetchOverview(instrumentId),
+      fetchDragonTiger(instrumentId),
+      api<CapitalInterpretation>(`/api/market-intel/instruments/${instrumentId}/capital-interpretations/latest`)
+    ])
+      .then(([capitalResult, dragonTigerResult, agentResult]) => {
         if (version !== selectionVersion.current) return;
         if (capitalResult.status === 'fulfilled') {
           setOverview(capitalResult.value);
@@ -105,6 +112,19 @@ export function MarketIntelView({
         } else {
           setLoadError(capitalResult.reason instanceof Error
             ? capitalResult.reason.message : '资金数据加载失败');
+        }
+        if (agentResult.status === 'fulfilled') {
+          setInterpretation(agentResult.value);
+          setAgentLoadError(null);
+          if (!TERMINAL_AGENT_STATUSES.has(agentResult.value.status)) {
+            void resumeAgent(agentResult.value, instrumentId, version);
+          }
+        } else {
+          const status = (agentResult.reason as { status?: number } | undefined)?.status;
+          if (status != null && status !== 404) {
+            setAgentLoadError(agentResult.reason instanceof Error
+              ? agentResult.reason.message : '最近一次 Agent 解读加载失败');
+          }
         }
         if (dragonTigerResult.status === 'fulfilled') {
           const value = dragonTigerResult.value;
@@ -212,42 +232,89 @@ export function MarketIntelView({
 
   async function runAgent() {
     if (!instrumentId || agentBusy) return;
+    const targetInstrumentId = instrumentId;
+    const version = selectionVersion.current;
     setAgentBusy(true);
+    setAgentLoadError(null);
     setMessage('Agent 正在解读资金行为');
     try {
       let value = await api<CapitalInterpretation>(
-        `/api/market-intel/instruments/${instrumentId}/capital-interpretations?force=true`,
+        `/api/market-intel/instruments/${targetInstrumentId}/capital-interpretations?force=${interpretation ? 'true' : 'false'}`,
         { method: 'POST' }
       );
+      if (version !== selectionVersion.current) return;
       setInterpretation(value);
-      for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS && !TERMINAL_AGENT_STATUSES.has(value.status); attempt++) {
-        await delay(POLL_DELAY_MS);
-        value = await api<CapitalInterpretation>(`/api/market-intel/capital-interpretations/${value.id}`);
-        setInterpretation(value);
-      }
+      value = await pollAgent(value, targetInstrumentId, version);
+      if (version !== selectionVersion.current) return;
       if (!TERMINAL_AGENT_STATUSES.has(value.status)) throw new Error('Agent 仍在运行，可稍后重新打开查看');
-      const explicitMessage = value.fallbackReason
-        ? capitalAgentStatusMessage(value.fallbackReason)
-        : null;
-      if (value.status === 'FAILED') {
-        const message = explicitMessage || 'Agent 解读失败';
-        setMessage(message);
-        addToast(message, 'error');
-      } else if (value.status === 'FALLBACK' || value.status === 'INSUFFICIENT_DATA') {
-        const message = explicitMessage || (value.status === 'FALLBACK'
-          ? '模型不可用，已自动展示规则解读。'
-          : '有效数据不足，未调用模型。');
-        setMessage(message);
-        addToast(message, 'info');
-      } else {
-        setMessage('Agent 解读完成');
-      }
+      presentAgentOutcome(value, true);
     } catch (error) {
+      if (version !== selectionVersion.current) return;
       const message = error instanceof Error ? error.message : 'Agent 解读失败';
       setMessage(message);
       addToast(message, 'error');
     } finally {
-      setAgentBusy(false);
+      if (version === selectionVersion.current) setAgentBusy(false);
+    }
+  }
+
+  async function resumeAgent(initial: CapitalInterpretation, targetInstrumentId: number, version: number) {
+    if (version !== selectionVersion.current) return;
+    setAgentBusy(true);
+    setMessage('正在恢复上次 Agent 解读');
+    try {
+      const value = await pollAgent(initial, targetInstrumentId, version);
+      if (version !== selectionVersion.current) return;
+      if (TERMINAL_AGENT_STATUSES.has(value.status)) presentAgentOutcome(value, false);
+    } catch (error) {
+      if (version !== selectionVersion.current) return;
+      setAgentLoadError(error instanceof Error ? error.message : 'Agent 解读恢复失败');
+    } finally {
+      if (version === selectionVersion.current) setAgentBusy(false);
+    }
+  }
+
+  async function pollAgent(initial: CapitalInterpretation, targetInstrumentId: number, version: number) {
+    let value = initial;
+    let consecutiveFailures = 0;
+    for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS && !TERMINAL_AGENT_STATUSES.has(value.status); attempt++) {
+      if (version !== selectionVersion.current) return value;
+      const retryDelay = Math.min(POLL_DELAY_MS * Math.pow(2, consecutiveFailures), 10_000);
+      await delay(retryDelay);
+      if (version !== selectionVersion.current) return value;
+      try {
+        value = await api<CapitalInterpretation>(`/api/market-intel/capital-interpretations/${value.id}`);
+        consecutiveFailures = 0;
+        if (version === selectionVersion.current) {
+          setInterpretation(value);
+          setAgentLoadError(null);
+        }
+      } catch (error) {
+        consecutiveFailures += 1;
+        if (version === selectionVersion.current) {
+          setAgentLoadError(`Agent 状态连接中断，正在重试（${targetInstrumentId}）`);
+        }
+      }
+    }
+    return value;
+  }
+
+  function presentAgentOutcome(value: CapitalInterpretation, notify: boolean) {
+    const explicitMessage = value.fallbackReason
+      ? capitalAgentStatusMessage(value.fallbackReason)
+      : null;
+    if (value.status === 'FAILED') {
+      const message = explicitMessage || 'Agent 解读失败';
+      setMessage(message);
+      if (notify) addToast(message, 'error');
+    } else if (value.status === 'FALLBACK' || value.status === 'INSUFFICIENT_DATA') {
+      const message = explicitMessage || (value.status === 'FALLBACK'
+        ? '模型不可用，已自动展示规则解读。'
+        : '有效数据不足，未调用模型。');
+      setMessage(message);
+      if (notify) addToast(message, 'info');
+    } else {
+      setMessage('Agent 解读完成');
     }
   }
 
@@ -358,6 +425,7 @@ export function MarketIntelView({
             <CapitalResearchBridge overview={overview} addToast={addToast} onOpenQuantResearch={onOpenQuantResearch} />
           </div>
           <aside className="market-intel-interpretation">
+            {agentLoadError && <p className="market-intel-agent-notice" role="alert">{agentLoadError}</p>}
             <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />
             <CapitalHistoricalEvaluationCard
               evaluation={overview.historicalEvaluation ?? null}

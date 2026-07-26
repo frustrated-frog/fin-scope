@@ -112,6 +112,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "novelty_reason TEXT,"
                 + "follow_up_questions TEXT,"
                 + "card_markdown TEXT NOT NULL,"
+                + "interpretation_source TEXT NOT NULL DEFAULT 'UNKNOWN',"
                 + "background TEXT,"
                 + "key_data TEXT,"
                 + "timeline TEXT,"
@@ -163,6 +164,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("insight_card", "reasoning", "TEXT");
         ensureColumn("insight_card", "opinions", "TEXT");
         ensureColumn("insight_card", "analysis_sections", "TEXT");
+        ensureColumn("insight_card", "interpretation_source", "TEXT NOT NULL DEFAULT 'UNKNOWN'");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS topic_article ("
                 + "topic_id INTEGER NOT NULL,"
                 + "article_id INTEGER NOT NULL,"

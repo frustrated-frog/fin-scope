@@ -46,6 +46,34 @@ test('continues polling while the interpretation remains in the same pending sta
   expect(screen.getByText('收入增长得到同比指标支持')).toBeInTheDocument();
 });
 
+test('resumes the latest pending task and retries after a transient status error', async () => {
+  vi.useFakeTimers();
+  let statusCalls = 0;
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/reports/9/interpretations?limit=20') return [];
+    if (path === '/api/financials/reports/9/interpretations/latest') return pending('RUNNING');
+    if (path === '/api/financials/interpretations/42') {
+      statusCalls += 1;
+      if (statusCalls === 1) throw new Error('temporary network failure');
+      return completed();
+    }
+    if (path === '/api/financials/interpretations/42/evidence') return [];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialInterpretationPanel reportId={9} />);
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByText('正在组织经营叙事')).toBeInTheDocument();
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  expect(screen.getByRole('alert')).toHaveTextContent('temporary network failure');
+  await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+
+  expect(statusCalls).toBe(2);
+  expect(screen.getByText('模型生成的经营叙事')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
 function pending(status: 'QUEUED' | 'RUNNING'): FinancialInterpretation {
   return {
     id: 42,

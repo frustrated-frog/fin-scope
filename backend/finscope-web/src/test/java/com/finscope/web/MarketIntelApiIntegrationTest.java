@@ -36,6 +36,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -171,6 +173,27 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(jsonPath("$.data.factorVersion").value("capital-factor-v1"))
                 .andExpect(jsonPath("$.data.signalVersion").value("capital-signal-v2"))
                 .andExpect(jsonPath("$.data.hypotheses[0].confidence").value("LOW"));
+        mvc.perform(get("/api/market-intel/instruments/7/capital-interpretations/latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(id))
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+        mvc.perform(post("/api/market-intel/instruments/7/capital-interpretations"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.id").value(id));
+
+        assertEquals("SUCCESS", jdbc.queryForObject(
+                "SELECT status FROM agent_run WHERE subject_type='CAPITAL_INTERPRETATION' AND subject_id=?",
+                String.class, id));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT fallback_used FROM agent_run WHERE subject_type='CAPITAL_INTERPRETATION' AND subject_id=?",
+                Integer.class, id).intValue());
+        String budget = jdbc.queryForObject(
+                "SELECT budget_snapshot FROM agent_run WHERE subject_type='CAPITAL_INTERPRETATION' AND subject_id=?",
+                String.class, id);
+        assertTrue(budget.contains("\"llmCallCount\":1"));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run WHERE subject_type='CAPITAL_INTERPRETATION' AND subject_id=?",
+                Integer.class, id).intValue());
     }
 
     @Test void returnsPersistedDragonTigerFactsAndSeats() throws Exception {

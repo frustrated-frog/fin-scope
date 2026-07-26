@@ -147,6 +147,7 @@ export type InsightCard = {
   impactTargets?: string;
   followUpQuestions?: string;
   cardMarkdown?: string;
+  interpretationSource?: 'LLM' | 'FALLBACK' | 'UNKNOWN';
   analysisSections?: Array<{
     title: string;
     content: string;

@@ -110,6 +110,15 @@ export function InsightCardPreview({ card, category }: { card: InsightCard; cate
 
   return (
     <div className="insight-card-preview">
+      <div className="insight-source-row" aria-label="解读生成来源">
+        <span className={`insight-source-badge source-${(card.interpretationSource || 'UNKNOWN').toLowerCase()}`}>
+          {card.interpretationSource === 'LLM'
+            ? 'Agent 模型解读'
+            : card.interpretationSource === 'FALLBACK'
+              ? '规则降级解读'
+              : '历史解读'}
+        </span>
+      </div>
       {basicFields.map(([label, value]) => (
         <div className="insight-field-item" key={label}>
           <div className="insight-field-label">{label}</div>

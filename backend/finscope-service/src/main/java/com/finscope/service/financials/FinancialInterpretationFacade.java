@@ -17,6 +17,7 @@ import com.finscope.domain.financials.FinancialReport;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 @Service
+@Slf4j
 public class FinancialInterpretationFacade {
     private final FinancialQueryService query;
     private final FinancialAnalysisSnapshotRepository snapshots;
@@ -153,41 +155,72 @@ public class FinancialInterpretationFacade {
 
     private void complete(FinancialInterpretation pending, FinancialEvidencePacket packet) {
         long started = System.nanoTime();
-        pending.setStatus("RUNNING");
-        pending.setStartedAt(LocalDateTime.now());
-        interpretations.update(pending);
         AgentRunContext context = AgentRunContext.start(null, null);
         AgentActionFingerprint fingerprint = AgentActionFingerprint.of(
                 "financial-interpret", "FINANCIAL_SNAPSHOT", String.valueOf(pending.getSnapshotId()),
                 "financial-interpret:" + pending.getGenerationKey(), packet.getInputHash());
-        AgentNodeResult<FinancialInterpretation> node = harness.runNode(context, fingerprint, actual -> {
-            actual.recordLlmCall();
-            FinancialInterpretation output = agent.interpret(packet);
-            return AgentNodeResult.success(output, "snapshot=" + pending.getSnapshotId(),
-                    "status=" + output.getStatus(), 1);
-        });
-        pending.setStatus("VALIDATING");
-        interpretations.update(pending);
-        FinancialInterpretation output = node.getValue();
-        if (output == null) {
+        AgentNodeResult<FinancialInterpretation> node;
+        try {
+            pending.setStatus("RUNNING");
+            pending.setStartedAt(LocalDateTime.now());
+            interpretations.update(pending);
+            node = harness.runNode(context, fingerprint, actual -> {
+                FinancialInterpretationAgent.Execution execution = agent.interpretWithMetrics(packet);
+                actual.recordLlmCalls(execution.getLlmCallCount());
+                FinancialInterpretation output = execution.getValue();
+                if ("FALLBACK".equals(output.getStatus())) {
+                    return AgentNodeResult.fallback(output, "snapshot=" + pending.getSnapshotId(),
+                            "status=" + output.getStatus(), output.getFailureCode(), 1);
+                }
+                return AgentNodeResult.success(output, "snapshot=" + pending.getSnapshotId(),
+                        "status=" + output.getStatus(), 1);
+            });
+            pending.setStatus("VALIDATING");
+            interpretations.update(pending);
+            FinancialInterpretation output = node.getValue();
+            if (output == null) {
+                pending.setStatus("FAILED");
+                pending.setFailureCode(node.getErrorType());
+                pending.setFailureMessage(node.getErrorMessage());
+            } else {
+                copyResult(pending, output);
+            }
+        } catch (RuntimeException error) {
+            node = AgentNodeResult.failed("UNEXPECTED_RUNTIME_ERROR", safeMessage(error));
             pending.setStatus("FAILED");
-            pending.setFailureCode(node.getErrorType());
-            pending.setFailureMessage(node.getErrorMessage());
-        } else {
-            pending.setStatus(output.getStatus());
-            pending.setGenerationMode(output.getGenerationMode());
-            pending.setResult(output.getResult());
-            pending.setValidationErrors(output.getValidationErrors());
-            pending.setFailureCode(output.getFailureCode());
-            pending.setFailureMessage(output.getFailureMessage());
-            pending.setModelName(output.getModelName());
+            pending.setFailureCode("UNEXPECTED_RUNTIME_ERROR");
+            pending.setFailureMessage("Agent 解读执行异常，请重新运行");
         }
         pending.setDurationMs((System.nanoTime() - started) / 1_000_000L);
         pending.setCompletedAt(LocalDateTime.now());
-        interpretations.update(pending);
-        traces.recordNode(AgentTraceSubject.of("FINANCIAL_INTERPRETATION", pending.getId()),
-                context, fingerprint, node, pending.getDurationMs(),
-                "{\"snapshotId\":" + pending.getSnapshotId() + "}");
+        try {
+            interpretations.update(pending);
+        } catch (RuntimeException updateError) {
+            log.error("财报 Agent 终态持久化失败 interpretationId={}", pending.getId(), updateError);
+        }
+        try {
+            traces.recordNode(AgentTraceSubject.of("FINANCIAL_INTERPRETATION", pending.getId()),
+                    context, fingerprint, node, pending.getDurationMs(),
+                    "{\"snapshotId\":" + pending.getSnapshotId() + "}");
+        } catch (RuntimeException traceError) {
+            log.warn("财报 Agent Trace 写入失败 interpretationId={}", pending.getId(), traceError);
+        }
+    }
+
+    private void copyResult(FinancialInterpretation pending, FinancialInterpretation output) {
+        pending.setStatus(output.getStatus());
+        pending.setGenerationMode(output.getGenerationMode());
+        pending.setResult(output.getResult());
+        pending.setValidationErrors(output.getValidationErrors());
+        pending.setFailureCode(output.getFailureCode());
+        pending.setFailureMessage(output.getFailureMessage());
+        pending.setModelName(output.getModelName());
+    }
+
+    private String safeMessage(Throwable error) {
+        if (error == null) return "unknown error";
+        String value = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        return value.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
     private List<FinancialReportView> comparables(FinancialReportView current) {

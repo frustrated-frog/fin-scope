@@ -66,6 +66,15 @@ public class AgentNodeResult<T> {
                 "", "", false, "", progressDelta);
     }
 
+    public static <T> AgentNodeResult<T> fallback(T value,
+                                                  String inputSummary,
+                                                  String outputSummary,
+                                                  String fallbackReason,
+                                                  int progressDelta) {
+        return new AgentNodeResult<T>("FALLBACK", value, inputSummary, outputSummary,
+                "", "", true, fallbackReason, progressDelta);
+    }
+
     public static <T> AgentNodeResult<T> skipped(String errorType, String errorMessage) {
         return new AgentNodeResult<T>("SKIPPED", null, "", "",
                 errorType, errorMessage, false, "", 0);

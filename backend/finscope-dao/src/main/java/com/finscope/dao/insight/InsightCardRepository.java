@@ -41,6 +41,7 @@ public class InsightCardRepository {
         card.setNoveltyReason(rs.getString("novelty_reason"));
         card.setFollowUpQuestions(rs.getString("follow_up_questions"));
         card.setCardMarkdown(rs.getString("card_markdown"));
+        card.setInterpretationSource(rs.getString("interpretation_source"));
 
         // 深度解读字段
         card.setBackground(rs.getString("background"));
@@ -72,9 +73,10 @@ public class InsightCardRepository {
             PreparedStatement ps = connection.prepareStatement("INSERT OR REPLACE INTO insight_card("
                     + "article_id,title,source_name,source_url,published_at,one_sentence_summary,core_event,"
                     + "importance,impact_targets,novelty_type,novelty_reason,follow_up_questions,card_markdown,"
+                    + "interpretation_source,"
                     + "background,key_data,timeline,related_parties,risk_factors,future_outlook,"
                     + "impact_on_investment,impact_on_startup,professional_insight,facts,reasoning,opinions,"
-                    + "analysis_sections,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                    + "analysis_sections,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             int i = 1;
             ps.setLong(i++, card.getArticleId());
             ps.setString(i++, card.getTitle());
@@ -89,6 +91,7 @@ public class InsightCardRepository {
             ps.setString(i++, card.getNoveltyReason());
             ps.setString(i++, card.getFollowUpQuestions());
             ps.setString(i++, card.getCardMarkdown());
+            ps.setString(i++, card.getInterpretationSource() == null ? "UNKNOWN" : card.getInterpretationSource());
 
             // 深度解读字段
             ps.setString(i++, card.getBackground());

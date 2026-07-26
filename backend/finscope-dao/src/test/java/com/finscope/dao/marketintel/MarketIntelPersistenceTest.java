@@ -29,6 +29,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketIntelPersistenceTest {
     @TempDir Path tempDir;
@@ -235,6 +236,36 @@ class MarketIntelPersistenceTest {
     }
 
     @Test
+    void latestInterpretationIsSnapshotScopedAndInterruptedTasksBecomeRetryable() {
+        CapitalFlowPoint point = point("payload-agent-recovery");
+        flows.saveAll(Collections.singletonList(point));
+        CapitalBehaviorSnapshot snapshot = CapitalBehaviorSnapshot.of(7L, point.getObservedAt(),
+                Collections.singletonList(point), Collections.emptyList(), "fingerprint-agent-recovery");
+        snapshots.save(snapshot);
+        CapitalInterpretationRepository repository = new CapitalInterpretationRepository(
+                jdbc, new ObjectMapper().findAndRegisterModules());
+
+        CapitalInterpretation completed = interpretation(snapshot.getId(), "SUCCEEDED", "same-input");
+        repository.save(completed);
+        CapitalInterpretation pending = interpretation(snapshot.getId(), "PENDING", "forced-input");
+        repository.save(pending);
+
+        assertEquals(pending.getId(), repository.findLatestByInstrumentAndSnapshot(7L, snapshot.getId())
+                .orElseThrow(AssertionError::new).getId());
+        assertEquals(pending.getId(), repository.findRunningByInstrumentAndSnapshot(7L, snapshot.getId())
+                .orElseThrow(AssertionError::new).getId());
+        assertEquals(completed.getId(), repository.findByAction(snapshot.getId(), "AGENT", "same-input")
+                .orElseThrow(AssertionError::new).getId());
+
+        assertEquals(1, repository.failInterrupted());
+        CapitalInterpretation interrupted = repository.findById(pending.getId()).orElseThrow(AssertionError::new);
+        assertEquals("FAILED", interrupted.getStatus());
+        assertEquals("INTERRUPTED", interrupted.getFallbackReason());
+        assertTrue(interrupted.getPlainSummary().contains("应用重启中断"));
+        assertTrue(!repository.findRunningByInstrumentAndSnapshot(7L, snapshot.getId()).isPresent());
+    }
+
+    @Test
     void latestSnapshotUsesRefreshCreationTimeAndPreservesWarnings() {
         CapitalFlowPoint futureMarketPoint = point("future-market-time");
         futureMarketPoint.setObservedAt(LocalDateTime.of(2026, 7, 14, 15, 0));
@@ -310,6 +341,26 @@ class MarketIntelPersistenceTest {
         point.setPayloadHash(hash);
         point.setQualityStatus("COMPLETE");
         return point;
+    }
+
+    private CapitalInterpretation interpretation(Long snapshotId, String status, String inputHash) {
+        CapitalInterpretation value = new CapitalInterpretation();
+        value.setInstrumentId(7L);
+        value.setSnapshotId(snapshotId);
+        value.setInterpretationType("AGENT");
+        value.setStatus(status);
+        value.setPlainSummary("解读任务");
+        value.setFacts(Collections.emptyList());
+        value.setHypotheses(Collections.emptyList());
+        value.setDataGaps(Collections.emptyList());
+        value.setObservationPoints(Collections.emptyList());
+        value.setObservations(Collections.emptyList());
+        value.setCounterEvidence(Collections.emptyList());
+        value.setWatchConditionRefs(Collections.emptyList());
+        value.setEvidenceRefs(Collections.emptyList());
+        value.setRejectionReasons(Collections.emptyList());
+        value.setInputHash(inputHash);
+        return value;
     }
 
     private DragonTigerRecord dragonTiger(String hash, BigDecimal netAmount) {

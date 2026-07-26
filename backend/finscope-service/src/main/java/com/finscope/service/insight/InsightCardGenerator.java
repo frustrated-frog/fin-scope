@@ -23,6 +23,7 @@ public class InsightCardGenerator {
         card.setPublishedAt(article.getPublishedAt());
         card.setNoveltyType(empty(article.getNoveltyType(), "NEW"));
         card.setNoveltyReason(empty(article.getNoveltyReason(), "首次进入信息流"));
+        card.setInterpretationSource("FALLBACK");
 
         String contentKind = detectContentKind(article);
         String evidence = buildOneSentenceSummary(article, contentKind);
@@ -48,6 +49,7 @@ public class InsightCardGenerator {
         card.setPublishedAt(article.getPublishedAt());
         card.setNoveltyType(empty(article.getNoveltyType(), "NEW"));
         card.setNoveltyReason(empty(article.getNoveltyReason(), "首次进入信息流"));
+        card.setInterpretationSource(normalizeInterpretationSource(interpretation.getSource()));
 
         // 基础字段
         card.setOneSentenceSummary(firstNonBlank(interpretation.getOneSentenceSummary(), empty(article.getSummary(), "")));
@@ -77,6 +79,10 @@ public class InsightCardGenerator {
 
         card.setCardMarkdown(renderMarkdown(card, interpretation));
         return card;
+    }
+
+    private String normalizeInterpretationSource(String source) {
+        return "LLM".equalsIgnoreCase(source) ? "LLM" : "FALLBACK";
     }
 
     private String detectContentKind(Article article) {

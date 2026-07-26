@@ -39,34 +39,62 @@ public class CapitalInterpretationAgent {
 
     public CapitalInterpretation interpret(CapitalAgentEvidencePacket packet,
                                             CapitalRuleExplanation rules) {
+        return interpretWithMetrics(packet, rules).getValue();
+    }
+
+    public Execution interpretWithMetrics(CapitalAgentEvidencePacket packet,
+                                          CapitalRuleExplanation rules) {
         if (!packet.isSufficientCoverage()) {
-            return fallback(packet, rules, "INSUFFICIENT_DATA", "INSUFFICIENT_FACTOR_COVERAGE");
+            return new Execution(fallback(packet, rules, "INSUFFICIENT_DATA", "INSUFFICIENT_FACTOR_COVERAGE"), 0);
         }
-        if (!llm.isConfigured()) return fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED");
+        if (!llm.isConfigured()) {
+            return new Execution(fallback(packet, rules, "FALLBACK", "LLM_NOT_CONFIGURED"), 0);
+        }
         String output = null;
+        int llmCallCount = 0;
         List<String> validationReasons = new ArrayList<String>();
         try {
+            llmCallCount++;
             output = llm.complete(systemPrompt(packet), input(packet), PRIMARY_TIMEOUT_MS);
             try {
-                return interpretOutput(output, packet, rules);
+                return new Execution(interpretOutput(output, packet, rules), llmCallCount);
             } catch (ModelOutputException firstFailure) {
                 validationReasons.add(validationReason("首次输出", firstFailure));
             }
+            llmCallCount++;
             output = llm.complete(repairPrompt(packet),
                     repairInput(packet, output, validationReasons.get(0)), REPAIR_TIMEOUT_MS);
             try {
-                return interpretOutput(output, packet, rules);
+                return new Execution(interpretOutput(output, packet, rules), llmCallCount);
             } catch (ModelOutputException repairFailure) {
                 validationReasons.add(validationReason("修复输出", repairFailure));
-                return invalidOutputFallback(packet, rules, output,
-                        repairFailure.fallbackReason, validationReasons);
+                return new Execution(invalidOutputFallback(packet, rules, output,
+                        repairFailure.fallbackReason, validationReasons), llmCallCount);
             }
         } catch (SocketTimeoutException e) {
-            return fallback(packet, rules, "FALLBACK", "LLM_TIMEOUT");
+            return new Execution(fallback(packet, rules, "FALLBACK", "LLM_TIMEOUT"), llmCallCount);
         } catch (Exception e) {
             validationReasons.add("模型调用异常：" + e.getClass().getSimpleName());
-            return invalidOutputFallback(packet, rules, output,
-                    "INVALID_MODEL_OUTPUT", validationReasons);
+            return new Execution(invalidOutputFallback(packet, rules, output,
+                    "INVALID_MODEL_OUTPUT", validationReasons), llmCallCount);
+        }
+    }
+
+    public static final class Execution {
+        private final CapitalInterpretation value;
+        private final int llmCallCount;
+
+        public Execution(CapitalInterpretation value, int llmCallCount) {
+            this.value = value;
+            this.llmCallCount = llmCallCount;
+        }
+
+        public CapitalInterpretation getValue() {
+            return value;
+        }
+
+        public int getLlmCallCount() {
+            return llmCallCount;
         }
     }
 

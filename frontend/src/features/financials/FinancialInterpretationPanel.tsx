@@ -64,14 +64,24 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
     setSelectedEvidence(undefined);
     setError('');
 
-    Promise.all([
-      api<FinancialInterpretation[]>(`/api/financials/reports/${reportId}/interpretations?limit=20`).catch(() => []),
-      api<FinancialInterpretation>(`/api/financials/reports/${reportId}/interpretations/latest`).catch(() => undefined)
-    ]).then(([items, latest]) => {
+    Promise.allSettled([
+      api<FinancialInterpretation[]>(`/api/financials/reports/${reportId}/interpretations?limit=20`),
+      api<FinancialInterpretation>(`/api/financials/reports/${reportId}/interpretations/latest`)
+    ]).then(([historyResult, latestResult]) => {
       if (!active) return;
+      const items = historyResult.status === 'fulfilled' ? historyResult.value : [];
+      const latest = latestResult.status === 'fulfilled' ? latestResult.value : undefined;
       setHistory(items);
       setTask(latest);
       setDisplayed(isDisplayable(latest) ? latest : items.find(isDisplayable));
+      if (historyResult.status === 'rejected') {
+        setError(messageOf(historyResult.reason, '历史解读加载失败，请稍后重试'));
+      } else if (latestResult.status === 'rejected') {
+        const status = (latestResult.reason as { status?: number } | undefined)?.status;
+        if (status != null && status !== 404) {
+          setError(messageOf(latestResult.reason, '最近一次解读加载失败，请稍后重试'));
+        }
+      }
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -87,28 +97,43 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
     let active = true;
     api<FinancialEvidence[]>(`/api/financials/interpretations/${displayed.id}/evidence`)
       .then((items) => { if (active) setEvidence(items); })
-      .catch(() => { if (active) setEvidence([]); });
+      .catch((reason) => {
+        if (active) {
+          setEvidence([]);
+          setError(messageOf(reason, '解读证据加载失败，请稍后重试'));
+        }
+      });
     return () => { active = false; };
   }, [displayed?.id]);
 
   useEffect(() => {
     if (!task || !pendingStatuses.includes(task.status)) return;
     let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        const current = await api<FinancialInterpretation>(`/api/financials/interpretations/${task.id}`);
+    const taskId = task.id;
+    const poll = async () => {
+      let current = task;
+      let consecutiveFailures = 0;
+      while (active && pendingStatuses.includes(current.status)) {
+        const waitMs = Math.min(2_000 * Math.pow(2, consecutiveFailures), 10_000);
+        await wait(waitMs);
         if (!active) return;
-        applyTask(current);
-        if (isDisplayable(current)) await refreshHistory();
-      } catch (reason) {
-        if (active) setError(messageOf(reason, '解读状态刷新失败，请稍后重试'));
+        try {
+          current = await api<FinancialInterpretation>(`/api/financials/interpretations/${taskId}`);
+          if (!active) return;
+          consecutiveFailures = 0;
+          applyTask(current);
+          if (isDisplayable(current)) await refreshHistory();
+        } catch (reason) {
+          consecutiveFailures += 1;
+          if (active) setError(messageOf(reason, '解读状态连接中断，系统正在重试'));
+        }
       }
-    }, 2000);
+    };
+    void poll();
     return () => {
       active = false;
-      window.clearTimeout(timer);
     };
-  }, [task]);
+  }, [task?.id]);
 
   async function generate(force: boolean) {
     setGenerating(true);
@@ -438,6 +463,10 @@ function historyLabel(item: FinancialInterpretation) {
 
 function fallbackEvidence(id: string): FinancialEvidence {
   return { id, type: 'EVIDENCE', label: id, detail: '证据详情暂未加载，可稍后重试。' };
+}
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function messageOf(reason: unknown, fallback: string) {

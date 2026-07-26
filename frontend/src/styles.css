@@ -12703,3 +12703,34 @@ input[type="checkbox"] {
     animation: none;
   }
 }
+.insight-source-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: .75rem;
+}
+
+.insight-source-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.65rem;
+  padding: .2rem .62rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .035em;
+}
+
+.insight-source-badge.source-llm {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-2));
+}
+
+.insight-source-badge.source-fallback {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--line));
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface-2));
+}

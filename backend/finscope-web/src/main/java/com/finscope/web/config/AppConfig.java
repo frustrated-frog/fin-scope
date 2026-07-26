@@ -2,6 +2,7 @@ package com.finscope.web.config;
 
 import com.finscope.service.brief.BriefGenerator;
 import com.finscope.dao.financials.FinancialInterpretationRepository;
+import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.export.ExportService;
 import com.finscope.service.vault.VaultWriter;
@@ -183,8 +184,12 @@ public class AppConfig {
     }
 
     @Bean
-    public ApplicationRunner financialInterpretationRecovery(
-            FinancialInterpretationRepository interpretations) {
-        return arguments -> interpretations.failInterrupted();
+    public ApplicationRunner agentInterpretationRecovery(
+            FinancialInterpretationRepository financialInterpretations,
+            CapitalInterpretationRepository capitalInterpretations) {
+        return arguments -> {
+            financialInterpretations.failInterrupted();
+            capitalInterpretations.failInterrupted();
+        };
     }
 }

@@ -107,7 +107,30 @@ public class CapitalInterpretationRepository {
         },id); return rows.isEmpty()?Optional.empty():Optional.of(rows.get(0));
     }
     public Optional<CapitalInterpretation> findByAction(Long snapshotId,String type,String hash){
-        List<Long> ids=jdbc.query("SELECT id FROM market_capital_interpretation WHERE snapshot_id=? AND interpretation_type=? AND input_hash=?",(rs,n)->rs.getLong(1),snapshotId,type,hash);
+        List<Long> ids=jdbc.query("SELECT id FROM market_capital_interpretation WHERE snapshot_id=? AND interpretation_type=? AND input_hash=? ORDER BY id DESC LIMIT 1",(rs,n)->rs.getLong(1),snapshotId,type,hash);
         return ids.isEmpty()?Optional.empty():findById(ids.get(0));
+    }
+
+    public Optional<CapitalInterpretation> findLatestByInstrumentAndSnapshot(Long instrumentId, Long snapshotId) {
+        List<Long> ids = jdbc.query("SELECT id FROM market_capital_interpretation " +
+                        "WHERE instrument_id=? AND snapshot_id=? AND interpretation_type='AGENT' " +
+                        "ORDER BY id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), instrumentId, snapshotId);
+        return ids.isEmpty() ? Optional.empty() : findById(ids.get(0));
+    }
+
+    public Optional<CapitalInterpretation> findRunningByInstrumentAndSnapshot(Long instrumentId, Long snapshotId) {
+        List<Long> ids = jdbc.query("SELECT id FROM market_capital_interpretation " +
+                        "WHERE instrument_id=? AND snapshot_id=? AND interpretation_type='AGENT' AND status='PENDING' " +
+                        "ORDER BY id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), instrumentId, snapshotId);
+        return ids.isEmpty() ? Optional.empty() : findById(ids.get(0));
+    }
+
+    public int failInterrupted() {
+        LocalDateTime now = LocalDateTime.now();
+        return jdbc.update("UPDATE market_capital_interpretation SET status='FAILED',fallback_reason='INTERRUPTED'," +
+                        "plain_summary=?,updated_at=? WHERE interpretation_type='AGENT' AND status='PENDING'",
+                "上次运行因应用重启中断，请重新运行", now.toString());
     }
 }

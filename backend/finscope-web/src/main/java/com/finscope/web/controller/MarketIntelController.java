@@ -3,7 +3,6 @@ package com.finscope.web.controller;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.common.exception.ResourceNotFoundException;
-import com.finscope.dao.marketintel.CapitalInterpretationRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalInterpretation;
@@ -22,25 +21,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/market-intel")
 public class MarketIntelController {
+    private final MarketIntelCapitalService capital;
+    private final MarketIntelRefreshCoordinator refresh;
+    private final CapitalInterpretationFacade agent;
+    private final MarketIntelRefreshRunRepository refreshRuns;
+    private final MarketIntelDragonTigerService dragonTiger;
 
-    @Resource
-    private MarketIntelCapitalService capital;
-    @Resource
-    private MarketIntelRefreshCoordinator refresh;
-    @Resource
-    private CapitalInterpretationFacade agent;
-    @Resource
-    private CapitalInterpretationRepository interpretations;
-    @Resource
-    private MarketIntelRefreshRunRepository refreshRuns;
-    @Resource
-    private MarketIntelDragonTigerService dragonTiger;
+    public MarketIntelController(MarketIntelCapitalService capital,
+                                 MarketIntelRefreshCoordinator refresh,
+                                 CapitalInterpretationFacade agent,
+                                 MarketIntelRefreshRunRepository refreshRuns,
+                                 MarketIntelDragonTigerService dragonTiger) {
+        this.capital = capital;
+        this.refresh = refresh;
+        this.agent = agent;
+        this.refreshRuns = refreshRuns;
+        this.dragonTiger = dragonTiger;
+    }
 
     @GetMapping("/instruments")
     public ApiResponse<List<Instrument>> instruments() {
@@ -75,9 +77,13 @@ public class MarketIntelController {
         return ResponseEntity.accepted().body(ApiResponses.success(agent.request(id, force)));
     }
 
+    @GetMapping("/instruments/{id}/capital-interpretations/latest")
+    public ApiResponse<CapitalInterpretation> latestInterpretation(@PathVariable Long id) {
+        return ApiResponses.success(agent.latest(id));
+    }
+
     @GetMapping("/capital-interpretations/{id}")
     public ApiResponse<CapitalInterpretation> interpretation(@PathVariable Long id) {
-        return ApiResponses.success(interpretations.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("资金行为解读不存在：" + id)));
+        return ApiResponses.success(agent.get(id));
     }
 }

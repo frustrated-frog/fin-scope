@@ -3,17 +3,12 @@ package com.finscope.rpc.llm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,28 +26,6 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                     + "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 FinScope/0.1";
-
-    static {
-        // 初始化SSL上下文,解决Java 8的TLS兼容性问题
-        try {
-            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-            sslContext.init(null, new TrustManager[] {
-                new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    }
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    }
-                }
-            }, new java.security.SecureRandom());
-            HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
-            HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
-        } catch (Exception e) {
-            // 如果初始化失败,使用默认配置
-        }
-    }
 
     public OpenAiCompatibleLlmClient(boolean enabled,
                                      String baseUrl,
@@ -109,29 +82,38 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         byte[] requestBody = objectMapper.writeValueAsBytes(
                 request(systemPrompt, userPrompt, maxOutputTokens));
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(actualTimeoutMs);
-        connection.setReadTimeout(actualTimeoutMs);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-        connection.setRequestProperty("User-Agent", USER_AGENT);
-        try (OutputStream output = connection.getOutputStream()) {
-            output.write(requestBody);
+        try {
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(actualTimeoutMs);
+            connection.setReadTimeout(actualTimeoutMs);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+            connection.setRequestProperty("User-Agent", USER_AGENT);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(requestBody);
+            }
+            int status = connection.getResponseCode();
+            String responseBody;
+            InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            try (InputStream input = responseStream) {
+                responseBody = new String(readAll(input), StandardCharsets.UTF_8);
+            }
+            if (status >= 400) {
+                throw new IllegalStateException("OpenAI compatible LLM request failed, HTTP " + status
+                        + ": " + limit(responseBody, 4000));
+            }
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode content = root.path("choices").path(0).path("message").path("content");
+            if (content.isMissingNode() || isBlank(content.asText())) {
+                throw new IllegalStateException("OpenAI compatible LLM response has no message content: "
+                        + limit(responseBody, 4000));
+            }
+            return content.asText();
+        } finally {
+            connection.disconnect();
         }
-        int status = connection.getResponseCode();
-        InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        String responseBody = new String(readAll(input), StandardCharsets.UTF_8);
-        if (status >= 400) {
-            throw new IllegalStateException("OpenAI compatible LLM request failed, HTTP " + status + ": " + responseBody);
-        }
-        JsonNode root = objectMapper.readTree(responseBody);
-        JsonNode content = root.path("choices").path(0).path("message").path("content");
-        if (content.isMissingNode() || isBlank(content.asText())) {
-            throw new IllegalStateException("OpenAI compatible LLM response has no message content: " + responseBody);
-        }
-        return content.asText();
     }
 
     private Map<String, Object> request(String systemPrompt, String userPrompt, int maxOutputTokens) {
@@ -194,6 +176,13 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     private String trim(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String limit(String value, int maximumLength) {
+        if (value == null || value.length() <= maximumLength) {
+            return value == null ? "" : value;
+        }
+        return value.substring(0, maximumLength) + "…";
     }
 
     private boolean isBlank(String value) {

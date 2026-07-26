@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.financials.FinancialAnalysisSnapshotRepository;
 import com.finscope.dao.financials.FinancialInterpretationRepository;
 import com.finscope.domain.agent.AgentTraceSubject;
+import com.finscope.domain.agent.AgentNodeResult;
+import com.finscope.domain.agent.AgentRunContext;
 import com.finscope.domain.financials.FinancialAnalysisSnapshot;
 import com.finscope.domain.financials.FinancialInterpretation;
 import com.finscope.domain.financials.FinancialQualityStatus;
@@ -22,6 +24,8 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -65,7 +69,8 @@ class FinancialInterpretationFacadeTest {
             return value;
         });
         when(agent.modelName()).thenReturn("test-model");
-        when(agent.interpret(any())).thenReturn(success());
+        when(agent.interpretWithMetrics(any()))
+                .thenReturn(new FinancialInterpretationAgent.Execution(success(), 1));
         facade = new FinancialInterpretationFacade(query, snapshots, interpretations, preflight,
                 assembler, agent, new AgentHarness(), traces, new ObjectMapper(), Runnable::run);
     }
@@ -93,9 +98,35 @@ class FinancialInterpretationFacadeTest {
         verify(interpretations).save(any());
         verify(interpretations, org.mockito.Mockito.atLeast(2)).update(any());
         ArgumentCaptor<AgentTraceSubject> subject = ArgumentCaptor.forClass(AgentTraceSubject.class);
-        verify(traces).recordNode(subject.capture(), any(), any(), any(), anyLong(), any());
+        ArgumentCaptor<AgentRunContext> context = ArgumentCaptor.forClass(AgentRunContext.class);
+        ArgumentCaptor<AgentNodeResult> node = ArgumentCaptor.forClass(AgentNodeResult.class);
+        verify(traces).recordNode(subject.capture(), context.capture(), any(), node.capture(), anyLong(), any());
         assertEquals("FINANCIAL_INTERPRETATION", subject.getValue().getType());
         assertEquals(41L, subject.getValue().getId());
+        assertEquals(1, context.getValue().getLlmCallCount());
+        assertEquals("SUCCESS", node.getValue().getStatus());
+        assertFalse(node.getValue().isFallbackUsed());
+    }
+
+    @Test
+    void recordsRuleFallbackWithoutPretendingThatTheModelWasCalled() {
+        FinancialInterpretation fallback = success();
+        fallback.setStatus("FALLBACK");
+        fallback.setGenerationMode("RULE");
+        fallback.setFailureCode("LLM_NOT_CONFIGURED");
+        when(agent.interpretWithMetrics(any()))
+                .thenReturn(new FinancialInterpretationAgent.Execution(fallback, 0));
+
+        FinancialInterpretation result = facade.request(9L, true);
+
+        assertEquals("FALLBACK", result.getStatus());
+        ArgumentCaptor<AgentRunContext> context = ArgumentCaptor.forClass(AgentRunContext.class);
+        ArgumentCaptor<AgentNodeResult> node = ArgumentCaptor.forClass(AgentNodeResult.class);
+        verify(traces).recordNode(any(), context.capture(), any(), node.capture(), anyLong(), any());
+        assertEquals(0, context.getValue().getLlmCallCount());
+        assertEquals("FALLBACK", node.getValue().getStatus());
+        assertTrue(node.getValue().isFallbackUsed());
+        assertEquals("LLM_NOT_CONFIGURED", node.getValue().getFallbackReason());
     }
 
     private FinancialReportView view() {

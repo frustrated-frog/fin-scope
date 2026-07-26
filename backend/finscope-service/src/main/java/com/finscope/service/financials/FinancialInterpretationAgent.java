@@ -32,29 +32,56 @@ public class FinancialInterpretationAgent {
     }
 
     public FinancialInterpretation interpret(FinancialEvidencePacket packet) {
-        if (!llm.isConfigured()) return fallback(packet, "LLM_NOT_CONFIGURED", new ArrayList<String>());
+        return interpretWithMetrics(packet).getValue();
+    }
+
+    public Execution interpretWithMetrics(FinancialEvidencePacket packet) {
+        if (!llm.isConfigured()) {
+            return new Execution(fallback(packet, "LLM_NOT_CONFIGURED", new ArrayList<String>()), 0);
+        }
         List<String> errors = new ArrayList<String>();
         String output = null;
+        int llmCallCount = 0;
         try {
+            llmCallCount++;
             output = llm.complete(systemPrompt(), modelPayload(packet));
             try {
-                return success(packet, output, "LLM", errors);
+                return new Execution(success(packet, output, "LLM", errors), llmCallCount);
             } catch (IllegalArgumentException first) {
                 errors.add("首次输出：" + message(first));
             }
+            llmCallCount++;
             output = llm.complete(repairPrompt(), repairInput(packet, output, errors.get(0)));
             try {
-                return success(packet, output, "REPAIRED", errors);
+                return new Execution(success(packet, output, "REPAIRED", errors), llmCallCount);
             } catch (IllegalArgumentException second) {
                 errors.add("修复输出：" + message(second));
-                return fallback(packet, "OUTPUT_REJECTED_BY_GATE", errors);
+                return new Execution(fallback(packet, "OUTPUT_REJECTED_BY_GATE", errors), llmCallCount);
             }
         } catch (SocketTimeoutException error) {
             errors.add("模型调用超时：" + message(error));
-            return fallback(packet, "LLM_TIMEOUT", errors);
+            return new Execution(fallback(packet, "LLM_TIMEOUT", errors), llmCallCount);
         } catch (Exception error) {
             errors.add("模型调用失败：" + message(error));
-            return fallback(packet, "LLM_UNAVAILABLE", errors);
+            return new Execution(fallback(packet, "LLM_UNAVAILABLE", errors), llmCallCount);
+        }
+    }
+
+    public static final class Execution {
+        private final FinancialInterpretation value;
+        private final int llmCallCount;
+
+        public Execution(FinancialInterpretation value, int llmCallCount) {
+            this.value = value;
+            this.llmCallCount = llmCallCount;
+        }
+
+        public FinancialInterpretation getValue() {
+            return value;
+        }
+
+        public int getLlmCallCount() {
+            return llmCallCount;
         }
     }
 
