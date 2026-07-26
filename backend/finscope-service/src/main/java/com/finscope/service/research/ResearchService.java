@@ -20,8 +20,11 @@ import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.ResearchReport;
+import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
+import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.source.Source;
 import com.finscope.service.agent.ActionFingerprintService;
 import com.finscope.service.agent.AgentHarness;
@@ -29,6 +32,8 @@ import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.report.ThesisQueryExpansionService;
+import com.finscope.service.research.mission.ResearchMissionService;
+import com.finscope.service.research.mission.ResearchSearchSourceFactory;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.springframework.stereotype.Service;
@@ -81,6 +86,10 @@ public class ResearchService {
     private ResearchRunOutputService researchRunOutputService;
     @Resource
     private ResearchRuntimeService researchRuntimeService;
+    @Resource
+    private ResearchMissionService researchMissionService;
+    @Resource
+    private ResearchSearchSourceFactory researchSearchSourceFactory;
     @Resource(name = "researchTaskExecutor")
     private Executor researchTaskExecutor;
 
@@ -96,8 +105,10 @@ public class ResearchService {
                                      List<String> themeCodes,
                                      Integer maxSourcesPerTheme,
                                      Boolean includeDisabled) {
-        if (thesisId != null && (researchThesisRepository == null || !researchThesisRepository.findById(thesisId).isPresent())) {
-            throw new ResourceNotFoundException("研究命题不存在：" + thesisId);
+        ResearchThesis thesis = null;
+        if (thesisId != null) {
+            thesis = researchThesisRepository == null ? null : researchThesisRepository.findById(thesisId)
+                    .orElseThrow(() -> new ResourceNotFoundException("研究命题不存在：" + thesisId));
         }
         LocalDate actualRunDate = runDate == null ? LocalDate.now() : runDate;
         int actualMaxSources = maxSourcesPerTheme == null ? 3 : maxSourcesPerTheme;
@@ -128,6 +139,9 @@ public class ResearchService {
 
         ResearchRun saved = researchRunRepository.save(run);
         researchRuntimeService.initialize(saved.getId(), ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
+        if (thesis != null) {
+            researchMissionService.initializePending(saved, thesis, ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
+        }
         researchRunRepository.replaceSources(saved.getId(), plannedSources);
         List<ResearchRunPlanStep> planSteps = researchRunPlanService.initializeDefaultPlan(saved.getId(), plannedSources.size());
         startStep(planSteps, ResearchRunPlanService.STEP_PLAN_SOURCES);
@@ -238,6 +252,9 @@ public class ResearchService {
                 null, ex.getMessage(), 0L);
         safeRuntimeFailure(run.getId(), ResearchRunPlanService.STEP_FETCH_SOURCES,
                 "RESEARCH_EXECUTOR_REJECTED", ex.getMessage());
+        if (researchMissionService != null && run.getThesisId() != null) {
+            researchMissionService.failMission(run.getId());
+        }
     }
 
     private ResearchRun execute(ResearchRun run, List<SourceProfile> plannedSources, List<ResearchRunPlanStep> planSteps) {
@@ -251,13 +268,31 @@ public class ResearchService {
         int dynamicQueries = 0;
         List<String> errors = new ArrayList<String>();
         ResearchRunPlanStep currentStep = null;
+        String activeMissionTask = null;
         try {
             ResearchRunContext.setCurrentRunId(run.getId());
             AgentRunContext context = ResearchRunContext.currentContext();
+            ResearchThesis thesis = run.getThesisId() == null ? null
+                    : researchThesisRepository.findById(run.getThesisId())
+                    .orElseThrow(() -> new IllegalStateException("研究命题不存在：" + run.getThesisId()));
+            List<ResearchMissionTask> missionTasks = new ArrayList<ResearchMissionTask>();
+            if (thesis != null) {
+                missionTasks = researchMissionService.tasks(run.getId());
+                if (missionTasks.isEmpty()) {
+                    researchMissionService.plan(run, thesis);
+                    missionTasks = researchMissionService.tasks(run.getId());
+                }
+                if (!researchMissionService.isFinished(run.getId(), "baseline_scan")) {
+                    researchMissionService.startTask(run.getId(), "baseline_scan");
+                    activeMissionTask = "baseline_scan";
+                }
+            }
             completeSystemNode(run, ResearchRunPlanService.STEP_PLAN_SOURCES, "PLAN",
                     "plannedSources=" + plannedSources.size(), plannedSources.size());
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES);
             boolean runtimeStopped = false;
+            int baselineEvidenceBefore = outputCount(run.getId(), ResearchRunOutputService.EVIDENCE);
+            int baselineSourcesBefore = distinctArticleSources(run.getId());
             for (int sourceIndex = 0; sourceIndex < plannedSources.size(); sourceIndex++) {
                 SourceProfile plannedSource = plannedSources.get(sourceIndex);
                 Long sourceId = plannedSource.getSourceId();
@@ -302,33 +337,52 @@ public class ResearchService {
                         Math.max(0, progressAfter - progressBefore), sourceFetchOutput(fetchRun));
             }
 
-            if (run.getThesisId() != null && !runtimeStopped) {
-                com.finscope.domain.research.ResearchThesis thesis = researchThesisRepository.findById(run.getThesisId())
-                        .orElseThrow(() -> new IllegalStateException("研究命题不存在：" + run.getThesisId()));
-                for (int round = 1; round <= 3; round++) {
-                    String assessmentNode = "assess_evidence:" + round;
-                    completeSystemNode(run, assessmentNode, "ASSESS",
-                            "round=" + round + ", evidence="
-                                    + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE), 0);
-                    if (researchReportService.assessSufficiency(run.getId()).isSufficient()) {
-                        break;
+            ResearchMissionGap latestGap = null;
+            if (thesis != null) {
+                if (runtimeStopped) {
+                    if ("baseline_scan".equals(activeMissionTask)) {
+                        researchMissionService.failTask(run.getId(), activeMissionTask,
+                                "Runtime停止，基线扫描未完整完成");
+                        activeMissionTask = null;
                     }
-                    List<Source> querySources = thesisQueryExpansionService.queries(thesis, round);
-                    for (int queryIndex = 0; queryIndex < querySources.size(); queryIndex++) {
-                        Source querySource = querySources.get(queryIndex);
-                        String runtimeNode = "expand_query:" + round + ":" + queryIndex;
-                        RuntimeNodeStart runtimeStart = researchRuntimeService.startNode(run.getId(), runtimeNode,
-                                "EXPAND", "query:" + querySource.getUrl(), "round=" + round + ", name=" + querySource.getName());
-                        if (runtimeStart.isAlreadyCompleted()) {
-                            continue;
-                        }
+                } else if ("baseline_scan".equals(activeMissionTask)) {
+                    researchMissionService.completeTask(run.getId(), activeMissionTask,
+                            "完成配置来源扫描，共处理" + fetchedSources + "个来源",
+                            Math.max(0, outputCount(run.getId(), ResearchRunOutputService.EVIDENCE)
+                                    - baselineEvidenceBefore),
+                            Math.max(0, distinctArticleSources(run.getId()) - baselineSourcesBefore));
+                    activeMissionTask = null;
+                    latestGap = researchMissionService.assess(run.getId(), "baseline_scan");
+                }
+            }
+
+            if (thesis != null && !runtimeStopped) {
+                for (ResearchMissionTask task : missionTasks) {
+                    if (!"public_news_search".equals(task.getToolCode())
+                            || researchMissionService.isFinished(run.getId(), task.getTaskKey())) {
+                        continue;
+                    }
+                    activeMissionTask = task.getTaskKey();
+                    researchMissionService.startTask(run.getId(), activeMissionTask);
+                    Source querySource = researchSearchSourceFactory.create(task);
+                    String runtimeNode = "mission:" + task.getTaskKey();
+                    RuntimeNodeStart runtimeStart = researchRuntimeService.startNode(run.getId(), runtimeNode,
+                            "EXPAND", "query:" + querySource.getUrl(),
+                            "task=" + task.getTaskKey() + ", intent=" + task.getIntent());
+                    int evidenceBeforeTask = outputCount(run.getId(), ResearchRunOutputService.EVIDENCE);
+                    int sourcesBeforeTask = distinctArticleSources(run.getId());
+                    FetchRun queryRun = null;
+                    if (!runtimeStart.isAlreadyCompleted()) {
                         if (!runtimeStart.isStarted()) {
                             errors.add("Runtime terminated: " + runtimeStart.getTerminationReason());
+                            researchMissionService.failTask(run.getId(), activeMissionTask,
+                                    "Runtime停止：" + runtimeStart.getTerminationReason());
+                            activeMissionTask = null;
                             runtimeStopped = true;
                             break;
                         }
                         int progressBefore = researchProgress(run.getId());
-                        FetchRun queryRun = fetchService.fetch(querySource);
+                        queryRun = fetchService.fetch(querySource);
                         dynamicQueries++;
                         if (!"SUCCESS".equals(queryRun.getStatus())) {
                             errors.add(querySource.getName() + ": " + queryRun.getErrorMessage());
@@ -338,10 +392,29 @@ public class ResearchService {
                         researchRuntimeService.completeNode(run.getId(), runtimeNode, runtimeStateHash(run.getId()),
                                 Math.max(0, progressAfter - progressBefore), sourceFetchOutput(queryRun));
                     }
-                    if (runtimeStopped) {
-                        break;
-                    }
+                    researchMissionService.completeTask(run.getId(), activeMissionTask,
+                            queryRun == null ? "Runtime已完成，任务状态已恢复"
+                                    : sourceFetchOutput(queryRun),
+                            Math.max(0, outputCount(run.getId(), ResearchRunOutputService.EVIDENCE)
+                                    - evidenceBeforeTask),
+                            Math.max(0, distinctArticleSources(run.getId()) - sourcesBeforeTask));
+                    activeMissionTask = null;
+                    latestGap = researchMissionService.assess(run.getId(), task.getTaskKey());
                 }
+            }
+
+            if (thesis != null && !runtimeStopped
+                    && !researchMissionService.isFinished(run.getId(), "assess_evidence")) {
+                activeMissionTask = "assess_evidence";
+                researchMissionService.startTask(run.getId(), activeMissionTask);
+                if (latestGap == null) {
+                    latestGap = researchMissionService.assess(run.getId(), activeMissionTask);
+                }
+                researchMissionService.completeTask(run.getId(), activeMissionTask,
+                        latestGap.isSufficient() ? "证据门槛已满足"
+                                : "证据仍有缺口：" + String.join("；", latestGap.getWarnings()),
+                        0, 0);
+                activeMissionTask = null;
             }
 
             completeStep(planSteps, ResearchRunPlanService.STEP_FETCH_SOURCES,
@@ -362,6 +435,10 @@ public class ResearchService {
                     "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
                     outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT);
+            if (thesis != null && !researchMissionService.isFinished(run.getId(), "synthesize_report")) {
+                activeMissionTask = "synthesize_report";
+                researchMissionService.startTask(run.getId(), activeMissionTask);
+            }
             RuntimeNodeStart reportStart = researchRuntimeService.startNode(run.getId(),
                     ResearchRunPlanService.STEP_COMPOSE_REPORT, "SYNTHESIZE", null, "runId=" + run.getId());
             ResearchReport report = reportStart.isAlreadyCompleted()
@@ -376,6 +453,11 @@ public class ResearchService {
             completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT,
                     "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount()
                             + ", chars=" + report.getCharacterCount(), 1);
+            if ("synthesize_report".equals(activeMissionTask)) {
+                researchMissionService.completeTask(run.getId(), activeMissionTask,
+                        "报告已生成，reportId=" + report.getId(), 0, 0);
+                activeMissionTask = null;
+            }
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_SUMMARIZE_RUN);
             run.setFetchedSourceCount(fetchedSources);
             refreshOutputCounts(run);
@@ -394,6 +476,9 @@ public class ResearchService {
                     run.getSummary(), run.getErrorMessage(), System.currentTimeMillis() - start);
             ResearchRun updated = researchRunRepository.updateResult(run);
             researchRuntimeService.complete(run.getId());
+            if (thesis != null) {
+                researchMissionService.completeMission(run.getId(), !errors.isEmpty());
+            }
             return updated;
         } catch (Exception ex) {
             run.setFetchedSourceCount(fetchedSources);
@@ -410,6 +495,12 @@ public class ResearchService {
                     null, ex.getMessage(), System.currentTimeMillis() - start);
             safeRuntimeFailure(run.getId(), currentStep == null ? "research-orchestrate" : currentStep.getStepId(),
                     "UNKNOWN", ex.getMessage());
+            if (researchMissionService != null && run.getThesisId() != null) {
+                if (activeMissionTask != null) {
+                    researchMissionService.failTask(run.getId(), activeMissionTask, ex.getMessage());
+                }
+                researchMissionService.failMission(run.getId());
+            }
             return updated;
         } finally {
             ResearchRunContext.clear();
@@ -454,6 +545,11 @@ public class ResearchService {
                 + outputCount(runId, ResearchRunOutputService.REPORT) + ":"
                 + (researchRunOutputService == null ? 0
                 : researchRunOutputService.countDistinctArticleSources(runId));
+    }
+
+    private int distinctArticleSources(Long runId) {
+        return researchRunOutputService == null ? 0
+                : researchRunOutputService.countDistinctArticleSources(runId);
     }
 
     private void completeSystemNode(ResearchRun run,

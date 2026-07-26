@@ -19,12 +19,17 @@ import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
+import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
+import com.finscope.domain.source.Source;
 import com.finscope.service.agent.ActionFingerprintService;
 import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
 import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.report.EvidenceSufficiency;
+import com.finscope.service.research.mission.ResearchMissionService;
+import com.finscope.service.research.mission.ResearchSearchSourceFactory;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
@@ -49,6 +54,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
@@ -432,6 +438,110 @@ class ResearchServiceHarnessTest {
         assertTrue(!run.getSummary().contains("briefDate"));
     }
 
+    @Test
+    void drivesThesisResearchFromPersistedMissionTasks() {
+        ResearchService service = new ResearchService();
+        ThemeProfileService themes = mock(ThemeProfileService.class);
+        SourcePlanner planner = mock(SourcePlanner.class);
+        SourceRepository sources = mock(SourceRepository.class);
+        ResearchRunRepository runs = mock(ResearchRunRepository.class);
+        ResearchThesisRepository theses = mock(ResearchThesisRepository.class);
+        FetchService fetches = mock(FetchService.class);
+        ResearchReportService reports = mock(ResearchReportService.class);
+        ResearchMissionService missions = mock(ResearchMissionService.class);
+        ResearchSearchSourceFactory searchSources = mock(ResearchSearchSourceFactory.class);
+        ResearchRunPlanService plans = mock(ResearchRunPlanService.class);
+        ResearchRunOutputService outputs = mock(ResearchRunOutputService.class);
+        CapturingExecutor executor = new CapturingExecutor();
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(3L);
+        thesis.setQuestion("AI资本开支能否持续？");
+        thesis.setSubjectName("AI算力");
+        thesis.setSubjectType("THEME");
+        List<ResearchMissionTask> missionTasks = Arrays.asList(
+                missionTask("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
+                missionTask("search_support", "支持证据搜索", "public_news_search", "SUPPORT"),
+                missionTask("search_counter", "反方证据搜索", "public_news_search", "COUNTER"),
+                missionTask("assess_evidence", "证据判断", "evidence_assess", "ASSESS"),
+                missionTask("synthesize_report", "报告合成", "report_synthesis", "SYNTHESIS"));
+
+        ReflectionTestUtils.setField(service, "themeProfileService", themes);
+        ReflectionTestUtils.setField(service, "sourcePlanner", planner);
+        ReflectionTestUtils.setField(service, "sourceRepository", sources);
+        ReflectionTestUtils.setField(service, "researchRunRepository", runs);
+        ReflectionTestUtils.setField(service, "researchThesisRepository", theses);
+        ReflectionTestUtils.setField(service, "fetchService", fetches);
+        ReflectionTestUtils.setField(service, "researchReportService", reports);
+        ReflectionTestUtils.setField(service, "researchMissionService", missions);
+        ReflectionTestUtils.setField(service, "researchSearchSourceFactory", searchSources);
+        ReflectionTestUtils.setField(service, "articleRepository", mock(ArticleRepository.class));
+        ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
+        ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
+        ReflectionTestUtils.setField(service, "learningTaskRepository", mock(LearningTaskRepository.class));
+        ReflectionTestUtils.setField(service, "contentIdeaRepository", mock(ContentIdeaRepository.class));
+        ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
+        ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
+        ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
+        ReflectionTestUtils.setField(service, "agentTraceService", mock(AgentTraceService.class));
+        ReflectionTestUtils.setField(service, "researchRunPlanService", plans);
+        ReflectionTestUtils.setField(service, "researchRunOutputService", outputs);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
+        ReflectionTestUtils.setField(service, "researchTaskExecutor", executor);
+
+        List<ResearchRunPlanStep> steps = defaultSteps();
+        when(theses.findById(3L)).thenReturn(java.util.Optional.of(thesis));
+        when(themes.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
+        when(sources.findAll()).thenReturn(Collections.emptyList());
+        when(planner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+                .thenReturn(Collections.singletonList(source(12L)));
+        when(runs.save(any(ResearchRun.class))).thenAnswer(invocation -> {
+            ResearchRun run = invocation.getArgument(0);
+            run.setId(501L);
+            return run;
+        });
+        when(runs.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(plans.initializeDefaultPlan(501L, 1)).thenReturn(steps);
+        when(plans.findStep(anyList(), any())).thenAnswer(invocation -> {
+            String stepId = invocation.getArgument(1);
+            for (ResearchRunPlanStep step : steps) if (stepId.equals(step.getStepId())) return step;
+            return steps.get(0);
+        });
+        when(plans.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(plans.complete(any(ResearchRunPlanStep.class), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(missions.tasks(501L)).thenReturn(Collections.<ResearchMissionTask>emptyList(), missionTasks);
+        when(missions.assess(eq(501L), anyString())).thenAnswer(invocation -> {
+            ResearchMissionGap gap = new ResearchMissionGap();
+            gap.setSufficient(false);
+            return gap;
+        });
+        when(searchSources.create(any(ResearchMissionTask.class))).thenAnswer(invocation -> {
+            ResearchMissionTask task = invocation.getArgument(0);
+            Source source = new Source();
+            source.setName(task.getTitle());
+            source.setType("RSS");
+            source.setUrl("https://news.google.com/rss/search?q=" + task.getTaskKey());
+            return source;
+        });
+        when(fetches.fetch(12L)).thenReturn(fetchRun());
+        when(fetches.fetch(any(Source.class))).thenReturn(fetchRun());
+        when(reports.generate(501L)).thenReturn(report(501L));
+
+        service.createRun(3L, LocalDate.of(2026, 7, 26),
+                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+        executor.runCaptured();
+
+        verify(missions).initializePending(any(ResearchRun.class), eq(thesis),
+                eq(ResearchRuntimeService.DEFAULT_MAX_ACTIONS));
+        verify(missions).plan(any(ResearchRun.class), eq(thesis));
+        verify(missions).startTask(501L, "baseline_scan");
+        verify(missions).assess(501L, "baseline_scan");
+        verify(missions).startTask(501L, "search_counter");
+        verify(fetches).fetch(org.mockito.ArgumentMatchers.<Source>argThat(
+                source -> source.getName().contains("反方")));
+        verify(missions).completeMission(501L, false);
+    }
+
     private ThemeProfile theme() {
         ThemeProfile theme = new ThemeProfile();
         theme.setCode(ResearchEnums.THEME_MARKET);
@@ -469,6 +579,17 @@ class ResearchServiceHarnessTest {
         report.setCharacterCount(4000);
         report.setGenerationMode("DETERMINISTIC");
         return report;
+    }
+
+    private ResearchMissionTask missionTask(String key, String title, String toolCode, String intent) {
+        ResearchMissionTask task = new ResearchMissionTask();
+        task.setTaskKey(key);
+        task.setTitle(title);
+        task.setToolCode(toolCode);
+        task.setIntent(intent);
+        task.setStatus("PENDING");
+        task.setQueryText(title + " 最新事实");
+        return task;
     }
 
     private List<ResearchRunPlanStep> defaultSteps() {
