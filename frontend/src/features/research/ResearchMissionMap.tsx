@@ -20,6 +20,12 @@ const MISSION_STATUS: Record<string, string> = {
   INTERRUPTED: '研究已中断'
 };
 
+const PLANNING_MODE_LABELS: Record<string, string> = {
+  LLM_VALIDATED: 'Agent 计划',
+  DETERMINISTIC: '规则计划',
+  PENDING: '等待计划'
+};
+
 export function ResearchMissionMap({ mission }: { mission?: ResearchMissionView }) {
   if (!mission) return null;
 
@@ -36,7 +42,7 @@ export function ResearchMissionMap({ mission }: { mission?: ResearchMissionView 
           <div className="research-mission-kicker">
             <span>Mission control</span>
             <span className={`research-mission-mode ${mission.mission.planningMode.toLowerCase()}`}>
-              {mission.mission.planningMode === 'LLM_VALIDATED' ? 'Agent 计划' : '规则计划'}
+              {PLANNING_MODE_LABELS[mission.mission.planningMode] || mission.mission.planningMode}
             </span>
           </div>
           <h4>{mission.mission.goal}</h4>

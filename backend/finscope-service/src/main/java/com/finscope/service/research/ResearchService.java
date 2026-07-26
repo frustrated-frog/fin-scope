@@ -276,15 +276,21 @@ public class ResearchService {
                     : researchThesisRepository.findById(run.getThesisId())
                     .orElseThrow(() -> new IllegalStateException("研究命题不存在：" + run.getThesisId()));
             List<ResearchMissionTask> missionTasks = new ArrayList<ResearchMissionTask>();
+            ResearchMissionTask baselineTask = null;
+            ResearchMissionTask assessmentTask = null;
+            ResearchMissionTask synthesisTask = null;
             if (thesis != null) {
                 missionTasks = researchMissionService.tasks(run.getId());
                 if (missionTasks.isEmpty()) {
                     researchMissionService.plan(run, thesis);
                     missionTasks = researchMissionService.tasks(run.getId());
                 }
-                if (!researchMissionService.isFinished(run.getId(), "baseline_scan")) {
-                    researchMissionService.startTask(run.getId(), "baseline_scan");
-                    activeMissionTask = "baseline_scan";
+                baselineTask = requiredMissionTask(missionTasks, "source_scan", "BASELINE");
+                assessmentTask = requiredMissionTask(missionTasks, "evidence_assess", "ASSESS");
+                synthesisTask = requiredMissionTask(missionTasks, "report_synthesis", "SYNTHESIS");
+                if (!researchMissionService.isFinished(run.getId(), baselineTask.getTaskKey())) {
+                    researchMissionService.startTask(run.getId(), baselineTask.getTaskKey());
+                    activeMissionTask = baselineTask.getTaskKey();
                 }
             }
             completeSystemNode(run, ResearchRunPlanService.STEP_PLAN_SOURCES, "PLAN",
@@ -340,19 +346,19 @@ public class ResearchService {
             ResearchMissionGap latestGap = null;
             if (thesis != null) {
                 if (runtimeStopped) {
-                    if ("baseline_scan".equals(activeMissionTask)) {
+                    if (baselineTask.getTaskKey().equals(activeMissionTask)) {
                         researchMissionService.failTask(run.getId(), activeMissionTask,
                                 "Runtime停止，基线扫描未完整完成");
                         activeMissionTask = null;
                     }
-                } else if ("baseline_scan".equals(activeMissionTask)) {
+                } else if (baselineTask.getTaskKey().equals(activeMissionTask)) {
                     researchMissionService.completeTask(run.getId(), activeMissionTask,
                             "完成配置来源扫描，共处理" + fetchedSources + "个来源",
                             Math.max(0, outputCount(run.getId(), ResearchRunOutputService.EVIDENCE)
                                     - baselineEvidenceBefore),
                             Math.max(0, distinctArticleSources(run.getId()) - baselineSourcesBefore));
                     activeMissionTask = null;
-                    latestGap = researchMissionService.assess(run.getId(), "baseline_scan");
+                    latestGap = researchMissionService.assess(run.getId(), baselineTask.getTaskKey());
                 }
             }
 
@@ -404,8 +410,8 @@ public class ResearchService {
             }
 
             if (thesis != null && !runtimeStopped
-                    && !researchMissionService.isFinished(run.getId(), "assess_evidence")) {
-                activeMissionTask = "assess_evidence";
+                    && !researchMissionService.isFinished(run.getId(), assessmentTask.getTaskKey())) {
+                activeMissionTask = assessmentTask.getTaskKey();
                 researchMissionService.startTask(run.getId(), activeMissionTask);
                 if (latestGap == null) {
                     latestGap = researchMissionService.assess(run.getId(), activeMissionTask);
@@ -435,8 +441,8 @@ public class ResearchService {
                     "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
                     outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT);
-            if (thesis != null && !researchMissionService.isFinished(run.getId(), "synthesize_report")) {
-                activeMissionTask = "synthesize_report";
+            if (thesis != null && !researchMissionService.isFinished(run.getId(), synthesisTask.getTaskKey())) {
+                activeMissionTask = synthesisTask.getTaskKey();
                 researchMissionService.startTask(run.getId(), activeMissionTask);
             }
             RuntimeNodeStart reportStart = researchRuntimeService.startNode(run.getId(),
@@ -453,7 +459,7 @@ public class ResearchService {
             completeStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT,
                     "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount()
                             + ", chars=" + report.getCharacterCount(), 1);
-            if ("synthesize_report".equals(activeMissionTask)) {
+            if (synthesisTask != null && synthesisTask.getTaskKey().equals(activeMissionTask)) {
                 researchMissionService.completeTask(run.getId(), activeMissionTask,
                         "报告已生成，reportId=" + report.getId(), 0, 0);
                 activeMissionTask = null;
@@ -550,6 +556,24 @@ public class ResearchService {
     private int distinctArticleSources(Long runId) {
         return researchRunOutputService == null ? 0
                 : researchRunOutputService.countDistinctArticleSources(runId);
+    }
+
+    private ResearchMissionTask requiredMissionTask(List<ResearchMissionTask> tasks,
+                                                     String toolCode,
+                                                     String intent) {
+        ResearchMissionTask found = null;
+        for (ResearchMissionTask task : tasks) {
+            if (toolCode.equals(task.getToolCode()) && intent.equals(task.getIntent())) {
+                if (found != null) {
+                    throw new IllegalStateException("研究任务图包含重复系统阶段：" + toolCode + "/" + intent);
+                }
+                found = task;
+            }
+        }
+        if (found == null) {
+            throw new IllegalStateException("研究任务图缺少系统阶段：" + toolCode + "/" + intent);
+        }
+        return found;
     }
 
     private void completeSystemNode(ResearchRun run,

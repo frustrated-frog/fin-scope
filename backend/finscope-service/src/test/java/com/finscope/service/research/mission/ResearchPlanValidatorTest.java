@@ -69,6 +69,19 @@ class ResearchPlanValidatorTest {
         assertThrows(IllegalArgumentException.class, () -> validator.validate(tooManySearches));
     }
 
+    @Test
+    void rejectsToolContractMismatchAndDuplicateSystemStages() {
+        ResearchMissionDraft mismatchedType = validDraft();
+        mismatchedType.getTasks().get(0).setTaskType("SEARCH");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(mismatchedType));
+
+        ResearchMissionDraft duplicateAssessment = validDraft();
+        duplicateAssessment.getTasks().add(task("assess_again", "重复判断",
+                "evidence_assess", "ASSESS",
+                Arrays.asList("search_support", "search_counter", "search_primary")));
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(duplicateAssessment));
+    }
+
     private ResearchMissionDraft validDraft() {
         ResearchMissionDraft draft = new ResearchMissionDraft();
         draft.setScopeSummary("聚焦需求、供给、兑现与反方风险");
@@ -99,7 +112,15 @@ class ResearchPlanValidatorTest {
         task.setTaskKey(key);
         task.setTitle(title);
         task.setQuestion(title + "要回答什么？");
-        task.setTaskType("SEARCH");
+        if ("source_scan".equals(toolCode)) {
+            task.setTaskType("COLLECT");
+        } else if ("evidence_assess".equals(toolCode)) {
+            task.setTaskType("ASSESS");
+        } else if ("report_synthesis".equals(toolCode)) {
+            task.setTaskType("SYNTHESIS");
+        } else {
+            task.setTaskType("SEARCH");
+        }
         task.setToolCode(toolCode);
         task.setIntent(intent);
         task.setDependencies(dependencies);

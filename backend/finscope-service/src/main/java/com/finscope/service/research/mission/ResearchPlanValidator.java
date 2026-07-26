@@ -95,6 +95,34 @@ public class ResearchPlanValidator {
         if (task.getDependencies() == null || task.getDependencies().size() > MAX_TASKS - 1) {
             throw invalid("任务依赖数量不合法：" + task.getTaskKey());
         }
+        validateToolContract(task);
+    }
+
+    private void validateToolContract(ResearchMissionTaskDraft task) {
+        if ("source_scan".equals(task.getToolCode())) {
+            requireContract(task, "COLLECT", "BASELINE");
+            return;
+        }
+        if ("public_news_search".equals(task.getToolCode())) {
+            if (!"SEARCH".equals(task.getTaskType())
+                    || !Arrays.asList("SUPPORT", "COUNTER", "PRIMARY", "BREADTH").contains(task.getIntent())) {
+                throw invalid("公开新闻搜索只能用于受控证据搜索：" + task.getTaskKey());
+            }
+            return;
+        }
+        if ("evidence_assess".equals(task.getToolCode())) {
+            requireContract(task, "ASSESS", "ASSESS");
+            return;
+        }
+        if ("report_synthesis".equals(task.getToolCode())) {
+            requireContract(task, "SYNTHESIS", "SYNTHESIS");
+        }
+    }
+
+    private void requireContract(ResearchMissionTaskDraft task, String taskType, String intent) {
+        if (!taskType.equals(task.getTaskType()) || !intent.equals(task.getIntent())) {
+            throw invalid("工具、任务类型和证据意图不匹配：" + task.getTaskKey());
+        }
     }
 
     private List<ResearchMissionTaskDraft> topologicalSort(Map<String, ResearchMissionTaskDraft> byKey) {
@@ -143,21 +171,25 @@ public class ResearchPlanValidator {
     }
 
     private void requireContractTasks(List<ResearchMissionTaskDraft> tasks) {
-        boolean baseline = false;
-        boolean support = false;
-        boolean counter = false;
-        boolean assess = false;
-        boolean synthesis = false;
+        int baseline = 0;
+        int support = 0;
+        int counter = 0;
+        int assess = 0;
+        int synthesis = 0;
         for (ResearchMissionTaskDraft task : tasks) {
-            baseline |= "source_scan".equals(task.getToolCode()) && "BASELINE".equals(task.getIntent());
-            support |= "public_news_search".equals(task.getToolCode()) && "SUPPORT".equals(task.getIntent());
-            counter |= "public_news_search".equals(task.getToolCode()) && "COUNTER".equals(task.getIntent());
-            assess |= "evidence_assess".equals(task.getToolCode()) && "ASSESS".equals(task.getIntent());
-            synthesis |= "report_synthesis".equals(task.getToolCode()) && "SYNTHESIS".equals(task.getIntent());
+            baseline += matches(task, "source_scan", "BASELINE") ? 1 : 0;
+            support += matches(task, "public_news_search", "SUPPORT") ? 1 : 0;
+            counter += matches(task, "public_news_search", "COUNTER") ? 1 : 0;
+            assess += matches(task, "evidence_assess", "ASSESS") ? 1 : 0;
+            synthesis += matches(task, "report_synthesis", "SYNTHESIS") ? 1 : 0;
         }
-        if (!baseline || !support || !counter || !assess || !synthesis) {
+        if (baseline != 1 || support < 1 || counter < 1 || assess != 1 || synthesis != 1) {
             throw invalid("计划必须包含基线、支持、反方、证据判断和报告合成任务");
         }
+    }
+
+    private boolean matches(ResearchMissionTaskDraft task, String toolCode, String intent) {
+        return toolCode.equals(task.getToolCode()) && intent.equals(task.getIntent());
     }
 
     private void requireText(String value, String field, int maxLength) {

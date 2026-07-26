@@ -459,11 +459,11 @@ class ResearchServiceHarnessTest {
         thesis.setSubjectName("AI算力");
         thesis.setSubjectType("THEME");
         List<ResearchMissionTask> missionTasks = Arrays.asList(
-                missionTask("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
+                missionTask("scan_context", "基线扫描", "source_scan", "BASELINE"),
                 missionTask("search_support", "支持证据搜索", "public_news_search", "SUPPORT"),
                 missionTask("search_counter", "反方证据搜索", "public_news_search", "COUNTER"),
-                missionTask("assess_evidence", "证据判断", "evidence_assess", "ASSESS"),
-                missionTask("synthesize_report", "报告合成", "report_synthesis", "SYNTHESIS"));
+                missionTask("judge_evidence", "证据判断", "evidence_assess", "ASSESS"),
+                missionTask("write_report", "报告合成", "report_synthesis", "SYNTHESIS"));
 
         ReflectionTestUtils.setField(service, "themeProfileService", themes);
         ReflectionTestUtils.setField(service, "sourcePlanner", planner);
@@ -534,9 +534,11 @@ class ResearchServiceHarnessTest {
         verify(missions).initializePending(any(ResearchRun.class), eq(thesis),
                 eq(ResearchRuntimeService.DEFAULT_MAX_ACTIONS));
         verify(missions).plan(any(ResearchRun.class), eq(thesis));
-        verify(missions).startTask(501L, "baseline_scan");
-        verify(missions).assess(501L, "baseline_scan");
+        verify(missions).startTask(501L, "scan_context");
+        verify(missions).assess(501L, "scan_context");
         verify(missions).startTask(501L, "search_counter");
+        verify(missions).startTask(501L, "judge_evidence");
+        verify(missions).startTask(501L, "write_report");
         verify(fetches).fetch(org.mockito.ArgumentMatchers.<Source>argThat(
                 source -> source.getName().contains("反方")));
         verify(missions).completeMission(501L, false);

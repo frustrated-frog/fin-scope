@@ -44,6 +44,17 @@ test('does not invent a mission for a legacy run', () => {
   expect(screen.queryByRole('region', { name: '研究作战图' })).not.toBeInTheDocument();
 });
 
+test('does not present a pending plan as deterministic fallback', () => {
+  const mission = runningMission();
+  mission.mission.status = 'PLANNING';
+  mission.mission.planningMode = 'PENDING';
+
+  render(<ResearchMissionMap mission={mission} />);
+
+  expect(screen.getByText('等待计划')).toBeInTheDocument();
+  expect(screen.queryByText('规则计划')).not.toBeInTheDocument();
+});
+
 function runningMission(): ResearchMissionView {
   return {
     mission: {
