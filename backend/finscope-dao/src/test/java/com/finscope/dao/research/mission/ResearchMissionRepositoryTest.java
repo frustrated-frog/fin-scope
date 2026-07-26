@@ -50,7 +50,7 @@ class ResearchMissionRepositoryTest {
                 Arrays.asList("至少六条证据"), Arrays.asList(
                         task("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
                         task("search_counter", "反方证据搜索", "public_news_search", "COUNTER")),
-                null);
+                "PLAN_REJECTED", "任务 search_counter 使用了未注册工具 external_browser");
 
         assertTrue(repository.startTask(9L, "baseline_scan"));
         assertTrue(repository.completeTask(9L, "baseline_scan", "完成三个信息源扫描", 4, 2));
@@ -64,6 +64,8 @@ class ResearchMissionRepositoryTest {
 
         assertEquals("RUNNING", repository.findMission(9L).get().getStatus());
         assertEquals("LLM_VALIDATED", repository.findMission(9L).get().getPlanningMode());
+        assertEquals("任务 search_counter 使用了未注册工具 external_browser",
+                repository.findMission(9L).get().getFallbackDetail());
         assertEquals(Arrays.asList("baseline_scan", "search_counter"),
                 repository.findTasks(9L).stream()
                         .map(ResearchMissionTask::getTaskKey)
@@ -84,7 +86,7 @@ class ResearchMissionRepositoryTest {
                 task("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
                 task("search_support", "支持证据搜索", "public_news_search", "SUPPORT"),
                 task("search_counter", "反方证据搜索", "public_news_search", "COUNTER"),
-                task("assess_evidence", "证据判断", "evidence_assess", "ASSESS")), "MODEL_DISABLED");
+                task("assess_evidence", "证据判断", "evidence_assess", "ASSESS")), "MODEL_DISABLED", null);
         repository.startTask(9L, "search_support");
         repository.completeTask(9L, "search_support", "已完成", 2, 1);
 
@@ -96,6 +98,27 @@ class ResearchMissionRepositoryTest {
         assertEquals("SUFFICIENT_EVIDENCE", tasks.get(2).getSkipReason());
         assertEquals("PENDING", tasks.get(3).getStatus());
         assertFalse(repository.completeTask(9L, "search_counter", "不应覆盖", 9, 9));
+    }
+
+    @Test
+    void finalizationSkipsEveryUnfinishedTaskWithoutOverwritingCompletedWork() {
+        repository.initialize(9L, "目标", "对象", "范围", Arrays.asList("标准"), 8);
+        repository.replacePlan(9L, "DETERMINISTIC", "范围", Arrays.asList("标准"), Arrays.asList(
+                task("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
+                task("search_support", "支持证据搜索", "public_news_search", "SUPPORT"),
+                task("search_counter", "反方证据搜索", "public_news_search", "COUNTER")), "MODEL_DISABLED", null);
+        repository.startTask(9L, "baseline_scan");
+        repository.completeTask(9L, "baseline_scan", "完成扫描", 2, 1);
+        repository.startTask(9L, "search_support");
+
+        assertEquals(2, repository.skipUnfinishedTasks(9L, "RUNTIME_TERMINATED:NO_PROGRESS"));
+
+        List<ResearchMissionTask> tasks = repository.findTasks(9L);
+        assertEquals("COMPLETED", tasks.get(0).getStatus());
+        assertEquals("SKIPPED", tasks.get(1).getStatus());
+        assertEquals("RUNTIME_TERMINATED:NO_PROGRESS", tasks.get(1).getSkipReason());
+        assertEquals("SKIPPED", tasks.get(2).getStatus());
+        assertNull(repository.findMission(9L).get().getActiveTaskKey());
     }
 
     private ResearchMissionTask task(String key, String title, String toolCode, String intent) {

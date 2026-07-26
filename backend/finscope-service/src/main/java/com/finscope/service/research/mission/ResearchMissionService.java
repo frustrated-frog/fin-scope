@@ -73,7 +73,8 @@ public class ResearchMissionService {
             tasks.add(task.toDomain());
         }
         repository.replacePlan(run.getId(), result.getPlanningMode(), result.getDraft().getScopeSummary(),
-                result.getDraft().getSuccessCriteria(), tasks, result.getFallbackReason());
+                result.getDraft().getSuccessCriteria(), tasks, result.getFallbackReason(),
+                result.getRejectionDetail());
         return result;
     }
 
@@ -118,13 +119,22 @@ public class ResearchMissionService {
     }
 
     public void completeMission(Long runId, boolean partial) {
-        String status = partial ? "PARTIAL_SUCCESS" : "COMPLETED";
+        completeMission(runId, partial, null);
+    }
+
+    public void completeMission(Long runId, boolean partial, String terminationReason) {
+        String status = partial || !blank(terminationReason) ? "PARTIAL_SUCCESS" : "COMPLETED";
+        String skipReason = blank(terminationReason)
+                ? "MISSION_FINALIZED"
+                : "RUNTIME_TERMINATED:" + compact(terminationReason, 120);
+        repository.skipUnfinishedTasks(runId, skipReason);
         if (!repository.updateMissionStatus(runId, status)) {
             throw new IllegalStateException("研究任务图无法进入终态：" + runId);
         }
     }
 
     public void failMission(Long runId) {
+        repository.skipUnfinishedTasks(runId, "MISSION_FAILED");
         repository.updateMissionStatus(runId, "FAILED");
     }
 

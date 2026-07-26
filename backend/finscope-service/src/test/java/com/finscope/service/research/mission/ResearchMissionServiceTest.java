@@ -47,7 +47,8 @@ class ResearchMissionServiceTest {
         ResearchThesis thesis = thesis();
         ResearchMissionDraft draft = new DeterministicResearchPlanner().plan(input());
         when(planningAgent.plan(any(ResearchPlanningInput.class)))
-                .thenReturn(new ResearchPlanningResult(draft, "DETERMINISTIC", "MODEL_DISABLED", null));
+                .thenReturn(new ResearchPlanningResult(draft, "DETERMINISTIC", "PLAN_REJECTED",
+                        "任务 search_counter 使用了未注册工具 external_browser"));
 
         service.initializePending(run, thesis, 12);
         ResearchPlanningResult result = service.plan(run, thesis);
@@ -56,7 +57,8 @@ class ResearchMissionServiceTest {
                 "等待研究规划", Arrays.asList("形成可验证的阶段性结论"), 12);
         ArgumentCaptor<List> tasks = ArgumentCaptor.forClass(List.class);
         verify(repository).replacePlan(eq(21L), eq("DETERMINISTIC"), anyString(), anyList(),
-                tasks.capture(), eq("MODEL_DISABLED"));
+                tasks.capture(), eq("PLAN_REJECTED"),
+                eq("任务 search_counter 使用了未注册工具 external_browser"));
         assertEquals(6, tasks.getValue().size());
         assertEquals("baseline_scan", ((ResearchMissionTask) tasks.getValue().get(0)).getTaskKey());
         assertEquals("DETERMINISTIC", result.getPlanningMode());
@@ -87,6 +89,24 @@ class ResearchMissionServiceTest {
         service.completeMission(21L, true);
 
         verify(repository).updateMissionStatus(21L, "PARTIAL_SUCCESS");
+    }
+
+    @Test
+    void terminalMissionSkipsUnfinishedTasksWithRuntimeReason() {
+        when(repository.updateMissionStatus(21L, "PARTIAL_SUCCESS")).thenReturn(true);
+
+        service.completeMission(21L, false, "NO_PROGRESS");
+
+        verify(repository).skipUnfinishedTasks(21L, "RUNTIME_TERMINATED:NO_PROGRESS");
+        verify(repository).updateMissionStatus(21L, "PARTIAL_SUCCESS");
+    }
+
+    @Test
+    void failedMissionClosesEveryUnfinishedTask() {
+        service.failMission(21L);
+
+        verify(repository).skipUnfinishedTasks(21L, "MISSION_FAILED");
+        verify(repository).updateMissionStatus(21L, "FAILED");
     }
 
     private ResearchRun run() {

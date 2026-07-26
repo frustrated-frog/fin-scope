@@ -5,13 +5,18 @@ import { ResearchMissionView } from '../../shared/types';
 import { ResearchMissionMap } from './ResearchMissionMap';
 
 test('shows the active research task, real gap and deterministic fallback mode', () => {
-  render(<ResearchMissionMap mission={runningMission()} />);
+  const mission = runningMission();
+  Object.assign(mission.mission, {
+    fallbackDetail: '任务 search_counter 使用了未注册工具 external_browser'
+  });
+  render(<ResearchMissionMap mission={mission} />);
 
   const map = screen.getByRole('region', { name: '研究作战图' });
   expect(within(map).getAllByText('反方证据搜索').length).toBeGreaterThan(0);
   expect(within(map).getAllByText('正在取证').length).toBeGreaterThan(0);
   expect(within(map).getByText(/缺少反向或风险证据/)).toBeInTheDocument();
   expect(within(map).getByText('规则计划')).toBeInTheDocument();
+  expect(within(map).getByText(/未注册工具 external_browser/)).toBeInTheDocument();
   expect(within(map).getByText('4 / 6')).toBeInTheDocument();
   expect(within(map).getByText('2 / 2')).toBeInTheDocument();
 });
@@ -53,6 +58,21 @@ test('does not present a pending plan as deterministic fallback', () => {
 
   expect(screen.getByText('等待计划')).toBeInTheDocument();
   expect(screen.queryByText('规则计划')).not.toBeInTheDocument();
+});
+
+test('explains runtime termination for skipped mission tasks', () => {
+  const mission = runningMission();
+  mission.mission.status = 'PARTIAL_SUCCESS';
+  mission.mission.activeTaskKey = undefined;
+  mission.tasks[3] = {
+    ...mission.tasks[3],
+    status: 'SKIPPED',
+    skipReason: 'RUNTIME_TERMINATED:NO_PROGRESS'
+  };
+
+  render(<ResearchMissionMap mission={mission} />);
+
+  expect(screen.getByText('运行因连续搜索无新增证据而停止')).toBeInTheDocument();
 });
 
 function runningMission(): ResearchMissionView {

@@ -45,15 +45,19 @@ public class ResearchRuntimeService {
         boolean systemNode = actionFingerprint == null;
         boolean finalizationNode = systemNode && isFinalizationNode(nodeId);
         int repeatedCount = systemNode ? 0 : repository.countStartedActions(runId, actionFingerprint);
-        RuntimeGuardDecision decision = systemNode
-                ? (checkpoint.isTerminal() && !finalizationNode
-                ? RuntimeGuardDecision.terminated("ALREADY_TERMINAL")
-                : RuntimeGuardDecision.allowed())
-                : checkpoint.getTerminationReason() != null
-                ? RuntimeGuardDecision.terminated(checkpoint.getTerminationReason())
-                : policy.beforeAction(checkpoint, repeatedCount);
+        RuntimeGuardDecision decision;
+        if (checkpoint.getTerminationReason() != null && !finalizationNode) {
+            decision = RuntimeGuardDecision.terminated(checkpoint.getTerminationReason());
+        } else if (systemNode) {
+            decision = checkpoint.isTerminal() && !finalizationNode
+                    ? RuntimeGuardDecision.terminated("ALREADY_TERMINAL")
+                    : RuntimeGuardDecision.allowed();
+        } else {
+            decision = policy.beforeAction(checkpoint, repeatedCount);
+        }
         if (!decision.isAllowed()) {
-            if (!"ALREADY_TERMINAL".equals(decision.getTerminationReason())) {
+            if (!"ALREADY_TERMINAL".equals(decision.getTerminationReason())
+                    && checkpoint.getTerminationReason() == null) {
                 if (!repository.terminate(runId, checkpoint.getStateVersion(), decision.getTerminationReason())) {
                     throw new BusinessConflictException("研究运行终止状态发生并发冲突：" + runId);
                 }
@@ -173,7 +177,7 @@ public class ResearchRuntimeService {
     }
 
     private boolean isBudgetedNode(String nodeId) {
-        return nodeId != null && (nodeId.startsWith("collect_source:") || nodeId.startsWith("expand_query:"));
+        return nodeId != null && (nodeId.startsWith("mission:") || nodeId.startsWith("expand_query:"));
     }
 
     private ResearchRuntimeCheckpoint required(Long runId) {

@@ -52,6 +52,10 @@ public class ResearchReportService {
         }
         List<ResearchEvidenceCard> evidence = evidenceSelector.select(context.getThesis(), context.getArticles(),
                 context.getEvidenceItems());
+        if (evidence.isEmpty()) {
+            throw new InsufficientResearchEvidenceException(
+                    "研究运行没有可引用的有效证据，已阻止生成结论报告");
+        }
         EvidenceSufficiency sufficiency = EvidenceSufficiency.assess(evidence);
         GeneratedResearchReport fallback = reportGenerator.generate(context.getThesis(), evidence, sufficiency);
         GeneratedResearchReport generated = synthesisAgent.refine(context.getThesis(), evidence, fallback);

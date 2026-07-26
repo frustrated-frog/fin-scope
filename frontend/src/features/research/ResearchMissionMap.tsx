@@ -47,6 +47,12 @@ export function ResearchMissionMap({ mission }: { mission?: ResearchMissionView 
           </div>
           <h4>{mission.mission.goal}</h4>
           <p>{mission.mission.scopeSummary}</p>
+          {mission.mission.fallbackDetail && (
+            <p className="research-mission-fallback-detail">
+              <strong>计划降级原因</strong>
+              <span>{mission.mission.fallbackDetail}</span>
+            </p>
+          )}
         </div>
         <div className="research-mission-state">
           <span>{MISSION_STATUS[mission.mission.status] || mission.mission.status}</span>
@@ -216,5 +222,12 @@ function presentIntent(intent: string) {
 }
 
 function presentSkipReason(reason: string) {
-  return reason === 'SUFFICIENT_EVIDENCE' ? '证据已充分' : reason;
+  const labels: Record<string, string> = {
+    SUFFICIENT_EVIDENCE: '证据已充分',
+    MISSION_FINALIZED: '任务图已收束',
+    'RUNTIME_TERMINATED:NO_PROGRESS': '运行因连续搜索无新增证据而停止',
+    'RUNTIME_TERMINATED:BUDGET_EXHAUSTED': '运行因动作预算耗尽而停止',
+    'RUNTIME_TERMINATED:REPEATED_ACTION': '运行因重复动作保护而停止'
+  };
+  return labels[reason] || reason;
 }

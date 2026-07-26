@@ -36,6 +36,7 @@ public class ResearchMissionRepository {
         value.setMaxActions(rs.getInt("max_actions"));
         value.setActiveTaskKey(rs.getString("active_task_key"));
         value.setFallbackReason(rs.getString("fallback_reason"));
+        value.setFallbackDetail(rs.getString("fallback_detail"));
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
         return value;
@@ -109,7 +110,8 @@ public class ResearchMissionRepository {
                                        String scopeSummary,
                                        List<String> successCriteria,
                                        List<ResearchMissionTask> tasks,
-                                       String fallbackReason) {
+                                       String fallbackReason,
+                                       String fallbackDetail) {
         LocalDateTime now = LocalDateTime.now();
         jdbcTemplate.update("DELETE FROM research_mission_task WHERE research_run_id=?", runId);
         if (tasks != null) {
@@ -119,8 +121,9 @@ public class ResearchMissionRepository {
         }
         int updated = jdbcTemplate.update("UPDATE research_mission SET scope_summary=?,success_criteria=?,"
                         + "status='RUNNING',planning_mode=?,plan_version=plan_version+1,active_task_key=NULL,"
-                        + "fallback_reason=?,updated_at=? WHERE research_run_id=?",
-                scopeSummary, joinList(successCriteria), planningMode, fallbackReason, TimeUtil.text(now), runId);
+                        + "fallback_reason=?,fallback_detail=?,updated_at=? WHERE research_run_id=?",
+                scopeSummary, joinList(successCriteria), planningMode, fallbackReason, fallbackDetail,
+                TimeUtil.text(now), runId);
         if (updated != 1) {
             throw new IllegalStateException("Research mission not found: " + runId);
         }
@@ -182,6 +185,19 @@ public class ResearchMissionRepository {
         return jdbcTemplate.update("UPDATE research_mission_task SET status='SKIPPED',skip_reason=?,"
                         + "ended_at=?,updated_at=? WHERE research_run_id=? AND tool_code=? AND status='PENDING'",
                 reason, TimeUtil.text(now), TimeUtil.text(now), runId, toolCode);
+    }
+
+    @Transactional
+    public int skipUnfinishedTasks(Long runId, String reason) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = jdbcTemplate.update("UPDATE research_mission_task SET status='SKIPPED',skip_reason=?,"
+                        + "ended_at=?,updated_at=? WHERE research_run_id=? "
+                        + "AND status IN ('PENDING','RUNNING','INTERRUPTED')",
+                reason, TimeUtil.text(now), TimeUtil.text(now), runId);
+        jdbcTemplate.update("UPDATE research_mission SET active_task_key=NULL,updated_at=? "
+                        + "WHERE research_run_id=?",
+                TimeUtil.text(now), runId);
+        return updated;
     }
 
     public int interruptRunning(String reason) {

@@ -415,6 +415,7 @@ export type ResearchMission = {
   maxActions: number;
   activeTaskKey?: string;
   fallbackReason?: string;
+  fallbackDetail?: string;
   createdAt?: string;
   updatedAt?: string;
 };

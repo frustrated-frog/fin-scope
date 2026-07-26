@@ -343,9 +343,11 @@ public class DatabaseInitializer implements InitializingBean {
                 + "max_actions INTEGER NOT NULL,"
                 + "active_task_key TEXT,"
                 + "fallback_reason TEXT,"
+                + "fallback_detail TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL,"
                 + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE)");
+        ensureColumn("research_mission", "fallback_detail", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_mission_status "
                 + "ON research_mission(status,updated_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_mission_task ("

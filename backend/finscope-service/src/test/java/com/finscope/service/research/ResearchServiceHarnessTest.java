@@ -541,7 +541,7 @@ class ResearchServiceHarnessTest {
         verify(missions).startTask(501L, "write_report");
         verify(fetches).fetch(org.mockito.ArgumentMatchers.<Source>argThat(
                 source -> source.getName().contains("反方")));
-        verify(missions).completeMission(501L, false);
+        verify(missions).completeMission(501L, false, null);
     }
 
     private ThemeProfile theme() {

@@ -17,6 +17,7 @@ public class ResearchMission {
     private int maxActions;
     private String activeTaskKey;
     private String fallbackReason;
+    private String fallbackDetail;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -106,6 +107,14 @@ public class ResearchMission {
 
     public void setFallbackReason(String fallbackReason) {
         this.fallbackReason = fallbackReason;
+    }
+
+    public String getFallbackDetail() {
+        return fallbackDetail;
+    }
+
+    public void setFallbackDetail(String fallbackDetail) {
+        this.fallbackDetail = fallbackDetail;
     }
 
     public LocalDateTime getCreatedAt() {

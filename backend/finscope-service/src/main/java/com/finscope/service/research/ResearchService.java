@@ -25,6 +25,7 @@ import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.ThemeProfile;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMissionTask;
+import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.source.Source;
 import com.finscope.service.agent.ActionFingerprintService;
 import com.finscope.service.agent.AgentHarness;
@@ -481,9 +482,10 @@ public class ResearchService {
                     "themes=" + String.join(",", run.getThemeCodes()) + ", date=" + run.getRunDate(),
                     run.getSummary(), run.getErrorMessage(), System.currentTimeMillis() - start);
             ResearchRun updated = researchRunRepository.updateResult(run);
-            researchRuntimeService.complete(run.getId());
+            ResearchRuntimeCheckpoint completedRuntime = researchRuntimeService.complete(run.getId());
             if (thesis != null) {
-                researchMissionService.completeMission(run.getId(), !errors.isEmpty());
+                researchMissionService.completeMission(run.getId(), !errors.isEmpty(),
+                        hardTerminationReason(completedRuntime));
             }
             return updated;
         } catch (Exception ex) {
@@ -556,6 +558,13 @@ public class ResearchService {
     private int distinctArticleSources(Long runId) {
         return researchRunOutputService == null ? 0
                 : researchRunOutputService.countDistinctArticleSources(runId);
+    }
+
+    private String hardTerminationReason(ResearchRuntimeCheckpoint checkpoint) {
+        if (checkpoint == null || "COMPLETED".equals(checkpoint.getTerminationReason())) {
+            return null;
+        }
+        return checkpoint.getTerminationReason();
     }
 
     private ResearchMissionTask requiredMissionTask(List<ResearchMissionTask> tasks,

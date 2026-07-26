@@ -17,9 +17,11 @@ import java.nio.file.Paths;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,5 +67,34 @@ class ResearchReportServiceTest {
         assertTrue(report.getCharacterCount() <= 12000);
         verify(outputService).record(14L, ResearchRunOutputService.REPORT, 7L);
         verify(thesisRepository).update(thesis);
+    }
+
+    @Test
+    void refusesToPersistAConclusionReportWithoutSelectedEvidence() throws Exception {
+        RunScopedResearchContextService contextService = mock(RunScopedResearchContextService.class);
+        ResearchReportRepository repository = mock(ResearchReportRepository.class);
+        ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
+        ResearchThesisRepository thesisRepository = mock(ResearchThesisRepository.class);
+        ResearchRun run = new ResearchRun();
+        run.setId(15L);
+        run.setThesisId(2L);
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(2L);
+        thesis.setSubjectName("AI算力");
+        thesis.setQuestion("资本开支能否持续");
+        when(contextService.load(15L)).thenReturn(new RunScopedResearchContext(run, thesis,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
+        VaultWriter vaultWriter = mock(VaultWriter.class);
+        ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
+                new ResearchReportGenerator(), new ResearchReportSynthesisAgent(), repository,
+                thesisRepository, vaultWriter, outputService);
+
+        InsufficientResearchEvidenceException error = assertThrows(
+                InsufficientResearchEvidenceException.class, () -> service.generate(15L));
+
+        assertTrue(error.getMessage().contains("没有可引用的有效证据"));
+        verify(repository, never()).upsert(any(ResearchReport.class));
+        verify(vaultWriter, never()).writeResearchReport(any(), any(), any());
+        verify(outputService, never()).record(any(), any(), any());
     }
 }

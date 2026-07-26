@@ -98,6 +98,19 @@ class ResearchRuntimeServiceTest {
     }
 
     @Test
+    void nonFinalizationSystemNodeCannotEraseGuardTermination() {
+        ResearchRuntimeCheckpoint finalizing = checkpoint("FINALIZING", 4);
+        finalizing.setTerminationReason("NO_PROGRESS");
+        when(repository.findCheckpoint(7L)).thenReturn(Optional.of(finalizing));
+
+        RuntimeNodeStart result = service.startNode(7L, "classify_events", "ASSESS", null, "runId=7");
+
+        assertFalse(result.isStarted());
+        assertEquals("NO_PROGRESS", result.getTerminationReason());
+        verify(repository, never()).startNode(any(), anyInt(), any(), any(), anyInt(), anyInt(), any(Boolean.class));
+    }
+
+    @Test
     void systemNodeCanFinalizeWithoutConsumingActionBudget() {
         ResearchRuntimeCheckpoint state = checkpoint("RUNNING", 4);
         state.setConsumedActions(12);
@@ -114,16 +127,30 @@ class ResearchRuntimeServiceTest {
     }
 
     @Test
-    void completeNodeIncrementsNoProgressForSameStateHash() {
+    void configuredSourceDoesNotIncrementNoProgressForSameStateHash() {
         ResearchRuntimeCheckpoint state = checkpoint("RUNNING", 4);
         state.setLastStateHash("2:1:3:0");
         state.setNoProgressCount(1);
         when(repository.findCheckpoint(7L)).thenReturn(Optional.of(state));
-        when(repository.completeNode(7L, 4, "collect_source:12", "2:1:3:0", 2, 0)).thenReturn(true);
+        when(repository.completeNode(7L, 4, "collect_source:12", "2:1:3:0", 0, 0)).thenReturn(true);
 
         service.completeNode(7L, "collect_source:12", "2:1:3:0", 0, "evidence=3");
 
-        verify(repository).completeNode(7L, 4, "collect_source:12", "2:1:3:0", 2, 0);
+        verify(repository).completeNode(7L, 4, "collect_source:12", "2:1:3:0", 0, 0);
+        verify(repository).appendEvent(any(ResearchRuntimeEvent.class));
+    }
+
+    @Test
+    void adaptiveMissionSearchIncrementsNoProgressForSameStateHash() {
+        ResearchRuntimeCheckpoint state = checkpoint("RUNNING", 4);
+        state.setLastStateHash("2:1:3:0");
+        state.setNoProgressCount(1);
+        when(repository.findCheckpoint(7L)).thenReturn(Optional.of(state));
+        when(repository.completeNode(7L, 4, "mission:support_search", "2:1:3:0", 2, 0)).thenReturn(true);
+
+        service.completeNode(7L, "mission:support_search", "2:1:3:0", 0, "evidence=3");
+
+        verify(repository).completeNode(7L, 4, "mission:support_search", "2:1:3:0", 2, 0);
         verify(repository).appendEvent(any(ResearchRuntimeEvent.class));
     }
 
