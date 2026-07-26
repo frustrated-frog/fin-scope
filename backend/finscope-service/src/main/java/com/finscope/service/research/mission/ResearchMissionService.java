@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -128,8 +129,16 @@ public class ResearchMissionService {
     }
 
     public ResearchMissionView detail(Long runId) {
-        ResearchMission mission = repository.findMission(runId)
+        return findDetail(runId)
                 .orElseThrow(() -> new ResourceNotFoundException("研究任务图不存在：" + runId));
+    }
+
+    public Optional<ResearchMissionView> findDetail(Long runId) {
+        Optional<ResearchMission> found = repository.findMission(runId);
+        if (!found.isPresent()) {
+            return Optional.empty();
+        }
+        ResearchMission mission = found.get();
         List<ResearchMissionTask> tasks = repository.findTasks(runId);
         Set<String> usedTools = new HashSet<String>();
         for (ResearchMissionTask task : tasks) {
@@ -146,7 +155,7 @@ public class ResearchMissionService {
         view.setTasks(tasks);
         view.setGaps(repository.findGaps(runId));
         view.setTools(tools);
-        return view;
+        return Optional.of(view);
     }
 
     private boolean blank(String value) {

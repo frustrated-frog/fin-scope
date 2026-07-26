@@ -7,12 +7,14 @@ import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
+import com.finscope.domain.research.mission.ResearchMissionView;
 import com.finscope.service.agent.AgentRunService;
 import com.finscope.service.research.evaluation.ResearchEvaluationService;
 import com.finscope.service.research.ResearchRunPlanService;
 import com.finscope.service.research.ResearchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
+import com.finscope.service.research.mission.ResearchMissionService;
 import com.finscope.web.request.CreateResearchRunRequest;
 import com.finscope.web.response.ResearchRunDetailResponse;
 import com.finscope.web.response.ResearchRunResponse;
@@ -42,6 +44,8 @@ public class ResearchController {
     private ResearchRuntimeService researchRuntimeService;
     @Resource
     private ResearchEvaluationService researchEvaluationService;
+    @Resource
+    private ResearchMissionService researchMissionService;
 
     /**
      * 创建研究运行计划。
@@ -87,7 +91,14 @@ public class ResearchController {
                 agentRunService.findByResearchRunId(id),
                 researchReportService.findByRunId(id).orElse(null),
                 runtime,
-                researchEvaluationService.findLatest(id).orElse(null)));
+                researchEvaluationService.findLatest(id).orElse(null),
+                researchMissionService.findDetail(id).orElse(null)));
+    }
+
+    @GetMapping("/{id}/mission")
+    public ApiResponse<ResearchMissionView> mission(@PathVariable Long id) {
+        researchService.detail(id);
+        return ApiResponses.success(researchMissionService.detail(id));
     }
 
     @GetMapping("/{id}/report")

@@ -5,6 +5,8 @@ import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
+import com.finscope.domain.research.mission.ResearchMission;
+import com.finscope.domain.research.mission.ResearchMissionView;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -55,6 +57,22 @@ class ResearchRunDetailResponseTest {
 
         assertTrue(response.getRuntime().isRecoverable());
         assertEquals(86, response.getLatestEvaluation().getScore());
+        assertEquals(null, response.getMission());
+    }
+
+    @Test
+    void exposesOptionalMissionWithoutBreakingLegacyConstructor() {
+        ResearchMission mission = new ResearchMission();
+        mission.setResearchRunId(18L);
+        mission.setGoal("验证AI资本开支能否持续");
+        ResearchMissionView missionView = new ResearchMissionView();
+        missionView.setMission(mission);
+
+        ResearchRunDetailResponse response = new ResearchRunDetailResponse(
+                run(18L, ResearchEnums.RUN_STATUS_RUNNING), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), null, null, null, missionView);
+
+        assertEquals("验证AI资本开支能否持续", response.getMission().getMission().getGoal());
     }
 
     private ResearchRun run(Long id, String status) {

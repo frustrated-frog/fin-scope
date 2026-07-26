@@ -7,6 +7,7 @@ import com.finscope.domain.research.ResearchRunPlanStep;
 import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
+import com.finscope.domain.research.mission.ResearchMissionView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,13 +24,14 @@ public class ResearchRunDetailResponse {
     private boolean canRegenerateReport;
     private ResearchRuntimeView runtime;
     private ResearchEvaluation latestEvaluation;
+    private ResearchMissionView mission;
 
     public ResearchRunDetailResponse(ResearchRun run,
                                      List<SourceProfile> plannedSources,
                                      List<ResearchRunPlanStep> planSteps,
                                      List<AgentRun> agentRuns,
                                      ResearchReport report) {
-        this(run, plannedSources, planSteps, agentRuns, report, null, null);
+        this(run, plannedSources, planSteps, agentRuns, report, null, null, null);
     }
 
     public ResearchRunDetailResponse(ResearchRun run,
@@ -39,6 +41,17 @@ public class ResearchRunDetailResponse {
                                      ResearchReport report,
                                      ResearchRuntimeView runtime,
                                      ResearchEvaluation latestEvaluation) {
+        this(run, plannedSources, planSteps, agentRuns, report, runtime, latestEvaluation, null);
+    }
+
+    public ResearchRunDetailResponse(ResearchRun run,
+                                     List<SourceProfile> plannedSources,
+                                     List<ResearchRunPlanStep> planSteps,
+                                     List<AgentRun> agentRuns,
+                                     ResearchReport report,
+                                     ResearchRuntimeView runtime,
+                                     ResearchEvaluation latestEvaluation,
+                                     ResearchMissionView mission) {
         this.run = run;
         setPlannedSources(plannedSources);
         setPlanSteps(planSteps);
@@ -49,6 +62,7 @@ public class ResearchRunDetailResponse {
         this.canRegenerateReport = run != null && run.getThesisId() != null && !"RUNNING".equals(run.getStatus());
         this.runtime = runtime;
         this.latestEvaluation = latestEvaluation;
+        this.mission = mission;
     }
 
     public ResearchRun getRun() {
@@ -103,4 +117,5 @@ public class ResearchRunDetailResponse {
 
     public ResearchRuntimeView getRuntime() { return runtime; }
     public ResearchEvaluation getLatestEvaluation() { return latestEvaluation; }
+    public ResearchMissionView getMission() { return mission; }
 }

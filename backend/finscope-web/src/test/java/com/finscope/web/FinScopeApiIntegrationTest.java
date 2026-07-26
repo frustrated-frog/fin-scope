@@ -90,6 +90,9 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("research_evaluation");
         deleteIfExists("research_runtime_event");
         deleteIfExists("research_runtime_checkpoint");
+        deleteIfExists("research_mission_gap");
+        deleteIfExists("research_mission_task");
+        deleteIfExists("research_mission");
         deleteIfExists("thesis_finding");
         deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
@@ -107,7 +110,8 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
                 + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
                 + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan',"
-                + "'research_run_output','research_report','thesis_finding','research_thesis',"
+                + "'research_run_output','research_report','research_mission_task','research_mission_gap',"
+                + "'thesis_finding','research_thesis',"
                 + "'fetch_batch','intake_candidate')");
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/rss", exchange -> {
@@ -958,7 +962,20 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(hasItem("content-idea-generate")))
                 .andExpect(jsonPath("$.data.agentRuns[*].researchRunId").value(hasItem(1)))
                 .andExpect(jsonPath("$.data.reportAvailable").value(true))
-                .andExpect(jsonPath("$.data.reportStatus", containsString("COMPLETED")));
+                .andExpect(jsonPath("$.data.reportStatus", containsString("COMPLETED")))
+                .andExpect(jsonPath("$.data.mission.mission.goal").value("宏观政策变化如何影响黄金？"))
+                .andExpect(jsonPath("$.data.mission.tasks.length()").value(greaterThanOrEqualTo(6)));
+
+        mvc.perform(get("/api/research/tools"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(4))
+                .andExpect(jsonPath("$.data[*].code").value(hasItem("public_news_search")));
+
+        mvc.perform(get("/api/research/runs/1/mission"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mission.planningMode").value("DETERMINISTIC"))
+                .andExpect(jsonPath("$.data.tasks.length()").value(greaterThanOrEqualTo(6)))
+                .andExpect(jsonPath("$.data.gaps.length()").value(greaterThanOrEqualTo(1)));
 
         mvc.perform(get("/api/research/runs/1/runtime"))
                 .andExpect(status().isOk())
