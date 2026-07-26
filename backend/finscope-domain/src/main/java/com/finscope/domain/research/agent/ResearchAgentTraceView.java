@@ -8,6 +8,7 @@ public class ResearchAgentTraceView {
     private ResearchAgentState state;
     private List<ResearchAgentDecision> decisions = Collections.emptyList();
     private List<ResearchToolObservation> observations = Collections.emptyList();
+    private ResearchAgentTrajectoryMetrics trajectoryMetrics;
 
     public ResearchAgentState getState() { return state; }
     public void setState(ResearchAgentState state) { this.state = state; }
@@ -22,5 +23,9 @@ public class ResearchAgentTraceView {
         this.observations = observations == null || observations.isEmpty()
                 ? Collections.<ResearchToolObservation>emptyList()
                 : Collections.unmodifiableList(new ArrayList<ResearchToolObservation>(observations));
+    }
+    public ResearchAgentTrajectoryMetrics getTrajectoryMetrics() { return trajectoryMetrics; }
+    public void setTrajectoryMetrics(ResearchAgentTrajectoryMetrics trajectoryMetrics) {
+        this.trajectoryMetrics = trajectoryMetrics;
     }
 }

@@ -7,6 +7,8 @@ import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionView;
+import com.finscope.domain.research.agent.ResearchAgentState;
+import com.finscope.domain.research.agent.ResearchAgentTraceView;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -73,6 +75,24 @@ class ResearchRunDetailResponseTest {
                 Collections.emptyList(), null, null, null, missionView);
 
         assertEquals("验证AI资本开支能否持续", response.getMission().getMission().getGoal());
+    }
+
+    @Test
+    void exposesOptionalAgentCoreTraceWithoutBreakingLegacyRuns() {
+        ResearchAgentState state = new ResearchAgentState();
+        state.setResearchRunId(19L);
+        state.setCurrentSubgoal("补齐反方证据");
+        ResearchAgentTraceView trace = new ResearchAgentTraceView();
+        trace.setState(state);
+
+        ResearchRunDetailResponse response = new ResearchRunDetailResponse(
+                run(19L, ResearchEnums.RUN_STATUS_RUNNING), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), null, null, null, null, trace);
+
+        assertEquals("补齐反方证据", response.getAgentCore().getState().getCurrentSubgoal());
+        ResearchRunDetailResponse legacy = new ResearchRunDetailResponse(run(20L, ResearchEnums.RUN_STATUS_FAILED),
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), null);
+        assertEquals(null, legacy.getAgentCore());
     }
 
     private ResearchRun run(Long id, String status) {
