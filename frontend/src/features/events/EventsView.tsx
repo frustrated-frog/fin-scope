@@ -495,8 +495,8 @@ export function EventsView({
                   <span>{selectedTasks.length} tasks</span>
                 </div>
                 {selectedTasks.length ? selectedTasks.map((task) => (
-                  <article className="event-output-card" key={task.id}>
-                    <span className="badge">{task.status}</span>
+                  <article className="event-output-card event-output-card-task" key={task.id}>
+                    <span className="event-output-format">{task.status}</span>
                     <strong>{task.question}</strong>
                     {task.whyNeeded && <p>{task.whyNeeded}</p>}
                     <p className="muted">请在知识工作台中接受、作答或完成此任务。</p>
@@ -512,11 +512,11 @@ export function EventsView({
                   <span>{selectedIdeas.length} ideas</span>
                 </div>
                 {selectedIdeas.length ? selectedIdeas.map((idea) => (
-                  <article className="event-output-card" key={idea.id}>
-                    <span className="badge">{idea.format}</span>
+                  <article className="event-output-card event-output-card-idea" key={idea.id}>
+                    <span className="event-output-format">{idea.format}</span>
                     <strong>{idea.title}</strong>
                     {idea.angle && <p>{idea.angle}</p>}
-                    <div className="task-status-row">
+                    <div className="task-status-row event-output-status">
                       <label className="inline-select">
                         <span>选题状态</span>
                         <select
@@ -532,8 +532,8 @@ export function EventsView({
                           ))}
                         </select>
                       </label>
-                      <button className="compact-button" type="button" disabled={mutationPending} onClick={() => saveIdeaStatus(idea)}>
-                        保存选题状态
+                      <button className="compact-button event-output-save" type="button" disabled={mutationPending} onClick={() => saveIdeaStatus(idea)}>
+                        保存状态
                       </button>
                     </div>
                   </article>

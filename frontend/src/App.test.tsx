@@ -1228,6 +1228,21 @@ test('events workbench explains timeline, merge basis, evidence strength and eve
   expect(within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
 });
 
+test('event output ideas use compact editorial controls', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
+
+  const detail = await screen.findByRole('region', { name: '事件详情' });
+  const ideaCard = within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？').closest('article') as HTMLElement;
+
+  expect(ideaCard).toHaveClass('event-output-card', 'event-output-card-idea');
+  expect(within(ideaCard).getByText('X_THREAD')).toHaveClass('event-output-format');
+  expect(within(ideaCard).getByLabelText('内容选题状态-1').closest('.event-output-status')).toBeInTheDocument();
+  expect(within(ideaCard).getByRole('button', { name: '保存状态' })).toHaveClass('event-output-save');
+});
+
 test('events stylesheet prevents long article urls from widening the workbench', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');

@@ -28,7 +28,7 @@ test('presents evidence as a judgement workbench instead of a flat ledger', () =
     articleUrl: 'https://example.com/rule'
   }]} events={[{ id: 1, canonicalTitle: '出口管制', themeCode: 'ai_startup' }]} onOpenEvent={vi.fn()} />);
 
-  expect(screen.getByText('当前可以形成的判断')).toBeInTheDocument();
+  expect(screen.getByText('证据链')).toBeInTheDocument();
   expect(screen.getByText('已证实')).toBeInTheDocument();
   expect(screen.getByText('证据缺口')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '查看原文' })).toHaveAttribute('href', 'https://example.com/rule');
@@ -43,4 +43,16 @@ test('groups multiple evidence items from one event into one judgement card', ()
   expect(screen.getAllByRole('button', { name: 'DeepSeek 研究进展' })).toHaveLength(1);
   expect(screen.getByText('规则已经公开。')).toBeInTheDocument();
   expect(screen.getByText('模型权重已经公开。')).toBeInTheDocument();
+});
+
+test('surfaces an Apple-style evidence review desk with grouped controls and chain labels', () => {
+  render(<EvidenceView evidenceItems={[
+    { id: 1, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'FACT', claim: '监管部门公布规则已经生效。', confidence: 90 },
+    { id: 2, eventId: 1, sourceTier: 'COMPANY', evidenceType: 'DATA', claim: '公司披露订单出现增长。', confidence: 72 }
+  ]} events={[{ id: 1, canonicalTitle: '出口管制', themeCode: 'ai_startup' }]} onOpenEvent={vi.fn()} />);
+
+  expect(screen.getByText('证据审阅台')).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: '证据筛选条件' })).toBeInTheDocument();
+  expect(screen.getByText('证据链')).toBeInTheDocument();
+  expect(screen.getByText('直接材料占比')).toBeInTheDocument();
 });
