@@ -349,10 +349,17 @@ export function EventsView({
           <>
             <header className="event-detail-hero">
               <div className="event-detail-topbar">
-                {onBack && <button className="secondary-button event-archive-back" type="button" onClick={onBack}>返回事件队列</button>}
+                {onBack && (
+                  <button className="secondary-button event-archive-back" type="button" onClick={onBack}>
+                    <span className="event-archive-back-icon" aria-hidden="true">←</span>
+                    <span>返回事件队列</span>
+                  </button>
+                )}
                 <div className="event-hero-badges">
                   <span className={`event-status-pill ${eventStatusTone(selectedEvent.status)}`}>{selectedEvent.status ?? 'ACTIVE'}</span>
-                  <span className="subtle-badge">{selectedEvent.noveltyState ?? 'NEW'}</span>
+                  <span className={`subtle-badge event-novelty-pill ${eventNoveltyTone(selectedEvent.noveltyState)}`}>
+                    {selectedEvent.noveltyState ?? 'NEW'}
+                  </span>
                 </div>
               </div>
               <div className="event-detail-title">
@@ -391,7 +398,9 @@ export function EventsView({
                   <ol className="event-timeline-list">
                     {[...eventArticles].sort(compareArticleLinks).map((article) => (
                       <li key={`${article.eventId}-${article.articleId}`}>
-                        <span className="badge">{article.noveltyType ?? 'NEW'}</span>
+                        <span className={`badge event-timeline-kind ${eventNoveltyTone(article.noveltyType)}`}>
+                          {article.noveltyType ?? 'NEW'}
+                        </span>
                         <div>
                           <strong>{article.articleTitle || `Article ${article.articleId}`}</strong>
                           <p>{formatDate(article.createdAt)} · {article.articleUrl ? <a href={article.articleUrl} target="_blank" rel="noopener noreferrer">查看原文</a> : '无链接'}</p>
@@ -420,7 +429,9 @@ export function EventsView({
                         <div className="merge-basis-tags">
                           <span className="subtle-badge">{article.relationType || 'PRIMARY'}</span>
                           <span className="subtle-badge">匹配 {formatPercent(article.matchScore)}</span>
-                          <span className="badge">{article.noveltyType || 'NEW'}</span>
+                          <span className={`badge event-novelty-pill ${eventNoveltyTone(article.noveltyType)}`}>
+                            {article.noveltyType || 'NEW'}
+                          </span>
                         </div>
                       </li>
                     ))}
@@ -642,6 +653,10 @@ function eventStatusTone(status?: string) {
   if (status === 'ARCHIVED') return 'archived';
   if (status === 'COOLING') return 'cooling';
   return 'active';
+}
+
+function eventNoveltyTone(novelty?: string) {
+  return (novelty || 'NEW').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
 }
 
 function isTrustedTier(tier?: string) {

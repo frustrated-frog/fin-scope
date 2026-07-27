@@ -1205,6 +1205,10 @@ test('events view presents the selected event as a structured detail panel', asy
   expect(within(detail).getAllByText('事件证据').length).toBeGreaterThan(0);
   expect(within(detail).getByText('2 条')).toBeInTheDocument();
   expect(within(detail).getByLabelText('证据来源层级')).toBeInTheDocument();
+
+  const timelineKinds = Array.from(detail.querySelectorAll('.event-timeline-kind'));
+  const followUpKind = timelineKinds.find((item) => item.textContent === 'FOLLOW_UP');
+  expect(followUpKind).toHaveClass('follow_up');
 });
 
 test('events workbench explains timeline, merge basis, evidence strength and event outputs', async () => {
@@ -1251,6 +1255,22 @@ test('events stylesheet prevents long article urls from widening the workbench',
   expect(styles).toMatch(/\.event-card\s*{[^}]*min-width:\s*0;/s);
   expect(styles).toMatch(/\.event-card-top\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
   expect(styles).toMatch(/\.event-timeline-list\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
+});
+
+test('events timeline status stays inside its layout column', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\.event-timeline-list\s+li\s*{[^}]*grid-template-columns:\s*96px\s+minmax\(0,\s*1fr\);/s);
+  expect(styles).toMatch(/\.event-timeline-kind\s*{[^}]*display:\s*inline-flex;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;/s);
+});
+
+test('dark event merge panel uses a restrained material instead of a white surface', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\[data-theme="dark"\]\s+\.events-detail-grid\s+\.event-merge-section\s*{[^}]*background:/s);
+  expect(styles).not.toMatch(/\[data-theme="dark"\]\s+\.events-detail-grid\s+\.event-merge-section\s*{[^}]*background:\s*(?:#fff(?:fff)?|white)\b/is);
 });
 
 test('dark theme keeps ghost buttons visually subordinate', () => {
