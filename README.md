@@ -15,10 +15,13 @@ FinScope 是一个本地优先的个人投资研究工作台。它把公开信�
 - 将文章转换为金融资讯、研究论文或社媒长文情报卡；模型不可用时使用确定性规则兜底，不阻断入库。
 - 生成每日 Markdown 简报，并围绕研究命题执行异步研究、保存发现和证据、合成研究报告。
 - 自适应研究智能体先建立 Research Contract，再由受校验的 Planning Agent 生成任务 DAG；模型计划不合法或不可用时自动切换到确定性计划。
+- 命题研究进入 Observation-driven Decision Loop：每轮基于工作记忆、证据缺口和上一轮 Observation 动态选择搜索、评估、局部重规划或完成请求，不再执行预先写死的搜索轮次。
 - 类型化 Research Tool Registry 只开放来源扫描、公开新闻搜索、证据判断和报告合成四种受控能力，模型不能直接执行 SQL、Shell 或任意 HTTP。
 - Evidence Gap 根据有效证据、独立来源和正反覆盖决定继续搜索或提前收束，不再依赖固定轮次；ResearchTab 用真实持久化状态展示任务图、活动节点和缺口变化。
+- Agent State、Decision 与 Observation 追加写入 SQLite；独立 Finish Verifier 决定是否允许生成报告，规则降级、重复动作、无进展和 Finish 拒绝均可恢复、可审计。
 - Deep Research Runtime 为命题研究保存 SQLite 检查点与单调事件流，限制动作预算、重复动作和无进展循环；进程中断后可从已完成节点继续。
-- Eval Harness 对运行状态、报告、证据、来源和执行轨迹做确定性离线评分，输出可复现的输入指纹、六项指标和 PASS/BLOCK 门禁。
+- Eval Harness 对运行状态、报告、证据、来源和 Agent 决策轨迹做确定性离线评分，额外计算决策有效率、观察跟进率、重复/无进展率、重规划成功率、首次完成率和降级率。
+- ResearchTab 的“Agent 决策流”以服务端真实状态成对展示预期动作与实际 Observation，并明确标识局部重规划、规则降级、无新增和完成校验拒绝。
 - 将文章聚类为事件档案，维护事件状态、关联文章和证据账本。
 
 ### 知识与内容沉淀
@@ -106,6 +109,16 @@ ResearchService
        -> validated task DAG or deterministic fallback
   -> ResearchMissionService
        -> contract / task state / gap snapshots
+  -> ResearchAgentLoopService
+       -> ResearchAgentContextBuilder
+       -> ResearchDecisionAgent
+            -> strict JSON + policy validation
+            -> model decision or deterministic fallback
+       -> ResearchToolDispatcher
+            -> public_news_search / evidence_assess
+       -> ResearchToolObservation
+       -> ResearchAgentStateReducer / local plan patch
+       -> ResearchFinishVerifier
   -> ResearchToolRegistry
        -> source_scan / public_news_search
        -> evidence_assess / report_synthesis
@@ -119,10 +132,11 @@ ResearchService
   -> ResearchEvaluationService
        -> completion / evidence / source diversity
        -> trace integrity / budget safety / recovery
+       -> Agent trajectory quality
        -> input fingerprint + PASS/BLOCK
 ```
 
-运行详情中的“研究作战图”会显示研究合同、计划来源、当前任务、证据增量、最近三次缺口判断和工具预算属性；页面轮询的都是 SQLite 中的真实任务状态。相关接口：
+运行详情中的“研究作战图”显示研究合同、计划来源、当前任务和证据缺口；其后的“Agent 决策流”展示当前子目标、工作记忆、剩余预算，以及 Decision 与 Observation 的实际配对。页面轮询的都是 SQLite 中的真实状态，不生成伪进度。相关接口：
 
 - `GET /api/research/tools`：读取允许进入研究计划的类型化工具契约。
 - `GET /api/research/runs/{id}/mission`：读取合同、任务 DAG、Gap Snapshot 和本次工具摘要。
@@ -130,8 +144,9 @@ ResearchService
 - `POST /api/research/runs/{id}/resume`：通过版本检查抢占恢复权，从未完成节点继续。
 - `POST /api/research/runs/{id}/evaluations`：对当前持久化快照执行离线评测。
 - `GET /api/research/runs/{id}/evaluations/latest`：读取最近评测结果。
+- `GET /api/research/runs/{id}`：聚合运行、Mission、Runtime、Agent State、Decision、Observation 和轨迹指标；旧运行的 `agentCore` 为空。
 
-自适应规划、证据闭环和过程可视化见 [产品需求](docs/产品需求-自适应研究智能体与过程可视化.md)、[技术方案](docs/技术方案-自适应研究智能体与过程可视化.md) 与 [实施计划](docs/superpowers/plans/2026-07-26-adaptive-research-agent.md)。Runtime 和 Eval 的设计边界见 [Runtime 产品需求](docs/产品需求-Deep-Research-Runtime与Eval-Harness.md)、[Runtime 技术方案](docs/superpowers/specs/2026-07-26-deep-research-runtime-eval-harness-design.md)。
+Observation 驱动决策内核见 [决策内核 PRD](docs/产品需求-研究智能体决策内核.md)、[决策内核技术方案](docs/技术方案-研究智能体决策内核.md) 与 [实施计划](docs/superpowers/plans/2026-07-27-research-agent-core.md)。前一阶段的自适应规划与证据闭环见 [产品需求](docs/产品需求-自适应研究智能体与过程可视化.md)；Runtime 和 Eval 的设计边界见 [Runtime 产品需求](docs/产品需求-Deep-Research-Runtime与Eval-Harness.md)。
 
 ## 本地启动
 
@@ -154,7 +169,7 @@ java -version
 mvn -version
 ```
 
-如果 Maven 使用 JDK 17 等高版本，本项目中的 `javax.annotation` 依赖可能在编译阶段报错。
+项目显式声明了 `javax.annotation` 兼容 API，避免依赖某个 JDK 发行版的隐式类路径；仍建议统一使用 JDK 8，以便本地运行行为与 CI 编译目标一致。
 
 ### 1. 准备本地数据目录
 

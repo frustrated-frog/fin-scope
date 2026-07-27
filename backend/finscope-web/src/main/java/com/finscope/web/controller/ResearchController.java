@@ -15,6 +15,7 @@ import com.finscope.service.research.ResearchService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.mission.ResearchMissionService;
+import com.finscope.service.research.agent.ResearchAgentTraceService;
 import com.finscope.web.request.CreateResearchRunRequest;
 import com.finscope.web.response.ResearchRunDetailResponse;
 import com.finscope.web.response.ResearchRunResponse;
@@ -46,6 +47,8 @@ public class ResearchController {
     private ResearchEvaluationService researchEvaluationService;
     @Resource
     private ResearchMissionService researchMissionService;
+    @Resource
+    private ResearchAgentTraceService researchAgentTraceService;
 
     /**
      * 创建研究运行计划。
@@ -92,7 +95,8 @@ public class ResearchController {
                 researchReportService.findByRunId(id).orElse(null),
                 runtime,
                 researchEvaluationService.findLatest(id).orElse(null),
-                researchMissionService.findDetail(id).orElse(null)));
+                researchMissionService.findDetail(id).orElse(null),
+                researchAgentTraceService.findTrace(id).orElse(null)));
     }
 
     @GetMapping("/{id}/mission")

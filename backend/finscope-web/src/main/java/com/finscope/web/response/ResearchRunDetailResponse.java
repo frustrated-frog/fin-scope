@@ -8,6 +8,7 @@ import com.finscope.domain.research.SourceProfile;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
 import com.finscope.domain.research.mission.ResearchMissionView;
+import com.finscope.domain.research.agent.ResearchAgentTraceView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,13 +26,14 @@ public class ResearchRunDetailResponse {
     private ResearchRuntimeView runtime;
     private ResearchEvaluation latestEvaluation;
     private ResearchMissionView mission;
+    private ResearchAgentTraceView agentCore;
 
     public ResearchRunDetailResponse(ResearchRun run,
                                      List<SourceProfile> plannedSources,
                                      List<ResearchRunPlanStep> planSteps,
                                      List<AgentRun> agentRuns,
                                      ResearchReport report) {
-        this(run, plannedSources, planSteps, agentRuns, report, null, null, null);
+        this(run, plannedSources, planSteps, agentRuns, report, null, null, null, null);
     }
 
     public ResearchRunDetailResponse(ResearchRun run,
@@ -41,7 +43,7 @@ public class ResearchRunDetailResponse {
                                      ResearchReport report,
                                      ResearchRuntimeView runtime,
                                      ResearchEvaluation latestEvaluation) {
-        this(run, plannedSources, planSteps, agentRuns, report, runtime, latestEvaluation, null);
+        this(run, plannedSources, planSteps, agentRuns, report, runtime, latestEvaluation, null, null);
     }
 
     public ResearchRunDetailResponse(ResearchRun run,
@@ -52,6 +54,18 @@ public class ResearchRunDetailResponse {
                                      ResearchRuntimeView runtime,
                                      ResearchEvaluation latestEvaluation,
                                      ResearchMissionView mission) {
+        this(run, plannedSources, planSteps, agentRuns, report, runtime, latestEvaluation, mission, null);
+    }
+
+    public ResearchRunDetailResponse(ResearchRun run,
+                                     List<SourceProfile> plannedSources,
+                                     List<ResearchRunPlanStep> planSteps,
+                                     List<AgentRun> agentRuns,
+                                     ResearchReport report,
+                                     ResearchRuntimeView runtime,
+                                     ResearchEvaluation latestEvaluation,
+                                     ResearchMissionView mission,
+                                     ResearchAgentTraceView agentCore) {
         this.run = run;
         setPlannedSources(plannedSources);
         setPlanSteps(planSteps);
@@ -63,6 +77,7 @@ public class ResearchRunDetailResponse {
         this.runtime = runtime;
         this.latestEvaluation = latestEvaluation;
         this.mission = mission;
+        this.agentCore = agentCore;
     }
 
     public ResearchRun getRun() {
@@ -118,4 +133,5 @@ public class ResearchRunDetailResponse {
     public ResearchRuntimeView getRuntime() { return runtime; }
     public ResearchEvaluation getLatestEvaluation() { return latestEvaluation; }
     public ResearchMissionView getMission() { return mission; }
+    public ResearchAgentTraceView getAgentCore() { return agentCore; }
 }

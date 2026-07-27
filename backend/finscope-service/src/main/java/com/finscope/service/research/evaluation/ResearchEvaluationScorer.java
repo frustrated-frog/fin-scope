@@ -5,6 +5,7 @@ import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.evaluation.ResearchEvaluationMetric;
+import com.finscope.domain.research.agent.ResearchAgentTrajectoryMetrics;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
 import org.springframework.stereotype.Component;
@@ -93,6 +94,22 @@ public class ResearchEvaluationScorer {
                 + ", criticalIssues=" + criticalIssues.size());
         evaluation.setMetrics(metrics);
         return evaluation;
+    }
+
+    public void appendTrajectoryMetric(ResearchEvaluation evaluation,
+                                       ResearchAgentTrajectoryMetrics trajectory) {
+        if (evaluation == null || trajectory == null || trajectory.getDecisionCount() == 0) {
+            return;
+        }
+        List<ResearchEvaluationMetric> metrics = new ArrayList<ResearchEvaluationMetric>(evaluation.getMetrics());
+        metrics.add(metric("agent_trajectory", "Agent轨迹质量", trajectory.getQualityScore(), 100,
+                "decisions=" + trajectory.getDecisionCount()
+                        + ", observationFollowup=" + decimal(trajectory.getObservationFollowupRate())
+                        + ", duplicate=" + decimal(trajectory.getDuplicateActionRate())
+                        + ", noProgress=" + decimal(trajectory.getNoProgressRate())
+                        + ", fallback=" + decimal(trajectory.getFallbackRate()),
+                "减少重复和无进展动作，并确保 Observation 进入后续决策"));
+        evaluation.setMetrics(metrics);
     }
 
     private int completionScore(ResearchRun run, ResearchReport report, List<String> issues) {
@@ -279,5 +296,9 @@ public class ResearchEvaluationScorer {
 
     private String safe(String value) {
         return value == null ? "missing" : value;
+    }
+
+    private String decimal(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 }

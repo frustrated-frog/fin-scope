@@ -118,6 +118,44 @@ public class ResearchMissionService {
         return repository.findTasks(runId);
     }
 
+    public ResearchMissionTask applyPatch(Long runId, ResearchPlanPatch patch) {
+        if (runId == null || patch == null
+                || !"ADD_OR_REPLACE_PENDING_TASK".equals(patch.getOperation())) {
+            throw new IllegalArgumentException("只允许增加或替换未完成的局部研究任务");
+        }
+        if (blank(patch.getTaskKey()) || !patch.getTaskKey().matches("adaptive_[a-z0-9_]{1,48}")) {
+            throw new IllegalArgumentException("局部任务编码必须使用 adaptive_ 前缀");
+        }
+        if (!"public_news_search".equals(patch.getToolCode())) {
+            throw new IllegalArgumentException("局部重规划只能使用公开新闻搜索工具");
+        }
+        Set<String> intents = new HashSet<String>(Arrays.asList("SUPPORT", "COUNTER", "PRIMARY", "UPDATE"));
+        if (!intents.contains(patch.getIntent())) {
+            throw new IllegalArgumentException("局部重规划意图不在白名单中");
+        }
+        if (blank(patch.getTitle()) || blank(patch.getQuestion()) || blank(patch.getQueryText())
+                || patch.getQueryText().length() > 180 || patch.getQueryText().contains("://")) {
+            throw new IllegalArgumentException("局部重规划任务字段未通过安全校验");
+        }
+        ResearchMissionTask task = new ResearchMissionTask();
+        task.setResearchRunId(runId);
+        task.setTaskKey(patch.getTaskKey());
+        task.setTitle(compact(patch.getTitle(), 100));
+        task.setQuestion(compact(patch.getQuestion(), 240));
+        task.setTaskType("SEARCH");
+        task.setToolCode(patch.getToolCode());
+        task.setIntent(patch.getIntent());
+        task.setDependencies(new ArrayList<String>());
+        task.setParallelGroup("adaptive_evidence");
+        task.setQueryText(patch.getQueryText().trim());
+        task.setRationale(compact(patch.getReason(), 240));
+        task.setExpectedEvidence("能够改变当前 Evidence Gap 的独立公开来源");
+        if (!repository.upsertAdaptiveTask(runId, task)) {
+            throw new IllegalStateException("局部任务已经执行或正在执行，不能被重写：" + patch.getTaskKey());
+        }
+        return task;
+    }
+
     public void completeMission(Long runId, boolean partial) {
         completeMission(runId, partial, null);
     }

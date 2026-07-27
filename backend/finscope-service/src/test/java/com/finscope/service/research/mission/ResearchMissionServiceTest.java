@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -107,6 +108,26 @@ class ResearchMissionServiceTest {
 
         verify(repository).skipUnfinishedTasks(21L, "MISSION_FAILED");
         verify(repository).updateMissionStatus(21L, "FAILED");
+    }
+
+    @Test
+    void appliesOnlyBoundedAdaptivePatchAndRejectsImmutableTask() {
+        when(repository.upsertAdaptiveTask(eq(21L), any(ResearchMissionTask.class))).thenReturn(true, false);
+        ResearchPlanPatch patch = new ResearchPlanPatch();
+        patch.setOperation("ADD_OR_REPLACE_PENDING_TASK");
+        patch.setTaskKey("adaptive_counter_2");
+        patch.setTitle("寻找需求下修的一手材料");
+        patch.setQuestion("是否存在订单或指引下修？");
+        patch.setToolCode("public_news_search");
+        patch.setIntent("COUNTER");
+        patch.setQueryText("AI算力 指引 下调 订单 风险");
+        patch.setReason("原查询没有新增独立来源");
+
+        ResearchMissionTask saved = service.applyPatch(21L, patch);
+
+        assertEquals("adaptive_counter_2", saved.getTaskKey());
+        assertEquals("COUNTER", saved.getIntent());
+        assertThrows(IllegalStateException.class, () -> service.applyPatch(21L, patch));
     }
 
     private ResearchRun run() {

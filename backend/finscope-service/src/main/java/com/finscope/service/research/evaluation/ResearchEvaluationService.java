@@ -5,6 +5,7 @@ import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.dao.research.ResearchReportRepository;
 import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.dao.research.ResearchRunOutputRepository;
+import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.dao.research.evaluation.ResearchEvaluationRepository;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
 import com.finscope.domain.research.ResearchReport;
@@ -13,6 +14,9 @@ import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
+import com.finscope.domain.research.agent.ResearchAgentTraceView;
+import com.finscope.domain.research.agent.ResearchAgentTrajectoryMetrics;
+import com.finscope.service.research.agent.ResearchTrajectoryEvaluator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Optional;
+import javax.annotation.Resource;
 
 @Service
 public class ResearchEvaluationService {
@@ -29,6 +34,10 @@ public class ResearchEvaluationService {
     private final ResearchRunOutputRepository outputRepository;
     private final ResearchEvaluationRepository evaluationRepository;
     private final ResearchEvaluationScorer scorer;
+    @Resource
+    private ResearchAgentRepository researchAgentRepository;
+    @Resource
+    private ResearchTrajectoryEvaluator trajectoryEvaluator;
 
     public ResearchEvaluationService(ResearchRunRepository runRepository,
                                      ResearchReportRepository reportRepository,
@@ -58,7 +67,9 @@ public class ResearchEvaluationService {
         int sourceCount = outputRepository.countDistinctArticleSources(runId);
         ResearchEvaluation evaluation = scorer.score(
                 new ResearchEvaluationSnapshot(run, report, checkpoint, events, evidenceCount, sourceCount));
-        evaluation.setInputFingerprint(fingerprint(run, report, checkpoint, events));
+        ResearchAgentTrajectoryMetrics trajectory = trajectory(runId);
+        scorer.appendTrajectoryMetric(evaluation, trajectory);
+        evaluation.setInputFingerprint(fingerprint(run, report, checkpoint, events, trajectory));
         return evaluationRepository.save(evaluation);
     }
 
@@ -71,7 +82,8 @@ public class ResearchEvaluationService {
     }
 
     private String fingerprint(ResearchRun run, ResearchReport report,
-                               ResearchRuntimeCheckpoint checkpoint, List<ResearchRuntimeEvent> events) {
+                               ResearchRuntimeCheckpoint checkpoint, List<ResearchRuntimeEvent> events,
+                               ResearchAgentTrajectoryMetrics trajectory) {
         StringBuilder canonical = new StringBuilder();
         canonical.append("v=").append(ResearchEvaluationScorer.VERSION)
                 .append("|run=").append(run.getId()).append(':').append(run.getStatus())
@@ -93,7 +105,24 @@ public class ResearchEvaluationService {
                     .append(event.getStatus()).append(':').append(event.getStateHash()).append(':')
                     .append(event.getProgressDelta()).append(':').append(event.getErrorType());
         }
+        if (trajectory != null) {
+            canonical.append("|trajectory=").append(trajectory.getDecisionCount()).append(':')
+                    .append(trajectory.getObservationCount()).append(':')
+                    .append(trajectory.getQualityScore()).append(':')
+                    .append(trajectory.getDuplicateActionRate()).append(':')
+                    .append(trajectory.getNoProgressRate()).append(':')
+                    .append(trajectory.getFallbackRate());
+        }
         return sha256(canonical.toString());
+    }
+
+    private ResearchAgentTrajectoryMetrics trajectory(Long runId) {
+        if (researchAgentRepository == null || trajectoryEvaluator == null
+                || !researchAgentRepository.findState(runId).isPresent()) {
+            return null;
+        }
+        ResearchAgentTraceView trace = researchAgentRepository.findTrace(runId);
+        return trajectoryEvaluator.evaluate(trace);
     }
 
     private String sha256(String value) {

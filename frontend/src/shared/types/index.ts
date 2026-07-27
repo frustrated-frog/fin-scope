@@ -401,6 +401,83 @@ export type ResearchRunDetail = {
   runtime?: ResearchRuntimeView;
   latestEvaluation?: ResearchEvaluation;
   mission?: ResearchMissionView;
+  agentCore?: ResearchAgentTraceView;
+};
+
+export type ResearchAgentState = {
+  researchRunId: number;
+  status: string;
+  stateVersion: number;
+  currentSubgoal?: string;
+  planSummary?: string;
+  memorySummary?: string;
+  evidenceSummary?: string;
+  attemptedFingerprints: string[];
+  lastObservationId?: number;
+  decisionCount: number;
+  replanCount: number;
+  noProgressCount: number;
+  finishRejectionCount: number;
+  fallbackCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ResearchAgentDecision = {
+  id: number;
+  researchRunId: number;
+  iteration: number;
+  decisionType: 'TOOL_CALL' | 'PLAN_PATCH' | 'FINISH' | 'ABORT' | string;
+  currentSubgoal?: string;
+  toolCode?: string;
+  argumentsJson?: string;
+  targetGap?: string;
+  expectedObservation?: string;
+  decisionSummary?: string;
+  confidence: number;
+  decisionMode: 'MODEL' | 'DETERMINISTIC' | string;
+  actionFingerprint?: string;
+  status: string;
+  validationError?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ResearchToolObservation = {
+  id: number;
+  researchRunId: number;
+  decisionId: number;
+  toolCode?: string;
+  status: string;
+  observationSummary?: string;
+  newInformation?: string;
+  evidenceDelta: number;
+  sourceDelta: number;
+  dataRefs: string[];
+  errorType?: string;
+  retryable: boolean;
+  stateHash?: string;
+  createdAt?: string;
+};
+
+export type ResearchAgentTrajectoryMetrics = {
+  decisionCount: number;
+  observationCount: number;
+  decisionValidityRate: number;
+  observationFollowupRate: number;
+  duplicateActionRate: number;
+  noProgressRate: number;
+  replanSuccessRate: number;
+  finishFirstPassRate: number;
+  fallbackRate: number;
+  qualityScore: number;
+};
+
+export type ResearchAgentTraceView = {
+  state: ResearchAgentState;
+  decisions: ResearchAgentDecision[];
+  observations: ResearchToolObservation[];
+  trajectoryMetrics?: ResearchAgentTrajectoryMetrics;
 };
 
 export type ResearchMission = {

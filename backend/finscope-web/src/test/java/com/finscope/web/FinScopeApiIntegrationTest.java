@@ -130,6 +130,22 @@ class FinScopeApiIntegrationTest {
                 body.write(bytes);
             }
         });
+        server.createContext("/research-rss-a", exchange -> {
+            byte[] bytes = researchRss("support").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/rss+xml; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
+        server.createContext("/research-rss-b", exchange -> {
+            byte[] bytes = researchRss("counter").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/rss+xml; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
         server.createContext("/article", exchange -> {
             byte[] bytes = htmlArticle().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
@@ -908,10 +924,16 @@ class FinScopeApiIntegrationTest {
 
     @Test
     void researchRunExecutesEndToEndFromThemes() throws Exception {
-        String macroSource = "{\"name\":\"Macro Source\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
+        String researchRssA = "http://localhost:" + server.getAddress().getPort() + "/research-rss-a";
+        String researchRssB = "http://localhost:" + server.getAddress().getPort() + "/research-rss-b";
+        String macroSource = "{\"name\":\"Macro Support\",\"type\":\"RSS\",\"url\":\"" + researchRssA + "\",\"enabled\":true,"
+                + "\"fetchFrequencyMinutes\":60,\"credibility\":5,\"tags\":\"china_macro,macro\"}";
+        String counterSource = "{\"name\":\"Macro Risk\",\"type\":\"RSS\",\"url\":\"" + researchRssB + "\",\"enabled\":true,"
                 + "\"fetchFrequencyMinutes\":60,\"credibility\":5,\"tags\":\"china_macro,macro\"}";
 
         mvc.perform(post("/api/sources").contentType("application/json").content(macroSource))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/sources").contentType("application/json").content(counterSource))
                 .andExpect(status().isOk());
 
         mvc.perform(post("/api/research/theses")
@@ -924,15 +946,16 @@ class FinScopeApiIntegrationTest {
         mvc.perform(post("/api/research/runs")
                         .contentType("application/json")
                         .content("{\"thesisId\":1,\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
-                                + "\"maxSourcesPerTheme\":1,\"includeDisabled\":false}"))
+                                + "\"maxSourcesPerTheme\":2,\"includeDisabled\":false}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("RUNNING"))
                 .andExpect(jsonPath("$.data.themeCodes.length()").value(1))
-                .andExpect(jsonPath("$.data.sourceCount").value(1))
+                .andExpect(jsonPath("$.data.sourceCount").value(2))
                 .andExpect(jsonPath("$.data.fetchedSourceCount").value(0))
-                .andExpect(jsonPath("$.data.plannedSources.length()").value(1))
-                .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Source")))
-                .andExpect(jsonPath("$.data.summary", containsString("Planned 1 sources")));
+                .andExpect(jsonPath("$.data.plannedSources.length()").value(2))
+                .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Support")))
+                .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Risk")))
+                .andExpect(jsonPath("$.data.summary", containsString("Planned 2 sources")));
 
         String completed = waitForResearchRun(1L);
         assertTrue(completed.contains("\"status\":\"COMPLETED\""));
@@ -941,14 +964,14 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data[0].sourceCount").value(1))
+                .andExpect(jsonPath("$.data[0].sourceCount").value(2))
                 .andExpect(jsonPath("$.data[0].eventCount").value(greaterThanOrEqualTo(1)));
 
         mvc.perform(get("/api/research/runs/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.run.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.plannedSources.length()").value(1))
-                .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Source")))
+                .andExpect(jsonPath("$.data.plannedSources.length()").value(2))
+                .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Support")))
                 .andExpect(jsonPath("$.data.planSteps.length()").value(6))
                 .andExpect(jsonPath("$.data.planSteps[*].stepId").value(hasItem("plan_sources")))
                 .andExpect(jsonPath("$.data.planSteps[*].stepId").value(hasItem("fetch_sources")))
@@ -964,7 +987,10 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.reportAvailable").value(true))
                 .andExpect(jsonPath("$.data.reportStatus", containsString("COMPLETED")))
                 .andExpect(jsonPath("$.data.mission.mission.goal").value("宏观政策变化如何影响黄金？"))
-                .andExpect(jsonPath("$.data.mission.tasks.length()").value(greaterThanOrEqualTo(6)));
+                .andExpect(jsonPath("$.data.mission.tasks.length()").value(greaterThanOrEqualTo(6)))
+                .andExpect(jsonPath("$.data.agentCore.state.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.agentCore.decisions[*].decisionType").value(hasItem("FINISH")))
+                .andExpect(jsonPath("$.data.agentCore.trajectoryMetrics.decisionValidityRate").value(1.0));
 
         mvc.perform(get("/api/research/tools"))
                 .andExpect(status().isOk())
@@ -987,7 +1013,8 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.score").isNumber())
                 .andExpect(jsonPath("$.data.gateStatus").value("PASS"))
-                .andExpect(jsonPath("$.data.metrics.length()").value(6));
+                .andExpect(jsonPath("$.data.metrics.length()").value(7))
+                .andExpect(jsonPath("$.data.metrics[*].metricCode").value(hasItem("agent_trajectory")));
 
         mvc.perform(get("/api/research/runs/1/evaluations/latest"))
                 .andExpect(status().isOk())
@@ -1350,6 +1377,31 @@ class FinScopeApiIntegrationTest {
                 + "<pubDate>" + DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC)) + "</pubDate>"
                 + "</item>"
                 + "</channel></rss>";
+    }
+
+    private String researchRss(String stance) {
+        boolean support = "support".equals(stance);
+        String source = support ? "Support Desk" : "Risk Desk";
+        String[][] items = support
+                ? new String[][]{
+                {"央行增持推动黄金需求持续增长", "多国央行持续增加黄金储备，长期需求保持增长。"},
+                {"降息预期上修支持黄金景气", "实际利率下行预期增加，黄金市场景气度继续上修。"},
+                {"黄金投资需求扩张并创阶段新高", "机构配置黄金的投资计划扩张，需求创下阶段新高。"}}
+                : new String[][]{
+                {"美元走强令黄金价格回落", "美元指数上行，黄金价格出现回落风险。"},
+                {"黄金消费需求放缓且库存增加", "高金价限制消费，黄金需求放缓并出现库存压力。"},
+                {"利率维持高位或导致黄金配置下调", "降息延迟可能带来黄金配置下调与资金流出风险。"},
+                {"黄金矿产供应增加带来下滑风险", "矿产黄金供应扩张，需求放缓可能带来价格下滑风险。"}};
+        StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+                .append("<rss version=\"2.0\"><channel><title>").append(source).append("</title>");
+        for (int index = 0; index < items.length; index++) {
+            xml.append("<item><title>").append(items[index][0]).append("</title>")
+                    .append("<link>https://example.com/research-").append(stance).append('-').append(index).append("</link>")
+                    .append("<description>").append(items[index][1]).append("</description>")
+                    .append("<pubDate>").append(DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC))).append("</pubDate>")
+                    .append("</item>");
+        }
+        return xml.append("</channel></rss>").toString();
     }
 
     private String emptyRss() {

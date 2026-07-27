@@ -3,6 +3,7 @@ package com.finscope.service.research;
 import com.finscope.dao.fetch.FetchRunRepository;
 import com.finscope.dao.research.ResearchRunPlanRepository;
 import com.finscope.dao.research.ResearchRunRepository;
+import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
 import org.junit.jupiter.api.Test;
@@ -19,9 +20,10 @@ class ResearchStartupRecoveryServiceTest {
         FetchRunRepository fetchRunRepository = mock(FetchRunRepository.class);
         ResearchRuntimeRepository runtimeRepository = mock(ResearchRuntimeRepository.class);
         ResearchMissionRepository missionRepository = mock(ResearchMissionRepository.class);
+        ResearchAgentRepository agentRepository = mock(ResearchAgentRepository.class);
         ResearchStartupRecoveryService service = new ResearchStartupRecoveryService(
                 researchRunRepository, researchRunPlanRepository, fetchRunRepository, runtimeRepository,
-                missionRepository);
+                missionRepository, agentRepository);
 
         service.recoverInterruptedRuns();
 
@@ -30,5 +32,6 @@ class ResearchStartupRecoveryServiceTest {
         verify(fetchRunRepository).failRunningRuns(contains("interrupted"));
         verify(runtimeRepository).interruptRunning(contains("interrupted"));
         verify(missionRepository).interruptRunning(contains("interrupted"));
+        verify(agentRepository).interruptRunning(contains("interrupted"));
     }
 }

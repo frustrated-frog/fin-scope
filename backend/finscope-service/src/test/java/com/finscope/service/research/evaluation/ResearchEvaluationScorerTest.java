@@ -4,6 +4,7 @@ import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
+import com.finscope.domain.research.agent.ResearchAgentTrajectoryMetrics;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,24 @@ class ResearchEvaluationScorerTest {
         assertEquals("BLOCK", evaluation.getGateStatus());
         assertTrue(evaluation.getCriticalIssues().contains("REPORT_OUTPUT_MISMATCH"));
         assertTrue(evaluation.getCriticalIssues().contains("INVALID_EVENT_SEQUENCE"));
+    }
+
+    @Test
+    void appendsAgentTrajectoryAsSupplementaryMetricWithoutReweightingReportScore() {
+        ResearchEvaluation evaluation = scorer.score(new ResearchEvaluationSnapshot(run(ResearchEnums.RUN_STATUS_COMPLETED),
+                report(4, 3), checkpoint("COMPLETED", 0, 12, 0), validCompletedEvents(), 4, 3));
+        ResearchAgentTrajectoryMetrics trajectory = new ResearchAgentTrajectoryMetrics();
+        trajectory.setQualityScore(82);
+        trajectory.setDecisionCount(6);
+        trajectory.setDuplicateActionRate(0.1D);
+        trajectory.setNoProgressRate(0.2D);
+
+        scorer.appendTrajectoryMetric(evaluation, trajectory);
+
+        assertEquals(100, evaluation.getScore());
+        assertEquals(7, evaluation.getMetrics().size());
+        assertEquals("agent_trajectory", evaluation.getMetrics().get(6).getMetricCode());
+        assertEquals(82, evaluation.getMetrics().get(6).getScore());
     }
 
     private List<ResearchRuntimeEvent> validCompletedEvents() {

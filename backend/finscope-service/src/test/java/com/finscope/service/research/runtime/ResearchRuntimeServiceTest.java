@@ -155,6 +155,19 @@ class ResearchRuntimeServiceTest {
     }
 
     @Test
+    void observationDrivenAgentToolIncrementsNoProgressForSameStateHash() {
+        ResearchRuntimeCheckpoint state = checkpoint("RUNNING", 4);
+        state.setLastStateHash("2:1:3:0");
+        state.setNoProgressCount(1);
+        when(repository.findCheckpoint(7L)).thenReturn(Optional.of(state));
+        when(repository.completeNode(7L, 4, "agent_tool:fingerprint", "2:1:3:0", 2, 0)).thenReturn(true);
+
+        service.completeNode(7L, "agent_tool:fingerprint", "2:1:3:0", 0, "没有新增证据");
+
+        verify(repository).completeNode(7L, 4, "agent_tool:fingerprint", "2:1:3:0", 2, 0);
+    }
+
+    @Test
     void resumeClaimsInterruptedRunAndRejectsConcurrentClaim() {
         ResearchRuntimeCheckpoint interrupted = checkpoint("INTERRUPTED", 4);
         interrupted.setCurrentNode("collect_sources");
