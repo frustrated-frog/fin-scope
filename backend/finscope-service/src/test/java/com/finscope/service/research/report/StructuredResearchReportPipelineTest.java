@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,7 +23,7 @@ class StructuredResearchReportPipelineTest {
     @Test
     void generatesDeepNarrativeAndAssemblesTraceableReport() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(90000), eq(7000))).thenReturn(narrativeJson());
+        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000))).thenReturn(narrativeJson());
         ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
         ResearchThesis thesis = thesis();
         ResearchReportBlueprint blueprint = blueprint();
@@ -37,7 +38,11 @@ class StructuredResearchReportPipelineTest {
         assertTrue(markdown.contains("## 最终认识与未知项"));
         assertTrue(markdown.contains("[E1](#evidence-e1)"));
         assertTrue(markdown.contains("<a id=\"evidence-e1\"></a>"));
-        verify(llm).complete(anyString(), anyString(), eq(90000), eq(7000));
+        assertTrue(!markdown.contains("\\n"));
+        String factRow = Arrays.stream(markdown.split("\\n"))
+                .filter(line -> line.startsWith("| [E1]")).findFirst().orElse("");
+        assertTrue(factRow.length() < 500);
+        verify(llm).complete(anyString(), anyString(), eq(120000), eq(7000));
     }
 
     @Test
@@ -47,6 +52,20 @@ class StructuredResearchReportPipelineTest {
 
         assertTrue(issues.contains("REPORT_TOO_SHORT"));
         assertTrue(issues.contains("INVALID_EVIDENCE_REF:E99"));
+    }
+
+    @Test
+    void repairsMalformedNarrativeOnceUsingArrayFieldContracts() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
+                .thenReturn("{\"executiveSummary\":\"结构错误\",\"subQuestionAnalysis\":\"不是数组\"}")
+                .thenReturn(narrativeJson());
+        ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
+
+        ResearchReportNarrative result = agent.generate(thesis(), blueprint(), dossier());
+
+        assertTrue(result.isRepaired());
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(120000), eq(7000));
     }
 
     private ResearchThesis thesis() {

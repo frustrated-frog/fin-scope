@@ -364,8 +364,8 @@ public class ResearchService {
                 ResearchAgentLoopResult agentResult = researchAgentLoopService.run(run.getId());
                 dynamicQueries += agentResult.getExternalActionCount();
                 if (!agentResult.isFinishAccepted()) {
-                    runtimeStopped = true;
-                    errors.add("Research Agent未通过完成校验：" + agentResult.getTerminationReason());
+                    errors.add("Research Agent已停止扩展检索，报告将声明证据局限："
+                            + agentResult.getTerminationReason());
                 }
             }
 
@@ -387,9 +387,6 @@ public class ResearchService {
                     "evidence=" + outputCount(run.getId(), ResearchRunOutputService.EVIDENCE),
                     outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
             currentStep = startStep(planSteps, ResearchRunPlanService.STEP_COMPOSE_REPORT);
-            if (thesis != null && runtimeStopped) {
-                throw new IllegalStateException("研究智能体未通过完成校验，禁止提前生成报告");
-            }
             if (thesis != null && !researchMissionService.isFinished(run.getId(), synthesisTask.getTaskKey())) {
                 activeMissionTask = synthesisTask.getTaskKey();
                 researchMissionService.startTask(run.getId(), activeMissionTask);

@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data
 public class ResearchReportBlueprint {
+    private transient boolean repaired;
     private String directAnswer;
     private String direction;
     private String confidence;

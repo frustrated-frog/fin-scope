@@ -11,6 +11,7 @@ import java.util.List;
 
 @Component
 public class ResearchReportBlueprintAgent {
+    private static final int TIMEOUT_MS = 90000;
     private final LlmChatClient llm;
     private final ResearchReportBlueprintValidator validator;
     private final ObjectMapper mapper = new ObjectMapper()
@@ -26,16 +27,16 @@ public class ResearchReportBlueprintAgent {
 
     public ResearchReportBlueprint generate(ResearchThesis thesis, List<ResearchEvidenceDossier> dossier)
             throws ResearchReportGenerationException {
+        String raw;
         try {
-            String raw = llm.complete(systemPrompt(), userPrompt(thesis, dossier), 45000, 3000);
-            ResearchReportBlueprint result = mapper.readValue(stripFence(raw), ResearchReportBlueprint.class);
-            List<String> issues = validator.validate(result, dossier);
-            if (!issues.isEmpty()) throw new ResearchReportGenerationException("BLUEPRINT_INVALID:" + String.join(",", issues));
-            return result;
-        } catch (ResearchReportGenerationException ex) {
-            throw ex;
+            raw = llm.complete(systemPrompt(), userPrompt(thesis, dossier), TIMEOUT_MS, 3000);
         } catch (Exception ex) {
             throw new ResearchReportGenerationException("BLUEPRINT_FAILED:" + ex.getClass().getSimpleName(), ex);
+        }
+        try {
+            return parseAndValidate(raw, dossier);
+        } catch (Exception firstFailure) {
+            return repair(thesis, dossier, raw, diagnostic(firstFailure));
         }
     }
 
@@ -48,7 +49,49 @@ public class ResearchReportBlueprintAgent {
                 + "字段严格为directAnswer,direction,confidence,confidenceBasis,timeRange,definitions,excludedQuestions,"
                 + "keyInsights,subQuestions,argumentChains,strongestCounterargument,scenarios,knowledgeTakeaways,unknowns,watchItems。"
                 + "direction只能是SUPPORT、PARTIAL_SUPPORT、MIXED、PARTIAL_CHALLENGE、CHALLENGE；confidence只能是HIGH、MEDIUM、LOW。"
+                + "嵌套字段契约严格如下，不得把数组写成字符串："
+                + "keyInsights=[{finding:string,meaning:string,evidenceRefs:string[]}];"
+                + "subQuestions=[{key:string,question:string,answer:string,evidenceRefs:string[],counterEvidenceRefs:string[],impact:string,unknowns:string[]}];"
+                + "argumentChains=[{fact:string,inference:string,judgment:string,alternativeExplanation:string,evidenceRefs:string[]}];"
+                + "strongestCounterargument={claim:string,evidenceRefs:string[],response:string,becomesDominantWhen:string[]};"
+                + "scenarios=[{name:string,trigger:string,mechanism:string,observableResult:string,impact:string,evidenceRefs:string[]}];"
+                + "watchItems=[{metric:string,baseline:string,frequency:string,upgradeCondition:string,downgradeCondition:string}]。"
+                + "definitions、excludedQuestions、knowledgeTakeaways、unknowns均为string[]。"
                 + "数组即使为空也输出[]；所有文本字段必须是JSON字符串。";
+    }
+
+    private ResearchReportBlueprint repair(ResearchThesis thesis,
+                                            List<ResearchEvidenceDossier> dossier,
+                                            String invalidRaw,
+                                            String firstDiagnostic) throws ResearchReportGenerationException {
+        try {
+            String repairPrompt = userPrompt(thesis, dossier)
+                    + "\n上一次JSON校验失败：" + firstDiagnostic
+                    + "\n请按系统消息中的精确嵌套字段契约修复以下输出。保留可用内容，只输出修复后的完整JSON：\n"
+                    + stripFence(invalidRaw);
+            String repairedRaw = llm.complete(systemPrompt(), repairPrompt, TIMEOUT_MS, 3000);
+            ResearchReportBlueprint repaired = parseAndValidate(repairedRaw, dossier);
+            repaired.setRepaired(true);
+            return repaired;
+        } catch (Exception repairFailure) {
+            throw new ResearchReportGenerationException("BLUEPRINT_REPAIR_FAILED:"
+                    + firstDiagnostic + ":" + diagnostic(repairFailure), repairFailure);
+        }
+    }
+
+    private ResearchReportBlueprint parseAndValidate(String raw, List<ResearchEvidenceDossier> dossier)
+            throws Exception {
+        ResearchReportBlueprint result = mapper.readValue(stripFence(raw), ResearchReportBlueprint.class);
+        List<String> issues = validator.validate(result, dossier);
+        if (!issues.isEmpty()) {
+            throw new ResearchReportGenerationException("BLUEPRINT_INVALID:" + String.join(",", issues));
+        }
+        return result;
+    }
+
+    private String diagnostic(Exception ex) {
+        String message = ex.getMessage();
+        return ex.getClass().getSimpleName() + (message == null ? "" : "(" + message + ")");
     }
 
     private String userPrompt(ResearchThesis thesis, List<ResearchEvidenceDossier> dossier) {

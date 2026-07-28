@@ -40,9 +40,36 @@ class ResearchEvidenceDossierBuilderTest {
         assertTrue(builder.promptCharacters(dossier) <= ResearchEvidenceDossierBuilder.MAX_PROMPT_CHARACTERS);
     }
 
+    @Test
+    void removesAggregatorMarkdownUrlsAndRepeatedTitlesFromFacts() {
+        Article article = new Article();
+        article.setId(1L);
+        article.setSourceName("Google News");
+        article.setTitle("长鑫科技上市首日数据");
+        article.setSummary("[长鑫科技上市首日数据](https://news.google.com/very-long-link) 财经媒体；摘要："
+                + "[长鑫科技上市首日数据](https://news.google.com/very-long-link) 财经媒体");
+        article.setBody("首日涨幅和成交额均创阶段高位 https://example.com/raw-link");
+        article.setUrl("https://news.google.com/article");
+
+        String excerpt = builder.build(java.util.Collections.singletonList(
+                new ResearchEvidenceCard(article, null, "SUPPORT", 90,
+                        "长鑫科技上市首日数据；首日涨幅和成交额均创阶段高位")))
+                .get(0).getFactExcerpt();
+
+        assertTrue(!excerpt.contains("http"));
+        assertTrue(!excerpt.contains("]("));
+        assertEquals(1, occurrences(excerpt, "长鑫科技上市首日数据"));
+    }
+
     private String repeat(String value, int count) {
         StringBuilder result = new StringBuilder();
         for (int index = 0; index < count; index++) result.append(value);
         return result.toString();
+    }
+
+    private int occurrences(String value, String expected) {
+        int count = 0;
+        for (int offset = 0; (offset = value.indexOf(expected, offset)) >= 0; offset += expected.length()) count++;
+        return count;
     }
 }

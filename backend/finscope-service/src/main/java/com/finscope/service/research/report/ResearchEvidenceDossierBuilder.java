@@ -70,10 +70,26 @@ public class ResearchEvidenceDossierBuilder {
     }
 
     private void appendUnique(StringBuilder out, String value) {
-        String clean = value(value).replaceAll("\\s+", " ").trim();
-        if (clean.isEmpty() || out.indexOf(clean) >= 0) return;
-        if (out.length() > 0) out.append("；");
-        out.append(clean);
+        String clean = value(value)
+                .replaceAll("\\[([^\\]]+)]\\(https?://[^\\s)]+\\)", "$1")
+                .replaceAll("https?://\\S+", "")
+                .replace("摘要：", "")
+                .replaceAll("\\s+", " ").trim();
+        for (String fragment : clean.split("[；。]+")) {
+            String candidate = fragment.trim();
+            if (candidate.isEmpty() || overlapsExisting(out, candidate)) continue;
+            if (out.length() > 0) out.append("；");
+            out.append(candidate);
+        }
+    }
+
+    private boolean overlapsExisting(StringBuilder out, String candidate) {
+        for (String existing : out.toString().split("；")) {
+            if (candidate.equals(existing)) return true;
+            if (candidate.length() >= 6 && existing.length() >= 6
+                    && (candidate.contains(existing) || existing.contains(candidate))) return true;
+        }
+        return false;
     }
 
     private String sourceTier(Article article) {

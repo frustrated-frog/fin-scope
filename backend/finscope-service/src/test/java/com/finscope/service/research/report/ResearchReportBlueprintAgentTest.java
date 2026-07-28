@@ -15,13 +15,14 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class ResearchReportBlueprintAgentTest {
     @Test
     void generatesStrictQuestionSpecificBlueprintWithinBudget() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(45000), eq(3000))).thenReturn(validJson());
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(validJson());
         ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
                 new ResearchReportBlueprintValidator());
 
@@ -31,13 +32,13 @@ class ResearchReportBlueprintAgentTest {
         assertEquals(3, result.getKeyInsights().size());
         assertEquals(3, result.getSubQuestions().size());
         assertEquals(2, result.getArgumentChains().size());
-        verify(llm).complete(anyString(), anyString(), eq(45000), eq(3000));
+        verify(llm).complete(anyString(), anyString(), eq(90000), eq(3000));
     }
 
     @Test
     void rejectsReferencesOutsideTheEvidenceDossier() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(45000), eq(3000)))
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
                 .thenReturn(validJson().replace("\"E2\"", "\"E99\""));
         ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
                 new ResearchReportBlueprintValidator());
@@ -49,6 +50,21 @@ class ResearchReportBlueprintAgentTest {
             return;
         }
         throw new AssertionError("invalid evidence reference should be rejected");
+    }
+
+    @Test
+    void repairsMalformedBlueprintOnceUsingTheExactNestedContract() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
+                .thenReturn("{\"directAnswer\":\"结构错误\",\"keyInsights\":\"不是数组\"}")
+                .thenReturn(validJson());
+        ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
+                new ResearchReportBlueprintValidator());
+
+        ResearchReportBlueprint result = agent.generate(thesis(), dossier());
+
+        assertTrue(result.isRepaired());
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(90000), eq(3000));
     }
 
     private ResearchThesis thesis() {

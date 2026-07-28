@@ -519,7 +519,8 @@ class ResearchServiceHarnessTest {
         when(fetches.fetch(12L)).thenReturn(fetchRun());
         when(fetches.fetch(any(Source.class))).thenReturn(fetchRun());
         when(reports.generate(501L)).thenReturn(report(501L));
-        when(agentLoop.run(501L)).thenReturn(ResearchAgentLoopResult.finished(2, 1));
+        when(agentLoop.run(501L)).thenReturn(ResearchAgentLoopResult.aborted(9, 3,
+                "EVIDENCE_INSUFFICIENT"));
 
         service.createRun(3L, LocalDate.of(2026, 7, 26),
                 Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
@@ -532,7 +533,8 @@ class ResearchServiceHarnessTest {
         verify(missions).assess(501L, "scan_context");
         verify(agentLoop).run(501L);
         verify(missions).startTask(501L, "write_report");
-        verify(missions).completeMission(501L, false, null);
+        verify(reports).generate(501L);
+        verify(missions).completeMission(501L, true, null);
     }
 
     private ThemeProfile theme() {

@@ -41,7 +41,8 @@ public class ResearchReportSynthesisAgent {
             }
             String title = value(thesis.getSubjectName(), "研究命题") + "深度研究报告";
             return new GeneratedResearchReport(title, blueprint.getDirectAnswer(), blueprint.getDirection(),
-                    blueprint.getConfidence(), narrative.getExecutiveSummary(), markdown, "MODEL_STRUCTURED", "");
+                    blueprint.getConfidence(), narrative.getExecutiveSummary(), markdown,
+                    blueprint.isRepaired() || narrative.isRepaired() ? "MODEL_REPAIRED" : "MODEL_STRUCTURED", "");
         } catch (ResearchReportGenerationException ex) {
             return fallback(fallback, ex.getMessage());
         } catch (Exception ex) {

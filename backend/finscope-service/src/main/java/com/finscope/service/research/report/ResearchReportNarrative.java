@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data
 public class ResearchReportNarrative {
+    private transient boolean repaired;
     private String executiveSummary;
     private String whatHappened;
     private List<String> subQuestionAnalysis = new ArrayList<String>();

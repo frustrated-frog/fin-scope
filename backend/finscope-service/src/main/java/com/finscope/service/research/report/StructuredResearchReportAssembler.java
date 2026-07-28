@@ -12,8 +12,8 @@ public class StructuredResearchReportAssembler {
                            ResearchReportNarrative narrative, List<ResearchEvidenceDossier> dossier) {
         StringBuilder out = new StringBuilder();
         out.append("# ").append(text(thesis.getSubjectName())).append("深度研究报告\n\n")
-                .append("> 研究日期：").append(LocalDate.now()).append("  \\n")
-                .append("> 原始问题：").append(text(thesis.getQuestion())).append("  \\n")
+                .append("> 研究日期：").append(LocalDate.now()).append("  \n")
+                .append("> 原始问题：").append(text(thesis.getQuestion())).append("  \n")
                 .append("> 判断：").append(blueprint.getDirection()).append(" · 置信度：")
                 .append(blueprint.getConfidence()).append("\n\n");
         heading(out, "核心结论");
@@ -33,7 +33,7 @@ public class StructuredResearchReportAssembler {
         out.append("| 证据 | 时间 | 可验证事实 | 来源层级 |\n| --- | --- | --- | --- |\n");
         for (ResearchEvidenceDossier item : dossier) {
             out.append("| ").append(ref(item.getEvidenceRef())).append(" | ").append(item.getPublishedAt() == null ? "未提供" : item.getPublishedAt())
-                    .append(" | ").append(cell(item.getFactExcerpt())).append(" | ").append(item.getSourceTier()).append(" |\n");
+                    .append(" | ").append(tableExcerpt(item.getFactExcerpt())).append(" | ").append(item.getSourceTier()).append(" |\n");
         }
         heading(out, "发生了什么"); out.append(narrative.getWhatHappened()).append("\n\n");
         heading(out, "命题拆解与逐题判断");
@@ -93,4 +93,8 @@ public class StructuredResearchReportAssembler {
     private String ref(String value) { return "[" + value + "](#evidence-" + value.toLowerCase() + ")"; }
     private String text(String value) { return value == null ? "" : value.replace("\n", " ").trim(); }
     private String cell(String value) { return text(value).replace("|", "｜"); }
+    private String tableExcerpt(String value) {
+        String clean = cell(value);
+        return clean.length() <= 260 ? clean : clean.substring(0, 259).trim() + "…";
+    }
 }
