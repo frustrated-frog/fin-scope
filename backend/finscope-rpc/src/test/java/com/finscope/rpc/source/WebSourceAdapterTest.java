@@ -56,6 +56,33 @@ class WebSourceAdapterTest {
         assertEquals("WEB_ARTICLE", runtime.getRequests().get(0).getPurpose());
     }
 
+    @Test
+    void prefersNextDataWhenVisibleDomIsJavascriptShell() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/dynamic", exchange -> {
+            byte[] bytes = ("<html><head><title>加载中</title></head><body><div id=\"__next\"></div>"
+                    + "<script id=\"__NEXT_DATA__\" type=\"application/json\">"
+                    + "{\"props\":{\"pageProps\":{\"article\":{"
+                    + "\"title\":\"动态财经正文\","
+                    + "\"content\":\"这是一篇通过页面内嵌状态恢复的财经正文，包含足够长度的研究信息。\"}}}}"
+                    + "</script></body></html>").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(bytes);
+            }
+        });
+        server.start();
+        Source source = new Source();
+        source.setType("WEB");
+        source.setUrl("http://localhost:" + server.getAddress().getPort() + "/dynamic");
+
+        RawItem item = new WebSourceAdapter().fetch(source).get(0);
+
+        assertEquals("动态财经正文", item.getTitle());
+        assertEquals("web:embedded-next-data", item.getExtractionMethod());
+    }
+
     private String html() {
         return "<html><head>"
                 + "<meta property=\"og:title\" content=\"Federal Reserve issues FOMC statement\">"

@@ -15,28 +15,36 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Component
 public class WebSourceAdapter implements SourceAdapter {
     private final AcquisitionRuntime acquisitionRuntime;
     private final WebArticleExtractor articleExtractor;
+    private final EmbeddedDataExtractor embeddedDataExtractor;
 
     public WebSourceAdapter() {
-        this(new JdkAcquisitionRuntime(), new WebArticleExtractor());
+        this(new JdkAcquisitionRuntime(), new WebArticleExtractor(), new EmbeddedDataExtractor());
     }
 
     WebSourceAdapter(WebArticleExtractor articleExtractor) {
-        this(new JdkAcquisitionRuntime(), articleExtractor);
+        this(new JdkAcquisitionRuntime(), articleExtractor, new EmbeddedDataExtractor());
     }
 
     @Autowired
     public WebSourceAdapter(AcquisitionRuntime acquisitionRuntime) {
-        this(acquisitionRuntime, new WebArticleExtractor());
+        this(acquisitionRuntime, new WebArticleExtractor(), new EmbeddedDataExtractor());
     }
 
     WebSourceAdapter(AcquisitionRuntime acquisitionRuntime, WebArticleExtractor articleExtractor) {
+        this(acquisitionRuntime, articleExtractor, new EmbeddedDataExtractor());
+    }
+
+    WebSourceAdapter(AcquisitionRuntime acquisitionRuntime, WebArticleExtractor articleExtractor,
+                     EmbeddedDataExtractor embeddedDataExtractor) {
         this.acquisitionRuntime = acquisitionRuntime;
         this.articleExtractor = articleExtractor;
+        this.embeddedDataExtractor = embeddedDataExtractor;
     }
 
     @Override
@@ -58,7 +66,12 @@ public class WebSourceAdapter implements SourceAdapter {
                 .build());
         Document document = Jsoup.parse(response.getBodyText(), response.getFinalUri().toString());
 
-        return Collections.singletonList(articleExtractor.extract(document, source));
+        RawItem visible = articleExtractor.extract(document, source);
+        Optional<RawItem> embedded = embeddedDataExtractor.extract(document, source);
+        if (embedded.isPresent() && embedded.get().getQualityScore() > visible.getQualityScore()) {
+            return Collections.singletonList(embedded.get());
+        }
+        return Collections.singletonList(visible);
     }
 
     private boolean isHttpUrl(String url) {
