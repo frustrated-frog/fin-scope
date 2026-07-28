@@ -157,6 +157,25 @@ async def test_required_minute_flow_skips_daily_only_provider(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
+async def test_provider_family_selection_calls_only_requested_independent_source(tmp_path: Path) -> None:
+    symbol = StockSymbol(market="SZ", code="000001")
+    tencent = FakeProvider("TENCENT", "TENCENT", 10, [quote(symbol, 10.0)])
+    tdx = FakeProvider("PYTDX", "TDX", 25, [quote(symbol, 10.2)])
+
+    result = await make_router(tmp_path, [tencent, tdx]).fetch(
+        DataCapability.QUOTE,
+        symbol,
+        provider_mode=True,
+        provider_family="TDX",
+    )
+
+    assert result.source_code == "PYTDX"
+    assert result.data.price == 10.2
+    assert tencent.calls == 0
+    assert tdx.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_router_returns_stale_snapshot_when_all_online_sources_fail(tmp_path: Path) -> None:
     symbol = StockSymbol(market="SH", code="600519")
     service = make_router(tmp_path, [FakeProvider("PRIMARY", "A", 10, [quote(symbol, 1480.5)])])

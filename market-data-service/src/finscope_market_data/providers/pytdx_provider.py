@@ -4,9 +4,11 @@ import asyncio
 import importlib.util
 import os
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
-from finscope_market_data.models import DailyBar, DataCapability, Market, StockSymbol
+from finscope_market_data.models import DailyBar, DataCapability, Market, StockQuote, StockSymbol
 from finscope_market_data.providers.base import ProviderError
 
 
@@ -25,14 +27,18 @@ class TdxApi(Protocol):
         self, category: int, market: int, code: str, start: int, count: int
     ) -> list[dict[str, Any]] | None: ...
 
+    def get_security_quotes(
+        self, stocks: list[tuple[int, str]]
+    ) -> list[dict[str, Any]] | None: ...
+
     def disconnect(self) -> None: ...
 
 
 class PytdxDailyProvider:
-    provider_code = "PYTDX_DAILY"
+    provider_code = "PYTDX"
     provider_family = "TDX"
     priority = 40
-    capabilities = {DataCapability.DAILY_BARS}
+    capabilities = {DataCapability.QUOTE, DataCapability.DAILY_BARS}
 
     def __init__(
         self,
@@ -49,26 +55,49 @@ class PytdxDailyProvider:
             self._server = None
         self._api_factory = api_factory
 
+    def priority_for(self, capability: DataCapability) -> int:
+        return 25 if capability is DataCapability.QUOTE else self.priority
+
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
         return (
-            capability is DataCapability.DAILY_BARS
+            capability in self.capabilities
             and symbol.market in {Market.SH, Market.SZ}
             and (self._api_factory is not None or importlib.util.find_spec("pytdx") is not None)
         )
 
-    async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> list[DailyBar]:
-        if capability is not DataCapability.DAILY_BARS:
-            raise ProviderError("UNSUPPORTED_CAPABILITY", capability.value, False)
-        limit = min(max(int(kwargs.get("limit", 250)), 1), 800)
+    async def fetch(
+        self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any
+    ) -> StockQuote | list[DailyBar]:
         try:
-            rows = await asyncio.to_thread(self._fetch_rows, symbol, limit)
-            return self.map_rows(rows, symbol)
+            if capability is DataCapability.QUOTE:
+                row = await asyncio.to_thread(self._fetch_quote_row, symbol)
+                return self.map_quote(row, symbol)
+            if capability is DataCapability.DAILY_BARS:
+                limit = min(max(int(kwargs.get("limit", 250)), 1), 800)
+                rows = await asyncio.to_thread(self._fetch_rows, symbol, limit)
+                return self.map_rows(rows, symbol)
+            raise ProviderError("UNSUPPORTED_CAPABILITY", capability.value, False)
         except ProviderError:
             raise
         except Exception as error:
             raise ProviderError("TDX_ERROR", f"通达信行情获取失败：{error}") from error
 
+    def _fetch_quote_row(self, symbol: StockSymbol) -> dict[str, Any]:
+        market = 1 if symbol.market is Market.SH else 0
+        rows = self._fetch_from_servers(
+            lambda api: api.get_security_quotes([(market, symbol.code)])
+        )
+        return rows[0]
+
     def _fetch_rows(self, symbol: StockSymbol, limit: int) -> list[dict[str, Any]]:
+        market = 1 if symbol.market is Market.SH else 0
+        return self._fetch_from_servers(
+            lambda api: api.get_security_bars(9, market, symbol.code, 0, limit)
+        )
+
+    def _fetch_from_servers(
+        self, request: Callable[[TdxApi], list[dict[str, Any]] | None]
+    ) -> list[dict[str, Any]]:
         candidates = list(self._servers)
         if self._server is not None:
             candidates = [self._server, *(server for server in candidates if server != self._server)]
@@ -80,8 +109,7 @@ class PytdxDailyProvider:
                 if not api.connect(host, port, time_out=2):
                     failures.append(f"{host}:{port}=connect_false")
                     continue
-                market = 1 if symbol.market is Market.SH else 0
-                rows = api.get_security_bars(9, market, symbol.code, 0, limit)
+                rows = request(api)
                 if not rows:
                     failures.append(f"{host}:{port}=empty")
                     continue
@@ -126,3 +154,49 @@ class PytdxDailyProvider:
                 )
             )
         return result
+
+    @staticmethod
+    def map_quote(
+        row: dict[str, Any], symbol: StockSymbol, observed_date: str | None = None
+    ) -> StockQuote:
+        price = _positive_number(row.get("price"))
+        if price is None:
+            raise ProviderError("EMPTY_DATA", "通达信行情暂无有效成交")
+        previous_close = _positive_number(row.get("last_close"))
+        change = price - previous_close if previous_close is not None else None
+        change_pct = change / previous_close * 100 if change is not None else None
+        date_text = observed_date or datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        time_text = str(row.get("servertime") or "").strip()
+        try:
+            observed_at = datetime.fromisoformat(f"{date_text}T{time_text}").replace(
+                tzinfo=ZoneInfo("Asia/Shanghai")
+            )
+        except ValueError:
+            observed_at = datetime.now(ZoneInfo("Asia/Shanghai"))
+        return StockQuote(
+            symbol=symbol,
+            price=price,
+            previous_close=previous_close,
+            open=_number(row.get("open")),
+            high=_number(row.get("high")),
+            low=_number(row.get("low")),
+            change=change,
+            change_pct=change_pct,
+            volume=_number(row.get("vol")),
+            amount=_number(row.get("amount")),
+            bid_price=_number(row.get("bid1")),
+            ask_price=_number(row.get("ask1")),
+            observed_at=observed_at,
+        )
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return None if value is None or value == "" else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _positive_number(value: Any) -> float | None:
+    number = _number(value)
+    return number if number is not None and number > 0 else None

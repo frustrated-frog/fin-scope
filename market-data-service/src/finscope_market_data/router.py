@@ -53,11 +53,20 @@ class ProviderRouter:
         symbol: StockSymbol,
         *,
         provider_mode: bool = False,
+        provider_family: str | None = None,
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         supported = sorted(
-            (provider for provider in self.providers if provider.supports(capability, symbol)),
-            key=lambda provider: provider.priority,
+            (
+                provider
+                for provider in self.providers
+                if provider.supports(capability, symbol)
+                and (
+                    provider_family is None
+                    or provider.provider_family.upper() == provider_family.strip().upper()
+                )
+            ),
+            key=lambda provider: self._priority(provider, capability),
         )
         candidates = (
             supported[:1]
@@ -178,6 +187,11 @@ class ProviderRouter:
             attempts=attempts,
             data=None,
         )
+
+    @staticmethod
+    def _priority(provider: MarketDataProvider, capability: DataCapability) -> int:
+        resolver = getattr(provider, "priority_for", None)
+        return resolver(capability) if callable(resolver) else provider.priority
 
     @staticmethod
     def _as_of(data: Any, fallback: datetime) -> datetime:

@@ -84,8 +84,22 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         return [item.model_dump(mode="json") for item in current.health.list(current.providers)]
 
     @application.get("/v1/stocks/{market}/{code}/quote")
-    async def quote(market: str, code: str):
-        return _response(await _fetch(application, DataCapability.QUOTE, market, code))
+    async def quote(
+        market: str,
+        code: str,
+        provider_family: str | None = Query(default=None),
+        provider_mode: bool = Query(default=False),
+    ):
+        return _response(
+            await _fetch(
+                application,
+                DataCapability.QUOTE,
+                market,
+                code,
+                provider_family=provider_family,
+                provider_mode=provider_mode,
+            )
+        )
 
     @application.get("/v1/stocks/{market}/{code}/daily-bars")
     async def daily_bars(

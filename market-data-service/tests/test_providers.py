@@ -276,6 +276,83 @@ def test_pytdx_mapping_provides_independent_daily_bar_fallback() -> None:
     assert bars[0].amount == 3_565_850_000
 
 
+def test_pytdx_mapping_provides_independent_realtime_quote_fallback() -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    row = {
+        "price": 1320.0,
+        "last_close": 1289.5,
+        "open": 1299.0,
+        "high": 1320.0,
+        "low": 1289.52,
+        "servertime": "15:17:18.006",
+        "vol": 53134,
+        "amount": 6_960_058_368.0,
+        "bid1": 1319.9,
+        "ask1": 1320.0,
+    }
+
+    quote = PytdxDailyProvider.map_quote(row, symbol, observed_date="2026-07-28")
+
+    assert quote.price == 1320.0
+    assert quote.previous_close == 1289.5
+    assert quote.change == 30.5
+    assert quote.change_pct == pytest.approx(2.3653, rel=1e-4)
+    assert quote.volume == 53134
+    assert quote.amount == 6_960_058_368.0
+    assert quote.bid_price == 1319.9
+    assert quote.ask_price == 1320.0
+    assert quote.observed_at.isoformat() == "2026-07-28T15:17:18.006000+08:00"
+
+
+def test_pytdx_prioritizes_quote_fallback_without_changing_qfq_daily_bar_route() -> None:
+    provider = PytdxDailyProvider(api_factory=lambda: None)
+
+    assert provider.priority_for(DataCapability.QUOTE) == 25
+    assert provider.priority_for(DataCapability.DAILY_BARS) == 40
+
+
+@pytest.mark.asyncio
+async def test_pytdx_quote_uses_real_fetch_to_select_working_server() -> None:
+    class FakeApi:
+        def __init__(self) -> None:
+            self.host = ""
+            self.quote_calls: list[tuple[int, str]] = []
+
+        def connect(self, host: str, port: int, time_out: int) -> bool:
+            self.host = host
+            return True
+
+        def get_security_quotes(self, stocks: list[tuple[int, str]]) -> list[dict[str, Any]]:
+            self.quote_calls.extend(stocks)
+            if self.host == "empty.example":
+                return []
+            return [{"price": 10.2, "last_close": 10.0, "servertime": "10:30:00.000"}]
+
+        def disconnect(self) -> None:
+            pass
+
+    apis: list[FakeApi] = []
+
+    def factory() -> FakeApi:
+        api = FakeApi()
+        apis.append(api)
+        return api
+
+    provider = PytdxDailyProvider(
+        api_factory=factory,
+        servers=(("empty.example", 7709), ("working.example", 7709)),
+    )
+
+    quote = await provider.fetch(
+        capability=DataCapability.QUOTE,
+        symbol=StockSymbol(market="SZ", code="000001"),
+    )
+
+    assert quote.price == 10.2
+    assert [api.quote_calls for api in apis] == [[(0, "000001")], [(0, "000001")]]
+    assert provider._server == ("working.example", 7709)
+
+
 @pytest.mark.asyncio
 async def test_pytdx_uses_bounded_server_fallback_without_global_probe() -> None:
     class FakeApi:
