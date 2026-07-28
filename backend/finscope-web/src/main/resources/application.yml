@@ -36,6 +36,13 @@ finscope:
     api-key: "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"
   python-market-data:
     base-url: ${FINSCOPE_PYTHON_MARKET_DATA_BASE_URL:http://127.0.0.1:8000}
+  acquisition:
+    browser:
+      enabled: ${FINSCOPE_ACQUISITION_BROWSER_ENABLED:false}
+      executable: ${FINSCOPE_ACQUISITION_BROWSER_EXECUTABLE:}
+      timeout-ms: ${FINSCOPE_ACQUISITION_BROWSER_TIMEOUT_MS:20000}
+      max-response-bytes: ${FINSCOPE_ACQUISITION_BROWSER_MAX_RESPONSE_BYTES:8388608}
+      max-concurrency: ${FINSCOPE_ACQUISITION_BROWSER_MAX_CONCURRENCY:1}
   market-data:
     fresh-cache-ms: ${FINSCOPE_MARKET_DATA_FRESH_CACHE_MS:15000}
     hedge-delay-ms: ${FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS:300}

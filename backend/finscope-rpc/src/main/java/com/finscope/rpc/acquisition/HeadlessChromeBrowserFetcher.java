@@ -31,6 +31,7 @@ public class HeadlessChromeBrowserFetcher implements BrowserFetcher {
     private final String configuredExecutable;
     private final int timeoutMs;
     private final int maxResponseBytes;
+    private final BrowserConcurrencyGate concurrencyGate;
     private final List<AcquisitionObserver> observers;
 
     public HeadlessChromeBrowserFetcher(
@@ -38,11 +39,13 @@ public class HeadlessChromeBrowserFetcher implements BrowserFetcher {
             @Value("${finscope.acquisition.browser.executable:}") String configuredExecutable,
             @Value("${finscope.acquisition.browser.timeout-ms:20000}") int timeoutMs,
             @Value("${finscope.acquisition.browser.max-response-bytes:8388608}") int maxResponseBytes,
+            @Value("${finscope.acquisition.browser.max-concurrency:1}") int maxConcurrency,
             List<AcquisitionObserver> observers) {
         this.enabled = enabled;
         this.configuredExecutable = configuredExecutable == null ? "" : configuredExecutable.trim();
         this.timeoutMs = timeoutMs;
         this.maxResponseBytes = maxResponseBytes;
+        this.concurrencyGate = new BrowserConcurrencyGate(maxConcurrency);
         this.observers = observers == null ? Collections.<AcquisitionObserver>emptyList() : observers;
     }
 
@@ -51,6 +54,14 @@ public class HeadlessChromeBrowserFetcher implements BrowserFetcher {
         if (!enabled) {
             return new DisabledBrowserFetcher().fetch(request);
         }
+        int totalTimeoutMs = Math.min(timeoutMs, request.getDeadlineMs());
+        long deadlineNanos = System.nanoTime() + totalTimeoutMs * 1_000_000L;
+        try (BrowserConcurrencyGate.Permit ignored = concurrencyGate.acquire(totalTimeoutMs)) {
+            return fetchWithPermit(request, remainingMillis(deadlineNanos));
+        }
+    }
+
+    private AcquisitionResponse fetchWithPermit(AcquisitionRequest request, int executionTimeoutMs) {
         long startedNanos = System.nanoTime();
         Path profile = null;
         Process process = null;
@@ -65,10 +76,10 @@ public class HeadlessChromeBrowserFetcher implements BrowserFetcher {
             outputThread.start();
             errorThread.start();
 
-            if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+            if (!process.waitFor(executionTimeoutMs, TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 throw new AcquisitionException(AcquisitionErrorType.TIMEOUT,
-                        "浏览器渲染超过时间限制：" + timeoutMs + " ms", true, null);
+                        "浏览器渲染超过时间限制：" + executionTimeoutMs + " ms", true, null);
             }
             outputThread.join(1000L);
             errorThread.join(1000L);
@@ -167,6 +178,15 @@ public class HeadlessChromeBrowserFetcher implements BrowserFetcher {
 
     private long elapsedMillis(long startedNanos) {
         return (System.nanoTime() - startedNanos) / 1_000_000L;
+    }
+
+    private int remainingMillis(long deadlineNanos) {
+        long remaining = (deadlineNanos - System.nanoTime()) / 1_000_000L;
+        if (remaining <= 0L) {
+            throw new AcquisitionException(AcquisitionErrorType.TIMEOUT,
+                    "浏览器采集总时间预算已耗尽", true, null);
+        }
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, remaining));
     }
 
     private void deleteProfile(Path profile) {
