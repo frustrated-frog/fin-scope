@@ -1,0 +1,16 @@
+package com.finscope.rpc.acquisition;
+
+public enum AcquisitionErrorType {
+    TIMEOUT,
+    CONNECTION_ERROR,
+    HTTP_RATE_LIMITED,
+    HTTP_CLIENT_ERROR,
+    HTTP_SERVER_ERROR,
+    RESPONSE_TOO_LARGE,
+    EMPTY_RESPONSE,
+    UNSUPPORTED_CONTENT,
+    RENDER_REQUIRED,
+    BROWSER_UNAVAILABLE,
+    SCHEMA_DRIFT,
+    BLOCKED_BY_POLICY
+}
