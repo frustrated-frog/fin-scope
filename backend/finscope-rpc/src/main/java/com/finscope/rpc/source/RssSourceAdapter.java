@@ -2,6 +2,9 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.AcquisitionRequest;
+import com.finscope.rpc.acquisition.AcquisitionRuntime;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
 import com.finscope.rpc.util.HtmlToMarkdownConverter;
 import com.rometools.rome.feed.module.DCModule;
 import com.rometools.rome.feed.module.Module;
@@ -13,14 +16,11 @@ import com.rometools.rome.feed.synd.SyndPerson;
 import com.rometools.rome.io.SyndFeedInput;
 import org.jdom2.Element;
 import org.jsoup.Jsoup;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.io.StringReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -30,6 +30,17 @@ import java.util.Set;
 
 @Component
 public class RssSourceAdapter implements SourceAdapter {
+    private final AcquisitionRuntime acquisitionRuntime;
+
+    public RssSourceAdapter() {
+        this(new JdkAcquisitionRuntime());
+    }
+
+    @Autowired
+    RssSourceAdapter(AcquisitionRuntime acquisitionRuntime) {
+        this.acquisitionRuntime = acquisitionRuntime;
+    }
+
     @Override
     public boolean supports(String type) {
         return "RSS".equalsIgnoreCase(type);
@@ -37,7 +48,14 @@ public class RssSourceAdapter implements SourceAdapter {
 
     @Override
     public List<RawItem> fetch(Source source) throws Exception {
-        String xml = fetchXml(source.getUrl());
+        String xml = acquisitionRuntime.fetch(AcquisitionRequest
+                .get(URI.create(source.getUrl()))
+                .purpose("RSS_FEED")
+                .header("Accept", "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8")
+                .build()).getBodyText();
+        if (!xml.isEmpty() && xml.charAt(0) == '\uFEFF') {
+            xml = xml.substring(1).trim();
+        }
         SyndFeed feed = new SyndFeedInput().build(new StringReader(xml));
         List<RawItem> items = new ArrayList<RawItem>();
 
@@ -67,43 +85,6 @@ public class RssSourceAdapter implements SourceAdapter {
             items.add(item);
         }
         return items;
-    }
-
-    private String fetchXml(String url) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(20000);
-        connection.setRequestProperty("User-Agent", "FinScope/0.1 (+local research workspace)");
-        connection.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8");
-        int status = connection.getResponseCode();
-        InputStream inputStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        byte[] bytes = readAll(inputStream);
-        String xml = new String(bytes, StandardCharsets.UTF_8).trim();
-        if (!xml.isEmpty() && xml.charAt(0) == '\uFEFF') {
-            xml = xml.substring(1).trim();
-        }
-        if (xml.isEmpty()) {
-            throw new IllegalStateException("RSS 返回空内容，无法解析：" + url);
-        }
-        if (status >= 400) {
-            throw new IllegalStateException("RSS 请求失败，HTTP " + status + "：" + url);
-        }
-        return xml;
-    }
-
-    private byte[] readAll(InputStream inputStream) throws Exception {
-        if (inputStream == null) {
-            return new byte[0];
-        }
-        try (InputStream in = inputStream; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-            return out.toByteArray();
-        }
     }
 
     private String content(SyndEntry entry) {

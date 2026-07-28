@@ -2,6 +2,8 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import com.finscope.rpc.acquisition.RecordingAcquisitionRuntime;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,8 @@ class RssSourceAdapterTest {
         source.setType("RSS");
         source.setUrl("http://localhost:" + server.getAddress().getPort() + "/rss");
 
-        List<RawItem> items = new RssSourceAdapter().fetch(source);
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(new JdkAcquisitionRuntime());
+        List<RawItem> items = new RssSourceAdapter(runtime).fetch(source);
 
         assertEquals(1, items.size());
         RawItem item = items.get(0);
@@ -56,6 +59,8 @@ class RssSourceAdapterTest {
         assertEquals("RSS_ITEM", item.getContentType());
         assertEquals("rss:rome-markdown", item.getExtractionMethod());
         assertTrue(item.getQualityScore() >= 80);
+        assertEquals(1, runtime.getRequests().size());
+        assertEquals("RSS_FEED", runtime.getRequests().get(0).getPurpose());
     }
 
     private String arxivRss() {

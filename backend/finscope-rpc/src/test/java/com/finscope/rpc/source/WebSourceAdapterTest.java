@@ -2,6 +2,8 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import com.finscope.rpc.acquisition.RecordingAcquisitionRuntime;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -42,13 +44,16 @@ class WebSourceAdapterTest {
         source.setUrl("http://localhost:" + server.getAddress().getPort()
                 + "/newsevents/pressreleases/monetary20260617a.htm");
 
-        List<RawItem> items = new WebSourceAdapter().fetch(source);
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(new JdkAcquisitionRuntime());
+        List<RawItem> items = new WebSourceAdapter(runtime, new WebArticleExtractor()).fetch(source);
 
         assertEquals(1, items.size());
         RawItem item = items.get(0);
         assertEquals("Federal Reserve issues FOMC statement", item.getTitle());
         assertTrue(item.getBody().contains("maximum employment"));
         assertEquals("web:generic-score", item.getExtractionMethod());
+        assertEquals(1, runtime.getRequests().size());
+        assertEquals("WEB_ARTICLE", runtime.getRequests().get(0).getPurpose());
     }
 
     private String html() {

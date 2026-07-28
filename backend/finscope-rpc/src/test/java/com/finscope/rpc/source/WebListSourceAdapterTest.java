@@ -2,6 +2,8 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import com.finscope.rpc.acquisition.RecordingAcquisitionRuntime;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -52,13 +54,18 @@ class WebListSourceAdapterTest {
         source.setType("WEB_LIST");
         source.setUrl("http://localhost:" + server.getAddress().getPort() + "/list");
 
-        List<RawItem> items = new WebListSourceAdapter().fetch(source);
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(new JdkAcquisitionRuntime());
+        List<RawItem> items = new WebListSourceAdapter(runtime, new WebArticleExtractor()).fetch(source);
 
         assertEquals(2, items.size());
         assertTrue(items.get(0).getTitle().contains("第一篇宏观文章"));
         assertTrue(items.get(0).getUrl().endsWith("/a"));
         assertTrue(items.get(1).getTitle().contains("第二篇 AI 文章"));
         assertTrue(items.get(1).getUrl().endsWith("/b"));
+        assertEquals(3, runtime.getRequests().size());
+        assertEquals("WEB_LIST", runtime.getRequests().get(0).getPurpose());
+        assertEquals("WEB_DETAIL", runtime.getRequests().get(1).getPurpose());
+        assertEquals("WEB_DETAIL", runtime.getRequests().get(2).getPurpose());
     }
 
     @Test

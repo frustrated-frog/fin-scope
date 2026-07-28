@@ -2,8 +2,13 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.AcquisitionRequest;
+import com.finscope.rpc.acquisition.AcquisitionResponse;
+import com.finscope.rpc.acquisition.AcquisitionRuntime;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -13,13 +18,24 @@ import java.util.Locale;
 
 @Component
 public class WebSourceAdapter implements SourceAdapter {
+    private final AcquisitionRuntime acquisitionRuntime;
     private final WebArticleExtractor articleExtractor;
 
     public WebSourceAdapter() {
-        this(new WebArticleExtractor());
+        this(new JdkAcquisitionRuntime(), new WebArticleExtractor());
     }
 
     WebSourceAdapter(WebArticleExtractor articleExtractor) {
+        this(new JdkAcquisitionRuntime(), articleExtractor);
+    }
+
+    @Autowired
+    public WebSourceAdapter(AcquisitionRuntime acquisitionRuntime) {
+        this(acquisitionRuntime, new WebArticleExtractor());
+    }
+
+    WebSourceAdapter(AcquisitionRuntime acquisitionRuntime, WebArticleExtractor articleExtractor) {
+        this.acquisitionRuntime = acquisitionRuntime;
         this.articleExtractor = articleExtractor;
     }
 
@@ -35,10 +51,12 @@ public class WebSourceAdapter implements SourceAdapter {
 
     @Override
     public List<RawItem> fetch(Source source) throws Exception {
-        Document document = Jsoup.connect(source.getUrl())
-                .userAgent("FinScope/0.1")
-                .timeout(10000)
-                .get();
+        AcquisitionResponse response = acquisitionRuntime.fetch(AcquisitionRequest
+                .get(URI.create(source.getUrl()))
+                .purpose("WEB_ARTICLE")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build());
+        Document document = Jsoup.parse(response.getBodyText(), response.getFinalUri().toString());
 
         return Collections.singletonList(articleExtractor.extract(document, source));
     }
