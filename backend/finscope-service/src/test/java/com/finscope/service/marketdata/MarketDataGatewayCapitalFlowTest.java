@@ -98,6 +98,14 @@ class MarketDataGatewayCapitalFlowTest {
         }
     }
 
+    @Test
+    void supportsALongerCapitalBudgetWithoutSlowingOtherQuoteRequests() {
+        MarketDataGatewayProperties properties = new MarketDataGatewayProperties(30_000, 30, 5_000, 20_000);
+
+        assertEquals(5_000, properties.getRequestBudgetMs());
+        assertEquals(20_000, properties.getCapitalRequestBudgetMs());
+    }
+
     private MarketDataGateway gateway(CapitalFlowProvider... providers) {
         return gateway(Runnable::run, providers);
     }

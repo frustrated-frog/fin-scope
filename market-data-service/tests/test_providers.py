@@ -47,6 +47,38 @@ async def test_provider_http_client_reuses_connection_pool_and_closes_explicitly
     assert "Connection" not in client.headers
 
 
+@pytest.mark.asyncio
+async def test_provider_http_client_serializes_and_spaces_rate_limited_family_requests() -> None:
+    loop = asyncio.get_running_loop()
+
+    class Response:
+        status_code = 200
+        text = "{}"
+        content = b"{}"
+
+    class FakeAsyncClient:
+        def __init__(self) -> None:
+            self.started_at: list[float] = []
+
+        async def get(self, url: str, **kwargs: Any) -> Response:
+            self.started_at.append(loop.time())
+            return Response()
+
+        async def aclose(self) -> None:
+            pass
+
+    transport = FakeAsyncClient()
+    client = ProviderHttpClient(client=transport, minimum_interval_seconds=0.02)
+
+    await asyncio.gather(
+        client.get_text("EASTMONEY_DIRECT", "https://example.com/one"),
+        client.get_text("EASTMONEY_DIRECT", "https://example.com/two"),
+    )
+
+    assert len(transport.started_at) == 2
+    assert transport.started_at[1] - transport.started_at[0] >= 0.018
+
+
 def test_tencent_parser_maps_rich_quote_fields() -> None:
     raw = (
         'v_sh600519="51~贵州茅台~600519~1480.00~1471.20~1475.00~123456'

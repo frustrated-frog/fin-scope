@@ -34,7 +34,10 @@ class EastmoneyProvider:
     _flow_ut = "b2884a393a59ad64002292a3e90d46a5"
 
     def __init__(self, http: ProviderHttpClient | None = None) -> None:
-        self.http = http or ProviderHttpClient(timeout_seconds=10)
+        self.http = http or ProviderHttpClient(
+            timeout_seconds=10,
+            minimum_interval_seconds=1.0,
+        )
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
         return capability in self.capabilities

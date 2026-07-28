@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -8,7 +9,12 @@ from finscope_market_data.providers.base import ProviderError
 
 
 class ProviderHttpClient:
-    def __init__(self, timeout_seconds: float = 8.0, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        timeout_seconds: float = 8.0,
+        client: Any | None = None,
+        minimum_interval_seconds: float = 0.0,
+    ) -> None:
         self.timeout = httpx.Timeout(timeout_seconds, connect=min(timeout_seconds, 4.0))
         self.headers = {
             "User-Agent": "Mozilla/5.0 FinScope-Market-Data/0.1",
@@ -18,6 +24,9 @@ class ProviderHttpClient:
             headers=self.headers,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
+        self._minimum_interval_seconds = max(0.0, minimum_interval_seconds)
+        self._request_lock = asyncio.Lock()
+        self._last_request_started_at: float | None = None
 
     async def get_text(
         self,
@@ -29,7 +38,17 @@ class ProviderHttpClient:
         encoding: str | None = None,
     ) -> str:
         try:
-            response = await self._client.get(url, headers=headers, params=params)
+            async with self._request_lock:
+                loop = asyncio.get_running_loop()
+                if self._last_request_started_at is not None:
+                    remaining = (
+                        self._minimum_interval_seconds
+                        - (loop.time() - self._last_request_started_at)
+                    )
+                    if remaining > 0:
+                        await asyncio.sleep(remaining)
+                self._last_request_started_at = loop.time()
+                response = await self._client.get(url, headers=headers, params=params)
         except httpx.TimeoutException as error:
             raise ProviderError("TIMEOUT", f"{provider_code} request timed out") from error
         except httpx.HTTPError as error:

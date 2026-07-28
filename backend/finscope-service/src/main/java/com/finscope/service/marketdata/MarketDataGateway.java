@@ -386,7 +386,7 @@ public class MarketDataGateway {
         List<String> attempts = new ArrayList<String>();
         String lastErrorType = MarketDataQualityStatus.UNAVAILABLE.name();
         String lastErrorMessage = null;
-        long requestDeadline = requestDeadlineNanos();
+        long requestDeadline = requestDeadlineNanos(properties.getCapitalRequestBudgetMs());
         Set<String> attemptedSources = new LinkedHashSet<String>();
         for (CapitalFlowProvider provider : ordered) {
             if (remainingMillis(requestDeadline) <= 0L) {
@@ -1114,8 +1114,12 @@ public class MarketDataGateway {
     }
 
     private long requestDeadlineNanos() {
+        return requestDeadlineNanos(properties.getRequestBudgetMs());
+    }
+
+    private long requestDeadlineNanos(long budgetMs) {
         return safeDeadline(System.nanoTime(),
-                TimeUnit.MILLISECONDS.toNanos(Math.max(1L, properties.getRequestBudgetMs())));
+                TimeUnit.MILLISECONDS.toNanos(Math.max(1L, budgetMs)));
     }
 
     private Duration remainingDuration(long deadlineNanos) {
