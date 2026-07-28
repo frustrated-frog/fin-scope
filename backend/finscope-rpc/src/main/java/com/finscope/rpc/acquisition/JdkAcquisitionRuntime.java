@@ -1,6 +1,9 @@
 package com.finscope.rpc.acquisition;
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,6 +21,19 @@ import java.util.Map;
 @Component
 public class JdkAcquisitionRuntime implements AcquisitionRuntime {
     private static final String DEFAULT_USER_AGENT = "Mozilla/5.0 FinScope-Acquisition/0.1";
+    private static final Logger log = LoggerFactory.getLogger(JdkAcquisitionRuntime.class);
+    private final List<AcquisitionObserver> observers;
+
+    public JdkAcquisitionRuntime() {
+        this(Collections.<AcquisitionObserver>emptyList());
+    }
+
+    @Autowired
+    public JdkAcquisitionRuntime(List<AcquisitionObserver> observers) {
+        this.observers = observers == null
+                ? Collections.<AcquisitionObserver>emptyList()
+                : Collections.unmodifiableList(observers);
+    }
 
     @Override
     public AcquisitionResponse fetch(AcquisitionRequest request) {
@@ -27,7 +43,9 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
 
         for (int attempt = 1; attempt <= request.getMaxRetries() + 1; attempt++) {
             try {
-                return fetchOnce(request, attempt, startedNanos, deadlineNanos);
+                AcquisitionResponse response = fetchOnce(request, attempt, startedNanos, deadlineNanos);
+                notifySuccess(request, response);
+                return response;
             } catch (AcquisitionException error) {
                 lastError = error;
                 if (!error.isRetryable() || attempt > request.getMaxRetries()) {
@@ -194,5 +212,16 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
 
     private String safeMessage(Exception error) {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
+    private void notifySuccess(AcquisitionRequest request, AcquisitionResponse response) {
+        for (AcquisitionObserver observer : observers) {
+            try {
+                observer.onSuccess(request, response);
+            } catch (RuntimeException error) {
+                log.warn("采集观察器执行失败 purpose={} url={} error={}",
+                        request.getPurpose(), request.getUri(), safeMessage(error));
+            }
+        }
     }
 }

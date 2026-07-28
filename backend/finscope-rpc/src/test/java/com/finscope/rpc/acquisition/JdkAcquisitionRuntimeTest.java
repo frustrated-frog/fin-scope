@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -109,6 +110,36 @@ class JdkAcquisitionRuntimeTest {
 
         assertEquals(AcquisitionErrorType.TIMEOUT, error.getErrorType());
         assertEquals(2, attempts.get());
+    }
+
+    @Test
+    void notifiesObserverAfterSuccessfulAcquisition() throws Exception {
+        startServer("/observed", exchange -> write(exchange, 200, "可审计正文"));
+        AtomicReference<AcquisitionRequest> observedRequest = new AtomicReference<AcquisitionRequest>();
+        AtomicReference<AcquisitionResponse> observedResponse = new AtomicReference<AcquisitionResponse>();
+        AcquisitionObserver observer = (request, response) -> {
+            observedRequest.set(request);
+            observedResponse.set(response);
+        };
+
+        AcquisitionResponse response = new JdkAcquisitionRuntime(
+                java.util.Collections.singletonList(observer)).fetch(request("/observed").build());
+
+        assertEquals("TEST", observedRequest.get().getPurpose());
+        assertEquals(response.getBodySha256(), observedResponse.get().getBodySha256());
+    }
+
+    @Test
+    void observerFailureDoesNotBreakSuccessfulAcquisition() throws Exception {
+        startServer("/observer-failure", exchange -> write(exchange, 200, "主链路成功"));
+        AcquisitionObserver observer = (request, response) -> {
+            throw new IllegalStateException("快照磁盘临时不可用");
+        };
+
+        AcquisitionResponse response = new JdkAcquisitionRuntime(
+                java.util.Collections.singletonList(observer)).fetch(request("/observer-failure").build());
+
+        assertEquals("主链路成功", response.getBodyText());
     }
 
     private AcquisitionRequest.Builder request(String path) {

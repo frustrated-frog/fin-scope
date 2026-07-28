@@ -10,6 +10,7 @@ import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
 import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;
+import com.finscope.rpc.acquisition.AcquisitionContext;
 import com.finscope.service.article.ArticleIngestCoordinator;
 import com.finscope.domain.article.ArticleIngestResult;
 import lombok.extern.slf4j.Slf4j;
@@ -54,7 +55,10 @@ public class FetchService {
         int duplicateCount = 0;
         try {
             SourceAdapter adapter = adapterRegistry.get(source);
-            List<RawItem> items = adapter.fetch(source);
+            List<RawItem> items;
+            try (AcquisitionContext.Scope ignored = AcquisitionContext.open(run.getId(), source.getId())) {
+                items = adapter.fetch(source);
+            }
             List<RawItem> rawItems = items == null ? Collections.emptyList() : items;
             List<RawItem> selectedItems = rawItemSelector.select(source, rawItems);
             log.info("信息源抓取到条目 sourceId={} itemCount={} selectedCount={}",

@@ -66,6 +66,18 @@ public class DatabaseInitializer implements InitializingBean {
                 + "success_count INTEGER NOT NULL DEFAULT 0,"
                 + "duplicate_count INTEGER NOT NULL DEFAULT 0,"
                 + "error_message TEXT)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS raw_snapshot ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "fetch_run_id INTEGER,source_id INTEGER,purpose TEXT NOT NULL,method TEXT NOT NULL,"
+                + "request_url TEXT NOT NULL,final_url TEXT,request_headers_json TEXT,"
+                + "status TEXT NOT NULL,http_status INTEGER,error_type TEXT,error_message TEXT,"
+                + "content_type TEXT,charset_name TEXT,body_bytes INTEGER NOT NULL DEFAULT 0,"
+                + "body_sha256 TEXT,body_path TEXT,attempt_count INTEGER NOT NULL DEFAULT 0,"
+                + "duration_ms INTEGER NOT NULL DEFAULT 0,policy_version TEXT,parser_version TEXT,"
+                + "fetched_at TEXT NOT NULL,parsed_at TEXT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_fetch_run ON raw_snapshot(fetch_run_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_source_time ON raw_snapshot(source_id,fetched_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_hash ON raw_snapshot(body_sha256)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS async_task ("
                 + "id TEXT PRIMARY KEY,"
                 + "type TEXT NOT NULL,"
