@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Optional;
+import java.util.ArrayList;
 
 @Service
 public class ResearchReportService {
@@ -74,7 +75,11 @@ public class ResearchReportService {
             report.setContentMarkdown(generated.getMarkdown());
             report.setMarkdownPath(path.toString());
             report.setGenerationMode(generated.getGenerationMode());
-            report.setWarningMessage(String.join("；", sufficiency.getWarnings()));
+            List<String> warnings = new ArrayList<String>(sufficiency.getWarnings());
+            if (generated.getWarning() != null && !generated.getWarning().trim().isEmpty()) {
+                warnings.add(generated.getWarning());
+            }
+            report.setWarningMessage(String.join("；", warnings));
             report.setEvidenceCount(evidence.size());
             report.setSourceCount(sourceCount(evidence));
             report.setCharacterCount(generated.getMarkdown().length());

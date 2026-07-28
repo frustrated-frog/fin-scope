@@ -2,50 +2,67 @@ package com.finscope.service.research.report;
 
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.ResearchThesis;
-import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchReportSynthesisAgentTest {
     @Test
-    void rejectsUnstructuredOrOversizedModelOutputAndUsesBoundedFallback() throws Exception {
-        LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString(), eq(20000)))
-                .thenReturn("无结构结果" + String.join("", Collections.nCopies(13000, "字")));
-        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent();
-        ReflectionTestUtils.setField(agent, "llmChatClient", llm);
-        GeneratedResearchReport fallback = fallback();
+    void persistsStructuredModelModeWhenTheWholePipelinePasses() throws Exception {
+        ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
+        ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
+        ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
+        StructuredResearchReportAssembler assembler = mock(StructuredResearchReportAssembler.class);
+        ResearchReportQualityValidator qualityValidator = mock(ResearchReportQualityValidator.class);
+        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        blueprint.setDirectAnswer("对象特定结论");
+        blueprint.setDirection("MIXED");
+        blueprint.setConfidence("MEDIUM");
+        ResearchReportNarrative narrative = new ResearchReportNarrative();
+        narrative.setExecutiveSummary("对象特定执行摘要");
+        when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
+        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
+        when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
+        when(assembler.assemble(any(), any(), any(), anyList())).thenReturn("结构化深度正文");
+        when(qualityValidator.validate(anyString(), any(), anyList())).thenReturn(Collections.<String>emptyList());
+        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent(
+                dossierBuilder, blueprintAgent, narrativeAgent, assembler, qualityValidator);
 
-        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback);
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback());
 
-        assertEquals("DETERMINISTIC", result.getGenerationMode());
-        assertEquals(fallback.getMarkdown(), result.getMarkdown());
+        assertEquals("MODEL_STRUCTURED", result.getGenerationMode());
+        assertEquals("对象特定结论", result.getConclusion());
+        assertEquals("对象特定执行摘要", result.getExecutiveSummary());
+        assertEquals("", result.getWarning());
     }
 
     @Test
-    void skipsModelRefinementWhenEvidenceIsInsufficient() throws Exception {
-        LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.isConfigured()).thenReturn(true);
-        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent();
-        ReflectionTestUtils.setField(agent, "llmChatClient", llm);
+    void exposesTheFailedStageWhenNarrativeGenerationFallsBack() throws Exception {
+        ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
+        ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
+        ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
+        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
+        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
+        when(narrativeAgent.generate(any(), any(), anyList()))
+                .thenThrow(new ResearchReportGenerationException("NARRATIVE_FAILED:SocketTimeoutException"));
+        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent(dossierBuilder, blueprintAgent,
+                narrativeAgent, mock(StructuredResearchReportAssembler.class), mock(ResearchReportQualityValidator.class));
 
-        GeneratedResearchReport result = agent.refine(new ResearchThesis(), Collections.emptyList(), fallback());
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback());
 
-        assertEquals("DETERMINISTIC", result.getGenerationMode());
-        verify(llm, never()).complete(anyString(), anyString());
+        assertEquals("EVIDENCE_STRUCTURED_FALLBACK", result.getGenerationMode());
+        assertTrue(result.getWarning().contains("NARRATIVE_FAILED:SocketTimeoutException"));
     }
 
     private GeneratedResearchReport fallback() {

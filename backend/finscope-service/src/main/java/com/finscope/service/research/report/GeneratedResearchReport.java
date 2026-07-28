@@ -8,9 +8,15 @@ public class GeneratedResearchReport {
     private final String executiveSummary;
     private final String markdown;
     private final String generationMode;
+    private final String warning;
 
     GeneratedResearchReport(String title, String conclusion, String conclusionDirection, String confidence,
                             String executiveSummary, String markdown, String generationMode) {
+        this(title, conclusion, conclusionDirection, confidence, executiveSummary, markdown, generationMode, "");
+    }
+
+    GeneratedResearchReport(String title, String conclusion, String conclusionDirection, String confidence,
+                            String executiveSummary, String markdown, String generationMode, String warning) {
         this.title = title;
         this.conclusion = conclusion;
         this.conclusionDirection = conclusionDirection;
@@ -18,6 +24,7 @@ public class GeneratedResearchReport {
         this.executiveSummary = executiveSummary;
         this.markdown = markdown;
         this.generationMode = generationMode;
+        this.warning = warning == null ? "" : warning;
     }
 
     public String getTitle() { return title; }
@@ -27,4 +34,5 @@ public class GeneratedResearchReport {
     public String getExecutiveSummary() { return executiveSummary; }
     public String getMarkdown() { return markdown; }
     public String getGenerationMode() { return generationMode; }
+    public String getWarning() { return warning; }
 }

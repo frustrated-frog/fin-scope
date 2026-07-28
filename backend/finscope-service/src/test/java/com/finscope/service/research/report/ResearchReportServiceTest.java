@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,8 +56,10 @@ class ResearchReportServiceTest {
             report.setId(7L);
             return report;
         });
+        ResearchReportSynthesisAgent synthesisAgent = mock(ResearchReportSynthesisAgent.class);
+        when(synthesisAgent.refine(any(), anyList(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
-                new ResearchReportGenerator(), new ResearchReportSynthesisAgent(), repository,
+                new ResearchReportGenerator(), synthesisAgent, repository,
                 thesisRepository, new VaultWriter(tempDir), outputService);
 
         ResearchReport report = service.generate(14L);
@@ -86,7 +89,7 @@ class ResearchReportServiceTest {
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
         VaultWriter vaultWriter = mock(VaultWriter.class);
         ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
-                new ResearchReportGenerator(), new ResearchReportSynthesisAgent(), repository,
+                new ResearchReportGenerator(), mock(ResearchReportSynthesisAgent.class), repository,
                 thesisRepository, vaultWriter, outputService);
 
         InsufficientResearchEvidenceException error = assertThrows(
