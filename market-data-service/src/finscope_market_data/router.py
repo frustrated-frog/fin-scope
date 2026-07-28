@@ -79,6 +79,17 @@ class ProviderRouter:
                         data = await provider.fetch(capability, symbol, **kwargs)
                     if data is None or data == []:
                         raise ProviderError("EMPTY_DATA", "provider returned no data", True)
+                    if (
+                        capability is DataCapability.CAPITAL_FLOW
+                        and kwargs.get("require_minute")
+                        and isinstance(data, CapitalFlowData)
+                        and not data.minute_points
+                    ):
+                        raise ProviderError(
+                            "MINUTE_DATA_UNAVAILABLE",
+                            "provider returned no intraday capital flow",
+                            False,
+                        )
                     if not provider_mode:
                         self.health.record_success(provider, capability)
                     attempts.append(

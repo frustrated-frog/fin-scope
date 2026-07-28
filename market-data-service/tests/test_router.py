@@ -10,6 +10,8 @@ import pytest
 
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import (
+    CapitalFlowData,
+    CapitalFlowPoint,
     DailyBar,
     DataCapability,
     QualityStatus,
@@ -113,6 +115,45 @@ async def test_router_switches_to_backup_provider(tmp_path: Path) -> None:
     assert result.quality_status is QualityStatus.FRESH_FALLBACK
     assert result.source_code == "BACKUP"
     assert [attempt.success for attempt in result.attempts] == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_required_minute_flow_skips_daily_only_provider(tmp_path: Path) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    observed = datetime(2026, 7, 16, 10, 30, tzinfo=UTC)
+    daily_only = FakeProvider(
+        "DAILY_ONLY",
+        "EASTMONEY",
+        10,
+        [CapitalFlowData(daily_points=[CapitalFlowPoint(
+            symbol=symbol,
+            granularity="DAY_1",
+            observed_at=observed,
+            main_net_inflow=1,
+        )])],
+    )
+    minute_backup = FakeProvider(
+        "MINUTE_BACKUP",
+        "EASTMONEY",
+        20,
+        [CapitalFlowData(minute_points=[CapitalFlowPoint(
+            symbol=symbol,
+            granularity="MINUTE_1",
+            observed_at=observed,
+            main_net_inflow=2,
+        )])],
+    )
+    daily_only.capabilities = {DataCapability.CAPITAL_FLOW}
+    minute_backup.capabilities = {DataCapability.CAPITAL_FLOW}
+
+    result = await make_router(tmp_path, [daily_only, minute_backup]).fetch(
+        DataCapability.CAPITAL_FLOW,
+        symbol,
+        require_minute=True,
+    )
+
+    assert result.source_code == "MINUTE_BACKUP"
+    assert [attempt.error_type for attempt in result.attempts] == ["MINUTE_DATA_UNAVAILABLE", None]
 
 
 @pytest.mark.asyncio

@@ -153,7 +153,7 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                     false);
         }
         URI uri = URI.create(baseUrl + "/v1/stocks/" + instrument.getMarket() + "/"
-                + instrument.getCode() + "/capital-flow?require_minute=true&provider_mode=true");
+                + instrument.getCode() + "/capital-flow?require_minute=true");
         try {
             FinanceHttpResponse response = http.get(providerCode(), uri, Collections.<String, String>emptyMap());
             return parse(response, instrument);
@@ -169,13 +169,19 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
 
     private CapitalFlowData parse(FinanceHttpResponse response, Instrument instrument) throws Exception {
         JsonNode root = json.readTree(response.getBody());
+        String quality = text(root, "quality_status");
+        if ("STALE_FALLBACK".equals(quality)) {
+            throw new ProviderContractException(
+                    "PYTHON_STALE_FALLBACK",
+                    "Python market data service only returned an expired capital-flow snapshot",
+                    true);
+        }
         JsonNode data = root.path("data");
         if (data.isMissingNode() || data.isNull() || !data.isObject()) {
             throw new ProviderContractException(
                     "PYTHON_SCHEMA_DRIFT", "Python market data response has no data object", false);
         }
-        String quality = text(root, "quality_status");
-        boolean stale = "STALE_FALLBACK".equals(quality);
+        boolean stale = false;
         LocalDateTime retrievedAt = parseTime(text(root, "retrieved_at"), response.getRetrievedAt());
         List<CapitalFlowPoint> minutePoints = parsePoints(
                 data.path("minute_points"), instrument, response, retrievedAt, stale);

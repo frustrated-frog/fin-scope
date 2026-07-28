@@ -5,6 +5,7 @@ import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PythonMarketDataCapitalFlowProviderTest {
@@ -30,7 +32,7 @@ class PythonMarketDataCapitalFlowProviderTest {
         CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
 
         assertEquals("/v1/stocks/SH/600519/capital-flow", requested.get().getPath());
-        assertEquals("require_minute=true&provider_mode=true", requested.get().getQuery());
+        assertEquals("require_minute=true", requested.get().getQuery());
         assertEquals("PYTHON_MARKET_DATA", data.getProviderCode());
         assertEquals(new BigDecimal("1.53"), data.getTurnoverRate());
         assertEquals(1, data.getMinutePoints().size());
@@ -43,16 +45,16 @@ class PythonMarketDataCapitalFlowProviderTest {
     }
 
     @Test
-    void marksSnapshotFallbackPointsAsStale() {
+    void rejectsSnapshotFallbackSoJavaCanTryAnotherOnlineProvider() {
         FinanceHttpClient http = (provider, uri, headers) -> response(
                 freshPayload().replace("FRESH_PRIMARY", "STALE_FALLBACK"));
         PythonMarketDataCapitalFlowProvider provider =
                 new PythonMarketDataCapitalFlowProvider("http://python-market-data:8000", http);
 
-        CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
+        ProviderContractException error = assertThrows(ProviderContractException.class,
+                () -> provider.fetch(stock(), LocalDate.of(2026, 7, 16)));
 
-        assertEquals("STALE", data.getMinutePoints().get(0).getQualityStatus());
-        assertTrue(data.getWarnings().contains("PYTHON_STALE_FALLBACK"));
+        assertEquals("PYTHON_STALE_FALLBACK", error.getErrorType());
     }
 
     @Test
