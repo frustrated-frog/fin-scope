@@ -1,5 +1,6 @@
 package com.finscope.service.marketintel;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,7 @@ public class CapitalSnapshotFreshnessPolicy {
     private final Clock clock;
     private final long maxLagMinutes;
 
+    @Autowired
     public CapitalSnapshotFreshnessPolicy(
             @Value("${finscope.market-data.capital-max-lag-minutes:15}") long maxLagMinutes) {
         this(Clock.systemDefaultZone(), maxLagMinutes);
