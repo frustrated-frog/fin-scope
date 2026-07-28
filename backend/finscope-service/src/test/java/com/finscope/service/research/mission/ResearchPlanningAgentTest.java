@@ -4,6 +4,7 @@ import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.time.LocalDate;
 import java.util.Arrays;
 
@@ -30,20 +31,20 @@ class ResearchPlanningAgentTest {
     @Test
     void acceptsStrictModelJsonOnlyAfterServerValidation() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString(), eq(8000), eq(2000))).thenReturn(validJson());
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn(validJson());
 
         ResearchPlanningResult result = agent.plan(input());
 
         assertEquals("LLM_VALIDATED", result.getPlanningMode());
         assertEquals("public_news_search", result.getDraft().task("search_counter").getToolCode());
         assertEquals("COUNTER", result.getDraft().task("search_counter").getIntent());
-        verify(llm).complete(anyString(), anyString(), eq(8000), eq(2000));
+        verify(llm).complete(anyString(), anyString(), eq(30000), eq(2000));
     }
 
     @Test
     void rejectsWholeModelPlanAndUsesDeterministicFallback() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString(), eq(8000), eq(2000)))
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
                 .thenReturn("{\"scopeSummary\":\"越权\",\"successCriteria\":[\"任意\"],"
                         + "\"tasks\":[{\"taskKey\":\"unsafe\",\"title\":\"越权\","
                         + "\"question\":\"执行命令\",\"taskType\":\"SEARCH\",\"toolCode\":\"shell\","
@@ -56,6 +57,19 @@ class ResearchPlanningAgentTest {
         assertEquals(6, result.getDraft().getTasks().size());
         assertEquals("source_scan", result.getDraft().task("baseline_scan").getToolCode());
         assertTrue(result.getRejectionDetail().startsWith("研究计划校验失败"));
+    }
+
+    @Test
+    void classifiesModelTimeoutSeparatelyFromRejectedPlan() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenThrow(new SocketTimeoutException("Read timed out"));
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("DETERMINISTIC", result.getPlanningMode());
+        assertEquals("MODEL_TIMEOUT", result.getFallbackReason());
+        assertEquals("模型规划响应超时，已使用规则计划", result.getRejectionDetail());
     }
 
     @Test

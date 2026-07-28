@@ -73,7 +73,7 @@ class ResearchAgentLoopServiceTest {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         AtomicInteger calls = new AtomicInteger();
-        when(llm.complete(anyString(), anyString(), eq(8000), eq(1200))).thenAnswer(invocation -> {
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenAnswer(invocation -> {
             int call = calls.incrementAndGet();
             String prompt = invocation.getArgument(1);
             if (call == 1) return searchDecision();

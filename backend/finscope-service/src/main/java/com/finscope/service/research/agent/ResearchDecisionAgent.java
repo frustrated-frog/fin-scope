@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ResearchDecisionAgent {
-    static final int TIMEOUT_MS = 8_000;
+    static final int TIMEOUT_MS = 20_000;
     static final int MAX_OUTPUT_TOKENS = 1_200;
     private static final int MAX_RAW_CHARACTERS = 16_000;
 
@@ -47,6 +47,9 @@ public class ResearchDecisionAgent {
             ResearchAgentDecision decision = validator.validate(draft, context, "MODEL");
             return new ResearchDecisionResult(decision, null, null);
         } catch (Exception error) {
+            if (isTimeout(error)) {
+                return fallback(context, "MODEL_TIMEOUT", "模型决策响应超时，已切换规则决策");
+            }
             return fallback(context, "DECISION_REJECTED", safeDetail(error));
         }
     }
@@ -71,5 +74,16 @@ public class ResearchDecisionAgent {
                 : error.getClass().getSimpleName() + "：" + error.getMessage();
         detail = detail.replaceAll("[\\r\\n\\t]+", " ").trim();
         return detail.length() <= 480 ? detail : detail.substring(0, 480);
+    }
+
+    private boolean isTimeout(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

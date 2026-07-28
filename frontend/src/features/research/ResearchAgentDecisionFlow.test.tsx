@@ -38,6 +38,13 @@ const trace = {
       currentSubgoal: '校验是否可收束', decisionSummary: '尝试结束研究',
       confidence: 0.82, decisionMode: 'MODEL', status: 'REJECTED',
       validationError: '仍缺少可引用的反方证据'
+    },
+    {
+      id: 104, researchRunId: 15, iteration: 4, decisionType: 'TOOL_CALL',
+      currentSubgoal: '规则接管下一步', toolCode: 'public_news_search',
+      decisionSummary: '模型超时后执行安全的规则决策', confidence: 0.66,
+      decisionMode: 'DETERMINISTIC', status: 'COMPLETED',
+      validationError: 'MODEL_TIMEOUT：模型决策响应超时，已切换规则决策'
     }
   ],
   observations: [{
@@ -77,3 +84,10 @@ test('makes plan patches and rejected finish decisions explicit', () => {
   expect(screen.getByText('轨迹质量 53')).toBeInTheDocument();
 });
 
+test('presents model timeout fallback separately from decision rejection', () => {
+  render(<ResearchAgentDecisionFlow agentCore={trace} remainingActions={7} planVersion={2} />);
+
+  const fallback = screen.getByText('MODEL_TIMEOUT：模型决策响应超时，已切换规则决策');
+  expect(fallback).toHaveClass('research-agent-fallback-detail');
+  expect(fallback).not.toHaveClass('research-agent-validation');
+});

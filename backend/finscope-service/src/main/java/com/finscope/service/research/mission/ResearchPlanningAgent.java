@@ -12,7 +12,7 @@ import java.util.List;
 
 @Component
 public class ResearchPlanningAgent {
-    static final int TIMEOUT_MS = 8_000;
+    static final int TIMEOUT_MS = 30_000;
     static final int MAX_OUTPUT_TOKENS = 2_000;
     private static final int MAX_RAW_CHARACTERS = 24_000;
 
@@ -52,6 +52,9 @@ public class ResearchPlanningAgent {
         } catch (IllegalArgumentException exception) {
             return fallback(input, "PLAN_REJECTED", safeDetail(exception.getMessage()));
         } catch (Exception exception) {
+            if (isTimeout(exception)) {
+                return fallback(input, "MODEL_TIMEOUT", "模型规划响应超时，已使用规则计划");
+            }
             String detail = exception.getMessage() == null
                     ? exception.getClass().getSimpleName()
                     : exception.getClass().getSimpleName() + "：" + exception.getMessage();
@@ -137,5 +140,16 @@ public class ResearchPlanningAgent {
 
     private boolean blank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean isTimeout(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

@@ -4,6 +4,8 @@ import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,7 +29,7 @@ class ResearchDecisionAgentTest {
     @Test
     void acceptsStrictModelDecisionWithBoundedCall() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString(), eq(8000), eq(1200))).thenReturn(validDecisionJson());
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(validDecisionJson());
 
         ResearchDecisionResult result = agent.decide(ResearchAgentTestFixtures.counterGapContext());
 
@@ -35,13 +37,13 @@ class ResearchDecisionAgentTest {
         assertEquals("public_news_search", result.getDecision().getToolCode());
         assertEquals("COUNTER", result.getArguments().get("intent"));
         assertNull(result.getFallbackReason());
-        verify(llm).complete(anyString(), anyString(), eq(8000), eq(1200));
+        verify(llm).complete(anyString(), anyString(), eq(20000), eq(1200));
     }
 
     @Test
     void rejectsUnknownJsonFieldAndFallsBackToGapDirectedPolicy() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(anyString(), anyString(), eq(8000), eq(1200)))
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200)))
                 .thenReturn(validDecisionJson().replace("\"confidence\":0.83", "\"confidence\":0.83,\"chainOfThought\":\"hidden\""));
 
         ResearchDecisionResult result = agent.decide(ResearchAgentTestFixtures.counterGapContext());
@@ -51,6 +53,19 @@ class ResearchDecisionAgentTest {
         assertEquals("COUNTER", result.getArguments().get("intent"));
         assertEquals("DECISION_REJECTED", result.getFallbackReason());
         assertTrue(result.getFallbackDetail().contains("Unrecognized field"));
+    }
+
+    @Test
+    void classifiesModelTimeoutSeparatelyFromRejectedDecision() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200)))
+                .thenThrow(new SocketTimeoutException("Read timed out"));
+
+        ResearchDecisionResult result = agent.decide(ResearchAgentTestFixtures.counterGapContext());
+
+        assertEquals("DETERMINISTIC", result.getDecision().getDecisionMode());
+        assertEquals("MODEL_TIMEOUT", result.getFallbackReason());
+        assertEquals("模型决策响应超时，已切换规则决策", result.getFallbackDetail());
     }
 
     @Test

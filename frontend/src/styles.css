@@ -11415,6 +11415,7 @@ input[type="checkbox"] {
 .research-agent-expectation p { display: grid; gap: 4px; margin: 0; padding: 8px 9px; border-left: 2px solid color-mix(in srgb, var(--agent-cyan) 55%, var(--line)); background: color-mix(in srgb, var(--agent-cyan) 4%, transparent); color: var(--muted); font-size: 9px; line-height: 1.45; }
 .research-agent-expectation span { color: var(--agent-cyan); font: 750 7px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; }
 .research-agent-validation { margin: 9px 0 0; padding: 8px 10px; border-left: 2px solid var(--agent-red); background: color-mix(in srgb, var(--agent-red) 8%, transparent); color: color-mix(in srgb, var(--agent-red) 78%, var(--ink)); font-size: 9px; line-height: 1.5; }
+.research-agent-fallback-detail { margin: 9px 0 0; padding: 8px 10px; border-left: 2px solid var(--agent-amber); background: color-mix(in srgb, var(--agent-amber) 8%, transparent); color: color-mix(in srgb, var(--agent-amber) 78%, var(--ink)); font-size: 9px; line-height: 1.5; }
 
 .research-agent-observation { position: relative; display: grid; gap: 5px; margin-top: 10px; padding: 10px 11px 10px 14px; border: 1px solid color-mix(in srgb, var(--agent-lime) 28%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--agent-lime) 5%, transparent); }
 .research-agent-observation::before { position: absolute; top: -11px; left: 18px; width: 1px; height: 10px; background: color-mix(in srgb, var(--agent-lime) 48%, var(--line)); content: ''; }

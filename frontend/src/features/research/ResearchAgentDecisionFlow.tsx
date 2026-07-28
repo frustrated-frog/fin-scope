@@ -90,6 +90,8 @@ function DecisionEntry({
   observation?: ResearchToolObservation;
 }) {
   const rejectedFinish = decision.decisionType === 'FINISH' && decision.status === 'REJECTED';
+  const modelTimeoutFallback = decision.decisionMode === 'DETERMINISTIC'
+    && decision.validationError?.startsWith('MODEL_TIMEOUT');
   const tone = rejectedFinish || decision.status === 'FAILED'
     ? 'warning'
     : decision.decisionType === 'PLAN_PATCH'
@@ -122,7 +124,12 @@ function DecisionEntry({
           </div>
         )}
         {decision.validationError && (
-          <p className="research-agent-validation" role="status">{decision.validationError}</p>
+          <p
+            className={modelTimeoutFallback ? 'research-agent-fallback-detail' : 'research-agent-validation'}
+            role="status"
+          >
+            {decision.validationError}
+          </p>
         )}
         {observation ? <ObservationCard observation={observation} /> : (
           decision.decisionType === 'TOOL_CALL' && decision.status !== 'FAILED'
