@@ -2,6 +2,8 @@ package com.finscope.rpc.source;
 
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import com.finscope.rpc.acquisition.RecordingAcquisitionRuntime;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,8 @@ class XPostSourceAdapterTest {
         source.setUrl("https://x.com/justloveabit/status/2069292114794762335");
 
         String baseUrl = "http://localhost:" + server.getAddress().getPort();
-        List<RawItem> items = new XPostSourceAdapter(baseUrl, baseUrl).fetch(source);
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(new JdkAcquisitionRuntime());
+        List<RawItem> items = new XPostSourceAdapter(runtime, baseUrl, baseUrl).fetch(source);
 
         assertEquals(1, items.size());
         RawItem item = items.get(0);
@@ -55,6 +58,8 @@ class XPostSourceAdapterTest {
         assertEquals("SOCIAL_POST", item.getContentType());
         assertEquals("x:fxtwitter:article", item.getExtractionMethod());
         assertTrue(item.getQualityScore() >= 90);
+        assertEquals(1, runtime.getRequests().size());
+        assertEquals("X_PUBLIC_JSON", runtime.getRequests().get(0).getPurpose());
     }
 
     private String fxTwitterArticleJson() {

@@ -4,14 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
+import com.finscope.rpc.acquisition.AcquisitionRequest;
+import com.finscope.rpc.acquisition.AcquisitionRuntime;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,13 +32,24 @@ public class XPostSourceAdapter implements SourceAdapter {
 
     private final String fxTwitterBaseUrl;
     private final String vxTwitterBaseUrl;
+    private final AcquisitionRuntime acquisitionRuntime;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public XPostSourceAdapter() {
-        this("https://api.fxtwitter.com", "https://api.vxtwitter.com");
+        this(new JdkAcquisitionRuntime(), "https://api.fxtwitter.com", "https://api.vxtwitter.com");
     }
 
     XPostSourceAdapter(String fxTwitterBaseUrl, String vxTwitterBaseUrl) {
+        this(new JdkAcquisitionRuntime(), fxTwitterBaseUrl, vxTwitterBaseUrl);
+    }
+
+    @Autowired
+    public XPostSourceAdapter(AcquisitionRuntime acquisitionRuntime) {
+        this(acquisitionRuntime, "https://api.fxtwitter.com", "https://api.vxtwitter.com");
+    }
+
+    XPostSourceAdapter(AcquisitionRuntime acquisitionRuntime, String fxTwitterBaseUrl, String vxTwitterBaseUrl) {
+        this.acquisitionRuntime = acquisitionRuntime;
         this.fxTwitterBaseUrl = trimTrailingSlash(fxTwitterBaseUrl);
         this.vxTwitterBaseUrl = trimTrailingSlash(vxTwitterBaseUrl);
     }
@@ -244,36 +254,13 @@ public class XPostSourceAdapter implements SourceAdapter {
     }
 
     private String get(String url) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(12000);
-        connection.setReadTimeout(20000);
-        connection.setRequestProperty("User-Agent", "FinScope/0.1 (+local research workspace)");
-        connection.setRequestProperty("Accept", "application/json, text/plain;q=0.9, */*;q=0.8");
-        int status = connection.getResponseCode();
-        InputStream inputStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        String body = new String(readAll(inputStream), StandardCharsets.UTF_8);
-        if (status >= 400) {
-            throw new IllegalStateException("X 公开适配器请求失败，HTTP " + status + "：" + body);
-        }
-        if (body.trim().isEmpty()) {
-            throw new IllegalStateException("X 公开适配器返回空内容");
-        }
-        return body;
-    }
-
-    private byte[] readAll(InputStream inputStream) throws Exception {
-        if (inputStream == null) {
-            return new byte[0];
-        }
-        try (InputStream in = inputStream; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-            return out.toByteArray();
-        }
+        return acquisitionRuntime.fetch(AcquisitionRequest.get(URI.create(url))
+                .purpose("X_PUBLIC_JSON")
+                .header("Accept", "application/json,text/plain;q=0.9,*/*;q=0.8")
+                .connectTimeoutMs(12000)
+                .readTimeoutMs(20000)
+                .deadlineMs(30000)
+                .build()).getBodyText();
     }
 
     private StatusRef parse(String url) {
