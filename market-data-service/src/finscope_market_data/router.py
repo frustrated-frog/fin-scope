@@ -51,15 +51,19 @@ class ProviderRouter:
         self,
         capability: DataCapability,
         symbol: StockSymbol,
+        *,
+        provider_mode: bool = False,
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         supported = sorted(
             (provider for provider in self.providers if provider.supports(capability, symbol)),
             key=lambda provider: provider.priority,
         )
-        candidates = [
-            provider for provider in supported if self.health.is_available(provider, capability)
-        ]
+        candidates = (
+            supported[:1]
+            if provider_mode
+            else [provider for provider in supported if self.health.is_available(provider, capability)]
+        )
         primary_code = supported[0].provider_code if supported else None
         attempts: list[ProviderAttempt] = []
         for provider in candidates:
@@ -75,7 +79,8 @@ class ProviderRouter:
                         data = await provider.fetch(capability, symbol, **kwargs)
                     if data is None or data == []:
                         raise ProviderError("EMPTY_DATA", "provider returned no data", True)
-                    self.health.record_success(provider, capability)
+                    if not provider_mode:
+                        self.health.record_success(provider, capability)
                     attempts.append(
                         ProviderAttempt(
                             provider_code=provider.provider_code,
@@ -101,16 +106,18 @@ class ProviderRouter:
                         attempts=attempts,
                         data=data,
                     )
-                    self.snapshots.save(envelope)
+                    if not provider_mode:
+                        self.snapshots.save(envelope)
                     return envelope
                 except Exception as error:
                     retryable = not isinstance(error, ProviderError) or error.retryable
-                    if retryable and retry_count < self.max_retries:
+                    if not provider_mode and retryable and retry_count < self.max_retries:
                         retry_count += 1
                         if self.retry_delay_seconds:
                             await asyncio.sleep(self.retry_delay_seconds * retry_count)
                         continue
-                    self.health.record_failure(provider, capability, error)
+                    if not provider_mode:
+                        self.health.record_failure(provider, capability, error)
                     attempts.append(
                         ProviderAttempt(
                             provider_code=provider.provider_code,
@@ -124,7 +131,7 @@ class ProviderRouter:
                     )
                     break
 
-        stored = self.snapshots.load(capability, symbol)
+        stored = None if provider_mode else self.snapshots.load(capability, symbol)
         now = datetime.now(UTC)
         if stored is not None and stored.data is not None:
             age = max(0, int((now - stored.retrieved_at).total_seconds()))

@@ -2,12 +2,10 @@ package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
-import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,6 +28,16 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
     private static final int TIMEOUT_MS = 8000;
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.REALTIME_STOCK_QUOTE);
+    private final QuoteHttpTransport httpTransport;
+
+    public SinaStockQuoteAdapter() {
+        this(new QuoteHttpTransport());
+    }
+
+    @Autowired
+    public SinaStockQuoteAdapter(QuoteHttpTransport httpTransport) {
+        this.httpTransport = httpTransport;
+    }
 
     @Override
     public String providerCode() {
@@ -191,19 +199,9 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
     }
 
     private String request(String urlText) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
-        DeadlineAwareHttpConnection.configure(connection, TIMEOUT_MS, TIMEOUT_MS, providerCode());
-        connection.setRequestProperty("Referer", "https://finance.sina.com.cn");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try {
-            InputStream input = DeadlineAwareHttpConnection.inputStream(
-                    connection, TIMEOUT_MS, providerCode());
-            return new String(DeadlineAwareHttpConnection.readAll(
-                    connection, input, TIMEOUT_MS, 0, providerCode()), GBK);
-        } finally {
-            connection.disconnect();
-        }
+        return httpTransport.get(providerCode(), URI.create(urlText), TIMEOUT_MS,
+                2 * 1024 * 1024,
+                Collections.singletonMap("Referer", "https://finance.sina.com.cn"), GBK);
     }
 
     private double parseDouble(String value) {

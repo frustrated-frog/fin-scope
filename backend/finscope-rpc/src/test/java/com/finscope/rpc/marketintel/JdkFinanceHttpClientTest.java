@@ -1,6 +1,8 @@
 package com.finscope.rpc.marketintel;
 
 import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.rpc.acquisition.JdkAcquisitionRuntime;
+import com.finscope.rpc.acquisition.RecordingAcquisitionRuntime;
 import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -26,12 +28,10 @@ class JdkFinanceHttpClientTest {
     void sendsEachRequestedCallOnceAndUsesBrowserUserAgent() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         AtomicReference<String> userAgent = new AtomicReference<String>();
-        AtomicReference<String> connectionHeader = new AtomicReference<String>();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/quote", exchange -> {
             attempts.incrementAndGet();
             userAgent.set(exchange.getRequestHeaders().getFirst("User-Agent"));
-            connectionHeader.set(exchange.getRequestHeaders().getFirst("Connection"));
             byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
@@ -39,14 +39,17 @@ class JdkFinanceHttpClientTest {
         });
         server.start();
         try {
-            JdkFinanceHttpClient client = new JdkFinanceHttpClient(1000, 1000, 1024);
+            RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(new JdkAcquisitionRuntime());
+            JdkFinanceHttpClient client = new JdkFinanceHttpClient(runtime, 1000, 1000, 1024);
             URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + "/quote");
             client.get("EASTMONEY", uri, Collections.emptyMap());
             client.get("EASTMONEY", uri, Collections.emptyMap());
 
             assertEquals(2, attempts.get());
             assertTrue(userAgent.get().startsWith("Mozilla/5.0"));
-            assertEquals("close", connectionHeader.get());
+            assertEquals(2, runtime.getRequests().size());
+            assertEquals(0, runtime.getRequests().get(0).getMaxRetries());
+            assertEquals("MARKET_PROVIDER:EASTMONEY", runtime.getRequests().get(0).getPurpose());
         } finally {
             server.stop(0);
         }
@@ -65,7 +68,8 @@ class JdkFinanceHttpClientTest {
         });
         server.start();
         try {
-            JdkFinanceHttpClient client = new JdkFinanceHttpClient(1000, 1000, 1024);
+            JdkFinanceHttpClient client = new JdkFinanceHttpClient(
+                    new JdkAcquisitionRuntime(), 1000, 1000, 1024);
             URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + "/unstable");
 
             ProviderContractException error = assertThrows(ProviderContractException.class,
@@ -97,7 +101,8 @@ class JdkFinanceHttpClientTest {
         });
         server.start();
         try {
-            JdkFinanceHttpClient client = new JdkFinanceHttpClient(1000, 1000, 1024);
+            JdkFinanceHttpClient client = new JdkFinanceHttpClient(
+                    new JdkAcquisitionRuntime(), 1000, 1000, 1024);
             ProviderRequestGuard guard = new ProviderRequestGuard(
                     Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), millis -> { },
                     Duration.ZERO, 0, 3, Duration.ofSeconds(60));

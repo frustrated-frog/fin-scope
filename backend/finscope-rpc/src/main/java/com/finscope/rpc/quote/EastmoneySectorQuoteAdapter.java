@@ -4,15 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
-import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
 import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.marketintel.ProviderContractException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.Duration;
@@ -34,8 +32,18 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.REALTIME_SECTOR_QUOTE);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final QuoteHttpTransport httpTransport;
     @Resource(name = "quoteTaskExecutor")
     private Executor quoteTaskExecutor;
+
+    public EastmoneySectorQuoteAdapter() {
+        this(new QuoteHttpTransport());
+    }
+
+    @Autowired
+    public EastmoneySectorQuoteAdapter(QuoteHttpTransport httpTransport) {
+        this.httpTransport = httpTransport;
+    }
 
     @Override
     public String providerCode() { return "EASTMONEY_SECTOR_QUOTE"; }
@@ -144,19 +152,10 @@ public class EastmoneySectorQuoteAdapter implements QuoteAdapter {
     }
 
     private String request(String urlText) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
-        DeadlineAwareHttpConnection.configure(connection, TIMEOUT_MS, TIMEOUT_MS, providerCode());
-        connection.setRequestProperty("Referer", "https://quote.eastmoney.com");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try {
-            InputStream input = DeadlineAwareHttpConnection.inputStream(
-                    connection, TIMEOUT_MS, providerCode());
-            return new String(DeadlineAwareHttpConnection.readAll(
-                    connection, input, TIMEOUT_MS, 0, providerCode()), StandardCharsets.UTF_8);
-        } finally {
-            connection.disconnect();
-        }
+        return httpTransport.get(providerCode(), URI.create(urlText), TIMEOUT_MS,
+                2 * 1024 * 1024,
+                Collections.singletonMap("Referer", "https://quote.eastmoney.com"),
+                StandardCharsets.UTF_8);
     }
 
     private double round(double value) {

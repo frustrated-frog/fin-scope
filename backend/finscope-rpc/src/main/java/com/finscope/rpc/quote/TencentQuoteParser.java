@@ -1,14 +1,13 @@
 package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.Quote;
-import com.finscope.rpc.marketintel.DeadlineAwareHttpConnection;
 import com.finscope.rpc.marketintel.ProviderContractException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.Collections;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -35,7 +34,14 @@ public class TencentQuoteParser {
     private final Fetcher fetcher;
 
     public TencentQuoteParser() {
-        this(TencentQuoteParser::requestGbk);
+        this(new QuoteHttpTransport());
+    }
+
+    @Autowired
+    public TencentQuoteParser(QuoteHttpTransport httpTransport) {
+        this(url -> httpTransport.get("TENCENT", URI.create(url), TIMEOUT_MS,
+                2 * 1024 * 1024,
+                Collections.singletonMap("Referer", "https://gu.qq.com"), GBK));
     }
 
     TencentQuoteParser(Fetcher fetcher) {
@@ -43,27 +49,9 @@ public class TencentQuoteParser {
     }
 
     static String requestGbk(String urlText) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
-        DeadlineAwareHttpConnection.configure(
-                connection, TIMEOUT_MS, TIMEOUT_MS, "TENCENT");
-        connection.setRequestProperty("Referer", "https://gu.qq.com");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 FinScope/0.1");
-        try {
-            int status = DeadlineAwareHttpConnection.responseCode(
-                    connection, TIMEOUT_MS, "TENCENT");
-            if (status < 200 || status >= 300) {
-                throw new ProviderContractException("HTTP_" + status,
-                        "Tencent quote returned HTTP " + status,
-                        status == 429 || status == 502 || status == 503 || status == 504);
-            }
-            InputStream input = DeadlineAwareHttpConnection.inputStream(
-                    connection, TIMEOUT_MS, "TENCENT");
-            return new String(DeadlineAwareHttpConnection.readAll(
-                    connection, input, TIMEOUT_MS, 0, "TENCENT"), GBK);
-        } finally {
-            connection.disconnect();
-        }
+        return new QuoteHttpTransport().get("TENCENT", URI.create(urlText), TIMEOUT_MS,
+                2 * 1024 * 1024,
+                Collections.singletonMap("Referer", "https://gu.qq.com"), GBK);
     }
 
     public List<Quote> fetch(List<String> symbols) throws Exception {

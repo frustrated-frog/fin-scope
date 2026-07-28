@@ -1,5 +1,6 @@
 package com.finscope.rpc.quote;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -12,6 +13,11 @@ public class FundQuoteBackupAdapter extends FundQuoteAdapter {
 
     public FundQuoteBackupAdapter() {
         super(BACKUP_ENDPOINT, "EASTMONEY_FUND_VALUATION_BACKUP", 20);
+    }
+
+    @Autowired
+    public FundQuoteBackupAdapter(QuoteHttpTransport httpTransport) {
+        super(BACKUP_ENDPOINT, "EASTMONEY_FUND_VALUATION_BACKUP", 20, httpTransport);
     }
 
     FundQuoteBackupAdapter(FundDataRequester requester) {

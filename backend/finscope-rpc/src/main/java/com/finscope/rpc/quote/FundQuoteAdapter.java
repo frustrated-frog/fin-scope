@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -53,8 +54,22 @@ public class FundQuoteAdapter implements QuoteAdapter {
                 Clock.systemDefaultZone());
     }
 
+    @Autowired
+    public FundQuoteAdapter(QuoteHttpTransport httpTransport) {
+        this(PRIMARY_ENDPOINT, "EASTMONEY_FUND_VALUATION", 10,
+                url -> EastmoneyFundHttpClient.get(httpTransport, url, TIMEOUT_MS),
+                Clock.systemDefaultZone());
+    }
+
     protected FundQuoteAdapter(String endpoint, String providerCode, int priority) {
         this(endpoint, providerCode, priority, null, Clock.systemDefaultZone());
+    }
+
+    protected FundQuoteAdapter(String endpoint, String providerCode, int priority,
+                               QuoteHttpTransport httpTransport) {
+        this(endpoint, providerCode, priority,
+                url -> EastmoneyFundHttpClient.get(httpTransport, url, TIMEOUT_MS),
+                Clock.systemDefaultZone());
     }
 
     FundQuoteAdapter(FundDataRequester requester) {

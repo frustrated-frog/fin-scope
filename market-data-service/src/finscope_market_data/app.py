@@ -102,6 +102,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         market: str,
         code: str,
         require_minute: bool = Query(default=False),
+        provider_mode: bool = Query(default=False),
     ):
         return _response(
             await _fetch(
@@ -110,6 +111,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
                 market,
                 code,
                 require_minute=require_minute,
+                provider_mode=provider_mode,
             )
         )
 

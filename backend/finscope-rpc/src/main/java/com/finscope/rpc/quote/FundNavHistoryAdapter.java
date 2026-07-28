@@ -6,6 +6,7 @@ import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.marketintel.ProviderContractException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -45,6 +46,12 @@ public class FundNavHistoryAdapter implements QuoteAdapter {
 
     public FundNavHistoryAdapter() {
         this.requester = url -> EastmoneyFundHttpClient.get(url, HTTP_TIMEOUT_MS);
+        this.clock = Clock.systemDefaultZone();
+    }
+
+    @Autowired
+    public FundNavHistoryAdapter(QuoteHttpTransport httpTransport) {
+        this.requester = url -> EastmoneyFundHttpClient.get(httpTransport, url, HTTP_TIMEOUT_MS);
         this.clock = Clock.systemDefaultZone();
     }
 

@@ -78,7 +78,7 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
 
             int status = connection.getResponseCode();
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            byte[] bytes = readBounded(stream, request.getMaxResponseBytes());
+            byte[] bytes = readBounded(stream, request.getMaxResponseBytes(), deadlineNanos);
             if (status < 200 || status >= 300) {
                 throw httpError(status);
             }
@@ -110,7 +110,7 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
         }
     }
 
-    private byte[] readBounded(InputStream stream, int maxBytes) throws IOException {
+    private byte[] readBounded(InputStream stream, int maxBytes, long deadlineNanos) throws IOException {
         if (stream == null) {
             return new byte[0];
         }
@@ -118,7 +118,13 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
             byte[] buffer = new byte[8192];
             int total = 0;
             int read;
-            while ((read = input.read(buffer)) != -1) {
+            while (true) {
+                remainingMillis(deadlineNanos);
+                read = input.read(buffer);
+                remainingMillis(deadlineNanos);
+                if (read == -1) {
+                    break;
+                }
                 total += read;
                 if (total > maxBytes) {
                     throw new AcquisitionException(AcquisitionErrorType.RESPONSE_TOO_LARGE,

@@ -30,6 +30,7 @@ class PythonMarketDataCapitalFlowProviderTest {
         CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
 
         assertEquals("/v1/stocks/SH/600519/capital-flow", requested.get().getPath());
+        assertEquals("require_minute=true&provider_mode=true", requested.get().getQuery());
         assertEquals("PYTHON_MARKET_DATA", data.getProviderCode());
         assertEquals(new BigDecimal("1.53"), data.getTurnoverRate());
         assertEquals(1, data.getMinutePoints().size());

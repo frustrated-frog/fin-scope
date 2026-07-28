@@ -160,6 +160,27 @@ async def test_router_retries_retryable_failure_once(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_provider_mode_makes_one_attempt_without_retry_backup_or_snapshot(tmp_path: Path) -> None:
+    symbol = StockSymbol(market="SZ", code="000001")
+    primary = FakeProvider(
+        "PRIMARY",
+        "A",
+        10,
+        [ProviderError("TIMEOUT", "slow"), quote(symbol, 11.23)],
+    )
+    backup = FakeProvider("BACKUP", "B", 20, [quote(symbol, 11.24)])
+    router = make_router(tmp_path, [primary, backup], max_retries=1)
+
+    result = await router.fetch(DataCapability.QUOTE, symbol, provider_mode=True)
+
+    assert result.quality_status is QualityStatus.UNAVAILABLE
+    assert primary.calls == 1
+    assert backup.calls == 0
+    assert result.attempts[0].retry_count == 0
+    assert router.snapshots.load(DataCapability.QUOTE, symbol) is None
+
+
+@pytest.mark.asyncio
 async def test_router_skips_provider_after_circuit_opens(tmp_path: Path) -> None:
     symbol = StockSymbol(market="BJ", code="920002")
     failed = FakeProvider(
