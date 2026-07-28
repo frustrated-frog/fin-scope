@@ -159,7 +159,7 @@ class MarketIntelApiIntegrationTest {
         mvc.perform(post("/api/market-intel/instruments/7/refresh")).andExpect(status().isAccepted());
         Long evidenceId=jdbc.queryForObject("SELECT id FROM market_capital_flow_snapshot WHERE instrument_id=7 ORDER BY observed_at DESC LIMIT 1",Long.class);
         when(llm.isConfigured()).thenReturn(true);when(llm.modelName()).thenReturn("test-model");
-        String latestDaily=LocalDate.now().atTime(15,0).toString();
+        String latestDaily=jdbc.queryForObject("SELECT observed_at FROM market_capital_flow_snapshot WHERE instrument_id=7 AND granularity='DAY_1' ORDER BY observed_at DESC LIMIT 1",String.class);
         String metricRef="flow:"+evidenceId+":mainNetInflow";
         String observations="{\"dimension\":\"VOLUME\",\"claim\":\"量能有所放大\",\"factorRefs\":[\"factor:AMOUNT_RATIO_5D:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]},"
                 +"{\"dimension\":\"FLOW\",\"claim\":\"资金方向偏弱\",\"factorRefs\":[\"factor:MAIN_FLOW_SHARE:"+latestDaily+"\"],\"metricRefs\":[\""+metricRef+"\"]},"
@@ -230,9 +230,9 @@ class MarketIntelApiIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
-    private CapitalFlowData fixture(){LocalDate today=LocalDate.now();CapitalFlowPoint minute=point("MINUTE_1",today.atTime(10,30),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));
-        CapitalFlowPoint previous=point("DAY_1",today.minusDays(1).atTime(15,0),new BigDecimal("100000000"),new BigDecimal("20000000"),"daily-1");
-        CapitalFlowPoint latest=point("DAY_1",today.atTime(15,0),new BigDecimal("180000000"),new BigDecimal("-30000000"),"daily-2");latest.setTradeVolume(new BigDecimal("1210000"));
+    private CapitalFlowData fixture(){LocalDateTime now=LocalDateTime.now();CapitalFlowPoint minute=point("MINUTE_1",now.minusMinutes(1),new BigDecimal("120000000"),new BigDecimal("18000000"),"minute");minute.setTradeVolume(new BigDecimal("81000"));minute.setCumulativeTradeAmount(new BigDecimal("120000000"));
+        CapitalFlowPoint previous=point("DAY_1",now.minusDays(1),new BigDecimal("100000000"),new BigDecimal("20000000"),"daily-1");
+        CapitalFlowPoint latest=point("DAY_1",now,new BigDecimal("180000000"),new BigDecimal("-30000000"),"daily-2");latest.setTradeVolume(new BigDecimal("1210000"));
         return new CapitalFlowData(Collections.singletonList(minute),Arrays.asList(previous,latest),new BigDecimal("3.21"),new BigDecimal("1.67"),Collections.emptyList(),"TEST");}
     private CapitalFlowPoint point(String granularity,LocalDateTime at,BigDecimal amount,BigDecimal flow,String hash){CapitalFlowPoint p=new CapitalFlowPoint();p.setInstrumentId(7L);p.setProviderCode("TEST");p.setGranularity(granularity);p.setDataDate(at.toLocalDate());p.setObservedAt(at);p.setPrice(new BigDecimal("100"));p.setIntervalTradeAmount(amount);p.setMainNetInflow(flow);p.setTurnoverRate(new BigDecimal("3.21"));p.setVolumeRatio(new BigDecimal("1.67"));p.setCalculationVersion("test-v1");p.setRetrievedAt(LocalDateTime.now());p.setPayloadHash(hash);p.setQualityStatus("COMPLETE");return p;}
 

@@ -72,6 +72,17 @@ public class ResearchPlanningAgent {
                 + "只能使用用户消息中列出的工具编码，不得输出HTTP地址、SQL、Shell、文件路径或额外字段。"
                 + "必须返回单个JSON对象，不要Markdown。任务不超过8个，公开搜索不超过4个，依赖必须无环。"
                 + "必须包含BASELINE、SUPPORT、COUNTER、ASSESS、SYNTHESIS意图。"
+                + "taskKey必须匹配[a-z][a-z0-9_]{2,47}，例如baseline_scan；"
+                + "dependencies只能精确引用同一计划中的taskKey。"
+                + "scopeSummary必须是JSON字符串；successCriteria必须是JSON字符串数组，包含1到5项；"
+                + "tasks必须是JSON对象数组，包含4到8项；dependencies必须是JSON字符串数组，没有依赖时输出[]；"
+                + "其余任务字段都必须是JSON字符串，不适用的parallelGroup、queryText、rationale或expectedEvidence输出空字符串。"
+                + "taskType只能是COLLECT、SEARCH、ASSESS、SYNTHESIS；"
+                + "intent只能是BASELINE、SUPPORT、COUNTER、PRIMARY、BREADTH、ASSESS、SYNTHESIS。"
+                + "source_scan只能搭配COLLECT和BASELINE；"
+                + "public_news_search只能搭配SEARCH以及SUPPORT、COUNTER、PRIMARY或BREADTH；"
+                + "evidence_assess只能搭配ASSESS和ASSESS；"
+                + "report_synthesis只能搭配SYNTHESIS和SYNTHESIS。"
                 + "JSON字段严格为scopeSummary、successCriteria、tasks；任务字段严格为taskKey、title、question、"
                 + "taskType、toolCode、intent、dependencies、parallelGroup、queryText、rationale、expectedEvidence。";
     }

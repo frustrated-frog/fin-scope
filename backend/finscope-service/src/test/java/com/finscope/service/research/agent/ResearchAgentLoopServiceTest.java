@@ -108,6 +108,33 @@ class ResearchAgentLoopServiceTest {
                 eq("first-observation-added-counter-evidence"));
     }
 
+    @Test
+    void abortsAfterRepeatedFinishRejectionWithoutEvidenceProgress() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(finishDecision());
+        ResearchDecisionValidator validator = new ResearchDecisionValidator();
+        ResearchDecisionAgent decisionAgent = new ResearchDecisionAgent(
+                llm, validator, new DeterministicResearchPolicy(validator));
+        ResearchAgentContextBuilder contexts = new ResearchAgentContextBuilder(
+                missions, agents, runtimes, new ResearchToolRegistry());
+        ResearchToolDispatcher dispatcher = new ResearchToolDispatcher(new ResearchAgentToolRegistry(
+                Collections.<ResearchAgentTool>emptyList()));
+        ResearchFinishVerifier finishVerifier = mock(ResearchFinishVerifier.class);
+        when(finishVerifier.verify(66L)).thenReturn(new ResearchFinishVerdict(false,
+                "EVIDENCE_INSUFFICIENT", Collections.singletonList("缺少反向证据")));
+        ResearchAgentLoopService loop = new ResearchAgentLoopService(
+                agents, contexts, decisionAgent, dispatcher, new ResearchAgentStateReducer(agents),
+                finishVerifier, mock(ResearchMissionService.class), mock(ResearchRuntimeService.class));
+
+        ResearchAgentLoopResult result = loop.run(66L);
+
+        assertTrue(result.isAborted());
+        assertEquals("REPEATED_FINISH_REJECTED:EVIDENCE_INSUFFICIENT", result.getTerminationReason());
+        assertEquals(2, result.getDecisionCount());
+        assertEquals(2, agents.findDecisions(66L).size());
+    }
+
     private String searchDecision() {
         return "{\"decisionType\":\"TOOL_CALL\",\"currentSubgoal\":\"补齐反方证据\","
                 + "\"toolCode\":\"public_news_search\","

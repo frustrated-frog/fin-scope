@@ -51,7 +51,7 @@ public class ResearchEvidenceSelector {
                 continue;
             }
             String text = combinedText(article, evidence);
-            String stance = stance(text);
+            String stance = stance(article, text);
             String claim = evidence != null && !isBlank(evidence.getClaim())
                     ? evidence.getClaim().trim() : firstNonBlank(article.getSummary(), article.getTitle());
             candidates.add(new ResearchEvidenceCard(article, evidence, stance, Math.min(score, 100), cleanClaim(claim)));
@@ -160,11 +160,14 @@ public class ResearchEvidenceSelector {
                 + " " + (evidence == null ? "" : firstNonBlank(evidence.getClaim(), "")));
     }
 
-    private String stance(String text) {
+    private String stance(Article article, String text) {
         int support = hits(text, SUPPORT_TERMS);
         int counter = hits(text, COUNTER_TERMS);
         if (counter > support) return "COUNTER";
         if (support > 0) return "SUPPORT";
+        String source = normalize(article == null ? null : article.getSourceName());
+        if (source.contains("反方证据搜索")) return "COUNTER";
+        if (source.contains("支持证据搜索")) return "SUPPORT";
         return "NEUTRAL";
     }
 

@@ -100,6 +100,11 @@ public class ResearchAgentLoopService {
                 if (verdict.isAccepted()) {
                     return ResearchAgentLoopResult.finished(decision.getIteration(), externalActions);
                 }
+                if (state.getFinishRejectionCount() >= 2) {
+                    reducer.recordAbort(state, decision);
+                    return ResearchAgentLoopResult.aborted(decision.getIteration(), externalActions,
+                            "REPEATED_FINISH_REJECTED:" + verdict.getReasonCode());
+                }
                 continue;
             }
             repository.updateDecisionStatus(decision.getId(), "COMPLETED", decision.getValidationError());

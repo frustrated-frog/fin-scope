@@ -58,6 +58,26 @@ class ResearchEvidenceSelectorTest {
         assertTrue(result.getWarnings().stream().anyMatch(item -> item.contains("证据数量")));
     }
 
+    @Test
+    void usesControlledSearchIntentWhenRelevantEvidenceHasNoExplicitStanceWords() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(2L);
+        thesis.setQuestion("长鑫科技上市后的交易表现说明了什么？");
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("长鑫科技");
+        List<Article> articles = new ArrayList<Article>();
+        articles.add(article(1L, "Google News · 支持证据搜索",
+                "长鑫科技上市首日成交额破千亿元", "首日交易数据汇总"));
+        articles.add(article(2L, "Google News · 反方证据搜索",
+                "长鑫科技上市后投资者担忧估值", "市场分歧仍然明显"));
+
+        List<ResearchEvidenceCard> selected = selector.select(thesis, articles, Collections.emptyList());
+
+        assertEquals(2, selected.size());
+        assertTrue(selected.stream().anyMatch(card -> "SUPPORT".equals(card.getStance())));
+        assertTrue(selected.stream().anyMatch(card -> "COUNTER".equals(card.getStance())));
+    }
+
     private ResearchThesis thesis() {
         ResearchThesis thesis = new ResearchThesis();
         thesis.setId(1L);

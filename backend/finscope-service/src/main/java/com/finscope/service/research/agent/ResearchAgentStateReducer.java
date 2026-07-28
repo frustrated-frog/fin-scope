@@ -40,6 +40,7 @@ public class ResearchAgentStateReducer {
             state.setNoProgressCount(state.getNoProgressCount() + 1);
         } else if (observation.getEvidenceDelta() > 0 || observation.getSourceDelta() > 0) {
             state.setNoProgressCount(0);
+            state.setFinishRejectionCount(0);
         }
         if ("DETERMINISTIC".equals(decision.getDecisionMode())) {
             state.setFallbackCount(state.getFallbackCount() + 1);

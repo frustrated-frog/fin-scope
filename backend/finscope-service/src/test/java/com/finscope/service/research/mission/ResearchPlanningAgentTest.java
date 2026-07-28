@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.net.SocketTimeoutException;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,6 +40,27 @@ class ResearchPlanningAgentTest {
         assertEquals("public_news_search", result.getDraft().task("search_counter").getToolCode());
         assertEquals("COUNTER", result.getDraft().task("search_counter").getIntent());
         verify(llm).complete(anyString(), anyString(), eq(30000), eq(2000));
+    }
+
+    @Test
+    void tellsModelTheExactTaskKeyAndDependencyContract() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        AtomicReference<String> systemPrompt = new AtomicReference<String>();
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenAnswer(invocation -> {
+            systemPrompt.set(invocation.getArgument(0));
+            return validJson();
+        });
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertTrue(systemPrompt.get().contains("taskKey必须匹配[a-z][a-z0-9_]{2,47}"));
+        assertTrue(systemPrompt.get().contains("dependencies只能精确引用同一计划中的taskKey"));
+        assertTrue(systemPrompt.get().contains("successCriteria必须是JSON字符串数组"));
+        assertTrue(systemPrompt.get().contains("dependencies必须是JSON字符串数组"));
+        assertTrue(systemPrompt.get().contains("source_scan只能搭配COLLECT和BASELINE"));
+        assertTrue(systemPrompt.get().contains("evidence_assess只能搭配ASSESS和ASSESS"));
+        assertTrue(systemPrompt.get().contains("report_synthesis只能搭配SYNTHESIS和SYNTHESIS"));
     }
 
     @Test
