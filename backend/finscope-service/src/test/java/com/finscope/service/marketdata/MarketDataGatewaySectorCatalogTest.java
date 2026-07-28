@@ -85,10 +85,48 @@ class MarketDataGatewaySectorCatalogTest {
         assertTrue(recovered.getStaleAgeSeconds() >= 0L);
     }
 
+    @Test
+    void independentSinaFallbackRefreshesQuotesWhilePreservingBkCodesAndCoverage() {
+        FakeSectorProvider eastmoney = new FakeSectorProvider("EASTMONEY_SECTOR", "EASTMONEY", 10);
+        eastmoney.entries = entries(5);
+        MarketDataGateway initial = gateway(eastmoney);
+        initial.fetchSectorCatalog(SectorCategory.INDUSTRY, true);
+
+        eastmoney.failure = new ProviderContractException("TIMEOUT", "upstream timeout", false);
+        FakeSectorProvider sina = new FakeSectorProvider("SINA_SECTOR", "SINA", 20);
+        SectorMarketEntry refreshed = new SectorMarketEntry();
+        refreshed.setCode("SINA:new_blhy");
+        refreshed.setName("板块1");
+        refreshed.setCategory(SectorCategory.INDUSTRY);
+        refreshed.setChangePct(9.9d);
+        SectorMarketEntry independent = new SectorMarketEntry();
+        independent.setCode("SINA:new_unknown");
+        independent.setName("新浪独立行业");
+        independent.setCategory(SectorCategory.INDUSTRY);
+        independent.setChangePct(8.8d);
+        sina.entries = java.util.Arrays.asList(refreshed, independent);
+
+        SectorCatalogGatewayResult result = gateway(eastmoney, sina)
+                .fetchSectorCatalog(SectorCategory.INDUSTRY, true);
+
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, result.getQualityStatus());
+        assertEquals("SINA_SECTOR", result.getSourceCode());
+        assertEquals(6, result.getSnapshot().getEntries().size());
+        assertEquals("BK0001", result.getSnapshot().getEntries().get(0).getCode());
+        assertEquals(9.9d, result.getSnapshot().getEntries().get(0).getChangePct());
+        assertEquals("SINA:new_unknown", result.getSnapshot().getEntries().get(1).getCode());
+        assertTrue(result.getWarning().contains("BK 编码"));
+        assertTrue(result.getWarning().contains("保留 4 条"));
+    }
+
     private MarketDataGateway gateway(SectorMarketProvider provider) {
+        return gateway(new SectorMarketProvider[]{provider});
+    }
+
+    private MarketDataGateway gateway(SectorMarketProvider... providers) {
         ProviderRequestGuard guard = new ProviderRequestGuard(clock, millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
-        return new MarketDataGateway(Collections.emptyList(), Collections.singletonList(provider),
+        return new MarketDataGateway(Collections.emptyList(), java.util.Arrays.asList(providers),
                 new ProviderRoutePolicy(guard), guard, snapshots, runs, codec,
                 new QuoteQualityValidator(clock), new MarketDataSingleFlight(),
                 new MarketDataGatewayProperties(30_000, 30, 800), Runnable::run, clock);
@@ -126,13 +164,20 @@ class MarketDataGatewaySectorCatalogTest {
         private List<SectorMarketEntry> entries = Collections.emptyList();
         private RuntimeException failure;
 
+        private final String family;
+
         private FakeSectorProvider(String code, int priority) {
+            this(code, "EASTMONEY", priority);
+        }
+
+        private FakeSectorProvider(String code, String family, int priority) {
             this.code = code;
+            this.family = family;
             this.priority = priority;
         }
 
         public String providerCode() { return code; }
-        public String providerFamily() { return "EASTMONEY"; }
+        public String providerFamily() { return family; }
         public Set<MarketDataCapability> capabilities() {
             return Collections.singleton(MarketDataCapability.SECTOR_CATALOG);
         }

@@ -42,6 +42,11 @@ class EastmoneyProvider:
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
         return capability in self.capabilities
 
+    def priority_for(self, capability: DataCapability) -> int:
+        # Fund flow has no richer independent intraday source, so try the direct
+        # request once before falling back to Sina daily data.
+        return 10 if capability is DataCapability.CAPITAL_FLOW else self.priority
+
     async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> Any:
         if capability is DataCapability.QUOTE:
             return self.parse_quote(await self._quote(symbol), symbol)
@@ -76,7 +81,11 @@ class EastmoneyProvider:
         minutes = self._safe_parse_flow(minute_payload, symbol, False, "实时资金流", warnings)
         days = self._safe_parse_flow(daily_payload, symbol, True, "历史资金流", warnings)
         if not minutes and not days:
-            raise ProviderError("ALL_FUND_FLOW_SOURCES_FAILED", "东方财富实时与历史资金流均不可用")
+            raise ProviderError(
+                "ALL_FUND_FLOW_SOURCES_FAILED",
+                "东方财富实时与历史资金流均不可用",
+                False,
+            )
         quote = None
         if isinstance(quote_payload, dict):
             try:

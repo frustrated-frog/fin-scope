@@ -153,7 +153,7 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                     false);
         }
         URI uri = URI.create(baseUrl + "/v1/stocks/" + instrument.getMarket() + "/"
-                + instrument.getCode() + "/capital-flow?require_minute=true");
+                + instrument.getCode() + "/capital-flow?require_minute=false");
         try {
             FinanceHttpResponse response = http.get(providerCode(), uri, Collections.<String, String>emptyMap());
             return parse(response, instrument);

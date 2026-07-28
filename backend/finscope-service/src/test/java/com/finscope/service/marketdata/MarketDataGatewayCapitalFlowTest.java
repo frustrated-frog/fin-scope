@@ -106,6 +106,24 @@ class MarketDataGatewayCapitalFlowTest {
         assertEquals(20_000, properties.getCapitalRequestBudgetMs());
     }
 
+    @Test
+    void acceptsIndependentDailyFlowAsDegradedFallbackWhenMinuteFlowIsUnavailable() {
+        FakeCapitalProvider primary = new FakeCapitalProvider("PRIMARY_FLOW", "EASTMONEY", 10);
+        primary.failure = new ProviderContractException("CONNECTION_ERROR", "push2 unavailable", false);
+        FakeCapitalProvider backup = new FakeCapitalProvider("SINA_DAILY_FLOW", "SINA", 20);
+        backup.data = dailyData("SINA_DAILY_FLOW");
+        MarketDataGateway gateway = gateway(primary, backup);
+
+        CapitalFlowGatewayResult result = gateway.fetchCapitalFlow(
+                instrument(), LocalDate.of(2026, 7, 14));
+
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, result.getQualityStatus());
+        assertEquals("SINA_DAILY_FLOW", result.getSourceCode());
+        assertEquals(0, result.getData().getMinutePoints().size());
+        assertEquals(1, result.getData().getDailyPoints().size());
+        assertTrue(result.getWarning().contains("分钟资金流暂不可用"));
+    }
+
     private MarketDataGateway gateway(CapitalFlowProvider... providers) {
         return gateway(Runnable::run, providers);
     }
@@ -146,6 +164,19 @@ class MarketDataGatewayCapitalFlowTest {
         point.setQualityStatus("COMPLETE");
         return new CapitalFlowData(Collections.singletonList(point), Collections.emptyList(),
                 BigDecimal.ONE, BigDecimal.ONE, Collections.emptyList(), providerCode);
+    }
+
+    private CapitalFlowData dailyData(String providerCode) {
+        CapitalFlowPoint point = new CapitalFlowPoint();
+        point.setInstrumentId(7L);
+        point.setProviderCode(providerCode);
+        point.setGranularity("DAY_1");
+        point.setDataDate(LocalDate.of(2026, 7, 14));
+        point.setObservedAt(LocalDateTime.of(2026, 7, 14, 15, 0));
+        point.setMainNetInflow(BigDecimal.ONE);
+        point.setQualityStatus("PARTIAL");
+        return new CapitalFlowData(Collections.emptyList(), Collections.singletonList(point),
+                null, null, Collections.singletonList("SINA_DAILY_FLOW_ONLY"), providerCode);
     }
 
     private static final class FakeCapitalProvider implements CapitalFlowProvider {

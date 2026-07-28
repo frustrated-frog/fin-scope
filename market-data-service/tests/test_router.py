@@ -157,6 +157,51 @@ async def test_required_minute_flow_skips_daily_only_provider(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
+async def test_capital_flow_falls_back_to_independent_daily_source_without_minute_requirement(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    observed = datetime(2026, 7, 28, 15, 0, tzinfo=UTC)
+    eastmoney = FakeProvider(
+        "EASTMONEY_DIRECT",
+        "EASTMONEY",
+        10,
+        [ProviderError("ALL_FUND_FLOW_SOURCES_FAILED", "push2 unavailable", False)],
+    )
+    sina = FakeProvider(
+        "SINA_CAPITAL_FLOW",
+        "SINA",
+        20,
+        [CapitalFlowData(
+            daily_points=[CapitalFlowPoint(
+                symbol=symbol,
+                granularity="DAY_1",
+                observed_at=observed,
+                main_net_inflow=1,
+            )],
+            warnings=["SINA_DAILY_FLOW_ONLY"],
+        )],
+    )
+    eastmoney.capabilities = {DataCapability.CAPITAL_FLOW}
+    sina.capabilities = {DataCapability.CAPITAL_FLOW}
+
+    result = await make_router(tmp_path, [eastmoney, sina]).fetch(
+        DataCapability.CAPITAL_FLOW,
+        symbol,
+        require_minute=False,
+    )
+
+    assert result.quality_status is QualityStatus.FRESH_FALLBACK
+    assert result.source_code == "SINA_CAPITAL_FLOW"
+    assert result.source_family == "SINA"
+    assert len(result.data.daily_points) == 1
+    assert [attempt.provider_code for attempt in result.attempts] == [
+        "EASTMONEY_DIRECT",
+        "SINA_CAPITAL_FLOW",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_provider_family_selection_calls_only_requested_independent_source(tmp_path: Path) -> None:
     symbol = StockSymbol(market="SZ", code="000001")
     tencent = FakeProvider("TENCENT", "TENCENT", 10, [quote(symbol, 10.0)])

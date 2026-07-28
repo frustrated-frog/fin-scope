@@ -58,6 +58,23 @@ class SectorMarketServiceTest {
     }
 
     @Test
+    void doesNotRepeatProviderWarningAlreadyIncludedByGateway() {
+        String providerWarning = "新浪板块行情已返回 49 条独立在线板块";
+        SectorMarketSnapshot snapshot = new SectorMarketSnapshot(SectorCategory.INDUSTRY,
+                "SINA_SECTOR", LocalDateTime.of(2026, 7, 14, 10, 0), "hash",
+                Collections.singletonList(entry("SINA:new_blhy", "玻璃行业", 2.0, 100.0)),
+                Collections.singletonList(providerWarning));
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, true)).thenReturn(
+                new SectorCatalogGatewayResult(snapshot, MarketDataQualityStatus.FRESH_FALLBACK,
+                        "SINA_SECTOR", snapshot.getRetrievedAt(), snapshot.getRetrievedAt(), null,
+                        "主数据源不可用；" + providerWarning, "refresh-sector"));
+
+        SectorMarketOverview overview = service.overview(SectorCategory.INDUSTRY, 5, true);
+
+        assertEquals("主数据源不可用；" + providerWarning, overview.getWarning());
+    }
+
+    @Test
     void searchesExactCodeAndNameMatchesInPriorityOrder() {
         when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(result(
                 MarketDataQualityStatus.FRESH_PRIMARY,

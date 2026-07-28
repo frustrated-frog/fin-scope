@@ -35,6 +35,12 @@ class AkshareProvider:
         DataCapability.FINANCIAL_STATEMENTS,
     }
 
+    def priority_for(self, capability: DataCapability) -> int:
+        # AkShare's capital-flow implementation uses Eastmoney underneath. Keep
+        # it behind the independent Sina fallback to avoid retrying one failure
+        # domain under a different provider name.
+        return 40 if capability is DataCapability.CAPITAL_FLOW else self.priority
+
     _META_FIELDS = {
         "SECUCODE",
         "SECURITY_CODE",

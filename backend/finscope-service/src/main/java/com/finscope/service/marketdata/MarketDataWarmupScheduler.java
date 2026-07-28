@@ -36,7 +36,7 @@ public class MarketDataWarmupScheduler {
             SectorMarketService sectors,
             MarketTradingSession tradingSession,
             @Qualifier("marketDataWarmupExecutor") Executor executor,
-            @Value("${finscope.market-data.warmup-enabled:true}") boolean enabled) {
+            @Value("${finscope.market-data.warmup-enabled:false}") boolean enabled) {
         this.watchlist = watchlist;
         this.indices = indices;
         this.sectors = sectors;
@@ -45,7 +45,7 @@ public class MarketDataWarmupScheduler {
         this.enabled = enabled;
     }
 
-    @Scheduled(fixedDelayString = "${finscope.market-data.warmup-interval-ms:10000}")
+    @Scheduled(fixedDelayString = "${finscope.market-data.warmup-interval-ms:60000}")
     public void refreshHotMarketData() {
         if (!enabled || !tradingSession.isOpenNow() || !running.compareAndSet(false, true)) return;
 

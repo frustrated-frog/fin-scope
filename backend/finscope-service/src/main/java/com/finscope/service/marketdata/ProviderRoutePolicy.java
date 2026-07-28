@@ -26,7 +26,9 @@ public class ProviderRoutePolicy {
                 available.add(provider);
             }
         }
-        available.sort(Comparator.comparingDouble(provider -> score(provider, capability)));
+        available.sort(Comparator
+                .comparing((P provider) -> provider.isTerminalFallback())
+                .thenComparingDouble(provider -> score(provider, capability)));
         return available;
     }
 

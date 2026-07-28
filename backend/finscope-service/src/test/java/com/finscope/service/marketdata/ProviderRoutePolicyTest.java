@@ -31,7 +31,28 @@ class ProviderRoutePolicyTest {
         assertEquals("TENCENT_STOCK", ordered.get(0).providerCode());
     }
 
+    @Test
+    void terminalFallbackAlwaysRemainsBehindRegularProviders() {
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        MarketDataProvider regular = provider("PYTHON_MARKET_DATA", "PYTHON", 5, false);
+        MarketDataProvider terminal = provider("EASTMONEY_DIRECT", "EASTMONEY", 1, true);
+        guard.recordSuccess("PYTHON_MARKET_DATA", "PYTHON",
+                MarketDataCapability.REALTIME_STOCK_QUOTE, 100_000);
+        guard.recordSuccess("EASTMONEY_DIRECT", "EASTMONEY",
+                MarketDataCapability.REALTIME_STOCK_QUOTE, 1);
+
+        List<MarketDataProvider> ordered = new ProviderRoutePolicy(guard).order(
+                Arrays.asList(terminal, regular), MarketDataCapability.REALTIME_STOCK_QUOTE);
+
+        assertEquals("PYTHON_MARKET_DATA", ordered.get(0).providerCode());
+        assertEquals("EASTMONEY_DIRECT", ordered.get(1).providerCode());
+    }
+
     private MarketDataProvider provider(String code, String family, int priority) {
+        return provider(code, family, priority, false);
+    }
+
+    private MarketDataProvider provider(String code, String family, int priority, boolean terminal) {
         return new MarketDataProvider() {
             public String providerCode() { return code; }
             public String providerFamily() { return family; }
@@ -42,6 +63,7 @@ class ProviderRoutePolicyTest {
             public int batchLimit() { return 100; }
             public Duration minimumInterval() { return Duration.ZERO; }
             public Duration timeout() { return Duration.ofSeconds(1); }
+            public boolean isTerminalFallback() { return terminal; }
         };
     }
 }

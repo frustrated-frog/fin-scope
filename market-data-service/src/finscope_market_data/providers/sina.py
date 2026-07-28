@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from finscope_market_data.models import DataCapability, StockQuote, StockSymbol
+from finscope_market_data.models import (
+    CapitalFlowData,
+    CapitalFlowPoint,
+    DataCapability,
+    StockQuote,
+    StockSymbol,
+)
 from finscope_market_data.providers.base import ProviderError
 from finscope_market_data.providers.http import ProviderHttpClient
 
@@ -64,11 +71,105 @@ class SinaQuoteProvider:
         )
 
 
+class SinaCapitalFlowProvider:
+    """新浪日级资金流；与东财 push2 使用独立域名和风控面。"""
+
+    provider_code = "SINA_CAPITAL_FLOW"
+    provider_family = "SINA"
+    priority = 20
+    capabilities = {DataCapability.CAPITAL_FLOW}
+
+    def priority_for(self, capability: DataCapability) -> int:
+        return self.priority
+    _endpoint = (
+        "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+        "MoneyFlow.ssl_qsfx_zjlrqs"
+    )
+
+    def __init__(self, http: ProviderHttpClient | None = None) -> None:
+        self.http = http or ProviderHttpClient(timeout_seconds=8)
+
+    def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
+        return capability is DataCapability.CAPITAL_FLOW
+
+    async def fetch(
+        self,
+        capability: DataCapability,
+        symbol: StockSymbol,
+        **kwargs: Any,
+    ) -> CapitalFlowData:
+        if capability is not DataCapability.CAPITAL_FLOW:
+            raise ProviderError("UNSUPPORTED_CAPABILITY", capability.value, False)
+        raw = await self.http.get_text(
+            self.provider_code,
+            self._endpoint,
+            headers={"Referer": "https://finance.sina.com.cn/"},
+            params={
+                "page": 1,
+                "num": min(max(int(kwargs.get("limit", 250)), 1), 500),
+                "sort": "opendate",
+                "asc": 0,
+                "daima": symbol.prefixed_code,
+            },
+        )
+        try:
+            rows = json.loads(raw)
+        except ValueError as error:
+            raise ProviderError("SCHEMA_DRIFT", "新浪资金流返回无效 JSON", False) from error
+        if not isinstance(rows, list):
+            raise ProviderError("SCHEMA_DRIFT", "新浪资金流返回结构变化", False)
+        points = self.map_rows(rows, symbol)
+        if not points:
+            raise ProviderError("EMPTY_DATA", "新浪日级资金流为空", True)
+        return CapitalFlowData(
+            daily_points=points,
+            warnings=["SINA_DAILY_FLOW_ONLY", "分钟资金流暂不可用，当前使用新浪日级资金数据"],
+        )
+
+    @staticmethod
+    def map_rows(rows: list[dict[str, Any]], symbol: StockSymbol) -> list[CapitalFlowPoint]:
+        result: list[CapitalFlowPoint] = []
+        for row in rows:
+            try:
+                observed = datetime.strptime(str(row["opendate"]), "%Y-%m-%d").replace(
+                    hour=15,
+                    tzinfo=ZoneInfo("Asia/Shanghai"),
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
+            result.append(CapitalFlowPoint(
+                symbol=symbol,
+                granularity="DAY_1",
+                observed_at=observed,
+                price=_object_number(row.get("trade")),
+                change_pct=_ratio_percent(row.get("changeratio")),
+                main_net_inflow=_object_number(row.get("netamount")),
+                main_net_inflow_ratio=_ratio_percent(row.get("ratioamount")),
+                super_large_net_inflow=_object_number(row.get("r0_net")),
+                super_large_net_inflow_ratio=_ratio_percent(row.get("r0_ratio")),
+                turnover_rate=_object_number(row.get("turnover")),
+                quality_status="PARTIAL",
+            ))
+        return result
+
+
 def _number(value: str) -> float | None:
     try:
         return float(value.strip())
     except (TypeError, ValueError):
         return None
+
+
+def _object_number(value: object) -> float | None:
+    try:
+        return None if value in {None, "", "-", "--"} else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ratio_percent(value: object) -> float | None:
+    number = _object_number(value)
+    return None if number is None else number * 100
 
 
 def _observed_at(date_value: str, time_value: str) -> datetime:
@@ -78,4 +179,3 @@ def _observed_at(date_value: str, time_value: str) -> datetime:
         )
     except ValueError:
         return datetime.now(ZoneInfo("Asia/Shanghai"))
-

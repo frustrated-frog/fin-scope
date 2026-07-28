@@ -13,6 +13,7 @@ from finscope_market_data.providers.eastmoney import EastmoneyProvider
 from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
 from finscope_market_data.providers.http import ProviderHttpClient
 from finscope_market_data.providers.sina import SinaQuoteProvider
+import finscope_market_data.providers.sina as sina_providers
 from finscope_market_data.providers.tencent import TencentQuoteProvider
 
 
@@ -489,3 +490,50 @@ async def test_eastmoney_capital_flow_serializes_its_upstream_requests() -> None
     assert result.minute_points
     assert result.daily_points
     assert http.max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_sina_capital_flow_maps_independent_daily_fallback() -> None:
+    class FakeHttpClient:
+        async def get_text(self, provider_code: str, url: str, **kwargs: Any) -> str:
+            assert provider_code == "SINA_CAPITAL_FLOW"
+            assert "MoneyFlow.ssl_qsfx_zjlrqs" in url
+            assert kwargs["params"]["daima"] == "sh600519"
+            return json.dumps([{
+                "opendate": "2026-07-28",
+                "trade": "1319.8100",
+                "changeratio": "0.0235052",
+                "turnover": "40.5586",
+                "netamount": "1140832541.2600",
+                "ratioamount": "0.171841",
+                "r0_net": "1115625599.5000",
+                "r0_ratio": "0.16804369",
+            }])
+
+    provider_type = getattr(sina_providers, "SinaCapitalFlowProvider", None)
+    assert provider_type is not None, "Sina daily capital-flow provider must exist"
+    provider = provider_type(http=FakeHttpClient())
+
+    result = await provider.fetch(
+        DataCapability.CAPITAL_FLOW,
+        StockSymbol(market="SH", code="600519"),
+    )
+
+    assert result.minute_points == []
+    assert len(result.daily_points) == 1
+    point = result.daily_points[0]
+    assert point.price == 1319.81
+    assert point.change_pct == pytest.approx(2.35052)
+    assert point.main_net_inflow == pytest.approx(1140832541.26)
+    assert point.super_large_net_inflow == pytest.approx(1115625599.5)
+    assert point.turnover_rate == pytest.approx(40.5586)
+    assert "SINA_DAILY_FLOW_ONLY" in result.warnings
+
+
+def test_capital_flow_prefers_direct_then_independent_sina_then_same_family_wrapper() -> None:
+    from finscope_market_data.providers.akshare_provider import AkshareProvider
+    from finscope_market_data.providers.eastmoney import EastmoneyProvider
+
+    assert EastmoneyProvider().priority_for(DataCapability.CAPITAL_FLOW) == 10
+    assert sina_providers.SinaCapitalFlowProvider().priority_for(DataCapability.CAPITAL_FLOW) == 20
+    assert AkshareProvider().priority_for(DataCapability.CAPITAL_FLOW) > 20

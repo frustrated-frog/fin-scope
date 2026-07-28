@@ -129,7 +129,10 @@ public class SectorMarketService {
         Set<String> values = new LinkedHashSet<String>();
         if (primary != null && !primary.trim().isEmpty()) values.add(primary);
         if (secondary != null) {
-            for (String value : secondary) if (value != null && !value.trim().isEmpty()) values.add(value);
+            for (String value : secondary) {
+                if (value != null && !value.trim().isEmpty()
+                        && (primary == null || !primary.contains(value))) values.add(value);
+            }
         }
         return values.isEmpty() ? null : String.join("；", values);
     }

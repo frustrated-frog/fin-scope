@@ -103,6 +103,7 @@ export function SectorMarketPanel({
           <ol className="sector-rank-list">
             {items.map((item, index) => {
               const isFollowed = followedCodes.has(item.code);
+              const canFollow = item.code.startsWith('BK');
               return (
                 <li key={item.code}>
                   <span className="sector-rank-index">{String(index + 1).padStart(2, '0')}</span>
@@ -118,8 +119,8 @@ export function SectorMarketPanel({
                     className={`sector-follow-button${isFollowed ? ' is-followed' : ''}`}
                     type="button"
                     aria-label={`${isFollowed ? '取消关注' : '关注'}-${item.name}`}
-                    title={isFollowed ? '取消关注' : '关注板块'}
-                    disabled={pendingCode === item.code}
+                    title={!canFollow ? '备用源板块暂不支持关注' : isFollowed ? '取消关注' : '关注板块'}
+                    disabled={!canFollow || pendingCode === item.code}
                     onClick={() => toggleFollow(item.code, isFollowed)}
                   >
                     <span aria-hidden="true">{isFollowed ? '★' : '☆'}</span>
@@ -210,13 +211,15 @@ export function SectorMarketPanel({
                   <p>未找到匹配板块</p>
                 ) : searchResult?.items.map((item) => {
                   const isFollowed = followedCodes.has(item.code);
+                  const canFollow = item.code.startsWith('BK');
                   return (
                     <div className="sector-search-item" role="option" aria-selected={isFollowed} key={item.code}>
                       <span><strong>{item.name}</strong><small>{categoryLabel(item.category)} · {item.code}</small></span>
                       <em className={changeClass(item.changePct)}>{formatPct(item.changePct)}</em>
                       <button
                         type="button"
-                        disabled={pendingCode === item.code}
+                        disabled={!canFollow || pendingCode === item.code}
+                        title={canFollow ? undefined : '备用源板块暂不支持关注'}
                         onClick={() => toggleFollow(item.code, isFollowed)}
                       >{isFollowed ? '取消关注' : '关注'}</button>
                     </div>

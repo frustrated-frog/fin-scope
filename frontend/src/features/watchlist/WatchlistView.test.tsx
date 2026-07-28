@@ -75,6 +75,25 @@ test('refreshes market indices and watchlist together', async () => {
   expect(api).toHaveBeenCalledWith('/api/sector-market/follows?refresh=true');
 });
 
+test('shows independent Sina sector rankings without offering an invalid follow action', async () => {
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path.startsWith('/api/sector-market/overview')) return Promise.resolve({
+      ...industryOverview,
+      qualityStatus: 'FRESH_FALLBACK',
+      leaders: [{ code: 'SINA:new_blhy', name: '玻璃行业', category: 'INDUSTRY', changePct: 3.2 }],
+      laggards: []
+    }) as never;
+    return Promise.resolve([]) as never;
+  });
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('玻璃行业')).toBeInTheDocument();
+  const follow = screen.getByRole('button', { name: '关注-玻璃行业' });
+  expect(follow).toBeDisabled();
+  expect(follow).toHaveAttribute('title', '备用源板块暂不支持关注');
+});
+
 test('shows a perceptible refresh state and reports unchanged fresh data', async () => {
   const user = userEvent.setup();
   const item = { id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2 };

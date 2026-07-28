@@ -25,6 +25,9 @@ public interface MarketDataProvider {
 
     Duration timeout();
 
+    /** 只在常规 Provider 全部失败后尝试，不参与动态健康分抢占。 */
+    default boolean isTerminalFallback() { return false; }
+
     default boolean supports(MarketDataCapability capability) {
         return capability != null && capabilities().contains(capability);
     }

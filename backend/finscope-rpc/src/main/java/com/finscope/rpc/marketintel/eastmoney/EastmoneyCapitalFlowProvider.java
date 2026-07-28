@@ -71,6 +71,9 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     public Duration timeout() { return Duration.ofSeconds(12); }
 
     @Override
+    public boolean isTerminalFallback() { return true; }
+
+    @Override
     public boolean supports(Instrument instrument) {
         return instrument != null && "STOCK".equals(instrument.getType())
                 && ("SH".equals(instrument.getMarket()) || "SZ".equals(instrument.getMarket()) || "BJ".equals(instrument.getMarket()));
