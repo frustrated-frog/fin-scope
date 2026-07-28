@@ -23,14 +23,26 @@ public class EmbeddedDataExtractor {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Optional<RawItem> extract(Document document, Source source) {
-        for (Element script : document.select("script#__NEXT_DATA__[type=application/json]")) {
+        Optional<RawItem> nextData = extractScripts(document,
+                "script#__NEXT_DATA__[type=application/json]", source,
+                "web:embedded-next-data", "从页面 __NEXT_DATA__ 内嵌状态恢复文章正文");
+        if (nextData.isPresent()) {
+            return nextData;
+        }
+        return extractScripts(document, "script[type=application/ld+json]", source,
+                "web:embedded-json-ld", "从页面 JSON-LD 结构化数据恢复文章正文");
+    }
+
+    private Optional<RawItem> extractScripts(Document document, String selector, Source source,
+                                             String method, String note) {
+        for (Element script : document.select(selector)) {
             try {
                 JsonNode candidate = findArticle(objectMapper.readTree(script.data()));
                 if (candidate == null) {
                     candidate = findArticle(objectMapper.readTree(script.html()));
                 }
                 if (candidate != null) {
-                    return Optional.of(toRawItem(candidate, source));
+                    return Optional.of(toRawItem(candidate, source, method, note));
                 }
             } catch (Exception ignored) {
                 // 单个内嵌状态损坏时继续使用其他抽取策略。
@@ -59,13 +71,12 @@ public class EmbeddedDataExtractor {
         return null;
     }
 
-    private RawItem toRawItem(JsonNode node, Source source) {
+    private RawItem toRawItem(JsonNode node, Source source, String method, String note) {
         String title = text(node, TITLE_KEYS);
         String body = Jsoup.parse(text(node, BODY_KEYS)).text().trim();
         String summary = body.length() <= 160 ? body : body.substring(0, 160) + "…";
         RawItem item = new RawItem(title, source.getUrl(), publishedAt(node), summary, body);
-        return item.withExtraction("ARTICLE", "web:embedded-next-data", 85,
-                "从页面 __NEXT_DATA__ 内嵌状态恢复文章正文");
+        return item.withExtraction("ARTICLE", method, 85, note);
     }
 
     private String text(JsonNode node, String[] keys) {

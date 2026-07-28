@@ -43,6 +43,22 @@ class EmbeddedDataExtractorTest {
         assertFalse(new EmbeddedDataExtractor().extract(document, source()).isPresent());
     }
 
+    @Test
+    void extractsArticleBodyFromJsonLdGraph() {
+        Document document = Jsoup.parse("<html><body><div id=\"app\"></div>"
+                + "<script type=\"application/ld+json\">{\"@graph\":[{"
+                + "\"@type\":\"NewsArticle\",\"headline\":\"上市公司发布年度报告\","
+                + "\"articleBody\":\"公司营业收入保持增长，经营现金流显著改善，管理层同时提示外部需求波动风险。\","
+                + "\"datePublished\":\"2026-07-28T10:00:00+08:00\"}]}"
+                + "</script></body></html>", "https://example.com/report");
+
+        Optional<RawItem> result = new EmbeddedDataExtractor().extract(document, source());
+
+        assertTrue(result.isPresent());
+        assertEquals("上市公司发布年度报告", result.get().getTitle());
+        assertEquals("web:embedded-json-ld", result.get().getExtractionMethod());
+    }
+
     private Source source() {
         Source source = new Source();
         source.setName("测试站点");
