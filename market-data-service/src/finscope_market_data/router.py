@@ -38,6 +38,15 @@ class ProviderRouter:
         self.retry_delay_seconds = retry_delay_seconds
         self._family_locks: dict[str, asyncio.Lock] = {}
 
+    async def aclose(self) -> None:
+        closed: set[int] = set()
+        for provider in self.providers:
+            client = getattr(provider, "http", None)
+            if client is None or not hasattr(client, "aclose") or id(client) in closed:
+                continue
+            closed.add(id(client))
+            await client.aclose()
+
     async def fetch(
         self,
         capability: DataCapability,

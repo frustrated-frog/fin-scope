@@ -8,12 +8,16 @@ from finscope_market_data.providers.base import ProviderError
 
 
 class ProviderHttpClient:
-    def __init__(self, timeout_seconds: float = 8.0) -> None:
+    def __init__(self, timeout_seconds: float = 8.0, client: Any | None = None) -> None:
         self.timeout = httpx.Timeout(timeout_seconds, connect=min(timeout_seconds, 4.0))
         self.headers = {
             "User-Agent": "Mozilla/5.0 FinScope-Market-Data/0.1",
-            "Connection": "close",
         }
+        self._client = client or httpx.AsyncClient(
+            timeout=self.timeout,
+            headers=self.headers,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
 
     async def get_text(
         self,
@@ -25,8 +29,7 @@ class ProviderHttpClient:
         encoding: str | None = None,
     ) -> str:
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers) as client:
-                response = await client.get(url, headers=headers, params=params)
+            response = await self._client.get(url, headers=headers, params=params)
         except httpx.TimeoutException as error:
             raise ProviderError("TIMEOUT", f"{provider_code} request timed out") from error
         except httpx.HTTPError as error:
@@ -54,3 +57,5 @@ class ProviderHttpClient:
             raise ProviderError("SCHEMA_DRIFT", f"{provider_code} returned a non-object payload", False)
         return payload
 
+    async def aclose(self) -> None:
+        await self._client.aclose()

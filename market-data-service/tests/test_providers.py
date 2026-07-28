@@ -11,8 +11,40 @@ from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.base import ProviderError
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
 from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
+from finscope_market_data.providers.http import ProviderHttpClient
 from finscope_market_data.providers.sina import SinaQuoteProvider
 from finscope_market_data.providers.tencent import TencentQuoteProvider
+
+
+@pytest.mark.asyncio
+async def test_provider_http_client_reuses_connection_pool_and_closes_explicitly() -> None:
+    class Response:
+        status_code = 200
+        text = "稳定行情"
+        content = "稳定行情".encode()
+
+    class FakeAsyncClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.closed = False
+
+        async def get(self, url: str, **kwargs: Any) -> Response:
+            self.calls += 1
+            return Response()
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    transport = FakeAsyncClient()
+    client = ProviderHttpClient(client=transport)
+
+    assert await client.get_text("TEST", "https://example.com/one") == "稳定行情"
+    assert await client.get_text("TEST", "https://example.com/two") == "稳定行情"
+    await client.aclose()
+
+    assert transport.calls == 2
+    assert transport.closed is True
+    assert "Connection" not in client.headers
 
 
 def test_tencent_parser_maps_rich_quote_fields() -> None:

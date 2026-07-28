@@ -66,6 +66,27 @@ def make_router(
 
 
 @pytest.mark.asyncio
+async def test_router_closes_unique_provider_http_clients(tmp_path: Path) -> None:
+    class HttpClient:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    shared = HttpClient()
+    first = FakeProvider("FIRST", "A", 10, [])
+    second = FakeProvider("SECOND", "B", 20, [])
+    first.http = shared
+    second.http = shared
+    router = make_router(tmp_path, [first, second])
+
+    await router.aclose()
+
+    assert shared.close_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_router_returns_primary_and_persists_last_good_snapshot(tmp_path: Path) -> None:
     symbol = StockSymbol(market="SH", code="600519")
     primary = FakeProvider("PRIMARY", "A", 10, [quote(symbol, 1480.5)])

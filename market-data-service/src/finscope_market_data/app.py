@@ -45,7 +45,10 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def lifespan(application: FastAPI):
         if application.state.router is None:
             application.state.router = build_router()
-        yield
+        try:
+            yield
+        finally:
+            await application.state.router.aclose()
 
     application = FastAPI(
         title="FinScope Market Data Service",
