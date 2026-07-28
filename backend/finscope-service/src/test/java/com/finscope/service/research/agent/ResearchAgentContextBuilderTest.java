@@ -50,6 +50,14 @@ class ResearchAgentContextBuilderTest {
         assertFalse(context.getPrompt().contains("observation-2-old"));
         assertTrue(context.getPrompt().contains("public_news_search"));
         assertTrue(context.getPrompt().contains("evidence_assess"));
+        assertTrue(context.getPrompt().contains(
+                "public_news_search：根据已校验查询补充公开新闻证据；"
+                        + "input={query=不含协议头的公开搜索词, "
+                        + "intent=证据意图（SUPPORT/COUNTER/PRIMARY/UPDATE）}"));
+        assertTrue(context.getPrompt().contains(
+                "evidence_assess：评估证据数量、独立来源和正反覆盖；input={}"));
+        assertFalse(context.getPrompt().contains("queryText"));
+        assertFalse(context.getPrompt().contains("researchRunId"));
         assertTrue(context.getPrompt().length() <= ResearchAgentContextBuilder.MAX_PROMPT_CHARACTERS);
     }
 

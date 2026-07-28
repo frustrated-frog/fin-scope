@@ -20,10 +20,13 @@ public class ResearchToolRegistry {
                         schema("themeCodes", "主题编码列表"), schema("articleIds", "新增文章ID列表"),
                         60000, false, false, "LOW", "EXTERNAL_ACTION"),
                 descriptor("public_news_search", "公开新闻搜索", "根据已校验查询补充公开新闻证据",
-                        schema("queryText", "不含协议头的公开搜索词"), schema("articleIds", "新增文章ID列表"),
+                        schema("query", "不含协议头的公开搜索词",
+                                "intent", "证据意图（SUPPORT/COUNTER/PRIMARY/UPDATE）"),
+                        schema("articleIds", "新增文章ID列表"),
                         45000, false, false, "MEDIUM", "EXTERNAL_ACTION"),
                 descriptor("evidence_assess", "证据缺口判断", "评估证据数量、独立来源和正反覆盖",
-                        schema("researchRunId", "研究运行ID"), schema("recommendedIntent", "下一证据意图"),
+                        Collections.<String, String>emptyMap(),
+                        schema("recommendedIntent", "下一证据意图"),
                         5000, true, true, "LOW", "INTERNAL"),
                 descriptor("report_synthesis", "研究报告合成", "仅使用冻结证据生成带边界的研究报告",
                         schema("researchRunId", "研究运行ID"), schema("reportId", "报告ID"),
@@ -76,9 +79,11 @@ public class ResearchToolRegistry {
         return value;
     }
 
-    private Map<String, String> schema(String key, String description) {
+    private Map<String, String> schema(String... definitions) {
         Map<String, String> value = new LinkedHashMap<String, String>();
-        value.put(key, description);
+        for (int index = 0; index < definitions.length; index += 2) {
+            value.put(definitions[index], definitions[index + 1]);
+        }
         return value;
     }
 }
