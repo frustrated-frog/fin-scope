@@ -44,6 +44,7 @@ finscope:
       max-response-bytes: ${FINSCOPE_ACQUISITION_BROWSER_MAX_RESPONSE_BYTES:8388608}
       max-concurrency: ${FINSCOPE_ACQUISITION_BROWSER_MAX_CONCURRENCY:1}
   market-data:
+    capital-max-lag-minutes: ${FINSCOPE_MARKET_DATA_CAPITAL_MAX_LAG_MINUTES:15}
     fresh-cache-ms: ${FINSCOPE_MARKET_DATA_FRESH_CACHE_MS:15000}
     hedge-delay-ms: ${FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS:300}
     request-budget-ms: ${FINSCOPE_MARKET_DATA_REQUEST_BUDGET_MS:5000}

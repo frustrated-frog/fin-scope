@@ -13,12 +13,16 @@ import com.finscope.service.quant.factor.TimeSeriesFactorOperators;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -49,7 +53,10 @@ class MarketIntelCapitalServiceTest {
         CapitalFactorEngine factors = new CapitalFactorEngine(new CapitalFactorRegistry(), new TimeSeriesFactorOperators());
         MarketIntelCapitalService service = new MarketIntelCapitalService(instruments, snapshots, evaluations,
                 new CapitalFlowAggregationService(), new CapitalRuleExplanationService(), new CapitalBehaviorMetricsService(),
-                factors, new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors));
+                factors, new CapitalBehaviorSignalService(CapitalSignalPolicy.v2(), factors),
+                new CapitalSnapshotFreshnessPolicy(Clock.fixed(
+                        LocalDateTime.of(2026, 7, 28, 10, 30).toInstant(ZoneOffset.ofHours(8)),
+                        ZoneOffset.ofHours(8)), 15));
 
         MarketIntelCapitalView view = service.view(7L, "20d", "5m");
 
@@ -59,5 +66,8 @@ class MarketIntelCapitalServiceTest {
         assertEquals("capital-factor-v1", view.getFactorVersion());
         assertEquals("capital-signal-v2", view.getSignalVersion());
         assertEquals(evaluation, view.getHistoricalEvaluation());
+        assertEquals("STALE_FALLBACK", view.getHealth().getStatus());
+        assertTrue(view.getHealth().getWarnings().contains(
+                "资金数据已落后于当前交易时点，请刷新成功后再判断"));
     }
 }

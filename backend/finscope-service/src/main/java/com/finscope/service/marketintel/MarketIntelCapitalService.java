@@ -32,6 +32,7 @@ public class MarketIntelCapitalService {
     private final CapitalBehaviorMetricsService metrics;
     private final CapitalFactorEngine factors;
     private final CapitalBehaviorSignalService signals;
+    private final CapitalSnapshotFreshnessPolicy freshness;
 
     public MarketIntelCapitalService(InstrumentRepository instruments,
                                      CapitalBehaviorSnapshotRepository snapshots,
@@ -40,7 +41,8 @@ public class MarketIntelCapitalService {
                                      CapitalRuleExplanationService rules,
                                      CapitalBehaviorMetricsService metrics,
                                      CapitalFactorEngine factors,
-                                     CapitalBehaviorSignalService signals) {
+                                     CapitalBehaviorSignalService signals,
+                                     CapitalSnapshotFreshnessPolicy freshness) {
         this.instruments = instruments;
         this.snapshots = snapshots;
         this.evaluations = evaluations;
@@ -49,6 +51,7 @@ public class MarketIntelCapitalService {
         this.metrics = metrics;
         this.factors = factors;
         this.signals = signals;
+        this.freshness = freshness;
     }
 
     public List<Instrument> listStockInstruments() {
@@ -139,9 +142,10 @@ public class MarketIntelCapitalService {
                 || currentContext.getVolumeRatio() == null) {
             warnings.add("成交额、成交量、换手率或量比尚未补齐");
         }
-        boolean stale = snapshot.getAsOf().isBefore(LocalDateTime.now().minusHours(36));
-        if (stale && !warnings.contains("资金快照已超过 36 小时，请刷新后再判断")) {
-            warnings.add("资金快照已超过 36 小时，请刷新后再判断");
+        LocalDateTime factAsOf = currentContext == null ? snapshot.getAsOf() : currentContext.getObservedAt();
+        boolean stale = !freshness.isFresh(factAsOf);
+        if (stale && !warnings.contains("资金数据已落后于当前交易时点，请刷新成功后再判断")) {
+            warnings.add("资金数据已落后于当前交易时点，请刷新成功后再判断");
         }
         health.setStatus(stale ? "STALE_FALLBACK"
                 : warnings.isEmpty() ? "FRESH_PRIMARY" : "PARTIAL_FRESH");
