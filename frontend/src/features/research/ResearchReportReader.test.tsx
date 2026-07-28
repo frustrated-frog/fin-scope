@@ -31,10 +31,26 @@ test('opens a complete report in a dedicated, understandable reader', async () =
 
   expect(screen.getByRole('article', { name: '研究报告' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: report.title })).toHaveFocus();
-  expect(screen.getByText('核心判断')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '核心判断' })).toBeInTheDocument();
   expect(screen.getByRole('note', { name: '证据边界' })).toHaveTextContent(report.warningMessage!);
   expect(screen.getByText('规则引擎保底生成')).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: '报告目录' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '核心判断' })).toHaveAttribute('href', '#section-核心判断');
 
   await userEvent.click(screen.getByRole('button', { name: /返回研究运行/ }));
   expect(onBack).toHaveBeenCalledOnce();
+});
+
+test('presents the structured model generation mode', () => {
+  const report: ResearchReport = {
+    id: 4, researchRunId: 17, reportType: 'THESIS', status: 'COMPLETED', title: '长鑫科技深度研究报告',
+    conclusion: '高市值首先反映集中价格发现。', conclusionDirection: 'MIXED', confidence: 'MEDIUM',
+    executiveSummary: '摘要', contentMarkdown: '## 核心结论\n\n结论\n\n## 证据附录\n\n来源',
+    markdownPath: '/tmp/run-17.md', generationMode: 'MODEL_STRUCTURED', evidenceCount: 8, sourceCount: 5,
+    characterCount: 9000
+  };
+
+  render(<ResearchReportReader report={report} onBack={() => undefined} />);
+
+  expect(screen.getByText('结构化模型生成')).toBeInTheDocument();
 });

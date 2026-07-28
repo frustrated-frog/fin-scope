@@ -3,11 +3,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { ResearchReport } from '../../shared/types';
+import { evidenceHeadingId, extractReportSections, slugReportHeading } from './researchReportPresentation';
 
 const CONFIDENCE_LABELS = { HIGH: '高', MEDIUM: '中', LOW: '低' } as const;
 
 export function ResearchReportReader({ report, onBack }: { report: ResearchReport; onBack: () => void }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const sections = extractReportSections(report.contentMarkdown);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -38,10 +40,43 @@ export function ResearchReportReader({ report, onBack }: { report: ResearchRepor
           <span>{report.warningMessage}</span>
         </div>
       )}
-      <section className="research-report-document">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.contentMarkdown}</ReactMarkdown>
-      </section>
+      <div className="research-report-layout">
+        <aside className="research-report-toc-wrap">
+          <details className="research-report-toc-container" open>
+            <summary>报告目录</summary>
+            <ReportTableOfContents sections={sections} />
+          </details>
+        </aside>
+        <section className="research-report-document">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              h2: ({ children }) => {
+                const title = String(children);
+                return <h2 id={`section-${slugReportHeading(title)}`}>{children}</h2>;
+              },
+              h3: ({ children }) => {
+                const title = String(children);
+                return <h3 id={evidenceHeadingId(title)}>{children}</h3>;
+              }
+            }}
+          >{report.contentMarkdown}</ReactMarkdown>
+        </section>
+      </div>
     </article>
+  );
+}
+
+function ReportTableOfContents({ sections }: { sections: ReturnType<typeof extractReportSections> }) {
+  return (
+    <nav className="research-report-toc" aria-label="报告目录">
+      <strong>报告目录</strong>
+      <ol>
+        {sections.map((section) => (
+          <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -49,6 +84,9 @@ function presentGenerationMode(mode: string) {
   if (mode === 'MODEL') return '模型综合生成';
   if (mode === 'HYBRID') return '模型与规则联合生成';
   if (mode === 'DETERMINISTIC') return '规则引擎保底生成';
+  if (mode === 'MODEL_STRUCTURED') return '结构化模型生成';
+  if (mode === 'MODEL_REPAIRED') return '模型修复后生成';
+  if (mode === 'EVIDENCE_STRUCTURED_FALLBACK') return '证据结构化保底生成';
   return mode || '系统生成';
 }
 
