@@ -50,10 +50,10 @@ public class MarketDataWarmupScheduler {
         if (!enabled || !tradingSession.isOpenNow() || !running.compareAndSet(false, true)) return;
 
         CompletableFuture<?>[] tasks = new CompletableFuture<?>[] {
-                run("watchlist", () -> watchlist.listInvestmentItemsWithQuotes(true)),
-                run("indices", () -> indices.list(true)),
-                run("industry-sectors", () -> sectors.overview(SectorCategory.INDUSTRY, 5, true)),
-                run("concept-sectors", () -> sectors.overview(SectorCategory.CONCEPT, 5, true))
+                run("watchlist", () -> watchlist.listInvestmentItemsWithQuotes(false)),
+                run("indices", () -> indices.list(false)),
+                run("industry-sectors", () -> sectors.overview(SectorCategory.INDUSTRY, 5, false)),
+                run("concept-sectors", () -> sectors.overview(SectorCategory.CONCEPT, 5, false))
         };
         CompletableFuture.allOf(tasks).whenComplete((ignored, error) -> running.set(false));
     }

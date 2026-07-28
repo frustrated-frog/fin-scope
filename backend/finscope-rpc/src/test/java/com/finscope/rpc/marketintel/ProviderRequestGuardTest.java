@@ -10,6 +10,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.CompletableFuture;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -85,6 +88,23 @@ class ProviderRequestGuardTest {
 
         assertEquals("ok", guard.execute(MarketDataCapability.CAPITAL_FLOW_5M,
                 "EASTMONEY", () -> "ok"));
+    }
+
+    @Test
+    void eastmoneyRequestsShareOneSecondThrottleAcrossCapabilities() {
+        List<Long> sleeps = new ArrayList<Long>();
+        ProviderRequestGuard guard = new ProviderRequestGuard(
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), sleeps::add,
+                Duration.ZERO, 0, 3, Duration.ofSeconds(60));
+        TestProvider sector = new TestProvider("EASTMONEY_SECTOR", "EASTMONEY",
+                MarketDataCapability.SECTOR_CATALOG);
+        TestProvider flow = new TestProvider("EASTMONEY_FLOW", "EASTMONEY",
+                MarketDataCapability.CAPITAL_FLOW_5M);
+
+        guard.execute(sector, MarketDataCapability.SECTOR_CATALOG, () -> "sector");
+        guard.execute(flow, MarketDataCapability.CAPITAL_FLOW_5M, () -> "flow");
+
+        assertEquals(Arrays.asList(1000L), sleeps);
     }
 
     @Test

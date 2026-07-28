@@ -29,6 +29,8 @@ public class ProviderRequestGuard {
             new ConcurrentHashMap<EndpointKey, EndpointState>();
     private final ConcurrentMap<FamilyKey, FamilyState> families =
             new ConcurrentHashMap<FamilyKey, FamilyState>();
+    private final ConcurrentMap<String, FamilyThrottleState> familyThrottles =
+            new ConcurrentHashMap<String, FamilyThrottleState>();
     public ProviderRequestGuard() {
         this(Clock.systemUTC(), Thread::sleep, Duration.ofSeconds(1), 1, 3, Duration.ofSeconds(60));
     }
@@ -84,6 +86,7 @@ public class ProviderRequestGuard {
 
         for (int attempt = 0; ; attempt++) {
             sleep(reserveDelay(endpoint, provider.minimumInterval()));
+            sleep(reserveFamilyDelay(provider));
             long started = System.nanoTime();
             try {
                 T value = operation.run();
@@ -179,6 +182,18 @@ public class ProviderRequestGuard {
 
     private long reserveDelay(EndpointState state, Duration minimumInterval) {
         return state.reserve(clock.instant(), minimumInterval == null ? Duration.ZERO : minimumInterval);
+    }
+
+    private long reserveFamilyDelay(MarketDataProvider provider) {
+        Duration interval = provider.minimumInterval() == null
+                ? Duration.ZERO : provider.minimumInterval();
+        if ("EASTMONEY".equalsIgnoreCase(provider.providerFamily())
+                && interval.compareTo(Duration.ofSeconds(1)) < 0) {
+            interval = Duration.ofSeconds(1);
+        }
+        return familyThrottles.computeIfAbsent(provider.providerFamily(),
+                        ignored -> new FamilyThrottleState())
+                .reserve(clock.instant(), interval);
     }
 
     private void sleep(long millis) {
@@ -364,6 +379,17 @@ public class ProviderRequestGuard {
             if (consecutiveFailures >= threshold) {
                 openUntil = now.plus(duration);
             }
+        }
+    }
+
+    private static final class FamilyThrottleState {
+        private Instant nextAllowedAt;
+
+        synchronized long reserve(Instant now, Duration interval) {
+            Instant slot = nextAllowedAt == null || !nextAllowedAt.isAfter(now)
+                    ? now : nextAllowedAt;
+            nextAllowedAt = slot.plus(interval.isNegative() ? Duration.ZERO : interval);
+            return Math.max(0L, Duration.between(now, slot).toMillis());
         }
     }
 

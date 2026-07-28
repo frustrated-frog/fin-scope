@@ -24,10 +24,10 @@ class MarketDataWarmupSchedulerTest {
     void warmsIndependentMarketCapabilitiesDuringTrading() {
         scheduler(true, LocalDateTime.of(2026, 7, 24, 10, 0)).refreshHotMarketData();
 
-        verify(watchlist).listInvestmentItemsWithQuotes(true);
-        verify(indices).list(true);
-        verify(sectors).overview(SectorCategory.INDUSTRY, 5, true);
-        verify(sectors).overview(SectorCategory.CONCEPT, 5, true);
+        verify(watchlist).listInvestmentItemsWithQuotes(false);
+        verify(indices).list(false);
+        verify(sectors).overview(SectorCategory.INDUSTRY, 5, false);
+        verify(sectors).overview(SectorCategory.CONCEPT, 5, false);
     }
 
     @Test
@@ -42,13 +42,13 @@ class MarketDataWarmupSchedulerTest {
     @Test
     void oneCapabilityFailureDoesNotSuppressOthers() {
         doThrow(new IllegalStateException("watchlist failed"))
-                .when(watchlist).listInvestmentItemsWithQuotes(true);
+                .when(watchlist).listInvestmentItemsWithQuotes(false);
 
         scheduler(true, LocalDateTime.of(2026, 7, 24, 10, 0)).refreshHotMarketData();
 
-        verify(indices).list(true);
-        verify(sectors).overview(SectorCategory.INDUSTRY, 5, true);
-        verify(sectors).overview(SectorCategory.CONCEPT, 5, true);
+        verify(indices).list(false);
+        verify(sectors).overview(SectorCategory.INDUSTRY, 5, false);
+        verify(sectors).overview(SectorCategory.CONCEPT, 5, false);
     }
 
     private MarketDataWarmupScheduler scheduler(boolean enabled, LocalDateTime now) {

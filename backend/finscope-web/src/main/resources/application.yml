@@ -48,7 +48,7 @@ finscope:
     hedge-delay-ms: ${FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS:300}
     request-budget-ms: ${FINSCOPE_MARKET_DATA_REQUEST_BUDGET_MS:5000}
     max-intraday-fallback-age-seconds: ${FINSCOPE_MARKET_DATA_MAX_FALLBACK_AGE_SECONDS:120}
-    warmup-enabled: ${FINSCOPE_MARKET_DATA_WARMUP_ENABLED:true}
-    warmup-interval-ms: ${FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS:10000}
+    warmup-enabled: ${FINSCOPE_MARKET_DATA_WARMUP_ENABLED:false}
+    warmup-interval-ms: ${FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS:60000}
   quant:
     market-data-sync-cron: ${FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON:0 30 18 * * MON-FRI}
