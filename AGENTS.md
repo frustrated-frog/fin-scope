@@ -70,6 +70,14 @@ Article or Brief
 - `NoveltyService`: Cross-day duplicate/subsequent development/new event detection
 - `VaultWriter`: Isolates Markdown persistence from database persistence
 
+## Git Commit Convention
+
+- Commit messages MUST use an English Conventional Commit type followed by a Chinese description: `<type>: <中文描述>`
+- Keep the type identifier in English, such as `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`
+- Write the subject after the colon in concise Chinese; do not use an English subject
+- Correct examples: `feat: 增加有界研究模式`, `fix: 修复研究证据评测遗漏`, `docs: 补充研究证据深度方案`
+- Incorrect examples: `feat: add bounded research modes`, `修复: 研究证据评测遗漏`
+
 ## Common Commands
 
 ### Backend
