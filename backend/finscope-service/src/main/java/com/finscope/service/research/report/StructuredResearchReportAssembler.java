@@ -4,6 +4,8 @@ import com.finscope.domain.research.ResearchThesis;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Component
@@ -17,7 +19,8 @@ public class StructuredResearchReportAssembler {
                 .append("> 判断：").append(blueprint.getDirection()).append(" · 置信度：")
                 .append(blueprint.getConfidence()).append("\n\n");
         heading(out, "核心结论");
-        out.append(blueprint.getDirectAnswer()).append("\n\n**置信度依据：** ")
+        out.append(blueprint.getDirectAnswer()).append(' ').append(refs(coreEvidenceRefs(blueprint)))
+                .append("\n\n**置信度依据：** ")
                 .append(blueprint.getConfidenceBasis()).append("\n\n");
         heading(out, "关键认识");
         for (ResearchReportBlueprint.KeyInsight item : blueprint.getKeyInsights()) {
@@ -90,6 +93,11 @@ public class StructuredResearchReportAssembler {
 
     private void heading(StringBuilder out, String title) { out.append("## ").append(title).append("\n\n"); }
     private String refs(List<String> values) { StringBuilder out = new StringBuilder(); for (String value : values) out.append(ref(value)); return out.toString(); }
+    private List<String> coreEvidenceRefs(ResearchReportBlueprint blueprint) {
+        LinkedHashSet<String> values = new LinkedHashSet<String>();
+        for (ResearchReportBlueprint.KeyInsight item : blueprint.getKeyInsights()) values.addAll(item.getEvidenceRefs());
+        return new ArrayList<String>(values);
+    }
     private String ref(String value) { return "[" + value + "](#evidence-" + value.toLowerCase() + ")"; }
     private String text(String value) { return value == null ? "" : value.replace("\n", " ").trim(); }
     private String cell(String value) { return text(value).replace("|", "｜"); }
