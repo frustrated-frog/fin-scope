@@ -5,6 +5,9 @@ import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,13 +29,19 @@ import static org.mockito.Mockito.when;
 class PublicNewsSearchToolTest {
     private WebSearchClient searchClient;
     private ResearchSearchEvidenceRepository evidenceRepository;
+    private ResearchEvidenceAcquisitionService acquisitionService;
     private PublicNewsSearchTool tool;
 
     @BeforeEach
     void setUp() {
         searchClient = mock(WebSearchClient.class);
         evidenceRepository = mock(ResearchSearchEvidenceRepository.class);
-        tool = new PublicNewsSearchTool(searchClient, evidenceRepository);
+        acquisitionService = mock(ResearchEvidenceAcquisitionService.class);
+        when(acquisitionService.acquire(any(String.class), any(String.class), any(String.class), any(String.class)))
+                .thenAnswer(invocation -> new ResearchEvidenceAcquisitionResult(
+                        "[S2] 原文片段：" + invocation.getArgument(2), invocation.getArgument(2), "FULL_TEXT",
+                        "web:generic-score", "FETCHED", 1680));
+        tool = new PublicNewsSearchTool(searchClient, evidenceRepository, acquisitionService);
     }
 
     @Test
@@ -58,6 +67,11 @@ class PublicNewsSearchToolTest {
         verify(evidenceRepository, times(2)).save(any(ResearchSearchEvidence.class));
         verify(searchClient).search(eq("光模块 指引 下修 风险"), eq(5));
         assertFalse(observation.isRetryable());
+        ArgumentCaptor<ResearchSearchEvidence> captor = ArgumentCaptor.forClass(ResearchSearchEvidence.class);
+        verify(evidenceRepository, times(2)).save(captor.capture());
+        assertTrue(captor.getAllValues().stream().allMatch(value -> "FULL_TEXT".equals(value.getContentOrigin())));
+        assertTrue(captor.getAllValues().stream().allMatch(value -> value.getContent().startsWith("[S2]")));
+        assertTrue(observation.getObservationSummary().contains("全文=2"));
     }
 
     @Test

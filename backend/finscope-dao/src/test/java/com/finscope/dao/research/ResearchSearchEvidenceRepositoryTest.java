@@ -51,6 +51,12 @@ class ResearchSearchEvidenceRepositoryTest {
         assertEquals(1, repository.countByRunId(21L));
         assertEquals("TAVILY", values.get(0).getProvider());
         assertEquals(0.91D, values.get(0).getRelevanceScore());
+        assertEquals("搜索摘要", values.get(0).getSearchSnippet());
+        assertEquals("FULL_TEXT", values.get(0).getContentOrigin());
+        assertEquals("web:generic-score", values.get(0).getExtractionMethod());
+        assertEquals("FETCHED", values.get(0).getFetchStatus());
+        assertEquals(1600, values.get(0).getContentCharCount());
+        assertNotNull(values.get(0).getFetchedAt());
     }
 
     private ResearchSearchEvidence evidence(String url, double score) {
@@ -63,6 +69,12 @@ class ResearchSearchEvidenceRepositoryTest {
         value.setTitle("上市后研发投入计划");
         value.setUrl(url);
         value.setContent("募集资金用于先进制程研发。");
+        value.setSearchSnippet("搜索摘要");
+        value.setContentOrigin("FULL_TEXT");
+        value.setExtractionMethod("web:generic-score");
+        value.setFetchStatus("FETCHED");
+        value.setContentCharCount(1600);
+        value.setFetchedAt(java.time.LocalDateTime.of(2026, 7, 29, 10, 1));
         value.setSourceDomain("example.com");
         value.setSourceTier("T2");
         value.setRelevanceScore(score);

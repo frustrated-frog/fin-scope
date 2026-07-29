@@ -6,6 +6,9 @@ import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,11 +26,20 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     private static final double MIN_RELEVANCE_SCORE = 0.10D;
     private final WebSearchClient searchClient;
     private final ResearchSearchEvidenceRepository evidenceRepository;
+    private final ResearchEvidenceAcquisitionService acquisitionService;
 
     public PublicNewsSearchTool(WebSearchClient searchClient,
                                 ResearchSearchEvidenceRepository evidenceRepository) {
+        this(searchClient, evidenceRepository, null);
+    }
+
+    @Autowired
+    public PublicNewsSearchTool(WebSearchClient searchClient,
+                                ResearchSearchEvidenceRepository evidenceRepository,
+                                ResearchEvidenceAcquisitionService acquisitionService) {
         this.searchClient = searchClient;
         this.evidenceRepository = evidenceRepository;
+        this.acquisitionService = acquisitionService;
     }
 
     @Override
@@ -35,13 +47,13 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         ResearchToolDescriptor value = new ResearchToolDescriptor();
         value.setCode("public_news_search");
         value.setName("Tavily 公开资料搜索");
-        value.setDescription("使用 Tavily 搜索公开资料，结果只写入本次研究证据域，不进入文章库");
+        value.setDescription("使用 Tavily 发现公开资料 URL，读取 HTML/PDF 原文并召回相关片段；结果只进入本次研究证据域");
         Map<String, String> input = new LinkedHashMap<String, String>();
         input.put("query", "2..180字符自然语言关键词");
         input.put("intent", "SUPPORT|COUNTER|PRIMARY|UPDATE");
         value.setInputSchema(input);
         value.setOutputSchema(Collections.singletonMap("observation", "本次研究新增证据与独立来源"));
-        value.setTimeoutMs(15_000);
+        value.setTimeoutMs(45_000);
         value.setReadOnly(true);
         value.setParallelizable(false);
         value.setRiskLevel("LOW");
@@ -85,6 +97,8 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             Set<String> newDomains = new HashSet<String>();
             int duplicates = 0;
             int lowRelevance = 0;
+            int fullText = 0;
+            int snippetFallback = 0;
             for (SearchResult hit : hits == null ? Collections.<SearchResult>emptyList() : hits) {
                 String url = text(hit.getUrl());
                 if (hit.getScore() == null || hit.getScore() < MIN_RELEVANCE_SCORE) {
@@ -96,7 +110,9 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                     duplicates++;
                     continue;
                 }
-                ResearchSearchEvidence saved = evidenceRepository.save(toEvidence(context, query, intent, hit));
+                ResearchSearchEvidence candidate = toEvidence(context, query, intent, hit);
+                if ("FULL_TEXT".equals(candidate.getContentOrigin())) fullText++; else snippetFallback++;
+                ResearchSearchEvidence saved = evidenceRepository.save(candidate);
                 if (saved.getId() != null) refs.add("search-evidence:" + saved.getId());
                 String domain = text(saved.getSourceDomain()).toLowerCase();
                 if (hasText(domain) && !existingDomains.contains(domain)) newDomains.add(domain);
@@ -109,6 +125,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
             value.setObservationSummary("Tavily 搜索完成：命中=" + (hits == null ? 0 : hits.size())
                     + "，低相关=" + lowRelevance + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
+                    + "，全文=" + fullText + "，摘要降级=" + snippetFallback
                     + "，新增独立来源=" + newDomains.size());
             value.setNewInformation(refs.isEmpty()
                     ? "本次查询没有获得新的运行内证据"
@@ -131,7 +148,18 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setIntent(intent);
         value.setTitle(text(hit.getTitle()));
         value.setUrl(text(hit.getUrl()));
-        value.setContent(text(hit.getContent()));
+        ResearchEvidenceAcquisitionResult acquired = acquisitionService == null
+                ? new ResearchEvidenceAcquisitionResult(text(hit.getContent()), text(hit.getContent()),
+                "SEARCH_SNIPPET", "snippet:fallback:not-configured", "NOT_ATTEMPTED",
+                text(hit.getContent()).length())
+                : acquisitionService.acquire(text(hit.getUrl()), query, text(hit.getContent()), query);
+        value.setContent(acquired.getContent());
+        value.setSearchSnippet(acquired.getSearchSnippet());
+        value.setContentOrigin(acquired.getContentOrigin());
+        value.setExtractionMethod(acquired.getExtractionMethod());
+        value.setFetchStatus(acquired.getFetchStatus());
+        value.setContentCharCount(acquired.getContentCharCount());
+        value.setFetchedAt(java.time.LocalDateTime.now());
         value.setSourceDomain(text(hit.getSourceDomain()));
         value.setSourceTier(hasText(hit.getSourceTier()) ? hit.getSourceTier() : "T3");
         value.setRelevanceScore(hit.getScore());

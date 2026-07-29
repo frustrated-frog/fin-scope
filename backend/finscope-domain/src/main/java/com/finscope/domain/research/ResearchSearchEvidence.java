@@ -13,6 +13,12 @@ public class ResearchSearchEvidence {
     private String title;
     private String url;
     private String content;
+    private String searchSnippet;
+    private String contentOrigin;
+    private String extractionMethod;
+    private String fetchStatus;
+    private Integer contentCharCount;
+    private LocalDateTime fetchedAt;
     private String sourceDomain;
     private String sourceTier;
     private Double relevanceScore;
@@ -37,6 +43,18 @@ public class ResearchSearchEvidence {
     public void setUrl(String url) { this.url = url; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public String getSearchSnippet() { return searchSnippet; }
+    public void setSearchSnippet(String searchSnippet) { this.searchSnippet = searchSnippet; }
+    public String getContentOrigin() { return contentOrigin; }
+    public void setContentOrigin(String contentOrigin) { this.contentOrigin = contentOrigin; }
+    public String getExtractionMethod() { return extractionMethod; }
+    public void setExtractionMethod(String extractionMethod) { this.extractionMethod = extractionMethod; }
+    public String getFetchStatus() { return fetchStatus; }
+    public void setFetchStatus(String fetchStatus) { this.fetchStatus = fetchStatus; }
+    public Integer getContentCharCount() { return contentCharCount; }
+    public void setContentCharCount(Integer contentCharCount) { this.contentCharCount = contentCharCount; }
+    public LocalDateTime getFetchedAt() { return fetchedAt; }
+    public void setFetchedAt(LocalDateTime fetchedAt) { this.fetchedAt = fetchedAt; }
     public String getSourceDomain() { return sourceDomain; }
     public void setSourceDomain(String sourceDomain) { this.sourceDomain = sourceDomain; }
     public String getSourceTier() { return sourceTier; }

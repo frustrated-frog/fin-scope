@@ -34,6 +34,12 @@ public class ResearchSearchEvidenceRepository {
         value.setTitle(rs.getString("title"));
         value.setUrl(rs.getString("url"));
         value.setContent(rs.getString("content"));
+        value.setSearchSnippet(rs.getString("search_snippet"));
+        value.setContentOrigin(rs.getString("content_origin"));
+        value.setExtractionMethod(rs.getString("extraction_method"));
+        value.setFetchStatus(rs.getString("fetch_status"));
+        value.setContentCharCount(rs.getInt("content_char_count"));
+        value.setFetchedAt(TimeUtil.localDateTime(rs, "fetched_at"));
         value.setSourceDomain(rs.getString("source_domain"));
         value.setSourceTier(rs.getString("source_tier"));
         value.setRelevanceScore(rs.getDouble("relevance_score"));
@@ -45,10 +51,15 @@ public class ResearchSearchEvidenceRepository {
     public ResearchSearchEvidence save(ResearchSearchEvidence value) {
         if (value.getCreatedAt() == null) value.setCreatedAt(LocalDateTime.now());
         jdbcTemplate.update("INSERT OR IGNORE INTO research_search_evidence("
-                        + "research_run_id,decision_id,provider,query_text,intent,title,url,content,source_domain,"
-                        + "source_tier,relevance_score,published_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        + "research_run_id,decision_id,provider,query_text,intent,title,url,content,search_snippet,"
+                        + "content_origin,extraction_method,fetch_status,content_char_count,fetched_at,source_domain,"
+                        + "source_tier,relevance_score,published_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 value.getResearchRunId(), value.getDecisionId(), value.getProvider(), value.getQueryText(),
-                value.getIntent(), value.getTitle(), value.getUrl(), value.getContent(), value.getSourceDomain(),
+                value.getIntent(), value.getTitle(), value.getUrl(), value.getContent(), value.getSearchSnippet(),
+                fallback(value.getContentOrigin(), "SEARCH_SNIPPET"), value.getExtractionMethod(),
+                fallback(value.getFetchStatus(), "NOT_ATTEMPTED"),
+                value.getContentCharCount() == null ? 0 : value.getContentCharCount(),
+                TimeUtil.text(value.getFetchedAt()), value.getSourceDomain(),
                 value.getSourceTier(), value.getRelevanceScore() == null ? 0D : value.getRelevanceScore(),
                 value.getPublishedAt(), TimeUtil.text(value.getCreatedAt()));
         return findByRunIdAndUrl(value.getResearchRunId(), value.getUrl()).orElse(value);
@@ -69,5 +80,9 @@ public class ResearchSearchEvidenceRepository {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM research_search_evidence WHERE research_run_id=?", Integer.class, runId);
         return count == null ? 0 : count;
+    }
+
+    private String fallback(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
     }
 }

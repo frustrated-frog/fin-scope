@@ -480,6 +480,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "title TEXT NOT NULL,"
                 + "url TEXT NOT NULL,"
                 + "content TEXT,"
+                + "search_snippet TEXT,"
+                + "content_origin TEXT NOT NULL DEFAULT 'SEARCH_SNIPPET',"
+                + "extraction_method TEXT,"
+                + "fetch_status TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED',"
+                + "content_char_count INTEGER NOT NULL DEFAULT 0,"
+                + "fetched_at TEXT,"
                 + "source_domain TEXT,"
                 + "source_tier TEXT NOT NULL,"
                 + "relevance_score REAL NOT NULL DEFAULT 0,"
@@ -488,6 +494,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "UNIQUE(research_run_id,url),"
                 + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE,"
                 + "FOREIGN KEY(decision_id) REFERENCES research_agent_decision(id) ON DELETE CASCADE)");
+        ensureColumn("research_search_evidence", "search_snippet", "TEXT");
+        ensureColumn("research_search_evidence", "content_origin", "TEXT NOT NULL DEFAULT 'SEARCH_SNIPPET'");
+        ensureColumn("research_search_evidence", "extraction_method", "TEXT");
+        ensureColumn("research_search_evidence", "fetch_status", "TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED'");
+        ensureColumn("research_search_evidence", "content_char_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_search_evidence", "fetched_at", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_search_evidence_run "
                 + "ON research_search_evidence(research_run_id,relevance_score DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_evaluation ("
