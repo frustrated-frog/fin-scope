@@ -47,7 +47,22 @@ class ResearchAgentStateReducerTest {
 
         assertEquals(0, state.getNoProgressCount());
         assertEquals(1, state.getFallbackCount());
-        assertTrue(state.getEvidenceSummary().contains("evidenceDelta=2"));
+        assertEquals("本轮新增 2 条证据，覆盖 1 个新来源；证据账本已更新。", state.getEvidenceSummary());
+    }
+
+    @Test
+    void explainsExhaustedRetriesWithoutLeakingInternalStateHashes() {
+        ResearchAgentRepository repository = mock(ResearchAgentRepository.class);
+        ResearchAgentStateReducer reducer = new ResearchAgentStateReducer(repository);
+        ResearchAgentState state = state();
+        when(repository.updateState(state, 3)).thenReturn(true);
+        ResearchToolObservation observation = observation("RETRYABLE_ERROR", 0, 0);
+        observation.setAttemptCount(2);
+
+        reducer.reduceAndPersist(state, decision("MODEL"), observation);
+
+        assertEquals("工具自动重试 1 次后仍未恢复；本轮没有写入新证据。", state.getEvidenceSummary());
+        assertTrue(!state.getEvidenceSummary().contains("state-next"));
     }
 
     @Test

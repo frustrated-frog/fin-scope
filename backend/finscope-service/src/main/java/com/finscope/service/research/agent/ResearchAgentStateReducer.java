@@ -45,10 +45,7 @@ public class ResearchAgentStateReducer {
         if ("DETERMINISTIC".equals(decision.getDecisionMode())) {
             state.setFallbackCount(state.getFallbackCount() + 1);
         }
-        state.setEvidenceSummary("state=" + safe(observation.getStateHash())
-                + ", evidenceDelta=" + observation.getEvidenceDelta()
-                + ", sourceDelta=" + observation.getSourceDelta()
-                + ", status=" + observation.getStatus());
+        state.setEvidenceSummary(evidenceSummary(observation));
         state.setMemorySummary(memory(state.getMemorySummary(), decision, observation));
         if (!repository.updateState(state, expectedVersion)) {
             throw new IllegalStateException("研究 Agent 状态发生并发更新，请从最新检查点恢复");
@@ -108,6 +105,25 @@ public class ResearchAgentStateReducer {
         String value = safe(previous) + " | #" + decision.getIteration() + " "
                 + safe(decision.getDecisionSummary()) + " -> " + safe(observation.getObservationSummary());
         return limit(value, MAX_MEMORY_CHARACTERS);
+    }
+
+    private String evidenceSummary(ResearchToolObservation observation) {
+        int evidenceDelta = Math.max(0, observation.getEvidenceDelta());
+        int sourceDelta = Math.max(0, observation.getSourceDelta());
+        if ("RETRYABLE_ERROR".equals(observation.getStatus())) {
+            int retries = Math.max(0, observation.getAttemptCount() - 1);
+            return retries > 0
+                    ? "工具自动重试 " + retries + " 次后仍未恢复；本轮没有写入新证据。"
+                    : "工具遇到可恢复错误；本轮没有写入新证据。";
+        }
+        if ("TERMINAL_ERROR".equals(observation.getStatus()) || "FAILED".equals(observation.getStatus())) {
+            return "工具执行失败且不可自动恢复；本轮没有写入新证据。";
+        }
+        if (evidenceDelta == 0 && sourceDelta == 0) {
+            return "本轮没有获得新增证据或独立来源；建议调整查询角度。";
+        }
+        return "本轮新增 " + evidenceDelta + " 条证据，覆盖 " + sourceDelta
+                + " 个新来源；证据账本已更新。";
     }
 
     private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
