@@ -9,6 +9,7 @@ import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.dao.research.ResearchRunRepository;
+import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentActionFingerprint;
@@ -82,6 +83,8 @@ public class ResearchService {
     private ResearchRunPlanService researchRunPlanService;
     @Resource
     private ResearchRunOutputService researchRunOutputService;
+    @Resource
+    private ResearchSearchEvidenceRepository researchSearchEvidenceRepository;
     @Resource
     private ResearchRuntimeService researchRuntimeService;
     @Resource
@@ -506,7 +509,7 @@ public class ResearchService {
     private void refreshOutputCounts(ResearchRun run) {
         run.setArticleCount(outputCount(run.getId(), ResearchRunOutputService.ARTICLE));
         run.setEventCount(outputCount(run.getId(), ResearchRunOutputService.EVENT));
-        run.setEvidenceCount(outputCount(run.getId(), ResearchRunOutputService.EVIDENCE));
+        run.setEvidenceCount(effectiveEvidenceCount(run.getId()));
     }
 
     private int researchProgress(Long runId) {
@@ -518,10 +521,17 @@ public class ResearchService {
     private String runtimeStateHash(Long runId) {
         return outputCount(runId, ResearchRunOutputService.ARTICLE) + ":"
                 + outputCount(runId, ResearchRunOutputService.EVENT) + ":"
-                + outputCount(runId, ResearchRunOutputService.EVIDENCE) + ":"
+                + effectiveEvidenceCount(runId) + ":"
                 + outputCount(runId, ResearchRunOutputService.REPORT) + ":"
                 + (researchRunOutputService == null ? 0
                 : researchRunOutputService.countDistinctArticleSources(runId));
+    }
+
+    private int effectiveEvidenceCount(Long runId) {
+        int articleEvidence = outputCount(runId, ResearchRunOutputService.EVIDENCE);
+        int searchEvidence = researchSearchEvidenceRepository == null
+                ? 0 : researchSearchEvidenceRepository.countByRunId(runId);
+        return articleEvidence + searchEvidence;
     }
 
     private int distinctArticleSources(Long runId) {

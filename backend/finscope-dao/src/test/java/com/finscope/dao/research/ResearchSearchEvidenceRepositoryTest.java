@@ -48,6 +48,7 @@ class ResearchSearchEvidenceRepositoryTest {
 
         assertNotNull(saved.getId());
         assertEquals(1, values.size());
+        assertEquals(1, repository.countByRunId(21L));
         assertEquals("TAVILY", values.get(0).getProvider());
         assertEquals(0.91D, values.get(0).getRelevanceScore());
     }

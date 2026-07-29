@@ -64,4 +64,10 @@ public class ResearchSearchEvidenceRepository {
         return jdbcTemplate.query("SELECT * FROM research_search_evidence WHERE research_run_id=? "
                 + "ORDER BY relevance_score DESC,id ASC", mapper, runId);
     }
+
+    public int countByRunId(Long runId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM research_search_evidence WHERE research_run_id=?", Integer.class, runId);
+        return count == null ? 0 : count;
+    }
 }

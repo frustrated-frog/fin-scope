@@ -7,6 +7,7 @@ import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.dao.research.ResearchRunRepository;
+import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.dao.source.SourceRepository;
 import com.finscope.domain.agent.AgentNodeResult;
@@ -412,6 +413,7 @@ class ResearchServiceHarnessTest {
         ResearchThesisRepository thesisRepository = mock(ResearchThesisRepository.class);
         ResearchReportService reportService = mock(ResearchReportService.class);
         ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
+        ResearchSearchEvidenceRepository searchEvidenceRepository = mock(ResearchSearchEvidenceRepository.class);
         FetchService fetchService = mock(FetchService.class);
         ResearchRunPlanService planService = mock(ResearchRunPlanService.class);
         ResearchRuntimeService runtimeService = runtimeService();
@@ -433,6 +435,7 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "researchThesisRepository", thesisRepository);
         ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
+        ReflectionTestUtils.setField(service, "researchSearchEvidenceRepository", searchEvidenceRepository);
         ReflectionTestUtils.setField(service, "fetchService", fetchService);
         ReflectionTestUtils.setField(service, "researchRunPlanService", planService);
         ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService);
@@ -442,6 +445,7 @@ class ResearchServiceHarnessTest {
         when(reportService.assessSufficiency(15L)).thenReturn(sufficiency);
         when(sufficiency.isSufficient()).thenReturn(false);
         when(reportService.generate(15L)).thenReturn(regenerated);
+        when(searchEvidenceRepository.countByRunId(15L)).thenReturn(8);
         when(planService.findByRunId(15L)).thenReturn(steps);
         when(planService.findStep(anyList(), anyString())).thenAnswer(invocation -> {
             String stepId = invocation.getArgument(1);
@@ -463,6 +467,7 @@ class ResearchServiceHarnessTest {
         verify(missionService).completeMission(15L, true);
         assertEquals(null, run.getBriefDate());
         assertEquals(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS, run.getStatus());
+        assertEquals(8, run.getEvidenceCount());
         assertEquals(null, run.getErrorMessage());
         assertTrue(run.getSummary().contains("研究报告已补建"));
         assertTrue(!run.getSummary().contains("briefDate"));
