@@ -2,12 +2,17 @@ package com.finscope.service.research.report;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 @Component
 public class ResearchReportBlueprintAgent {
@@ -81,12 +86,77 @@ public class ResearchReportBlueprintAgent {
 
     private ResearchReportBlueprint parseAndValidate(String raw, List<ResearchEvidenceDossier> dossier)
             throws Exception {
-        ResearchReportBlueprint result = mapper.readValue(stripFence(raw), ResearchReportBlueprint.class);
+        JsonNode root = mapper.readTree(stripFence(raw));
+        if (!(root instanceof ObjectNode)) {
+            throw new ResearchReportGenerationException("BLUEPRINT_INVALID:ROOT_NOT_OBJECT");
+        }
+        boolean[] normalized = new boolean[]{false};
+        normalize((ObjectNode) root, normalized);
+        ResearchReportBlueprint result = mapper.treeToValue(root, ResearchReportBlueprint.class);
+        result.setRepaired(normalized[0]);
         List<String> issues = validator.validate(result, dossier);
         if (!issues.isEmpty()) {
             throw new ResearchReportGenerationException("BLUEPRINT_INVALID:" + String.join(",", issues));
         }
         return result;
+    }
+
+    private void normalize(ObjectNode root, boolean[] changed) {
+        normalizeStringArrays(root, changed,
+                "definitions", "excludedQuestions", "knowledgeTakeaways", "unknowns");
+        normalizeObjectArrayFields(root.get("keyInsights"), changed, "evidenceRefs");
+        normalizeObjectArrayFields(root.get("subQuestions"), changed,
+                "evidenceRefs", "counterEvidenceRefs", "unknowns");
+        normalizeSubQuestionKeys(root.get("subQuestions"), changed);
+        normalizeObjectArrayFields(root.get("argumentChains"), changed, "evidenceRefs");
+        JsonNode counter = root.get("strongestCounterargument");
+        if (counter instanceof ObjectNode) {
+            normalizeStringArrays((ObjectNode) counter, changed, "evidenceRefs", "becomesDominantWhen");
+        }
+        normalizeObjectArrayFields(root.get("scenarios"), changed, "evidenceRefs");
+    }
+
+    private void normalizeObjectArrayFields(JsonNode values, boolean[] changed, String... fields) {
+        if (values == null || !values.isArray()) return;
+        for (JsonNode value : values) {
+            if (value instanceof ObjectNode) normalizeStringArrays((ObjectNode) value, changed, fields);
+        }
+    }
+
+    private void normalizeStringArrays(ObjectNode value, boolean[] changed, String... fields) {
+        for (String field : fields) {
+            JsonNode node = value.get(field);
+            if (node == null || node.isArray()) continue;
+            if (node.isNull()) {
+                value.set(field, mapper.createArrayNode());
+                changed[0] = true;
+            } else if (node.isTextual()) {
+                ArrayNode array = mapper.createArrayNode();
+                String text = node.asText().trim();
+                if (!text.isEmpty()) array.add(text);
+                value.set(field, array);
+                changed[0] = true;
+            }
+        }
+    }
+
+    private void normalizeSubQuestionKeys(JsonNode values, boolean[] changed) {
+        if (values == null || !values.isArray()) return;
+        Set<String> keys = new HashSet<String>();
+        int index = 0;
+        for (JsonNode value : values) {
+            index++;
+            if (!(value instanceof ObjectNode)) continue;
+            ObjectNode item = (ObjectNode) value;
+            String key = item.path("key").asText("").trim();
+            if (key.matches("[a-z][a-z0-9_]{2,47}") && keys.add(key)) continue;
+            String normalized = "question_" + index;
+            int suffix = 1;
+            while (keys.contains(normalized)) normalized = "question_" + index + "_" + suffix++;
+            item.put("key", normalized);
+            keys.add(normalized);
+            changed[0] = true;
+        }
     }
 
     private String diagnostic(Exception ex) {

@@ -67,6 +67,26 @@ class ResearchReportBlueprintAgentTest {
         verify(llm, times(2)).complete(anyString(), anyString(), eq(90000), eq(3000));
     }
 
+    @Test
+    void normalizesRecoverableArrayAndSubQuestionKeyDriftWithoutDiscardingModelContent() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        String recoverable = validJson()
+                .replace("\"key\":\"valuation\"", "\"key\":\"市值影响\"")
+                .replaceFirst("\"unknowns\":\\[\\]", "\"unknowns\":\"待确认自由流通口径\"");
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(recoverable);
+        ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
+                new ResearchReportBlueprintValidator());
+
+        ResearchReportBlueprint result = agent.generate(thesis(), dossier());
+
+        assertTrue(result.isRepaired());
+        assertEquals("question_1", result.getSubQuestions().get(0).getKey());
+        assertEquals(Arrays.asList("待确认自由流通口径"), result.getSubQuestions().get(0).getUnknowns());
+        assertEquals("上市首日的高市值主要反映稀缺流通结构和集中定价，不能单独证明长期价值。",
+                result.getDirectAnswer());
+        verify(llm, times(1)).complete(anyString(), anyString(), eq(90000), eq(3000));
+    }
+
     private ResearchThesis thesis() {
         ResearchThesis thesis = new ResearchThesis();
         thesis.setQuestion("长鑫科技上市两日的市值和交易表现说明什么？");
