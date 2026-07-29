@@ -5,6 +5,7 @@ import com.finscope.domain.research.material.ResearchMaterialType;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -22,6 +23,7 @@ public class NewsFeedService {
     private final ResearchMaterialGateway gateway;
     private final Clock clock;
 
+    @Autowired
     public NewsFeedService(ResearchMaterialGateway gateway) {
         this(gateway, Clock.systemDefaultZone());
     }
