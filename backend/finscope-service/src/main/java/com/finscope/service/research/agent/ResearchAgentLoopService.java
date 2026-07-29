@@ -6,7 +6,8 @@ import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.service.research.agent.tool.ResearchAgentToolContext;
-import com.finscope.service.research.agent.tool.ResearchToolDispatcher;
+import com.finscope.service.research.agent.tool.ResearchToolExecutionResult;
+import com.finscope.service.research.agent.tool.ResearchToolRetryExecutor;
 import com.finscope.service.research.mission.ResearchMissionService;
 import com.finscope.service.research.mission.ResearchPlanPatch;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
@@ -23,7 +24,8 @@ public class ResearchAgentLoopService {
     private final ResearchAgentRepository repository;
     private final ResearchAgentContextBuilder contextBuilder;
     private final ResearchDecisionAgent decisionAgent;
-    private final ResearchToolDispatcher dispatcher;
+    private final ResearchToolRetryExecutor toolExecutor;
+    private final ResearchAgentTurnService turnService;
     private final ResearchAgentStateReducer reducer;
     private final ResearchFinishVerifier finishVerifier;
     private final ResearchMissionService missionService;
@@ -33,7 +35,8 @@ public class ResearchAgentLoopService {
     public ResearchAgentLoopService(ResearchAgentRepository repository,
                                     ResearchAgentContextBuilder contextBuilder,
                                     ResearchDecisionAgent decisionAgent,
-                                    ResearchToolDispatcher dispatcher,
+                                    ResearchToolRetryExecutor toolExecutor,
+                                    ResearchAgentTurnService turnService,
                                     ResearchAgentStateReducer reducer,
                                     ResearchFinishVerifier finishVerifier,
                                     ResearchMissionService missionService,
@@ -41,7 +44,8 @@ public class ResearchAgentLoopService {
         this.repository = repository;
         this.contextBuilder = contextBuilder;
         this.decisionAgent = decisionAgent;
-        this.dispatcher = dispatcher;
+        this.toolExecutor = toolExecutor;
+        this.turnService = turnService;
         this.reducer = reducer;
         this.finishVerifier = finishVerifier;
         this.missionService = missionService;
@@ -136,24 +140,16 @@ public class ResearchAgentLoopService {
             observation.setObservationSummary("相同动作已由 Runtime 完成，本次未重复执行");
             observation.setStateHash(contextStateHash(state));
         } else {
-            observation = dispatcher.dispatch(decision,
+            ResearchToolExecutionResult execution = toolExecutor.execute(decision,
                     new ResearchAgentToolContext(runId, decision.getId()));
+            observation = execution.getObservation();
         }
-        repository.appendObservation(observation);
-        if (start.isStarted()) {
-            runtimeService.completeNode(runId, nodeId, observation.getStateHash(),
-                    observation.getEvidenceDelta() + observation.getSourceDelta(),
-                    observation.getObservationSummary());
-        }
-        String decisionStatus = "TERMINAL_ERROR".equals(observation.getStatus())
-                || "RETRYABLE_ERROR".equals(observation.getStatus()) ? "FAILED" : "COMPLETED";
-        repository.updateDecisionStatus(decision.getId(), decisionStatus,
-                observation.getErrorType() == null ? decision.getValidationError() : observation.getErrorType());
-        ResearchAgentState reduced = reducer.reduceAndPersist(state, decision, observation);
-        if ("TERMINAL_ERROR".equals(observation.getStatus())) {
-            reducer.recordAbort(reduced, decision);
+        ResearchAgentState reduced = turnService.commitToolTurn(runId, nodeId, start.isStarted(),
+                state, decision, observation);
+        if ("TERMINAL_ERROR".equals(observation.getStatus())
+                || "RETRYABLE_ERROR".equals(observation.getStatus())) {
             return new ToolStep(reduced, external && start.isStarted() ? 1 : 0,
-                    observation.getErrorType());
+                    observation.getErrorType() == null ? "TOOL_EXECUTION_FAILED" : observation.getErrorType());
         }
         return new ToolStep(reduced, external && start.isStarted() ? 1 : 0, null);
     }

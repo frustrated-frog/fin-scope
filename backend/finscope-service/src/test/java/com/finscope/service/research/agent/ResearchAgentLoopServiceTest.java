@@ -12,6 +12,7 @@ import com.finscope.service.research.agent.tool.ResearchAgentTool;
 import com.finscope.service.research.agent.tool.ResearchAgentToolContext;
 import com.finscope.service.research.agent.tool.ResearchAgentToolRegistry;
 import com.finscope.service.research.agent.tool.ResearchToolDispatcher;
+import com.finscope.service.research.agent.tool.ResearchToolRetryExecutor;
 import com.finscope.service.research.mission.ResearchMissionService;
 import com.finscope.service.research.mission.ResearchToolRegistry;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
@@ -94,7 +95,9 @@ class ResearchAgentLoopServiceTest {
         when(finishVerifier.verify(66L)).thenReturn(
                 new ResearchFinishVerdict(true, "ACCEPTED", Collections.<String>emptyList()));
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
-                agents, contexts, decisionAgent, dispatcher, new ResearchAgentStateReducer(agents),
+                agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentStateReducer(agents),
                 finishVerifier, mock(ResearchMissionService.class), runtimeService);
 
         ResearchAgentLoopResult result = loop.run(66L);
@@ -124,7 +127,10 @@ class ResearchAgentLoopServiceTest {
         when(finishVerifier.verify(66L)).thenReturn(new ResearchFinishVerdict(false,
                 "EVIDENCE_INSUFFICIENT", Collections.singletonList("缺少反向证据")));
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
-                agents, contexts, decisionAgent, dispatcher, new ResearchAgentStateReducer(agents),
+                agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents),
+                        mock(ResearchRuntimeService.class)),
+                new ResearchAgentStateReducer(agents),
                 finishVerifier, mock(ResearchMissionService.class), mock(ResearchRuntimeService.class));
 
         ResearchAgentLoopResult result = loop.run(66L);
@@ -133,6 +139,72 @@ class ResearchAgentLoopServiceTest {
         assertEquals("REPEATED_FINISH_REJECTED:EVIDENCE_INSUFFICIENT", result.getTerminationReason());
         assertEquals(2, result.getDecisionCount());
         assertEquals(2, agents.findDecisions(66L).size());
+    }
+
+    @Test
+    void retriesTransientToolFailureAndPersistsOnlyFinalObservation() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200)))
+                .thenReturn(searchDecision(), finishDecision());
+        ResearchDecisionValidator validator = new ResearchDecisionValidator();
+        ResearchDecisionAgent decisionAgent = new ResearchDecisionAgent(
+                llm, validator, new DeterministicResearchPolicy(validator));
+        ResearchAgentContextBuilder contexts = new ResearchAgentContextBuilder(
+                missions, agents, runtimes, new ResearchToolRegistry());
+        RetryingObservationTool tool = new RetryingObservationTool();
+        ResearchToolDispatcher dispatcher = new ResearchToolDispatcher(new ResearchAgentToolRegistry(
+                Collections.<ResearchAgentTool>singletonList(tool)));
+        ResearchRuntimeService runtimeService = mock(ResearchRuntimeService.class);
+        when(runtimeService.startNode(eq(66L), anyString(), eq("EXPAND"), anyString(), anyString()))
+                .thenReturn(RuntimeNodeStart.started(new ResearchRuntimeCheckpoint()));
+        ResearchFinishVerifier finishVerifier = mock(ResearchFinishVerifier.class);
+        when(finishVerifier.verify(66L)).thenReturn(
+                new ResearchFinishVerdict(true, "ACCEPTED", Collections.<String>emptyList()));
+        ResearchAgentLoopService loop = new ResearchAgentLoopService(
+                agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentStateReducer(agents),
+                finishVerifier, mock(ResearchMissionService.class), runtimeService);
+
+        ResearchAgentLoopResult result = loop.run(66L);
+
+        assertTrue(result.isFinishAccepted());
+        assertEquals(2, tool.calls.get());
+        assertEquals(1, agents.findObservations(66L).size());
+        assertEquals(2, agents.findObservations(66L).get(0).getAttemptCount());
+        assertTrue(agents.findObservations(66L).get(0).getObservationSummary().contains("恢复成功"));
+        verify(runtimeService).completeNode(eq(66L), anyString(), eq("retry-recovered"), eq(2), anyString());
+    }
+
+    @Test
+    void failsRuntimeNodeAndAbortsOnTerminalToolError() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(searchDecision());
+        ResearchDecisionValidator validator = new ResearchDecisionValidator();
+        ResearchDecisionAgent decisionAgent = new ResearchDecisionAgent(
+                llm, validator, new DeterministicResearchPolicy(validator));
+        ResearchAgentContextBuilder contexts = new ResearchAgentContextBuilder(
+                missions, agents, runtimes, new ResearchToolRegistry());
+        ResearchToolDispatcher dispatcher = new ResearchToolDispatcher(new ResearchAgentToolRegistry(
+                Collections.<ResearchAgentTool>singletonList(new TerminalObservationTool())));
+        ResearchRuntimeService runtimeService = mock(ResearchRuntimeService.class);
+        when(runtimeService.startNode(eq(66L), anyString(), eq("EXPAND"), anyString(), anyString()))
+                .thenReturn(RuntimeNodeStart.started(new ResearchRuntimeCheckpoint()));
+        ResearchAgentLoopService loop = new ResearchAgentLoopService(
+                agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentStateReducer(agents),
+                mock(ResearchFinishVerifier.class), mock(ResearchMissionService.class), runtimeService);
+
+        ResearchAgentLoopResult result = loop.run(66L);
+
+        assertTrue(result.isAborted());
+        assertEquals("SOURCE_ACCESS_DENIED", result.getTerminationReason());
+        assertEquals("FAILED", agents.findDecisions(66L).get(0).getStatus());
+        assertEquals(1, agents.findObservations(66L).size());
+        verify(runtimeService).failNode(eq(66L), anyString(), eq("SOURCE_ACCESS_DENIED"), anyString());
     }
 
     private String searchDecision() {
@@ -169,6 +241,39 @@ class ResearchAgentLoopServiceTest {
             value.setEvidenceDelta(1);
             value.setSourceDelta(1);
             value.setStateHash("next-state");
+            return value;
+        }
+    }
+
+    private static class RetryingObservationTool extends ObservationTool {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public ResearchToolObservation execute(ResearchAgentToolContext context, Map<String, Object> arguments) {
+            if (calls.incrementAndGet() == 1) {
+                ResearchToolObservation value = new ResearchToolObservation();
+                value.setStatus("RETRYABLE_ERROR");
+                value.setObservationSummary("搜索上游超时");
+                value.setErrorType("SEARCH_TIMEOUT");
+                value.setRetryable(true);
+                value.setStateHash("retry-pending");
+                return value;
+            }
+            ResearchToolObservation value = super.execute(context, arguments);
+            value.setStateHash("retry-recovered");
+            return value;
+        }
+    }
+
+    private static class TerminalObservationTool extends ObservationTool {
+        @Override
+        public ResearchToolObservation execute(ResearchAgentToolContext context, Map<String, Object> arguments) {
+            ResearchToolObservation value = new ResearchToolObservation();
+            value.setStatus("TERMINAL_ERROR");
+            value.setObservationSummary("来源拒绝访问，无法继续当前动作");
+            value.setErrorType("SOURCE_ACCESS_DENIED");
+            value.setRetryable(false);
+            value.setStateHash("terminal-error");
             return value;
         }
     }

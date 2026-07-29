@@ -462,10 +462,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "data_refs TEXT,"
                 + "error_type TEXT,"
                 + "retryable INTEGER NOT NULL DEFAULT 0,"
+                + "attempt_count INTEGER NOT NULL DEFAULT 1,"
                 + "state_hash TEXT NOT NULL,"
                 + "created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE,"
                 + "FOREIGN KEY(decision_id) REFERENCES research_agent_decision(id) ON DELETE CASCADE)");
+        ensureColumn("research_tool_observation", "attempt_count", "INTEGER NOT NULL DEFAULT 1");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_tool_observation_run "
                 + "ON research_tool_observation(research_run_id,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_evaluation ("

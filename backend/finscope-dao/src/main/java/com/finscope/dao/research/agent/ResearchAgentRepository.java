@@ -85,6 +85,7 @@ public class ResearchAgentRepository {
         value.setDataRefs(parseList(rs.getString("data_refs")));
         value.setErrorType(rs.getString("error_type"));
         value.setRetryable(rs.getInt("retryable") == 1);
+        value.setAttemptCount(rs.getInt("attempt_count"));
         value.setStateHash(rs.getString("state_hash"));
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return value;
@@ -161,7 +162,7 @@ public class ResearchAgentRepository {
             PreparedStatement statement = connection.prepareStatement(
                     "INSERT INTO research_tool_observation(research_run_id,decision_id,tool_code,status,"
                             + "observation_summary,new_information,evidence_delta,source_delta,data_refs,error_type,"
-                            + "retryable,state_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "retryable,attempt_count,state_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             statement.setLong(1, observation.getResearchRunId());
             statement.setLong(2, observation.getDecisionId());
@@ -174,8 +175,9 @@ public class ResearchAgentRepository {
             statement.setString(9, joinList(observation.getDataRefs()));
             statement.setString(10, observation.getErrorType());
             statement.setInt(11, observation.isRetryable() ? 1 : 0);
-            statement.setString(12, observation.getStateHash());
-            statement.setString(13, TimeUtil.text(now));
+            statement.setInt(12, observation.getAttemptCount());
+            statement.setString(13, observation.getStateHash());
+            statement.setString(14, TimeUtil.text(now));
             return statement;
         }, keys);
         observation.setId(requiredKey(keys));

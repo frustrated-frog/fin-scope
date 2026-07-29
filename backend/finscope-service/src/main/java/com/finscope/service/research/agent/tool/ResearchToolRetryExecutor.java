@@ -19,6 +19,7 @@ public class ResearchToolRetryExecutor {
         ResearchToolObservation observation = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             observation = dispatcher.dispatch(decision, context);
+            observation.setAttemptCount(attempt);
             if (!isRetryable(observation)) {
                 if (attempt > 1) {
                     observation.setObservationSummary("第 " + attempt + " 次尝试恢复成功："

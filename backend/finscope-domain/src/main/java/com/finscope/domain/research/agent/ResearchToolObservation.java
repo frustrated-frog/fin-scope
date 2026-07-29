@@ -18,6 +18,7 @@ public class ResearchToolObservation {
     private List<String> dataRefs = Collections.emptyList();
     private String errorType;
     private boolean retryable;
+    private int attemptCount = 1;
     private String stateHash;
     private LocalDateTime createdAt;
 
@@ -49,6 +50,8 @@ public class ResearchToolObservation {
     public void setErrorType(String errorType) { this.errorType = errorType; }
     public boolean isRetryable() { return retryable; }
     public void setRetryable(boolean retryable) { this.retryable = retryable; }
+    public int getAttemptCount() { return attemptCount; }
+    public void setAttemptCount(int attemptCount) { this.attemptCount = Math.max(1, attemptCount); }
     public String getStateHash() { return stateHash; }
     public void setStateHash(String stateHash) { this.stateHash = stateHash; }
     public LocalDateTime getCreatedAt() { return createdAt; }
