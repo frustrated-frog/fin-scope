@@ -49,6 +49,10 @@ public class ResearchMissionService {
                 : thesis.getQuestion().trim();
         String subject = thesis == null || blank(thesis.getSubjectName()) ? "研究对象"
                 : thesis.getSubjectName().trim();
+        if (thesis != null && !blank(thesis.getSubjectCode())
+                && thesis.getSubjectCode().trim().matches("\\d{6}")) {
+            subject += "（" + thesis.getSubjectCode().trim() + "）";
+        }
         return repository.initialize(run.getId(), goal, subject, "等待研究规划",
                 Arrays.asList("形成可验证的阶段性结论"), maxActions);
     }
@@ -63,6 +67,7 @@ public class ResearchMissionService {
         input.setQuestion(thesis.getQuestion());
         input.setSubjectType(thesis.getSubjectType());
         input.setSubjectName(thesis.getSubjectName());
+        input.setSubjectCode(thesis.getSubjectCode());
         input.setThemeCodes(run.getThemeCodes());
         input.setMaxActions(maxActions);
         input.setCurrentDate(run.getRunDate() == null ? LocalDate.now() : run.getRunDate());

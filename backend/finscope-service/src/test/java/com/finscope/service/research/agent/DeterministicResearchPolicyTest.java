@@ -1,12 +1,14 @@
 package com.finscope.service.research.agent;
 
 import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.mission.ResearchMission;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DeterministicResearchPolicyTest {
     private final ResearchDecisionValidator validator = new ResearchDecisionValidator();
@@ -35,5 +37,22 @@ class DeterministicResearchPolicyTest {
         sufficient.getLatestGap().setSufficient(false);
         sufficient.getLatestGap().setRecommendedIntent("COUNTER");
         assertEquals("ABORT", policy.decide(sufficient).getDecisionType());
+    }
+
+    @Test
+    void choosesStructuredPrimaryMaterialForAStockSubject() {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        context.getLatestGap().setCounterCount(1);
+        context.getLatestGap().setSupportCount(1);
+        context.getLatestGap().setSourceCount(1);
+        context.getLatestGap().setRecommendedIntent("PRIMARY");
+        ResearchMission mission = context.getMission();
+        mission.setSubject("平安银行（000001）");
+
+        ResearchAgentDecision decision = policy.decide(context);
+
+        assertEquals("research_material_search", decision.getToolCode());
+        assertTrue(decision.getArgumentsJson().contains("000001"));
+        assertTrue(decision.getArgumentsJson().contains("ANNOUNCEMENT"));
     }
 }

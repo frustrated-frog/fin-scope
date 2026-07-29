@@ -9,6 +9,7 @@ public class ResearchPlanningInput {
     private String question;
     private String subjectType;
     private String subjectName;
+    private String subjectCode;
     private List<String> themeCodes = Collections.emptyList();
     private int maxActions;
     private LocalDate currentDate;
@@ -36,6 +37,9 @@ public class ResearchPlanningInput {
     public void setSubjectName(String subjectName) {
         this.subjectName = subjectName;
     }
+
+    public String getSubjectCode() { return subjectCode; }
+    public void setSubjectCode(String subjectCode) { this.subjectCode = subjectCode; }
 
     public List<String> getThemeCodes() {
         return themeCodes;

@@ -10,6 +10,7 @@ import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.service.research.mission.ResearchToolRegistry;
@@ -48,6 +49,7 @@ public class ResearchAgentContextBuilder {
         ResearchRuntimeCheckpoint runtime = runtimeRepository.findCheckpoint(runId)
                 .orElseThrow(() -> new IllegalStateException("研究 Runtime 不存在：" + runId));
         List<ResearchMissionGap> gaps = missionRepository.findGaps(runId);
+        List<ResearchMissionTask> tasks = missionRepository.findTasks(runId);
         ResearchMissionGap latestGap = gaps.isEmpty() ? null : gaps.get(gaps.size() - 1);
         ResearchAgentTraceView trace = agentRepository.findTrace(runId);
 
@@ -64,11 +66,12 @@ public class ResearchAgentContextBuilder {
         context.setState(state);
         context.setLatestGap(latestGap);
         context.setAttemptedFingerprints(state.getAttemptedFingerprints());
-        context.setPrompt(buildPrompt(mission, state, latestGap, trace, context.getRemainingActions()));
+        context.setPrompt(buildPrompt(mission, tasks, state, latestGap, trace, context.getRemainingActions()));
         return context;
     }
 
     private String buildPrompt(ResearchMission mission,
+                               List<ResearchMissionTask> tasks,
                                ResearchAgentState state,
                                ResearchMissionGap gap,
                                ResearchAgentTraceView trace,
@@ -87,6 +90,7 @@ public class ResearchAgentContextBuilder {
                 .append("证据摘要：").append(safe(state.getEvidenceSummary())).append('\n')
                 .append("已尝试动作：").append(state.getAttemptedFingerprints()).append('\n');
         appendGap(prompt, gap);
+        appendTasks(prompt, tasks);
         appendTrace(prompt, trace);
         prompt.append("可用工具\n");
         for (ResearchToolDescriptor tool : toolRegistry.list()) {
@@ -101,6 +105,20 @@ public class ResearchAgentContextBuilder {
         }
         prompt.append("请选择一个下一步决策。不得重复已尝试动作。只输出决策 JSON。");
         return limit(prompt.toString(), MAX_PROMPT_CHARACTERS);
+    }
+
+    private void appendTasks(StringBuilder prompt, List<ResearchMissionTask> tasks) {
+        prompt.append("计划任务\n");
+        if (tasks == null) return;
+        for (ResearchMissionTask task : tasks) {
+            if ("COMPLETED".equals(task.getStatus()) || "SKIPPED".equals(task.getStatus())) continue;
+            prompt.append("- ").append(safe(task.getTaskKey())).append("[")
+                    .append(safe(task.getStatus())).append("] ")
+                    .append(safe(task.getTitle())).append("；tool=")
+                    .append(safe(task.getToolCode())).append("；intent=")
+                    .append(safe(task.getIntent())).append("；query=")
+                    .append(limit(safe(task.getQueryText()), 240)).append('\n');
+        }
     }
 
     private void appendGap(StringBuilder prompt, ResearchMissionGap gap) {

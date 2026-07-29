@@ -27,8 +27,9 @@ class ResearchPlanValidatorTest {
         assertEquals(6, validated.getTasks().size());
         assertEquals("baseline_scan", validated.getTasks().get(0).getTaskKey());
         assertEquals("synthesize_report", validated.getTasks().get(5).getTaskKey());
-        assertEquals(4, new ResearchToolRegistry().list().size());
+        assertEquals(5, new ResearchToolRegistry().list().size());
         assertTrue(new ResearchToolRegistry().contains("public_news_search"));
+        assertTrue(new ResearchToolRegistry().contains("research_material_search"));
     }
 
     @Test

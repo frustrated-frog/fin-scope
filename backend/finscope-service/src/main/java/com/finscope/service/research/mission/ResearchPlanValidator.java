@@ -103,6 +103,17 @@ public class ResearchPlanValidator {
             requireContract(task, "COLLECT", "BASELINE");
             return;
         }
+        if ("research_material_search".equals(task.getToolCode())) {
+            if (!"SEARCH".equals(task.getTaskType())
+                    || !Arrays.asList("SUPPORT", "COUNTER", "PRIMARY", "BREADTH").contains(task.getIntent())) {
+                throw invalid("结构化资料检索只能用于受控证据搜索：" + task.getTaskKey());
+            }
+            requireText(task.getQueryText(), "结构化资料查询", 180);
+            if (!task.getQueryText().matches("^\\d{6} (ANNOUNCEMENT|INTERACTION|BROKER_REPORT|NEWS_FLASH)( .*)?$")) {
+                throw invalid("结构化资料查询必须包含六位代码和资料类型：" + task.getTaskKey());
+            }
+            return;
+        }
         if ("public_news_search".equals(task.getToolCode())) {
             if (!"SEARCH".equals(task.getTaskType())
                     || !Arrays.asList("SUPPORT", "COUNTER", "PRIMARY", "BREADTH").contains(task.getIntent())) {

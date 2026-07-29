@@ -9,6 +9,7 @@ import com.finscope.domain.research.agent.ResearchAgentTraceView;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.service.research.mission.ResearchToolRegistry;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class ResearchAgentContextBuilderTest {
 
         when(missions.findMission(44L)).thenReturn(Optional.of(mission()));
         when(missions.findGaps(44L)).thenReturn(Arrays.asList(gap(1, "SUPPORT"), gap(2, "COUNTER")));
+        when(missions.findTasks(44L)).thenReturn(Collections.singletonList(materialTask()));
         when(agents.findState(44L)).thenReturn(Optional.of(state()));
         when(agents.findTrace(44L)).thenReturn(trace());
         when(runtimes.findCheckpoint(44L)).thenReturn(Optional.of(checkpoint()));
@@ -51,15 +53,26 @@ class ResearchAgentContextBuilderTest {
         assertFalse(context.getPrompt().contains("observation-2-old"));
         assertTrue(context.getPrompt().contains("public_news_search"));
         assertTrue(context.getPrompt().contains("evidence_assess"));
+        assertTrue(context.getPrompt().contains("000001 ANNOUNCEMENT 财报 经营"));
         assertTrue(context.getPrompt().contains(
                 "public_news_search：使用 Tavily 补充本次研究证据，搜索材料不进入文章库；"
                         + "input={query=不含协议头的公开搜索词, "
                         + "intent=证据意图（SUPPORT/COUNTER/PRIMARY/UPDATE）}"));
         assertTrue(context.getPrompt().contains(
                 "evidence_assess：评估证据数量、独立来源和正反覆盖；input={}"));
-        assertFalse(context.getPrompt().contains("queryText"));
         assertFalse(context.getPrompt().contains("researchRunId"));
         assertTrue(context.getPrompt().length() <= ResearchAgentContextBuilder.MAX_PROMPT_CHARACTERS);
+    }
+
+    private ResearchMissionTask materialTask() {
+        ResearchMissionTask value = new ResearchMissionTask();
+        value.setTaskKey("primary_disclosure");
+        value.setStatus("PENDING");
+        value.setTitle("公司一手披露");
+        value.setToolCode("research_material_search");
+        value.setIntent("PRIMARY");
+        value.setQueryText("000001 ANNOUNCEMENT 财报 经营");
+        return value;
     }
 
     private ResearchMission mission() {

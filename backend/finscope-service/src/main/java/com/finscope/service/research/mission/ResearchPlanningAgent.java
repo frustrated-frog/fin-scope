@@ -81,6 +81,10 @@ public class ResearchPlanningAgent {
                 + "intent只能是BASELINE、SUPPORT、COUNTER、PRIMARY、BREADTH、ASSESS、SYNTHESIS。"
                 + "source_scan只能搭配COLLECT和BASELINE；"
                 + "public_news_search只能搭配SEARCH以及SUPPORT、COUNTER、PRIMARY或BREADTH；"
+                + "research_material_search只能搭配SEARCH以及SUPPORT、COUNTER、PRIMARY或BREADTH，"
+                + "queryText格式严格为‘六位代码 空格 ANNOUNCEMENT|INTERACTION|BROKER_REPORT|NEWS_FLASH 空格 自然语言关键词’；"
+                + "对于包含六位A股代码的对象，按研究地图、公司一手披露、专业资料、支持证据、反方证据、证据评估、报告合成组织任务；"
+                + "优先一手材料，再用专业与新闻语境交叉核对，并主动寻找替代解释和证据缺口；"
                 + "evidence_assess只能搭配ASSESS和ASSESS；"
                 + "report_synthesis只能搭配SYNTHESIS和SYNTHESIS。"
                 + "JSON字段严格为scopeSummary、successCriteria、tasks；任务字段严格为taskKey、title、question、"
@@ -93,6 +97,7 @@ public class ResearchPlanningAgent {
                 .append("研究问题：").append(compact(input.getQuestion(), 180)).append('\n')
                 .append("对象类型：").append(compact(input.getSubjectType(), 40)).append('\n')
                 .append("研究对象：").append(compact(input.getSubjectName(), 100)).append('\n')
+                .append("对象代码：").append(compact(input.getSubjectCode(), 20)).append('\n')
                 .append("主题代码：").append(input.getThemeCodes()).append('\n')
                 .append("最大外部动作预算：").append(input.getMaxActions()).append("\n可用工具：\n");
         List<ResearchToolDescriptor> tools = toolRegistry.list();

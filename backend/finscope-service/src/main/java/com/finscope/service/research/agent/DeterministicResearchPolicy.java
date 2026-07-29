@@ -9,9 +9,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class DeterministicResearchPolicy {
+    private static final Pattern A_SHARE_CODE = Pattern.compile("(?<!\\d)(\\d{6})(?!\\d)");
     private final ResearchDecisionValidator validator;
 
     public DeterministicResearchPolicy(ResearchDecisionValidator validator) {
@@ -51,6 +54,10 @@ public class DeterministicResearchPolicy {
                                                      String intent,
                                                      ResearchMissionGap gap) {
         String subject = subject(context.getMission());
+        if ("PRIMARY".equals(intent)) {
+            ResearchAgentDecision material = firstUntriedPrimaryMaterial(context, subject, gap);
+            if (material != null) return material;
+        }
         String[][] templates = templates(subject, intent);
         for (String[] template : templates) {
             ResearchDecisionDraft draft = new ResearchDecisionDraft();
@@ -65,6 +72,43 @@ public class DeterministicResearchPolicy {
             draft.setExpectedObservation("获得能改变证据缺口的独立公开来源");
             draft.setDecisionSummary(template[2]);
             draft.setConfidence(0.66D);
+            try {
+                return validated(draft, context);
+            } catch (IllegalArgumentException repeated) {
+                if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) {
+                    throw repeated;
+                }
+            }
+        }
+        return null;
+    }
+
+    private ResearchAgentDecision firstUntriedPrimaryMaterial(ResearchDecisionContext context,
+                                                               String subject,
+                                                               ResearchMissionGap gap) {
+        Matcher matcher = A_SHARE_CODE.matcher(subject);
+        if (!matcher.find()) return null;
+        String stockCode = matcher.group(1);
+        String[][] candidates = {
+                {"ANNOUNCEMENT", "财报 业绩 经营", "读取公司公告建立一手事实基线"},
+                {"INTERACTION", "经营 订单 客户", "用公司互动回复补充公告未覆盖的经营细节"},
+                {"BROKER_REPORT", "经营 行业 估值", "用专业资料交叉核对公司披露"},
+                {"NEWS_FLASH", subject.replaceAll("（?" + stockCode + "）?", "").trim(), "用财经快讯补充近期变化"}
+        };
+        for (String[] candidate : candidates) {
+            ResearchDecisionDraft draft = new ResearchDecisionDraft();
+            draft.setDecisionType("TOOL_CALL");
+            draft.setCurrentSubgoal("补充" + candidate[0] + "资料");
+            draft.setToolCode("research_material_search");
+            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+            arguments.put("stockCode", stockCode);
+            arguments.put("materialType", candidate[0]);
+            arguments.put("query", candidate[1]);
+            draft.setArguments(arguments);
+            draft.setTargetGap(targetGap(gap));
+            draft.setExpectedObservation("获得可追溯的结构化研究材料");
+            draft.setDecisionSummary(candidate[2]);
+            draft.setConfidence(0.78D);
             try {
                 return validated(draft, context);
             } catch (IllegalArgumentException repeated) {

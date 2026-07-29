@@ -108,11 +108,28 @@ class ResearchPlanningAgentTest {
                 result.getDraft().task("search_counter").getQueryText());
     }
 
+    @Test
+    void plansPrimaryAndProfessionalMaterialLanesForAStockSubject() {
+        when(llm.isConfigured()).thenReturn(false);
+        ResearchPlanningInput stock = input();
+        stock.setSubjectType("STOCK");
+        stock.setSubjectName("平安银行");
+        stock.setSubjectCode("000001");
+
+        ResearchPlanningResult result = agent.plan(stock);
+
+        assertEquals("research_material_search", result.getDraft().task("primary_disclosure").getToolCode());
+        assertTrue(result.getDraft().task("primary_disclosure").getQueryText().contains("ANNOUNCEMENT"));
+        assertEquals("research_material_search", result.getDraft().task("professional_context").getToolCode());
+        assertTrue(result.getDraft().task("professional_context").getQueryText().contains("BROKER_REPORT"));
+    }
+
     private ResearchPlanningInput input() {
         ResearchPlanningInput input = new ResearchPlanningInput();
         input.setQuestion("AI资本开支能否持续？");
         input.setSubjectName("AI算力");
         input.setSubjectType("THEME");
+        input.setSubjectCode("");
         input.setThemeCodes(Arrays.asList("ai_compute"));
         input.setMaxActions(12);
         input.setCurrentDate(LocalDate.of(2026, 7, 26));
