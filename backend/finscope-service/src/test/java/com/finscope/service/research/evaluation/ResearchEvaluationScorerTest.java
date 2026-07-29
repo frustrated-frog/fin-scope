@@ -99,6 +99,21 @@ class ResearchEvaluationScorerTest {
         assertEquals(82, evaluation.getMetrics().get(6).getScore());
     }
 
+    @Test
+    void appendsGroundingMetricsWithoutHidingRuntimeReliabilityScore() {
+        ResearchEvaluation evaluation = scorer.score(new ResearchEvaluationSnapshot(run(ResearchEnums.RUN_STATUS_COMPLETED),
+                report(4, 3), checkpoint("COMPLETED", 0, 12, 0), validCompletedEvents(), 4, 3));
+        ResearchGroundingMetrics grounding = new ResearchGroundingMetrics(4, 4, 3, 1D, 0.75D,
+                0.8D, 0.5D, 1D, 1D, 0.75D);
+
+        scorer.appendGroundingMetrics(evaluation, grounding);
+
+        assertEquals(100, evaluation.getScore());
+        assertEquals(13, evaluation.getMetrics().size());
+        assertTrue(evaluation.getMetrics().stream()
+                .anyMatch(metric -> "claim_support".equals(metric.getMetricCode()) && metric.getScore() == 75));
+    }
+
     private List<ResearchRuntimeEvent> validCompletedEvents() {
         java.util.ArrayList<ResearchRuntimeEvent> events = new java.util.ArrayList<ResearchRuntimeEvent>();
         events.add(event(1, "RUN_CREATED", null));

@@ -17,7 +17,7 @@ public class ResearchEvidenceDossier {
     private final String stance;
     private final int relevanceScore;
 
-    ResearchEvidenceDossier(String evidenceRef, Long articleId, Long evidenceId, String sourceIdentity,
+    public ResearchEvidenceDossier(String evidenceRef, Long articleId, Long evidenceId, String sourceIdentity,
                             String sourceName, String sourceTier, String title, LocalDateTime publishedAt,
                             String url, String factExcerpt, String stance, int relevanceScore) {
         this.evidenceRef = evidenceRef;

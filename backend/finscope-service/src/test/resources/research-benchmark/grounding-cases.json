@@ -1,0 +1,36 @@
+[
+  {
+    "id": "company-revenue-grounding-v1",
+    "frozenAt": "2026-07-29",
+    "question": "公司收入增长是否得到经营质量支撑？",
+    "reportMarkdown": "## 核心结论\n\n公司披露2025年收入增长18%。[E1] 毛利率仍承压，需求放缓可能影响产能利用率。[E2]",
+    "expectedFacts": [
+      "收入增长18%",
+      "毛利率仍承压"
+    ],
+    "evidence": [
+      {
+        "ref": "E1",
+        "sourceIdentity": "sse.com.cn",
+        "sourceName": "上交所公告",
+        "sourceTier": "T1",
+        "title": "年度报告",
+        "publishedAt": "2026-03-31T00:00:00",
+        "url": "https://www.sse.com.cn/disclosure/annual-report.pdf",
+        "excerpt": "公司披露2025年收入同比增长18%，研发投入继续增加。",
+        "stance": "SUPPORT"
+      },
+      {
+        "ref": "E2",
+        "sourceIdentity": "industry.example.com",
+        "sourceName": "行业统计",
+        "sourceTier": "T2",
+        "title": "行业供需跟踪",
+        "publishedAt": "2026-06-30T00:00:00",
+        "url": "https://industry.example.com/report/2026-06",
+        "excerpt": "毛利率仍承压，需求放缓可能影响新增产能利用率。",
+        "stance": "COUNTER"
+      }
+    ]
+  }
+]

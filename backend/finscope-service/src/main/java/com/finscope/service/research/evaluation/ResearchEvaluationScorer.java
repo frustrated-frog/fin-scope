@@ -19,7 +19,7 @@ import java.util.Set;
 
 @Component
 public class ResearchEvaluationScorer {
-    public static final String VERSION = "deep-research-rules-v2";
+    public static final String VERSION = "deep-research-rules-v3";
 
     public ResearchEvaluation score(ResearchEvaluationSnapshot snapshot) {
         ResearchRun run = snapshot.getRun();
@@ -109,6 +109,26 @@ public class ResearchEvaluationScorer {
                         + ", noProgress=" + decimal(trajectory.getNoProgressRate())
                         + ", fallback=" + decimal(trajectory.getFallbackRate()),
                 "减少重复和无进展动作，并确保 Observation 进入后续决策"));
+        evaluation.setMetrics(metrics);
+    }
+
+    public void appendGroundingMetrics(ResearchEvaluation evaluation, ResearchGroundingMetrics grounding) {
+        if (evaluation == null || grounding == null) return;
+        List<ResearchEvaluationMetric> metrics = new ArrayList<ResearchEvaluationMetric>(evaluation.getMetrics());
+        metrics.add(rateMetric("citation_coverage", "Claim引用覆盖率", grounding.getCitationCoverageRate(),
+                "事实 Claim 应绑定可追溯引用"));
+        metrics.add(rateMetric("claim_support", "Claim真实支持率", grounding.getClaimSupportRate(),
+                "引用片段应真实支持相邻主张"));
+        metrics.add(rateMetric("key_fact_coverage", "关键事实覆盖率", grounding.getKeyFactCoverageRate(),
+                "覆盖冻结问题集中的关键事实"));
+        metrics.add(rateMetric("primary_source_ratio", "一手来源占比", grounding.getPrimarySourceRatio(),
+                "优先使用公告、交易所、监管和公司 IR"));
+        metrics.add(rateMetric("counter_coverage", "反方证据覆盖", grounding.getCounterEvidenceCoverage(),
+                "反方材料必须进入报告论证"));
+        metrics.add(rateMetric("citation_accessibility", "引用可访问率", grounding.getCitationAccessibilityRate(),
+                "引用 URL 必须保持合法可追溯"));
+        metrics.add(rateMetric("freshness", "信息时效性", grounding.getFreshnessRate(),
+                "证据不得晚于冻结时间并应处于有效观察窗口"));
         evaluation.setMetrics(metrics);
     }
 
@@ -292,6 +312,11 @@ public class ResearchEvaluationScorer {
         metric.setEvidence(evidence);
         metric.setRecommendation(recommendation);
         return metric;
+    }
+
+    private ResearchEvaluationMetric rateMetric(String code, String label, double rate, String recommendation) {
+        int score = (int) Math.round(Math.max(0D, Math.min(1D, rate)) * 100D);
+        return metric(code, label, score, 100, "rate=" + decimal(rate), recommendation);
     }
 
     private String safe(String value) {
