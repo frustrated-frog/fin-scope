@@ -38,6 +38,7 @@ export function ResearchView({
   reportBusy: boolean;
   onRun: (input: {
     thesisId?: number;
+    mode: 'QUICK' | 'DEEP';
     runDate: string;
     themeCodes: string[];
     maxSourcesPerTheme: number;
@@ -53,6 +54,7 @@ export function ResearchView({
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [runDate, setRunDate] = useState(today);
+  const [mode, setMode] = useState<'QUICK' | 'DEEP'>('DEEP');
   const [themeCodes, setThemeCodes] = useState<string[]>(['china_macro', 'ai_startup', 'company_ipo']);
   const [maxSourcesPerTheme, setMaxSourcesPerTheme] = useState(3);
   const [includeDisabled, setIncludeDisabled] = useState(false);
@@ -99,7 +101,7 @@ export function ResearchView({
   }, [selectedThesisId]);
 
   async function submit() {
-    await onRun({ thesisId: selectedThesisId || undefined, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
+    await onRun({ thesisId: selectedThesisId || undefined, mode, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
   }
 
   async function createThesis() {
@@ -274,6 +276,17 @@ export function ResearchView({
             <input type="date" value={runDate} onChange={(event) => setRunDate(event.target.value)} />
           </label>
           <label className="inline-select">
+            <span>研究模式</span>
+            <select
+              aria-label="研究模式"
+              value={mode}
+              onChange={(event) => setMode(event.target.value as 'QUICK' | 'DEEP')}
+            >
+              <option value="DEEP">深度 · 多分支</option>
+              <option value="QUICK">快速 · 单分支</option>
+            </select>
+          </label>
+          <label className="inline-select">
             <span>每主题来源数</span>
             <input
               min={1}
@@ -293,7 +306,11 @@ export function ResearchView({
           </label>
           </div>
         </div>
-        <p className="research-scope-note">默认覆盖：中国宏观、AI 创业、公司 / IPO。研究范围将随命题和来源配置逐步细化。</p>
+        <p className="research-scope-note">
+          {mode === 'DEEP'
+            ? '深度模式最多并行读取三条互补分支，再顺序提交证据；默认覆盖：中国宏观、AI 创业、公司 / IPO。'
+            : '快速模式使用单分支与较小搜索、全文预算，适合先形成方向性判断。'}
+        </p>
         <div className="research-run-action">
           <div>
             <span>{selectedThesisId ? '本次运行将写回当前命题' : '本次运行将作为探索档案保存'}</span>
@@ -547,7 +564,7 @@ function ResearchRunRow({
     >
       <span className="research-run-date-cell">
         <strong>{run.runDate}</strong>
-        <small>RUN #{run.id}</small>
+        <small>{run.mode === 'QUICK' ? 'QUICK' : 'DEEP'} · RUN #{run.id}</small>
       </span>
       <span className="research-run-thesis-cell">
         <strong>{thesisName}</strong>

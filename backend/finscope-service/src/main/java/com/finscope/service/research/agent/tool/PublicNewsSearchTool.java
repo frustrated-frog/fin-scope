@@ -6,6 +6,8 @@ import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
+import com.finscope.service.research.agent.BoundedResearchOrchestrator;
+import com.finscope.service.research.agent.ResearchOrchestrator;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
 import com.finscope.service.research.source.FinancialSourceQueryPolicy;
@@ -22,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class PublicNewsSearchTool implements ResearchAgentTool {
@@ -32,6 +35,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     private final ResearchEvidenceAcquisitionService acquisitionService;
     private final FinancialSourceQueryPolicy queryPolicy;
     private final OfficialFinancialSourceRegistry sourceRegistry;
+    private final ResearchOrchestrator orchestrator;
 
     public PublicNewsSearchTool(WebSearchClient searchClient,
                                 ResearchSearchEvidenceRepository evidenceRepository) {
@@ -43,7 +47,16 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                                 ResearchEvidenceAcquisitionService acquisitionService) {
         this(searchClient, evidenceRepository, acquisitionService,
                 new FinancialSourceQueryPolicy(new OfficialFinancialSourceRegistry()),
-                new OfficialFinancialSourceRegistry());
+                new OfficialFinancialSourceRegistry(), new BoundedResearchOrchestrator());
+    }
+
+    public PublicNewsSearchTool(WebSearchClient searchClient,
+                                ResearchSearchEvidenceRepository evidenceRepository,
+                                ResearchEvidenceAcquisitionService acquisitionService,
+                                FinancialSourceQueryPolicy queryPolicy,
+                                OfficialFinancialSourceRegistry sourceRegistry) {
+        this(searchClient, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry,
+                new BoundedResearchOrchestrator());
     }
 
     @Autowired
@@ -51,12 +64,14 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                                 ResearchSearchEvidenceRepository evidenceRepository,
                                 ResearchEvidenceAcquisitionService acquisitionService,
                                 FinancialSourceQueryPolicy queryPolicy,
-                                OfficialFinancialSourceRegistry sourceRegistry) {
+                                OfficialFinancialSourceRegistry sourceRegistry,
+                                ResearchOrchestrator orchestrator) {
         this.searchClient = searchClient;
         this.evidenceRepository = evidenceRepository;
         this.acquisitionService = acquisitionService;
         this.queryPolicy = queryPolicy;
         this.sourceRegistry = sourceRegistry;
+        this.orchestrator = orchestrator;
     }
 
     @Override
@@ -72,7 +87,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setOutputSchema(Collections.singletonMap("observation", "本次研究新增证据与独立来源"));
         value.setTimeoutMs(45_000);
         value.setReadOnly(true);
-        value.setParallelizable(false);
+        value.setParallelizable(true);
         value.setRiskLevel("LOW");
         value.setBudgetType("EXTERNAL_ACTION");
         return value;
@@ -104,17 +119,23 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         String query = text(arguments.get("query"));
         String intent = text(arguments.get("intent"));
         try {
-            FinancialSourceSearchPlan searchPlan = queryPolicy.plan(query, intent);
             Set<String> existingDomains = new HashSet<String>();
             for (ResearchSearchEvidence item : evidenceRepository.findByRunId(context.getResearchRunId())) {
                 if (hasText(item.getSourceDomain())) existingDomains.add(item.getSourceDomain().toLowerCase());
             }
-            List<SearchResult> hits = searchClient.search(searchPlan.getEffectiveQuery(), MAX_RESULTS);
-            boolean generalFallback = false;
-            if (searchPlan.isOfficialLane() && (hits == null || hits.isEmpty())) {
-                hits = searchClient.search(searchPlan.getOriginalQuery(), MAX_RESULTS);
-                generalFallback = true;
-            }
+            AtomicInteger officialBranches = new AtomicInteger();
+            AtomicInteger generalFallbacks = new AtomicInteger();
+            List<ResearchOrchestrator.BranchResult> branches = orchestrator.execute(
+                    context.getResearchMode(), query, intent, (branchQuery, branchIntent) -> {
+                        FinancialSourceSearchPlan searchPlan = queryPolicy.plan(branchQuery, branchIntent);
+                        if (searchPlan.isOfficialLane()) officialBranches.incrementAndGet();
+                        List<SearchResult> branchHits = searchClient.search(searchPlan.getEffectiveQuery(), MAX_RESULTS);
+                        if (searchPlan.isOfficialLane() && (branchHits == null || branchHits.isEmpty())) {
+                            branchHits = searchClient.search(searchPlan.getOriginalQuery(), MAX_RESULTS);
+                            generalFallbacks.incrementAndGet();
+                        }
+                        return branchHits;
+                    });
             List<String> refs = new ArrayList<String>();
             Set<String> seenUrls = new HashSet<String>();
             Set<String> newDomains = new HashSet<String>();
@@ -122,23 +143,41 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             int lowRelevance = 0;
             int fullText = 0;
             int snippetFallback = 0;
-            for (SearchResult hit : hits == null ? Collections.<SearchResult>emptyList() : hits) {
-                String url = text(hit.getUrl());
-                if (hit.getScore() == null || hit.getScore() < MIN_RELEVANCE_SCORE) {
-                    lowRelevance++;
+            int hitCount = 0;
+            int failedBranches = 0;
+            int fullTextAttempts = 0;
+            int fullTextBudget = context.getResearchMode().getFullTextReadsPerSearch();
+            for (ResearchOrchestrator.BranchResult branch : branches) {
+                if (!branch.isSuccess()) {
+                    failedBranches++;
                     continue;
                 }
-                if (!hasText(url) || !seenUrls.add(url)
-                        || evidenceRepository.findByRunIdAndUrl(context.getResearchRunId(), url).isPresent()) {
-                    duplicates++;
-                    continue;
+                hitCount += branch.getHits().size();
+                for (SearchResult hit : branch.getHits()) {
+                    String url = text(hit.getUrl());
+                    if (hit.getScore() == null || hit.getScore() < MIN_RELEVANCE_SCORE) {
+                        lowRelevance++;
+                        continue;
+                    }
+                    if (!hasText(url) || !seenUrls.add(url)
+                            || evidenceRepository.findByRunIdAndUrl(context.getResearchRunId(), url).isPresent()) {
+                        duplicates++;
+                        continue;
+                    }
+                    boolean readFullText = fullTextAttempts < fullTextBudget;
+                    if (readFullText) fullTextAttempts++;
+                    ResearchSearchEvidence candidate = toEvidence(context, branch.getQuery(), branch.getIntent(),
+                            hit, readFullText);
+                    if ("FULL_TEXT".equals(candidate.getContentOrigin())) fullText++; else snippetFallback++;
+                    ResearchSearchEvidence saved = evidenceRepository.save(candidate);
+                    if (saved.getId() != null) refs.add("search-evidence:" + saved.getId());
+                    String domain = text(saved.getSourceDomain()).toLowerCase();
+                    if (hasText(domain) && !existingDomains.contains(domain)) newDomains.add(domain);
                 }
-                ResearchSearchEvidence candidate = toEvidence(context, query, intent, hit);
-                if ("FULL_TEXT".equals(candidate.getContentOrigin())) fullText++; else snippetFallback++;
-                ResearchSearchEvidence saved = evidenceRepository.save(candidate);
-                if (saved.getId() != null) refs.add("search-evidence:" + saved.getId());
-                String domain = text(saved.getSourceDomain()).toLowerCase();
-                if (hasText(domain) && !existingDomains.contains(domain)) newDomains.add(domain);
+            }
+            if (failedBranches == branches.size()) {
+                return error("RETRYABLE_ERROR", "TAVILY_SEARCH_FAILED", true,
+                        "全部研究搜索分支均执行失败");
             }
             ResearchToolObservation value = new ResearchToolObservation();
             value.setEvidenceDelta(refs.size());
@@ -146,10 +185,12 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             value.setDataRefs(refs);
             value.setStateHash("tavily:" + refs.size() + ":" + newDomains.size());
             value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
-            value.setObservationSummary("Tavily 搜索完成：命中=" + (hits == null ? 0 : hits.size())
-                    + "，官方通道=" + searchPlan.isOfficialLane() + "，通用降级=" + generalFallback
+            value.setObservationSummary("Tavily 搜索完成：命中=" + hitCount
+                    + "，研究分支=" + branches.size() + "，失败分支=" + failedBranches
+                    + "，官方通道=" + (officialBranches.get() > 0) + "，通用降级=" + (generalFallbacks.get() > 0)
                     + "，低相关=" + lowRelevance + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
                     + "，全文=" + fullText + "，摘要降级=" + snippetFallback
+                    + "，全文读取预算=" + fullTextBudget
                     + "，新增独立来源=" + newDomains.size());
             value.setNewInformation(refs.isEmpty()
                     ? "本次查询没有获得新的运行内证据"
@@ -163,7 +204,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     }
 
     private ResearchSearchEvidence toEvidence(ResearchAgentToolContext context, String query, String intent,
-                                                SearchResult hit) {
+                                                SearchResult hit, boolean readFullText) {
         ResearchSearchEvidence value = new ResearchSearchEvidence();
         value.setResearchRunId(context.getResearchRunId());
         value.setDecisionId(context.getDecisionId());
@@ -172,9 +213,10 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setIntent(intent);
         value.setTitle(text(hit.getTitle()));
         value.setUrl(text(hit.getUrl()));
-        ResearchEvidenceAcquisitionResult acquired = acquisitionService == null
+        ResearchEvidenceAcquisitionResult acquired = acquisitionService == null || !readFullText
                 ? new ResearchEvidenceAcquisitionResult(text(hit.getContent()), text(hit.getContent()),
-                "SEARCH_SNIPPET", "snippet:fallback:not-configured", "NOT_ATTEMPTED",
+                "SEARCH_SNIPPET", readFullText ? "snippet:fallback:not-configured" : "snippet:fallback:mode-budget",
+                "NOT_ATTEMPTED",
                 text(hit.getContent()).length())
                 : acquisitionService.acquire(text(hit.getUrl()), query, text(hit.getContent()), query);
         value.setContent(acquired.getContent());

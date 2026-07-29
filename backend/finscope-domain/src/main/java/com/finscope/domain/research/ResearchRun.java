@@ -16,6 +16,10 @@ public class ResearchRun {
      */
     private Long thesisId;
     /**
+     * 研究深度模式；历史数据按 DEEP 解释。
+     */
+    private ResearchMode mode = ResearchMode.DEEP;
+    /**
      * 运行日期。
      */
     private LocalDate runDate;
@@ -90,6 +94,14 @@ public class ResearchRun {
 
     public void setThesisId(Long thesisId) {
         this.thesisId = thesisId;
+    }
+
+    public ResearchMode getMode() {
+        return mode;
+    }
+
+    public void setMode(ResearchMode mode) {
+        this.mode = ResearchMode.defaultIfNull(mode);
     }
 
     public LocalDate getRunDate() {

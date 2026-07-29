@@ -374,6 +374,7 @@ export default function App() {
 
   async function runResearch(input: {
     thesisId?: number;
+    mode: 'QUICK' | 'DEEP';
     runDate: string;
     themeCodes: string[];
     maxSourcesPerTheme: number;

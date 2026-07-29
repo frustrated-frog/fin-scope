@@ -12,6 +12,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.InetAddress;
@@ -24,6 +25,7 @@ public class DefaultResearchSourceReader implements ResearchSourceReader {
     private final AcquisitionRuntime acquisitionRuntime;
     private final WebArticleExtractor articleExtractor;
 
+    @Autowired
     public DefaultResearchSourceReader(AcquisitionRuntime acquisitionRuntime) {
         this(acquisitionRuntime, new WebArticleExtractor());
     }

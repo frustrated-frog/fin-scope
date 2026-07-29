@@ -326,6 +326,7 @@ export type ResearchRunPlanStep = {
 export type ResearchRun = {
   id: number;
   thesisId?: number;
+  mode?: 'QUICK' | 'DEEP';
   runDate: string;
   themeCodes: string[];
   sourceCount: number;

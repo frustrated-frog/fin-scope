@@ -2,6 +2,7 @@ package com.finscope.dao.research;
 
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.SourceProfile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -29,6 +30,7 @@ public class ResearchRunRepository {
         long thesisId = rs.getLong("thesis_id");
         run.setThesisId(rs.wasNull() ? null : thesisId);
         run.setRunDate(LocalDate.parse(rs.getString("run_date")));
+        run.setMode(ResearchMode.from(rs.getString("mode")));
         run.setThemeCodes(parseThemeCodes(rs.getString("theme_codes")));
         run.setSourceCount(rs.getInt("source_count"));
         run.setFetchedSourceCount(rs.getInt("fetched_source_count"));
@@ -53,30 +55,31 @@ public class ResearchRunRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO research_run(run_date,theme_codes,source_count,fetched_source_count,article_count,"
+                    "INSERT INTO research_run(run_date,mode,theme_codes,source_count,fetched_source_count,article_count,"
                             + "event_count,evidence_count,learning_task_count,content_idea_count,brief_date,status,"
-                            + "summary,error_message,thesis_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "summary,error_message,thesis_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, run.getRunDate().toString());
-            ps.setString(2, joinThemeCodes(run.getThemeCodes()));
-            ps.setInt(3, run.getSourceCount() == null ? 0 : run.getSourceCount());
-            ps.setInt(4, value(run.getFetchedSourceCount()));
-            ps.setInt(5, value(run.getArticleCount()));
-            ps.setInt(6, value(run.getEventCount()));
-            ps.setInt(7, value(run.getEvidenceCount()));
-            ps.setInt(8, value(run.getLearningTaskCount()));
-            ps.setInt(9, value(run.getContentIdeaCount()));
-            ps.setString(10, run.getBriefDate() == null ? null : run.getBriefDate().toString());
-            ps.setString(11, run.getStatus());
-            ps.setString(12, run.getSummary());
-            ps.setString(13, run.getErrorMessage());
+            ps.setString(2, ResearchMode.defaultIfNull(run.getMode()).name());
+            ps.setString(3, joinThemeCodes(run.getThemeCodes()));
+            ps.setInt(4, run.getSourceCount() == null ? 0 : run.getSourceCount());
+            ps.setInt(5, value(run.getFetchedSourceCount()));
+            ps.setInt(6, value(run.getArticleCount()));
+            ps.setInt(7, value(run.getEventCount()));
+            ps.setInt(8, value(run.getEvidenceCount()));
+            ps.setInt(9, value(run.getLearningTaskCount()));
+            ps.setInt(10, value(run.getContentIdeaCount()));
+            ps.setString(11, run.getBriefDate() == null ? null : run.getBriefDate().toString());
+            ps.setString(12, run.getStatus());
+            ps.setString(13, run.getSummary());
+            ps.setString(14, run.getErrorMessage());
             if (run.getThesisId() == null) {
-                ps.setObject(14, null);
+                ps.setObject(15, null);
             } else {
-                ps.setLong(14, run.getThesisId());
+                ps.setLong(15, run.getThesisId());
             }
-            ps.setString(15, TimeUtil.text(run.getCreatedAt()));
-            ps.setString(16, TimeUtil.text(run.getUpdatedAt()));
+            ps.setString(16, TimeUtil.text(run.getCreatedAt()));
+            ps.setString(17, TimeUtil.text(run.getUpdatedAt()));
             return ps;
         }, keyHolder);
         run.setId(keyHolder.getKey().longValue());

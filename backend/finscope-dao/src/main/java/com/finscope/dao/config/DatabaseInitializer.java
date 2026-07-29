@@ -279,6 +279,7 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "run_date TEXT NOT NULL,"
+                + "mode TEXT NOT NULL DEFAULT 'DEEP',"
                 + "theme_codes TEXT NOT NULL,"
                 + "source_count INTEGER NOT NULL DEFAULT 0,"
                 + "fetched_source_count INTEGER NOT NULL DEFAULT 0,"
@@ -295,6 +296,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
         ensureColumn("research_run", "fetched_source_count", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("research_run", "mode", "TEXT NOT NULL DEFAULT 'DEEP'");
         ensureColumn("research_run", "article_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "event_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "evidence_count", "INTEGER NOT NULL DEFAULT 0");

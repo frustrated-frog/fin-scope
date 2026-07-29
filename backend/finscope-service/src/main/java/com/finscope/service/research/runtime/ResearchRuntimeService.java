@@ -3,6 +3,7 @@ package com.finscope.service.research.runtime;
 import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;
@@ -30,6 +31,14 @@ public class ResearchRuntimeService {
 
     public ResearchRuntimeCheckpoint initialize(Long runId, int maxActions) {
         return repository.initialize(runId, maxActions);
+    }
+
+    public ResearchRuntimeCheckpoint initialize(Long runId, ResearchMode mode) {
+        return repository.initialize(runId, policy.maxActions(mode));
+    }
+
+    public int maxActions(ResearchMode mode) {
+        return policy.maxActions(mode);
     }
 
     @Transactional

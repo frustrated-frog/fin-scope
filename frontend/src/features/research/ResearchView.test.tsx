@@ -24,6 +24,18 @@ test('renders research runs as a telemetry list', () => {
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
 });
 
+test('defaults to deep research mode and submits the selected quick mode', async () => {
+  const onRun = vi.fn().mockResolvedValue(undefined);
+  renderView(legacyDetail(), { onRun });
+
+  const mode = screen.getByRole('combobox', { name: '研究模式' });
+  expect(mode).toHaveValue('DEEP');
+  await userEvent.selectOptions(mode, 'QUICK');
+  await userEvent.click(screen.getByRole('button', { name: '开始探索研究' }));
+
+  expect(onRun).toHaveBeenCalledWith(expect.objectContaining({ mode: 'QUICK' }));
+});
+
 test('places the research mission map before legacy run diagnostics', () => {
   const detail = legacyDetail();
   detail.mission = {

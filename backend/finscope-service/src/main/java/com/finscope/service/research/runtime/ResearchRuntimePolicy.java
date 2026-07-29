@@ -1,5 +1,6 @@
 package com.finscope.service.research.runtime;
 
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import org.springframework.stereotype.Component;
 
@@ -7,6 +8,16 @@ import org.springframework.stereotype.Component;
 public class ResearchRuntimePolicy {
     static final int MAX_NO_PROGRESS = 2;
     static final int MAX_REPEATED_ACTIONS = 2;
+
+    public int maxActions(ResearchMode mode) {
+        return maxActionsFor(mode);
+    }
+
+    public static int maxActionsFor(ResearchMode mode) {
+        return ResearchMode.defaultIfNull(mode) == ResearchMode.QUICK
+                ? ResearchMode.QUICK.getMaxIterations()
+                : ResearchRuntimeService.DEFAULT_MAX_ACTIONS;
+    }
 
     public RuntimeGuardDecision beforeAction(ResearchRuntimeCheckpoint state, int repeatedCount) {
         if (state == null || state.isTerminal()) {

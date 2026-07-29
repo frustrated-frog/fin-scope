@@ -2,6 +2,7 @@ package com.finscope.service.research.agent.tool;
 
 import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
@@ -17,6 +18,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -83,8 +85,10 @@ class PublicNewsSearchToolTest {
                 .thenReturn(Collections.<SearchResult>emptyList())
                 .thenThrow(new IllegalStateException("provider timeout"));
 
-        ResearchToolObservation noProgress = tool.execute(new ResearchAgentToolContext(22L, 9L), arguments());
-        ResearchToolObservation failed = tool.execute(new ResearchAgentToolContext(22L, 10L), arguments());
+        ResearchToolObservation noProgress = tool.execute(
+                new ResearchAgentToolContext(22L, 9L, ResearchMode.QUICK), arguments());
+        ResearchToolObservation failed = tool.execute(
+                new ResearchAgentToolContext(22L, 10L, ResearchMode.QUICK), arguments());
 
         assertEquals("NO_PROGRESS", noProgress.getStatus());
         assertEquals("RETRYABLE_ERROR", failed.getStatus());
@@ -141,6 +145,54 @@ class PublicNewsSearchToolTest {
         assertEquals("T1", captor.getValue().getSourceTier());
         assertTrue(observation.getObservationSummary().contains("官方通道=true"));
         verify(searchClient).search(officialQuery, 5);
+    }
+
+    @Test
+    void deepUsesBoundedBranchesButCommitsEvidenceSequentiallyOnCallerThread() throws Exception {
+        when(searchClient.isConfigured()).thenReturn(true);
+        when(searchClient.search(any(String.class), eq(5))).thenAnswer(invocation -> Collections.singletonList(
+                result("分支材料", "https://" + Math.abs(invocation.getArgument(0).hashCode()) + ".example.com/a",
+                        "分支证据", "T2")));
+        String callerThread = Thread.currentThread().getName();
+        CopyOnWriteArrayList<String> commitThreads = new CopyOnWriteArrayList<String>();
+        when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
+            commitThreads.add(Thread.currentThread().getName());
+            ResearchSearchEvidence value = invocation.getArgument(0);
+            value.setId((long) commitThreads.size());
+            return value;
+        });
+
+        ResearchToolObservation observation = tool.execute(
+                new ResearchAgentToolContext(22L, 9L, ResearchMode.DEEP), arguments());
+
+        assertEquals(3, observation.getEvidenceDelta());
+        assertTrue(observation.getObservationSummary().contains("研究分支=3"));
+        assertEquals(Arrays.asList(callerThread, callerThread, callerThread), commitThreads);
+        verify(acquisitionService, times(3)).acquire(any(String.class), any(String.class),
+                any(String.class), any(String.class));
+    }
+
+    @Test
+    void quickUsesOneBranchAndLimitsFullTextReadsToTwo() throws Exception {
+        when(searchClient.isConfigured()).thenReturn(true);
+        when(searchClient.search("光模块 指引 下修 风险", 5)).thenReturn(Arrays.asList(
+                result("材料一", "https://a.example.com/1", "一", "T2"),
+                result("材料二", "https://b.example.com/2", "二", "T2"),
+                result("材料三", "https://c.example.com/3", "三", "T2")));
+        when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
+            ResearchSearchEvidence value = invocation.getArgument(0);
+            value.setId((long) value.getUrl().hashCode());
+            return value;
+        });
+
+        ResearchToolObservation observation = tool.execute(
+                new ResearchAgentToolContext(22L, 9L, ResearchMode.QUICK), arguments());
+
+        assertEquals(3, observation.getEvidenceDelta());
+        assertTrue(observation.getObservationSummary().contains("研究分支=1"));
+        assertTrue(observation.getObservationSummary().contains("全文读取预算=2"));
+        verify(acquisitionService, times(2)).acquire(any(String.class), any(String.class),
+                any(String.class), any(String.class));
     }
 
     private Map<String, Object> arguments() {

@@ -63,7 +63,8 @@ public class ResearchController {
                 request.getRunDate(),
                 request.getThemeCodes(),
                 request.getMaxSourcesPerTheme(),
-                request.getIncludeDisabled());
+                request.getIncludeDisabled(),
+                request.getMode());
         return ApiResponses.success(ResearchRunResponse.of(plan));
     }
 

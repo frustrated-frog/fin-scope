@@ -1,5 +1,6 @@
 package com.finscope.web.request;
 
+import com.finscope.domain.research.ResearchMode;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -9,6 +10,7 @@ public class CreateResearchRunRequest {
     private List<String> themeCodes;
     private Integer maxSourcesPerTheme;
     private Boolean includeDisabled;
+    private ResearchMode mode = ResearchMode.DEEP;
 
     public Long getThesisId() {
         return thesisId;
@@ -48,5 +50,13 @@ public class CreateResearchRunRequest {
 
     public void setIncludeDisabled(Boolean includeDisabled) {
         this.includeDisabled = includeDisabled;
+    }
+
+    public ResearchMode getMode() {
+        return ResearchMode.defaultIfNull(mode);
+    }
+
+    public void setMode(ResearchMode mode) {
+        this.mode = ResearchMode.defaultIfNull(mode);
     }
 }

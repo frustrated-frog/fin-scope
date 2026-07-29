@@ -3,6 +3,7 @@ package com.finscope.service.research.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.service.research.agent.tool.ResearchAgentToolContext;
@@ -53,13 +54,19 @@ public class ResearchAgentLoopService {
     }
 
     public ResearchAgentLoopResult run(Long runId) {
+        return run(runId, ResearchMode.DEEP);
+    }
+
+    public ResearchAgentLoopResult run(Long runId, ResearchMode requestedMode) {
+        ResearchMode mode = ResearchMode.defaultIfNull(requestedMode);
         ResearchAgentState state = repository.findState(runId)
                 .orElseGet(() -> repository.initialize(runId, "按最新证据缺口和 Observation 选择下一动作"));
         if ("COMPLETED".equals(state.getStatus())) {
             return ResearchAgentLoopResult.finished(state.getDecisionCount(), countExternalActions(runId));
         }
         int externalActions = countExternalActions(runId);
-        for (int control = 0; control < MAX_CONTROL_ITERATIONS; control++) {
+        int controlLimit = Math.min(MAX_CONTROL_ITERATIONS, mode.getMaxIterations());
+        for (int control = 0; control < controlLimit; control++) {
             ResearchDecisionContext context = contextBuilder.build(runId);
             ResearchDecisionResult result = decisionAgent.decide(context);
             ResearchAgentDecision decision = result.getDecision();
@@ -72,7 +79,14 @@ public class ResearchAgentLoopService {
                     () -> new IllegalStateException("研究 Agent 状态在决策后丢失：" + runId));
 
             if ("TOOL_CALL".equals(decision.getDecisionType())) {
-                ToolStep step = executeTool(runId, state, decision);
+                if ("public_news_search".equals(decision.getToolCode())
+                        && externalActions >= mode.getSearchActionBudget()) {
+                    repository.updateDecisionStatus(decision.getId(), "REJECTED", "SEARCH_BUDGET_EXHAUSTED");
+                    reducer.recordAbort(state, decision);
+                    return ResearchAgentLoopResult.aborted(state.getDecisionCount(), externalActions,
+                            "SEARCH_BUDGET_EXHAUSTED");
+                }
+                ToolStep step = executeTool(runId, state, decision, mode);
                 externalActions += step.externalActionDelta;
                 state = step.state;
                 if (step.terminationReason != null) {
@@ -121,7 +135,8 @@ public class ResearchAgentLoopService {
 
     private ToolStep executeTool(Long runId,
                                  ResearchAgentState state,
-                                 ResearchAgentDecision decision) {
+                                 ResearchAgentDecision decision,
+                                 ResearchMode mode) {
         boolean external = "public_news_search".equals(decision.getToolCode());
         String nodeId = "agent_tool:" + decision.getActionFingerprint();
         RuntimeNodeStart start = runtimeService.startNode(runId, nodeId, "EXPAND",
@@ -141,7 +156,7 @@ public class ResearchAgentLoopService {
             observation.setStateHash(contextStateHash(state));
         } else {
             ResearchToolExecutionResult execution = toolExecutor.execute(decision,
-                    new ResearchAgentToolContext(runId, decision.getId()));
+                    new ResearchAgentToolContext(runId, decision.getId(), mode));
             observation = execution.getObservation();
         }
         ResearchAgentState reduced = turnService.commitToolTurn(runId, nodeId, start.isStarted(),

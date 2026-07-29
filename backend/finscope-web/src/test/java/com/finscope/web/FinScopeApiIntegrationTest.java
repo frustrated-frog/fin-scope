@@ -948,6 +948,7 @@ class FinScopeApiIntegrationTest {
                         .content("{\"thesisId\":1,\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
                                 + "\"maxSourcesPerTheme\":2,\"includeDisabled\":false}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("DEEP"))
                 .andExpect(jsonPath("$.data.status").value("RUNNING"))
                 .andExpect(jsonPath("$.data.themeCodes.length()").value(1))
                 .andExpect(jsonPath("$.data.sourceCount").value(2))
@@ -963,12 +964,14 @@ class FinScopeApiIntegrationTest {
         mvc.perform(get("/api/research/runs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].mode").value("DEEP"))
                 .andExpect(jsonPath("$.data[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data[0].sourceCount").value(2))
                 .andExpect(jsonPath("$.data[0].eventCount").value(greaterThanOrEqualTo(1)));
 
         mvc.perform(get("/api/research/runs/1"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.run.mode").value("DEEP"))
                 .andExpect(jsonPath("$.data.run.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.plannedSources.length()").value(2))
                 .andExpect(jsonPath("$.data.plannedSources[*].sourceName").value(hasItem("Macro Support")))

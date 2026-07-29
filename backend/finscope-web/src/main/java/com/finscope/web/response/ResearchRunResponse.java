@@ -2,6 +2,7 @@ package com.finscope.web.response;
 
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.SourceProfile;
 
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import java.util.List;
 public class ResearchRunResponse {
     private Long id;
     private LocalDate runDate;
+    private ResearchMode mode = ResearchMode.DEEP;
     private List<String> themeCodes = Collections.emptyList();
     private Integer sourceCount;
     private Integer fetchedSourceCount;
@@ -37,6 +39,7 @@ public class ResearchRunResponse {
         ResearchRunResponse response = new ResearchRunResponse();
         response.setId(run.getId());
         response.setRunDate(run.getRunDate());
+        response.setMode(run.getMode());
         response.setThemeCodes(run.getThemeCodes());
         response.setSourceCount(run.getSourceCount());
         response.setFetchedSourceCount(run.getFetchedSourceCount());
@@ -69,6 +72,14 @@ public class ResearchRunResponse {
 
     public void setRunDate(LocalDate runDate) {
         this.runDate = runDate;
+    }
+
+    public ResearchMode getMode() {
+        return mode;
+    }
+
+    public void setMode(ResearchMode mode) {
+        this.mode = ResearchMode.defaultIfNull(mode);
     }
 
     public List<String> getThemeCodes() {

@@ -1,5 +1,6 @@
 package com.finscope.service.research.runtime;
 
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import org.junit.jupiter.api.Test;
 
@@ -9,6 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResearchRuntimePolicyTest {
     private final ResearchRuntimePolicy policy = new ResearchRuntimePolicy();
+
+    @Test
+    void projectsQuickAndDeepRuntimeBudgetsWithoutChangingLegacyDeepDefault() {
+        assertEquals(5, policy.maxActions(ResearchMode.QUICK));
+        assertEquals(ResearchRuntimeService.DEFAULT_MAX_ACTIONS, policy.maxActions(ResearchMode.DEEP));
+    }
 
     @Test
     void allowsActionWithinAllRuntimeGuards() {

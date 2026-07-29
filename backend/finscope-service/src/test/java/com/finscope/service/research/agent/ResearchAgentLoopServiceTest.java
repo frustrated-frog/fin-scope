@@ -4,6 +4,9 @@ import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
+import com.finscope.domain.research.ResearchMode;
+import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
@@ -205,6 +208,55 @@ class ResearchAgentLoopServiceTest {
         assertEquals("FAILED", agents.findDecisions(66L).get(0).getStatus());
         assertEquals(1, agents.findObservations(66L).size());
         verify(runtimeService).failNode(eq(66L), anyString(), eq("SOURCE_ACCESS_DENIED"), anyString());
+    }
+
+    @Test
+    void quickStopsBeforeAThirdPublicSearchAction() throws Exception {
+        seedCompletedSearchDecision(1);
+        seedCompletedSearchDecision(2);
+        ResearchAgentState seededState = agents.findState(66L).get();
+        seededState.setDecisionCount(2);
+        assertTrue(agents.updateState(seededState, seededState.getStateVersion()));
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200)))
+                .thenReturn(searchDecision());
+        ResearchDecisionValidator validator = new ResearchDecisionValidator();
+        ResearchDecisionAgent decisionAgent = new ResearchDecisionAgent(
+                llm, validator, new DeterministicResearchPolicy(validator));
+        ResearchAgentContextBuilder contexts = new ResearchAgentContextBuilder(
+                missions, agents, runtimes, new ResearchToolRegistry());
+        ResearchToolDispatcher dispatcher = new ResearchToolDispatcher(new ResearchAgentToolRegistry(
+                Collections.<ResearchAgentTool>emptyList()));
+        ResearchRuntimeService runtimeService = mock(ResearchRuntimeService.class);
+        ResearchAgentLoopService loop = new ResearchAgentLoopService(
+                agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentStateReducer(agents), mock(ResearchFinishVerifier.class),
+                mock(ResearchMissionService.class), runtimeService);
+
+        ResearchAgentLoopResult result = loop.run(66L, ResearchMode.QUICK);
+
+        assertTrue(result.isAborted());
+        assertEquals(2, result.getExternalActionCount());
+        assertEquals("SEARCH_BUDGET_EXHAUSTED", result.getTerminationReason());
+        assertEquals("REJECTED", agents.findDecisions(66L).get(2).getStatus());
+    }
+
+    private void seedCompletedSearchDecision(int iteration) {
+        ResearchAgentDecision decision = new ResearchAgentDecision();
+        decision.setResearchRunId(66L);
+        decision.setIteration(iteration);
+        decision.setDecisionType("TOOL_CALL");
+        decision.setCurrentSubgoal("既有搜索 " + iteration);
+        decision.setToolCode("public_news_search");
+        decision.setArgumentsJson("{\"query\":\"历史查询\",\"intent\":\"SUPPORT\"}");
+        decision.setDecisionSummary("既有搜索动作");
+        decision.setConfidence(1D);
+        decision.setDecisionMode("DETERMINISTIC");
+        decision.setActionFingerprint("existing-search-" + iteration);
+        decision.setStatus("COMPLETED");
+        agents.appendDecision(decision);
     }
 
     private String searchDecision() {

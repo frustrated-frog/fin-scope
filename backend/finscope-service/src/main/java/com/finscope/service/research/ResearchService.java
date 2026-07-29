@@ -17,6 +17,7 @@ import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.agent.AgentRunContext;
 import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
@@ -36,6 +37,7 @@ import com.finscope.service.research.agent.ResearchAgentLoopService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.mission.ResearchMissionService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
+import com.finscope.service.research.runtime.ResearchRuntimePolicy;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.springframework.stereotype.Service;
 
@@ -98,7 +100,7 @@ public class ResearchService {
                                      List<String> themeCodes,
                                      Integer maxSourcesPerTheme,
                                      Boolean includeDisabled) {
-        return createRun(null, runDate, themeCodes, maxSourcesPerTheme, includeDisabled);
+        return createRun(null, runDate, themeCodes, maxSourcesPerTheme, includeDisabled, ResearchMode.DEEP);
     }
 
     public ResearchRunPlan createRun(Long thesisId,
@@ -106,6 +108,16 @@ public class ResearchService {
                                      List<String> themeCodes,
                                      Integer maxSourcesPerTheme,
                                      Boolean includeDisabled) {
+        return createRun(thesisId, runDate, themeCodes, maxSourcesPerTheme, includeDisabled, ResearchMode.DEEP);
+    }
+
+    public ResearchRunPlan createRun(Long thesisId,
+                                     LocalDate runDate,
+                                     List<String> themeCodes,
+                                     Integer maxSourcesPerTheme,
+                                     Boolean includeDisabled,
+                                     ResearchMode mode) {
+        ResearchMode actualMode = ResearchMode.defaultIfNull(mode);
         ResearchThesis thesis = null;
         if (thesisId != null) {
             thesis = researchThesisRepository == null ? null : researchThesisRepository.findById(thesisId)
@@ -125,6 +137,7 @@ public class ResearchService {
 
         ResearchRun run = new ResearchRun();
         run.setThesisId(thesisId);
+        run.setMode(actualMode);
         run.setRunDate(actualRunDate);
         run.setThemeCodes(extractCodes(themes));
         run.setSourceCount(plannedSources.size());
@@ -139,9 +152,10 @@ public class ResearchService {
         run.setErrorMessage(null);
 
         ResearchRun saved = researchRunRepository.save(run);
-        researchRuntimeService.initialize(saved.getId(), ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
+        int maxActions = ResearchRuntimePolicy.maxActionsFor(actualMode);
+        researchRuntimeService.initialize(saved.getId(), maxActions);
         if (thesis != null) {
-            researchMissionService.initializePending(saved, thesis, ResearchRuntimeService.DEFAULT_MAX_ACTIONS);
+            researchMissionService.initializePending(saved, thesis, maxActions);
         }
         researchRunRepository.replaceSources(saved.getId(), plannedSources);
         List<ResearchRunPlanStep> planSteps = researchRunPlanService.initializeDefaultPlan(saved.getId(), plannedSources.size());
@@ -388,7 +402,7 @@ public class ResearchService {
             }
 
             if (thesis != null && !runtimeStopped) {
-                ResearchAgentLoopResult agentResult = researchAgentLoopService.run(run.getId());
+                ResearchAgentLoopResult agentResult = researchAgentLoopService.run(run.getId(), run.getMode());
                 dynamicQueries += agentResult.getExternalActionCount();
                 if (!agentResult.isFinishAccepted()) {
                     errors.add("Research Agent已停止扩展检索，报告将声明证据局限："

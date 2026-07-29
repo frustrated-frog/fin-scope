@@ -553,7 +553,8 @@ class ResearchServiceHarnessTest {
         when(fetches.fetch(12L)).thenReturn(fetchRun());
         when(fetches.fetch(any(Source.class))).thenReturn(fetchRun());
         when(reports.generate(501L)).thenReturn(report(501L));
-        when(agentLoop.run(501L)).thenReturn(ResearchAgentLoopResult.aborted(9, 3,
+        when(agentLoop.run(501L, com.finscope.domain.research.ResearchMode.DEEP))
+                .thenReturn(ResearchAgentLoopResult.aborted(9, 3,
                 "EVIDENCE_INSUFFICIENT"));
 
         service.createRun(3L, LocalDate.of(2026, 7, 26),
@@ -565,7 +566,7 @@ class ResearchServiceHarnessTest {
         verify(missions).plan(any(ResearchRun.class), eq(thesis));
         verify(missions).startTask(501L, "scan_context");
         verify(missions).assess(501L, "scan_context");
-        verify(agentLoop).run(501L);
+        verify(agentLoop).run(501L, com.finscope.domain.research.ResearchMode.DEEP);
         verify(missions).startTask(501L, "write_report");
         verify(reports).generate(501L);
         verify(missions).completeMission(501L, true, null);
