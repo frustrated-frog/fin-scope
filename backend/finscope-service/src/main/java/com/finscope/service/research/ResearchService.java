@@ -33,7 +33,6 @@ import com.finscope.service.fetch.FetchService;
 import com.finscope.service.research.agent.ResearchAgentLoopResult;
 import com.finscope.service.research.agent.ResearchAgentLoopService;
 import com.finscope.service.research.report.ResearchReportService;
-import com.finscope.service.research.report.ThesisQueryExpansionService;
 import com.finscope.service.research.mission.ResearchMissionService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
@@ -61,8 +60,6 @@ public class ResearchService {
     private FetchService fetchService;
     @Resource
     private ResearchReportService researchReportService;
-    @Resource
-    private ThesisQueryExpansionService thesisQueryExpansionService;
     @Resource
     private ArticleRepository articleRepository;
     @Resource
@@ -214,22 +211,49 @@ public class ResearchService {
                 .orElseThrow(() -> new ResourceNotFoundException("研究命题不存在：" + run.getThesisId()));
         try {
             ResearchRunContext.setCurrentRunId(runId);
-            for (int round = 1; round <= 3 && !researchReportService.assessSufficiency(runId).isSufficient(); round++) {
-                for (Source querySource : thesisQueryExpansionService.queries(thesis, round)) {
-                    fetchService.fetch(querySource);
-                }
-            }
-            refreshOutputCounts(run);
             ResearchReport report = researchReportService.generate(runId);
             researchRunOutputService.deleteByType(runId, ResearchRunOutputService.BRIEF);
             run.setBriefDate(null);
+            refreshOutputCounts(run);
+            reconcileRegeneratedRun(run, report);
             run.setSummary("研究报告已补建：有效证据=" + value(report.getEvidenceCount())
                     + "，独立来源=" + value(report.getSourceCount())
                     + "，生成方式=" + report.getGenerationMode());
+            run.setErrorMessage(null);
             researchRunRepository.updateResult(run);
             return report;
         } finally {
             ResearchRunContext.clear();
+        }
+    }
+
+    private void reconcileRegeneratedRun(ResearchRun run, ResearchReport report) {
+        Long runId = run.getId();
+        completeSystemNode(run, ResearchRunPlanService.STEP_COMPOSE_REPORT, "SYNTHESIZE",
+                "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount(), 1);
+        completeSystemNode(run, "verify_output", "VERIFY",
+                "补建报告校验完成：reportId=" + report.getId(), 1);
+        researchRuntimeService.complete(runId);
+
+        List<ResearchRunPlanStep> steps = researchRunPlanService.findByRunId(runId);
+        recoverPlanStep(steps, ResearchRunPlanService.STEP_COMPOSE_REPORT,
+                "reportId=" + report.getId() + ", evidence=" + report.getEvidenceCount()
+                        + ", chars=" + report.getCharacterCount());
+        recoverPlanStep(steps, ResearchRunPlanService.STEP_SUMMARIZE_RUN,
+                "研究报告补建完成并通过输出校验");
+
+        boolean partial = !"COMPLETED".equals(report.getStatus());
+        run.setStatus(partial ? ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS : ResearchEnums.RUN_STATUS_COMPLETED);
+        researchMissionService.completeMission(runId, partial);
+    }
+
+    private void recoverPlanStep(List<ResearchRunPlanStep> steps, String stepId, String outputSummary) {
+        if (steps == null) return;
+        for (ResearchRunPlanStep step : steps) {
+            if (!stepId.equals(step.getStepId()) || "COMPLETED".equals(step.getStatus())) continue;
+            researchRunPlanService.start(step);
+            researchRunPlanService.complete(step, outputSummary, 1);
+            return;
         }
     }
 

@@ -412,31 +412,58 @@ class ResearchServiceHarnessTest {
         ResearchThesisRepository thesisRepository = mock(ResearchThesisRepository.class);
         ResearchReportService reportService = mock(ResearchReportService.class);
         ResearchRunOutputService outputService = mock(ResearchRunOutputService.class);
+        FetchService fetchService = mock(FetchService.class);
+        ResearchRunPlanService planService = mock(ResearchRunPlanService.class);
+        ResearchRuntimeService runtimeService = runtimeService();
+        ResearchMissionService missionService = mock(ResearchMissionService.class);
         EvidenceSufficiency sufficiency = mock(EvidenceSufficiency.class);
         ResearchRun run = new ResearchRun();
         run.setId(15L);
         run.setThesisId(1L);
-        run.setStatus(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS);
+        run.setStatus(ResearchEnums.RUN_STATUS_FAILED);
+        run.setErrorMessage("研究运行没有可引用的有效证据");
         run.setBriefDate(LocalDate.of(2026, 7, 13));
         ResearchThesis thesis = new ResearchThesis();
         thesis.setId(1L);
+        ResearchReport regenerated = report(15L);
+        regenerated.setStatus("COMPLETED_WITH_GAPS");
+        List<ResearchRunPlanStep> steps = defaultSteps();
 
         ReflectionTestUtils.setField(service, "researchRunRepository", runRepository);
         ReflectionTestUtils.setField(service, "researchThesisRepository", thesisRepository);
         ReflectionTestUtils.setField(service, "researchReportService", reportService);
         ReflectionTestUtils.setField(service, "researchRunOutputService", outputService);
-        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService());
+        ReflectionTestUtils.setField(service, "fetchService", fetchService);
+        ReflectionTestUtils.setField(service, "researchRunPlanService", planService);
+        ReflectionTestUtils.setField(service, "researchRuntimeService", runtimeService);
+        ReflectionTestUtils.setField(service, "researchMissionService", missionService);
         when(runRepository.findById(15L)).thenReturn(java.util.Optional.of(run));
         when(thesisRepository.findById(1L)).thenReturn(java.util.Optional.of(thesis));
         when(reportService.assessSufficiency(15L)).thenReturn(sufficiency);
-        when(sufficiency.isSufficient()).thenReturn(true);
-        when(reportService.generate(15L)).thenReturn(report(15L));
+        when(sufficiency.isSufficient()).thenReturn(false);
+        when(reportService.generate(15L)).thenReturn(regenerated);
+        when(planService.findByRunId(15L)).thenReturn(steps);
+        when(planService.findStep(anyList(), anyString())).thenAnswer(invocation -> {
+            String stepId = invocation.getArgument(1);
+            return steps.stream().filter(step -> stepId.equals(step.getStepId())).findFirst().get();
+        });
+        when(planService.start(any(ResearchRunPlanStep.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(planService.complete(any(ResearchRunPlanStep.class), anyString(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(runRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.regenerateReport(15L);
 
+        verify(fetchService, never()).fetch(any(Source.class));
         verify(outputService).deleteByType(15L, ResearchRunOutputService.BRIEF);
+        verify(runtimeService).startNode(eq(15L), eq(ResearchRunPlanService.STEP_COMPOSE_REPORT),
+                eq("SYNTHESIZE"), isNull(), anyString());
+        verify(runtimeService).startNode(eq(15L), eq("verify_output"), eq("VERIFY"), isNull(), anyString());
+        verify(runtimeService).complete(15L);
+        verify(missionService).completeMission(15L, true);
         assertEquals(null, run.getBriefDate());
+        assertEquals(ResearchEnums.RUN_STATUS_PARTIAL_SUCCESS, run.getStatus());
+        assertEquals(null, run.getErrorMessage());
         assertTrue(run.getSummary().contains("研究报告已补建"));
         assertTrue(!run.getSummary().contains("briefDate"));
     }
