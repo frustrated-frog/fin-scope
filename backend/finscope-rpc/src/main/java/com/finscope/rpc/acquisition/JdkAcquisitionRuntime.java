@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
@@ -74,6 +75,14 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
             connection.setRequestProperty("Accept-Encoding", "identity");
             for (Map.Entry<String, String> header : request.getHeaders().entrySet()) {
                 connection.setRequestProperty(header.getKey(), header.getValue());
+            }
+            byte[] requestBody = request.getBodyBytes();
+            if (requestBody.length > 0) {
+                connection.setDoOutput(true);
+                connection.setFixedLengthStreamingMode(requestBody.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(requestBody);
+                }
             }
 
             int status = connection.getResponseCode();

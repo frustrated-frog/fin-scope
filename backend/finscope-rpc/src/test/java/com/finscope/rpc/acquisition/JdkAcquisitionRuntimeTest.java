@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -142,6 +143,30 @@ class JdkAcquisitionRuntimeTest {
         assertEquals("主链路成功", response.getBodyText());
     }
 
+    @Test
+    void sendsBoundedPostBodyWithDeclaredContentType() throws Exception {
+        AtomicReference<String> method = new AtomicReference<String>();
+        AtomicReference<String> contentType = new AtomicReference<String>();
+        AtomicReference<String> body = new AtomicReference<String>();
+        startServer("/post", exchange -> {
+            method.set(exchange.getRequestMethod());
+            contentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
+            body.set(read(exchange.getRequestBody()));
+            write(exchange, 200, "ok");
+        });
+        URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + "/post");
+
+        AcquisitionResponse response = new JdkAcquisitionRuntime().fetch(
+                AcquisitionRequest.post(uri, "stock=000001&query=公告", "application/x-www-form-urlencoded")
+                        .purpose("TEST_POST")
+                        .build());
+
+        assertEquals("ok", response.getBodyText());
+        assertEquals("POST", method.get());
+        assertEquals("application/x-www-form-urlencoded", contentType.get());
+        assertEquals("stock=000001&query=公告", body.get());
+    }
+
     private AcquisitionRequest.Builder request(String path) {
         URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + path);
         return AcquisitionRequest.get(uri).purpose("TEST");
@@ -166,5 +191,15 @@ class JdkAcquisitionRuntimeTest {
         } finally {
             exchange.close();
         }
+    }
+
+    private static String read(InputStream input) throws IOException {
+        byte[] buffer = new byte[1024];
+        StringBuilder value = new StringBuilder();
+        int count;
+        while ((count = input.read(buffer)) >= 0) {
+            value.append(new String(buffer, 0, count, StandardCharsets.UTF_8));
+        }
+        return value.toString();
     }
 }

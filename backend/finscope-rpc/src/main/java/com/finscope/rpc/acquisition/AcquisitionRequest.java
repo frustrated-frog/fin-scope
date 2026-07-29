@@ -1,6 +1,7 @@
 package com.finscope.rpc.acquisition;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -18,6 +19,7 @@ public final class AcquisitionRequest {
     private final int maxRetries;
     private final int retryBackoffMs;
     private final boolean followRedirects;
+    private final byte[] bodyBytes;
 
     private AcquisitionRequest(Builder builder) {
         validateUri(builder.uri);
@@ -39,10 +41,19 @@ public final class AcquisitionRequest {
         this.maxRetries = builder.maxRetries;
         this.retryBackoffMs = builder.retryBackoffMs;
         this.followRedirects = builder.followRedirects;
+        this.bodyBytes = builder.bodyBytes.clone();
     }
 
     public static Builder get(URI uri) {
         return new Builder("GET", uri);
+    }
+
+    public static Builder post(URI uri, String body, String contentType) {
+        Builder builder = new Builder("POST", uri);
+        builder.bodyBytes = (body == null ? "" : body).getBytes(StandardCharsets.UTF_8);
+        builder.header("Content-Type", contentType == null || contentType.trim().isEmpty()
+                ? "application/octet-stream" : contentType.trim());
+        return builder;
     }
 
     public String getMethod() { return method; }
@@ -56,6 +67,7 @@ public final class AcquisitionRequest {
     public int getMaxRetries() { return maxRetries; }
     public int getRetryBackoffMs() { return retryBackoffMs; }
     public boolean isFollowRedirects() { return followRedirects; }
+    public byte[] getBodyBytes() { return bodyBytes.clone(); }
 
     public Map<String, String> auditHeaders() {
         Map<String, String> safe = new LinkedHashMap<String, String>();
@@ -98,6 +110,7 @@ public final class AcquisitionRequest {
         private int maxRetries = 1;
         private int retryBackoffMs = 250;
         private boolean followRedirects = true;
+        private byte[] bodyBytes = new byte[0];
 
         private Builder(String method, URI uri) {
             this.method = method;
