@@ -6,6 +6,7 @@ export type View =
   | 'briefs'
   | 'briefReader'
   | 'research'
+  | 'news'
   | 'events'
   | 'eventDetail'
   | 'evidence'

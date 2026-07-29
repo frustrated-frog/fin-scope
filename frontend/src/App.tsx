@@ -12,6 +12,7 @@ import { EventsView } from './features/events/EventsView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
+import { NewsView } from './features/news/NewsView';
 import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
 import { ResearchView } from './features/research/ResearchView';
@@ -240,6 +241,8 @@ export default function App() {
         return 'Briefs';
       case 'research':
         return 'Research';
+      case 'news':
+        return 'News Wire · 市场资讯';
       case 'events':
         return 'Events';
       case 'eventDetail':
@@ -572,6 +575,7 @@ export default function App() {
           onCloseReport={() => setResearchReport(null)}
         />
       )}
+      {view === 'news' && <NewsView setMessage={setMessage} addToast={addToast} />}
       {view === 'events' && (
         <EventsView
           events={events}
