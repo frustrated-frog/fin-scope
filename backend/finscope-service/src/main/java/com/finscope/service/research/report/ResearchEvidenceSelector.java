@@ -4,6 +4,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.ResearchSourceIdentity;
+import com.finscope.domain.research.ResearchSearchEvidence;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Component
 public class ResearchEvidenceSelector {
@@ -30,14 +33,21 @@ public class ResearchEvidenceSelector {
 
     public List<ResearchEvidenceCard> select(ResearchThesis thesis, List<Article> articles,
                                              List<EvidenceItem> evidenceItems) {
-        if (thesis == null || articles == null || articles.isEmpty()) {
+        return select(thesis, articles, evidenceItems, Collections.<ResearchSearchEvidence>emptyList());
+    }
+
+    public List<ResearchEvidenceCard> select(ResearchThesis thesis, List<Article> articles,
+                                             List<EvidenceItem> evidenceItems,
+                                             List<ResearchSearchEvidence> searchEvidence) {
+        if (thesis == null || ((articles == null || articles.isEmpty())
+                && (searchEvidence == null || searchEvidence.isEmpty()))) {
             return Collections.emptyList();
         }
         Map<Long, EvidenceItem> evidenceByArticle = evidenceByArticle(evidenceItems);
         List<String> subjectKeywords = subjectKeywords(thesis);
         List<ResearchEvidenceCard> candidates = new ArrayList<ResearchEvidenceCard>();
         Set<String> fingerprints = new HashSet<String>();
-        for (Article article : articles) {
+        for (Article article : articles == null ? Collections.<Article>emptyList() : articles) {
             if (article == null) {
                 continue;
             }
@@ -56,12 +66,27 @@ public class ResearchEvidenceSelector {
                     ? evidence.getClaim().trim() : firstNonBlank(article.getSummary(), article.getTitle());
             candidates.add(new ResearchEvidenceCard(article, evidence, stance, Math.min(score, 100), cleanClaim(claim)));
         }
+        for (ResearchSearchEvidence search : searchEvidence == null
+                ? Collections.<ResearchSearchEvidence>emptyList() : searchEvidence) {
+            Article article = transientArticle(search);
+            String fingerprint = normalize(firstNonBlank(article.getUrl(), article.getTitle()));
+            if (!fingerprints.add(fingerprint)) continue;
+            int score = relevanceScore(article, null, subjectKeywords);
+            if (score < 25) continue;
+            int providerScore = search.getRelevanceScore() == null ? 0
+                    : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 30D);
+            String stance = searchStance(search.getIntent(), article);
+            candidates.add(new ResearchEvidenceCard(article, null, stance,
+                    Math.min(100, score + providerScore), cleanClaim(firstNonBlank(search.getContent(), search.getTitle())),
+                    firstNonBlank(search.getSourceDomain(), ResearchSourceIdentity.resolve(article)),
+                    firstNonBlank(search.getSourceTier(), "T3")));
+        }
         candidates.sort(Comparator.comparingInt(ResearchEvidenceCard::getRelevanceScore).reversed()
                 .thenComparing(card -> card.getArticle().getId() == null ? Long.MAX_VALUE : card.getArticle().getId()));
         List<ResearchEvidenceCard> selected = new ArrayList<ResearchEvidenceCard>();
         Map<String, Integer> sourceCounts = new HashMap<String, Integer>();
         for (ResearchEvidenceCard candidate : candidates) {
-            String source = ResearchSourceIdentity.resolve(candidate.getArticle());
+            String source = candidate.getSourceIdentity();
             int count = sourceCounts.getOrDefault(source, 0);
             if (count >= MAX_PER_SOURCE) {
                 continue;
@@ -73,6 +98,36 @@ public class ResearchEvidenceSelector {
             }
         }
         return selected;
+    }
+
+    private Article transientArticle(ResearchSearchEvidence search) {
+        Article article = new Article();
+        article.setSourceName(firstNonBlank(search.getSourceDomain(), search.getProvider()));
+        article.setTitle(search.getTitle());
+        article.setSummary(search.getContent());
+        article.setBody(search.getContent());
+        article.setUrl(search.getUrl());
+        article.setPublishedAt(parsePublishedAt(search.getPublishedAt()));
+        return article;
+    }
+
+    private LocalDateTime parsePublishedAt(String value) {
+        if (isBlank(value)) return null;
+        try {
+            return LocalDateTime.parse(value);
+        } catch (Exception ignored) {
+            try {
+                return LocalDate.parse(value.substring(0, Math.min(10, value.length()))).atStartOfDay();
+            } catch (Exception invalid) {
+                return null;
+            }
+        }
+    }
+
+    private String searchStance(String intent, Article article) {
+        if ("SUPPORT".equals(intent)) return "SUPPORT";
+        if ("COUNTER".equals(intent)) return "COUNTER";
+        return stance(article, combinedText(article, null));
     }
 
     private Map<Long, EvidenceItem> evidenceByArticle(List<EvidenceItem> items) {

@@ -470,6 +470,26 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("research_tool_observation", "attempt_count", "INTEGER NOT NULL DEFAULT 1");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_tool_observation_run "
                 + "ON research_tool_observation(research_run_id,id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_search_evidence ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "research_run_id INTEGER NOT NULL,"
+                + "decision_id INTEGER NOT NULL,"
+                + "provider TEXT NOT NULL,"
+                + "query_text TEXT NOT NULL,"
+                + "intent TEXT NOT NULL,"
+                + "title TEXT NOT NULL,"
+                + "url TEXT NOT NULL,"
+                + "content TEXT,"
+                + "source_domain TEXT,"
+                + "source_tier TEXT NOT NULL,"
+                + "relevance_score REAL NOT NULL DEFAULT 0,"
+                + "published_at TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "UNIQUE(research_run_id,url),"
+                + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE,"
+                + "FOREIGN KEY(decision_id) REFERENCES research_agent_decision(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_search_evidence_run "
+                + "ON research_search_evidence(research_run_id,relevance_score DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_evaluation ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "research_run_id INTEGER NOT NULL,"

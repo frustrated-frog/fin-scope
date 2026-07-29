@@ -1,45 +1,45 @@
 package com.finscope.service.research.agent.tool;
 
-import com.finscope.domain.fetch.FetchRun;
+import com.finscope.dao.research.ResearchSearchEvidenceRepository;
+import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.agent.ResearchToolObservation;
-import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
-import com.finscope.domain.source.Source;
-import com.finscope.service.fetch.FetchService;
-import com.finscope.service.research.ResearchRunOutputService;
-import com.finscope.service.research.mission.ResearchSearchSourceFactory;
+import com.finscope.domain.search.SearchResult;
+import com.finscope.rpc.search.WebSearchClient;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class PublicNewsSearchTool implements ResearchAgentTool {
-    private final FetchService fetchService;
-    private final ResearchRunOutputService outputService;
-    private final ResearchSearchSourceFactory sourceFactory;
+    private static final int MAX_RESULTS = 5;
+    private final WebSearchClient searchClient;
+    private final ResearchSearchEvidenceRepository evidenceRepository;
 
-    public PublicNewsSearchTool(FetchService fetchService,
-                                ResearchRunOutputService outputService,
-                                ResearchSearchSourceFactory sourceFactory) {
-        this.fetchService = fetchService;
-        this.outputService = outputService;
-        this.sourceFactory = sourceFactory;
+    public PublicNewsSearchTool(WebSearchClient searchClient,
+                                ResearchSearchEvidenceRepository evidenceRepository) {
+        this.searchClient = searchClient;
+        this.evidenceRepository = evidenceRepository;
     }
 
     @Override
     public ResearchToolDescriptor descriptor() {
         ResearchToolDescriptor value = new ResearchToolDescriptor();
         value.setCode("public_news_search");
-        value.setName("公开新闻搜索");
-        value.setDescription("按自然语言关键词搜索公开新闻，并通过现有摄入链路生成文章和证据");
+        value.setName("Tavily 公开资料搜索");
+        value.setDescription("使用 Tavily 搜索公开资料，结果只写入本次研究证据域，不进入文章库");
         Map<String, String> input = new LinkedHashMap<String, String>();
         input.put("query", "2..180字符自然语言关键词");
         input.put("intent", "SUPPORT|COUNTER|PRIMARY|UPDATE");
         value.setInputSchema(input);
-        value.setOutputSchema(Collections.singletonMap("observation", "证据与独立来源增量"));
+        value.setOutputSchema(Collections.singletonMap("observation", "本次研究新增证据与独立来源"));
         value.setTimeoutMs(15_000);
         value.setReadOnly(true);
         value.setParallelizable(false);
@@ -51,80 +51,103 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     @Override
     public void validate(Map<String, Object> arguments) {
         if (arguments == null || !arguments.keySet().equals(
-                new java.util.HashSet<String>(Arrays.asList("query", "intent")))) {
-            throw new IllegalArgumentException("公开新闻搜索参数必须且只能包含 query 和 intent");
+                new HashSet<String>(Arrays.asList("query", "intent")))) {
+            throw new IllegalArgumentException("公开资料搜索参数必须且只能包含 query 和 intent");
         }
         String query = text(arguments.get("query"));
         String intent = text(arguments.get("intent"));
         if (query.length() < 2 || query.length() > 180 || query.contains("://")) {
-            throw new IllegalArgumentException("公开新闻搜索 query 未通过安全校验");
+            throw new IllegalArgumentException("公开资料搜索 query 未通过安全校验");
         }
         if (!Arrays.asList("SUPPORT", "COUNTER", "PRIMARY", "UPDATE").contains(intent)) {
-            throw new IllegalArgumentException("公开新闻搜索 intent 未通过安全校验");
+            throw new IllegalArgumentException("公开资料搜索 intent 未通过安全校验");
         }
     }
 
     @Override
     public ResearchToolObservation execute(ResearchAgentToolContext context, Map<String, Object> arguments) {
         validate(arguments);
-        int evidenceBefore = outputService.count(context.getResearchRunId(), ResearchRunOutputService.EVIDENCE);
-        int sourcesBefore = outputService.countDistinctArticleSources(context.getResearchRunId());
-        ResearchMissionTask task = task(context, arguments);
-        Source source = sourceFactory.create(task);
-        FetchRun fetchRun = fetchService.fetch(source);
-        int evidenceAfter = outputService.count(context.getResearchRunId(), ResearchRunOutputService.EVIDENCE);
-        int sourcesAfter = outputService.countDistinctArticleSources(context.getResearchRunId());
-        int evidenceDelta = Math.max(0, evidenceAfter - evidenceBefore);
-        int sourceDelta = Math.max(0, sourcesAfter - sourcesBefore);
-
-        ResearchToolObservation value = new ResearchToolObservation();
-        value.setEvidenceDelta(evidenceDelta);
-        value.setSourceDelta(sourceDelta);
-        value.setStateHash(evidenceAfter + ":" + sourcesAfter);
-        if (fetchRun != null && fetchRun.getId() != null) {
-            value.setDataRefs(Collections.singletonList("fetch-run:" + fetchRun.getId()));
+        if (!searchClient.isConfigured()) {
+            return error("TERMINAL_ERROR", "TAVILY_NOT_CONFIGURED", false,
+                    "Tavily 未配置，无法执行公开资料搜索");
         }
-        if (fetchRun == null || !"SUCCESS".equals(fetchRun.getStatus())) {
-            value.setStatus("RETRYABLE_ERROR");
-            value.setObservationSummary("公开新闻搜索失败：" + safe(fetchRun == null ? null : fetchRun.getErrorMessage()));
-            value.setNewInformation("没有得到可用搜索结果");
-            value.setErrorType("SEARCH_FETCH_FAILED");
-            value.setRetryable(true);
+        String query = text(arguments.get("query"));
+        String intent = text(arguments.get("intent"));
+        try {
+            Set<String> existingDomains = new HashSet<String>();
+            for (ResearchSearchEvidence item : evidenceRepository.findByRunId(context.getResearchRunId())) {
+                if (hasText(item.getSourceDomain())) existingDomains.add(item.getSourceDomain().toLowerCase());
+            }
+            List<SearchResult> hits = searchClient.search(query, MAX_RESULTS);
+            List<String> refs = new ArrayList<String>();
+            Set<String> seenUrls = new HashSet<String>();
+            Set<String> newDomains = new HashSet<String>();
+            int duplicates = 0;
+            for (SearchResult hit : hits == null ? Collections.<SearchResult>emptyList() : hits) {
+                String url = text(hit.getUrl());
+                if (!hasText(url) || !seenUrls.add(url)
+                        || evidenceRepository.findByRunIdAndUrl(context.getResearchRunId(), url).isPresent()) {
+                    duplicates++;
+                    continue;
+                }
+                ResearchSearchEvidence saved = evidenceRepository.save(toEvidence(context, query, intent, hit));
+                if (saved.getId() != null) refs.add("search-evidence:" + saved.getId());
+                String domain = text(saved.getSourceDomain()).toLowerCase();
+                if (hasText(domain) && !existingDomains.contains(domain)) newDomains.add(domain);
+            }
+            ResearchToolObservation value = new ResearchToolObservation();
+            value.setEvidenceDelta(refs.size());
+            value.setSourceDelta(newDomains.size());
+            value.setDataRefs(refs);
+            value.setStateHash("tavily:" + refs.size() + ":" + newDomains.size());
+            value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
+            value.setObservationSummary("Tavily 搜索完成：命中=" + (hits == null ? 0 : hits.size())
+                    + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
+                    + "，新增独立来源=" + newDomains.size());
+            value.setNewInformation(refs.isEmpty()
+                    ? "本次查询没有获得新的运行内证据"
+                    : "搜索材料已进入本次研究证据域，未写入文章库");
+            value.setRetryable(false);
             return value;
+        } catch (Exception ex) {
+            return error("RETRYABLE_ERROR", "TAVILY_SEARCH_FAILED", true,
+                    "Tavily 搜索失败：" + safe(ex.getMessage()));
         }
-        value.setStatus(evidenceDelta == 0 && sourceDelta == 0 ? "NO_PROGRESS" : "SUCCESS");
-        value.setObservationSummary("公开新闻搜索完成：抓取=" + fetchRun.getSuccessCount()
-                + "，重复=" + fetchRun.getDuplicateCount() + "，新增证据=" + evidenceDelta
-                + "，新增独立来源=" + sourceDelta);
-        value.setNewInformation(evidenceDelta == 0 && sourceDelta == 0
-                ? "本次查询没有改变当前证据状态"
-                : "研究证据状态已更新为 evidence=" + evidenceAfter + ", sources=" + sourcesAfter);
-        value.setRetryable(false);
+    }
+
+    private ResearchSearchEvidence toEvidence(ResearchAgentToolContext context, String query, String intent,
+                                                SearchResult hit) {
+        ResearchSearchEvidence value = new ResearchSearchEvidence();
+        value.setResearchRunId(context.getResearchRunId());
+        value.setDecisionId(context.getDecisionId());
+        value.setProvider("TAVILY");
+        value.setQueryText(query);
+        value.setIntent(intent);
+        value.setTitle(text(hit.getTitle()));
+        value.setUrl(text(hit.getUrl()));
+        value.setContent(text(hit.getContent()));
+        value.setSourceDomain(text(hit.getSourceDomain()));
+        value.setSourceTier(hasText(hit.getSourceTier()) ? hit.getSourceTier() : "T3");
+        value.setRelevanceScore(hit.getScore());
+        value.setPublishedAt(text(hit.getPublishedAt()));
         return value;
     }
 
-    private ResearchMissionTask task(ResearchAgentToolContext context, Map<String, Object> arguments) {
-        ResearchMissionTask value = new ResearchMissionTask();
-        value.setTaskKey(context.decisionTaskKey());
-        value.setTitle(intentTitle(text(arguments.get("intent"))));
-        value.setQuestion("该查询能否补齐当前研究证据缺口？");
-        value.setTaskType("SEARCH");
-        value.setToolCode("public_news_search");
-        value.setIntent(text(arguments.get("intent")));
-        value.setQueryText(text(arguments.get("query")));
+    private ResearchToolObservation error(String status, String type, boolean retryable, String summary) {
+        ResearchToolObservation value = new ResearchToolObservation();
+        value.setStatus(status);
+        value.setErrorType(type);
+        value.setRetryable(retryable);
+        value.setObservationSummary(summary);
+        value.setNewInformation("没有写入新的研究证据");
+        value.setStateHash("tavily:error:" + type);
         return value;
-    }
-
-    private String intentTitle(String intent) {
-        if ("COUNTER".equals(intent)) return "反方证据搜索";
-        if ("SUPPORT".equals(intent)) return "支持证据搜索";
-        if ("PRIMARY".equals(intent)) return "一手证据搜索";
-        return "最新进展搜索";
     }
 
     private String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
+    private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
     private String safe(String value) {
-        if (value == null || value.trim().isEmpty()) return "未知抓取错误";
+        if (!hasText(value)) return "未知搜索错误";
         String compact = value.replaceAll("[\\r\\n\\t]+", " ").trim();
         return compact.length() <= 240 ? compact : compact.substring(0, 240);
     }

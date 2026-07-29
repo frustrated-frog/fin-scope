@@ -2,9 +2,9 @@ package com.finscope.service.research.report;
 
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.ResearchReportRepository;
+import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchReport;
-import com.finscope.domain.research.ResearchSourceIdentity;
 import com.finscope.domain.research.ThesisFinding;
 import com.finscope.service.research.ResearchRunOutputService;
 import com.finscope.service.vault.VaultWriter;
@@ -25,6 +25,7 @@ public class ResearchReportService {
     private final ResearchReportSynthesisAgent synthesisAgent;
     private final ResearchReportRepository reportRepository;
     private final ResearchThesisRepository thesisRepository;
+    private final ResearchSearchEvidenceRepository searchEvidenceRepository;
     private final VaultWriter vaultWriter;
     private final ResearchRunOutputService outputService;
 
@@ -34,6 +35,7 @@ public class ResearchReportService {
                                  ResearchReportSynthesisAgent synthesisAgent,
                                  ResearchReportRepository reportRepository,
                                  ResearchThesisRepository thesisRepository,
+                                 ResearchSearchEvidenceRepository searchEvidenceRepository,
                                  VaultWriter vaultWriter,
                                  ResearchRunOutputService outputService) {
         this.contextService = contextService;
@@ -42,6 +44,7 @@ public class ResearchReportService {
         this.synthesisAgent = synthesisAgent;
         this.reportRepository = reportRepository;
         this.thesisRepository = thesisRepository;
+        this.searchEvidenceRepository = searchEvidenceRepository;
         this.vaultWriter = vaultWriter;
         this.outputService = outputService;
     }
@@ -52,7 +55,7 @@ public class ResearchReportService {
             throw new IllegalStateException("A research thesis is required to generate a thesis report");
         }
         List<ResearchEvidenceCard> evidence = evidenceSelector.select(context.getThesis(), context.getArticles(),
-                context.getEvidenceItems());
+                context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId));
         if (evidence.isEmpty()) {
             throw new InsufficientResearchEvidenceException(
                     "研究运行没有可引用的有效证据，已阻止生成结论报告");
@@ -125,13 +128,13 @@ public class ResearchReportService {
             return EvidenceSufficiency.assess(java.util.Collections.<ResearchEvidenceCard>emptyList());
         }
         return EvidenceSufficiency.assess(evidenceSelector.select(context.getThesis(), context.getArticles(),
-                context.getEvidenceItems()));
+                context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId)));
     }
 
     private int sourceCount(List<ResearchEvidenceCard> evidence) {
         Set<String> sources = new HashSet<String>();
         for (ResearchEvidenceCard card : evidence) {
-            sources.add(ResearchSourceIdentity.resolve(card.getArticle()));
+            sources.add(card.getSourceIdentity());
         }
         return sources.size();
     }

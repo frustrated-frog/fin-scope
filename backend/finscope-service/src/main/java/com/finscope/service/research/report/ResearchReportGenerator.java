@@ -202,7 +202,7 @@ public class ResearchReportGenerator {
 
     private int sourceCount(List<ResearchEvidenceCard> evidence) {
         Set<String> sources = new HashSet<String>();
-        for (ResearchEvidenceCard card : evidence) sources.add(ResearchSourceIdentity.resolve(card.getArticle()));
+        for (ResearchEvidenceCard card : evidence) sources.add(card.getSourceIdentity());
         return sources.size();
     }
 

@@ -74,7 +74,7 @@ public class EvidenceSufficiency {
     }
 
     private static String source(ResearchEvidenceCard card) {
-        return ResearchSourceIdentity.resolve(card.getArticle());
+        return card.getSourceIdentity();
     }
 
     public boolean isSufficient() { return sufficient; }

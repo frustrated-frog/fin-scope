@@ -2,6 +2,7 @@ package com.finscope.service.research.report;
 
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.ResearchSearchEvidence;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -76,6 +77,39 @@ class ResearchEvidenceSelectorTest {
         assertEquals(2, selected.size());
         assertTrue(selected.stream().anyMatch(card -> "SUPPORT".equals(card.getStance())));
         assertTrue(selected.stream().anyMatch(card -> "COUNTER".equals(card.getStance())));
+    }
+
+    @Test
+    void includesRunScopedTavilyEvidenceWithoutRequiringAnArticleRecord() {
+        ResearchSearchEvidence searchEvidence = new ResearchSearchEvidence();
+        searchEvidence.setId(71L);
+        searchEvidence.setResearchRunId(18L);
+        searchEvidence.setIntent("SUPPORT");
+        searchEvidence.setTitle("长鑫科技上市后扩大存储芯片研发投入");
+        searchEvidence.setContent("公司上市融资将用于先进制程研发与产能建设，对产业链形成正面影响。");
+        searchEvidence.setUrl("https://exchange.example.com/disclosure/71");
+        searchEvidence.setSourceDomain("exchange.example.com");
+        searchEvidence.setSourceTier("T1");
+        searchEvidence.setRelevanceScore(0.96D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertEquals(1, selected.size());
+        assertEquals("SUPPORT", selected.get(0).getStance());
+        assertEquals("T1", selected.get(0).getSourceTier());
+        assertEquals("exchange.example.com", selected.get(0).getSourceIdentity());
+        assertEquals(null, selected.get(0).getArticle().getId());
+    }
+
+    private ResearchThesis thesisForChangxin() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(2L);
+        thesis.setQuestion("长鑫科技上市带来了哪些影响？");
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("长鑫科技");
+        return thesis;
     }
 
     private ResearchThesis thesis() {

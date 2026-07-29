@@ -49,7 +49,7 @@ public class ResearchEvidenceDossierBuilder {
         String excerpt = combine(card.getClaim(), article.getSummary(), article.getBody());
         return new ResearchEvidenceDossier(reference, article.getId(),
                 card.getEvidenceItem() == null ? null : card.getEvidenceItem().getId(),
-                ResearchSourceIdentity.resolve(article), value(article.getSourceName()), sourceTier(article),
+                card.getSourceIdentity(), value(article.getSourceName()), sourceTier(card),
                 value(article.getTitle()), article.getPublishedAt(), value(article.getUrl()), excerpt,
                 card.getStance(), card.getRelevanceScore());
     }
@@ -92,7 +92,9 @@ public class ResearchEvidenceDossierBuilder {
         return false;
     }
 
-    private String sourceTier(Article article) {
+    private String sourceTier(ResearchEvidenceCard card) {
+        if (!value(card.getSourceTier()).isEmpty()) return card.getSourceTier();
+        Article article = card.getArticle();
         String source = value(article.getSourceName()).toLowerCase();
         if (source.contains("公告") || source.contains("交易所") || source.contains("政府")) return "PRIMARY";
         if (source.contains("协会") || source.contains("统计")) return "AUTHORITATIVE";
