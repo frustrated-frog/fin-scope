@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchReportSynthesisAgentTest {
@@ -63,6 +64,42 @@ class ResearchReportSynthesisAgentTest {
 
         assertEquals("EVIDENCE_STRUCTURED_FALLBACK", result.getGenerationMode());
         assertTrue(result.getWarning().contains("NARRATIVE_FAILED:SocketTimeoutException"));
+    }
+
+    @Test
+    void repairsUnsupportedClaimOnceBeforeAcceptingModelReport() throws Exception {
+        ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
+        ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
+        ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
+        StructuredResearchReportAssembler assembler = mock(StructuredResearchReportAssembler.class);
+        ResearchReportQualityValidator qualityValidator = mock(ResearchReportQualityValidator.class);
+        ResearchReportRepairAgent repairAgent = mock(ResearchReportRepairAgent.class);
+        ResearchEvidenceDossier dossier = new ResearchEvidenceDossier("E1", null, null, "example.com",
+                "示例来源", "T2", "业绩公告", null, "https://example.com/e1",
+                "公司披露2025年收入增长18%。", "SUPPORT", 90);
+        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        blueprint.setDirectAnswer("对象特定结论");
+        blueprint.setDirection("SUPPORT");
+        blueprint.setConfidence("MEDIUM");
+        ResearchReportNarrative narrative = new ResearchReportNarrative();
+        narrative.setExecutiveSummary("对象特定执行摘要");
+        String unsupported = "## 核心结论\n\n公司披露2025年收入增长25%。[E1]";
+        String repaired = "## 核心结论\n\n公司披露2025年收入增长18%。[E1]";
+        when(dossierBuilder.build(anyList())).thenReturn(Collections.singletonList(dossier));
+        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
+        when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
+        when(assembler.assemble(any(), any(), any(), anyList())).thenReturn(unsupported);
+        when(repairAgent.repair(anyString(), any(), anyList())).thenReturn(repaired);
+        when(qualityValidator.validate(anyString(), any(), anyList())).thenReturn(Collections.emptyList());
+        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent(dossierBuilder, blueprintAgent,
+                narrativeAgent, assembler, qualityValidator,
+                new ResearchClaimAuditor(new ResearchClaimExtractor()), repairAgent);
+
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback());
+
+        assertEquals("MODEL_CLAIM_REPAIRED", result.getGenerationMode());
+        assertTrue(result.getMarkdown().contains("18%"));
+        verify(repairAgent).repair(anyString(), any(), anyList());
     }
 
     private GeneratedResearchReport fallback() {
