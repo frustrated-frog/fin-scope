@@ -70,7 +70,7 @@ public class CninfoResearchMaterialProvider implements ResearchMaterialProvider 
         form.put("pageSize", String.valueOf(request.getLimit()));
         form.put("pageNum", "1");
         form.put("column", ""); form.put("category", ""); form.put("plate", "");
-        form.put("seDate", ""); form.put("searchkey", request.getQuery()); form.put("secid", "");
+        form.put("seDate", ""); form.put("searchkey", ""); form.put("secid", "");
         form.put("sortName", ""); form.put("sortType", ""); form.put("isHLtitle", "true");
         AcquisitionResponse response = runtime.fetch(postForm(ANNOUNCEMENTS, form, "CNINFO_ANNOUNCEMENT"));
         try {
@@ -84,7 +84,7 @@ public class CninfoResearchMaterialProvider implements ResearchMaterialProvider 
                 ResearchMaterial value = base(ResearchMaterialType.ANNOUNCEMENT, request.getStockCode(), id);
                 value.setTitle(title);
                 value.setContent(join(text(item, "announcementTypeName"), title));
-                value.setUrl("https://www.cninfo.com.cn/new/disclosure/detail?annoId=" + encode(id));
+                value.setUrl(announcementUrl(text(item, "adjunctUrl"), id));
                 value.setPublishedAt(epochMillis(item.path("announcementTime").asLong(0L)));
                 result.add(value);
             }
@@ -107,7 +107,7 @@ public class CninfoResearchMaterialProvider implements ResearchMaterialProvider 
             String orgId = text(companies.get(0), "secid");
             String uri = IRM_QUESTIONS + "?_t=1&stockcode=" + request.getStockCode()
                     + "&orgId=" + encode(orgId) + "&pageSize=" + request.getLimit()
-                    + "&pageNum=1&keyWord=" + encode(request.getQuery()) + "&startDay=&endDay=";
+                    + "&pageNum=1&keyWord=&startDay=&endDay=";
             AcquisitionRequest query = AcquisitionRequest.post(URI.create(uri), "", "application/x-www-form-urlencoded")
                     .purpose("CNINFO_INTERACTION").maxResponseBytes(2 * 1024 * 1024).maxRetries(0).build();
             JsonNode rows = json.readTree(runtime.fetch(query).getBodyText()).path("rows");
@@ -124,7 +124,7 @@ public class CninfoResearchMaterialProvider implements ResearchMaterialProvider 
                 value.setTitle("公司互动回复：" + compact(question, 80));
                 value.setContent("问题：" + question + "\n公司回复：" + answer);
                 value.setUrl("https://irm.cninfo.com.cn/ircs/company/companyDetail?stockcode="
-                        + request.getStockCode() + "&orgId=" + encode(orgId));
+                        + request.getStockCode() + "&orgId=" + encode(orgId) + "&questionId=" + encode(id));
                 value.setPublishedAt(epochMillis(item.path("pubDate").asLong(0L)));
                 result.add(value);
             }
@@ -188,7 +188,16 @@ public class CninfoResearchMaterialProvider implements ResearchMaterialProvider 
     }
     private String text(JsonNode node, String field) { return node == null ? "" : node.path(field).asText("").trim(); }
     private String cleanTitle(String value) { return value == null ? "" : value.replaceAll("<[^>]+>", "").trim(); }
-    private boolean matches(String query, String value) { return blank(query) || value.contains(query); }
+    private boolean matches(String query, String value) {
+        return ResearchMaterialQueryMatcher.matchesAny(query, value);
+    }
+    private String announcementUrl(String adjunctUrl, String id) {
+        String path = adjunctUrl == null ? "" : adjunctUrl.trim();
+        if (!path.isEmpty() && !path.contains("://") && !path.contains("..")) {
+            return "https://static.cninfo.com.cn/" + (path.startsWith("/") ? path.substring(1) : path);
+        }
+        return "https://www.cninfo.com.cn/new/disclosure/detail?annoId=" + encode(id);
+    }
     private boolean blank(String value) { return value == null || value.trim().isEmpty(); }
     private String join(String left, String right) { return (left == null ? "" : left) + " " + (right == null ? "" : right); }
     private String compact(String value, int max) { String text = value == null ? "" : value.replaceAll("\\s+", " ").trim(); return text.length() <= max ? text : text.substring(0, max); }

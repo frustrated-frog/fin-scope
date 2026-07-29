@@ -32,11 +32,12 @@ class ClsNewsResearchMaterialProviderTest {
         ClsNewsResearchMaterialProvider provider = new ClsNewsResearchMaterialProvider(runtime, new ObjectMapper());
 
         List<ResearchMaterial> result = provider.fetch(ResearchMaterialType.NEWS_FLASH,
-                new ResearchMaterialRequest("000001", "机器人", 20)).getData();
+                new ResearchMaterialRequest("000001", "银行 机器人", 20)).getData();
 
         assertTrue(requested.get().getQuery().contains("sign="));
         assertEquals(1, result.size());
         assertEquals("机器人产业链订单增长", result.get(0).getTitle());
+        assertEquals("https://www.cls.cn/detail/101", result.get(0).getUrl());
         assertEquals("T2", result.get(0).getSourceTier());
     }
 

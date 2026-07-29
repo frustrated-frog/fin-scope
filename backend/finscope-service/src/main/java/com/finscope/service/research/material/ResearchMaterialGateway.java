@@ -35,6 +35,15 @@ public class ResearchMaterialGateway {
                 providers, capability, provider -> provider.supports(type, request));
         Map<String, ResearchMaterial> unique = new LinkedHashMap<String, ResearchMaterial>();
         List<String> warnings = new ArrayList<String>();
+        int supportedProviders = 0;
+        for (ResearchMaterialProvider provider : providers) {
+            if (provider.supports(type, request)) supportedProviders++;
+        }
+        if (ordered.isEmpty()) {
+            warnings.add(supportedProviders == 0
+                    ? "没有配置支持 " + type + " 的研究资料来源"
+                    : "支持 " + type + " 的研究资料来源当前均被熔断或暂停");
+        }
         for (ResearchMaterialProvider provider : ordered) {
             try {
                 ProviderResult<List<ResearchMaterial>> fetched = guard.execute(

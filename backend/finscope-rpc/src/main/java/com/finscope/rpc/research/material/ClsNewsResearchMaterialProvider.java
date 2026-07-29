@@ -62,8 +62,10 @@ public class ClsNewsResearchMaterialProvider implements ResearchMaterialProvider
                 if (title.isEmpty() || !matches(request.getQuery(), title + " " + content)) continue;
                 ResearchMaterial value = new ResearchMaterial();
                 value.setMaterialType(type); value.setStockCode(request.getStockCode());
-                value.setExternalId(item.path("id").asText(ProviderResult.hashOf(title).substring(0, 24)));
-                value.setTitle(title); value.setContent(content); value.setUrl("https://www.cls.cn/telegraph");
+                String externalId = item.path("id").asText(ProviderResult.hashOf(title).substring(0, 24));
+                value.setExternalId(externalId);
+                value.setTitle(title); value.setContent(content);
+                value.setUrl("https://www.cls.cn/detail/" + externalId);
                 long seconds = item.path("ctime").asLong(0L);
                 if (seconds > 0L) value.setPublishedAt(LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), ZoneId.systemDefault()));
                 value.setProviderCode(providerCode()); value.setProviderFamily(providerFamily()); value.setSourceTier("T2");
@@ -77,7 +79,9 @@ public class ClsNewsResearchMaterialProvider implements ResearchMaterialProvider
         }
     }
 
-    private boolean matches(String query, String value) { return query == null || query.trim().isEmpty() || value.contains(query.trim()); }
+    private boolean matches(String query, String value) {
+        return ResearchMaterialQueryMatcher.matchesAny(query, value);
+    }
     private String sha1(String value) { return digest("SHA-1", value); }
     private String md5(String value) { return digest("MD5", value); }
     private String digest(String algorithm, String value) {

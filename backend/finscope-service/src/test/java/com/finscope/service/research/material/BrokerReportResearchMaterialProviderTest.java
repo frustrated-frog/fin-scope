@@ -33,7 +33,7 @@ class BrokerReportResearchMaterialProviderTest {
         BrokerReportResearchMaterialProvider provider = new BrokerReportResearchMaterialProvider(source);
 
         List<ResearchMaterial> result = provider.fetch(ResearchMaterialType.BROKER_REPORT,
-                new ResearchMaterialRequest("000001", "盈利预测", 10)).getData();
+                new ResearchMaterialRequest("000001", "行业 盈利", 10)).getData();
 
         assertEquals(1, result.size());
         assertEquals("EASTMONEY", result.get(0).getProviderCode());

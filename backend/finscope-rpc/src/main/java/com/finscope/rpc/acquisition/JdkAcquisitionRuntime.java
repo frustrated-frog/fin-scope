@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -39,7 +40,13 @@ public class JdkAcquisitionRuntime implements AcquisitionRuntime {
     @Override
     public AcquisitionResponse fetch(AcquisitionRequest request) {
         long startedNanos = System.nanoTime();
-        long deadlineNanos = startedNanos + request.getDeadlineMs() * 1_000_000L;
+        long providerRemainingMs = ProviderCallDeadline.remainingMillis();
+        if (providerRemainingMs <= 0L) {
+            throw new AcquisitionException(AcquisitionErrorType.TIMEOUT,
+                    "Provider 总时间预算已耗尽", false, null);
+        }
+        long effectiveDeadlineMs = Math.min((long) request.getDeadlineMs(), providerRemainingMs);
+        long deadlineNanos = startedNanos + effectiveDeadlineMs * 1_000_000L;
         AcquisitionException lastError = null;
 
         for (int attempt = 1; attempt <= request.getMaxRetries() + 1; attempt++) {

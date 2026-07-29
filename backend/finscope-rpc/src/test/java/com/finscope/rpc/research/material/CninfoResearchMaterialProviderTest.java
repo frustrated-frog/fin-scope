@@ -27,20 +27,22 @@ class CninfoResearchMaterialProviderTest {
             assertEquals("POST", request.getMethod());
             String body = new String(request.getBodyBytes(), StandardCharsets.UTF_8);
             assertTrue(body.contains("stock=000001%2Cgssz0000001"));
+            assertTrue(body.contains("searchkey=&"));
             return response(request, "{\"announcements\":[{\"announcementId\":\"12001\","
                     + "\"announcementTitle\":\"2026年半年度报告\",\"announcementTypeName\":\"定期报告\","
+                    + "\"adjunctUrl\":\"finalpage/2026-07-20/12001.PDF\","
                     + "\"announcementTime\":1785369600000}]}");
         };
         CninfoResearchMaterialProvider provider = new CninfoResearchMaterialProvider(runtime, new ObjectMapper());
 
         List<ResearchMaterial> result = provider.fetch(ResearchMaterialType.ANNOUNCEMENT,
-                new ResearchMaterialRequest("000001", "半年度报告", 20)).getData();
+                new ResearchMaterialRequest("000001", "财报 半年度", 20)).getData();
 
         assertEquals(1, result.size());
         assertEquals("2026年半年度报告", result.get(0).getTitle());
         assertEquals("CNINFO", result.get(0).getProviderCode());
         assertEquals("T1", result.get(0).getSourceTier());
-        assertTrue(result.get(0).getUrl().contains("annoId=12001"));
+        assertEquals("https://static.cninfo.com.cn/finalpage/2026-07-20/12001.PDF", result.get(0).getUrl());
     }
 
     @Test
@@ -63,6 +65,7 @@ class CninfoResearchMaterialProviderTest {
 
         assertEquals(1, result.size());
         assertTrue(result.get(0).getContent().contains("不良率保持稳定"));
+        assertTrue(result.get(0).getUrl().contains("questionId=q1"));
         assertEquals("T1", result.get(0).getSourceTier());
     }
 

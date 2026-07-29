@@ -2,6 +2,7 @@ package com.finscope.rpc.acquisition;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -165,6 +167,28 @@ class JdkAcquisitionRuntimeTest {
         assertEquals("POST", method.get());
         assertEquals("application/x-www-form-urlencoded", contentType.get());
         assertEquals("stock=000001&query=公告", body.get());
+    }
+
+    @Test
+    void honorsProviderDeadlineAcrossAcquisitionRequestBudget() throws Exception {
+        startServer("/provider-deadline", exchange -> {
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            write(exchange, 200, "太慢");
+        });
+        AcquisitionRequest request = request("/provider-deadline")
+                .readTimeoutMs(2_000).deadlineMs(2_000).maxRetries(0).build();
+
+        AcquisitionException error;
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofMillis(60))) {
+            error = assertThrows(AcquisitionException.class,
+                    () -> new JdkAcquisitionRuntime().fetch(request));
+        }
+
+        assertEquals(AcquisitionErrorType.TIMEOUT, error.getErrorType());
     }
 
     private AcquisitionRequest.Builder request(String path) {

@@ -29,17 +29,21 @@ public class DeterministicResearchPlanner {
                     "SEARCH", "public_news_search", "BREADTH", Arrays.asList("baseline_scan"),
                     subject + " 行业结构 商业模式 关键变量 最新变化", "先建立研究地图，避免直接堆叠零散新闻", "行业结构、商业模式与关键变量"));
             tasks.add(task("primary_disclosure", "公司一手披露", "公司公告和财报披露了哪些可核验事实？",
-                    "SEARCH", "research_material_search", "PRIMARY", Arrays.asList("baseline_scan"),
+                    "SEARCH", "research_material_search", "PRIMARY", Arrays.asList("research_map"),
                     stockCode + " ANNOUNCEMENT 财报 业绩 经营", "优先用公司和监管披露建立事实基线", "公告、财报和监管披露"));
             tasks.add(task("professional_context", "专业资料与行业语境", "专业机构如何解释公司的经营变化？",
                     "SEARCH", "research_material_search", "BREADTH", Arrays.asList("primary_disclosure"),
                     stockCode + " BROKER_REPORT 经营 行业 估值", "用专业资料补充行业语境并与一手材料交叉核对", "券商研报与行业资料"));
         }
-        tasks.add(task("search_support", "支持证据搜索", "哪些最新事实支持该命题？",
-                "SEARCH", "public_news_search", "SUPPORT", dependencies(stockCode, "research_map", "baseline_scan"),
-                subject + " 资本开支 订单 需求 最新公告", "验证核心驱动是否继续成立", "订单、需求或资本开支一手信息"));
+        String supportTaskKey = stockCode.isEmpty() ? "search_support" : "crosscheck_chain";
+        tasks.add(task(supportTaskKey, stockCode.isEmpty() ? "支持证据搜索" : "产业链交叉核对",
+                stockCode.isEmpty() ? "哪些最新事实支持该命题？" : "客户、供应商和竞争对手的事实是否印证公司披露？",
+                "SEARCH", "public_news_search", "SUPPORT", dependencies(stockCode, "professional_context", "baseline_scan"),
+                stockCode.isEmpty() ? subject + " 资本开支 订单 需求 最新公告"
+                        : subject + " 客户 供应商 竞争对手 订单 需求 交叉验证",
+                "验证核心驱动是否继续成立", "订单、需求或产业链交叉验证信息"));
         tasks.add(task("search_counter", "反方证据搜索", "哪些事实可能推翻或限制该命题？",
-                "SEARCH", "public_news_search", "COUNTER", dependencies(stockCode, "research_map", "baseline_scan"),
+                "SEARCH", "public_news_search", "COUNTER", dependencies(stockCode, supportTaskKey, "baseline_scan"),
                 subject + " 资本开支 风险 下调 延迟 反方证据", "主动寻找证伪与边界", "下调、延迟、风险或需求转弱证据"));
         if (stockCode.isEmpty()) {
             tasks.add(task("search_primary", "一手证据搜索", "是否存在公司或机构的一手披露？",
@@ -48,7 +52,7 @@ public class DeterministicResearchPlanner {
         }
         List<String> evidenceDependencies = stockCode.isEmpty()
                 ? Arrays.asList("search_support", "search_counter", "search_primary")
-                : Arrays.asList("primary_disclosure", "professional_context", "search_support", "search_counter");
+                : Arrays.asList("primary_disclosure", "professional_context", supportTaskKey, "search_counter");
         tasks.add(task("assess_evidence", "证据充分性判断", "当前证据是否达到研究合同标准？",
                 "ASSESS", "evidence_assess", "ASSESS",
                 evidenceDependencies,

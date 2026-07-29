@@ -17,6 +17,11 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ResearchMaterialGatewayTest {
     @Test
@@ -33,6 +38,22 @@ class ResearchMaterialGatewayTest {
         assertEquals(1, result.getMaterials().size());
         assertEquals("HEALTHY", result.getMaterials().get(0).getProviderCode());
         assertTrue(result.getWarnings().get(0).contains("FAILED"));
+    }
+
+    @Test
+    void reportsWhenSupportedProvidersAreFilteredByRoutingHealth() {
+        ResearchMaterialProvider provider = provider("OPEN_CIRCUIT", 10, false);
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ProviderRoutePolicy routes = mock(ProviderRoutePolicy.class);
+        when(routes.orderExternal(anyList(), anyString(), any())).thenReturn(Collections.emptyList());
+        ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                Collections.singletonList(provider), routes, guard);
+
+        ResearchMaterialGatewayResult result = gateway.search(ResearchMaterialType.NEWS_FLASH,
+                new ResearchMaterialRequest("000001", "订单", 10));
+
+        assertTrue(result.getMaterials().isEmpty());
+        assertTrue(result.getWarnings().get(0).contains("熔断或暂停"));
     }
 
     private ResearchMaterialProvider provider(String code, int priority, boolean fail) {

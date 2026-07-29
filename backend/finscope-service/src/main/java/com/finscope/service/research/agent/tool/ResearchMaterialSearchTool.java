@@ -9,6 +9,9 @@ import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -31,11 +34,20 @@ public class ResearchMaterialSearchTool implements ResearchAgentTool {
 
     private final ResearchMaterialGateway gateway;
     private final ResearchSearchEvidenceRepository evidenceRepository;
+    private final ResearchEvidenceAcquisitionService acquisitionService;
 
     public ResearchMaterialSearchTool(ResearchMaterialGateway gateway,
                                       ResearchSearchEvidenceRepository evidenceRepository) {
+        this(gateway, evidenceRepository, null);
+    }
+
+    @Autowired
+    public ResearchMaterialSearchTool(ResearchMaterialGateway gateway,
+                                      ResearchSearchEvidenceRepository evidenceRepository,
+                                      ResearchEvidenceAcquisitionService acquisitionService) {
         this.gateway = gateway;
         this.evidenceRepository = evidenceRepository;
+        this.acquisitionService = acquisitionService;
     }
 
     @Override
@@ -134,18 +146,29 @@ public class ResearchMaterialSearchTool implements ResearchAgentTool {
                 ? "PRIMARY" : "BREADTH");
         value.setTitle(text(material.getTitle()));
         value.setUrl(text(material.getUrl()));
-        value.setContent(text(material.getContent()));
-        value.setSearchSnippet(text(material.getContent()));
-        value.setContentOrigin("STRUCTURED_MATERIAL");
-        value.setExtractionMethod("STRUCTURED:" + text(material.getProviderCode()) + ":" + type.name());
-        value.setFetchStatus("FETCHED");
-        value.setContentCharCount(value.getContent().length());
+        String structuredContent = text(material.getContent());
+        ResearchEvidenceAcquisitionResult acquired = shouldReadFullText(type, value.getUrl())
+                ? acquisitionService.acquire(value.getUrl(), query, structuredContent, text(material.getStockCode()))
+                : null;
+        value.setContent(acquired == null ? structuredContent : acquired.getContent());
+        value.setSearchSnippet(acquired == null ? structuredContent : acquired.getSearchSnippet());
+        value.setContentOrigin(acquired == null ? "STRUCTURED_MATERIAL" : acquired.getContentOrigin());
+        value.setExtractionMethod(acquired == null
+                ? "STRUCTURED:" + text(material.getProviderCode()) + ":" + type.name()
+                : acquired.getExtractionMethod());
+        value.setFetchStatus(acquired == null ? "FETCHED" : acquired.getFetchStatus());
+        value.setContentCharCount(acquired == null ? value.getContent().length() : acquired.getContentCharCount());
         value.setFetchedAt(LocalDateTime.now());
         value.setSourceDomain(domain(value.getUrl(), material.getProviderFamily()));
         value.setSourceTier(text(material.getSourceTier()));
         value.setRelevanceScore("T1".equalsIgnoreCase(value.getSourceTier()) ? 1.0D : 0.85D);
         value.setPublishedAt(material.getPublishedAt() == null ? "" : material.getPublishedAt().toString());
         return value;
+    }
+
+    private boolean shouldReadFullText(ResearchMaterialType type, String url) {
+        return acquisitionService != null && !text(url).isEmpty()
+                && (type == ResearchMaterialType.ANNOUNCEMENT || type == ResearchMaterialType.BROKER_REPORT);
     }
 
     private ResearchToolObservation error(ResearchMaterialType type, RuntimeException error) {

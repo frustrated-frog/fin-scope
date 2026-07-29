@@ -372,10 +372,10 @@ export function ResearchView({
   );
 }
 
-function remainingSearchActions(detail: ResearchRunDetail) {
+export function remainingSearchActions(detail: ResearchRunDetail) {
   const searchBudget = detail.run.mode === 'QUICK' ? 2 : 6;
   const consumedSearches = detail.agentCore?.decisions.filter((decision) =>
-    decision.toolCode === 'public_news_search'
+    (decision.toolCode === 'public_news_search' || decision.toolCode === 'research_material_search')
     && (decision.status === 'COMPLETED' || decision.status === 'FAILED')).length || 0;
   const modeRemaining = Math.max(0, searchBudget - consumedSearches);
   if (!detail.runtime) return modeRemaining;

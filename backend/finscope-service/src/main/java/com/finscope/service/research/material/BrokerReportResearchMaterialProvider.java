@@ -7,6 +7,7 @@ import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.research.material.ResearchMaterialProvider;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
+import com.finscope.rpc.research.material.ResearchMaterialQueryMatcher;
 import com.finscope.service.financials.BrokerResearchSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -72,7 +73,9 @@ public class BrokerReportResearchMaterialProvider implements ResearchMaterialPro
         return ProviderResult.of(result, LocalDateTime.now(), ProviderResult.hashOf(result), Collections.emptyList());
     }
 
-    private boolean matches(String query, String value) { return blank(query) || value.contains(query); }
+    private boolean matches(String query, String value) {
+        return ResearchMaterialQueryMatcher.matchesAny(query, value);
+    }
     private boolean blank(String value) { return value == null || value.trim().isEmpty(); }
     private String text(String value) { return blank(value) ? "未提供" : value.trim(); }
 }

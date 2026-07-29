@@ -122,6 +122,11 @@ class ResearchPlanningAgentTest {
         assertTrue(result.getDraft().task("primary_disclosure").getQueryText().contains("ANNOUNCEMENT"));
         assertEquals("research_material_search", result.getDraft().task("professional_context").getToolCode());
         assertTrue(result.getDraft().task("professional_context").getQueryText().contains("BROKER_REPORT"));
+        assertEquals(Arrays.asList("research_map"), result.getDraft().task("primary_disclosure").getDependencies());
+        assertEquals(Arrays.asList("primary_disclosure"), result.getDraft().task("professional_context").getDependencies());
+        assertEquals(Arrays.asList("professional_context"), result.getDraft().task("crosscheck_chain").getDependencies());
+        assertTrue(result.getDraft().task("crosscheck_chain").getQueryText().contains("供应商"));
+        assertEquals(Arrays.asList("crosscheck_chain"), result.getDraft().task("search_counter").getDependencies());
     }
 
     private ResearchPlanningInput input() {
