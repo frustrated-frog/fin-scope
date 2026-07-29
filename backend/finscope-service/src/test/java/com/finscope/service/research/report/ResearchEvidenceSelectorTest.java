@@ -164,18 +164,19 @@ class ResearchEvidenceSelectorTest {
     }
 
     @Test
-    void keepsTruncatedClaimsWithinTheDeclaredLimit() {
+    void keepsACompleteSelectedFactParagraphWithoutEllipsis() {
         ResearchSearchEvidence searchEvidence = searchEvidence(
                 "长鑫科技上市交易数据",
-                "长鑫科技" + repeat("上市交易数据", 80),
+                "长鑫科技上市首日完成集中价格发现。" + repeat("交易保持活跃，", 60) + "最后一句完整结论。",
                 0.87D);
 
         ResearchEvidenceCard selected = selector.select(thesisForChangxin(),
                 Collections.<Article>emptyList(), Collections.emptyList(),
                 Collections.singletonList(searchEvidence)).get(0);
 
-        assertTrue(selected.getClaim().length() <= 260);
-        assertTrue(selected.getClaim().endsWith("…"));
+        assertTrue(selected.getClaim().contains("最后一句完整结论。"));
+        assertFalse(selected.getClaim().contains("…"));
+        assertFalse(selected.getClaim().contains("（已截断）"));
     }
 
     private ResearchSearchEvidence searchEvidence(String title, String content, double score) {

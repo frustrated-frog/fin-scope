@@ -51,6 +51,8 @@ public class ResearchReportBlueprintAgent {
                 + "必须直接回答原问题，并按问题本身动态设计3到6个子问题，禁止套用固定公司经营模板。"
                 + "keyInsights为3到6项，argumentChains至少2项，必须给出有实质内容的最强反方解释。"
                 + "所有evidenceRefs只能使用输入给出的E编号；每项keyInsight、subQuestion和argumentChain都必须至少引用一条证据。"
+                + "每个argumentChain.fact必须从证据档案提炼为语义完整的事实段落，不得使用省略号或在句中截断；"
+                + "inference和judgment只做与命题直接相关的推理，不得新增外部事实。"
                 + "蓝图整体至少覆盖证据档案的一半；若档案含COUNTER证据，strongestCounterargument必须引用其中至少一条。"
                 + "字段严格为directAnswer,direction,confidence,confidenceBasis,timeRange,definitions,excludedQuestions,"
                 + "keyInsights,subQuestions,argumentChains,strongestCounterargument,scenarios,knowledgeTakeaways,unknowns,watchItems。"

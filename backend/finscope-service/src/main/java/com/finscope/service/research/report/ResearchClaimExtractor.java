@@ -18,7 +18,7 @@ public class ResearchClaimExtractor {
 
     public List<ResearchClaim> extract(String markdown) {
         String value = markdown == null ? "" : markdown;
-        int appendix = value.indexOf("## 证据附录");
+        int appendix = firstSection(value, "## 资料来源", "## 证据附录");
         if (appendix >= 0) value = value.substring(0, appendix);
         List<ResearchClaim> result = new ArrayList<ResearchClaim>();
         for (String line : value.split("\\n")) {
@@ -42,6 +42,15 @@ public class ResearchClaimExtractor {
             }
         }
         return result;
+    }
+
+    private int firstSection(String value, String... headings) {
+        int first = -1;
+        for (String heading : headings) {
+            int index = value.indexOf(heading);
+            if (index >= 0 && (first < 0 || index < first)) first = index;
+        }
+        return first;
     }
 
     private List<String> matches(Pattern pattern, String value) {

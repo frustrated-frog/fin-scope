@@ -34,16 +34,17 @@ class StructuredResearchReportPipelineTest {
         String markdown = new StructuredResearchReportAssembler().assemble(thesis, blueprint, narrative, dossier);
 
         assertEquals(3, narrative.getSubQuestionAnalysis().size());
-        assertTrue(markdown.contains("## 关键事实与数字"));
-        assertTrue(markdown.contains("## 核心证据链"));
-        assertTrue(markdown.contains("## 最终认识与未知项"));
+        assertTrue(markdown.contains("## 关键事实与 AI 解读"));
+        assertTrue(markdown.contains("**事实：** 对象特定事实 1"));
+        assertTrue(markdown.contains("**AI 解读：**"));
+        assertTrue(markdown.contains("## 命题拆解与综合判断"));
+        assertTrue(markdown.contains("## 不同解释与不确定性"));
+        assertTrue(markdown.contains("## 资料来源"));
+        assertTrue(!markdown.contains("## 执行摘要"));
+        assertTrue(!markdown.contains("支持与反向证据比"));
         assertTrue(markdown.contains("[E1](#evidence-e1)"));
-        assertTrue(markdown.contains("<a id=\"evidence-e1\"></a>"));
-        assertTrue(markdown.contains("模型摘要没有显式引用。 [E1](#evidence-e1)[E2](#evidence-e2)"));
+        assertTrue(!markdown.contains("<a id=\"evidence-e1\"></a>"));
         assertTrue(!markdown.contains("\\n"));
-        String factRow = Arrays.stream(markdown.split("\\n"))
-                .filter(line -> line.startsWith("| [E1]")).findFirst().orElse("");
-        assertTrue(factRow.length() < 500);
         verify(llm).complete(anyString(), anyString(), eq(120000), eq(7000));
     }
 

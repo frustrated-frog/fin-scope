@@ -16,10 +16,9 @@ public class ResearchReportQualityValidator {
     private static final Pattern EVIDENCE_REF = Pattern.compile("\\[(E\\d+)]");
     private static final Pattern SECTION = Pattern.compile("(?m)^##\\s+(.+?)\\s*$");
     private static final String AUDIT_CAVEAT = "**审计降级：**";
-    private static final String[] GROUNDED_SECTIONS = {"核心结论", "核心证据链", "反方解释与争议"};
-    private static final String[] REQUIRED = {"核心结论", "关键认识", "执行摘要", "研究范围与口径",
-            "关键事实与数字", "发生了什么", "命题拆解与逐题判断", "核心证据链", "反方解释与争议",
-            "机制与情景推演", "最终认识与未知项", "跟踪清单与失效条件", "证据附录"};
+    private static final String[] GROUNDED_SECTIONS = {"核心结论", "关键事实与 AI 解读", "不同解释与不确定性"};
+    private static final String[] REQUIRED = {"核心结论", "关键事实与 AI 解读", "命题拆解与综合判断",
+            "影响机制", "不同解释与不确定性", "情景推演", "结论更新条件", "资料来源"};
 
     public List<String> validate(String markdown, ResearchThesis thesis, List<ResearchEvidenceDossier> dossier) {
         List<String> issues = new ArrayList<String>();
@@ -27,6 +26,8 @@ public class ResearchReportQualityValidator {
         if (markdown != null && markdown.length() > ResearchReportPolicy.MAX_REPORT_CHARACTERS) issues.add("REPORT_TOO_LONG");
         String value = markdown == null ? "" : markdown;
         for (String heading : REQUIRED) if (!value.contains("## " + heading)) issues.add("MISSING_SECTION:" + heading);
+        validateFactInterpretations(value, issues);
+        validateReaderFacingContent(value, issues);
         if (section(value, "核心结论").contains(AUDIT_CAVEAT)) issues.add("CORE_CONCLUSION_OVER_REPAIRED");
         if (occurrences(value, AUDIT_CAVEAT) > 5) issues.add("EXCESSIVE_AUDIT_CAVEATS");
         Set<String> allowed = new HashSet<String>();
@@ -57,7 +58,7 @@ public class ResearchReportQualityValidator {
                                             Set<String> allowed,
                                             List<String> issues) {
         if (dossier.size() < 3) return;
-        String narrative = withoutSection(withoutSection(markdown, "证据附录"), "关键事实与数字");
+        String narrative = withoutSection(markdown, "资料来源");
         int used = validRefs(narrative, allowed).size();
         if (used * 2 < dossier.size()) issues.add("INSUFFICIENT_CITATION_COVERAGE");
     }
@@ -70,7 +71,7 @@ public class ResearchReportQualityValidator {
             if ("COUNTER".equals(item.getStance())) counterRefs.add(item.getEvidenceRef());
         }
         if (counterRefs.isEmpty()) return;
-        Set<String> cited = validRefs(section(markdown, "反方解释与争议"), counterRefs);
+        Set<String> cited = validRefs(section(markdown, "不同解释与不确定性"), counterRefs);
         if (cited.isEmpty()) issues.add("COUNTER_EVIDENCE_MISSING");
     }
 
@@ -85,9 +86,38 @@ public class ResearchReportQualityValidator {
     }
 
     private void validateMonitoringConditions(String markdown, List<String> issues) {
-        String monitoring = section(markdown, "跟踪清单与失效条件");
+        String monitoring = section(markdown, "结论更新条件");
         if (!containsAny(monitoring, "失效", "下调", "削弱", "触发", "连续", "低于", "高于", "恶化", "转负")) {
             issues.add("MONITORING_CONDITION_MISSING");
+        }
+    }
+
+    private void validateFactInterpretations(String markdown, List<String> issues) {
+        String section = section(markdown, "关键事实与 AI 解读");
+        int facts = occurrences(section, "**事实：**");
+        int interpretations = occurrences(section, "**AI 解读：**");
+        if (facts == 0 || facts != interpretations) {
+            issues.add("FACT_INTERPRETATION_MISMATCH");
+            return;
+        }
+        String[] blocks = section.split("\\*\\*事实：\\*\\*", -1);
+        for (int index = 1; index < blocks.length; index++) {
+            if (!blocks[index].contains("**AI 解读：**")) {
+                issues.add("FACT_INTERPRETATION_MISMATCH");
+                return;
+            }
+        }
+    }
+
+    private void validateReaderFacingContent(String markdown, List<String> issues) {
+        if (markdown.contains("## 执行摘要") || markdown.contains("## 研究范围与口径")
+                || markdown.contains("支持与反向证据比") || markdown.contains("当前证据分布为支持")
+                || markdown.contains("支持证据为") || markdown.contains("反向证据为")) {
+            issues.add("LEGACY_META_SECTION_PRESENT");
+        }
+        String facts = section(markdown, "关键事实与 AI 解读");
+        if (markdown.contains("（已截断）") || facts.contains("…") || facts.contains("...")) {
+            issues.add("TRUNCATION_MARKER_PRESENT");
         }
     }
 

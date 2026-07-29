@@ -64,9 +64,7 @@ public class ResearchEvidenceDossierBuilder {
         appendUnique(out, claim);
         appendUnique(out, summary);
         appendUnique(out, body);
-        String compact = out.toString().replaceAll("\\s+", " ").trim();
-        return compact.length() <= MAX_EXCERPT_CHARACTERS ? compact
-                : compact.substring(0, MAX_EXCERPT_CHARACTERS - 1).trim() + "…";
+        return ResearchFactText.completeExcerpt(out.toString(), MAX_EXCERPT_CHARACTERS);
     }
 
     private void appendUnique(StringBuilder out, String value) {
@@ -76,21 +74,28 @@ public class ResearchEvidenceDossierBuilder {
                 .replaceAll("https?://\\S+", "")
                 .replace("摘要：", "")
                 .replaceAll("\\s+", " ").trim();
-        for (String fragment : clean.split("[；。]+")) {
+        for (String fragment : clean.split("(?<=[；。！？.!?])\\s*")) {
             String candidate = fragment.trim();
             if (candidate.isEmpty() || overlapsExisting(out, candidate)) continue;
-            if (out.length() > 0) out.append("；");
+            if (out.length() > 0) out.append(' ');
             out.append(candidate);
         }
     }
 
     private boolean overlapsExisting(StringBuilder out, String candidate) {
-        for (String existing : out.toString().split("；")) {
-            if (candidate.equals(existing)) return true;
-            if (candidate.length() >= 6 && existing.length() >= 6
-                    && (candidate.contains(existing) || existing.contains(candidate))) return true;
+        String normalizedCandidate = normalizeFragment(candidate);
+        for (String existing : out.toString().split("(?<=[；。！？.!?])\\s*")) {
+            String normalizedExisting = normalizeFragment(existing);
+            if (normalizedCandidate.equals(normalizedExisting)) return true;
+            if (normalizedCandidate.length() >= 6 && normalizedExisting.length() >= 6
+                    && (normalizedCandidate.contains(normalizedExisting)
+                    || normalizedExisting.contains(normalizedCandidate))) return true;
         }
         return false;
+    }
+
+    private String normalizeFragment(String value) {
+        return value.replaceAll("[；。！？.!?\\s]+", "");
     }
 
     private String sourceTier(ResearchEvidenceCard card) {

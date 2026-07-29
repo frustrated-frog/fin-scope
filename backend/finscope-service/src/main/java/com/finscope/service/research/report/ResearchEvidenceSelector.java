@@ -203,15 +203,7 @@ public class ResearchEvidenceSelector {
     }
 
     private String cleanClaim(String value) {
-        String plain = value == null ? "" : value;
-        plain = plain.replaceFirst("(?i)^\\[S\\d+\\]\\s*(?:-\\s*\\d+\\s*/)?\\s*\\[?", "");
-        int labelEnd = plain.indexOf("](");
-        if (plain.startsWith("[") && labelEnd > 1) {
-            plain = plain.substring(1, labelEnd);
-        } else {
-            plain = plain.replaceAll("\\[([^\\]]+)]\\([^)]*\\)", "$1");
-        }
-        return compact(plain, 260);
+        return ResearchFactText.completeExcerpt(value, 900);
     }
 
     private String combinedText(Article article, EvidenceItem evidence) {

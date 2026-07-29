@@ -57,9 +57,12 @@ public class ResearchReportNarrativeAgent {
                 + "argumentAnalysis:string[]，counterAnalysis:string，scenarioAnalysis:string[]，"
                 + "knowledgeSynthesis:string，monitoringPlan:string。不得把数组写成字符串或对象。"
                 + "正文必须是中文、对象特定、信息密集；事实和数字后用[E1]格式引用。"
-                + "明确区分事实、推理和判断，解释事实为何重要，并呈现最强替代解释。"
+                + "argumentAnalysis必须与论证链逐项对应，每项都是紧跟该事实的详细AI解读：解释事实与研究命题的关系、"
+                + "传导机制、能说明什么以及不能单独证明什么，不得新增证据档案之外的事实。"
+                + "明确区分事实、推理和判断，并呈现不同解释与未知项。"
                 + "目标总正文8000到16000中文字符；subQuestionAnalysis与蓝图子问题逐项对应，argumentAnalysis与论证链逐项对应。"
-                + "禁止复述通用研究方法、禁止投资买卖指令、禁止用空泛风险提示填充长度。";
+                + "禁止复述研究执行过程，禁止输出支持/反对证据数量或比例，禁止省略号、截断标记、投资买卖指令，"
+                + "禁止用空泛风险提示填充长度。";
     }
 
     private ResearchReportNarrative repair(ResearchThesis thesis,

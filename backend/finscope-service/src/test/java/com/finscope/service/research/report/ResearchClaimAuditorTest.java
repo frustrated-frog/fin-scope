@@ -68,6 +68,18 @@ class ResearchClaimAuditorTest {
         assertEquals(0, audit.getClaimCount());
     }
 
+    @Test
+    void ignoresDatesAndNumbersInsideTheSourceList() {
+        String report = "## 核心结论\n\n公司在2025年收入增长18%。[E1]\n\n"
+                + "## 资料来源\n\n### E1 · 示例材料\n\n- 发布时间：2026-07-30\n- 原文：文章 #123";
+
+        ResearchClaimAudit audit = auditor.audit(report, Collections.singletonList(
+                evidence("E1", "公司在2025年收入增长18%。")));
+
+        assertEquals(1, audit.getClaimCount());
+        assertEquals(1, audit.getSupportedCount());
+    }
+
     private ResearchEvidenceDossier evidence(String ref, String excerpt) {
         return new ResearchEvidenceDossier(ref, null, null, "example.com", "示例来源", "T2",
                 "示例材料", null, "https://example.com/" + ref, excerpt, "SUPPORT", 90);

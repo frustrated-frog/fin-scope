@@ -36,8 +36,8 @@ class ResearchReportQualityValidatorTest {
                         evidence("E2", "source-b", "COUNTER")));
 
         assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:核心结论"));
-        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:核心证据链"));
-        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:反方解释与争议"));
+        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:关键事实与 AI 解读"));
+        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:不同解释与不确定性"));
     }
 
     @Test
@@ -85,6 +85,20 @@ class ResearchReportQualityValidatorTest {
         assertTrue(issues.contains("EXCESSIVE_AUDIT_CAVEATS"));
     }
 
+    @Test
+    void rejectsMissingFactInterpretationPairsLegacyMetaSectionsAndTruncation() {
+        String report = report("[E1]", "[E1][E2]", "[E2]", true)
+                .replace("**AI 解读：**", "**普通说明：**")
+                + "\n## 执行摘要\n系统使用了2条支持证据。\n\n（已截断）\n";
+
+        List<String> issues = validator.validate(report, thesis(), Arrays.asList(
+                evidence("E1", "source-a", "SUPPORT"), evidence("E2", "source-b", "COUNTER")));
+
+        assertTrue(issues.contains("FACT_INTERPRETATION_MISMATCH"));
+        assertTrue(issues.contains("LEGACY_META_SECTION_PRESENT"));
+        assertTrue(issues.contains("TRUNCATION_MARKER_PRESENT"));
+    }
+
     private String report(String conclusionRefs, String chainRefs, String counterRefs, boolean actionable) {
         String monitoring = actionable
                 ? "若收入增速连续两个季度下滑，则下调判断；若现金流转负，命题失效。"
@@ -92,18 +106,15 @@ class ResearchReportQualityValidatorTest {
         StringBuilder markdown = new StringBuilder();
         markdown.append("# 测试公司深度研究报告\n\n")
                 .append("## 核心结论\n测试公司当前结论。 ").append(conclusionRefs).append("\n\n")
-                .append("## 关键认识\n关键认识 [E1]\n\n")
-                .append("## 执行摘要\n执行摘要 [E1]\n\n")
-                .append("## 研究范围与口径\n研究范围。\n\n")
-                .append("## 关键事实与数字\n事实 [E1][E2]\n\n")
-                .append("## 发生了什么\n事件经过 [E1]\n\n")
-                .append("## 命题拆解与逐题判断\n逐题判断 [E1]\n\n")
-                .append("## 核心证据链\n证据链 ").append(chainRefs).append("\n\n")
-                .append("## 反方解释与争议\n反方解释 ").append(counterRefs).append("\n\n")
-                .append("## 机制与情景推演\n情景推演 [E1][E2]\n\n")
-                .append("## 最终认识与未知项\n未知项。\n\n")
-                .append("## 跟踪清单与失效条件\n").append(monitoring).append("\n\n")
-                .append("## 证据附录\n[E1][E2]\n\n");
+                .append("## 关键事实与 AI 解读\n### 事实 1\n\n**事实：** 可验证事实 ")
+                .append(chainRefs).append("\n\n**AI 解读：** 该事实影响测试公司命题 ")
+                .append(chainRefs).append("\n\n")
+                .append("## 命题拆解与综合判断\n逐题判断 [E1]\n\n")
+                .append("## 影响机制\n事件如何影响命题 [E1]\n\n")
+                .append("## 不同解释与不确定性\n另一种解释 ").append(counterRefs).append("\n\n")
+                .append("## 情景推演\n情景推演 [E1][E2]\n\n")
+                .append("## 结论更新条件\n").append(monitoring).append("\n\n")
+                .append("## 资料来源\n[E1][E2]\n\n");
         while (markdown.length() < 6100) markdown.append("测试公司研究正文用于验证报告长度与结构。\n");
         return markdown.toString();
     }

@@ -74,6 +74,27 @@ test('hides legacy evidence anchor markup while preserving evidence navigation',
   expect(screen.getByRole('heading', { name: 'E1 · 示例证据' })).toHaveAttribute('id', 'evidence-e1');
 });
 
+test('renders complete fact and ai interpretation pairs in the report body', () => {
+  const completeFact = '长鑫科技上市首日成交额和换手率均处于高位，市场在有限流通盘上完成了集中价格发现。';
+  const report: ResearchReport = {
+    id: 6, researchRunId: 19, reportType: 'THESIS', status: 'COMPLETED', title: '命题优先研究报告',
+    conclusion: '当前交易表现反映集中价格发现。', conclusionDirection: 'MIXED', confidence: 'MEDIUM',
+    executiveSummary: '摘要', contentMarkdown: `## 核心结论\n\n结论 [E1](#evidence-e1)\n\n`
+      + `## 关键事实与 AI 解读\n\n### 事实 1\n\n**事实：** ${completeFact} [E1](#evidence-e1)\n\n`
+      + '**AI 解读：** 该事实说明短期定价高度集中，但不能单独证明长期价值。 [E1](#evidence-e1)\n\n'
+      + '## 资料来源\n\n### E1 · 示例来源', markdownPath: '/tmp/run-19.md',
+    generationMode: 'MODEL_STRUCTURED', evidenceCount: 1, sourceCount: 1, characterCount: 2400
+  };
+
+  render(<ResearchReportReader report={report} onBack={() => undefined} />);
+
+  expect(screen.getByText(completeFact, { exact: false })).toBeInTheDocument();
+  expect(screen.getByText(/该事实说明短期定价高度集中/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '关键事实与 AI 解读' }))
+    .toHaveAttribute('href', '#section-关键事实与-ai-解读');
+  expect(screen.queryByText(/已截断/)).not.toBeInTheDocument();
+});
+
 test('keeps the desktop report body on the page centerline', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');

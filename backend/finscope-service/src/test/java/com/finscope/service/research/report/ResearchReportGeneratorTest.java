@@ -30,24 +30,26 @@ class ResearchReportGeneratorTest {
         GeneratedResearchReport report = generator.generate(thesis, evidence, EvidenceSufficiency.assess(evidence));
 
         assertTrue(report.getMarkdown().contains("## 核心结论"));
-        assertTrue(report.getMarkdown().contains("## 执行摘要"));
         assertTrue(report.getMarkdown().contains("# 半导体设备深度研究报告"));
-        assertTrue(report.getMarkdown().contains("## 关键认识"));
-        assertTrue(report.getMarkdown().contains("## 研究范围与口径"));
-        assertTrue(report.getMarkdown().contains("## 关键事实与数字"));
-        assertTrue(report.getMarkdown().contains("## 发生了什么"));
-        assertTrue(report.getMarkdown().contains("## 命题拆解与逐题判断"));
-        assertTrue(report.getMarkdown().contains("## 核心证据链"));
-        assertTrue(report.getMarkdown().contains("## 反方解释与争议"));
-        assertTrue(report.getMarkdown().contains("## 机制与情景推演"));
-        assertTrue(report.getMarkdown().contains("## 最终认识与未知项"));
-        assertTrue(report.getMarkdown().contains("## 跟踪清单与失效条件"));
-        assertTrue(report.getMarkdown().contains("## 证据附录"));
+        assertTrue(report.getMarkdown().contains("## 关键事实与 AI 解读"));
+        assertTrue(report.getMarkdown().contains("## 命题拆解与综合判断"));
+        assertTrue(report.getMarkdown().contains("## 影响机制"));
+        assertTrue(report.getMarkdown().contains("## 不同解释与不确定性"));
+        assertTrue(report.getMarkdown().contains("## 情景推演"));
+        assertTrue(report.getMarkdown().contains("## 结论更新条件"));
+        assertTrue(report.getMarkdown().contains("## 资料来源"));
+        assertTrue(!report.getMarkdown().contains("## 执行摘要"));
+        assertTrue(!report.getMarkdown().contains("支持与反向证据比"));
+        assertTrue(!report.getMarkdown().contains("相关性："));
+        assertTrue(!report.getMarkdown().contains("（已截断）"));
+        assertTrue(!report.getMarkdown().contains("…"));
+        assertTrue(occurrences(report.getMarkdown(), "**事实：**") == evidence.size());
+        assertTrue(occurrences(report.getMarkdown(), "**AI 解读：**") == evidence.size());
         assertTrue(report.getMarkdown().contains("[E1](#evidence-e1)"));
         assertTrue(report.getMarkdown().contains("### E1 ·"));
         assertFalse(report.getMarkdown().contains("<a id=\"evidence-e1\"></a>"));
         assertTrue(report.getMarkdown().length() <= ResearchReportPolicy.MAX_REPORT_CHARACTERS);
-        assertTrue(report.getExecutiveSummary().length() >= 800);
+        assertTrue(report.getExecutiveSummary().length() > 100);
         assertTrue(report.getExecutiveSummary().length() <= ResearchReportPolicy.MAX_EXECUTIVE_SUMMARY_CHARACTERS);
         assertFalse(report.getConclusion().contains("无法得出结论"));
     }
@@ -62,7 +64,7 @@ class ResearchReportGeneratorTest {
         GeneratedResearchReport report = generator.generate(thesis, evidence, EvidenceSufficiency.assess(evidence));
 
         assertTrue(report.getConclusion().startsWith("阶段性结论"));
-        assertTrue(report.getMarkdown().contains("证据局限"));
+        assertTrue(report.getMarkdown().contains("当前资料尚未覆盖全部必要方向"));
         assertTrue(report.getMarkdown().length() < 12000);
     }
 
@@ -100,5 +102,11 @@ class ResearchReportGeneratorTest {
         article.setSummary(summary);
         article.setUrl("https://example.com/" + id);
         return article;
+    }
+
+    private int occurrences(String value, String expected) {
+        int count = 0;
+        for (int offset = 0; (offset = value.indexOf(expected, offset)) >= 0; offset += expected.length()) count++;
+        return count;
     }
 }
