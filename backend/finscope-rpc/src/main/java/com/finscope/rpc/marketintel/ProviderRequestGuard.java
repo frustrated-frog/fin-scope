@@ -85,9 +85,10 @@ public class ProviderRequestGuard {
                                         Operation<T> operation) {
         EndpointKey key = new EndpointKey(provider.providerCode(), capability);
         EndpointState endpoint = endpoints.computeIfAbsent(key, ignored -> new EndpointState());
-        FamilyKey familyKey = new FamilyKey(capability, provider.providerFamily());
+        String reliabilityFamily = provider.reliabilityFamily();
+        FamilyKey familyKey = new FamilyKey(capability, reliabilityFamily);
         FamilyState family = families.computeIfAbsent(familyKey, ignored -> new FamilyState());
-        acquirePermission(provider, endpoint, family);
+        acquirePermission(provider, reliabilityFamily, endpoint, family);
 
         for (int attempt = 0; ; attempt++) {
             sleep(reserveDelay(endpoint, provider.minimumInterval()));
@@ -95,20 +96,20 @@ public class ProviderRequestGuard {
             long started = System.nanoTime();
             try {
                 T value = operation.run();
-                recordSuccess(provider.providerCode(), provider.providerFamily(), capability,
+                recordSuccess(provider.providerCode(), reliabilityFamily, capability,
                         elapsedMillis(started));
                 return value;
             } catch (ProviderContractException error) {
                 if (error.isRetryable() && attempt < maxRetries) {
                     continue;
                 }
-                recordFailure(key, provider.providerFamily(), capability,
+                recordFailure(key, reliabilityFamily, capability,
                         elapsedMillis(started), error.isRetryable());
                 throw error;
             } catch (Exception error) {
                 if (error instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
-                    recordFailure(key, provider.providerFamily(), capability,
+                    recordFailure(key, reliabilityFamily, capability,
                             elapsedMillis(started), false);
                     throw new ProviderContractException("INTERRUPTED",
                             "provider call interrupted", false, error);
@@ -116,7 +117,7 @@ public class ProviderRequestGuard {
                 if (attempt < maxRetries) {
                     continue;
                 }
-                recordFailure(key, provider.providerFamily(), capability,
+                recordFailure(key, reliabilityFamily, capability,
                         elapsedMillis(started), true);
                 throw new ProviderContractException("CONNECTION_ERROR", error.getMessage(), true, error);
             }
@@ -133,38 +134,40 @@ public class ProviderRequestGuard {
     public boolean isAvailable(ExternalDataProvider provider, String capabilityCode) {
         requireCapability(capabilityCode);
         EndpointState endpoint = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
-        FamilyState family = families.get(new FamilyKey(capabilityCode, provider.providerFamily()));
+        FamilyState family = families.get(new FamilyKey(capabilityCode, provider.reliabilityFamily()));
         Instant now = clock.instant();
         return (endpoint == null || endpoint.isAvailable(now))
                 && (family == null || family.isAvailable(now));
     }
 
-    public boolean isFamilyAvailable(String providerFamily) {
-        return isFamilyAvailable(MarketDataCapability.REALTIME_STOCK_QUOTE, providerFamily);
+    /** 查询指定可靠性故障域是否可用；通常传入 provider.reliabilityFamily()。 */
+    public boolean isFamilyAvailable(String reliabilityFamily) {
+        return isFamilyAvailable(MarketDataCapability.REALTIME_STOCK_QUOTE, reliabilityFamily);
     }
 
-    public boolean isFamilyAvailable(MarketDataCapability capability, String providerFamily) {
-        return isFamilyAvailable(capability.name(), providerFamily);
+    public boolean isFamilyAvailable(MarketDataCapability capability, String reliabilityFamily) {
+        return isFamilyAvailable(capability.name(), reliabilityFamily);
     }
 
-    public boolean isFamilyAvailable(String capabilityCode, String providerFamily) {
+    public boolean isFamilyAvailable(String capabilityCode, String reliabilityFamily) {
         requireCapability(capabilityCode);
-        FamilyState family = families.get(new FamilyKey(capabilityCode, providerFamily));
+        FamilyState family = families.get(new FamilyKey(capabilityCode, reliabilityFamily));
         return family == null || family.isAvailable(clock.instant());
     }
 
-    public void recordSuccess(String providerCode, String providerFamily,
+    /** 记录端点及其可靠性故障域成功；第二个参数通常传入 provider.reliabilityFamily()。 */
+    public void recordSuccess(String providerCode, String reliabilityFamily,
                               MarketDataCapability capability, long latencyMillis) {
-        recordSuccess(providerCode, providerFamily, capability.name(), latencyMillis);
+        recordSuccess(providerCode, reliabilityFamily, capability.name(), latencyMillis);
     }
 
-    public void recordSuccess(String providerCode, String providerFamily,
+    public void recordSuccess(String providerCode, String reliabilityFamily,
                               String capabilityCode, long latencyMillis) {
         requireCapability(capabilityCode);
         EndpointState endpoint = endpoints.computeIfAbsent(
                 new EndpointKey(providerCode, capabilityCode), ignored -> new EndpointState());
         endpoint.recordSuccess(Math.max(0L, latencyMillis));
-        families.computeIfAbsent(new FamilyKey(capabilityCode, providerFamily),
+        families.computeIfAbsent(new FamilyKey(capabilityCode, reliabilityFamily),
                 ignored -> new FamilyState()).recordSuccess();
     }
 
@@ -198,14 +201,15 @@ public class ProviderRequestGuard {
         return state == null ? 0.0d : state.consecutiveFailures() * 25.0d;
     }
 
-    private void acquirePermission(ExternalDataProvider provider, EndpointState endpoint, FamilyState family) {
+    private void acquirePermission(ExternalDataProvider provider, String reliabilityFamily,
+                                   EndpointState endpoint, FamilyState family) {
         Instant now = clock.instant();
         if (!endpoint.tryAcquire(now)) {
             throw circuitOpen(provider.providerCode());
         }
         if (!family.tryAcquire(now)) {
             endpoint.releaseProbe();
-            throw circuitOpen(provider.providerFamily());
+            throw circuitOpen(reliabilityFamily);
         }
     }
 
