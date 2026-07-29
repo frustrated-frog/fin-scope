@@ -30,16 +30,25 @@ public class SourcePlanner {
         Set<Long> selectedSourceIds = new LinkedHashSet<Long>();
         for (String themeCode : themeCodes) {
             ThemeProfile theme = themeProfileService.getRequired(themeCode);
-            List<SourceProfile> candidates = new ArrayList<SourceProfile>();
+            List<SourceProfile> taggedCandidates = new ArrayList<SourceProfile>();
+            List<SourceProfile> tierFallbackCandidates = new ArrayList<SourceProfile>();
             for (SourceProfile profile : emptyIfNull(sourceProfiles)) {
                 if (!includeDisabled && !profile.isEnabled()) {
                     continue;
                 }
-                if (!matchesTheme(theme, profile)) {
+                String sourceTier = normalized(profile.getSourceTier());
+                if (containsTier(theme.getDisallowedTiers(), sourceTier)) {
                     continue;
                 }
-                candidates.add(profile);
+                if (profile.getThemeCodes().contains(theme.getCode())) {
+                    taggedCandidates.add(profile);
+                } else if (containsTier(theme.getRequiredTiers(), sourceTier)
+                        || containsTier(theme.getPreferredTiers(), sourceTier)) {
+                    tierFallbackCandidates.add(profile);
+                }
             }
+            List<SourceProfile> candidates = taggedCandidates.isEmpty()
+                    ? tierFallbackCandidates : taggedCandidates;
             Collections.sort(candidates, byTheme(theme));
             int selected = 0;
             for (SourceProfile candidate : candidates) {
@@ -57,17 +66,6 @@ public class SourcePlanner {
             }
         }
         return planned;
-    }
-
-    private boolean matchesTheme(ThemeProfile theme, SourceProfile profile) {
-        String sourceTier = normalized(profile.getSourceTier());
-        if (containsTier(theme.getDisallowedTiers(), sourceTier)) {
-            return false;
-        }
-        if (profile.getThemeCodes().contains(theme.getCode())) {
-            return true;
-        }
-        return containsTier(theme.getRequiredTiers(), sourceTier) || containsTier(theme.getPreferredTiers(), sourceTier);
     }
 
     private Comparator<SourceProfile> byTheme(final ThemeProfile theme) {

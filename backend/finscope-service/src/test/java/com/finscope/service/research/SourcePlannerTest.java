@@ -76,6 +76,22 @@ class SourcePlannerTest {
         assertTrue(planned.stream().anyMatch(profile -> Long.valueOf(3L).equals(profile.getSourceId())));
     }
 
+    @Test
+    void prefersThemeTaggedSourceOverHigherCredibilityGenericMedia() {
+        List<SourceProfile> planned = sourcePlanner.plan(
+                LocalDate.of(2026, 7, 29),
+                Collections.singletonList("company_ipo"),
+                1,
+                false,
+                Arrays.asList(
+                        profile(5L, "AI HOT", "MEDIA", true, 5, "ai_startup"),
+                        profile(6L, "BBC Business", "MEDIA", true, 3, "company_ipo,china_macro"))
+        );
+
+        assertEquals(1, planned.size());
+        assertEquals(Long.valueOf(6L), planned.get(0).getSourceId());
+    }
+
     private SourceProfile profile(Long id,
                                   String name,
                                   String sourceTier,
