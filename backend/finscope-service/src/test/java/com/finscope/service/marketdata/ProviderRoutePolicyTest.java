@@ -3,6 +3,7 @@ package com.finscope.service.marketdata;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
+import com.finscope.rpc.provider.ExternalDataProvider;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -48,6 +49,20 @@ class ProviderRoutePolicyTest {
         assertEquals("EASTMONEY_DIRECT", ordered.get(1).providerCode());
     }
 
+    @Test
+    void ordersResearchProvidersWithTheSharedHealthPolicy() {
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ExternalDataProvider primary = externalProvider("CNINFO", "CNINFO", 10);
+        ExternalDataProvider fallback = externalProvider("EXCHANGE", "SZSE", 10);
+        guard.recordSuccess("CNINFO", "CNINFO", "RESEARCH_ANNOUNCEMENT", 800);
+        guard.recordSuccess("EXCHANGE", "SZSE", "RESEARCH_ANNOUNCEMENT", 40);
+
+        List<ExternalDataProvider> ordered = new ProviderRoutePolicy(guard).orderExternal(
+                Arrays.asList(primary, fallback), "RESEARCH_ANNOUNCEMENT", provider -> true);
+
+        assertEquals("EXCHANGE", ordered.get(0).providerCode());
+    }
+
     private MarketDataProvider provider(String code, String family, int priority) {
         return provider(code, family, priority, false);
     }
@@ -64,6 +79,17 @@ class ProviderRoutePolicyTest {
             public Duration minimumInterval() { return Duration.ZERO; }
             public Duration timeout() { return Duration.ofSeconds(1); }
             public boolean isTerminalFallback() { return terminal; }
+        };
+    }
+
+    private ExternalDataProvider externalProvider(String code, String family, int priority) {
+        return new ExternalDataProvider() {
+            public String providerCode() { return code; }
+            public String providerFamily() { return family; }
+            public int priority() { return priority; }
+            public int batchLimit() { return 20; }
+            public Duration minimumInterval() { return Duration.ZERO; }
+            public Duration timeout() { return Duration.ofSeconds(2); }
         };
     }
 }

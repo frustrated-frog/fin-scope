@@ -3,6 +3,7 @@ package com.finscope.rpc.marketintel;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.quote.EastmoneySectorMarketProvider;
 import com.finscope.rpc.quote.SinaStockQuoteAdapter;
+import com.finscope.rpc.provider.ExternalDataProvider;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -108,6 +109,25 @@ class ProviderRequestGuardTest {
     }
 
     @Test
+    void nonMarketProvidersShareTheSameReliabilityRuntime() {
+        AtomicInteger calls = new AtomicInteger();
+        ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                millis -> { }, Duration.ZERO, 1, 3, Duration.ofSeconds(60));
+        ExternalDataProvider provider = externalProvider("CNINFO_ANNOUNCEMENT", "CNINFO");
+
+        String result = guard.execute(provider, "RESEARCH_ANNOUNCEMENT", () -> {
+            if (calls.getAndIncrement() == 0) {
+                throw new ProviderContractException("HTTP_503", "busy", true);
+            }
+            return "ok";
+        });
+
+        assertEquals("ok", result);
+        assertEquals(2, calls.get());
+        assertTrue(guard.isAvailable(provider, "RESEARCH_ANNOUNCEMENT"));
+    }
+
+    @Test
     void providerDeadlineIsNestedAndAlwaysCleanedUp() {
         ProviderRequestGuard guard = new ProviderRequestGuard(Clock.systemUTC(), millis -> { },
                 Duration.ZERO, 0, 3, Duration.ofSeconds(60));
@@ -160,5 +180,16 @@ class ProviderRequestGuardTest {
         public int batchLimit() { return 1; }
         public Duration minimumInterval() { return Duration.ZERO; }
         public Duration timeout() { return Duration.ofSeconds(1); }
+    }
+
+    private ExternalDataProvider externalProvider(String code, String family) {
+        return new ExternalDataProvider() {
+            public String providerCode() { return code; }
+            public String providerFamily() { return family; }
+            public int priority() { return 10; }
+            public int batchLimit() { return 20; }
+            public Duration minimumInterval() { return Duration.ZERO; }
+            public Duration timeout() { return Duration.ofSeconds(2); }
+        };
     }
 }

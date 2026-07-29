@@ -2,13 +2,12 @@ package com.finscope.rpc.marketintel;
 
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketdata.MarketDataProvider;
+import com.finscope.rpc.provider.ExternalDataProvider;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -60,8 +59,8 @@ public class ProviderRequestGuard {
      */
     public <T> T execute(MarketDataCapability capability, String providerCode,
                          Operation<T> operation) {
-        return execute(new LegacyProvider(providerCode, legacyMinimumInterval, capability),
-                capability, operation);
+        return execute(new LegacyProvider(providerCode, legacyMinimumInterval),
+                capability.name(), operation);
     }
 
     public <T> T execute(MarketDataProvider provider, MarketDataCapability capability,
@@ -70,13 +69,19 @@ public class ProviderRequestGuard {
             throw new ProviderContractException("UNSUPPORTED_CAPABILITY",
                     provider.providerCode() + " does not support " + capability, false);
         }
+        return execute(provider, capability.name(), operation);
+    }
+
+    public <T> T execute(ExternalDataProvider provider, String capabilityCode,
+                         Operation<T> operation) {
+        requireCapability(capabilityCode);
         try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(provider.timeout())) {
-            return executeWithinDeadline(provider, capability, operation);
+            return executeWithinDeadline(provider, capabilityCode, operation);
         }
     }
 
-    private <T> T executeWithinDeadline(MarketDataProvider provider,
-                                        MarketDataCapability capability,
+    private <T> T executeWithinDeadline(ExternalDataProvider provider,
+                                        String capability,
                                         Operation<T> operation) {
         EndpointKey key = new EndpointKey(provider.providerCode(), capability);
         EndpointState endpoint = endpoints.computeIfAbsent(key, ignored -> new EndpointState());
@@ -122,8 +127,13 @@ public class ProviderRequestGuard {
         if (!provider.supports(capability)) {
             return false;
         }
-        EndpointState endpoint = endpoints.get(new EndpointKey(provider.providerCode(), capability));
-        FamilyState family = families.get(new FamilyKey(capability, provider.providerFamily()));
+        return isAvailable(provider, capability.name());
+    }
+
+    public boolean isAvailable(ExternalDataProvider provider, String capabilityCode) {
+        requireCapability(capabilityCode);
+        EndpointState endpoint = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
+        FamilyState family = families.get(new FamilyKey(capabilityCode, provider.providerFamily()));
         Instant now = clock.instant();
         return (endpoint == null || endpoint.isAvailable(now))
                 && (family == null || family.isAvailable(now));
@@ -134,38 +144,61 @@ public class ProviderRequestGuard {
     }
 
     public boolean isFamilyAvailable(MarketDataCapability capability, String providerFamily) {
-        FamilyState family = families.get(new FamilyKey(capability, providerFamily));
+        return isFamilyAvailable(capability.name(), providerFamily);
+    }
+
+    public boolean isFamilyAvailable(String capabilityCode, String providerFamily) {
+        requireCapability(capabilityCode);
+        FamilyState family = families.get(new FamilyKey(capabilityCode, providerFamily));
         return family == null || family.isAvailable(clock.instant());
     }
 
     public void recordSuccess(String providerCode, String providerFamily,
                               MarketDataCapability capability, long latencyMillis) {
+        recordSuccess(providerCode, providerFamily, capability.name(), latencyMillis);
+    }
+
+    public void recordSuccess(String providerCode, String providerFamily,
+                              String capabilityCode, long latencyMillis) {
+        requireCapability(capabilityCode);
         EndpointState endpoint = endpoints.computeIfAbsent(
-                new EndpointKey(providerCode, capability), ignored -> new EndpointState());
+                new EndpointKey(providerCode, capabilityCode), ignored -> new EndpointState());
         endpoint.recordSuccess(Math.max(0L, latencyMillis));
-        families.computeIfAbsent(new FamilyKey(capability, providerFamily),
+        families.computeIfAbsent(new FamilyKey(capabilityCode, providerFamily),
                 ignored -> new FamilyState()).recordSuccess();
     }
 
     public double successRateEwma(MarketDataProvider provider, MarketDataCapability capability) {
-        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capability));
+        return successRateEwma(provider, capability.name());
+    }
+
+    public double successRateEwma(ExternalDataProvider provider, String capabilityCode) {
+        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
         return state == null ? 1.0d : state.successRate();
     }
 
     public double latencyEwmaMillis(MarketDataProvider provider, MarketDataCapability capability) {
-        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capability));
+        return latencyEwmaMillis(provider, capability.name());
+    }
+
+    public double latencyEwmaMillis(ExternalDataProvider provider, String capabilityCode) {
+        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
         return state == null ? 0.0d : state.latencyMillis();
     }
 
     public double failurePenalty(MarketDataProvider provider, MarketDataCapability capability) {
-        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capability));
-        if (!isAvailable(provider, capability)) {
+        return failurePenalty(provider, capability.name());
+    }
+
+    public double failurePenalty(ExternalDataProvider provider, String capabilityCode) {
+        EndpointState state = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
+        if (!isAvailable(provider, capabilityCode)) {
             return 10_000.0d;
         }
         return state == null ? 0.0d : state.consecutiveFailures() * 25.0d;
     }
 
-    private void acquirePermission(MarketDataProvider provider, EndpointState endpoint, FamilyState family) {
+    private void acquirePermission(ExternalDataProvider provider, EndpointState endpoint, FamilyState family) {
         Instant now = clock.instant();
         if (!endpoint.tryAcquire(now)) {
             throw circuitOpen(provider.providerCode());
@@ -184,7 +217,7 @@ public class ProviderRequestGuard {
         return state.reserve(clock.instant(), minimumInterval == null ? Duration.ZERO : minimumInterval);
     }
 
-    private long reserveFamilyDelay(MarketDataProvider provider) {
+    private long reserveFamilyDelay(ExternalDataProvider provider) {
         Duration interval = provider.minimumInterval() == null
                 ? Duration.ZERO : provider.minimumInterval();
         if ("EASTMONEY".equalsIgnoreCase(provider.providerFamily())
@@ -209,7 +242,7 @@ public class ProviderRequestGuard {
     }
 
     private void recordFailure(EndpointKey key, String providerFamily,
-                               MarketDataCapability capability, long latencyMillis,
+                               String capability, long latencyMillis,
                                boolean retryable) {
         Instant now = clock.instant();
         endpoints.computeIfAbsent(key, ignored -> new EndpointState())
@@ -230,9 +263,9 @@ public class ProviderRequestGuard {
 
     private static final class EndpointKey {
         private final String providerCode;
-        private final MarketDataCapability capability;
+        private final String capability;
 
-        private EndpointKey(String providerCode, MarketDataCapability capability) {
+        private EndpointKey(String providerCode, String capability) {
             this.providerCode = providerCode;
             this.capability = capability;
         }
@@ -242,7 +275,7 @@ public class ProviderRequestGuard {
             if (this == value) return true;
             if (!(value instanceof EndpointKey)) return false;
             EndpointKey other = (EndpointKey) value;
-            return providerCode.equals(other.providerCode) && capability == other.capability;
+            return providerCode.equals(other.providerCode) && capability.equals(other.capability);
         }
 
         @Override
@@ -252,10 +285,10 @@ public class ProviderRequestGuard {
     }
 
     private static final class FamilyKey {
-        private final MarketDataCapability capability;
+        private final String capability;
         private final String providerFamily;
 
-        private FamilyKey(MarketDataCapability capability, String providerFamily) {
+        private FamilyKey(String capability, String providerFamily) {
             this.capability = capability;
             this.providerFamily = providerFamily;
         }
@@ -265,7 +298,7 @@ public class ProviderRequestGuard {
             if (this == value) return true;
             if (!(value instanceof FamilyKey)) return false;
             FamilyKey other = (FamilyKey) value;
-            return capability == other.capability && providerFamily.equals(other.providerFamily);
+            return capability.equals(other.capability) && providerFamily.equals(other.providerFamily);
         }
 
         @Override
@@ -393,16 +426,13 @@ public class ProviderRequestGuard {
         }
     }
 
-    private static final class LegacyProvider implements MarketDataProvider {
+    private static final class LegacyProvider implements ExternalDataProvider {
         private final String code;
         private final Duration minimumInterval;
-        private final MarketDataCapability capability;
 
-        private LegacyProvider(String code, Duration minimumInterval,
-                               MarketDataCapability capability) {
+        private LegacyProvider(String code, Duration minimumInterval) {
             this.code = code;
             this.minimumInterval = minimumInterval;
-            this.capability = capability;
         }
 
         public String providerCode() {
@@ -411,10 +441,6 @@ public class ProviderRequestGuard {
 
         public String providerFamily() {
             return code;
-        }
-
-        public Set<MarketDataCapability> capabilities() {
-            return Collections.singleton(capability);
         }
 
         public int priority() {
@@ -431,6 +457,12 @@ public class ProviderRequestGuard {
 
         public Duration timeout() {
             return Duration.ofSeconds(10);
+        }
+    }
+
+    private void requireCapability(String capabilityCode) {
+        if (capabilityCode == null || capabilityCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("provider capability must not be blank");
         }
     }
 }
