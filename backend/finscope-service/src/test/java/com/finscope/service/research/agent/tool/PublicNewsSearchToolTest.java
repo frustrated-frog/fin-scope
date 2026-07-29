@@ -7,6 +7,8 @@ import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
+import com.finscope.service.research.source.FinancialSourceQueryPolicy;
+import com.finscope.service.research.source.OfficialFinancialSourceRegistry;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -111,6 +113,34 @@ class PublicNewsSearchToolTest {
         assertEquals(1, observation.getEvidenceDelta());
         assertTrue(observation.getObservationSummary().contains("低相关=1"));
         verify(evidenceRepository, times(1)).save(any(ResearchSearchEvidence.class));
+    }
+
+    @Test
+    void primaryIntentSearchesOfficialLaneAndOverridesTierFromRegistry() throws Exception {
+        OfficialFinancialSourceRegistry registry = new OfficialFinancialSourceRegistry();
+        FinancialSourceQueryPolicy queryPolicy = new FinancialSourceQueryPolicy(registry);
+        tool = new PublicNewsSearchTool(searchClient, evidenceRepository, acquisitionService, queryPolicy, registry);
+        when(searchClient.isConfigured()).thenReturn(true);
+        SearchResult official = result("上市公告", "https://static.sse.com.cn/disclosure/a.pdf",
+                "募集资金用于先进制程研发", "T3");
+        String officialQuery = queryPolicy.plan("长鑫科技 IPO 募集资金", "PRIMARY").getEffectiveQuery();
+        when(searchClient.search(officialQuery, 5)).thenReturn(Collections.singletonList(official));
+        when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
+            ResearchSearchEvidence value = invocation.getArgument(0);
+            value.setId(88L);
+            return value;
+        });
+        Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+        arguments.put("query", "长鑫科技 IPO 募集资金");
+        arguments.put("intent", "PRIMARY");
+
+        ResearchToolObservation observation = tool.execute(new ResearchAgentToolContext(22L, 9L), arguments);
+
+        ArgumentCaptor<ResearchSearchEvidence> captor = ArgumentCaptor.forClass(ResearchSearchEvidence.class);
+        verify(evidenceRepository).save(captor.capture());
+        assertEquals("T1", captor.getValue().getSourceTier());
+        assertTrue(observation.getObservationSummary().contains("官方通道=true"));
+        verify(searchClient).search(officialQuery, 5);
     }
 
     private Map<String, Object> arguments() {

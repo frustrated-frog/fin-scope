@@ -8,6 +8,9 @@ import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.search.WebSearchClient;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
+import com.finscope.service.research.source.FinancialSourceQueryPolicy;
+import com.finscope.service.research.source.FinancialSourceSearchPlan;
+import com.finscope.service.research.source.OfficialFinancialSourceRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -27,19 +30,33 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     private final WebSearchClient searchClient;
     private final ResearchSearchEvidenceRepository evidenceRepository;
     private final ResearchEvidenceAcquisitionService acquisitionService;
+    private final FinancialSourceQueryPolicy queryPolicy;
+    private final OfficialFinancialSourceRegistry sourceRegistry;
 
     public PublicNewsSearchTool(WebSearchClient searchClient,
                                 ResearchSearchEvidenceRepository evidenceRepository) {
         this(searchClient, evidenceRepository, null);
     }
 
-    @Autowired
     public PublicNewsSearchTool(WebSearchClient searchClient,
                                 ResearchSearchEvidenceRepository evidenceRepository,
                                 ResearchEvidenceAcquisitionService acquisitionService) {
+        this(searchClient, evidenceRepository, acquisitionService,
+                new FinancialSourceQueryPolicy(new OfficialFinancialSourceRegistry()),
+                new OfficialFinancialSourceRegistry());
+    }
+
+    @Autowired
+    public PublicNewsSearchTool(WebSearchClient searchClient,
+                                ResearchSearchEvidenceRepository evidenceRepository,
+                                ResearchEvidenceAcquisitionService acquisitionService,
+                                FinancialSourceQueryPolicy queryPolicy,
+                                OfficialFinancialSourceRegistry sourceRegistry) {
         this.searchClient = searchClient;
         this.evidenceRepository = evidenceRepository;
         this.acquisitionService = acquisitionService;
+        this.queryPolicy = queryPolicy;
+        this.sourceRegistry = sourceRegistry;
     }
 
     @Override
@@ -87,11 +104,17 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         String query = text(arguments.get("query"));
         String intent = text(arguments.get("intent"));
         try {
+            FinancialSourceSearchPlan searchPlan = queryPolicy.plan(query, intent);
             Set<String> existingDomains = new HashSet<String>();
             for (ResearchSearchEvidence item : evidenceRepository.findByRunId(context.getResearchRunId())) {
                 if (hasText(item.getSourceDomain())) existingDomains.add(item.getSourceDomain().toLowerCase());
             }
-            List<SearchResult> hits = searchClient.search(query, MAX_RESULTS);
+            List<SearchResult> hits = searchClient.search(searchPlan.getEffectiveQuery(), MAX_RESULTS);
+            boolean generalFallback = false;
+            if (searchPlan.isOfficialLane() && (hits == null || hits.isEmpty())) {
+                hits = searchClient.search(searchPlan.getOriginalQuery(), MAX_RESULTS);
+                generalFallback = true;
+            }
             List<String> refs = new ArrayList<String>();
             Set<String> seenUrls = new HashSet<String>();
             Set<String> newDomains = new HashSet<String>();
@@ -124,6 +147,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             value.setStateHash("tavily:" + refs.size() + ":" + newDomains.size());
             value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
             value.setObservationSummary("Tavily 搜索完成：命中=" + (hits == null ? 0 : hits.size())
+                    + "，官方通道=" + searchPlan.isOfficialLane() + "，通用降级=" + generalFallback
                     + "，低相关=" + lowRelevance + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
                     + "，全文=" + fullText + "，摘要降级=" + snippetFallback
                     + "，新增独立来源=" + newDomains.size());
@@ -161,7 +185,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setContentCharCount(acquired.getContentCharCount());
         value.setFetchedAt(java.time.LocalDateTime.now());
         value.setSourceDomain(text(hit.getSourceDomain()));
-        value.setSourceTier(hasText(hit.getSourceTier()) ? hit.getSourceTier() : "T3");
+        value.setSourceTier(sourceRegistry.resolveTier(value.getSourceDomain(), hit.getSourceTier()));
         value.setRelevanceScore(hit.getScore());
         value.setPublishedAt(text(hit.getPublishedAt()));
         return value;
