@@ -3,13 +3,19 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { ResearchReport } from '../../shared/types';
-import { evidenceHeadingId, extractReportSections, slugReportHeading } from './researchReportPresentation';
+import {
+  evidenceHeadingId,
+  extractReportSections,
+  sanitizeLegacyEvidenceAnchors,
+  slugReportHeading
+} from './researchReportPresentation';
 
 const CONFIDENCE_LABELS = { HIGH: '高', MEDIUM: '中', LOW: '低' } as const;
 
 export function ResearchReportReader({ report, onBack }: { report: ResearchReport; onBack: () => void }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const sections = extractReportSections(report.contentMarkdown);
+  const displayMarkdown = sanitizeLegacyEvidenceAnchors(report.contentMarkdown);
+  const sections = extractReportSections(displayMarkdown);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -60,7 +66,7 @@ export function ResearchReportReader({ report, onBack }: { report: ResearchRepor
                 return <h3 id={evidenceHeadingId(title)}>{children}</h3>;
               }
             }}
-          >{report.contentMarkdown}</ReactMarkdown>
+          >{displayMarkdown}</ReactMarkdown>
         </section>
       </div>
     </article>

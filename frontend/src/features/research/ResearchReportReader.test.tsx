@@ -57,6 +57,23 @@ test('presents the structured model generation mode', () => {
   expect(screen.getByText('结构化模型生成')).toBeInTheDocument();
 });
 
+test('hides legacy evidence anchor markup while preserving evidence navigation', () => {
+  const report: ResearchReport = {
+    id: 5, researchRunId: 18, reportType: 'THESIS', status: 'COMPLETED', title: '证据锚点兼容报告',
+    conclusion: '结论', conclusionDirection: 'MIXED', confidence: 'MEDIUM', executiveSummary: '摘要',
+    contentMarkdown: '## 核心结论\n\n参见 [E1](#evidence-e1)。\n\n## 证据附录\n\n'
+      + '<a id="evidence-e1"></a>\n### E1 · 示例证据\n\n- 事实摘录：示例事实',
+    markdownPath: '/tmp/run-18.md', generationMode: 'EVIDENCE_STRUCTURED_FALLBACK', evidenceCount: 1,
+    sourceCount: 1, characterCount: 1800
+  };
+
+  render(<ResearchReportReader report={report} onBack={() => undefined} />);
+
+  expect(screen.queryByText('<a id="evidence-e1"></a>')).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'E1' })).toHaveAttribute('href', '#evidence-e1');
+  expect(screen.getByRole('heading', { name: 'E1 · 示例证据' })).toHaveAttribute('id', 'evidence-e1');
+});
+
 test('keeps the desktop report body on the page centerline', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');

@@ -44,6 +44,8 @@ class ResearchReportGeneratorTest {
         assertTrue(report.getMarkdown().contains("## 跟踪清单与失效条件"));
         assertTrue(report.getMarkdown().contains("## 证据附录"));
         assertTrue(report.getMarkdown().contains("[E1](#evidence-e1)"));
+        assertTrue(report.getMarkdown().contains("### E1 ·"));
+        assertFalse(report.getMarkdown().contains("<a id=\"evidence-e1\"></a>"));
         assertTrue(report.getMarkdown().length() <= ResearchReportPolicy.MAX_REPORT_CHARACTERS);
         assertTrue(report.getExecutiveSummary().length() >= 800);
         assertTrue(report.getExecutiveSummary().length() <= ResearchReportPolicy.MAX_EXECUTIVE_SUMMARY_CHARACTERS);

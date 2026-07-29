@@ -153,8 +153,7 @@ public class ResearchReportGenerator {
             for (int index = 0; index < evidence.size(); index++) {
                 ResearchEvidenceCard card = evidence.get(index);
                 Article article = card.getArticle();
-                out.append("<a id=\"evidence-e").append(index + 1).append("\"></a>\n")
-                        .append("### E").append(index + 1).append(" · ")
+                out.append("### E").append(index + 1).append(" · ")
                         .append(markdownText(value(article.getTitle(), "未命名证据"))).append("\n\n")
                         .append("- 来源：").append(value(article.getSourceName(), "未知来源"))
                         .append("（").append(value(card.getSourceTier(), "T3")).append("）\n")

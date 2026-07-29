@@ -16,3 +16,7 @@ export function evidenceHeadingId(value: string) {
   const match = value.trim().match(/^(E\d+)\b/i);
   return match ? `evidence-${match[1].toLowerCase()}` : undefined;
 }
+
+export function sanitizeLegacyEvidenceAnchors(markdown: string) {
+  return markdown.replace(/^[ \t]*<a id=["']evidence-e\d+["']><\/a>[ \t]*$/gim, '');
+}
