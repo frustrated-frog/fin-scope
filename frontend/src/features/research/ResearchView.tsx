@@ -41,8 +41,6 @@ export function ResearchView({
     mode: 'QUICK' | 'DEEP';
     runDate: string;
     themeCodes: string[];
-    maxSourcesPerTheme: number;
-    includeDisabled: boolean;
   }) => Promise<void>;
   onCreateThesis: (input: Omit<ResearchThesis, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => Promise<ResearchThesis>;
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
@@ -56,8 +54,6 @@ export function ResearchView({
   const [runDate, setRunDate] = useState(today);
   const [mode, setMode] = useState<'QUICK' | 'DEEP'>('DEEP');
   const [themeCodes, setThemeCodes] = useState<string[]>(['china_macro', 'ai_startup', 'company_ipo']);
-  const [maxSourcesPerTheme, setMaxSourcesPerTheme] = useState(3);
-  const [includeDisabled, setIncludeDisabled] = useState(false);
   const [selectedThesisId, setSelectedThesisId] = useState<number | null>(null);
   const [question, setQuestion] = useState('');
   const [subjectType, setSubjectType] = useState<ResearchThesis['subjectType']>('COMPANY');
@@ -101,7 +97,7 @@ export function ResearchView({
   }, [selectedThesisId]);
 
   async function submit() {
-    await onRun({ thesisId: selectedThesisId || undefined, mode, runDate, themeCodes, maxSourcesPerTheme, includeDisabled });
+    await onRun({ thesisId: selectedThesisId || undefined, mode, runDate, themeCodes });
   }
 
   async function createThesis() {
@@ -286,29 +282,11 @@ export function ResearchView({
               <option value="QUICK">快速 · 单分支</option>
             </select>
           </label>
-          <label className="inline-select">
-            <span>每主题来源数</span>
-            <input
-              min={1}
-              max={8}
-              type="number"
-              value={maxSourcesPerTheme}
-              onChange={(event) => setMaxSourcesPerTheme(Number(event.target.value))}
-            />
-          </label>
-          <label className="research-toggle">
-            <input
-              type="checkbox"
-              checked={includeDisabled}
-              onChange={(event) => setIncludeDisabled(event.target.checked)}
-            />
-            <span>包含停用来源</span>
-          </label>
           </div>
         </div>
         <p className="research-scope-note">
           {mode === 'DEEP'
-            ? '深度模式最多并行读取三条互补分支，再顺序提交证据；默认覆盖：中国宏观、AI 创业、公司 / IPO。'
+            ? '深度模式会自动扩展启用来源，优先读取互补的一手与专业资料，并在证据覆盖充分后停止。'
             : '快速模式使用单分支与较小搜索、全文预算，适合先形成方向性判断。'}
         </p>
         <div className="research-run-action">

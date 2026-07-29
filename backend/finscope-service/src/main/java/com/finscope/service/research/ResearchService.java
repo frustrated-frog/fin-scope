@@ -97,25 +97,13 @@ public class ResearchService {
     private Executor researchTaskExecutor;
 
     public ResearchRunPlan createRun(LocalDate runDate,
-                                     List<String> themeCodes,
-                                     Integer maxSourcesPerTheme,
-                                     Boolean includeDisabled) {
-        return createRun(null, runDate, themeCodes, maxSourcesPerTheme, includeDisabled, ResearchMode.DEEP);
+                                     List<String> themeCodes) {
+        return createRun(null, runDate, themeCodes, ResearchMode.DEEP);
     }
 
     public ResearchRunPlan createRun(Long thesisId,
                                      LocalDate runDate,
                                      List<String> themeCodes,
-                                     Integer maxSourcesPerTheme,
-                                     Boolean includeDisabled) {
-        return createRun(thesisId, runDate, themeCodes, maxSourcesPerTheme, includeDisabled, ResearchMode.DEEP);
-    }
-
-    public ResearchRunPlan createRun(Long thesisId,
-                                     LocalDate runDate,
-                                     List<String> themeCodes,
-                                     Integer maxSourcesPerTheme,
-                                     Boolean includeDisabled,
                                      ResearchMode mode) {
         ResearchMode actualMode = ResearchMode.defaultIfNull(mode);
         ResearchThesis thesis = null;
@@ -124,17 +112,20 @@ public class ResearchService {
                     .orElseThrow(() -> new ResourceNotFoundException("研究命题不存在：" + thesisId));
         }
         LocalDate actualRunDate = runDate == null ? LocalDate.now() : runDate;
-        int actualMaxSources = maxSourcesPerTheme == null ? 3 : maxSourcesPerTheme;
-        boolean actualIncludeDisabled = includeDisabled != null && includeDisabled;
 
         List<ThemeProfile> themes = themeProfileService.getRequired(themeCodes);
         List<SourceProfile> plannedSources = sourcePlanner.plan(
-                actualRunDate,
-                themeCodes,
-                actualMaxSources,
-                actualIncludeDisabled,
-                toProfiles(sourceRepository.findAll()));
+                actualRunDate, themeCodes, toProfiles(sourceRepository.findAll()));
 
+        return persistAndStart(thesisId, thesis, actualRunDate, actualMode, themes, plannedSources);
+    }
+
+    private ResearchRunPlan persistAndStart(Long thesisId,
+                                            ResearchThesis thesis,
+                                            LocalDate actualRunDate,
+                                            ResearchMode actualMode,
+                                            List<ThemeProfile> themes,
+                                            List<SourceProfile> plannedSources) {
         ResearchRun run = new ResearchRun();
         run.setThesisId(thesisId);
         run.setMode(actualMode);

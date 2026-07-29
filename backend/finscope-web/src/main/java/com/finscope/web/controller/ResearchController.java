@@ -53,7 +53,7 @@ public class ResearchController {
     /**
      * 创建研究运行计划。
      *
-     * @param request 研究运行创建请求，包含命题 ID、运行日期、主题编码、每主题来源上限和是否包含禁用来源。
+     * @param request 研究运行创建请求，包含命题 ID、运行日期、主题编码和研究模式。
      * @return 创建后的研究运行响应，包含运行计划摘要。
      */
     @PostMapping
@@ -62,8 +62,6 @@ public class ResearchController {
                 request.getThesisId(),
                 request.getRunDate(),
                 request.getThemeCodes(),
-                request.getMaxSourcesPerTheme(),
-                request.getIncludeDisabled(),
                 request.getMode());
         return ApiResponses.success(ResearchRunResponse.of(plan));
     }

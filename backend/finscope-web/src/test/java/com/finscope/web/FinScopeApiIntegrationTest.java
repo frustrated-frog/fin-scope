@@ -945,8 +945,8 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(post("/api/research/runs")
                         .contentType("application/json")
-                        .content("{\"thesisId\":1,\"runDate\":\"" + LocalDate.now() + "\",\"themeCodes\":[\"china_macro\"],"
-                                + "\"maxSourcesPerTheme\":2,\"includeDisabled\":false}"))
+                        .content("{\"thesisId\":1,\"runDate\":\"" + LocalDate.now()
+                                + "\",\"themeCodes\":[\"china_macro\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.mode").value("DEEP"))
                 .andExpect(jsonPath("$.data.status").value("RUNNING"))
@@ -997,8 +997,9 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(get("/api/research/tools"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(4))
-                .andExpect(jsonPath("$.data[*].code").value(hasItem("public_news_search")));
+                .andExpect(jsonPath("$.data.length()").value(5))
+                .andExpect(jsonPath("$.data[*].code").value(hasItem("public_news_search")))
+                .andExpect(jsonPath("$.data[*].code").value(hasItem("research_material_search")));
 
         mvc.perform(get("/api/research/runs/1/mission"))
                 .andExpect(status().isOk())

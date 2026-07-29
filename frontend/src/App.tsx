@@ -377,8 +377,6 @@ export default function App() {
     mode: 'QUICK' | 'DEEP';
     runDate: string;
     themeCodes: string[];
-    maxSourcesPerTheme: number;
-    includeDisabled: boolean;
   }) {
     setResearchBusy(true);
     setMessage('正在启动研究运行');

@@ -21,19 +21,15 @@ public class SourcePlanner {
 
     public List<SourceProfile> plan(LocalDate runDate,
                                     List<String> themeCodes,
-                                    int maxSourcesPerTheme,
-                                    boolean includeDisabled,
                                     List<SourceProfile> sourceProfiles) {
         themeProfileService.getRequired(themeCodes);
-        int cappedMax = maxSourcesPerTheme <= 0 ? 1 : maxSourcesPerTheme;
         List<SourceProfile> planned = new ArrayList<SourceProfile>();
         Set<Long> selectedSourceIds = new LinkedHashSet<Long>();
         for (String themeCode : themeCodes) {
             ThemeProfile theme = themeProfileService.getRequired(themeCode);
-            List<SourceProfile> taggedCandidates = new ArrayList<SourceProfile>();
-            List<SourceProfile> tierFallbackCandidates = new ArrayList<SourceProfile>();
+            List<SourceProfile> candidates = new ArrayList<SourceProfile>();
             for (SourceProfile profile : emptyIfNull(sourceProfiles)) {
-                if (!includeDisabled && !profile.isEnabled()) {
+                if (!profile.isEnabled()) {
                     continue;
                 }
                 String sourceTier = normalized(profile.getSourceTier());
@@ -41,16 +37,13 @@ public class SourcePlanner {
                     continue;
                 }
                 if (profile.getThemeCodes().contains(theme.getCode())) {
-                    taggedCandidates.add(profile);
+                    candidates.add(profile);
                 } else if (containsTier(theme.getRequiredTiers(), sourceTier)
                         || containsTier(theme.getPreferredTiers(), sourceTier)) {
-                    tierFallbackCandidates.add(profile);
+                    candidates.add(profile);
                 }
             }
-            List<SourceProfile> candidates = taggedCandidates.isEmpty()
-                    ? tierFallbackCandidates : taggedCandidates;
             Collections.sort(candidates, byTheme(theme));
-            int selected = 0;
             for (SourceProfile candidate : candidates) {
                 if (candidate.getSourceId() != null && selectedSourceIds.contains(candidate.getSourceId())) {
                     continue;
@@ -58,10 +51,6 @@ public class SourcePlanner {
                 planned.add(candidate);
                 if (candidate.getSourceId() != null) {
                     selectedSourceIds.add(candidate.getSourceId());
-                }
-                selected++;
-                if (selected >= cappedMax) {
-                    break;
                 }
             }
         }
@@ -99,7 +88,7 @@ public class SourcePlanner {
             score += 20;
         }
         if (profile.getThemeCodes().contains(theme.getCode())) {
-            score += 10;
+            score += 1000;
         }
         return score;
     }

@@ -19,12 +19,10 @@ class SourcePlannerTest {
     private final SourcePlanner sourcePlanner = sourcePlanner();
 
     @Test
-    void plansEnabledSourcesByThemeAndRespectsPerThemeLimit() {
+    void plansAllEligibleEnabledSourcesAcrossThemes() {
         List<SourceProfile> planned = sourcePlanner.plan(
                 LocalDate.of(2026, 6, 27),
                 Arrays.asList("china_macro", "ai_startup"),
-                1,
-                false,
                 Arrays.asList(
                         profile(1L, "Reuters Macro", "MEDIA", true, 4, "china_macro,market"),
                         profile(2L, "Fed Official", "REGULATOR", true, 5, "china_macro"),
@@ -32,23 +30,22 @@ class SourcePlannerTest {
                         profile(4L, "Disabled AI", "COMPANY", false, 5, "ai_startup"))
         );
 
-        assertEquals(2, planned.size());
-        assertEquals(Arrays.asList(2L, 3L), Arrays.asList(planned.get(0).getSourceId(), planned.get(1).getSourceId()));
+        assertEquals(3, planned.size());
+        assertEquals(Arrays.asList(2L, 1L, 3L), Arrays.asList(
+                planned.get(0).getSourceId(), planned.get(1).getSourceId(), planned.get(2).getSourceId()));
     }
 
     @Test
-    void plansDisabledSourcesOnlyWhenExplicitlyRequested() {
+    void neverPlansDisabledSources() {
         List<SourceProfile> planned = sourcePlanner.plan(
                 LocalDate.of(2026, 6, 27),
                 Collections.singletonList("ai_startup"),
-                5,
-                true,
                 Arrays.asList(
                         profile(1L, "AI Weekly", "CURATED_AI", true, 4, "ai_startup"),
                         profile(2L, "Disabled AI", "COMPANY", false, 5, "ai_startup"))
         );
 
-        assertEquals(Arrays.asList(2L, 1L), Arrays.asList(planned.get(0).getSourceId(), planned.get(1).getSourceId()));
+        assertEquals(Collections.singletonList(1L), Collections.singletonList(planned.get(0).getSourceId()));
     }
 
     @Test
@@ -67,8 +64,6 @@ class SourcePlannerTest {
         List<SourceProfile> planned = sourcePlanner.plan(
                 LocalDate.of(2026, 7, 9),
                 Arrays.asList("china_macro", "ai_startup"),
-                2,
-                false,
                 profiles);
 
         assertTrue(planned.stream().anyMatch(profile -> Long.valueOf(1L).equals(profile.getSourceId())
@@ -81,14 +76,12 @@ class SourcePlannerTest {
         List<SourceProfile> planned = sourcePlanner.plan(
                 LocalDate.of(2026, 7, 29),
                 Collections.singletonList("company_ipo"),
-                1,
-                false,
                 Arrays.asList(
                         profile(5L, "AI HOT", "MEDIA", true, 5, "ai_startup"),
                         profile(6L, "BBC Business", "MEDIA", true, 3, "company_ipo,china_macro"))
         );
 
-        assertEquals(1, planned.size());
+        assertEquals(2, planned.size());
         assertEquals(Long.valueOf(6L), planned.get(0).getSourceId());
     }
 

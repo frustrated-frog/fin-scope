@@ -8,8 +8,6 @@ public class CreateResearchRunRequest {
     private Long thesisId;
     private LocalDate runDate;
     private List<String> themeCodes;
-    private Integer maxSourcesPerTheme;
-    private Boolean includeDisabled;
     private ResearchMode mode = ResearchMode.DEEP;
 
     public Long getThesisId() {
@@ -34,22 +32,6 @@ public class CreateResearchRunRequest {
 
     public void setThemeCodes(List<String> themeCodes) {
         this.themeCodes = themeCodes;
-    }
-
-    public Integer getMaxSourcesPerTheme() {
-        return maxSourcesPerTheme;
-    }
-
-    public void setMaxSourcesPerTheme(Integer maxSourcesPerTheme) {
-        this.maxSourcesPerTheme = maxSourcesPerTheme;
-    }
-
-    public Boolean getIncludeDisabled() {
-        return includeDisabled;
-    }
-
-    public void setIncludeDisabled(Boolean includeDisabled) {
-        this.includeDisabled = includeDisabled;
     }
 
     public ResearchMode getMode() {

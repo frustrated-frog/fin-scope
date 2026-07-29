@@ -109,7 +109,7 @@ class ResearchServiceHarnessTest {
         List<ResearchRunPlanStep> defaultSteps = defaultSteps();
         when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
-        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyList()))
                 .thenReturn(Collections.singletonList(source(12L)));
         when(researchRunPlanService.initializeDefaultPlan(501L, 1)).thenReturn(defaultSteps);
         when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
@@ -137,7 +137,7 @@ class ResearchServiceHarnessTest {
         when(reportService.generate(501L)).thenReturn(report(501L));
 
         ResearchRunPlan plan = service.createRun(runDate,
-                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+                Collections.singletonList(ResearchEnums.THEME_MARKET));
 
         assertEquals(ResearchEnums.RUN_STATUS_RUNNING, plan.getRun().getStatus());
         assertEquals(6, plan.getPlanSteps().size());
@@ -195,7 +195,7 @@ class ResearchServiceHarnessTest {
         List<ResearchRunPlanStep> defaultSteps = defaultSteps();
         when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
-        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyList()))
                 .thenReturn(Arrays.asList(source(12L), source(12L), source(12L)));
         when(researchRunPlanService.initializeDefaultPlan(501L, 3)).thenReturn(defaultSteps);
         when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
@@ -223,7 +223,7 @@ class ResearchServiceHarnessTest {
         when(reportService.generate(501L)).thenReturn(report(501L));
 
         ResearchRunPlan plan = service.createRun(runDate,
-                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+                Collections.singletonList(ResearchEnums.THEME_MARKET));
         researchTaskExecutor.runCaptured();
 
         assertEquals(6, plan.getPlanSteps().size());
@@ -280,7 +280,7 @@ class ResearchServiceHarnessTest {
         List<ResearchRunPlanStep> steps = defaultSteps();
         when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
-        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyList()))
                 .thenReturn(Arrays.asList(source(21L), source(22L)));
         when(researchRunPlanService.initializeDefaultPlan(501L, 2)).thenReturn(steps);
         when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
@@ -321,7 +321,7 @@ class ResearchServiceHarnessTest {
                 .thenAnswer(invocation -> completedFetches.get() * 2);
         when(reportService.generate(501L)).thenReturn(report(501L));
 
-        service.createRun(runDate, Collections.singletonList(ResearchEnums.THEME_MARKET), 2, true);
+        service.createRun(runDate, Collections.singletonList(ResearchEnums.THEME_MARKET));
         executor.runCaptured();
 
         assertTrue(snapshots.contains("RUNNING|1|2|1|2"), "progress snapshots=" + snapshots);
@@ -368,7 +368,7 @@ class ResearchServiceHarnessTest {
         List<ResearchRunPlanStep> defaultSteps = defaultSteps();
         when(themeProfileService.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sourceRepository.findAll()).thenReturn(Collections.emptyList());
-        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+        when(sourcePlanner.plan(any(LocalDate.class), anyList(), anyList()))
                 .thenReturn(Collections.emptyList());
         when(researchRunPlanService.initializeDefaultPlan(501L, 0)).thenReturn(defaultSteps);
         when(researchRunPlanService.findStep(anyList(), any())).thenAnswer(invocation -> {
@@ -396,7 +396,7 @@ class ResearchServiceHarnessTest {
         when(researchRunRepository.updateResult(any(ResearchRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ResearchRunPlan plan = service.createRun(runDate,
-                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+                Collections.singletonList(ResearchEnums.THEME_MARKET));
 
         assertEquals(6, plan.getPlanSteps().size());
         assertEquals(ResearchEnums.RUN_STATUS_FAILED, plan.getRun().getStatus());
@@ -527,7 +527,7 @@ class ResearchServiceHarnessTest {
         when(theses.findById(3L)).thenReturn(java.util.Optional.of(thesis));
         when(themes.getRequired(anyList())).thenReturn(Collections.singletonList(theme()));
         when(sources.findAll()).thenReturn(Collections.emptyList());
-        when(planner.plan(any(LocalDate.class), anyList(), anyInt(), anyBoolean(), anyList()))
+        when(planner.plan(any(LocalDate.class), anyList(), anyList()))
                 .thenReturn(Collections.singletonList(source(12L)));
         when(runs.save(any(ResearchRun.class))).thenAnswer(invocation -> {
             ResearchRun run = invocation.getArgument(0);
@@ -558,7 +558,7 @@ class ResearchServiceHarnessTest {
                 "EVIDENCE_INSUFFICIENT"));
 
         service.createRun(3L, LocalDate.of(2026, 7, 26),
-                Collections.singletonList(ResearchEnums.THEME_MARKET), 3, true);
+                Collections.singletonList(ResearchEnums.THEME_MARKET), com.finscope.domain.research.ResearchMode.DEEP);
         executor.runCaptured();
 
         verify(missions).initializePending(any(ResearchRun.class), eq(thesis),
