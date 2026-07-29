@@ -97,6 +97,17 @@ class ResearchDecisionValidatorTest {
         assertTrue(decision.getArgumentsJson().contains("adaptive_counter_2"));
     }
 
+    @Test
+    void appliesExternalBudgetOnlyToPublicSearch() {
+        context.setRemainingActions(0);
+
+        ResearchAgentDecision assessment = validator.validate(assessmentDraft(), context, "MODEL");
+
+        assertEquals("evidence_assess", assessment.getToolCode());
+        assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(searchDraft(), context, "MODEL"));
+    }
+
     private ResearchDecisionDraft searchDraft() {
         ResearchDecisionDraft draft = new ResearchDecisionDraft();
         draft.setDecisionType("TOOL_CALL");
@@ -110,6 +121,19 @@ class ResearchDecisionValidatorTest {
         draft.setExpectedObservation("获得独立反方来源");
         draft.setDecisionSummary("当前证据单边，优先寻找反方材料");
         draft.setConfidence(0.82D);
+        return draft;
+    }
+
+    private ResearchDecisionDraft assessmentDraft() {
+        ResearchDecisionDraft draft = new ResearchDecisionDraft();
+        draft.setDecisionType("TOOL_CALL");
+        draft.setCurrentSubgoal("刷新证据缺口判断");
+        draft.setToolCode("evidence_assess");
+        draft.setArguments(Collections.<String, Object>emptyMap());
+        draft.setTargetGap("搜索后需要重新统计");
+        draft.setExpectedObservation("获得最新证据状态");
+        draft.setDecisionSummary("搜索已结束，先执行本地证据评估");
+        draft.setConfidence(0.9D);
         return draft;
     }
 }

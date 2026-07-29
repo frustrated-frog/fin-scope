@@ -306,7 +306,7 @@ public class ResearchService {
                 }
                 String runtimeNode = "collect_source:" + sourceId + ":" + sourceIndex;
                 RuntimeNodeStart runtimeStart = researchRuntimeService.startNode(run.getId(), runtimeNode, "COLLECT",
-                        "fetch:source:" + sourceId, sourceFetchInput(sourceId, plannedSource));
+                        null, sourceFetchInput(sourceId, plannedSource));
                 if (runtimeStart.isAlreadyCompleted()) {
                     continue;
                 }

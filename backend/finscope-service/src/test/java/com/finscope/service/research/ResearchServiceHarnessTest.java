@@ -146,6 +146,8 @@ class ResearchServiceHarnessTest {
         researchTaskExecutor.runCaptured();
 
         verify(fetchService).fetch(12L);
+        verify(researchRuntimeService).startNode(eq(501L), eq("collect_source:12:0"), eq("COLLECT"),
+                isNull(), anyString());
         verify(researchRunRepository, atLeastOnce()).updateResult(any(ResearchRun.class));
     }
 

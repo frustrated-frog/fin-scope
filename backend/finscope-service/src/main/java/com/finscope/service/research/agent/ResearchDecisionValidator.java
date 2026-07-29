@@ -39,10 +39,10 @@ public class ResearchDecisionValidator {
             throw rejected("confidence 必须位于 0 到 1");
         }
         if ("TOOL_CALL".equals(type)) {
-            if (context.getRemainingActions() <= 0) {
+            validateToolCall(draft);
+            if ("public_news_search".equals(draft.getToolCode()) && context.getRemainingActions() <= 0) {
                 throw rejected("外部动作预算已用尽");
             }
-            validateToolCall(draft);
             if (!empty(draft.getPlanPatch())) {
                 throw rejected("TOOL_CALL 不得同时携带 planPatch");
             }

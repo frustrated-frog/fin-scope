@@ -79,6 +79,28 @@ class ResearchDecisionAgentTest {
         assertEquals("COUNTER", result.getArguments().get("intent"));
     }
 
+    @Test
+    void acceptsLocalEvidenceAssessmentAfterExternalBudgetIsExhausted() throws Exception {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        context.setRemainingActions(0);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn("{"
+                + "\"decisionType\":\"TOOL_CALL\","
+                + "\"currentSubgoal\":\"重新评估证据\","
+                + "\"toolCode\":\"evidence_assess\","
+                + "\"arguments\":{},"
+                + "\"targetGap\":\"搜索后刷新统计\","
+                + "\"expectedObservation\":\"获得最新证据状态\","
+                + "\"decisionSummary\":\"外部搜索结束后执行本地评估\","
+                + "\"confidence\":0.95}");
+
+        ResearchDecisionResult result = agent.decide(context);
+
+        assertEquals("evidence_assess", result.getDecision().getToolCode());
+        assertEquals("MODEL", result.getDecision().getDecisionMode());
+        assertNull(result.getFallbackReason());
+    }
+
     private String validDecisionJson() {
         return "{"
                 + "\"decisionType\":\"TOOL_CALL\","
