@@ -106,6 +106,24 @@ class ResearchDecisionValidatorTest {
         assertEquals("evidence_assess", assessment.getToolCode());
         assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(searchDraft(), context, "MODEL"));
+        assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(materialDraft(), context, "MODEL"));
+    }
+
+    @Test
+    void validatesStructuredMaterialToolWithExactArguments() {
+        ResearchAgentDecision decision = validator.validate(materialDraft(), context, "MODEL");
+
+        assertEquals("research_material_search", decision.getToolCode());
+        assertTrue(decision.getArgumentsJson().contains("ANNOUNCEMENT"));
+
+        ResearchDecisionDraft extra = materialDraft();
+        extra.getArguments().put("limit", 100);
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(extra, context, "MODEL"));
+
+        ResearchDecisionDraft invalidCode = materialDraft();
+        invalidCode.getArguments().put("stockCode", "NVDA");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(invalidCode, context, "MODEL"));
     }
 
     private ResearchDecisionDraft searchDraft() {
@@ -133,6 +151,23 @@ class ResearchDecisionValidatorTest {
         draft.setTargetGap("搜索后需要重新统计");
         draft.setExpectedObservation("获得最新证据状态");
         draft.setDecisionSummary("搜索已结束，先执行本地证据评估");
+        draft.setConfidence(0.9D);
+        return draft;
+    }
+
+    private ResearchDecisionDraft materialDraft() {
+        ResearchDecisionDraft draft = new ResearchDecisionDraft();
+        draft.setDecisionType("TOOL_CALL");
+        draft.setCurrentSubgoal("查找公司一手公告");
+        draft.setToolCode("research_material_search");
+        Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+        arguments.put("stockCode", "000001");
+        arguments.put("materialType", "ANNOUNCEMENT");
+        arguments.put("query", "半年度报告");
+        draft.setArguments(arguments);
+        draft.setTargetGap("primary=0");
+        draft.setExpectedObservation("获得公司披露的一手材料");
+        draft.setDecisionSummary("优先用公告建立事实基线");
         draft.setConfidence(0.9D);
         return draft;
     }

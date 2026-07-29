@@ -20,6 +20,10 @@ public class ResearchDecisionValidator {
     private static final Set<String> SEARCH_INTENTS = new HashSet<String>(Arrays.asList(
             "SUPPORT", "COUNTER", "PRIMARY", "UPDATE"));
     private static final Set<String> SEARCH_ARGUMENTS = new HashSet<String>(Arrays.asList("query", "intent"));
+    private static final Set<String> MATERIAL_ARGUMENTS = new HashSet<String>(Arrays.asList(
+            "stockCode", "materialType", "query"));
+    private static final Set<String> MATERIAL_TYPES = new HashSet<String>(Arrays.asList(
+            "ANNOUNCEMENT", "INTERACTION", "BROKER_REPORT", "NEWS_FLASH"));
     private final ObjectMapper objectMapper = new ObjectMapper()
             .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
 
@@ -40,7 +44,7 @@ public class ResearchDecisionValidator {
         }
         if ("TOOL_CALL".equals(type)) {
             validateToolCall(draft);
-            if ("public_news_search".equals(draft.getToolCode()) && context.getRemainingActions() <= 0) {
+            if (isExternalTool(draft.getToolCode()) && context.getRemainingActions() <= 0) {
                 throw rejected("外部动作预算已用尽");
             }
             if (!empty(draft.getPlanPatch())) {
@@ -105,6 +109,29 @@ public class ResearchDecisionValidator {
             if (!empty(draft.getArguments())) {
                 throw rejected("evidence_assess 不接受参数");
             }
+            return;
+        }
+        if ("research_material_search".equals(tool)) {
+            Map<String, Object> arguments = draft.getArguments();
+            if (arguments == null || !MATERIAL_ARGUMENTS.equals(arguments.keySet())) {
+                throw rejected("research_material_search 参数只能包含 stockCode、materialType 和 query");
+            }
+            String stockCode = text(arguments.get("stockCode"));
+            if (stockCode == null || !stockCode.trim().matches("\\d{6}")) {
+                throw rejected("stockCode 必须是六位 A 股代码");
+            }
+            String materialType = upper(text(arguments.get("materialType")));
+            if (!MATERIAL_TYPES.contains(materialType)) {
+                throw rejected("materialType 不在白名单中");
+            }
+            String query = text(arguments.get("query"));
+            if (query == null || compact(query).length() > 100 || query.contains("://")) {
+                throw rejected("research_material_search query 未通过安全校验");
+            }
+            arguments.put("stockCode", stockCode.trim());
+            arguments.put("materialType", materialType);
+            arguments.put("query", compact(query));
+            requireText(draft.getExpectedObservation(), "expectedObservation", 320);
             return;
         }
         throw rejected("工具不在 Agent 可执行白名单中：" + tool);
@@ -174,6 +201,9 @@ public class ResearchDecisionValidator {
     }
 
     private boolean empty(Map<String, Object> value) { return value == null || value.isEmpty(); }
+    private boolean isExternalTool(String toolCode) {
+        return "public_news_search".equals(toolCode) || "research_material_search".equals(toolCode);
+    }
     private String text(Object value) { return value == null ? null : String.valueOf(value); }
     private String upper(String value) { return value == null ? "" : value.trim().toUpperCase(Locale.ROOT); }
     private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }

@@ -104,6 +104,7 @@ public class ResearchMissionService {
         repository.appendGap(gap);
         if (gap.isSufficient()) {
             repository.skipPendingTasksByTool(runId, "public_news_search", "SUFFICIENT_EVIDENCE");
+            repository.skipPendingTasksByTool(runId, "research_material_search", "SUFFICIENT_EVIDENCE");
         }
         return gap;
     }

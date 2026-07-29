@@ -180,7 +180,7 @@ public class ResearchAgentLoopService {
                                  ResearchAgentState state,
                                  ResearchAgentDecision decision,
                                  ResearchMode mode) {
-        boolean external = "public_news_search".equals(decision.getToolCode());
+        boolean external = isExternalTool(decision.getToolCode());
         String nodeId = "agent_tool:" + decision.getActionFingerprint();
         RuntimeNodeStart start = runtimeService.startNode(runId, nodeId, "EXPAND",
                 external ? decision.getActionFingerprint() : null,
@@ -239,12 +239,16 @@ public class ResearchAgentLoopService {
     private int countExternalActions(Long runId) {
         int count = 0;
         for (ResearchAgentDecision decision : repository.findDecisions(runId)) {
-            if ("public_news_search".equals(decision.getToolCode())
+            if (isExternalTool(decision.getToolCode())
                     && ("COMPLETED".equals(decision.getStatus()) || "FAILED".equals(decision.getStatus()))) {
                 count++;
             }
         }
         return count;
+    }
+
+    private boolean isExternalTool(String toolCode) {
+        return "public_news_search".equals(toolCode) || "research_material_search".equals(toolCode);
     }
 
     private String contextStateHash(ResearchAgentState state) {

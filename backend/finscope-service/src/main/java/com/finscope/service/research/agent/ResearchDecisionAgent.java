@@ -67,7 +67,9 @@ public class ResearchDecisionAgent {
                 + "字段仅允许 decisionType、currentSubgoal、toolCode、arguments、targetGap、"
                 + "expectedObservation、decisionSummary、confidence、planPatch。"
                 + "decisionType 仅允许 TOOL_CALL、PLAN_PATCH、FINISH、ABORT。"
-                + "可执行工具仅允许 public_news_search 和 evidence_assess。"
+                + "可执行工具仅允许 public_news_search、research_material_search 和 evidence_assess。"
+                + "若研究对象包含六位A股代码，应优先使用research_material_search读取公告、互动问答、研报或快讯，"
+                + "其中参数必须且只能包含stockCode、materialType、query；"
                 + "decisionSummary 只写可审计的选择依据，不写详细内部推理过程。";
     }
 

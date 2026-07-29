@@ -90,7 +90,9 @@ public class ResearchAgentContextBuilder {
         appendTrace(prompt, trace);
         prompt.append("可用工具\n");
         for (ResearchToolDescriptor tool : toolRegistry.list()) {
-            if (!"public_news_search".equals(tool.getCode()) && !"evidence_assess".equals(tool.getCode())) {
+            if (!"public_news_search".equals(tool.getCode())
+                    && !"research_material_search".equals(tool.getCode())
+                    && !"evidence_assess".equals(tool.getCode())) {
                 continue;
             }
             prompt.append("- ").append(tool.getCode()).append("：")
@@ -146,12 +148,16 @@ public class ResearchAgentContextBuilder {
         int count = 0;
         if (trace == null) return count;
         for (ResearchAgentDecision decision : trace.getDecisions()) {
-            if ("public_news_search".equals(decision.getToolCode())
+            if (isExternalTool(decision.getToolCode())
                     && ("COMPLETED".equals(decision.getStatus()) || "FAILED".equals(decision.getStatus()))) {
                 count++;
             }
         }
         return count;
+    }
+
+    private boolean isExternalTool(String toolCode) {
+        return "public_news_search".equals(toolCode) || "research_material_search".equals(toolCode);
     }
 
     private String safe(String value) { return value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").trim(); }
