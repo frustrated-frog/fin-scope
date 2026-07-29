@@ -12,7 +12,7 @@ const DECISION_LABELS: Record<string, string> = {
 };
 
 const TOOL_LABELS: Record<string, string> = {
-  public_news_search: '公开新闻检索',
+  public_news_search: 'Tavily 公开资料搜索',
   evidence_assess: '证据缺口评估',
   source_scan: '来源扫描',
   report_synthesis: '报告合成'
@@ -50,7 +50,7 @@ export function ResearchAgentDecisionFlow({
         <dl className="research-agent-flow-stats" aria-label="Agent 当前状态">
           <div><dt>决策轮次</dt><dd>{state.decisionCount}</dd></div>
           <div><dt>计划版本</dt><dd>V{planVersion}</dd></div>
-          <div><dt>剩余动作</dt><dd>{Math.max(0, remainingActions)} 次</dd></div>
+          <div><dt>剩余搜索</dt><dd>{Math.max(0, remainingActions)} 次</dd></div>
           <div><dt>轨迹质量</dt><dd>{trajectoryMetrics?.qualityScore ?? '—'}</dd></div>
         </dl>
       </header>

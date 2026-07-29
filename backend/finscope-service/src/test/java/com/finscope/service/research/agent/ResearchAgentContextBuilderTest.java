@@ -51,7 +51,7 @@ class ResearchAgentContextBuilderTest {
         assertTrue(context.getPrompt().contains("public_news_search"));
         assertTrue(context.getPrompt().contains("evidence_assess"));
         assertTrue(context.getPrompt().contains(
-                "public_news_search：根据已校验查询补充公开新闻证据；"
+                "public_news_search：使用 Tavily 补充本次研究证据，搜索材料不进入文章库；"
                         + "input={query=不含协议头的公开搜索词, "
                         + "intent=证据意图（SUPPORT/COUNTER/PRIMARY/UPDATE）}"));
         assertTrue(context.getPrompt().contains(
