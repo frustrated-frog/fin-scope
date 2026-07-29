@@ -85,7 +85,7 @@ public class ProviderRequestGuard {
                                         Operation<T> operation) {
         EndpointKey key = new EndpointKey(provider.providerCode(), capability);
         EndpointState endpoint = endpoints.computeIfAbsent(key, ignored -> new EndpointState());
-        String reliabilityFamily = provider.reliabilityFamily();
+        String reliabilityFamily = reliabilityFamily(provider);
         FamilyKey familyKey = new FamilyKey(capability, reliabilityFamily);
         FamilyState family = families.computeIfAbsent(familyKey, ignored -> new FamilyState());
         acquirePermission(provider, reliabilityFamily, endpoint, family);
@@ -134,7 +134,7 @@ public class ProviderRequestGuard {
     public boolean isAvailable(ExternalDataProvider provider, String capabilityCode) {
         requireCapability(capabilityCode);
         EndpointState endpoint = endpoints.get(new EndpointKey(provider.providerCode(), capabilityCode));
-        FamilyState family = families.get(new FamilyKey(capabilityCode, provider.reliabilityFamily()));
+        FamilyState family = families.get(new FamilyKey(capabilityCode, reliabilityFamily(provider)));
         Instant now = clock.instant();
         return (endpoint == null || endpoint.isAvailable(now))
                 && (family == null || family.isAvailable(now));
@@ -215,6 +215,20 @@ public class ProviderRequestGuard {
 
     private ProviderContractException circuitOpen(String target) {
         return new ProviderContractException("CIRCUIT_OPEN", "provider circuit is open: " + target, false);
+    }
+
+    private String reliabilityFamily(ExternalDataProvider provider) {
+        String value = provider.reliabilityFamily();
+        if (value == null || value.trim().isEmpty()) {
+            value = provider.providerFamily();
+        }
+        if (value == null || value.trim().isEmpty()) {
+            value = provider.providerCode();
+        }
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("provider reliability family must not be blank");
+        }
+        return value.trim();
     }
 
     private long reserveDelay(EndpointState state, Duration minimumInterval) {
