@@ -27,7 +27,7 @@ public class StructuredResearchReportAssembler {
             out.append("- **").append(item.getFinding()).append("**：").append(item.getMeaning()).append(' ')
                     .append(refs(item.getEvidenceRefs())).append("\n");
         }
-        heading(out, "执行摘要"); out.append(narrative.getExecutiveSummary()).append("\n\n");
+        heading(out, "执行摘要"); out.append(ground(narrative.getExecutiveSummary(), coreEvidenceRefs(blueprint))).append("\n\n");
         heading(out, "研究范围与口径");
         out.append("- **观察范围：** ").append(blueprint.getTimeRange()).append("\n");
         for (String item : blueprint.getDefinitions()) out.append("- **口径：** ").append(item).append("\n");
@@ -38,13 +38,13 @@ public class StructuredResearchReportAssembler {
             out.append("| ").append(ref(item.getEvidenceRef())).append(" | ").append(item.getPublishedAt() == null ? "未提供" : item.getPublishedAt())
                     .append(" | ").append(tableExcerpt(item.getFactExcerpt())).append(" | ").append(item.getSourceTier()).append(" |\n");
         }
-        heading(out, "发生了什么"); out.append(narrative.getWhatHappened()).append("\n\n");
+        heading(out, "发生了什么"); out.append(ground(narrative.getWhatHappened(), coreEvidenceRefs(blueprint))).append("\n\n");
         heading(out, "命题拆解与逐题判断");
         for (int i = 0; i < blueprint.getSubQuestions().size(); i++) {
             ResearchReportBlueprint.SubQuestion item = blueprint.getSubQuestions().get(i);
             out.append("### ").append(i + 1).append(". ").append(item.getQuestion()).append("\n\n")
                     .append("**当前回答：** ").append(item.getAnswer()).append(' ').append(refs(item.getEvidenceRefs())).append("\n\n")
-                    .append(narrative.getSubQuestionAnalysis().get(i)).append("\n\n")
+                    .append(ground(narrative.getSubQuestionAnalysis().get(i), subQuestionRefs(item))).append("\n\n")
                     .append("**对总命题的影响：** ").append(item.getImpact()).append("\n\n");
             if (!item.getUnknowns().isEmpty()) out.append("**仍未知：** ").append(String.join("；", item.getUnknowns())).append("\n\n");
         }
@@ -56,22 +56,24 @@ public class StructuredResearchReportAssembler {
                     .append("- **推理：** ").append(item.getInference()).append("\n")
                     .append("- **判断：** ").append(item.getJudgment()).append("\n")
                     .append("- **替代解释：** ").append(item.getAlternativeExplanation()).append("\n\n")
-                    .append(narrative.getArgumentAnalysis().get(i)).append("\n\n");
+                    .append(ground(narrative.getArgumentAnalysis().get(i), item.getEvidenceRefs())).append("\n\n");
         }
         heading(out, "反方解释与争议");
         ResearchReportBlueprint.Counterargument counter = blueprint.getStrongestCounterargument();
         out.append("**最强反方观点：** ").append(counter.getClaim()).append(' ').append(refs(counter.getEvidenceRefs())).append("\n\n")
                 .append("**当前回应：** ").append(counter.getResponse()).append("\n\n")
-                .append(narrative.getCounterAnalysis()).append("\n\n")
+                .append(ground(narrative.getCounterAnalysis(), counter.getEvidenceRefs())).append("\n\n")
                 .append("**反方成为更优解释的条件：** ").append(String.join("；", counter.getBecomesDominantWhen())).append("\n\n");
         heading(out, "机制与情景推演");
         for (int i = 0; i < narrative.getScenarioAnalysis().size(); i++)
-            out.append("### 情景 ").append(i + 1).append("\n\n").append(narrative.getScenarioAnalysis().get(i)).append("\n\n");
+            out.append("### 情景 ").append(i + 1).append("\n\n")
+                    .append(ground(narrative.getScenarioAnalysis().get(i), coreEvidenceRefs(blueprint))).append("\n\n");
         heading(out, "最终认识与未知项");
-        out.append(narrative.getKnowledgeSynthesis()).append("\n\n");
+        out.append(ground(narrative.getKnowledgeSynthesis(), coreEvidenceRefs(blueprint))).append("\n\n");
         for (String item : blueprint.getKnowledgeTakeaways()) out.append("- **可以形成的认识：** ").append(item).append("\n");
         for (String item : blueprint.getUnknowns()) out.append("- **仍然未知：** ").append(item).append("\n");
-        heading(out, "跟踪清单与失效条件"); out.append(narrative.getMonitoringPlan()).append("\n\n");
+        heading(out, "跟踪清单与失效条件");
+        out.append(ground(narrative.getMonitoringPlan(), coreEvidenceRefs(blueprint))).append("\n\n");
         for (ResearchReportBlueprint.WatchItem item : blueprint.getWatchItems()) {
             out.append("- **").append(item.getMetric()).append("**：基线=").append(item.getBaseline())
                     .append("；频率=").append(item.getFrequency()).append("；上调=").append(item.getUpgradeCondition())
@@ -97,6 +99,24 @@ public class StructuredResearchReportAssembler {
         LinkedHashSet<String> values = new LinkedHashSet<String>();
         for (ResearchReportBlueprint.KeyInsight item : blueprint.getKeyInsights()) values.addAll(item.getEvidenceRefs());
         return new ArrayList<String>(values);
+    }
+    private List<String> subQuestionRefs(ResearchReportBlueprint.SubQuestion item) {
+        LinkedHashSet<String> values = new LinkedHashSet<String>();
+        values.addAll(item.getEvidenceRefs());
+        values.addAll(item.getCounterEvidenceRefs());
+        return new ArrayList<String>(values);
+    }
+    private String ground(String value, List<String> evidenceRefs) {
+        String citations = refs(evidenceRefs);
+        if (citations.isEmpty() || value == null || value.trim().isEmpty()) return text(value);
+        StringBuilder out = new StringBuilder();
+        for (String line : value.split("\\n", -1)) {
+            if (out.length() > 0) out.append('\n');
+            String clean = line.trim();
+            out.append(clean);
+            if (!clean.isEmpty()) out.append(' ').append(citations);
+        }
+        return out.toString();
     }
     private String ref(String value) { return "[" + value + "](#evidence-" + value.toLowerCase() + ")"; }
     private String text(String value) { return value == null ? "" : value.replace("\n", " ").trim(); }

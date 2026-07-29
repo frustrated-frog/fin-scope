@@ -24,7 +24,7 @@ public class ResearchReportGenerator {
         String conclusion = conclusion(thesis, direction, confidence, support, counter);
         String summary = executiveSummary(thesis, conclusion, evidence.size(), sourceCount, support, counter,
                 neutral, sufficiency);
-        String title = value(thesis.getSubjectName(), "研究命题") + "命题研究报告";
+        String title = value(thesis.getSubjectName(), "研究命题") + "深度研究报告";
         String markdown = markdown(thesis, title, conclusion, confidence, summary, evidence, sufficiency,
                 support, counter, neutral);
         return new GeneratedResearchReport(title, conclusion, direction, confidence,
@@ -37,70 +37,153 @@ public class ResearchReportGenerator {
                             int support, int counter, int neutral) {
         StringBuilder out = new StringBuilder();
         out.append("# ").append(title).append("\n\n");
-        out.append("> 研究日期：").append(LocalDate.now()).append("  ").append("命题：")
-                .append(value(thesis.getQuestion(), "未命名命题")).append("  ").append("置信度：")
-                .append(confidenceLabel(confidence)).append("\n\n");
-        out.append("## 核心结论\n\n").append(conclusion).append("\n\n");
+        out.append("> 研究日期：").append(LocalDate.now()).append("  \n")
+                .append("> 原始问题：").append(value(thesis.getQuestion(), "未命名命题")).append("  \n")
+                .append("> 判断：").append(direction(support, counter, sufficiency.isSufficient()))
+                .append(" · 置信度：").append(confidenceLabel(confidence)).append("\n\n");
+        out.append("## 核心结论\n\n").append(conclusion).append(' ')
+                .append(references(evidence, null, 3)).append("\n\n")
+                .append("**置信度依据：** 本次判断使用 ").append(evidence.size()).append(" 条可追溯证据，覆盖 ")
+                .append(sourceCount(evidence)).append(" 个独立来源；支持、反向和中性证据分别为 ")
+                .append(support).append("、").append(counter).append("、").append(neutral)
+                .append(" 条。置信度同时受到公开资料完整性、观察期长度和反方覆盖程度约束。\n\n");
+        out.append("## 关键认识\n\n");
+        int insightCount = Math.min(5, evidence.size());
+        for (int index = 0; index < insightCount; index++) {
+            ResearchEvidenceCard card = evidence.get(index);
+            out.append("- **").append(stanceLabel(card.getStance())).append("认识 ").append(index + 1)
+                    .append("：** ").append(ResearchReportPolicy.bound(card.getClaim(), 260)).append(' ')
+                    .append(reference(index)).append("。这条材料的作用是限定当前判断，而不是单独决定最终方向。\n");
+        }
+        if (insightCount == 0) out.append("- 当前没有足以形成对象特定认识的证据，以下内容仅保留研究框架和待验证项。\n");
+        out.append('\n');
         out.append("## 执行摘要\n\n").append(summary).append("\n\n");
-        out.append("## 命题拆解\n\n");
-        out.append("本报告把命题拆成四个可验证环节：核心经营或行业指标是否改善、变化能否持续并兑现到结果、")
-                .append("市场定价是否已经反映预期、哪些反向信号足以推翻当前判断。")
-                .append("判断对象限定为“").append(value(thesis.getSubjectName(), "目标对象"))
-                .append("”，不把泛科技、泛 AI 或与产业链无直接关系的论文资讯作为结论依据。\n\n");
-        out.append("- 支持证据：").append(support).append(" 条\n");
-        out.append("- 反向证据：").append(counter).append(" 条\n");
-        out.append("- 中性证据：").append(neutral).append(" 条\n\n");
-        out.append("## 关键证据\n\n");
-        appendEvidence(out, evidence, false);
-        out.append("## 反方证据与风险\n\n");
-        appendEvidence(out, evidence, true);
-        out.append("## 机制推演\n\n");
+        out.append("## 研究范围与口径\n\n")
+                .append("- **研究对象：** ").append(value(thesis.getSubjectName(), "目标对象")).append("。\n")
+                .append("- **研究问题：** ").append(value(thesis.getQuestion(), "未命名命题")).append("。\n")
+                .append("- **证据边界：** 只使用本次运行筛选出的公开材料，不把搜索排名、重复转载或模型常识当作事实。\n")
+                .append("- **判断口径：** 区分事实、机制推理和阶段判断；价格信号不能替代经营、行业或监管事实。\n")
+                .append("- **本次不能回答：** 未被当前证据覆盖的长期结果、精确预测和投资买卖时点。\n\n");
+        out.append("## 关键事实与数字\n\n")
+                .append("| 证据 | 立场 | 可验证事实 | 来源层级 | 相关性 |\n")
+                .append("| --- | --- | --- | --- | --- |\n");
+        for (int index = 0; index < evidence.size(); index++) {
+            ResearchEvidenceCard card = evidence.get(index);
+            out.append("| ").append(reference(index)).append(" | ").append(stanceLabel(card.getStance()))
+                    .append(" | ").append(tableText(ResearchReportPolicy.bound(card.getClaim(), 260)))
+                    .append(" | ").append(value(card.getSourceTier(), "T3"))
+                    .append(" | ").append(card.getRelevanceScore()).append("/100 |\n");
+        }
+        if (evidence.isEmpty()) out.append("| — | 未知 | 当前没有可引用事实 | — | — |\n");
+        out.append("\n## 发生了什么\n\n")
+                .append("本次运行把与研究对象直接相关的材料聚合为一个有边界的证据集。当前证据分布为支持 ")
+                .append(support).append(" 条、反向 ").append(counter).append(" 条、中性 ").append(neutral)
+                .append(" 条。材料之间若只是转述同一事件，只能提高线索可见度，不能自动提高结论可信度。")
+                .append(references(evidence, null, 4)).append("\n\n")
+                .append("这些事实首先说明市场或基本面出现了值得跟踪的变化，但是否足以回答总命题，仍取决于变化能否通过")
+                .append("“外部驱动—关键指标—结果兑现”形成连续证据链。\n\n");
+        out.append("## 命题拆解与逐题判断\n\n")
+                .append("### 1. 当前事实是否直接对应研究对象？\n\n")
+                .append("**当前回答：** 已筛选材料均通过对象相关性门槛，但不同来源的直接性和完整性不同。")
+                .append(references(evidence, null, 3)).append("\n\n")
+                .append("**对总命题的影响：** 高相关来源可以建立事实底座；摘要材料和间接报道只能作为补充线索。\n\n")
+                .append("### 2. 支持方向是否有独立来源交叉验证？\n\n")
+                .append("**当前回答：** 支持证据为 ").append(support).append(" 条，必须结合来源独立性判断，不能按标题数量机械累加。")
+                .append(references(evidence, "SUPPORT", 3)).append("\n\n")
+                .append("**对总命题的影响：** 只有不同主体、不同披露渠道指向同一关键变量，才可以提高结论置信度。\n\n")
+                .append("### 3. 哪些反向事实可能推翻当前解释？\n\n")
+                .append("**当前回答：** 当前反向证据为 ").append(counter).append(" 条。若反向材料覆盖需求、指引或实际结果，")
+                .append("其权重应高于单纯价格波动。").append(references(evidence, "COUNTER", 3)).append("\n\n")
+                .append("**仍未知：** 缺少的连续披露期、经营口径或反方一手资料仍需在下一轮验证。\n\n");
+        out.append("## 核心证据链\n\n");
+        int chainCount = Math.min(4, evidence.size());
+        for (int index = 0; index < chainCount; index++) {
+            ResearchEvidenceCard card = evidence.get(index);
+            out.append("### 证据链 ").append(index + 1).append("\n\n")
+                    .append("- **事实：** ").append(ResearchReportPolicy.bound(card.getClaim(), 300)).append(' ')
+                    .append(reference(index)).append("\n")
+                    .append("- **推理：** 该事实影响研究命题的关键变量，但仍需与其他独立来源和后续结果交叉验证。\n")
+                    .append("- **判断：** 当前将其计为“").append(stanceLabel(card.getStance()))
+                    .append("”材料，不把单条证据扩大为确定性结论。\n")
+                    .append("- **替代解释：** 变化也可能来自短期事件、统计口径、流通结构或预期调整。\n\n");
+        }
+        if (chainCount == 0) out.append("当前没有可建立的证据链，所有对象特定结论均应视为待验证。\n\n");
+        out.append("## 反方解释与争议\n\n");
+        String counterRefs = references(evidence, "COUNTER", 4);
+        if (counter == 0) {
+            out.append("**最强反方观点：** 当前材料没有覆盖足够的反向事实，这本身就是结论局限。不能把“没有搜到反证”解释为“反证不存在”。\n\n");
+        } else {
+            out.append("**最强反方观点：** 现有反向材料提示，当前变化可能只是短期价格发现、预期修正或局部分化，并不必然代表长期趋势成立。")
+                    .append(counterRefs).append("\n\n");
+        }
+        out.append("**当前回应：** 维持带条件的阶段性判断，并要求后续一手披露和同步指标确认。\n\n")
+                .append("**反方成为更优解释的条件：** 需求、经营指引和实际结果连续恶化，或关键支持证据被后续一手资料否定。\n\n");
+        out.append("## 机制与情景推演\n\n");
         out.append("价格变化本身不能单独确认或推翻命题。若关键经营指标、外部需求和管理层指引持续改善，")
-                .append("价格回落更可能是预期或估值修正；若领先指标、实际结果和风险暴露同时恶化，则应把它视为基本面转向。")
-                .append("因此，本报告优先采信能够连接“外部驱动—经营指标—结果兑现”的证据链，而不是只依据单日涨跌或情绪标题。\n\n");
-        out.append("### 情景推演\n\n");
+                .append("价格回落更可能是预期或估值修正；若领先指标、实际结果和风险暴露同时恶化，则应把它视为基本面转向。\n\n")
+                .append("### 情景 1 · 基准\n\n");
         out.append("- **基准情景**：核心指标温和改善，但不同业务或细分方向继续分化；结果兑现与估值匹配度决定后续表现。\n");
-        out.append("- **上行情景**：多个独立领先指标连续改善，并在后续披露中兑现为收入、利润或目标变量的上修；此时可上调结论置信度。\n");
-        out.append("- **下行情景**：需求、经营指引和实际结果同步转弱，且反向风险连续两个观察期未缓解；此时应转为挑战命题。\n");
-        out.append("- **验证原则**：至少观察两个披露期，并区分企业公告、行业统计与媒体转述；单条预测或市场观点只作为线索，不作为确认信号。\n\n");
-        out.append("## 结论边界与后续验证\n\n");
+        out.append("\n### 情景 2 · 上行\n\n- 多个独立领先指标连续改善，并在后续披露中兑现为结果上修；此时可上调结论置信度。\n")
+                .append("\n### 情景 3 · 下行\n\n- 需求、经营指引和实际结果同步转弱，且反向风险连续两个观察期未缓解；此时应挑战命题。\n\n");
+        out.append("## 最终认识与未知项\n\n")
+                .append("当前可以形成的认识，是现有公开证据更接近“").append(direction(support, counter, sufficiency.isSufficient()))
+                .append("”而非确定性答案。这个认识的价值在于明确了支持方向、反方解释和下一次更新条件。\n\n")
+                .append("- **可以形成的认识：** 结论必须建立在对象特定事实和独立来源交叉验证之上。\n")
+                .append("- **可以形成的认识：** 单日价格、单篇报道或同源转载不足以证明长期命题。\n")
+                .append("- **仍然未知：** 尚未被本次材料覆盖的连续经营结果、精确口径和长期兑现程度。\n")
+                .append("- **仍然未知：** 当前反方材料能否在后续披露期得到重复确认。\n\n");
+        out.append("## 跟踪清单与失效条件\n\n");
+        appendNextValidationSignals(out, thesis);
         out.append("### 证据局限\n\n");
         if (sufficiency.getWarnings().isEmpty()) {
             out.append("- 当前证据达到最低覆盖要求，但仍属于公开信息条件下的阶段性判断。\n");
         } else {
             for (String warning : sufficiency.getWarnings()) out.append("- ").append(warning).append("。\n");
         }
-        out.append("\n### 下一轮验证信号\n\n");
-        appendNextValidationSignals(out, thesis);
-        out.append("## 判定框架与监测仪表盘\n\n");
-        out.append("### 指标分层\n\n");
-        out.append("研究不应把所有指标放在同一层级。**领先指标**包括需求预期、管理层指引、订单或用户行为和政策变化；")
-                .append("它们先于最终结果，适合判断方向。**同步指标**包括收入、利润率、现金流、供需和目标变量的实际变化；")
-                .append("它们用于确认领先信号是否兑现。**滞后指标**包括板块估值、机构持仓和历史价格表现；它们能解释市场定价，")
-                .append("但不能代替产业证据。报告后续更新时，应优先补领先指标，再用同步指标交叉验证，最后才讨论估值。\n\n");
-        out.append("### 结论升级条件\n\n");
+        out.append("\n### 结论升级条件\n\n");
         out.append("若至少两个独立的一手或高可信来源显示领先指标改善，同时后续实际结果连续兑现，且关键风险没有反向恶化，")
-                .append("可把“部分支持”升级为“支持”。如果只有媒体预测或市场价格上涨，而公告、经营指标或行业数据没有确认，")
-                .append("应维持原置信度。升级结论还要求证据覆盖不同主体，避免把同一篇报道的多次转载误计为多个来源。\n\n");
+                .append("可上调当前判断；如果只有媒体预测或市场价格上涨，而公告、经营指标或行业数据没有确认，应维持原置信度。\n\n");
         out.append("### 结论降级与失效条件\n\n");
         out.append("若需求主体连续削减投入、领先指标同比和环比同时转弱、结果兑现中断，或政策与竞争变化显著压缩可实现空间，")
-                .append("应先降级置信度，再评估是否转为挑战命题。任何单一公司异常都要区分公司份额变化与行业总量变化；")
-                .append("只有行业总量与多个企业经营指标同向恶化，才足以判定周期层面的拐点。\n\n");
-        out.append("### 下一次更新的最小数据包\n\n");
-        out.append("下一轮报告至少需要：一项公司公告或权威原始披露、一项行业或业务统计、一个领先指标和一个明确的反向风险信号。")
-                .append("每项数据要记录发布日期、原始来源、对应经营变量和支持方向。若免费新闻聚合仍无法补齐，应保留缺口，")
-                .append("而不是用更多低相关标题填满证据数量。这样可以在控制模型成本和报告长度的同时，让每次更新真正改变或强化判断。\n\n");
-        out.append("## 来源\n\n");
+                .append("应先降级置信度，再评估是否转为挑战命题。\n\n");
+        out.append("## 证据附录\n\n");
         if (evidence.isEmpty()) {
             out.append("- 本次运行没有筛选出满足相关性门槛的来源；报告仍给出低置信度基线判断，等待下一轮验证。\n");
         } else {
-            int index = 1;
-            for (ResearchEvidenceCard card : evidence) {
+            for (int index = 0; index < evidence.size(); index++) {
+                ResearchEvidenceCard card = evidence.get(index);
                 Article article = card.getArticle();
-                out.append(index++).append(". ").append(sourceReference(article)).append("\n");
+                out.append("<a id=\"evidence-e").append(index + 1).append("\"></a>\n")
+                        .append("### E").append(index + 1).append(" · ")
+                        .append(markdownText(value(article.getTitle(), "未命名证据"))).append("\n\n")
+                        .append("- 来源：").append(value(article.getSourceName(), "未知来源"))
+                        .append("（").append(value(card.getSourceTier(), "T3")).append("）\n")
+                        .append("- 立场：").append(stanceLabel(card.getStance()))
+                        .append("；相关性：").append(card.getRelevanceScore()).append("/100\n")
+                        .append("- 事实摘录：").append(ResearchReportPolicy.bound(card.getClaim(), 420)).append("\n")
+                        .append("- 原文：").append(sourceReference(article)).append("\n\n");
             }
         }
         return out.toString();
+    }
+
+    private String references(List<ResearchEvidenceCard> evidence, String stance, int limit) {
+        StringBuilder value = new StringBuilder();
+        int count = 0;
+        for (int index = 0; index < evidence.size() && count < limit; index++) {
+            if (stance != null && !stance.equals(evidence.get(index).getStance())) continue;
+            value.append(reference(index));
+            count++;
+        }
+        return value.toString();
+    }
+
+    private String reference(int index) {
+        return "[E" + (index + 1) + "](#evidence-e" + (index + 1) + ")";
+    }
+
+    private String tableText(String value) {
+        return markdownText(value(value, "未提供")).replace("|", "｜");
     }
 
     private void appendEvidence(StringBuilder out, List<ResearchEvidenceCard> evidence, boolean counterOnly) {

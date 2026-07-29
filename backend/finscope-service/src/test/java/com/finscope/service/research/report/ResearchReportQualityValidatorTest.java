@@ -71,6 +71,20 @@ class ResearchReportQualityValidatorTest {
         assertFalse(issues.contains("MONITORING_CONDITION_MISSING"));
     }
 
+    @Test
+    void rejectsAReportWhoseCoreAnswerWasRemovedOrIsDominatedByAuditCaveats() {
+        String report = report("[E1]", "[E1][E2]", "[E2]", true)
+                .replace("测试公司当前结论。 [E1]", "**审计降级：** 核心断言已移除。[E1]")
+                + "\n**审计降级：** 一\n**审计降级：** 二\n**审计降级：** 三"
+                + "\n**审计降级：** 四\n**审计降级：** 五\n**审计降级：** 六\n";
+
+        List<String> issues = validator.validate(report, thesis(), Arrays.asList(
+                evidence("E1", "source-a", "SUPPORT"), evidence("E2", "source-b", "COUNTER")));
+
+        assertTrue(issues.contains("CORE_CONCLUSION_OVER_REPAIRED"));
+        assertTrue(issues.contains("EXCESSIVE_AUDIT_CAVEATS"));
+    }
+
     private String report(String conclusionRefs, String chainRefs, String counterRefs, boolean actionable) {
         String monitoring = actionable
                 ? "若收入增速连续两个季度下滑，则下调判断；若现金流转负，命题失效。"

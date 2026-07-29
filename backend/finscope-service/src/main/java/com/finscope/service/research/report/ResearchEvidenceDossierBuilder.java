@@ -72,6 +72,7 @@ public class ResearchEvidenceDossierBuilder {
     private void appendUnique(StringBuilder out, String value) {
         String clean = value(value)
                 .replaceAll("\\[([^\\]]+)]\\(https?://[^\\s)]+\\)", "$1")
+                .replaceAll("(?i)\\[S\\d+\\]\\s*(?:-\\s*\\d+\\s*/)?\\s*\\[?", "")
                 .replaceAll("https?://\\S+", "")
                 .replace("摘要：", "")
                 .replaceAll("\\s+", " ").trim();

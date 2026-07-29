@@ -31,6 +31,9 @@ public class ResearchDecisionAgent {
     }
 
     public ResearchDecisionResult decide(ResearchDecisionContext context) {
+        if (context != null && context.getLatestGap() != null && context.getLatestGap().isSufficient()) {
+            return new ResearchDecisionResult(fallbackPolicy.decide(context), null, null);
+        }
         if (llmChatClient == null || !llmChatClient.isConfigured()) {
             return fallback(context, "MODEL_DISABLED", null);
         }

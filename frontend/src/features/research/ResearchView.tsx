@@ -334,10 +334,7 @@ export function ResearchView({
         <ResearchAgentDecisionFlow
           agentCore={detail.agentCore}
           planVersion={detail.mission?.mission.planVersion || 1}
-          remainingActions={detail.runtime
-            ? detail.runtime.checkpoint.maxActions - detail.runtime.checkpoint.consumedActions
-            : (detail.mission?.mission.maxActions || 0)
-              - detail.agentCore.decisions.filter((decision) => decision.decisionType === 'TOOL_CALL').length}
+          remainingActions={remainingSearchActions(detail)}
         />
       )}
 
@@ -395,6 +392,18 @@ export function ResearchView({
       </div>
     </section>
   );
+}
+
+function remainingSearchActions(detail: ResearchRunDetail) {
+  const searchBudget = detail.run.mode === 'QUICK' ? 2 : 6;
+  const consumedSearches = detail.agentCore?.decisions.filter((decision) =>
+    decision.toolCode === 'public_news_search'
+    && (decision.status === 'COMPLETED' || decision.status === 'FAILED')).length || 0;
+  const modeRemaining = Math.max(0, searchBudget - consumedSearches);
+  if (!detail.runtime) return modeRemaining;
+  const runtimeRemaining = Math.max(0,
+    detail.runtime.checkpoint.maxActions - detail.runtime.checkpoint.consumedActions);
+  return Math.min(modeRemaining, runtimeRemaining);
 }
 
 function ResearchRuntimeEvaluationPanel({

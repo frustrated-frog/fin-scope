@@ -61,6 +61,27 @@ class ResearchEvidenceDossierBuilderTest {
         assertEquals(1, occurrences(excerpt, "长鑫科技上市首日数据"));
     }
 
+    @Test
+    void removesSearchRankingMarkersFromFactExcerpt() {
+        Article article = new Article();
+        article.setId(2L);
+        article.setSourceName("公开新闻搜索");
+        article.setTitle("长鑫科技上市次日市值回落");
+        article.setSummary("[S6] [来咖智库；[S4] - 01/[长鑫科技上市次日市值回落");
+        article.setBody("融资余额仍处高位");
+        article.setUrl("https://example.com/changxin");
+
+        String excerpt = builder.build(java.util.Collections.singletonList(
+                new ResearchEvidenceCard(article, null, "COUNTER", 87,
+                        "[S4] - 01/[长鑫科技上市次日市值回落")))
+                .get(0).getFactExcerpt();
+
+        assertTrue(!excerpt.contains("[S4]"));
+        assertTrue(!excerpt.contains("[S6]"));
+        assertTrue(!excerpt.contains("01/["));
+        assertTrue(excerpt.contains("长鑫科技上市次日市值回落"));
+    }
+
     private String repeat(String value, int count) {
         StringBuilder result = new StringBuilder();
         for (int index = 0; index < count; index++) result.append(value);

@@ -96,7 +96,7 @@ test('places the Agent decision flow between the mission map and legacy diagnost
   const diagnostics = screen.getByText('研究过程与来源').closest('details');
   expect(missionMap.compareDocumentPosition(agentFlow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(agentFlow.compareDocumentPosition(diagnostics!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByText('8 次')).toBeInTheDocument();
+  expect(screen.getByText('6 次')).toBeInTheDocument();
 });
 
 test('isolates the run archive for container-responsive layout', () => {

@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ResearchDecisionAgentTest {
@@ -99,6 +100,19 @@ class ResearchDecisionAgentTest {
         assertEquals("evidence_assess", result.getDecision().getToolCode());
         assertEquals("MODEL", result.getDecision().getDecisionMode());
         assertNull(result.getFallbackReason());
+    }
+
+    @Test
+    void finishesDeterministicallyWhenTheLatestEvidenceAssessmentIsSufficient() {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        context.getLatestGap().setSufficient(true);
+
+        ResearchDecisionResult result = agent.decide(context);
+
+        assertEquals("FINISH", result.getDecision().getDecisionType());
+        assertEquals("DETERMINISTIC", result.getDecision().getDecisionMode());
+        assertNull(result.getFallbackReason());
+        verifyNoInteractions(llm);
     }
 
     private String validDecisionJson() {

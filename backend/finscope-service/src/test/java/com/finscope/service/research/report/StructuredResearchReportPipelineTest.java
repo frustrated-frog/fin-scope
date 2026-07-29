@@ -30,6 +30,7 @@ class StructuredResearchReportPipelineTest {
         List<ResearchEvidenceDossier> dossier = dossier();
 
         ResearchReportNarrative narrative = agent.generate(thesis, blueprint, dossier);
+        narrative.setExecutiveSummary("模型摘要没有显式引用。");
         String markdown = new StructuredResearchReportAssembler().assemble(thesis, blueprint, narrative, dossier);
 
         assertEquals(3, narrative.getSubQuestionAnalysis().size());
@@ -38,6 +39,7 @@ class StructuredResearchReportPipelineTest {
         assertTrue(markdown.contains("## 最终认识与未知项"));
         assertTrue(markdown.contains("[E1](#evidence-e1)"));
         assertTrue(markdown.contains("<a id=\"evidence-e1\"></a>"));
+        assertTrue(markdown.contains("模型摘要没有显式引用。 [E1](#evidence-e1)[E2](#evidence-e2)"));
         assertTrue(!markdown.contains("\\n"));
         String factRow = Arrays.stream(markdown.split("\\n"))
                 .filter(line -> line.startsWith("| [E1]")).findFirst().orElse("");

@@ -31,11 +31,19 @@ class ResearchReportGeneratorTest {
 
         assertTrue(report.getMarkdown().contains("## 核心结论"));
         assertTrue(report.getMarkdown().contains("## 执行摘要"));
-        assertTrue(report.getMarkdown().contains("## 命题拆解"));
-        assertTrue(report.getMarkdown().contains("## 关键证据"));
-        assertTrue(report.getMarkdown().contains("## 反方证据与风险"));
-        assertTrue(report.getMarkdown().contains("## 结论边界与后续验证"));
-        assertTrue(report.getMarkdown().contains("## 来源"));
+        assertTrue(report.getMarkdown().contains("# 半导体设备深度研究报告"));
+        assertTrue(report.getMarkdown().contains("## 关键认识"));
+        assertTrue(report.getMarkdown().contains("## 研究范围与口径"));
+        assertTrue(report.getMarkdown().contains("## 关键事实与数字"));
+        assertTrue(report.getMarkdown().contains("## 发生了什么"));
+        assertTrue(report.getMarkdown().contains("## 命题拆解与逐题判断"));
+        assertTrue(report.getMarkdown().contains("## 核心证据链"));
+        assertTrue(report.getMarkdown().contains("## 反方解释与争议"));
+        assertTrue(report.getMarkdown().contains("## 机制与情景推演"));
+        assertTrue(report.getMarkdown().contains("## 最终认识与未知项"));
+        assertTrue(report.getMarkdown().contains("## 跟踪清单与失效条件"));
+        assertTrue(report.getMarkdown().contains("## 证据附录"));
+        assertTrue(report.getMarkdown().contains("[E1](#evidence-e1)"));
         assertTrue(report.getMarkdown().length() <= ResearchReportPolicy.MAX_REPORT_CHARACTERS);
         assertTrue(report.getExecutiveSummary().length() >= 800);
         assertTrue(report.getExecutiveSummary().length() <= ResearchReportPolicy.MAX_EXECUTIVE_SUMMARY_CHARACTERS);

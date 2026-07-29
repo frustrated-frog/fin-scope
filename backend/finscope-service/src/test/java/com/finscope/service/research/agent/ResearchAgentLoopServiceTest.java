@@ -97,11 +97,13 @@ class ResearchAgentLoopServiceTest {
         ResearchFinishVerifier finishVerifier = mock(ResearchFinishVerifier.class);
         when(finishVerifier.verify(66L)).thenReturn(
                 new ResearchFinishVerdict(true, "ACCEPTED", Collections.<String>emptyList()));
+        ResearchMissionService missionService = mock(ResearchMissionService.class);
+        when(missionService.assess(eq(66L), anyString())).thenReturn(sufficientGap());
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
                 new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
                 new ResearchAgentStateReducer(agents),
-                finishVerifier, mock(ResearchMissionService.class), runtimeService);
+                finishVerifier, missionService, runtimeService);
 
         ResearchAgentLoopResult result = loop.run(66L);
 
@@ -112,6 +114,7 @@ class ResearchAgentLoopServiceTest {
         assertEquals(1, agents.findObservations(66L).size());
         verify(runtimeService).completeNode(eq(66L), anyString(), eq("next-state"), eq(2),
                 eq("first-observation-added-counter-evidence"));
+        verify(missionService).assess(eq(66L), anyString());
     }
 
     @Test
@@ -211,7 +214,7 @@ class ResearchAgentLoopServiceTest {
     }
 
     @Test
-    void quickStopsBeforeAThirdPublicSearchAction() throws Exception {
+    void quickEndsAtTheEvidenceBoundaryWithoutProposingARejectedThirdSearch() throws Exception {
         seedCompletedSearchDecision(1);
         seedCompletedSearchDecision(2);
         ResearchAgentState seededState = agents.findState(66L).get();
@@ -229,18 +232,23 @@ class ResearchAgentLoopServiceTest {
         ResearchToolDispatcher dispatcher = new ResearchToolDispatcher(new ResearchAgentToolRegistry(
                 Collections.<ResearchAgentTool>emptyList()));
         ResearchRuntimeService runtimeService = mock(ResearchRuntimeService.class);
+        ResearchMissionService missionService = mock(ResearchMissionService.class);
+        when(missionService.assess(eq(66L), anyString())).thenReturn(insufficientGap());
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
                 new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
                 new ResearchAgentStateReducer(agents), mock(ResearchFinishVerifier.class),
-                mock(ResearchMissionService.class), runtimeService);
+                missionService, runtimeService);
 
         ResearchAgentLoopResult result = loop.run(66L, ResearchMode.QUICK);
 
         assertTrue(result.isAborted());
         assertEquals(2, result.getExternalActionCount());
-        assertEquals("SEARCH_BUDGET_EXHAUSTED", result.getTerminationReason());
-        assertEquals("REJECTED", agents.findDecisions(66L).get(2).getStatus());
+        assertEquals("EVIDENCE_LIMIT_REACHED", result.getTerminationReason());
+        assertEquals(3, agents.findDecisions(66L).size());
+        assertEquals("ABORT", agents.findDecisions(66L).get(2).getDecisionType());
+        assertEquals("COMPLETED", agents.findDecisions(66L).get(2).getStatus());
+        assertTrue(agents.findDecisions(66L).get(2).getValidationError() == null);
     }
 
     private void seedCompletedSearchDecision(int iteration) {
@@ -257,6 +265,26 @@ class ResearchAgentLoopServiceTest {
         decision.setActionFingerprint("existing-search-" + iteration);
         decision.setStatus("COMPLETED");
         agents.appendDecision(decision);
+    }
+
+    private com.finscope.domain.research.mission.ResearchMissionGap sufficientGap() {
+        com.finscope.domain.research.mission.ResearchMissionGap gap =
+                new com.finscope.domain.research.mission.ResearchMissionGap();
+        gap.setEvidenceCount(8);
+        gap.setSourceCount(4);
+        gap.setSupportCount(5);
+        gap.setCounterCount(3);
+        gap.setSufficient(true);
+        gap.setStateHash("sufficient-gap");
+        return gap;
+    }
+
+    private com.finscope.domain.research.mission.ResearchMissionGap insufficientGap() {
+        com.finscope.domain.research.mission.ResearchMissionGap gap = sufficientGap();
+        gap.setSufficient(false);
+        gap.setCounterCount(0);
+        gap.setStateHash("insufficient-gap");
+        return gap;
     }
 
     private String searchDecision() {

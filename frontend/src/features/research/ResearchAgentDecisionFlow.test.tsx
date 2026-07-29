@@ -118,3 +118,23 @@ test('distinguishes an exhausted retry from a generic tool failure', () => {
   expect(screen.getByText('重试未恢复')).toBeInTheDocument();
   expect(screen.getByText('错误类型：SEARCH_TIMEOUT · 已完成自动重试')).toBeInTheDocument();
 });
+
+test('renders a rejected tool decision as terminal instead of waiting for an observation', () => {
+  const rejectedTrace = {
+    ...trace,
+    decisions: [{
+      ...trace.decisions[0],
+      id: 105,
+      iteration: 5,
+      status: 'REJECTED',
+      validationError: 'SEARCH_BUDGET_EXHAUSTED'
+    }],
+    observations: []
+  };
+
+  render(<ResearchAgentDecisionFlow agentCore={rejectedTrace} remainingActions={0} planVersion={2} />);
+
+  expect(screen.getByText('工具调用已终止')).toBeInTheDocument();
+  expect(screen.getByText('该决策未执行，因此不会返回 Observation。')).toBeInTheDocument();
+  expect(screen.queryByText('等待工具返回 Observation…')).not.toBeInTheDocument();
+});

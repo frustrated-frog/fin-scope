@@ -105,6 +105,7 @@ function DecisionEntry({
   observation?: ResearchToolObservation;
 }) {
   const rejectedFinish = decision.decisionType === 'FINISH' && decision.status === 'REJECTED';
+  const rejectedTool = decision.decisionType === 'TOOL_CALL' && decision.status === 'REJECTED';
   const modelTimeoutFallback = decision.decisionMode === 'DETERMINISTIC'
     && decision.validationError?.startsWith('MODEL_TIMEOUT');
   const tone = rejectedFinish || decision.status === 'FAILED'
@@ -122,7 +123,9 @@ function DecisionEntry({
         <header>
           <div>
             <span className="research-agent-decision-type">
-              {rejectedFinish ? '完成校验未通过' : DECISION_LABELS[decision.decisionType] || decision.decisionType}
+              {rejectedFinish ? '完成校验未通过'
+                : rejectedTool ? '工具调用已终止'
+                  : DECISION_LABELS[decision.decisionType] || decision.decisionType}
             </span>
             {decision.toolCode && <strong>{TOOL_LABELS[decision.toolCode] || decision.toolCode}</strong>}
           </div>
@@ -147,7 +150,9 @@ function DecisionEntry({
           </p>
         )}
         {observation ? <ObservationCard observation={observation} /> : (
-          decision.decisionType === 'TOOL_CALL' && decision.status !== 'FAILED'
+          rejectedTool
+            ? <p className="research-agent-observation-pending">该决策未执行，因此不会返回 Observation。</p>
+            : decision.decisionType === 'TOOL_CALL' && decision.status !== 'FAILED'
             ? <p className="research-agent-observation-pending">等待工具返回 Observation…</p>
             : null
         )}

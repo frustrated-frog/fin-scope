@@ -43,7 +43,8 @@ class ResearchAgentContextBuilderTest {
         ResearchDecisionContext context = builder.build(44L);
 
         assertEquals(7, context.getNextIteration());
-        assertEquals(6, context.getRemainingActions());
+        assertEquals(0, context.getRemainingActions());
+        assertTrue(context.getPrompt().contains("剩余搜索动作：0"));
         assertEquals("COUNTER", context.getLatestGap().getRecommendedIntent());
         assertTrue(context.getPrompt().contains("observation-6-latest"));
         assertTrue(context.getPrompt().contains("observation-3"));
@@ -116,6 +117,7 @@ class ResearchAgentContextBuilderTest {
             decision.setIteration(index);
             decision.setDecisionType("TOOL_CALL");
             decision.setToolCode("public_news_search");
+            decision.setStatus("COMPLETED");
             decision.setDecisionSummary("decision-" + index + " " + repeat("研究摘要", 700));
             decisions.add(decision);
 

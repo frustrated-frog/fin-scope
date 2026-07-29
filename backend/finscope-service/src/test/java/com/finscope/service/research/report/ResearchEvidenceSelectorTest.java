@@ -121,15 +121,61 @@ class ResearchEvidenceSelectorTest {
     @Test
     void rejectsLowConfidenceTavilyResultWithoutAnyEntityMatch() {
         ResearchSearchEvidence searchEvidence = searchEvidence(
-                "Aspinall returns to training after eye surgery",
-                "The heavyweight fighter discussed his recovery and next match.",
-                0.080D);
+                "Jialicheng IPO opens at 84.46 yuan",
+                "The PCB prototyping company raised nearly 4.7 billion yuan in a separate listing.",
+                0.124D);
 
         List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
                 Collections.<Article>emptyList(), Collections.emptyList(),
                 Collections.singletonList(searchEvidence));
 
         assertTrue(selected.isEmpty());
+    }
+
+    @Test
+    void removesSearchRankingMarkersFromSelectedClaims() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "长鑫科技上市次日市值回落",
+                "[S4] - 01/[长鑫科技上市次日市值回落，融资余额仍处高位",
+                0.87D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertEquals(1, selected.size());
+        assertEquals("长鑫科技上市次日市值回落，融资余额仍处高位", selected.get(0).getClaim());
+    }
+
+    @Test
+    void prefersConciseSearchSnippetOverFetchedPageNavigation() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "长鑫科技上市次日市值回落",
+                "[S4] - 01/[其他市场导航](https://example.com/other) - 02/广告与站点菜单",
+                0.87D);
+        searchEvidence.setSearchSnippet("长鑫科技上市首日成交额1411.87亿元，换手率66.40%。");
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertEquals(1, selected.size());
+        assertEquals("长鑫科技上市首日成交额1411.87亿元，换手率66.40%。", selected.get(0).getClaim());
+    }
+
+    @Test
+    void keepsTruncatedClaimsWithinTheDeclaredLimit() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "长鑫科技上市交易数据",
+                "长鑫科技" + repeat("上市交易数据", 80),
+                0.87D);
+
+        ResearchEvidenceCard selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence)).get(0);
+
+        assertTrue(selected.getClaim().length() <= 260);
+        assertTrue(selected.getClaim().endsWith("…"));
     }
 
     private ResearchSearchEvidence searchEvidence(String title, String content, double score) {
@@ -173,5 +219,12 @@ class ResearchEvidenceSelectorTest {
         article.setSummary(summary);
         article.setUrl("https://example.com/" + id);
         return article;
+    }
+
+
+    private String repeat(String value, int count) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < count; index++) result.append(value);
+        return result.toString();
     }
 }

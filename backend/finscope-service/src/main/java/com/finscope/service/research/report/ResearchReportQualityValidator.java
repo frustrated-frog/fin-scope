@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 public class ResearchReportQualityValidator {
     private static final Pattern EVIDENCE_REF = Pattern.compile("\\[(E\\d+)]");
     private static final Pattern SECTION = Pattern.compile("(?m)^##\\s+(.+?)\\s*$");
+    private static final String AUDIT_CAVEAT = "**审计降级：**";
     private static final String[] GROUNDED_SECTIONS = {"核心结论", "核心证据链", "反方解释与争议"};
     private static final String[] REQUIRED = {"核心结论", "关键认识", "执行摘要", "研究范围与口径",
             "关键事实与数字", "发生了什么", "命题拆解与逐题判断", "核心证据链", "反方解释与争议",
@@ -26,6 +27,8 @@ public class ResearchReportQualityValidator {
         if (markdown != null && markdown.length() > ResearchReportPolicy.MAX_REPORT_CHARACTERS) issues.add("REPORT_TOO_LONG");
         String value = markdown == null ? "" : markdown;
         for (String heading : REQUIRED) if (!value.contains("## " + heading)) issues.add("MISSING_SECTION:" + heading);
+        if (section(value, "核心结论").contains(AUDIT_CAVEAT)) issues.add("CORE_CONCLUSION_OVER_REPAIRED");
+        if (occurrences(value, AUDIT_CAVEAT) > 5) issues.add("EXCESSIVE_AUDIT_CAVEATS");
         Set<String> allowed = new HashSet<String>();
         for (ResearchEvidenceDossier item : dossier) allowed.add(item.getEvidenceRef());
         Matcher matcher = EVIDENCE_REF.matcher(value);
@@ -116,6 +119,16 @@ public class ResearchReportQualityValidator {
     private boolean containsAny(String value, String... keywords) {
         for (String keyword : keywords) if (value.contains(keyword)) return true;
         return false;
+    }
+
+    private int occurrences(String value, String pattern) {
+        int count = 0;
+        int from = 0;
+        while (value != null && (from = value.indexOf(pattern, from)) >= 0) {
+            count++;
+            from += pattern.length();
+        }
+        return count;
     }
 
     private String text(String primary, String fallback) {

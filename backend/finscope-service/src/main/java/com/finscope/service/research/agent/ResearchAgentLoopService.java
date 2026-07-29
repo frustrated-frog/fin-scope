@@ -6,6 +6,7 @@ import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
+import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.service.research.agent.tool.ResearchAgentToolContext;
 import com.finscope.service.research.agent.tool.ResearchToolExecutionResult;
 import com.finscope.service.research.agent.tool.ResearchToolRetryExecutor;
@@ -67,6 +68,9 @@ public class ResearchAgentLoopService {
         int externalActions = countExternalActions(runId);
         int controlLimit = Math.min(MAX_CONTROL_ITERATIONS, mode.getMaxIterations());
         for (int control = 0; control < controlLimit; control++) {
+            if (externalActions >= mode.getSearchActionBudget()) {
+                return finishAtEvidenceBoundary(runId, state, externalActions);
+            }
             ResearchDecisionContext context = contextBuilder.build(runId);
             ResearchDecisionResult result = decisionAgent.decide(context);
             ResearchAgentDecision decision = result.getDecision();
@@ -79,13 +83,6 @@ public class ResearchAgentLoopService {
                     () -> new IllegalStateException("研究 Agent 状态在决策后丢失：" + runId));
 
             if ("TOOL_CALL".equals(decision.getDecisionType())) {
-                if ("public_news_search".equals(decision.getToolCode())
-                        && externalActions >= mode.getSearchActionBudget()) {
-                    repository.updateDecisionStatus(decision.getId(), "REJECTED", "SEARCH_BUDGET_EXHAUSTED");
-                    reducer.recordAbort(state, decision);
-                    return ResearchAgentLoopResult.aborted(state.getDecisionCount(), externalActions,
-                            "SEARCH_BUDGET_EXHAUSTED");
-                }
                 ToolStep step = executeTool(runId, state, decision, mode);
                 externalActions += step.externalActionDelta;
                 state = step.state;
@@ -133,6 +130,52 @@ public class ResearchAgentLoopService {
         return abortForControlLimit(runId, externalActions);
     }
 
+    private ResearchAgentLoopResult finishAtEvidenceBoundary(Long runId,
+                                                               ResearchAgentState state,
+                                                               int externalActions) {
+        ResearchMissionGap gap = missionService.assess(runId, "agent-search-budget-boundary");
+        if (gap != null && gap.isSufficient()) {
+            ResearchAgentDecision decision = terminalDecision(runId, state, "FINISH",
+                    "在搜索预算边界校验研究完成条件",
+                    "搜索额度已完成且最新证据达到门槛，提交独立完成校验");
+            repository.appendDecision(decision);
+            ResearchFinishVerdict verdict = finishVerifier.verify(runId);
+            repository.updateDecisionStatus(decision.getId(), verdict.isAccepted() ? "COMPLETED" : "REJECTED",
+                    verdict.isAccepted() ? null : verdict.getReasonCode() + "：" + verdict.getMissingConditions());
+            reducer.recordFinishVerdict(state, decision, verdict);
+            if (verdict.isAccepted()) {
+                return ResearchAgentLoopResult.finished(decision.getIteration(), externalActions);
+            }
+            state = repository.findState(runId).orElse(state);
+        }
+        ResearchAgentDecision decision = terminalDecision(runId, state, "ABORT",
+                "在证据边界结束扩展研究",
+                "搜索额度已经完成，保留现有证据生成带局限声明的研究报告");
+        repository.appendDecision(decision);
+        repository.updateDecisionStatus(decision.getId(), "COMPLETED", null);
+        reducer.recordAbort(state, decision);
+        return ResearchAgentLoopResult.aborted(decision.getIteration(), externalActions,
+                "EVIDENCE_LIMIT_REACHED");
+    }
+
+    private ResearchAgentDecision terminalDecision(Long runId,
+                                                    ResearchAgentState state,
+                                                    String type,
+                                                    String subgoal,
+                                                    String summary) {
+        ResearchAgentDecision decision = new ResearchAgentDecision();
+        decision.setResearchRunId(runId);
+        decision.setIteration(state.getDecisionCount() + 1);
+        decision.setDecisionType(type);
+        decision.setCurrentSubgoal(subgoal);
+        decision.setArgumentsJson("{}");
+        decision.setDecisionSummary(summary);
+        decision.setConfidence(1D);
+        decision.setDecisionMode("DETERMINISTIC");
+        decision.setStatus("PROPOSED");
+        return decision;
+    }
+
     private ToolStep executeTool(Long runId,
                                  ResearchAgentState state,
                                  ResearchAgentDecision decision,
@@ -161,6 +204,11 @@ public class ResearchAgentLoopService {
         }
         ResearchAgentState reduced = turnService.commitToolTurn(runId, nodeId, start.isStarted(),
                 state, decision, observation);
+        if (external && !"TERMINAL_ERROR".equals(observation.getStatus())
+                && !"RETRYABLE_ERROR".equals(observation.getStatus())
+                && !"FAILED".equals(observation.getStatus())) {
+            missionService.assess(runId, "agent-decision-" + decision.getId());
+        }
         if ("TERMINAL_ERROR".equals(observation.getStatus())
                 || "RETRYABLE_ERROR".equals(observation.getStatus())) {
             return new ToolStep(reduced, external && start.isStarted() ? 1 : 0,

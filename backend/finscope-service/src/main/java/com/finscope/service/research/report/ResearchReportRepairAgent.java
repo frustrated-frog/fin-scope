@@ -26,7 +26,12 @@ public class ResearchReportRepairAgent {
                 String output = client.complete(systemPrompt(allowed), userPrompt(markdown, audit, dossier),
                         60_000, 12_000);
                 String candidate = stripFence(output);
-                if (isValid(candidate, allowed)) return candidate;
+                if (isValid(candidate, markdown, allowed)) {
+                    ResearchClaimAudit candidateAudit = new ResearchClaimAuditor(new ResearchClaimExtractor())
+                            .audit(candidate, dossier);
+                    return candidateAudit.hasBlockingIssues()
+                            ? deterministicRepair(candidate, candidateAudit) : candidate;
+                }
             } catch (Exception ignored) {
                 // Deterministic degradation below keeps the report pipeline available.
             }
@@ -56,17 +61,38 @@ public class ResearchReportRepairAgent {
         String result = markdown == null ? "" : markdown;
         for (ResearchClaimAuditItem item : audit.getItems()) {
             if (!item.isBlocking()) continue;
+            StringBuilder refs = new StringBuilder();
+            for (String ref : item.getClaim().getEvidenceRefs()) refs.append('[').append(ref).append(']');
             result = result.replace(item.getClaim().getRawText(),
-                    "该事实表述缺乏充分引用支持，已降级为待验证判断。");
+                    "**审计降级：** 原事实表述缺乏充分引用支持，已移除具体断言并标记为待验证；"
+                            + "原关联材料仅供复核。" + refs);
         }
         return result;
     }
 
-    private boolean isValid(String markdown, Set<String> allowed) {
+    private boolean isValid(String markdown, String original, Set<String> allowed) {
         if (markdown == null || markdown.trim().isEmpty() || !markdown.contains("## ")) return false;
         Matcher matcher = REF.matcher(markdown);
         while (matcher.find()) if (!allowed.contains(matcher.group(1))) return false;
+        if (original != null && markdown.length() * 10 < original.length() * 8) return false;
+        for (String heading : headings(original)) if (!markdown.contains("## " + heading)) return false;
+        Set<String> originalRefs = cited(original, allowed);
+        if (!cited(markdown, allowed).containsAll(originalRefs)) return false;
         return true;
+    }
+
+    private Set<String> cited(String markdown, Set<String> allowed) {
+        Set<String> result = new HashSet<String>();
+        Matcher matcher = REF.matcher(markdown == null ? "" : markdown);
+        while (matcher.find()) if (allowed.contains(matcher.group(1))) result.add(matcher.group(1));
+        return result;
+    }
+
+    private Set<String> headings(String markdown) {
+        Set<String> result = new HashSet<String>();
+        Matcher matcher = Pattern.compile("(?m)^##\\s+(.+?)\\s*$").matcher(markdown == null ? "" : markdown);
+        while (matcher.find()) result.add(matcher.group(1).trim());
+        return result;
     }
 
     private Set<String> allowed(List<ResearchEvidenceDossier> dossier) {

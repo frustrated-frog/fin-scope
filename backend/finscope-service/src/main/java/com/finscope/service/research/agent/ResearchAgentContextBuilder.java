@@ -7,6 +7,7 @@ import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchAgentTraceView;
 import com.finscope.domain.research.agent.ResearchToolObservation;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
@@ -53,7 +54,12 @@ public class ResearchAgentContextBuilder {
         ResearchDecisionContext context = new ResearchDecisionContext();
         context.setResearchRunId(runId);
         context.setNextIteration(state.getDecisionCount() + 1);
-        context.setRemainingActions(Math.max(0, runtime.getMaxActions() - runtime.getConsumedActions()));
+        int runtimeRemaining = Math.max(0, runtime.getMaxActions() - runtime.getConsumedActions());
+        int searchBudget = runtime.getMaxActions() <= ResearchMode.QUICK.getMaxIterations()
+                ? ResearchMode.QUICK.getSearchActionBudget()
+                : ResearchMode.DEEP.getSearchActionBudget();
+        int searchRemaining = Math.max(0, searchBudget - completedSearchActions(trace));
+        context.setRemainingActions(Math.min(runtimeRemaining, searchRemaining));
         context.setMission(mission);
         context.setState(state);
         context.setLatestGap(latestGap);
@@ -76,7 +82,7 @@ public class ResearchAgentContextBuilder {
                 .append("计划版本：").append(mission.getPlanVersion()).append('\n')
                 .append("当前子目标：").append(safe(state.getCurrentSubgoal())).append('\n')
                 .append("计划摘要：").append(safe(state.getPlanSummary())).append('\n')
-                .append("剩余外部动作：").append(remainingActions).append('\n')
+                .append("剩余搜索动作：").append(remainingActions).append('\n')
                 .append("工作记忆：").append(limit(safe(state.getMemorySummary()), 8_000)).append('\n')
                 .append("证据摘要：").append(safe(state.getEvidenceSummary())).append('\n')
                 .append("已尝试动作：").append(state.getAttemptedFingerprints()).append('\n');
@@ -134,6 +140,18 @@ public class ResearchAgentContextBuilder {
                         .append("；sourceDelta=").append(observation.getSourceDelta()).append('\n');
             }
         }
+    }
+
+    private int completedSearchActions(ResearchAgentTraceView trace) {
+        int count = 0;
+        if (trace == null) return count;
+        for (ResearchAgentDecision decision : trace.getDecisions()) {
+            if ("public_news_search".equals(decision.getToolCode())
+                    && ("COMPLETED".equals(decision.getStatus()) || "FAILED".equals(decision.getStatus()))) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private String safe(String value) { return value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").trim(); }

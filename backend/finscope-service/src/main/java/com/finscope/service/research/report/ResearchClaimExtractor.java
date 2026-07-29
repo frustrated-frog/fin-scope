@@ -22,13 +22,19 @@ public class ResearchClaimExtractor {
         if (appendix >= 0) value = value.substring(0, appendix);
         List<ResearchClaim> result = new ArrayList<ResearchClaim>();
         for (String line : value.split("\\n")) {
-            String compact = line.replaceFirst("^\\s*(?:[-*>]|\\d+\\.)\\s*", "").trim();
-            if (compact.isEmpty() || compact.startsWith("#") || compact.startsWith("|")) continue;
+            String trimmed = line.trim();
+            if (trimmed.startsWith("> 研究日期：") || trimmed.startsWith("> 原始问题：")
+                    || trimmed.startsWith("> 判断：")) continue;
+            String compact = line.replaceFirst("^\\s*(?:[-*>]\\s+|\\d+\\.\\s+)", "").trim();
+            if (compact.isEmpty() || compact.startsWith("#") || compact.startsWith("|")
+                    || compact.startsWith("**审计降级：**")) continue;
+            List<String> paragraphRefs = matches(REF, compact);
             Matcher sentences = SENTENCE.matcher(compact);
             while (sentences.find()) {
                 String raw = sentences.group().trim();
-                if (raw.isEmpty()) continue;
+                if (raw.isEmpty() || raw.startsWith("**审计降级：**")) continue;
                 List<String> refs = matches(REF, raw);
+                if (refs.isEmpty() && !paragraphRefs.isEmpty()) refs = paragraphRefs;
                 String text = REF.matcher(raw).replaceAll("").trim();
                 List<String> numbers = matches(NUMBER, text);
                 if (refs.isEmpty() && numbers.isEmpty()) continue;

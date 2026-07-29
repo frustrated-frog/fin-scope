@@ -48,6 +48,26 @@ class ResearchClaimAuditorTest {
         assertEquals(1, audit.getConflictCount());
     }
 
+    @Test
+    void appliesATrailingParagraphCitationToAllClaimsInThatParagraph() {
+        String report = "## 核心结论\n\n公司在2025年收入增长18%。公司研发投入增长10%。[E1]";
+
+        ResearchClaimAudit audit = auditor.audit(report, Collections.singletonList(
+                evidence("E1", "公司披露2025年收入增长18%，研发投入增长10%。")));
+
+        assertEquals(2, audit.getClaimCount());
+        assertEquals(2, audit.getSupportedCount());
+    }
+
+    @Test
+    void ignoresReportMetadataDatesThatAreNotResearchClaims() {
+        ResearchClaimAudit audit = auditor.audit(
+                "> 研究日期：2026-07-29  \n> 原始问题：测试问题  \n> 判断：MIXED · 置信度：HIGH",
+                Collections.<ResearchEvidenceDossier>emptyList());
+
+        assertEquals(0, audit.getClaimCount());
+    }
+
     private ResearchEvidenceDossier evidence(String ref, String excerpt) {
         return new ResearchEvidenceDossier(ref, null, null, "example.com", "示例来源", "T2",
                 "示例材料", null, "https://example.com/" + ref, excerpt, "SUPPORT", 90);

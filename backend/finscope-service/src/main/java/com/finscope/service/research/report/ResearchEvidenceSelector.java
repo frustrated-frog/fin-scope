@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 public class ResearchEvidenceSelector {
     private static final int MAX_EVIDENCE = 15;
     private static final int MAX_PER_SOURCE = 5;
-    private static final int MIN_SEARCH_PROVIDER_SCORE = 10;
+    private static final int MIN_SEARCH_PROVIDER_SCORE = 35;
     private static final List<String> SUPPORT_TERMS = Arrays.asList(
             "增长", "上调", "上修", "扩张", "景气", "复苏", "持续", "增加", "突破", "创高", "投资计划",
             "资本开支周期", "迎来新一轮", "growth", "raise", "expand", "recovery");
@@ -79,7 +79,8 @@ public class ResearchEvidenceSelector {
             String stance = searchStance(search.getIntent(), article);
             candidates.add(new ResearchEvidenceCard(article, null, stance,
                     Math.min(100, Math.max(score, providerScore)),
-                    cleanClaim(firstNonBlank(search.getContent(), search.getTitle())),
+                    cleanClaim(firstNonBlank(search.getSearchSnippet(),
+                            firstNonBlank(search.getContent(), search.getTitle()))),
                     firstNonBlank(search.getSourceDomain(), ResearchSourceIdentity.resolve(article)),
                     firstNonBlank(search.getSourceTier(), "T3")));
         }
@@ -106,7 +107,7 @@ public class ResearchEvidenceSelector {
         Article article = new Article();
         article.setSourceName(firstNonBlank(search.getSourceDomain(), search.getProvider()));
         article.setTitle(search.getTitle());
-        article.setSummary(search.getContent());
+        article.setSummary(firstNonBlank(search.getSearchSnippet(), search.getContent()));
         article.setBody(search.getContent());
         article.setUrl(search.getUrl());
         article.setPublishedAt(parsePublishedAt(search.getPublishedAt()));
@@ -203,6 +204,7 @@ public class ResearchEvidenceSelector {
 
     private String cleanClaim(String value) {
         String plain = value == null ? "" : value;
+        plain = plain.replaceFirst("(?i)^\\[S\\d+\\]\\s*(?:-\\s*\\d+\\s*/)?\\s*\\[?", "");
         int labelEnd = plain.indexOf("](");
         if (plain.startsWith("[") && labelEnd > 1) {
             plain = plain.substring(1, labelEnd);
@@ -239,7 +241,8 @@ public class ResearchEvidenceSelector {
     private String compact(String value, int max) {
         if (value == null) return "";
         String compacted = value.replaceAll("\\s+", " ").trim();
-        return compacted.length() <= max ? compacted : compacted.substring(0, max) + "…";
+        return compacted.length() <= max ? compacted
+                : compacted.substring(0, Math.max(0, max - 1)).trim() + "…";
     }
 
     private String normalize(String value) {
