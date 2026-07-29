@@ -103,6 +103,50 @@ class ResearchEvidenceSelectorTest {
         assertEquals(null, selected.get(0).getArticle().getId());
     }
 
+    @Test
+    void acceptsHighConfidenceCrossLanguageTavilyEvidenceForChineseCompany() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "China memory chipmaker CXMT skyrockets 470% in Shanghai debut",
+                "CXMT raised fresh capital in its IPO and its market debut changed the competitive landscape.",
+                0.478D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertEquals(1, selected.size());
+        assertTrue(selected.get(0).getRelevanceScore() >= 40);
+    }
+
+    @Test
+    void rejectsLowConfidenceTavilyResultWithoutAnyEntityMatch() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "Aspinall returns to training after eye surgery",
+                "The heavyweight fighter discussed his recovery and next match.",
+                0.080D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertTrue(selected.isEmpty());
+    }
+
+    private ResearchSearchEvidence searchEvidence(String title, String content, double score) {
+        ResearchSearchEvidence value = new ResearchSearchEvidence();
+        value.setId(72L);
+        value.setResearchRunId(19L);
+        value.setIntent("SUPPORT");
+        value.setQueryText("长鑫科技上市 半导体产业 竞争格局 影响");
+        value.setTitle(title);
+        value.setContent(content);
+        value.setUrl("https://www.cnbc.com/cxmt-ipo.html");
+        value.setSourceDomain("www.cnbc.com");
+        value.setSourceTier("T2");
+        value.setRelevanceScore(score);
+        return value;
+    }
+
     private ResearchThesis thesisForChangxin() {
         ResearchThesis thesis = new ResearchThesis();
         thesis.setId(2L);

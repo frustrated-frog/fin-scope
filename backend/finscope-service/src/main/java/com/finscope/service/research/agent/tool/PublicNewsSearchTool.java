@@ -20,6 +20,7 @@ import java.util.Set;
 @Component
 public class PublicNewsSearchTool implements ResearchAgentTool {
     private static final int MAX_RESULTS = 5;
+    private static final double MIN_RELEVANCE_SCORE = 0.10D;
     private final WebSearchClient searchClient;
     private final ResearchSearchEvidenceRepository evidenceRepository;
 
@@ -83,8 +84,13 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             Set<String> seenUrls = new HashSet<String>();
             Set<String> newDomains = new HashSet<String>();
             int duplicates = 0;
+            int lowRelevance = 0;
             for (SearchResult hit : hits == null ? Collections.<SearchResult>emptyList() : hits) {
                 String url = text(hit.getUrl());
+                if (hit.getScore() == null || hit.getScore() < MIN_RELEVANCE_SCORE) {
+                    lowRelevance++;
+                    continue;
+                }
                 if (!hasText(url) || !seenUrls.add(url)
                         || evidenceRepository.findByRunIdAndUrl(context.getResearchRunId(), url).isPresent()) {
                     duplicates++;
@@ -102,7 +108,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             value.setStateHash("tavily:" + refs.size() + ":" + newDomains.size());
             value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
             value.setObservationSummary("Tavily 搜索完成：命中=" + (hits == null ? 0 : hits.size())
-                    + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
+                    + "，低相关=" + lowRelevance + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
                     + "，新增独立来源=" + newDomains.size());
             value.setNewInformation(refs.isEmpty()
                     ? "本次查询没有获得新的运行内证据"

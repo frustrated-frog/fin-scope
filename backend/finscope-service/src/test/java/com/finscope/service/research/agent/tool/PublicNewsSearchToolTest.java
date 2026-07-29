@@ -76,6 +76,29 @@ class PublicNewsSearchToolTest {
         assertTrue(failed.isRetryable());
     }
 
+    @Test
+    void discardsLowConfidenceProviderNoiseBeforePersistence() throws Exception {
+        when(searchClient.isConfigured()).thenReturn(true);
+        SearchResult relevant = result("China memory chipmaker CXMT completes IPO",
+                "https://www.cnbc.com/cxmt", "The company completed its Shanghai listing.", "T2");
+        relevant.setScore(0.478D);
+        SearchResult noise = result("Aspinall returns to training",
+                "https://sport.example.com/a", "The fighter recovered from eye surgery.", "T3");
+        noise.setScore(0.080D);
+        when(searchClient.search("光模块 指引 下修 风险", 5)).thenReturn(Arrays.asList(relevant, noise));
+        when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
+            ResearchSearchEvidence value = invocation.getArgument(0);
+            value.setId(41L);
+            return value;
+        });
+
+        ResearchToolObservation observation = tool.execute(new ResearchAgentToolContext(22L, 9L), arguments());
+
+        assertEquals(1, observation.getEvidenceDelta());
+        assertTrue(observation.getObservationSummary().contains("低相关=1"));
+        verify(evidenceRepository, times(1)).save(any(ResearchSearchEvidence.class));
+    }
+
     private Map<String, Object> arguments() {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("query", "光模块 指引 下修 风险");

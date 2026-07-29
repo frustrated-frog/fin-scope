@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 public class ResearchEvidenceSelector {
     private static final int MAX_EVIDENCE = 15;
     private static final int MAX_PER_SOURCE = 5;
+    private static final int MIN_SEARCH_PROVIDER_SCORE = 10;
     private static final List<String> SUPPORT_TERMS = Arrays.asList(
             "增长", "上调", "上修", "扩张", "景气", "复苏", "持续", "增加", "突破", "创高", "投资计划",
             "资本开支周期", "迎来新一轮", "growth", "raise", "expand", "recovery");
@@ -72,12 +73,13 @@ public class ResearchEvidenceSelector {
             String fingerprint = normalize(firstNonBlank(article.getUrl(), article.getTitle()));
             if (!fingerprints.add(fingerprint)) continue;
             int score = relevanceScore(article, null, subjectKeywords);
-            if (score < 25) continue;
             int providerScore = search.getRelevanceScore() == null ? 0
-                    : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 30D);
+                    : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 100D);
+            if (score < 25 && providerScore < MIN_SEARCH_PROVIDER_SCORE) continue;
             String stance = searchStance(search.getIntent(), article);
             candidates.add(new ResearchEvidenceCard(article, null, stance,
-                    Math.min(100, score + providerScore), cleanClaim(firstNonBlank(search.getContent(), search.getTitle())),
+                    Math.min(100, Math.max(score, providerScore)),
+                    cleanClaim(firstNonBlank(search.getContent(), search.getTitle())),
                     firstNonBlank(search.getSourceDomain(), ResearchSourceIdentity.resolve(article)),
                     firstNonBlank(search.getSourceTier(), "T3")));
         }
