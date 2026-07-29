@@ -33,7 +33,7 @@ finscope:
   search:
     enabled: ${FINSCOPE_SEARCH_ENABLED:true}
     provider: ${FINSCOPE_SEARCH_PROVIDER:tavily}
-    api-key: "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"
+    api-key: "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"
   python-market-data:
     base-url: ${FINSCOPE_PYTHON_MARKET_DATA_BASE_URL:http://127.0.0.1:8000}
   acquisition:
