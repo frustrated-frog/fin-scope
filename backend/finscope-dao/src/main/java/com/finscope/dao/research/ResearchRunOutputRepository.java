@@ -7,8 +7,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Repository
@@ -23,6 +24,10 @@ public class ResearchRunOutputRepository {
         return count == null ? 0 : count;
     }
     public int countDistinctArticleSources(Long runId) {
+        return findDistinctArticleSourceIdentities(runId).size();
+    }
+
+    public List<String> findDistinctArticleSourceIdentities(Long runId) {
         List<String> identities = jdbcTemplate.query(
                 "SELECT a.title,a.source_name FROM research_run_output o "
                         + "JOIN article a ON a.id=o.output_id "
@@ -31,7 +36,7 @@ public class ResearchRunOutputRepository {
                         rs.getString("title"), rs.getString("source_name")),
                 runId);
         Set<String> distinct = new HashSet<String>(identities);
-        return distinct.size();
+        return new ArrayList<String>(distinct);
     }
     public List<ResearchRunOutput> findByRunId(Long runId) {
         return jdbcTemplate.query("SELECT * FROM research_run_output WHERE research_run_id=? ORDER BY id ASC", (rs, row) -> {

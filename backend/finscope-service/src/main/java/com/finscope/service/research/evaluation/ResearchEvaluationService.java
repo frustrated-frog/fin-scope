@@ -5,12 +5,14 @@ import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.dao.research.ResearchReportRepository;
 import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.dao.research.ResearchRunOutputRepository;
+import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.dao.research.evaluation.ResearchEvaluationRepository;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.evaluation.ResearchEvaluation;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
@@ -22,8 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.Resource;
 
 @Service
@@ -32,6 +37,7 @@ public class ResearchEvaluationService {
     private final ResearchReportRepository reportRepository;
     private final ResearchRuntimeRepository runtimeRepository;
     private final ResearchRunOutputRepository outputRepository;
+    private final ResearchSearchEvidenceRepository searchEvidenceRepository;
     private final ResearchEvaluationRepository evaluationRepository;
     private final ResearchEvaluationScorer scorer;
     @Resource
@@ -43,12 +49,14 @@ public class ResearchEvaluationService {
                                      ResearchReportRepository reportRepository,
                                      ResearchRuntimeRepository runtimeRepository,
                                      ResearchRunOutputRepository outputRepository,
+                                     ResearchSearchEvidenceRepository searchEvidenceRepository,
                                      ResearchEvaluationRepository evaluationRepository,
                                      ResearchEvaluationScorer scorer) {
         this.runRepository = runRepository;
         this.reportRepository = reportRepository;
         this.runtimeRepository = runtimeRepository;
         this.outputRepository = outputRepository;
+        this.searchEvidenceRepository = searchEvidenceRepository;
         this.evaluationRepository = evaluationRepository;
         this.scorer = scorer;
     }
@@ -63,13 +71,15 @@ public class ResearchEvaluationService {
         ResearchReport report = reportRepository.findByRunId(runId).orElse(null);
         ResearchRuntimeCheckpoint checkpoint = runtimeRepository.findCheckpoint(runId).orElse(null);
         List<ResearchRuntimeEvent> events = runtimeRepository.findEvents(runId);
-        int evidenceCount = outputRepository.countByRunIdAndType(runId, "EVIDENCE");
-        int sourceCount = outputRepository.countDistinctArticleSources(runId);
+        List<ResearchSearchEvidence> searchEvidence = searchEvidenceRepository.findByRunId(runId);
+        int evidenceCount = outputRepository.countByRunIdAndType(runId, "EVIDENCE") + searchEvidence.size();
+        int sourceCount = actualSourceCount(runId, searchEvidence);
         ResearchEvaluation evaluation = scorer.score(
                 new ResearchEvaluationSnapshot(run, report, checkpoint, events, evidenceCount, sourceCount));
         ResearchAgentTrajectoryMetrics trajectory = trajectory(runId);
         scorer.appendTrajectoryMetric(evaluation, trajectory);
-        evaluation.setInputFingerprint(fingerprint(run, report, checkpoint, events, trajectory));
+        evaluation.setInputFingerprint(fingerprint(run, report, checkpoint, events, trajectory,
+                evidenceCount, sourceCount));
         return evaluationRepository.save(evaluation);
     }
 
@@ -83,11 +93,14 @@ public class ResearchEvaluationService {
 
     private String fingerprint(ResearchRun run, ResearchReport report,
                                ResearchRuntimeCheckpoint checkpoint, List<ResearchRuntimeEvent> events,
-                               ResearchAgentTrajectoryMetrics trajectory) {
+                               ResearchAgentTrajectoryMetrics trajectory,
+                               int actualEvidenceCount,
+                               int actualSourceCount) {
         StringBuilder canonical = new StringBuilder();
         canonical.append("v=").append(ResearchEvaluationScorer.VERSION)
                 .append("|run=").append(run.getId()).append(':').append(run.getStatus())
                 .append(':').append(run.getFetchedSourceCount()).append(':').append(run.getEvidenceCount())
+                .append("|actual=").append(actualEvidenceCount).append(':').append(actualSourceCount)
                 .append("|report=").append(report == null ? "missing" : report.getId() + ":"
                         + report.getEvidenceCount() + ":" + report.getSourceCount() + ":" + report.getCharacterCount()
                         + ":" + report.getStatus() + ":" + report.getContentMarkdown())
@@ -114,6 +127,22 @@ public class ResearchEvaluationService {
                     .append(trajectory.getFallbackRate());
         }
         return sha256(canonical.toString());
+    }
+
+    private int actualSourceCount(Long runId, List<ResearchSearchEvidence> searchEvidence) {
+        Set<String> identities = new HashSet<String>();
+        for (String identity : outputRepository.findDistinctArticleSourceIdentities(runId)) {
+            if (hasText(identity)) identities.add(identity.trim().toLowerCase(Locale.ROOT));
+        }
+        for (ResearchSearchEvidence item : searchEvidence) {
+            String identity = hasText(item.getSourceDomain()) ? item.getSourceDomain() : item.getProvider();
+            if (hasText(identity)) identities.add(identity.trim().toLowerCase(Locale.ROOT));
+        }
+        return identities.size();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private ResearchAgentTrajectoryMetrics trajectory(Long runId) {

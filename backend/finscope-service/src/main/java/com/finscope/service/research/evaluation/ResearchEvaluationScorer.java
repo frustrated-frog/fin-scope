@@ -19,7 +19,7 @@ import java.util.Set;
 
 @Component
 public class ResearchEvaluationScorer {
-    public static final String VERSION = "deep-research-rules-v3";
+    public static final String VERSION = "deep-research-rules-v4";
 
     public ResearchEvaluation score(ResearchEvaluationSnapshot snapshot) {
         ResearchRun run = snapshot.getRun();
