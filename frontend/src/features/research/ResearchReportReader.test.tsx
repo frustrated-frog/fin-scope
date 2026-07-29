@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 
 import { ResearchReport } from '../../shared/types';
@@ -53,4 +55,26 @@ test('presents the structured model generation mode', () => {
   render(<ResearchReportReader report={report} onBack={() => undefined} />);
 
   expect(screen.getByText('结构化模型生成')).toBeInTheDocument();
+});
+
+test('keeps the desktop report body on the page centerline', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(
+    /\.research-report-reader\.standalone\s*{[^}]*max-width:\s*1480px;[^}]*margin:\s*0\s+auto;/s
+  );
+  expect(styles).toMatch(
+    /\.research-report-reader\.standalone\s*{[^}]*container:\s*report-reader\s*\/\s*inline-size;/s
+  );
+  expect(styles).toMatch(
+    /\.research-report-layout\s*{[^}]*grid-template-columns:\s*minmax\(144px,\s*176px\)\s+minmax\(0,\s*1040px\)\s+minmax\(144px,\s*176px\);[^}]*justify-content:\s*center;/s
+  );
+  expect(styles).toMatch(
+    /\.research-report-layout\s*>\s*\.research-report-document\s*{[^}]*grid-column:\s*2;[^}]*width:\s*100%;/s
+  );
+  expect(styles).toMatch(/@container\s+report-reader\s*\(max-width:\s*1120px\)/);
+  expect(styles).toMatch(
+    /@container\s+report-reader\s*\(max-width:\s*1120px\)[\s\S]*\.research-report-toc-container\s+\.research-report-toc\s*>\s*strong\s*{[^}]*display:\s*none;[\s\S]*\.research-report-toc-container\s+\.research-report-toc\s+ol\s*{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/
+  );
 });
