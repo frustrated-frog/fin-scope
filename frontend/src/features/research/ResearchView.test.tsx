@@ -9,7 +9,7 @@ import {
   ResearchThesisDetail,
   ThesisFinding
 } from '../../shared/types';
-import { ResearchView } from './ResearchView';
+import { ResearchView, remainingSearchActions } from './ResearchView';
 import { apiResponse } from '../../test/apiEnvelope';
 
 test('renders research runs as a telemetry list', () => {
@@ -34,6 +34,24 @@ test('defaults to deep research mode and submits the selected quick mode', async
   await userEvent.click(screen.getByRole('button', { name: '开始探索研究' }));
 
   expect(onRun).toHaveBeenCalledWith(expect.objectContaining({ mode: 'QUICK' }));
+});
+
+test('counts public and structured material calls against the same search budget', () => {
+  const detail = legacyDetail();
+  detail.run.mode = 'DEEP';
+  detail.agentCore = {
+    state: {} as NonNullable<ResearchRunDetail['agentCore']>['state'],
+    decisions: [
+      { toolCode: 'public_news_search', status: 'COMPLETED' },
+      { toolCode: 'research_material_search', status: 'FAILED' },
+      { toolCode: 'evidence_assess', status: 'COMPLETED' }
+    ] as NonNullable<ResearchRunDetail['agentCore']>['decisions'],
+    observations: [],
+    trajectoryMetrics: {} as NonNullable<ResearchRunDetail['agentCore']>['trajectoryMetrics']
+  };
+  detail.runtime = undefined;
+
+  expect(remainingSearchActions(detail)).toBe(4);
 });
 
 test('places the research mission map before legacy run diagnostics', () => {
