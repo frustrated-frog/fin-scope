@@ -456,6 +456,7 @@ export type ResearchToolObservation = {
   dataRefs: string[];
   errorType?: string;
   retryable: boolean;
+  attemptCount?: number;
   stateHash?: string;
   createdAt?: string;
 };

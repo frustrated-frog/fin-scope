@@ -51,7 +51,7 @@ const trace = {
     id: 201, researchRunId: 15, decisionId: 101, toolCode: 'public_news_search',
     status: 'NO_PROGRESS', observationSummary: '查询结果与已有证据重复',
     newInformation: '没有形成新的可引用事实', evidenceDelta: 0, sourceDelta: 0,
-    dataRefs: [], retryable: true, stateHash: 'state-1'
+    dataRefs: [], retryable: true, attemptCount: 2, stateHash: 'state-1'
   }],
   trajectoryMetrics: {
     decisionCount: 3, observationCount: 1, decisionValidityRate: 1,
@@ -67,6 +67,12 @@ test('renders the live objective, budget and paired decision observations', () =
   expect(screen.getByText('补齐反方证据并验证需求回落风险')).toBeInTheDocument();
   expect(screen.getByText('7 次')).toBeInTheDocument();
   expect(screen.getByText('V2')).toBeInTheDocument();
+  expect(screen.getByText('证据健康')).toBeInTheDocument();
+  expect(screen.getByText('当前缺口')).toBeInTheDocument();
+  expect(screen.getByText('收敛状态')).toBeInTheDocument();
+  expect(screen.getByText('1 次自动重试')).toBeInTheDocument();
+  expect(screen.getByText('1 次规则降级')).toBeInTheDocument();
+  expect(screen.queryByText('已有三条支持证据，反方证据仍不足')).not.toBeInTheDocument();
 
   const firstDecision = screen.getByTestId('agent-decision-101');
   expect(within(firstDecision).getByText('主动搜索与主命题相反的公开信号')).toBeInTheDocument();
@@ -90,4 +96,23 @@ test('presents model timeout fallback separately from decision rejection', () =>
   const fallback = screen.getByText('MODEL_TIMEOUT：模型决策响应超时，已切换规则决策');
   expect(fallback).toHaveClass('research-agent-fallback-detail');
   expect(fallback).not.toHaveClass('research-agent-validation');
+});
+
+test('distinguishes an exhausted retry from a generic tool failure', () => {
+  const failedTrace = {
+    ...trace,
+    observations: [{
+      ...trace.observations[0],
+      status: 'RETRYABLE_ERROR',
+      observationSummary: '自动重试 1 次后仍失败：搜索上游超时',
+      errorType: 'SEARCH_TIMEOUT',
+      retryable: true,
+      attemptCount: 2
+    }]
+  };
+
+  render(<ResearchAgentDecisionFlow agentCore={failedTrace} remainingActions={7} planVersion={2} />);
+
+  expect(screen.getByText('重试未恢复')).toBeInTheDocument();
+  expect(screen.getByText('错误类型：SEARCH_TIMEOUT · 已完成自动重试')).toBeInTheDocument();
 });

@@ -31,6 +31,13 @@ export function ResearchAgentDecisionFlow({
 
   const { state, decisions, observations, trajectoryMetrics } = agentCore;
   const observationByDecision = new Map(observations.map((item) => [item.decisionId, item]));
+  const evidenceDelta = observations.reduce((total, item) => total + item.evidenceDelta, 0);
+  const sourceDelta = observations.reduce((total, item) => total + item.sourceDelta, 0);
+  const retryCount = observations.reduce((total, item) => total + Math.max(0, (item.attemptCount || 1) - 1), 0);
+  const activeGap = [...decisions].reverse().find((item) => item.targetGap)?.targetGap
+    || '等待下一轮证据评估确认缺口';
+  const convergence = presentConvergence(state.status, state.finishRejectionCount, state.noProgressCount);
+  const evidencePulse = Math.min(100, 20 + evidenceDelta * 14 + sourceDelta * 10);
 
   return (
     <section className="research-agent-flow" aria-label="Agent 决策流">
@@ -48,19 +55,27 @@ export function ResearchAgentDecisionFlow({
         </dl>
       </header>
 
-      <div className="research-agent-memory" aria-label="Agent 工作记忆">
-        <article>
-          <span>工作记忆</span>
-          <p>{state.memorySummary || '等待第一条工具观察写入工作记忆。'}</p>
+      <div className="research-agent-health" aria-label="研究证据健康">
+        <article className="evidence">
+          <span>证据健康</span>
+          <strong>+{evidenceDelta} 证据 · +{sourceDelta} 来源</strong>
+          <p>{state.evidenceSummary || '等待第一条可验证证据进入研究账本。'}</p>
+          <i className="research-agent-evidence-pulse" aria-hidden="true"><b style={{ width: `${evidencePulse}%` }} /></i>
         </article>
-        <article>
-          <span>证据状态</span>
-          <p>{state.evidenceSummary || '尚未形成证据摘要。'}</p>
+        <article className="gap">
+          <span>当前缺口</span>
+          <strong>{activeGap}</strong>
+          <p>{state.replanCount > 0 ? `已重规划 ${state.replanCount} 次，继续寻找独立证据。` : 'Agent 将优先处理这个缺口。'}</p>
         </article>
-        <div className="research-agent-memory-signals">
-          <span>重规划 <strong>{state.replanCount}</strong></span>
-          <span>无新增 <strong>{state.noProgressCount}</strong></span>
-          <span>完成拒绝 <strong>{state.finishRejectionCount}</strong></span>
+        <article className={`convergence ${convergence.tone}`}>
+          <span>收敛状态</span>
+          <strong>{convergence.label}</strong>
+          <p>{convergence.description}</p>
+        </article>
+        <div className="research-agent-health-signals">
+          <span>{retryCount} 次自动重试</span>
+          <span>{state.fallbackCount} 次规则降级</span>
+          <span>{state.noProgressCount} 次无新增</span>
           {trajectoryMetrics && <span className="quality">轨迹质量 {trajectoryMetrics.qualityScore}</span>}
         </div>
       </div>
@@ -143,8 +158,9 @@ function DecisionEntry({
 
 function ObservationCard({ observation }: { observation: ResearchToolObservation }) {
   const noProgress = observation.status === 'NO_PROGRESS';
-  const failed = observation.status === 'FAILED';
-  const label = noProgress ? '无新增' : failed ? '工具失败' : '获得新观察';
+  const retryFailed = observation.status === 'RETRYABLE_ERROR';
+  const failed = retryFailed || observation.status === 'FAILED' || observation.status === 'TERMINAL_ERROR';
+  const label = retryFailed ? '重试未恢复' : noProgress ? '无新增' : failed ? '工具失败' : '获得新观察';
   return (
     <section className={`research-agent-observation ${noProgress ? 'no-progress' : failed ? 'failed' : 'success'}`} aria-label={`Observation：${label}`}>
       <header>
@@ -158,7 +174,29 @@ function ObservationCard({ observation }: { observation: ResearchToolObservation
       {observation.newInformation && observation.newInformation !== observation.observationSummary && (
         <small>{observation.newInformation}</small>
       )}
-      {observation.errorType && <small>错误类型：{observation.errorType}{observation.retryable ? ' · 可调整后重试' : ''}</small>}
+      {observation.errorType && (
+        <small>
+          错误类型：{observation.errorType}
+          {observation.retryable ? (observation.attemptCount && observation.attemptCount > 1
+            ? ' · 已完成自动重试' : ' · 可恢复后重试') : ''}
+        </small>
+      )}
     </section>
   );
+}
+
+function presentConvergence(status: string, finishRejections: number, noProgressCount: number) {
+  if (status === 'COMPLETED') {
+    return { tone: 'complete', label: '完成门槛通过', description: '正反证据与关键缺口已通过收束校验。' };
+  }
+  if (status === 'FAILED' || status === 'INTERRUPTED') {
+    return { tone: 'blocked', label: '等待恢复', description: '轨迹已保存，可从最近检查点继续。' };
+  }
+  if (noProgressCount >= 2) {
+    return { tone: 'warning', label: '需要更换取证路径', description: '连续查询没有带来新的独立信息。' };
+  }
+  if (finishRejections > 0) {
+    return { tone: 'active', label: '继续取证', description: '完成校验未通过，Agent 正补齐关键证据。' };
+  }
+  return { tone: 'active', label: '证据积累中', description: '研究尚未满足最终收束条件。' };
 }
