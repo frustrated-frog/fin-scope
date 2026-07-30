@@ -10569,6 +10569,305 @@ input[type="checkbox"] {
   cursor: default;
 }
 
+/* 自选观察视觉层：保留原有信息结构，以行情仪表玻璃统一材质、颜色与反馈。 */
+.watchlist-page {
+  --watchlist-cyan: #4ddbc8;
+  --watchlist-blue: #6f8cff;
+  --watchlist-amber: #edb85f;
+  --watchlist-rose: #ff7585;
+  --watchlist-green: #42d69a;
+  --watchlist-depth: #08111f;
+  position: relative;
+  isolation: isolate;
+}
+
+.watchlist-page::before {
+  position: absolute;
+  z-index: -1;
+  inset: -32px -20px auto;
+  height: 360px;
+  background:
+    radial-gradient(circle at 16% 10%, color-mix(in srgb, var(--watchlist-cyan) 9%, transparent), transparent 42%),
+    radial-gradient(circle at 82% 2%, color-mix(in srgb, var(--watchlist-blue) 8%, transparent), transparent 38%);
+  content: "";
+  pointer-events: none;
+}
+
+.watchlist-page .market-index-card {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 26%, var(--line));
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--watchlist-cyan) 8%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, transparent), color-mix(in srgb, var(--surface-2) 76%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    0 14px 34px color-mix(in srgb, var(--watchlist-depth) 12%, transparent);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.watchlist-page .market-index-card::before,
+.watchlist-page .watchlist-card::before {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  left: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--watchlist-cyan), var(--watchlist-blue), transparent);
+  content: "";
+  opacity: .72;
+  pointer-events: none;
+}
+
+.watchlist-page .market-index-name {
+  color: color-mix(in srgb, var(--ink) 76%, var(--watchlist-cyan));
+}
+
+.watchlist-page .market-index-values strong,
+.watchlist-page .watchlist-price,
+.watchlist-page .fund-nav-main-row strong {
+  text-shadow: 0 0 22px color-mix(in srgb, var(--watchlist-cyan) 13%, transparent);
+}
+
+.watchlist-page .sector-market-panel,
+.watchlist-page > .panel.wide {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 22%, var(--line));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--watchlist-blue) 7%, transparent), transparent 32%),
+    linear-gradient(135deg, color-mix(in srgb, var(--watchlist-cyan) 5%, transparent), transparent 38%),
+    color-mix(in srgb, var(--surface) 91%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+    0 20px 52px color-mix(in srgb, var(--watchlist-depth) 10%, transparent);
+  backdrop-filter: blur(20px) saturate(125%);
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+}
+
+.watchlist-page .sector-market-kicker,
+.watchlist-page .sector-rank-head span {
+  color: var(--watchlist-cyan);
+}
+
+.watchlist-page .sector-category-tabs button {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 18%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
+.watchlist-page .sector-category-tabs button.is-active {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 62%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--watchlist-cyan) 16%, transparent), color-mix(in srgb, var(--watchlist-blue) 8%, transparent));
+  color: color-mix(in srgb, var(--ink) 74%, var(--watchlist-cyan));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
+}
+
+.watchlist-page .sector-market-scan,
+.watchlist-page .sector-follow-workspace {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 15%, var(--line));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+}
+
+.watchlist-page .sector-follow-card {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 19%, var(--line));
+  border-radius: 14px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--watchlist-cyan) 5%, transparent), transparent 52%),
+    color-mix(in srgb, var(--surface) 78%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--watchlist-depth) 8%, transparent);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.watchlist-page .sector-follow-button,
+.watchlist-page .sector-search-item button {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 34%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--watchlist-cyan) 7%, transparent);
+  color: color-mix(in srgb, var(--ink) 74%, var(--watchlist-cyan));
+}
+
+.watchlist-page .watchlist-input,
+.watchlist-page .watchlist-move-select,
+.watchlist-page .watchlist-sort {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 18%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 13%, transparent);
+}
+
+.watchlist-page .watchlist-input:focus,
+.watchlist-page .watchlist-move-select:focus,
+.watchlist-page .watchlist-sort:focus {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 72%, var(--line));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--watchlist-cyan) 14%, transparent);
+}
+
+.watchlist-page .watchlist-toggle-track {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 20%, var(--line));
+  background: color-mix(in srgb, var(--surface-3) 78%, transparent);
+}
+
+.watchlist-page .watchlist-toggle-input:checked + .watchlist-toggle-track {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 64%, var(--line));
+  background: linear-gradient(90deg, var(--watchlist-cyan), var(--watchlist-blue));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--watchlist-cyan) 22%, transparent);
+}
+
+.watchlist-page .watchlist-group {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 18%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-2) 62%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+}
+
+.watchlist-page .watchlist-group-head {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--watchlist-cyan) 5%, transparent), transparent 52%);
+}
+
+.watchlist-page .watchlist-group-head:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--watchlist-cyan) 9%, transparent), transparent 64%);
+}
+
+.watchlist-page .watchlist-group-count {
+  border: 1px solid color-mix(in srgb, var(--watchlist-cyan) 22%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--watchlist-cyan) 7%, transparent);
+  color: color-mix(in srgb, var(--muted) 75%, var(--watchlist-cyan));
+}
+
+.watchlist-page .watchlist-card {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 19%, var(--line));
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--watchlist-cyan) 6%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, transparent), color-mix(in srgb, var(--surface-2) 72%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+    0 12px 28px color-mix(in srgb, var(--watchlist-depth) 10%, transparent);
+  transition: border-color 170ms ease, box-shadow 170ms ease, transform 170ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.watchlist-page .watchlist-card-abnormal {
+  border-color: color-mix(in srgb, var(--watchlist-rose) 54%, var(--line));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 12px 30px color-mix(in srgb, var(--watchlist-rose) 9%, transparent);
+}
+
+.watchlist-page .watchlist-card-abnormal::before {
+  background: linear-gradient(90deg, transparent, var(--watchlist-rose), var(--watchlist-amber), transparent);
+}
+
+.watchlist-page .watchlist-up {
+  color: color-mix(in srgb, var(--watchlist-rose) 88%, #d0342c);
+}
+
+.watchlist-page .watchlist-down {
+  color: color-mix(in srgb, var(--watchlist-green) 84%, #1f9d55);
+}
+
+.watchlist-page .watchlist-stats,
+.watchlist-page .watchlist-attr-summary,
+.watchlist-page .fund-estimate-row {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 13%, var(--line));
+}
+
+.watchlist-page .watchlist-abnormal-tag {
+  border: 1px solid color-mix(in srgb, var(--watchlist-rose) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--watchlist-rose) 11%, transparent);
+  color: var(--watchlist-rose);
+}
+
+.watchlist-page .watchlist-attr-button,
+.watchlist-page .watchlist-refresh-button {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 34%, var(--line));
+  border-radius: 10px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--watchlist-cyan) 10%, transparent), color-mix(in srgb, var(--watchlist-blue) 6%, transparent));
+  color: color-mix(in srgb, var(--ink) 78%, var(--watchlist-cyan));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
+}
+
+.watchlist-page .watchlist-attr-button:hover:not(:disabled),
+.watchlist-page .watchlist-refresh-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--watchlist-cyan) 70%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--watchlist-cyan) 17%, transparent), color-mix(in srgb, var(--watchlist-blue) 10%, transparent));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--watchlist-cyan) 10%, transparent);
+}
+
+.watchlist-page .watchlist-remove {
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.watchlist-page .watchlist-remove:hover {
+  border-color: color-mix(in srgb, var(--watchlist-rose) 30%, transparent);
+  background: color-mix(in srgb, var(--watchlist-rose) 12%, transparent);
+  color: var(--watchlist-rose);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .watchlist-page .market-index-card:hover,
+  .watchlist-page .sector-follow-card:hover,
+  .watchlist-page .watchlist-card:hover {
+    border-color: color-mix(in srgb, var(--watchlist-cyan) 48%, var(--line));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
+      0 18px 38px color-mix(in srgb, var(--watchlist-depth) 15%, transparent);
+    transform: translateY(-2px);
+  }
+
+  .watchlist-page .market-index-card:active,
+  .watchlist-page .sector-follow-card:active,
+  .watchlist-page .watchlist-card:active,
+  .watchlist-page button:active {
+    transform: scale(.992);
+    transition-duration: 80ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchlist-page *,
+  .watchlist-page *::before,
+  .watchlist-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .watchlist-page .market-index-card,
+  .watchlist-page .sector-market-panel,
+  .watchlist-page > .panel.wide,
+  .watchlist-page .watchlist-card {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .watchlist-page .market-index-card,
+  .watchlist-page .sector-market-panel,
+  .watchlist-page > .panel.wide,
+  .watchlist-page .watchlist-group,
+  .watchlist-page .watchlist-card {
+    border-color: currentColor;
+    box-shadow: none;
+  }
+}
+
 /* ===== 归因详情页 ===== */
 .attribution-panel {
   display: flex;

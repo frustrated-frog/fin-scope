@@ -1,5 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
@@ -24,6 +26,24 @@ const industryOverview = {
 
 beforeEach(() => {
   vi.mocked(api).mockReset();
+});
+
+test('scopes the market-glass visual system to the watchlist page', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(
+    /\.watchlist-page\s*{[^}]*--watchlist-cyan:\s*#4ddbc8;[^}]*--watchlist-blue:\s*#6f8cff;[^}]*isolation:\s*isolate;/s
+  );
+  expect(styles).toMatch(
+    /\.watchlist-page\s+\.market-index-card\s*{[^}]*border-radius:\s*16px;[^}]*backdrop-filter:\s*blur\(14px\)\s+saturate\(135%\);/s
+  );
+  expect(styles).toMatch(
+    /\.watchlist-page\s+\.watchlist-card\s*{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*18px;[^}]*box-shadow:/s
+  );
+  expect(styles).toMatch(/\.watchlist-page\s+\.watchlist-card::before\s*{/s);
+  expect(styles).toMatch(/@media\s*\(prefers-reduced-transparency:\s*reduce\)[\s\S]*\.watchlist-page\s+\.watchlist-card/s);
+  expect(styles).toMatch(/@media\s*\(prefers-contrast:\s*more\)[\s\S]*\.watchlist-page\s+\.watchlist-card/s);
 });
 
 test('renders market index cards above the watchlist controls', async () => {
