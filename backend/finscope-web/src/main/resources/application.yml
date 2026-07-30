@@ -36,7 +36,7 @@ finscope:
     api-key: "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"
     any-search:
       enabled: true
-      api-key: ""
+      api-key: "as_sk_8bd8463e8068b211c142bd684bdbcdf8"
       base-url: https://api.anysearch.com
       timeout-ms: 15000
       max-response-bytes: 2097152
