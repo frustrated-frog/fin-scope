@@ -423,6 +423,11 @@ public class AttributionAgent {
                 .append("\"dampeners\":[\"缓冲或反方因素\"]},\"drivers\":[{\"claim\":\"原因\",")
                 .append("\"role\":\"TRIGGER|AMPLIFIER|BACKGROUND|COUNTER\",")
                 .append("\"plainExplanation\":\"不用术语也能读懂的解释\",")
+                .append("\"marketInterpretation\":\"市场为什么在意以及正在交易什么\",")
+                .append("\"expectationShift\":\"原本预期 → 现在预期\",")
+                .append("\"priceImpact\":\"预期变化如何影响价格\",")
+                .append("\"explanatoryPower\":\"HIGH|MID|LOW\",")
+                .append("\"explanatoryPowerReason\":\"解释力度的判断依据和边界\",")
                 .append("\"impactLevel\":\"HIGH|MID|LOW\",\"confidence\":\"HIGH|MID|LOW\",\"detail\":\"详细解释\",")
                 .append("\"facts\":[\"明确事实\"],\"transmissionPath\":\"事件到价格的传导链\",")
                 .append("\"counterEvidence\":\"反证或局限\",\"observationWindow\":\"后续观察窗口\",")
@@ -431,6 +436,11 @@ public class AttributionAgent {
                 .append("要求给出 4-6 个不重复的驱动因素，覆盖公司、行业、宏观/政策、市场联动和反证；证据不足必须降低置信度。\n")
                 .append("先讲清：今天发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么今天集中反应 → 价格结果。")
                 .append("直接触发、放大因素、背景和反方必须分开；使用普通中文，术语出现时在同一句解释。\n")
+                .append("facts 只写证据明确支持的事实；AI 解读不得重复事实原句。")
+                .append("marketInterpretation 回答市场为什么在意；expectationShift 使用‘原本预期 → 现在预期’。")
+                .append("priceImpact 必须落到盈利预期、估值倍数、风险溢价或资金行为中的至少一种。")
+                .append("explanatoryPower 综合证据直接性、时间贴近度、价格方向一致性与反证。")
+                .append("不得虚构数字、业务暴露或投资者行为；推断使用‘可能、意味着、市场倾向于’等边界措辞。\n")
                 .append(typeTransmissionInstruction(instrument)).append("\n");
         builder.append("标的:").append(StringUtils.firstNonBlank(instrument.getName(), instrument.getCode()))
                 .append("(").append(instrument.getCode()).append(")\n");
@@ -485,6 +495,13 @@ public class AttributionAgent {
                     driver.setClaim(claim.trim());
                     driver.setRole(normRole(node.path("role").asText("BACKGROUND")));
                     driver.setPlainExplanation(node.path("plainExplanation").asText("").trim());
+                    driver.setMarketInterpretation(node.path("marketInterpretation").asText("").trim());
+                    driver.setExpectationShift(node.path("expectationShift").asText("").trim());
+                    driver.setPriceImpact(node.path("priceImpact").asText("").trim());
+                    String explanatoryPower = node.path("explanatoryPower").asText("").trim();
+                    driver.setExplanatoryPower(StringUtils.isBlank(explanatoryPower)
+                            ? "" : normLevel(explanatoryPower));
+                    driver.setExplanatoryPowerReason(node.path("explanatoryPowerReason").asText("").trim());
                     driver.setImpactLevel(normLevel(node.path("impactLevel").asText("MID")));
                     driver.setConfidence(normLevel(node.path("confidence").asText("MID")));
                     driver.setDetail(node.path("detail").asText("").trim());

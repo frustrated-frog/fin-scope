@@ -18,6 +18,16 @@ public class AttributionDriver {
     private String claim;
     /** 面向普通用户的白话解释。 */
     private String plainExplanation;
+    /** 市场为何关注该因素，以及正在交易的核心预期。 */
+    private String marketInterpretation;
+    /** 事件前后的市场预期变化。 */
+    private String expectationShift;
+    /** 预期变化影响价格的具体通道。 */
+    private String priceImpact;
+    /** 该因素对当日涨跌的解释力度。 */
+    private String explanatoryPower;
+    /** 解释力度的判断依据及边界。 */
+    private String explanatoryPowerReason;
     /**
      * 影响力等级。
      */
