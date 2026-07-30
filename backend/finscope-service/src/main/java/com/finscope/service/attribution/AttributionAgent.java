@@ -8,6 +8,7 @@ import com.finscope.dao.article.ArticleRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.attribution.AttributionDriver;
 import com.finscope.domain.attribution.AttributionEvidence;
+import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.search.SearchResult;
@@ -395,6 +396,7 @@ public class AttributionAgent {
             try {
                 String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences));
                 if (parseSynthResult(report, raw)) {
+                    ensureNarrative(report, instrument, changePct, evidences);
                     return true;
                 }
             } catch (Exception ex) {
@@ -402,6 +404,7 @@ public class AttributionAgent {
             }
         }
         fallbackSynthesize(report, instrument, changePct, evidences);
+        ensureNarrative(report, instrument, changePct, evidences);
         return false;
     }
 
@@ -411,15 +414,24 @@ public class AttributionAgent {
                 + "只返回 JSON，不做买卖建议。";
     }
 
-    private String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences) {
+    String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences) {
         StringBuilder builder = new StringBuilder();
-        builder.append("输出格式:{\"summary\":\"综合归因\",\"drivers\":[{\"claim\":\"原因\",")
+        builder.append("输出格式:{\"summary\":\"综合归因\",\"narrative\":{")
+                .append("\"plainSummary\":\"2-3句白话核心结论\",\"event\":\"今天发生了什么\",")
+                .append("\"instrumentLink\":\"为什么影响该标的\",\"whyToday\":\"为什么在今天集中反应\",")
+                .append("\"causalSteps\":[\"因果节点\"],\"amplifiers\":[\"放大因素\"],")
+                .append("\"dampeners\":[\"缓冲或反方因素\"]},\"drivers\":[{\"claim\":\"原因\",")
+                .append("\"role\":\"TRIGGER|AMPLIFIER|BACKGROUND|COUNTER\",")
+                .append("\"plainExplanation\":\"不用术语也能读懂的解释\",")
                 .append("\"impactLevel\":\"HIGH|MID|LOW\",\"confidence\":\"HIGH|MID|LOW\",\"detail\":\"详细解释\",")
                 .append("\"facts\":[\"明确事实\"],\"transmissionPath\":\"事件到价格的传导链\",")
                 .append("\"counterEvidence\":\"反证或局限\",\"observationWindow\":\"后续观察窗口\",")
                 .append("\"evidenceUrls\":[\"证据URL\"]}],\"uncertainties\":[\"不确定性\"],")
                 .append("\"observationWindows\":[\"整体观察项\"],\"disclaimer\":\"诚实说明\"}\n")
-                .append("要求给出 4-6 个不重复的驱动因素，覆盖公司、行业、宏观/政策、市场联动和反证；证据不足必须降低置信度。\n");
+                .append("要求给出 4-6 个不重复的驱动因素，覆盖公司、行业、宏观/政策、市场联动和反证；证据不足必须降低置信度。\n")
+                .append("先讲清：今天发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么今天集中反应 → 价格结果。")
+                .append("直接触发、放大因素、背景和反方必须分开；使用普通中文，术语出现时在同一句解释。\n")
+                .append(typeTransmissionInstruction(instrument)).append("\n");
         builder.append("标的:").append(StringUtils.firstNonBlank(instrument.getName(), instrument.getCode()))
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
@@ -438,7 +450,7 @@ public class AttributionAgent {
         return builder.toString();
     }
 
-    private boolean parseSynthResult(AttributionReport report, String raw) {
+    boolean parseSynthResult(AttributionReport report, String raw) {
         try {
             JsonNode root = objectMapper.readTree(extractJson(raw));
             String summary = root.path("summary").asText("");
@@ -448,6 +460,18 @@ public class AttributionAgent {
             report.setSummary(summary.trim());
             if (StringUtils.isNotBlank(root.path("disclaimer").asText(""))) {
                 report.setDisclaimer(root.path("disclaimer").asText().trim());
+            }
+            JsonNode narrativeNode = root.path("narrative");
+            if (narrativeNode.isObject()) {
+                AttributionNarrative narrative = new AttributionNarrative();
+                narrative.setPlainSummary(narrativeNode.path("plainSummary").asText("").trim());
+                narrative.setEvent(narrativeNode.path("event").asText("").trim());
+                narrative.setInstrumentLink(narrativeNode.path("instrumentLink").asText("").trim());
+                narrative.setWhyToday(narrativeNode.path("whyToday").asText("").trim());
+                narrative.setCausalSteps(readStringArray(narrativeNode.path("causalSteps")));
+                narrative.setAmplifiers(readStringArray(narrativeNode.path("amplifiers")));
+                narrative.setDampeners(readStringArray(narrativeNode.path("dampeners")));
+                report.setNarrative(narrative);
             }
             List<AttributionDriver> drivers = new ArrayList<>();
             JsonNode driverNodes = root.path("drivers");
@@ -459,6 +483,8 @@ public class AttributionAgent {
                     }
                     AttributionDriver driver = new AttributionDriver();
                     driver.setClaim(claim.trim());
+                    driver.setRole(normRole(node.path("role").asText("BACKGROUND")));
+                    driver.setPlainExplanation(node.path("plainExplanation").asText("").trim());
                     driver.setImpactLevel(normLevel(node.path("impactLevel").asText("MID")));
                     driver.setConfidence(normLevel(node.path("confidence").asText("MID")));
                     driver.setDetail(node.path("detail").asText("").trim());
@@ -497,12 +523,106 @@ public class AttributionAgent {
             AttributionEvidence e = evidences.get(i);
             AttributionDriver driver = new AttributionDriver();
             driver.setClaim(StringUtils.firstNonBlank(e.getTitle(), "相关消息"));
+            driver.setRole(i == 0 ? "TRIGGER" : "BACKGROUND");
             driver.setImpactLevel(i == 0 ? "MID" : "LOW");
             driver.setConfidence("T1".equals(e.getSourceTier()) ? "MID" : "LOW");
             driver.setDetail(StringUtils.firstNonBlank(e.getSnippet(), ""));
+            driver.setPlainExplanation(StringUtils.firstNonBlank(e.getSnippet(), e.getTitle(), "该线索可能影响市场预期。"));
             drivers.add(driver);
         }
         report.setDrivers(drivers);
+    }
+
+    void ensureNarrative(AttributionReport report,
+                         Instrument instrument,
+                         Double changePct,
+                         List<AttributionEvidence> evidences) {
+        AttributionNarrative narrative = report.getNarrative();
+        if (narrative == null) {
+            narrative = new AttributionNarrative();
+            report.setNarrative(narrative);
+        }
+        if (StringUtils.isBlank(narrative.getPlainSummary())) {
+            narrative.setPlainSummary(report.getSummary());
+        }
+        List<AttributionEvidence> currentEvidence = new ArrayList<>();
+        if (evidences != null) {
+            for (AttributionEvidence evidence : evidences) {
+                if (evidence != null && !evidence.isHistoricalContext()) currentEvidence.add(evidence);
+            }
+        }
+        AttributionEvidence firstCurrent = currentEvidence.isEmpty() ? null : currentEvidence.get(0);
+        if (StringUtils.isBlank(narrative.getEvent())) {
+            narrative.setEvent(firstCurrent == null
+                    ? "当日未检索到可确认的直接触发信息"
+                    : StringUtils.firstNonBlank(firstCurrent.getTitle(), firstCurrent.getSnippet(), "当日公开线索"));
+        }
+        AttributionDriver primary = report.getDrivers() == null || report.getDrivers().isEmpty()
+                ? null : report.getDrivers().get(0);
+        if (StringUtils.isBlank(narrative.getInstrumentLink())) {
+            String primaryExplanation = primary == null ? null
+                    : StringUtils.firstNonBlank(primary.getPlainExplanation(), primary.getDetail());
+            narrative.setInstrumentLink(StringUtils.firstNonBlank(primaryExplanation,
+                    fallbackInstrumentLink(instrument)));
+        }
+        if (StringUtils.isBlank(narrative.getWhyToday())) {
+            narrative.setWhyToday(firstCurrent == null
+                    ? "当前公开信息不足以确认行情在当日集中反应的具体触发点。"
+                    : "该公开线索与当日价格异动同时出现，具体时点仍需结合公告时间、板块走势和成交数据继续确认。");
+        }
+        if (narrative.getCausalSteps() == null || narrative.getCausalSteps().isEmpty()) {
+            List<String> steps = new ArrayList<>();
+            addStep(steps, narrative.getEvent());
+            if (primary != null && StringUtils.isNotBlank(primary.getTransmissionPath())) {
+                for (String step : primary.getTransmissionPath().split("\\s*→\\s*")) addStep(steps, step);
+            } else if (primary != null) {
+                addStep(steps, StringUtils.firstNonBlank(primary.getPlainExplanation(), primary.getClaim()));
+            }
+            addStep(steps, priceResult(changePct));
+            narrative.setCausalSteps(steps);
+        }
+        if (narrative.getAmplifiers() == null) narrative.setAmplifiers(new ArrayList<String>());
+        if (narrative.getDampeners() == null) narrative.setDampeners(new ArrayList<String>());
+    }
+
+    private String typeTransmissionInstruction(Instrument instrument) {
+        String type = instrument.getType() == null ? "STOCK" : instrument.getType().toUpperCase(Locale.ROOT);
+        if ("FUND".equals(type)) {
+            return "基金传导必须说明：行业或核心持仓变化 → 组合暴露 → 净值或交易价格；不要把基金写成经营主体。";
+        }
+        if ("SECTOR".equals(type)) {
+            return "板块传导必须说明：政策或需求变化 → 龙头股反应 → 成分股扩散 → 板块涨跌。";
+        }
+        return "股票传导必须说明：事件 → 盈利或风险预期 → 公司暴露 → 板块或资金行为 → 股价。";
+    }
+
+    private String fallbackInstrumentLink(Instrument instrument) {
+        String type = instrument.getType() == null ? "STOCK" : instrument.getType().toUpperCase(Locale.ROOT);
+        if ("FUND".equals(type)) return "该基金会通过相关行业或核心持仓的价格变化受到影响，具体组合暴露仍需核验。";
+        if ("SECTOR".equals(type)) return "该事件可能通过龙头股和成分股扩散影响板块表现，当前扩散范围仍需核验。";
+        return "当前证据显示该标的与上述事件相关，但具体业务暴露仍需公开资料进一步确认。";
+    }
+
+    private String priceResult(Double changePct) {
+        if (changePct == null) return "价格出现异动";
+        if (changePct < 0) return "卖出压力集中反映为股价或净值下跌";
+        if (changePct > 0) return "买入力量集中反映为股价或净值上涨";
+        return "多空力量接近平衡，价格变化有限";
+    }
+
+    private void addStep(List<String> steps, String value) {
+        if (steps.size() >= 4 || StringUtils.isBlank(value)) return;
+        String normalized = value.trim();
+        if (!steps.contains(normalized)) steps.add(normalized);
+    }
+
+    private String normRole(String value) {
+        String role = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if ("TRIGGER".equals(role) || "AMPLIFIER".equals(role)
+                || "BACKGROUND".equals(role) || "COUNTER".equals(role)) {
+            return role;
+        }
+        return "BACKGROUND";
     }
 
     private String normLevel(String value) {
