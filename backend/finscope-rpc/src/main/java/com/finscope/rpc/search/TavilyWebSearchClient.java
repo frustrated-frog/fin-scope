@@ -24,7 +24,7 @@ import java.util.Map;
  * 返回：{"results":[{"title","url","content","score","published_date"}]}
  * API Key 由应用配置装配，不在客户端代码中硬编码。
  */
-public class TavilyWebSearchClient implements WebSearchClient {
+public class TavilyWebSearchClient implements WebSearchProvider {
     private static final String DEFAULT_ENDPOINT = "https://api.tavily.com/search";
     private static final int DEFAULT_TIMEOUT_MS = 15000;
 
@@ -71,7 +71,6 @@ public class TavilyWebSearchClient implements WebSearchClient {
         return enabled;
     }
 
-    @Override
     public List<SearchResult> search(String query, int maxResults) throws Exception {
         if (query == null || query.trim().isEmpty()) return new ArrayList<SearchResult>();
         return search(new WebSearchRequest(query, maxResults, "", ""));

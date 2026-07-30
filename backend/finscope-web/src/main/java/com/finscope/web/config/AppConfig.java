@@ -9,7 +9,6 @@ import com.finscope.service.vault.VaultWriter;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
 import com.finscope.rpc.search.TavilyWebSearchClient;
-import com.finscope.rpc.search.WebSearchClient;
 import com.finscope.rpc.search.AnySearchWebSearchProvider;
 import com.finscope.rpc.search.WebSearchProvider;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
@@ -67,7 +66,7 @@ public class AppConfig {
     }
 
     @Bean
-    public WebSearchClient webSearchClient() {
+    public TavilyWebSearchClient tavilyWebSearchProvider() {
         FinScopeProperties.SearchProperties search = properties.getSearch();
         return new TavilyWebSearchClient(search.isEnabled(), search.getApiKey());
     }
@@ -92,7 +91,7 @@ public class AppConfig {
 
     @Bean
     public SearchEvidenceGateway searchEvidenceGateway(
-            WebSearchClient tavily,
+            TavilyWebSearchClient tavily,
             AnySearchWebSearchProvider anySearch,
             @Qualifier("searchEvidenceExecutor") ExecutorService executor) {
         FinScopeProperties.SearchFusionProperties fusion = properties.getSearch().getFusion();

@@ -6,8 +6,6 @@ import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.search.SearchResult;
-import com.finscope.rpc.search.WebSearchClient;
-import com.finscope.service.research.agent.BoundedResearchOrchestrator;
 import com.finscope.service.research.agent.ResearchOrchestrator;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
@@ -35,35 +33,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class PublicNewsSearchTool implements ResearchAgentTool {
     private static final int MAX_RESULTS = 5;
-    private final WebSearchClient legacySearchClient;
     private final SearchEvidenceGateway searchGateway;
     private final ResearchSearchEvidenceRepository evidenceRepository;
     private final ResearchEvidenceAcquisitionService acquisitionService;
     private final FinancialSourceQueryPolicy queryPolicy;
     private final OfficialFinancialSourceRegistry sourceRegistry;
     private final ResearchOrchestrator orchestrator;
-
-    public PublicNewsSearchTool(WebSearchClient searchClient,
-                                ResearchSearchEvidenceRepository evidenceRepository) {
-        this(searchClient, evidenceRepository, null);
-    }
-
-    public PublicNewsSearchTool(WebSearchClient searchClient,
-                                ResearchSearchEvidenceRepository evidenceRepository,
-                                ResearchEvidenceAcquisitionService acquisitionService) {
-        this(searchClient, null, evidenceRepository, acquisitionService,
-                new FinancialSourceQueryPolicy(new OfficialFinancialSourceRegistry()),
-                new OfficialFinancialSourceRegistry(), new BoundedResearchOrchestrator());
-    }
-
-    public PublicNewsSearchTool(WebSearchClient searchClient,
-                                ResearchSearchEvidenceRepository evidenceRepository,
-                                ResearchEvidenceAcquisitionService acquisitionService,
-                                FinancialSourceQueryPolicy queryPolicy,
-                                OfficialFinancialSourceRegistry sourceRegistry) {
-        this(searchClient, null, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry,
-                new BoundedResearchOrchestrator());
-    }
 
     @Autowired
     public PublicNewsSearchTool(SearchEvidenceGateway searchGateway,
@@ -72,17 +47,6 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                                 FinancialSourceQueryPolicy queryPolicy,
                                 OfficialFinancialSourceRegistry sourceRegistry,
                                 ResearchOrchestrator orchestrator) {
-        this(null, searchGateway, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry, orchestrator);
-    }
-
-    private PublicNewsSearchTool(WebSearchClient legacySearchClient,
-                                 SearchEvidenceGateway searchGateway,
-                                 ResearchSearchEvidenceRepository evidenceRepository,
-                                 ResearchEvidenceAcquisitionService acquisitionService,
-                                 FinancialSourceQueryPolicy queryPolicy,
-                                 OfficialFinancialSourceRegistry sourceRegistry,
-                                 ResearchOrchestrator orchestrator) {
-        this.legacySearchClient = legacySearchClient;
         this.searchGateway = searchGateway;
         this.evidenceRepository = evidenceRepository;
         this.acquisitionService = acquisitionService;
@@ -258,12 +222,10 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     }
 
     private boolean isSearchConfigured(ResearchMode mode) {
-        if (searchGateway != null) return searchGateway.isConfigured(toDepth(mode));
-        return legacySearchClient != null && legacySearchClient.isConfigured();
+        return searchGateway != null && searchGateway.isConfigured(toDepth(mode));
     }
 
     private List<SearchResult> search(String query, ResearchMode mode) throws Exception {
-        if (searchGateway == null) return legacySearchClient.search(query, MAX_RESULTS);
         boolean chinese = query != null && query.matches(".*[\\u4e00-\\u9fa5].*");
         SearchEvidenceBatch batch = searchGateway.search(new SearchEvidenceRequest(query, toDepth(mode),
                 MAX_RESULTS, MAX_RESULTS, chinese ? "cn" : "intl", chinese ? "zh" : "en", 15_000L));
