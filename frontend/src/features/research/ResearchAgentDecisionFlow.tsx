@@ -12,7 +12,7 @@ const DECISION_LABELS: Record<string, string> = {
 };
 
 const TOOL_LABELS: Record<string, string> = {
-  public_news_search: 'Tavily 公开资料搜索',
+  public_news_search: '多源公开资料搜索',
   evidence_assess: '证据缺口评估',
   source_scan: '来源扫描',
   report_synthesis: '报告合成'

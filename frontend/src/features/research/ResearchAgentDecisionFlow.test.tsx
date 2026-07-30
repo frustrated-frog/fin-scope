@@ -67,7 +67,7 @@ test('renders the live objective, budget and paired decision observations', () =
   expect(screen.getByText('补齐反方证据并验证需求回落风险')).toBeInTheDocument();
   expect(screen.getByText('7 次')).toBeInTheDocument();
   expect(screen.getByText('剩余搜索')).toBeInTheDocument();
-  expect(screen.getAllByText('Tavily 公开资料搜索').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('多源公开资料搜索').length).toBeGreaterThan(0);
   expect(screen.getByText('V2')).toBeInTheDocument();
   expect(screen.getByText('证据健康')).toBeInTheDocument();
   expect(screen.getByText('当前缺口')).toBeInTheDocument();
