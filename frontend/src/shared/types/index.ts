@@ -677,6 +677,11 @@ export type AttributionDriver = {
   claim: string;
   role?: AttributionDriverRole;
   plainExplanation?: string;
+  marketInterpretation?: string;
+  expectationShift?: string;
+  priceImpact?: string;
+  explanatoryPower?: 'HIGH' | 'MID' | 'LOW';
+  explanatoryPowerReason?: string;
   impactLevel?: string;
   confidence?: string;
   detail?: string;

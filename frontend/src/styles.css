@@ -11131,6 +11131,104 @@ input[type="checkbox"] {
   line-height: 1.65;
 }
 
+.attribution-driver-ai {
+  position: relative;
+  margin-top: 13px;
+  padding: 13px 14px 14px 16px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 72%, white);
+  border-radius: 0 9px 9px 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-2));
+}
+
+.attribution-driver-ai-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.attribution-driver-ai-heading > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+}
+
+.attribution-driver-ai-heading strong {
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+
+.attribution-driver-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 22px;
+}
+
+.attribution-driver-ai-grid article {
+  min-width: 0;
+}
+
+.attribution-driver-ai-grid article > span,
+.attribution-driver-facts > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted, #8a9490);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.attribution-driver-ai-grid p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.68;
+}
+
+.attribution-explanatory-power {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.attribution-explanatory-power.power-low {
+  color: var(--muted, #8a9490);
+}
+
+.attribution-explanatory-power.power-high {
+  color: #d9a441;
+}
+
+.attribution-driver-facts {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.attribution-driver-facts ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.attribution-driver-facts li {
+  color: var(--muted, #6b7672);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  .attribution-driver-ai-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .attribution-disclaimer {
   font-size: 12px;
   color: var(--muted, #8a9490);

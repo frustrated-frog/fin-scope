@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { AttributionProgress, AttributionReport, AttributionResearchRunView } from '../../shared/types';
+import { AttributionDriver, AttributionProgress, AttributionReport, AttributionResearchRunView } from '../../shared/types';
 
 const stageLabels: Record<string, string> = {
   'question-plan': '拆解研究问题',
@@ -13,6 +13,7 @@ const stageLabels: Record<string, string> = {
 };
 
 const levelLabels: Record<string, string> = { HIGH: '高', MID: '中', LOW: '低' };
+const explanatoryPowerLabels: Record<string, string> = { HIGH: '强', MID: '中', LOW: '弱' };
 const driverRoleLabels: Record<string, string> = {
   TRIGGER: '直接触发',
   AMPLIFIER: '放大因素',
@@ -39,6 +40,16 @@ const ATTRIBUTION_MAX_POLL_ATTEMPTS = 300;
 function levelDots(level?: string) {
   const map: Record<string, string> = { HIGH: '●●●', MID: '●●○', LOW: '●○○' };
   return map[level || 'MID'] || '●●○';
+}
+
+function hasAiInterpretation(driver: AttributionDriver) {
+  return Boolean(
+    driver.marketInterpretation
+    || driver.expectationShift
+    || driver.priceImpact
+    || driver.explanatoryPower
+    || driver.explanatoryPowerReason
+  );
 }
 
 export function AttributionReaderView({
@@ -417,9 +428,54 @@ export function AttributionReaderView({
                         </span>
                       </div>
                       {driver.plainExplanation && <p className="attribution-driver-plain">{driver.plainExplanation}</p>}
+                      {hasAiInterpretation(driver) && (
+                        <section className="attribution-driver-ai" aria-label="AI 市场解读">
+                          <div className="attribution-driver-ai-heading">
+                            <span aria-hidden="true">AI</span>
+                            <strong>AI 解读</strong>
+                          </div>
+                          <div className="attribution-driver-ai-grid">
+                            {driver.marketInterpretation && (
+                              <article>
+                                <span>市场在交易什么</span>
+                                <p>{driver.marketInterpretation}</p>
+                              </article>
+                            )}
+                            {driver.expectationShift && (
+                              <article>
+                                <span>预期发生了什么变化</span>
+                                <p>{driver.expectationShift}</p>
+                              </article>
+                            )}
+                            {driver.priceImpact && (
+                              <article>
+                                <span>为什么会影响股价</span>
+                                <p>{driver.priceImpact}</p>
+                              </article>
+                            )}
+                            {(driver.explanatoryPower || driver.explanatoryPowerReason) && (
+                              <article>
+                                <span>解释力度</span>
+                                <p>
+                                  {driver.explanatoryPower && (
+                                    <strong className={`attribution-explanatory-power power-${driver.explanatoryPower.toLowerCase()}`}>
+                                      {explanatoryPowerLabels[driver.explanatoryPower] || driver.explanatoryPower}
+                                    </strong>
+                                  )}
+                                  {driver.explanatoryPower && driver.explanatoryPowerReason ? ' · ' : ''}
+                                  {driver.explanatoryPowerReason}
+                                </p>
+                              </article>
+                            )}
+                          </div>
+                        </section>
+                      )}
                       {driver.detail && <p className="attribution-driver-detail">{driver.detail}</p>}
                       {driver.facts && driver.facts.length > 0 && (
-                        <ul>{driver.facts.map((fact, factIndex) => <li key={factIndex}>事实：{fact}</li>)}</ul>
+                        <div className="attribution-driver-facts">
+                          <span>事实依据</span>
+                          <ul>{driver.facts.map((fact, factIndex) => <li key={factIndex}>{fact}</li>)}</ul>
+                        </div>
                       )}
                       {driver.transmissionPath && <p className="attribution-driver-detail"><strong>传导链：</strong>{driver.transmissionPath}</p>}
                       {driver.counterEvidence && <p className="attribution-driver-detail"><strong>反证/局限：</strong>{driver.counterEvidence}</p>}

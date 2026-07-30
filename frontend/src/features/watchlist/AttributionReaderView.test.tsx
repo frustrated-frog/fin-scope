@@ -108,7 +108,8 @@ test('renders rich driver reasoning and uncertainty sections', async () => {
   eventSource.onerror?.();
 
   expect(await screen.findByText(/首要驱动/)).toBeInTheDocument();
-  expect(screen.getByText(/事实：公司发布正式公告/)).toBeInTheDocument();
+  expect(screen.getByText('事实依据')).toBeInTheDocument();
+  expect(screen.getByText('公司发布正式公告')).toBeInTheDocument();
   expect(screen.getByText(/不确定性/)).toBeInTheDocument();
   expect(screen.getByText(/后续验证/)).toBeInTheDocument();
   expect(screen.queryByLabelText('归因证据与验证')).not.toBeInTheDocument();
@@ -287,4 +288,48 @@ test('renders the plain-language causal narrative', async () => {
   expect(screen.getByText('缓冲或反方因素')).toBeInTheDocument();
   expect(screen.getByText('直接触发')).toBeInTheDocument();
   expect(screen.getByText('市场担心相关硬件需求后移。')).toBeInTheDocument();
+});
+
+test('separates AI market interpretation from factual evidence', async () => {
+  const report = {
+    id: 402,
+    instrumentCode: '600343',
+    instrumentType: 'STOCK',
+    status: 'COMPLETED',
+    summary: '公告否定题材预期后股价承压',
+    drivers: [{
+      claim: '公司澄清不涉及商业航天核心业务',
+      role: 'TRIGGER',
+      plainExplanation: '市场此前炒作的成长故事被公司公告否定。',
+      marketInterpretation: '市场在交易商业航天订单预期落空。',
+      expectationShift: '原本预期切入商业航天 → 现在确认仍以传统业务为主。',
+      priceImpact: '成长想象空间收缩，可能提高风险溢价并压低估值。',
+      explanatoryPower: 'HIGH',
+      explanatoryPowerReason: '公告直接否定核心题材，且与当日下跌方向一致。',
+      facts: ['公司公告明确否认商业航天主营业务']
+    }]
+  };
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path.includes('/history') ? [] : report
+  ) as never);
+
+  render(
+    <AttributionReaderView
+      reportId={402}
+      code="600343"
+      type="STOCK"
+      name="航天动力"
+      changePct={-5.2}
+      onBack={vi.fn()}
+    />
+  );
+
+  expect(await screen.findByText('AI 解读')).toBeInTheDocument();
+  expect(screen.getByLabelText('AI 市场解读')).toBeInTheDocument();
+  expect(screen.getByText('市场在交易什么')).toBeInTheDocument();
+  expect(screen.getByText('预期发生了什么变化')).toBeInTheDocument();
+  expect(screen.getByText('为什么会影响股价')).toBeInTheDocument();
+  expect(screen.getByText('解释力度')).toBeInTheDocument();
+  expect(screen.getByText('事实依据')).toBeInTheDocument();
+  expect(screen.getByText('公司公告明确否认商业航天主营业务')).toBeInTheDocument();
 });
