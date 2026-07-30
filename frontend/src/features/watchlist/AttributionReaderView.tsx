@@ -13,6 +13,12 @@ const stageLabels: Record<string, string> = {
 };
 
 const levelLabels: Record<string, string> = { HIGH: '高', MID: '中', LOW: '低' };
+const driverRoleLabels: Record<string, string> = {
+  TRIGGER: '直接触发',
+  AMPLIFIER: '放大因素',
+  BACKGROUND: '背景因素',
+  COUNTER: '反方因素'
+};
 const trackLabels: Record<string, string> = {
   COMPANY: '公司事件', FUND_EXPOSURE: '基金暴露', INDUSTRY: '行业与产业链',
   MACRO: '宏观与政策', MARKET: '市场联动', COUNTER: '反证检查'
@@ -197,6 +203,10 @@ export function AttributionReaderView({
     : activatedTrackCount === 0
       ? '轨道准备中'
       : `已启动 ${activatedTrackCount}/${plannedTrackCount}，已结算 ${settledTrackCount}/${plannedTrackCount}`;
+  const displayedChangePct = report?.changePct ?? changePct;
+  const directionWord = (displayedChangePct ?? 0) < 0 ? '跌' : (displayedChangePct ?? 0) > 0 ? '涨' : '波动';
+  const amplifiedMoveLabel = (displayedChangePct ?? 0) < 0 ? '放大跌幅的因素'
+    : (displayedChangePct ?? 0) > 0 ? '放大涨幅的因素' : '放大波动的因素';
 
   return (
     <section className="panel wide attribution-panel">
@@ -317,30 +327,96 @@ export function AttributionReaderView({
         <div className="attribution-report">
           <div className="attribution-report-layout">
             <div className="attribution-report-main">
-              <div className="attribution-summary">
-                <span className="attribution-summary-label">📌 一句话归因</span>
-                <p>{report.summary}</p>
-              </div>
+              {report.narrative ? (
+                <section className="attribution-narrative" aria-label="今日涨跌通俗解释">
+                  <div className="attribution-narrative-hero">
+                    <span>30 秒看懂</span>
+                    <h3>今天为什么{directionWord}</h3>
+                    <p>{report.narrative.plainSummary || report.summary}</p>
+                  </div>
 
-              {report.primaryDriver && (
-                <div className="attribution-summary">
-                  <span className="attribution-summary-label">🎯 首要驱动</span>
-                  <p><strong>{report.primaryDriver.claim}</strong></p>
-                  {report.primaryDriver.transmissionPath && <p>{report.primaryDriver.transmissionPath}</p>}
-                </div>
+                  {report.narrative.causalSteps && report.narrative.causalSteps.length > 0 && (
+                    <div className="attribution-causal-section">
+                      <span className="attribution-summary-label">原因故事线</span>
+                      <ol className="attribution-causal-flow">
+                        {report.narrative.causalSteps.map((step, index) => (
+                          <li key={`${step}-${index}`}>
+                            <span>{index + 1}</span>
+                            <p>{step}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  <div className="attribution-context-grid">
+                    {report.narrative.instrumentLink && (
+                      <article>
+                        <span>为什么是它</span>
+                        <p>{report.narrative.instrumentLink}</p>
+                      </article>
+                    )}
+                    {report.narrative.whyToday && (
+                      <article>
+                        <span>为什么是今天</span>
+                        <p>{report.narrative.whyToday}</p>
+                      </article>
+                    )}
+                  </div>
+
+                  {((report.narrative.amplifiers?.length || 0) > 0 || (report.narrative.dampeners?.length || 0) > 0) && (
+                    <div className="attribution-forces-grid">
+                      {(report.narrative.amplifiers?.length || 0) > 0 && (
+                        <article className="attribution-force-card amplifier">
+                          <span>{amplifiedMoveLabel}</span>
+                          <ul>{report.narrative.amplifiers?.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                        </article>
+                      )}
+                      {(report.narrative.dampeners?.length || 0) > 0 && (
+                        <article className="attribution-force-card dampener">
+                          <span>缓冲或反方因素</span>
+                          <ul>{report.narrative.dampeners?.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                        </article>
+                      )}
+                    </div>
+                  )}
+                </section>
+              ) : (
+                <>
+                  <div className="attribution-summary">
+                    <span className="attribution-summary-label">📌 一句话归因</span>
+                    <p>{report.summary}</p>
+                  </div>
+
+                  {report.primaryDriver && (
+                    <div className="attribution-summary">
+                      <span className="attribution-summary-label">🎯 首要驱动</span>
+                      <p><strong>{report.primaryDriver.claim}</strong></p>
+                      {report.primaryDriver.transmissionPath && <p>{report.primaryDriver.transmissionPath}</p>}
+                    </div>
+                  )}
+                </>
               )}
 
-              <h4 className="attribution-section-title">🔍 驱动因素</h4>
+              <h4 className="attribution-section-title">🔍 原因拆解</h4>
               {report.drivers && report.drivers.length > 0 ? (
                 <div className="attribution-drivers">
                   {report.drivers.map((driver, index) => (
                     <div className="attribution-driver" key={index}>
                       <div className="attribution-driver-head">
-                        <strong>{index + 1}. {driver.claim}</strong>
+                        <div className="attribution-driver-title">
+                          {driver.role && (
+                            <span className={`attribution-driver-role role-${driver.role.toLowerCase()}`}>
+                              {driverRoleLabels[driver.role] || driver.role}
+                            </span>
+                          )}
+                          <strong>{index + 1}. {driver.claim}</strong>
+                        </div>
                         <span className="attribution-driver-meta">
                           影响 {levelDots(driver.impactLevel)} · 置信 {levelLabels[driver.confidence || 'MID']}
                         </span>
                       </div>
+                      {driver.plainExplanation && <p className="attribution-driver-plain">{driver.plainExplanation}</p>}
                       {driver.detail && <p className="attribution-driver-detail">{driver.detail}</p>}
                       {driver.facts && driver.facts.length > 0 && (
                         <ul>{driver.facts.map((fact, factIndex) => <li key={factIndex}>事实：{fact}</li>)}</ul>

@@ -671,8 +671,12 @@ export type ToastItem = {
   type: 'success' | 'error' | 'info';
 };
 
+export type AttributionDriverRole = 'TRIGGER' | 'AMPLIFIER' | 'BACKGROUND' | 'COUNTER';
+
 export type AttributionDriver = {
   claim: string;
+  role?: AttributionDriverRole;
+  plainExplanation?: string;
   impactLevel?: string;
   confidence?: string;
   detail?: string;
@@ -681,6 +685,16 @@ export type AttributionDriver = {
   counterEvidence?: string;
   observationWindow?: string;
   evidenceUrls?: string[];
+};
+
+export type AttributionNarrative = {
+  plainSummary?: string;
+  event?: string;
+  instrumentLink?: string;
+  whyToday?: string;
+  causalSteps?: string[];
+  amplifiers?: string[];
+  dampeners?: string[];
 };
 
 export type AttributionEvidence = {
@@ -709,6 +723,7 @@ export type AttributionReport = {
   changePct?: number;
   status: 'GENERATING' | 'COMPLETED' | 'FAILED';
   summary?: string;
+  narrative?: AttributionNarrative;
   drivers?: AttributionDriver[];
   primaryDriver?: AttributionDriver;
   uncertainties?: string[];

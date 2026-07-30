@@ -242,3 +242,49 @@ test('loads history when a live attribution becomes completed', async () => {
   ));
   expect(screen.getByText('上次归因')).toBeInTheDocument();
 });
+
+test('renders the plain-language causal narrative', async () => {
+  vi.mocked(api).mockResolvedValue({
+    id: 401,
+    instrumentCode: '603618',
+    instrumentType: 'STOCK',
+    status: 'COMPLETED',
+    summary: '多重因素共同造成下跌',
+    narrative: {
+      plainSummary: '延期传闻触发需求担忧，板块走弱和前期涨幅进一步放大了抛压。',
+      event: '英伟达机架延期传闻出现',
+      instrumentLink: '公司处于算力硬件相关链条，市场会据此调整短期需求预期。',
+      whyToday: '传闻、板块回撤与获利盘卖出在今天集中出现。',
+      causalSteps: ['延期传闻', '需求预期下调', '算力硬件板块承压', '杭电股份下跌'],
+      amplifiers: ['前期累计涨幅较大', '板块龙头集体走弱'],
+      dampeners: ['公司尚未确认实际订单受到影响']
+    },
+    drivers: [{
+      claim: '机架延期传闻',
+      role: 'TRIGGER',
+      plainExplanation: '市场担心相关硬件需求后移。',
+      impactLevel: 'HIGH',
+      confidence: 'MID'
+    }]
+  });
+
+  render(
+    <AttributionReaderView
+      reportId={401}
+      code="603618"
+      type="STOCK"
+      name="杭电股份"
+      changePct={-5.76}
+      onBack={vi.fn()}
+    />
+  );
+
+  expect(await screen.findByText('今天为什么跌')).toBeInTheDocument();
+  expect(screen.getByText('延期传闻触发需求担忧，板块走弱和前期涨幅进一步放大了抛压。')).toBeInTheDocument();
+  expect(screen.getByText('为什么是它')).toBeInTheDocument();
+  expect(screen.getByText('为什么是今天')).toBeInTheDocument();
+  expect(screen.getByText('放大跌幅的因素')).toBeInTheDocument();
+  expect(screen.getByText('缓冲或反方因素')).toBeInTheDocument();
+  expect(screen.getByText('直接触发')).toBeInTheDocument();
+  expect(screen.getByText('市场担心相关硬件需求后移。')).toBeInTheDocument();
+});
