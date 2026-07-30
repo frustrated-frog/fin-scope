@@ -260,33 +260,13 @@ uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 
 ## 模型、搜索与行情配置
 
-FinScope 使用 OpenAI 兼容 Chat Completions 接口，不绑定具体模型服务商。当前个人本地部署的 LLM 和搜索凭证沿用 `backend/finscope-web/src/main/resources/application.yml` 中的既有配置约定，README 不记录或复制凭证值。若要公开分发项目，应先轮换凭证并单独设计密钥管理方案。
+FinScope 使用 OpenAI 兼容 Chat Completions 接口，不绑定具体模型服务商。当前个人本地部署的全部运行参数，以及 LLM 和搜索凭据，均直接固定在 `backend/finscope-web/src/main/resources/application.yml` 中，不使用环境变量占位符。README 和其他文档不记录或复制凭据值；若要公开分发项目，应先轮换凭据并单独设计密钥管理方案。
 
-常用运行参数可以通过环境变量覆盖：
-
-```bash
-export FINSCOPE_LLM_ENABLED=true
-export FINSCOPE_LLM_BASE_URL=https://你的模型服务/v1
-export FINSCOPE_LLM_MODEL=你的模型名
-export FINSCOPE_SEARCH_ENABLED=true
-export FINSCOPE_SEARCH_PROVIDER=tavily
-export FINSCOPE_PYTHON_MARKET_DATA_BASE_URL=http://127.0.0.1:8000
-export FINSCOPE_CORS_ORIGIN=http://localhost:5173
-export FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON='0 30 18 * * MON-FRI'
-```
+当前默认模型为 `GPT-5.5-joybuilder`。模型切换、字段说明、已验证请求以及历史 GLM-5 配置见 [模型服务接入与配置说明](docs/模型服务接入与配置说明.md)。
 
 模型调用失败时，文章入库等主流程会保留结果并使用确定性兜底。搜索或行情外部服务不可用时，接口会返回明确的失败、部分成功或快照降级状态，不用空数据伪装成功。
 
-行情可靠性参数：
-
-```bash
-export FINSCOPE_MARKET_DATA_FRESH_CACHE_MS=15000
-export FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS=300
-export FINSCOPE_MARKET_DATA_REQUEST_BUDGET_MS=5000
-export FINSCOPE_MARKET_DATA_MAX_FALLBACK_AGE_SECONDS=120
-export FINSCOPE_MARKET_DATA_WARMUP_ENABLED=true
-export FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS=10000
-```
+行情可靠性参数也直接维护在 `application.yml` 的 `finscope.market-data` 配置块中。修改后需要重启后端生效。
 
 免费公开行情源没有 SLA。盘中在线源全部失败时，只接受规定时间内的快照；午休和收盘后可以展示最后收盘事实，但会保留数据时间和降级标记。
 

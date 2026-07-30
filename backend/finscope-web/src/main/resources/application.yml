@@ -24,33 +24,33 @@ finscope:
   data-root: ../data
   cors-origin: http://localhost:*
   llm:
-    enabled: ${FINSCOPE_LLM_ENABLED:true}
-    base-url: ${FINSCOPE_LLM_BASE_URL:https://modelservice.jdcloud.com/v1}
-    api-key: "pk-1439bbdb-a7a8-47d3-a7f1-0d9e3bd103ea"
-    model: ${FINSCOPE_LLM_MODEL:GLM-5}
-    timeout-ms: ${FINSCOPE_LLM_TIMEOUT_MS:300000}
-    temperature: ${FINSCOPE_LLM_TEMPERATURE:0.2}
+    enabled: true
+    base-url: http://llm-gw.jd.local/v1
+    api-key: ecacd6e33a5b4ca3a6ae1f0a3ebf3da0
+    model: GPT-5.5-joybuilder
+    timeout-ms: 300000
+    temperature: 1
   search:
-    enabled: ${FINSCOPE_SEARCH_ENABLED:true}
-    provider: ${FINSCOPE_SEARCH_PROVIDER:tavily}
+    enabled: true
+    provider: tavily
     api-key: "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"
   python-market-data:
-    base-url: ${FINSCOPE_PYTHON_MARKET_DATA_BASE_URL:http://127.0.0.1:8000}
+    base-url: http://127.0.0.1:8000
   acquisition:
     browser:
-      enabled: ${FINSCOPE_ACQUISITION_BROWSER_ENABLED:false}
-      executable: ${FINSCOPE_ACQUISITION_BROWSER_EXECUTABLE:}
-      timeout-ms: ${FINSCOPE_ACQUISITION_BROWSER_TIMEOUT_MS:20000}
-      max-response-bytes: ${FINSCOPE_ACQUISITION_BROWSER_MAX_RESPONSE_BYTES:8388608}
-      max-concurrency: ${FINSCOPE_ACQUISITION_BROWSER_MAX_CONCURRENCY:1}
+      enabled: false
+      executable: ""
+      timeout-ms: 20000
+      max-response-bytes: 8388608
+      max-concurrency: 1
   market-data:
-    capital-max-lag-minutes: ${FINSCOPE_MARKET_DATA_CAPITAL_MAX_LAG_MINUTES:15}
-    fresh-cache-ms: ${FINSCOPE_MARKET_DATA_FRESH_CACHE_MS:15000}
-    hedge-delay-ms: ${FINSCOPE_MARKET_DATA_HEDGE_DELAY_MS:300}
-    request-budget-ms: ${FINSCOPE_MARKET_DATA_REQUEST_BUDGET_MS:5000}
-    capital-request-budget-ms: ${FINSCOPE_MARKET_DATA_CAPITAL_REQUEST_BUDGET_MS:20000}
-    max-intraday-fallback-age-seconds: ${FINSCOPE_MARKET_DATA_MAX_FALLBACK_AGE_SECONDS:120}
-    warmup-enabled: ${FINSCOPE_MARKET_DATA_WARMUP_ENABLED:false}
-    warmup-interval-ms: ${FINSCOPE_MARKET_DATA_WARMUP_INTERVAL_MS:60000}
+    capital-max-lag-minutes: 15
+    fresh-cache-ms: 15000
+    hedge-delay-ms: 300
+    request-budget-ms: 5000
+    capital-request-budget-ms: 20000
+    max-intraday-fallback-age-seconds: 120
+    warmup-enabled: false
+    warmup-interval-ms: 60000
   quant:
-    market-data-sync-cron: ${FINSCOPE_QUANT_MARKET_DATA_SYNC_CRON:0 30 18 * * MON-FRI}
+    market-data-sync-cron: 0 30 18 * * MON-FRI

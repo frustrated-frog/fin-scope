@@ -121,13 +121,7 @@ cd frontend && npm run build
 
 本项目使用兼容 OpenAI 的 Chat Completions 接口，不绑定特定供应商。当前本地部署有意将 LLM 和搜索 API Key 固定在 `backend/finscope-web/src/main/resources/application.yml` 中。除非用户明确要求迁移，否则不得将任一 `api-key` 替换为环境变量表达式。
 
-其他运行时设置仍可通过环境变量覆盖：
-
-```bash
-export FINSCOPE_LLM_ENABLED=true
-export FINSCOPE_LLM_BASE_URL=https://your-model-service/v1
-export FINSCOPE_LLM_MODEL=your_model_name
-```
+所有运行时设置均直接写在 `application.yml` 中，不使用环境变量占位符。切换模型或调整行情、采集参数时，应修改该文件中的固定值，并同步更新模型接入文档；不得把 API Key 复制到 README、设计文档或日志。
 
 启用后：
 - 新文章通过 `article-interpret` Agent 节点生成洞察卡片
