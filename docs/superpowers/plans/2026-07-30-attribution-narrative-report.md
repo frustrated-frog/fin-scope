@@ -31,7 +31,7 @@
 - Modify: `frontend/src/features/watchlist/AttributionReaderView.tsx`
 - Test: `frontend/src/features/watchlist/AttributionReaderView.test.tsx`
 
-- [ ] **Step 1: Write the failing regression test**
+- [x] **Step 1: Write the failing regression test**
 
 Add a test that renders with `taskId`, returns a completed report from `/reports/301`, returns the current and previous receipts from `/history`, and expects the history endpoint and both summaries to appear.
 
@@ -56,13 +56,13 @@ test('loads history when a live attribution becomes completed', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the regression test and verify RED**
+- [x] **Step 2: Run the regression test and verify RED**
 
 Run: `cd frontend && npm test -- AttributionReaderView.test.tsx -t "loads history when a live attribution becomes completed"`
 
 Expected: FAIL because the history effect exits while `taskId` is present.
 
-- [ ] **Step 3: Implement completion-driven history loading**
+- [x] **Step 3: Implement completion-driven history loading**
 
 Extract `loadHistory` with a monotonically safe state update, call it immediately for persisted reports, and call it when the current report first reaches `COMPLETED`. On failure, preserve the existing history instead of replacing it with an empty list.
 
@@ -75,13 +75,13 @@ const loadHistory = useCallback(async () => {
 
 Use a ref keyed by completed report ID so polling cannot trigger duplicate history requests.
 
-- [ ] **Step 4: Run the focused frontend test**
+- [x] **Step 4: Run the focused frontend test**
 
 Run: `cd frontend && npm test -- AttributionReaderView.test.tsx`
 
 Expected: all tests in the file PASS.
 
-- [ ] **Step 5: Commit and push the independent bug fix**
+- [x] **Step 5: Commit and push the independent bug fix**
 
 ```bash
 git add frontend/src/features/watchlist/AttributionReaderView.tsx frontend/src/features/watchlist/AttributionReaderView.test.tsx
@@ -99,7 +99,7 @@ git push origin main
 - Modify: `backend/finscope-dao/src/main/java/com/finscope/dao/attribution/AttributionRepository.java`
 - Test: `backend/finscope-dao/src/test/java/com/finscope/dao/attribution/AttributionRepositoryTest.java`
 
-- [ ] **Step 1: Write the failing repository round-trip test**
+- [x] **Step 1: Write the failing repository round-trip test**
 
 Create a completed report containing a narrative and a `TRIGGER` driver, update it, reload it, and assert every new field.
 
@@ -132,17 +132,17 @@ void persistsNarrativeAndPlainLanguageDriverFields() {
 }
 ```
 
-- [ ] **Step 2: Run the DAO test and verify RED**
+- [x] **Step 2: Run the DAO test and verify RED**
 
 Run: `cd backend && mvn -pl finscope-dao -am -Dtest=AttributionRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`
 
 Expected: compilation failure because the narrative contract does not exist.
 
-- [ ] **Step 3: Add the domain types and schema column**
+- [x] **Step 3: Add the domain types and schema column**
 
 Implement `AttributionNarrative` with nullable strings and lists initialized to empty `ArrayList`s. Add `narrative` to `AttributionReport`, and `role` plus `plainExplanation` to `AttributionDriver`. Add `narrative_json TEXT` to new tables and `ensureColumn("attribution_report", "narrative_json", "TEXT")` for existing databases.
 
-- [ ] **Step 4: Add repository JSON persistence**
+- [x] **Step 4: Add repository JSON persistence**
 
 Read `narrative_json` in `reportMapper`, include it in both `INSERT` and `UPDATE`, and add focused helpers:
 
@@ -153,13 +153,13 @@ private AttributionNarrative parseNarrative(String raw)
 
 Blank or malformed legacy JSON must return `null`; serialization failure must throw `IllegalStateException` like the existing driver serializer.
 
-- [ ] **Step 5: Run DAO tests**
+- [x] **Step 5: Run DAO tests**
 
 Run: `cd backend && mvn -pl finscope-dao -am -Dtest=AttributionRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`
 
 Expected: PASS with the original history tests and the new round-trip test.
 
-- [ ] **Step 6: Commit and push the contract batch**
+- [x] **Step 6: Commit and push the contract batch**
 
 ```bash
 git add backend/finscope-domain backend/finscope-dao
@@ -173,7 +173,7 @@ git push origin main
 - Modify: `backend/finscope-service/src/main/java/com/finscope/service/attribution/AttributionAgent.java`
 - Create: `backend/finscope-service/src/test/java/com/finscope/service/attribution/AttributionAgentNarrativeTest.java`
 
-- [ ] **Step 1: Write failing synthesis parsing and routing tests**
+- [x] **Step 1: Write failing synthesis parsing and routing tests**
 
 Test a JSON response containing all narrative fields and driver presentation fields, then test that stock, fund, and sector prompts contain their distinct transmission requirements.
 
@@ -194,13 +194,13 @@ void parsesPlainLanguageNarrativeAndDriverRole() {
 }
 ```
 
-- [ ] **Step 2: Run the service test and verify RED**
+- [x] **Step 2: Run the service test and verify RED**
 
 Run: `cd backend && mvn -pl finscope-service -am -Dtest=AttributionAgentNarrativeTest -Dsurefire.failIfNoSpecifiedTests=false test`
 
 Expected: FAIL because synthesis does not parse or request the narrative contract.
 
-- [ ] **Step 3: Extend the strict JSON prompt and parser**
+- [x] **Step 3: Extend the strict JSON prompt and parser**
 
 Make `parseSynthResult` and a prompt-building seam package-private for focused tests. Require the model to output `narrative`, `role`, and `plainExplanation`. Add the daily-attribution chain and type-specific instructions:
 
@@ -212,17 +212,17 @@ SECTOR: 政策或需求 → 龙头反应 → 成分扩散 → 板块
 
 Normalize unknown roles to `BACKGROUND`, and accept only `TRIGGER`, `AMPLIFIER`, `BACKGROUND`, or `COUNTER`.
 
-- [ ] **Step 4: Add deterministic narrative fallback**
+- [x] **Step 4: Add deterministic narrative fallback**
 
 After synthesis, ensure a minimum narrative exists. Use current evidence and primary driver only; exclude `historicalContext` evidence from `event` and `whyToday`. Populate no more than four causal steps and do not invent type-specific exposure when it is unavailable.
 
-- [ ] **Step 5: Run service attribution tests**
+- [x] **Step 5: Run service attribution tests**
 
 Run: `cd backend && mvn -pl finscope-service -am -Dtest='AttributionAgentNarrativeTest,AttributionHarnessTest' -Dsurefire.failIfNoSpecifiedTests=false test`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit and push the generation batch**
+- [x] **Step 6: Commit and push the generation batch**
 
 ```bash
 git add backend/finscope-service/src/main/java/com/finscope/service/attribution/AttributionAgent.java backend/finscope-service/src/test/java/com/finscope/service/attribution/AttributionAgentNarrativeTest.java
@@ -238,7 +238,7 @@ git push origin main
 - Modify: `frontend/src/features/watchlist/AttributionReaderView.test.tsx`
 - Modify: `frontend/src/styles.css`
 
-- [ ] **Step 1: Write the failing narrative presentation test**
+- [x] **Step 1: Write the failing narrative presentation test**
 
 Return a complete narrative and drivers with different roles. Assert that the page renders the plain summary, causal steps in order, “为什么是它”, “为什么是今天”, amplifiers, dampeners, and a localized driver-role label.
 
@@ -252,31 +252,31 @@ expect(screen.getByText('缓冲或反方因素')).toBeInTheDocument();
 expect(screen.getByText('直接触发')).toBeInTheDocument();
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `cd frontend && npm test -- AttributionReaderView.test.tsx -t "renders the plain-language causal narrative"`
 
 Expected: FAIL because narrative fields are not typed or rendered.
 
-- [ ] **Step 3: Add TypeScript contract and presentation helpers**
+- [x] **Step 3: Add TypeScript contract and presentation helpers**
 
 Add `AttributionNarrative`, `AttributionDriverRole`, `narrative`, `role`, and `plainExplanation`. Add small pure helpers for direction-aware headings and localized role labels; keep existing reports valid because every new field is optional.
 
-- [ ] **Step 4: Render the narrative before detailed drivers**
+- [x] **Step 4: Render the narrative before detailed drivers**
 
 Add a narrative hero followed by an ordered causal flow and two context cards. Display driver role and `plainExplanation`, and retain the existing facts, transmission path, counter-evidence, observation window, and evidence sidebar. When narrative is absent, render the existing summary and primary-driver layout unchanged.
 
-- [ ] **Step 5: Add responsive styles**
+- [x] **Step 5: Add responsive styles**
 
 Use existing attribution colors and surfaces. The causal flow should be a wrapping grid on desktop and a vertical sequence below 900px. Cards must not rely on color alone: every role includes visible text.
 
-- [ ] **Step 6: Run the watchlist frontend tests and build**
+- [x] **Step 6: Run the watchlist frontend tests and build**
 
 Run: `cd frontend && npm test -- AttributionReaderView.test.tsx WatchlistView.test.tsx && npm run build`
 
 Expected: all selected tests PASS and Vite exits 0.
 
-- [ ] **Step 7: Commit and push the presentation batch**
+- [x] **Step 7: Commit and push the presentation batch**
 
 ```bash
 git add frontend/src/shared/types/index.ts frontend/src/features/watchlist/AttributionReaderView.tsx frontend/src/features/watchlist/AttributionReaderView.test.tsx frontend/src/styles.css
@@ -289,25 +289,25 @@ git push origin main
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-30-attribution-narrative-report.md`
 
-- [ ] **Step 1: Run complete backend verification**
+- [x] **Step 1: Run complete backend verification**
 
 Run: `cd backend && mvn test`
 
 Expected: BUILD SUCCESS with zero failed tests.
 
-- [ ] **Step 2: Run complete frontend verification**
+- [x] **Step 2: Run complete frontend verification**
 
 Run: `cd frontend && npm test && npm run build`
 
 Expected: all Vitest tests PASS and Vite production build exits 0.
 
-- [ ] **Step 3: Check the diff and working tree**
+- [x] **Step 3: Check the diff and working tree**
 
 Run: `git diff --check && git status --short`
 
 Expected: no whitespace errors and only the plan checkbox updates, if any, remain uncommitted.
 
-- [ ] **Step 4: Mark plan tasks complete and push the final documentation update**
+- [x] **Step 4: Mark plan tasks complete and push the final documentation update**
 
 Update each completed checkbox from `[ ]` to `[x]`, then run:
 
