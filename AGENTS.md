@@ -1,126 +1,126 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+本文件为 Codex（Codex.ai/code）在本仓库中处理代码时提供指导。
 
-## Project Overview
+## 项目概览
 
-FinScope is a local-first personal investment research information workbench. It establishes stable information acquisition channels, checks fetched articles in Inbox, identifies duplicate content across days, generates daily research briefs, and preserves valuable information as long-term maintainable Markdown knowledge notes.
+FinScope 是一个本地优先的个人投资研究信息工作台。它用于建立稳定的信息获取渠道、在 Inbox 中检查抓取文章、识别跨日重复内容、生成每日研究简报，并将有价值的信息保存为可长期维护的 Markdown 知识笔记。
 
-**Key Principles:**
-- This project intentionally avoids public hot lists, operational intervention backends, and enterprise publishing chains
-- Positioning: personal learning, fall recruitment project showcase, and future self-media material accumulation
-- Chinese and English mixed codebase (Chinese README/docs, code in English)
+**核心原则：**
+- 本项目有意避免公开热榜、运营干预后台和企业级发布链路
+- 项目定位：个人学习、秋招项目展示，以及未来自媒体素材积累
+- 中英文混合代码库（README/文档使用中文，代码使用英文）
 
-## Architecture
+## 架构
 
-**Backend:** Java 8, Spring Boot 2.7, Maven multi-module, SQLite, Jsoup, Rome RSS
-**Frontend:** React, TypeScript, Vite
-**Storage:** `data/finance.db` (SQLite) and Markdown files in `data/vault/`
-**AI Extension:** OpenAI-compatible `LlmChatClient`, article interpretation Agent, `agent_run` call traces
+**后端：** Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS
+**前端：** React、TypeScript、Vite
+**存储：** `data/finance.db`（SQLite）和 `data/vault/` 中的 Markdown 文件
+**AI 扩展：** 兼容 OpenAI 的 `LlmChatClient`、文章解读 Agent、`agent_run` 调用轨迹
 
-### Module Structure
+### 模块结构
 
 ```
 backend/
-  finscope-common/    Generic utilities, no business logic
-  finscope-domain/    Domain models and DTOs
-  finscope-dao/       SQLite repositories and schema initialization
-  finscope-rpc/       External source adapters (RSS/Web/X/Twitter)
-  finscope-service/   Business orchestration, deduplication, briefs, vault, export
-  finscope-web/       REST controllers and application assembly
+  finscope-common/    通用工具，不包含业务逻辑
+  finscope-domain/    领域模型和 DTO
+  finscope-dao/       SQLite Repository 和 Schema 初始化
+  finscope-rpc/       外部信源适配器（RSS/Web/X/Twitter）
+  finscope-service/   业务编排、去重、简报、知识库、导出
+  finscope-web/       REST Controller 和应用装配
 ```
 
-**Dependency Direction:** `web -> service -> dao/rpc -> domain/common`
-- Controllers should NOT directly call Repository
-- External fetching is unified behind `SourceAdapter`
+**依赖方向：** `web -> service -> dao/rpc -> domain/common`
+- Controller 不应直接调用 Repository
+- 外部抓取统一通过 `SourceAdapter` 实现
 
-### Core Flows
+### 核心流程
 
-**Article Ingestion:**
+**文章摄取：**
 ```
 SourceAdapter -> RawItem -> ArticleIngestCoordinator
-  -> Article + fingerprints + novelty decision
+  -> Article + 指纹 + 新意判定
   -> InsightCardGenerator
   -> insight_card
-  -> Inbox / Daily Brief / Topic pipeline
+  -> Inbox / Daily Brief / Topic 流程
 ```
 
-**Source Adapter Strategy:**
+**信源适配器策略：**
 ```
-Source or Manual URL
+Source 或手动 URL
   -> SourceAdapterRegistry
-  -> URL-aware adapter first (e.g., XPostSourceAdapter for x.com URLs)
-  -> typed adapter fallback (RSS/WEB)
+  -> 优先使用 URL 感知适配器（例如用于 x.com URL 的 XPostSourceAdapter）
+  -> 回退到类型适配器（RSS/WEB）
   -> RawItem(title/url/summary/body/contentType/extractionMethod/qualityScore)
 ```
 
-**Knowledge Preservation:**
+**知识沉淀：**
 ```
-Article or Brief
-  -> ArticleInterpretationAgent (if LLM configured)
-  -> TopicExtractor fallback
+Article 或 Brief
+  -> ArticleInterpretationAgent（如果已配置 LLM）
+  -> TopicExtractor 回退方案
   -> TopicService
-  -> SQLite links + Markdown notes in data/vault/topics/
+  -> SQLite 关联关系 + data/vault/topics/ 中的 Markdown 笔记
 ```
 
-**Key Extension Points:**
-- `SourceAdapter`: Add new RSS/Web/API sources without changing orchestration
-- `ArticleInterpretationAgent`: LLM-based article interpretation with fallback
-- `InsightCardGenerator`: Converts articles to insight cards (supports deterministic rules or Agent output)
-- `NoveltyService`: Cross-day duplicate/subsequent development/new event detection
-- `VaultWriter`: Isolates Markdown persistence from database persistence
+**关键扩展点：**
+- `SourceAdapter`：无需修改编排逻辑即可增加新的 RSS/Web/API 信源
+- `ArticleInterpretationAgent`：基于 LLM 的文章解读，支持回退方案
+- `InsightCardGenerator`：将文章转换为洞察卡片（支持确定性规则或 Agent 输出）
+- `NoveltyService`：识别跨日重复、后续进展和新事件
+- `VaultWriter`：隔离 Markdown 持久化与数据库持久化
 
-## Git Commit Convention
+## Git 提交规范
 
-- Commit messages MUST use an English Conventional Commit type followed by a Chinese description: `<type>: <中文描述>`
-- Keep the type identifier in English, such as `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`
-- Write the subject after the colon in concise Chinese; do not use an English subject
-- Correct examples: `feat: 增加有界研究模式`, `fix: 修复研究证据评测遗漏`, `docs: 补充研究证据深度方案`
-- Incorrect examples: `feat: add bounded research modes`, `修复: 研究证据评测遗漏`
-- During coding, commit and push each independently verifiable batch of changes to the current branch as soon as it is complete; do not defer all commits and pushes until the end of the task
+- 提交信息必须使用英文 Conventional Commit 类型，并在其后添加中文描述：`<type>: <中文描述>`
+- 类型标识必须保留英文，例如 `feat`、`fix`、`docs`、`refactor`、`test`、`chore` 或 `perf`
+- 冒号后的主题应使用简洁中文，不得使用英文主题
+- 正确示例：`feat: 增加有界研究模式`、`fix: 修复研究证据评测遗漏`、`docs: 补充研究证据深度方案`
+- 错误示例：`feat: add bounded research modes`、`修复: 研究证据评测遗漏`
+- 编码过程中，每完成一批可独立验证的改动，就应立即提交并推送到当前分支；不得将所有提交和推送拖延到任务结束时集中处理
 
-## Common Commands
+## 常用命令
 
-### Backend
+### 后端
 
 ```bash
-# Run backend (from project root)
+# 启动后端（从项目根目录执行）
 cd backend
 mvn -pl finscope-web -am spring-boot:run
 
-# Run all backend tests
+# 运行全部后端测试
 cd backend && mvn test
 
-# Run specific module tests
+# 运行指定模块测试
 cd backend && mvn -pl finscope-service test
 ```
 
-Backend runs on `http://localhost:8080` by default.
+后端默认运行在 `http://localhost:8080`。
 
-### Frontend
+### 前端
 
 ```bash
-# Install dependencies
+# 安装依赖
 cd frontend && npm install
 
-# Run development server
+# 启动开发服务器
 cd frontend && npm run dev
 
-# Run tests
+# 运行测试
 cd frontend && npm test
 
-# Build for production
+# 生产构建
 cd frontend && npm run build
 ```
 
-Frontend runs on `http://localhost:5173` by default (or 5174 if port occupied).
-Frontend proxies `/api` to `http://localhost:8080`.
+前端默认运行在 `http://localhost:5173`（如果端口被占用，则使用 5174）。
+前端将 `/api` 代理到 `http://localhost:8080`。
 
-### LLM/Agent Configuration
+### LLM/Agent 配置
 
-The project uses OpenAI-compatible Chat Completions interface, not bound to specific providers. The LLM and search API keys are intentionally fixed in `backend/finscope-web/src/main/resources/application.yml` for the current local deployment. Do not replace either `api-key` with an environment-variable expression unless the user explicitly asks for that migration.
+本项目使用兼容 OpenAI 的 Chat Completions 接口，不绑定特定供应商。当前本地部署有意将 LLM 和搜索 API Key 固定在 `backend/finscope-web/src/main/resources/application.yml` 中。除非用户明确要求迁移，否则不得将任一 `api-key` 替换为环境变量表达式。
 
-Other runtime settings can still be overridden through environment variables:
+其他运行时设置仍可通过环境变量覆盖：
 
 ```bash
 export FINSCOPE_LLM_ENABLED=true
@@ -128,62 +128,62 @@ export FINSCOPE_LLM_BASE_URL=https://your-model-service/v1
 export FINSCOPE_LLM_MODEL=your_model_name
 ```
 
-When enabled:
-- New articles generate insight cards via `article-interpret` Agent node
-- Each call is traced in Agent Runs page with node, status, duration, and error info
-- If model call fails, system preserves fetch pipeline and uses deterministic fallback
+启用后：
+- 新文章通过 `article-interpret` Agent 节点生成洞察卡片
+- 每次调用都会在 Agent Runs 页面记录节点、状态、耗时和错误信息
+- 如果模型调用失败，系统仍会保留抓取流程，并使用确定性回退方案
 
-## Key Implementation Details
+## 关键实现细节
 
-### Article Ingest Flow
+### 文章摄取流程
 
-`ArticleIngestCoordinator.ingest()` orchestrates:
-1. Article creation from `RawItem`
-2. URL fingerprint, title normalization, body simhash
-3. Novelty decision via `NoveltyService`
-4. Insight card generation via `InsightCardGenerator`
+`ArticleIngestCoordinator.ingest()` 负责编排：
+1. 根据 `RawItem` 创建 Article
+2. 生成 URL 指纹、标题归一化结果和正文 simhash
+3. 通过 `NoveltyService` 进行新意判定
+4. 通过 `InsightCardGenerator` 生成洞察卡片
 
-### Source Adapters
+### 信源适配器
 
-Three adapters implement `SourceAdapter` interface:
-- `RssSourceAdapter`: RSS/Atom feeds via Rome library
-- `WebSourceAdapter`: Static HTML via Jsoup (no JavaScript execution)
-- `XPostSourceAdapter`: X/Twitter status URLs, prioritizes public JSON adapter for X long posts
+以下三个适配器实现了 `SourceAdapter` 接口：
+- `RssSourceAdapter`：通过 Rome 处理 RSS/Atom Feed
+- `WebSourceAdapter`：通过 Jsoup 处理静态 HTML（不执行 JavaScript）
+- `XPostSourceAdapter`：处理 X/Twitter 状态 URL，并优先使用面向 X 长文的公开 JSON 适配器
 
-When adding new sites, create new adapters rather than adding logic to `UrlIngestService`.
+增加新站点时，应创建新的适配器，不要向 `UrlIngestService` 中添加逻辑。
 
-### Insight Cards
+### 洞察卡片
 
-`InsightCardGenerator` supports three deterministic templates:
-- Financial news cards
-- Research paper cards
-- Social media long-form cards
+`InsightCardGenerator` 支持三种确定性模板：
+- 财经新闻卡片
+- 研究论文卡片
+- 社交媒体长文卡片
 
-Can also consume Agent's structured interpretation output.
+它也可以消费 Agent 输出的结构化解读结果。
 
-### Vault Structure
+### 知识库结构
 
-Markdown files stored in `data/vault/`:
-- `daily-briefs/`: Daily brief markdown files
-- `topics/`: Topic knowledge notes
-- `terms/`: Term definitions
-- `learning-path/`: Learning path notes
+Markdown 文件存储在 `data/vault/` 中：
+- `daily-briefs/`：每日简报 Markdown 文件
+- `topics/`：主题知识笔记
+- `terms/`：术语定义
+- `learning-path/`：学习路径笔记
 
-## Data Safety
+## 数据安全
 
-**Git-ignored:**
-- `data/finance.db` (SQLite database)
-- `data/raw/` (raw fetched content)
-- `data/exports/` (export packages)
-- `.env` and `*.local` files
-- Additional API keys outside the two intentionally fixed local LLM/search entries
+**Git 已忽略：**
+- `data/finance.db`（SQLite 数据库）
+- `data/raw/`（原始抓取内容）
+- `data/exports/`（导出包）
+- `.env` 和 `*.local` 文件
+- 除两个有意固定的本地 LLM/搜索条目以外的其他 API Key
 
-**Never commit:** Company internal data, code, credentials, proprietary prompts, or private documents. The two existing fixed local LLM/search keys are an explicit project convention; do not print, duplicate, or relocate their values.
+**严禁提交：** 公司内部数据、代码、凭据、专有 Prompt 或私有文档。现有两个固定的本地 LLM/搜索 Key 是明确的项目约定；不得打印、复制或移动其值。
 
-## Important Notes
+## 重要说明
 
-- When working with source adapters, URL-aware adapters take precedence over typed adapters
-- Agent fallback is deterministic - system never blocks Inbox flow if LLM unavailable
-- All external API calls should go through `finscope-rpc` module
-- SQLite database path is relative: `../data/finance.db` from backend running directory
-- Frontend uses TypeScript strict mode with Vite for fast development
+- 处理信源适配器时，URL 感知适配器的优先级高于类型适配器
+- Agent 回退方案是确定性的；即使 LLM 不可用，系统也绝不会阻断 Inbox 流程
+- 所有外部 API 调用都应通过 `finscope-rpc` 模块
+- SQLite 数据库路径是相对路径：从后端运行目录访问 `../data/finance.db`
+- 前端采用 TypeScript 严格模式，并使用 Vite 提供快速开发体验
