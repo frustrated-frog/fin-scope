@@ -77,6 +77,7 @@ Article or Brief
 - Write the subject after the colon in concise Chinese; do not use an English subject
 - Correct examples: `feat: 增加有界研究模式`, `fix: 修复研究证据评测遗漏`, `docs: 补充研究证据深度方案`
 - Incorrect examples: `feat: add bounded research modes`, `修复: 研究证据评测遗漏`
+- During coding, commit and push each independently verifiable batch of changes to the current branch as soon as it is complete; do not defer all commits and pushes until the end of the task
 
 ## Common Commands
 
