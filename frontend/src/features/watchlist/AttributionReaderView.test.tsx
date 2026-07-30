@@ -208,3 +208,37 @@ test('loads a persisted report and history without opening an event stream', asy
   expect(EventSource).not.toHaveBeenCalled();
   expect(api).toHaveBeenCalledWith('/api/attribution/history?code=600519&type=STOCK&limit=50');
 });
+
+test('loads history when a live attribution becomes completed', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path.includes('/history') ? [
+      {
+        id: 301, instrumentCode: '603618', instrumentType: 'STOCK', status: 'COMPLETED',
+        reportDate: '2026-07-30', createdAt: '2026-07-30T15:20:00', summary: '本次归因', changePct: -5.76
+      },
+      {
+        id: 299, instrumentCode: '603618', instrumentType: 'STOCK', status: 'COMPLETED',
+        reportDate: '2026-07-29', createdAt: '2026-07-29T15:10:00', summary: '上次归因', changePct: 1.25
+      }
+    ] : {
+      id: 301, instrumentCode: '603618', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-30', createdAt: '2026-07-30T15:20:00', summary: '本次归因', drivers: []
+    }
+  ) as never);
+
+  render(
+    <AttributionReaderView
+      taskId="live-task"
+      reportId={301}
+      code="603618"
+      type="STOCK"
+      onBack={vi.fn()}
+    />
+  );
+
+  expect(await screen.findByText('本次归因')).toBeInTheDocument();
+  await waitFor(() => expect(api).toHaveBeenCalledWith(
+    '/api/attribution/history?code=603618&type=STOCK&limit=50'
+  ));
+  expect(screen.getByText('上次归因')).toBeInTheDocument();
+});

@@ -150,13 +150,13 @@ export function AttributionReaderView({
   }, [taskId, reportId]);
 
   useEffect(() => {
-    if (taskId) return undefined;
+    if (taskId && report?.status !== 'COMPLETED') return undefined;
     let disposed = false;
     Promise.resolve(api<AttributionReport[]>(`/api/attribution/history?code=${encodeURIComponent(code)}&type=${type || 'STOCK'}&limit=50`))
       .then((items) => { if (!disposed) setHistory(Array.isArray(items) ? items : []); })
-      .catch(() => { if (!disposed) setHistory([]); });
+      .catch(() => undefined);
     return () => { disposed = true; };
-  }, [code, type, taskId]);
+  }, [code, type, taskId, report?.status]);
 
   async function selectHistory(nextReportId: number) {
     if (nextReportId === report?.id) return;
