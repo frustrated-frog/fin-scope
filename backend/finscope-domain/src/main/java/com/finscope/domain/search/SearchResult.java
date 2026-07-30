@@ -1,7 +1,7 @@
 package com.finscope.domain.search;
 
 /**
- * 联网搜索单条结果，来源于 WebSearchClient（如 Tavily）。
+ * 联网搜索供应商返回的单条结果。
  */
 public class SearchResult {
     /**
@@ -32,6 +32,14 @@ public class SearchResult {
      * 发布时间。
      */
     private String publishedAt;
+    /**
+     * 搜索供应商编码。
+     */
+    private String providerCode;
+    /**
+     * 结果在当前供应商中的一基排名。
+     */
+    private int providerRank;
 
     public String getTitle() {
         return title;
@@ -87,5 +95,21 @@ public class SearchResult {
 
     public void setPublishedAt(String publishedAt) {
         this.publishedAt = publishedAt;
+    }
+
+    public String getProviderCode() {
+        return providerCode;
+    }
+
+    public void setProviderCode(String providerCode) {
+        this.providerCode = providerCode;
+    }
+
+    public int getProviderRank() {
+        return providerRank;
+    }
+
+    public void setProviderRank(int providerRank) {
+        this.providerRank = providerRank;
     }
 }

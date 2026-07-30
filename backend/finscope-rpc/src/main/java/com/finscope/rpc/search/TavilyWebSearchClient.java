@@ -3,6 +3,7 @@ package com.finscope.rpc.search;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.search.SearchResult;
+import com.finscope.domain.search.WebSearchRequest;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -21,14 +22,16 @@ import java.util.Map;
  * 接口：POST https://api.tavily.com/search
  * body: {"api_key":"...","query":"...","max_results":n,"search_depth":"basic"}
  * 返回：{"results":[{"title","url","content","score","published_date"}]}
- * API Key 由外部注入（来自环境变量），不硬编码。
+ * API Key 由应用配置装配，不在客户端代码中硬编码。
  */
 public class TavilyWebSearchClient implements WebSearchClient {
-    private static final String ENDPOINT = "https://api.tavily.com/search";
-    private static final int TIMEOUT_MS = 15000;
+    private static final String DEFAULT_ENDPOINT = "https://api.tavily.com/search";
+    private static final int DEFAULT_TIMEOUT_MS = 15000;
 
     private final boolean enabled;
     private final String apiKey;
+    private final String endpoint;
+    private final int timeoutMs;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // 来源可信度分级：T1 权威 / T2 主流媒体券商 / 其余 T3
@@ -48,8 +51,19 @@ public class TavilyWebSearchClient implements WebSearchClient {
     }
 
     public TavilyWebSearchClient(boolean enabled, String apiKey) {
+        this(enabled, apiKey, DEFAULT_ENDPOINT, DEFAULT_TIMEOUT_MS);
+    }
+
+    TavilyWebSearchClient(boolean enabled, String apiKey, String endpoint, int timeoutMs) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.enabled = enabled && !this.apiKey.isEmpty();
+        this.endpoint = endpoint;
+        this.timeoutMs = timeoutMs;
+    }
+
+    @Override
+    public String providerCode() {
+        return "TAVILY";
     }
 
     @Override
@@ -59,25 +73,34 @@ public class TavilyWebSearchClient implements WebSearchClient {
 
     @Override
     public List<SearchResult> search(String query, int maxResults) throws Exception {
+        if (query == null || query.trim().isEmpty()) return new ArrayList<SearchResult>();
+        return search(new WebSearchRequest(query, maxResults, "", ""));
+    }
+
+    @Override
+    public List<SearchResult> search(WebSearchRequest request) throws Exception {
         List<SearchResult> results = new ArrayList<>();
-        if (!enabled || query == null || query.trim().isEmpty()) {
+        if (!enabled || request == null) {
             return results;
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("api_key", apiKey);
-        body.put("query", query.trim());
-        body.put("max_results", maxResults <= 0 ? 5 : maxResults);
+        body.put("query", request.getQuery());
+        body.put("max_results", request.getMaxResults());
         body.put("search_depth", "basic");
         body.put("topic", "news");
 
-        String response = post(ENDPOINT, objectMapper.writeValueAsString(body));
+        String response = post(endpoint, objectMapper.writeValueAsString(body));
         JsonNode root = objectMapper.readTree(response);
         JsonNode items = root.path("results");
         if (!items.isArray()) {
             return results;
         }
+        int rank = 0;
         for (JsonNode node : items) {
             SearchResult result = new SearchResult();
+            result.setProviderCode(providerCode());
+            result.setProviderRank(++rank);
             result.setTitle(text(node, "title"));
             result.setUrl(text(node, "url"));
             result.setContent(text(node, "content"));
@@ -121,8 +144,8 @@ public class TavilyWebSearchClient implements WebSearchClient {
     private String post(String urlText, String jsonBody) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
         connection.setRequestMethod("POST");
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
+        connection.setConnectTimeout(timeoutMs);
+        connection.setReadTimeout(timeoutMs);
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json");
         connection.setRequestProperty("Accept", "application/json");
