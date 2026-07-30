@@ -10,10 +10,14 @@ import java.util.List;
  */
 @Data
 public class AttributionDriver {
+    /** 驱动在当日归因中的角色。 */
+    private String role;
     /**
      * 归因或证据主张。
      */
     private String claim;
+    /** 面向普通用户的白话解释。 */
+    private String plainExplanation;
     /**
      * 影响力等级。
      */

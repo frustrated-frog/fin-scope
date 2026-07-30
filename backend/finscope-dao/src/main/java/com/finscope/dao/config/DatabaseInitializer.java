@@ -756,6 +756,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "status TEXT NOT NULL,"
                 + "summary TEXT,"
                 + "drivers_json TEXT,"
+                + "narrative_json TEXT,"
                 + "disclaimer TEXT,"
                 + "error_message TEXT,"
                 + "warning_message TEXT,"
@@ -767,6 +768,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("attribution_report", "warning_message", "TEXT");
         ensureColumn("attribution_report", "uncertainties_json", "TEXT");
         ensureColumn("attribution_report", "observation_windows_json", "TEXT");
+        ensureColumn("attribution_report", "narrative_json", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_code ON attribution_report(instrument_code)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_identity "
                 + "ON attribution_report(instrument_code, instrument_type, id)");

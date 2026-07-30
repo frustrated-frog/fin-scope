@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.attribution.AttributionDriver;
 import com.finscope.domain.attribution.AttributionEvidence;
+import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -41,6 +42,7 @@ public class AttributionRepository {
         report.setStatus(rs.getString("status"));
         report.setSummary(rs.getString("summary"));
         report.setDrivers(parseDrivers(rs.getString("drivers_json")));
+        report.setNarrative(parseNarrative(rs.getString("narrative_json")));
         report.setPrimaryDriver(report.getDrivers().isEmpty() ? null : report.getDrivers().get(0));
         report.setUncertainties(parseStrings(rs.getString("uncertainties_json")));
         report.setObservationWindows(parseStrings(rs.getString("observation_windows_json")));
@@ -85,8 +87,8 @@ public class AttributionRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO attribution_report(instrument_code,instrument_name,instrument_type,report_date,"
-                            + "change_pct,status,summary,drivers_json,disclaimer,error_message,warning_message,uncertainties_json,"
-                            + "observation_windows_json,duration_ms,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "change_pct,status,summary,drivers_json,narrative_json,disclaimer,error_message,warning_message,uncertainties_json,"
+                            + "observation_windows_json,duration_ms,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, report.getInstrumentCode());
             ps.setString(2, report.getInstrumentName());
@@ -100,18 +102,19 @@ public class AttributionRepository {
             ps.setString(6, report.getStatus());
             ps.setString(7, report.getSummary());
             ps.setString(8, writeDrivers(report.getDrivers()));
-            ps.setString(9, report.getDisclaimer());
-            ps.setString(10, report.getErrorMessage());
-            ps.setString(11, report.getWarningMessage());
-            ps.setString(12, writeStrings(report.getUncertainties()));
-            ps.setString(13, writeStrings(report.getObservationWindows()));
+            ps.setString(9, writeNarrative(report.getNarrative()));
+            ps.setString(10, report.getDisclaimer());
+            ps.setString(11, report.getErrorMessage());
+            ps.setString(12, report.getWarningMessage());
+            ps.setString(13, writeStrings(report.getUncertainties()));
+            ps.setString(14, writeStrings(report.getObservationWindows()));
             if (report.getDurationMs() == null) {
-                ps.setObject(14, null);
+                ps.setObject(15, null);
             } else {
-                ps.setLong(14, report.getDurationMs());
+                ps.setLong(15, report.getDurationMs());
             }
-            ps.setString(15, TimeUtil.text(report.getCreatedAt()));
-            ps.setString(16, TimeUtil.text(report.getUpdatedAt()));
+            ps.setString(16, TimeUtil.text(report.getCreatedAt()));
+            ps.setString(17, TimeUtil.text(report.getUpdatedAt()));
             return ps;
         }, keyHolder);
         if (keyHolder.getKey() != null) {
@@ -122,10 +125,11 @@ public class AttributionRepository {
 
     /** 完成/失败时更新报告结果。 */
     public void updateResult(AttributionReport report) {
-        jdbcTemplate.update("UPDATE attribution_report SET status=?, summary=?, drivers_json=?, disclaimer=?, "
+        jdbcTemplate.update("UPDATE attribution_report SET status=?, summary=?, drivers_json=?, narrative_json=?, disclaimer=?, "
                         + "error_message=?, warning_message=?, uncertainties_json=?, observation_windows_json=?, "
                         + "duration_ms=?, change_pct=?, updated_at=? WHERE id=?",
-                report.getStatus(), report.getSummary(), writeDrivers(report.getDrivers()), report.getDisclaimer(),
+                report.getStatus(), report.getSummary(), writeDrivers(report.getDrivers()), writeNarrative(report.getNarrative()),
+                report.getDisclaimer(),
                 report.getErrorMessage(), report.getWarningMessage(), writeStrings(report.getUncertainties()),
                 writeStrings(report.getObservationWindows()), report.getDurationMs(), report.getChangePct(),
                 TimeUtil.text(LocalDateTime.now()), report.getId());
@@ -250,6 +254,24 @@ public class AttributionRepository {
             return objectMapper.readValue(json, type);
         } catch (Exception ex) {
             return new ArrayList<>();
+        }
+    }
+
+    private String writeNarrative(AttributionNarrative narrative) {
+        if (narrative == null) return null;
+        try {
+            return objectMapper.writeValueAsString(narrative);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private AttributionNarrative parseNarrative(String json) {
+        if (json == null || json.trim().isEmpty()) return null;
+        try {
+            return objectMapper.readValue(json, AttributionNarrative.class);
+        } catch (Exception ex) {
+            return null;
         }
     }
 

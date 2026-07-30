@@ -1,6 +1,8 @@
 package com.finscope.dao.attribution;
 
 import com.finscope.dao.config.DatabaseInitializer;
+import com.finscope.domain.attribution.AttributionDriver;
+import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +68,36 @@ class AttributionRepositoryTest {
         assertEquals(2, history.size());
         assertEquals(latest.getId(), history.get(0).getId());
         assertEquals(older.getId(), history.get(1).getId());
+    }
+
+    @Test
+    void persistsNarrativeAndPlainLanguageDriverFields() {
+        AttributionReport report = save(
+                "603618", "STOCK", LocalDate.of(2026, 7, 30), "主线", -5.76, "GENERATING");
+        AttributionNarrative narrative = new AttributionNarrative();
+        narrative.setPlainSummary("延期传闻触发担忧，前期涨幅放大抛压。");
+        narrative.setEvent("英伟达机架延期传闻出现");
+        narrative.setInstrumentLink("公司处于算力硬件相关链条");
+        narrative.setWhyToday("传闻与板块回撤在当日集中共振");
+        narrative.setCausalSteps(Arrays.asList("延期传闻", "需求预期下调", "板块承压", "股价下跌"));
+        narrative.setAmplifiers(Collections.singletonList("前期累计涨幅较大"));
+        narrative.setDampeners(Collections.singletonList("公司尚未确认实际订单影响"));
+        AttributionDriver driver = new AttributionDriver();
+        driver.setClaim("延期传闻");
+        driver.setRole("TRIGGER");
+        driver.setPlainExplanation("市场担心相关硬件需求推迟。");
+        report.setNarrative(narrative);
+        report.setDrivers(Collections.singletonList(driver));
+        report.setStatus("COMPLETED");
+
+        repository.updateResult(report);
+        AttributionReport restored = repository.findById(report.getId()).orElseThrow(AssertionError::new);
+
+        assertEquals("传闻与板块回撤在当日集中共振", restored.getNarrative().getWhyToday());
+        assertEquals(Arrays.asList("延期传闻", "需求预期下调", "板块承压", "股价下跌"),
+                restored.getNarrative().getCausalSteps());
+        assertEquals("TRIGGER", restored.getDrivers().get(0).getRole());
+        assertEquals("市场担心相关硬件需求推迟。", restored.getDrivers().get(0).getPlainExplanation());
     }
 
     private AttributionReport save(String code, String type, LocalDate date, String summary, Double changePct, String status) {

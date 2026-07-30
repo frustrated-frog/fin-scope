@@ -44,6 +44,8 @@ public class AttributionReport {
      * 摘要。
      */
     private String summary;
+    /** 面向普通用户的结构化因果叙事。 */
+    private AttributionNarrative narrative;
     /**
      * 归因驱动因素列表。
      */
@@ -151,6 +153,14 @@ public class AttributionReport {
 
     public void setSummary(String summary) {
         this.summary = summary;
+    }
+
+    public AttributionNarrative getNarrative() {
+        return narrative;
+    }
+
+    public void setNarrative(AttributionNarrative narrative) {
+        this.narrative = narrative;
     }
 
     public List<AttributionDriver> getDrivers() {
