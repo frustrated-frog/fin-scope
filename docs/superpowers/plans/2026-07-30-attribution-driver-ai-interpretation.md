@@ -17,7 +17,7 @@
 - Modify: `backend/finscope-service/src/main/java/com/finscope/service/attribution/AttributionAgent.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/attribution/AttributionAgentNarrativeTest.java`
 
-- [ ] **Step 1: Write the failing parser test**
+- [x] **Step 1: Write the failing parser test**
 
 Extend `parsesPlainLanguageNarrativeAndDriverRole` with the five fields and assertions:
 
@@ -38,7 +38,7 @@ assertEquals("HIGH", driver.getExplanatoryPower());
 assertEquals("公告直接否定核心题材，且与当日下跌方向一致", driver.getExplanatoryPowerReason());
 ```
 
-- [ ] **Step 2: Write the failing prompt-boundary test**
+- [x] **Step 2: Write the failing prompt-boundary test**
 
 Add a test named `asksForBoundedMarketInterpretationInsteadOfRepeatingFacts`:
 
@@ -51,7 +51,7 @@ assertTrue(prompt.contains("盈利预期、估值倍数、风险溢价或资金�
 assertTrue(prompt.contains("不得虚构数字、业务暴露或投资者行为"));
 ```
 
-- [ ] **Step 3: Run the focused test and verify RED**
+- [x] **Step 3: Run the focused test and verify RED**
 
 Run:
 
@@ -61,7 +61,7 @@ cd backend && mvn -pl finscope-service -am -Dtest=AttributionAgentNarrativeTest 
 
 Expected: compilation fails because the five `AttributionDriver` properties do not exist.
 
-- [ ] **Step 4: Add the optional domain fields**
+- [x] **Step 4: Add the optional domain fields**
 
 Add Lombok-backed fields with comments to `AttributionDriver`:
 
@@ -75,7 +75,7 @@ private String explanatoryPowerReason;
 
 No repository or schema change is needed because the complete driver object is already serialized in `drivers_json`.
 
-- [ ] **Step 5: Extend the prompt and parser**
+- [x] **Step 5: Extend the prompt and parser**
 
 Add the fields to the strict JSON example in `synthUserPrompt`, then add these rules:
 
@@ -100,11 +100,11 @@ driver.setExplanatoryPowerReason(node.path("explanatoryPowerReason").asText("").
 
 Do not populate these fields in `fallbackSynthesize`.
 
-- [ ] **Step 6: Run the focused backend test and verify GREEN**
+- [x] **Step 6: Run the focused backend test and verify GREEN**
 
 Run the command from Step 3. Expected: all `AttributionAgentNarrativeTest` tests pass.
 
-- [ ] **Step 7: Commit and push the backend batch**
+- [x] **Step 7: Commit and push the backend batch**
 
 ```bash
 git add backend/finscope-domain/src/main/java/com/finscope/domain/attribution/AttributionDriver.java backend/finscope-service/src/main/java/com/finscope/service/attribution/AttributionAgent.java backend/finscope-service/src/test/java/com/finscope/service/attribution/AttributionAgentNarrativeTest.java
@@ -120,7 +120,7 @@ git push
 - Modify: `frontend/src/styles.css`
 - Test: `frontend/src/features/watchlist/AttributionReaderView.test.tsx`
 
-- [ ] **Step 1: Write the failing presentation test**
+- [x] **Step 1: Write the failing presentation test**
 
 Add a test named `separates AI market interpretation from factual evidence`. Return one driver with all five fields and one fact, then assert:
 
@@ -140,7 +140,7 @@ Also assert the AI panel is identifiable:
 expect(screen.getByLabelText('AI 市场解读')).toBeInTheDocument();
 ```
 
-- [ ] **Step 2: Run the focused frontend test and verify RED**
+- [x] **Step 2: Run the focused frontend test and verify RED**
 
 Run:
 
@@ -150,7 +150,7 @@ cd frontend && npm test -- AttributionReaderView.test.tsx -t "separates AI marke
 
 Expected: FAIL because the new fields and labels are not rendered.
 
-- [ ] **Step 3: Extend the TypeScript contract**
+- [x] **Step 3: Extend the TypeScript contract**
 
 Add optional properties to `AttributionDriver`:
 
@@ -162,7 +162,7 @@ explanatoryPower?: 'HIGH' | 'MID' | 'LOW';
 explanatoryPowerReason?: string;
 ```
 
-- [ ] **Step 4: Add focused presentation helpers**
+- [x] **Step 4: Add focused presentation helpers**
 
 In `AttributionReaderView.tsx`, add a predicate and strength labels:
 
@@ -176,7 +176,7 @@ const hasAiInterpretation = (driver: AttributionDriver) => Boolean(
 
 Import `AttributionDriver` as a type if it is not already imported.
 
-- [ ] **Step 5: Render the AI layer before facts**
+- [x] **Step 5: Render the AI layer before facts**
 
 Inside each driver, after `plainExplanation`, render one semantic section when `hasAiInterpretation(driver)` is true:
 
@@ -194,11 +194,11 @@ Inside each driver, after `plainExplanation`, render one semantic section when `
 
 Replace the fact prefix repeated on every list item with one visible `事实依据` label and a dedicated fact list. Keep `detail`, transmission, counter-evidence, and observation window unchanged.
 
-- [ ] **Step 6: Add responsive visual hierarchy**
+- [x] **Step 6: Add responsive visual hierarchy**
 
 In `styles.css`, use an inset surface with a cyan left accent, compact `AI` badge, and a two-column grid. Add a media rule below 900px that switches `.attribution-driver-ai-grid` to one column. Keep the outer driver as the only bordered card and do not add shadows or gradients.
 
-- [ ] **Step 7: Run focused frontend tests and build**
+- [x] **Step 7: Run focused frontend tests and build**
 
 ```bash
 cd frontend && npm test -- AttributionReaderView.test.tsx WatchlistView.test.tsx && npm run build
@@ -206,7 +206,7 @@ cd frontend && npm test -- AttributionReaderView.test.tsx WatchlistView.test.tsx
 
 Expected: selected tests pass and the Vite production build exits 0.
 
-- [ ] **Step 8: Commit and push the frontend batch**
+- [x] **Step 8: Commit and push the frontend batch**
 
 ```bash
 git add frontend/src/shared/types/index.ts frontend/src/features/watchlist/AttributionReaderView.tsx frontend/src/features/watchlist/AttributionReaderView.test.tsx frontend/src/styles.css
@@ -219,7 +219,7 @@ git push
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-30-attribution-driver-ai-interpretation.md`
 
-- [ ] **Step 1: Run backend verification**
+- [x] **Step 1: Run backend verification**
 
 ```bash
 cd backend && mvn test
@@ -227,7 +227,7 @@ cd backend && mvn test
 
 Expected: Maven exits 0 with no failed tests.
 
-- [ ] **Step 2: Run frontend verification**
+- [x] **Step 2: Run frontend verification**
 
 ```bash
 cd frontend && npm test && npm run build
@@ -235,7 +235,7 @@ cd frontend && npm test && npm run build
 
 Expected: all Vitest tests pass and Vite exits 0.
 
-- [ ] **Step 3: Check repository state**
+- [x] **Step 3: Check repository state**
 
 ```bash
 git diff --check
@@ -244,7 +244,7 @@ git status --short
 
 Expected: no whitespace errors and only this plan's checkbox update remains.
 
-- [ ] **Step 4: Mark the plan complete and push**
+- [x] **Step 4: Mark the plan complete and push**
 
 Change completed steps from `[ ]` to `[x]`, then run:
 
