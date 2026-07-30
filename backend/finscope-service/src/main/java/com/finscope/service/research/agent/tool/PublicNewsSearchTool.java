@@ -2,6 +2,7 @@ package com.finscope.service.research.agent.tool;
 
 import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
+import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.search.SearchResult;
@@ -13,6 +14,11 @@ import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService
 import com.finscope.service.research.source.FinancialSourceQueryPolicy;
 import com.finscope.service.research.source.FinancialSourceSearchPlan;
 import com.finscope.service.research.source.OfficialFinancialSourceRegistry;
+import com.finscope.service.search.evidence.SearchDepth;
+import com.finscope.service.search.evidence.SearchEvidence;
+import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceGateway;
+import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -29,8 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class PublicNewsSearchTool implements ResearchAgentTool {
     private static final int MAX_RESULTS = 5;
-    private static final double MIN_RELEVANCE_SCORE = 0.10D;
-    private final WebSearchClient searchClient;
+    private final WebSearchClient legacySearchClient;
+    private final SearchEvidenceGateway searchGateway;
     private final ResearchSearchEvidenceRepository evidenceRepository;
     private final ResearchEvidenceAcquisitionService acquisitionService;
     private final FinancialSourceQueryPolicy queryPolicy;
@@ -45,7 +51,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     public PublicNewsSearchTool(WebSearchClient searchClient,
                                 ResearchSearchEvidenceRepository evidenceRepository,
                                 ResearchEvidenceAcquisitionService acquisitionService) {
-        this(searchClient, evidenceRepository, acquisitionService,
+        this(searchClient, null, evidenceRepository, acquisitionService,
                 new FinancialSourceQueryPolicy(new OfficialFinancialSourceRegistry()),
                 new OfficialFinancialSourceRegistry(), new BoundedResearchOrchestrator());
     }
@@ -55,18 +61,29 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                                 ResearchEvidenceAcquisitionService acquisitionService,
                                 FinancialSourceQueryPolicy queryPolicy,
                                 OfficialFinancialSourceRegistry sourceRegistry) {
-        this(searchClient, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry,
+        this(searchClient, null, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry,
                 new BoundedResearchOrchestrator());
     }
 
     @Autowired
-    public PublicNewsSearchTool(WebSearchClient searchClient,
+    public PublicNewsSearchTool(SearchEvidenceGateway searchGateway,
                                 ResearchSearchEvidenceRepository evidenceRepository,
                                 ResearchEvidenceAcquisitionService acquisitionService,
                                 FinancialSourceQueryPolicy queryPolicy,
                                 OfficialFinancialSourceRegistry sourceRegistry,
                                 ResearchOrchestrator orchestrator) {
-        this.searchClient = searchClient;
+        this(null, searchGateway, evidenceRepository, acquisitionService, queryPolicy, sourceRegistry, orchestrator);
+    }
+
+    private PublicNewsSearchTool(WebSearchClient legacySearchClient,
+                                 SearchEvidenceGateway searchGateway,
+                                 ResearchSearchEvidenceRepository evidenceRepository,
+                                 ResearchEvidenceAcquisitionService acquisitionService,
+                                 FinancialSourceQueryPolicy queryPolicy,
+                                 OfficialFinancialSourceRegistry sourceRegistry,
+                                 ResearchOrchestrator orchestrator) {
+        this.legacySearchClient = legacySearchClient;
+        this.searchGateway = searchGateway;
         this.evidenceRepository = evidenceRepository;
         this.acquisitionService = acquisitionService;
         this.queryPolicy = queryPolicy;
@@ -78,8 +95,8 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     public ResearchToolDescriptor descriptor() {
         ResearchToolDescriptor value = new ResearchToolDescriptor();
         value.setCode("public_news_search");
-        value.setName("Tavily 公开资料搜索");
-        value.setDescription("使用 Tavily 发现公开资料 URL，读取 HTML/PDF 原文并召回相关片段；结果只进入本次研究证据域");
+        value.setName("多源公开资料搜索");
+        value.setDescription("使用多源搜索发现公开资料 URL，读取 HTML/PDF 原文并召回相关片段；结果只进入本次研究证据域");
         Map<String, String> input = new LinkedHashMap<String, String>();
         input.put("query", "2..180字符自然语言关键词");
         input.put("intent", "SUPPORT|COUNTER|PRIMARY|UPDATE");
@@ -112,9 +129,10 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     @Override
     public ResearchToolObservation execute(ResearchAgentToolContext context, Map<String, Object> arguments) {
         validate(arguments);
-        if (!searchClient.isConfigured()) {
-            return error("TERMINAL_ERROR", "TAVILY_NOT_CONFIGURED", false,
-                    "Tavily 未配置，无法执行公开资料搜索");
+        ResearchMode mode = ResearchMode.defaultIfNull(context.getResearchMode());
+        if (!isSearchConfigured(mode)) {
+            return error("TERMINAL_ERROR", "WEB_SEARCH_NOT_CONFIGURED", false,
+                    "未配置可用的公开资料搜索供应商");
         }
         String query = text(arguments.get("query"));
         String intent = text(arguments.get("intent"));
@@ -129,9 +147,9 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                     context.getResearchMode(), query, intent, (branchQuery, branchIntent) -> {
                         FinancialSourceSearchPlan searchPlan = queryPolicy.plan(branchQuery, branchIntent);
                         if (searchPlan.isOfficialLane()) officialBranches.incrementAndGet();
-                        List<SearchResult> branchHits = searchClient.search(searchPlan.getEffectiveQuery(), MAX_RESULTS);
+                        List<SearchResult> branchHits = search(searchPlan.getEffectiveQuery(), mode);
                         if (searchPlan.isOfficialLane() && (branchHits == null || branchHits.isEmpty())) {
-                            branchHits = searchClient.search(searchPlan.getOriginalQuery(), MAX_RESULTS);
+                            branchHits = search(searchPlan.getOriginalQuery(), mode);
                             generalFallbacks.incrementAndGet();
                         }
                         return branchHits;
@@ -140,7 +158,6 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             Set<String> seenUrls = new HashSet<String>();
             Set<String> newDomains = new HashSet<String>();
             int duplicates = 0;
-            int lowRelevance = 0;
             int fullText = 0;
             int snippetFallback = 0;
             int hitCount = 0;
@@ -155,10 +172,6 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                 hitCount += branch.getHits().size();
                 for (SearchResult hit : branch.getHits()) {
                     String url = text(hit.getUrl());
-                    if (hit.getScore() == null || hit.getScore() < MIN_RELEVANCE_SCORE) {
-                        lowRelevance++;
-                        continue;
-                    }
                     if (!hasText(url) || !seenUrls.add(url)
                             || evidenceRepository.findByRunIdAndUrl(context.getResearchRunId(), url).isPresent()) {
                         duplicates++;
@@ -176,19 +189,19 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
                 }
             }
             if (failedBranches == branches.size()) {
-                return error("RETRYABLE_ERROR", "TAVILY_SEARCH_FAILED", true,
+                return error("RETRYABLE_ERROR", "WEB_SEARCH_FAILED", true,
                         "全部研究搜索分支均执行失败");
             }
             ResearchToolObservation value = new ResearchToolObservation();
             value.setEvidenceDelta(refs.size());
             value.setSourceDelta(newDomains.size());
             value.setDataRefs(refs);
-            value.setStateHash("tavily:" + refs.size() + ":" + newDomains.size());
+            value.setStateHash("web-search:" + refs.size() + ":" + newDomains.size());
             value.setStatus(refs.isEmpty() ? "NO_PROGRESS" : "SUCCESS");
-            value.setObservationSummary("Tavily 搜索完成：命中=" + hitCount
+            value.setObservationSummary("多源公开资料搜索完成：命中=" + hitCount
                     + "，研究分支=" + branches.size() + "，失败分支=" + failedBranches
                     + "，官方通道=" + (officialBranches.get() > 0) + "，通用降级=" + (generalFallbacks.get() > 0)
-                    + "，低相关=" + lowRelevance + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
+                    + "，重复=" + duplicates + "，新增研究证据=" + refs.size()
                     + "，全文=" + fullText + "，摘要降级=" + snippetFallback
                     + "，全文读取预算=" + fullTextBudget
                     + "，新增独立来源=" + newDomains.size());
@@ -198,8 +211,8 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
             value.setRetryable(false);
             return value;
         } catch (Exception ex) {
-            return error("RETRYABLE_ERROR", "TAVILY_SEARCH_FAILED", true,
-                    "Tavily 搜索失败：" + safe(ex.getMessage()));
+            return error("RETRYABLE_ERROR", "WEB_SEARCH_FAILED", true,
+                    "公开资料搜索失败：" + safe(ex.getMessage()));
         }
     }
 
@@ -208,7 +221,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         ResearchSearchEvidence value = new ResearchSearchEvidence();
         value.setResearchRunId(context.getResearchRunId());
         value.setDecisionId(context.getDecisionId());
-        value.setProvider("TAVILY");
+        value.setProvider(hasText(hit.getProviderCode()) ? hit.getProviderCode() : "TAVILY");
         value.setQueryText(query);
         value.setIntent(intent);
         value.setTitle(text(hit.getTitle()));
@@ -240,8 +253,39 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setRetryable(retryable);
         value.setObservationSummary(summary);
         value.setNewInformation("没有写入新的研究证据");
-        value.setStateHash("tavily:error:" + type);
+        value.setStateHash("web-search:error:" + type);
         return value;
+    }
+
+    private boolean isSearchConfigured(ResearchMode mode) {
+        if (searchGateway != null) return searchGateway.isConfigured(toDepth(mode));
+        return legacySearchClient != null && legacySearchClient.isConfigured();
+    }
+
+    private List<SearchResult> search(String query, ResearchMode mode) throws Exception {
+        if (searchGateway == null) return legacySearchClient.search(query, MAX_RESULTS);
+        boolean chinese = query != null && query.matches(".*[\\u4e00-\\u9fa5].*");
+        SearchEvidenceBatch batch = searchGateway.search(new SearchEvidenceRequest(query, toDepth(mode),
+                MAX_RESULTS, MAX_RESULTS, chinese ? "cn" : "intl", chinese ? "zh" : "en", 15_000L));
+        if (batch.isAllProvidersFailed()) throw new IllegalStateException("所有搜索供应商均不可用");
+        List<SearchResult> results = new ArrayList<SearchResult>();
+        for (SearchEvidence evidence : batch.getEvidence()) {
+            SearchResult result = new SearchResult();
+            result.setTitle(evidence.getTitle());
+            result.setUrl(evidence.getUrl());
+            result.setContent(evidence.getContent());
+            result.setSourceDomain(evidence.getSourceDomain());
+            result.setSourceTier(evidence.getSourceTier());
+            result.setPublishedAt(evidence.getPublishedAt());
+            result.setScore(evidence.getProviderScore());
+            result.setProviderCode(String.join("+", evidence.getProviders()));
+            results.add(result);
+        }
+        return results;
+    }
+
+    private SearchDepth toDepth(ResearchMode mode) {
+        return mode == ResearchMode.QUICK ? SearchDepth.QUICK : SearchDepth.DEEP;
     }
 
     private String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }

@@ -10,6 +10,11 @@ import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
 import com.finscope.service.research.source.FinancialSourceQueryPolicy;
 import com.finscope.service.research.source.OfficialFinancialSourceRegistry;
+import com.finscope.service.research.agent.BoundedResearchOrchestrator;
+import com.finscope.service.search.evidence.SearchDepth;
+import com.finscope.service.search.evidence.SearchEvidence;
+import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +72,7 @@ class PublicNewsSearchToolTest {
         assertEquals(2, observation.getEvidenceDelta());
         assertEquals(2, observation.getSourceDelta());
         assertEquals(Arrays.asList("search-evidence:31", "search-evidence:32"), observation.getDataRefs());
-        assertTrue(observation.getObservationSummary().contains("Tavily"));
+        assertTrue(observation.getObservationSummary().contains("多源公开资料搜索"));
         verify(evidenceRepository, times(2)).save(any(ResearchSearchEvidence.class));
         verify(searchClient).search(eq("光模块 指引 下修 风险"), eq(5));
         assertFalse(observation.isRetryable());
@@ -92,19 +97,19 @@ class PublicNewsSearchToolTest {
 
         assertEquals("NO_PROGRESS", noProgress.getStatus());
         assertEquals("RETRYABLE_ERROR", failed.getStatus());
-        assertEquals("TAVILY_SEARCH_FAILED", failed.getErrorType());
+        assertEquals("WEB_SEARCH_FAILED", failed.getErrorType());
         assertTrue(failed.isRetryable());
     }
 
     @Test
-    void discardsLowConfidenceProviderNoiseBeforePersistence() throws Exception {
+    void retainsProviderResultsEvenWhenRawScoresAreLowOrMissing() throws Exception {
         when(searchClient.isConfigured()).thenReturn(true);
         SearchResult relevant = result("China memory chipmaker CXMT completes IPO",
                 "https://www.cnbc.com/cxmt", "The company completed its Shanghai listing.", "T2");
         relevant.setScore(0.478D);
         SearchResult noise = result("Aspinall returns to training",
                 "https://sport.example.com/a", "The fighter recovered from eye surgery.", "T3");
-        noise.setScore(0.080D);
+        noise.setScore(null);
         when(searchClient.search("光模块 指引 下修 风险", 5)).thenReturn(Arrays.asList(relevant, noise));
         when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
             ResearchSearchEvidence value = invocation.getArgument(0);
@@ -114,9 +119,8 @@ class PublicNewsSearchToolTest {
 
         ResearchToolObservation observation = tool.execute(new ResearchAgentToolContext(22L, 9L), arguments());
 
-        assertEquals(1, observation.getEvidenceDelta());
-        assertTrue(observation.getObservationSummary().contains("低相关=1"));
-        verify(evidenceRepository, times(1)).save(any(ResearchSearchEvidence.class));
+        assertEquals(2, observation.getEvidenceDelta());
+        verify(evidenceRepository, times(2)).save(any(ResearchSearchEvidence.class));
     }
 
     @Test
@@ -195,6 +199,37 @@ class PublicNewsSearchToolTest {
                 any(String.class), any(String.class));
     }
 
+    @Test
+    void consumesSharedGatewayAndPersistsAllContributingProviders() {
+        SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
+        when(gateway.isConfigured(SearchDepth.QUICK)).thenReturn(true);
+        SearchEvidence evidence = new SearchEvidence();
+        evidence.setTitle("共同命中的公告");
+        evidence.setUrl("https://official.example.com/a");
+        evidence.setContent("公告正文摘要");
+        evidence.setSourceDomain("official.example.com");
+        evidence.setSourceTier("T1");
+        evidence.setProviders(Arrays.asList("ANYSEARCH", "TAVILY"));
+        when(gateway.search(any())).thenReturn(new SearchEvidenceBatch(
+                Collections.singletonList(evidence), Collections.emptyList(), false));
+        when(evidenceRepository.save(any(ResearchSearchEvidence.class))).thenAnswer(invocation -> {
+            ResearchSearchEvidence value = invocation.getArgument(0);
+            value.setId(99L);
+            return value;
+        });
+        OfficialFinancialSourceRegistry registry = new OfficialFinancialSourceRegistry();
+        tool = new PublicNewsSearchTool(gateway, evidenceRepository, acquisitionService,
+                new FinancialSourceQueryPolicy(registry), registry, new BoundedResearchOrchestrator());
+
+        ResearchToolObservation observation = tool.execute(
+                new ResearchAgentToolContext(22L, 9L, ResearchMode.QUICK), arguments());
+
+        ArgumentCaptor<ResearchSearchEvidence> captor = ArgumentCaptor.forClass(ResearchSearchEvidence.class);
+        verify(evidenceRepository).save(captor.capture());
+        assertEquals("ANYSEARCH+TAVILY", captor.getValue().getProvider());
+        assertEquals(1, observation.getEvidenceDelta());
+    }
+
     private Map<String, Object> arguments() {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("query", "光模块 指引 下修 风险");
@@ -211,6 +246,7 @@ class PublicNewsSearchToolTest {
         value.setSourceTier(tier);
         value.setScore(0.91D);
         value.setPublishedAt("2026-07-29");
+        value.setProviderCode("TAVILY");
         return value;
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
         "spring.datasource.url=jdbc:sqlite:target/quant-context-test/finance.db",
         "finscope.data-root=target/quant-context-test",
         "finscope.search.enabled=false",
+        "finscope.search.any-search.enabled=false",
         "finscope.llm.enabled=false"
 })
 class QuantPlatformContextTest {

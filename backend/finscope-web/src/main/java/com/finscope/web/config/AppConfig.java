@@ -10,6 +10,12 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
 import com.finscope.rpc.search.TavilyWebSearchClient;
 import com.finscope.rpc.search.WebSearchClient;
+import com.finscope.rpc.search.AnySearchWebSearchProvider;
+import com.finscope.rpc.search.WebSearchProvider;
+import com.finscope.service.search.evidence.SearchEvidenceGateway;
+import com.finscope.service.search.evidence.SearchResultFusionService;
+import com.finscope.service.search.evidence.SearchUrlCanonicalizer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.ApplicationRunner;
@@ -18,6 +24,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import javax.annotation.Resource;
 import java.nio.file.Paths;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Configuration
 public class AppConfig {
@@ -60,6 +70,35 @@ public class AppConfig {
     public WebSearchClient webSearchClient() {
         FinScopeProperties.SearchProperties search = properties.getSearch();
         return new TavilyWebSearchClient(search.isEnabled(), search.getApiKey());
+    }
+
+    @Bean
+    public AnySearchWebSearchProvider anySearchWebSearchProvider() {
+        FinScopeProperties.AnySearchProperties search = properties.getSearch().getAnySearch();
+        return new AnySearchWebSearchProvider(search.isEnabled(), search.getApiKey(), search.getBaseUrl(),
+                search.getTimeoutMs(), search.getMaxResponseBytes());
+    }
+
+    @Bean(name = "searchEvidenceExecutor", destroyMethod = "shutdownNow")
+    public ExecutorService searchEvidenceExecutor() {
+        int concurrency = Math.max(1, properties.getSearch().getFusion().getConcurrency());
+        AtomicInteger sequence = new AtomicInteger();
+        return Executors.newFixedThreadPool(concurrency, runnable -> {
+            Thread thread = new Thread(runnable, "search-evidence-" + sequence.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    @Bean
+    public SearchEvidenceGateway searchEvidenceGateway(
+            WebSearchClient tavily,
+            AnySearchWebSearchProvider anySearch,
+            @Qualifier("searchEvidenceExecutor") ExecutorService executor) {
+        FinScopeProperties.SearchFusionProperties fusion = properties.getSearch().getFusion();
+        SearchResultFusionService fusionService = new SearchResultFusionService(
+                new SearchUrlCanonicalizer(), fusion.getRrfConstant(), fusion.getMaxPerDomain());
+        return new SearchEvidenceGateway(Arrays.<WebSearchProvider>asList(tavily, anySearch), executor, fusionService);
     }
 
     @Bean(name = "ingestTaskExecutor")

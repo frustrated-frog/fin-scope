@@ -29,6 +29,24 @@ public class FinScopeProperties {
         private boolean enabled = false;
         private String provider = "tavily";
         private String apiKey = "";
+        private AnySearchProperties anySearch = new AnySearchProperties();
+        private SearchFusionProperties fusion = new SearchFusionProperties();
+    }
+
+    @Data
+    public static class AnySearchProperties {
+        private boolean enabled = false;
+        private String apiKey = "";
+        private String baseUrl = "https://api.anysearch.com";
+        private int timeoutMs = 15000;
+        private int maxResponseBytes = 2097152;
+    }
+
+    @Data
+    public static class SearchFusionProperties {
+        private int rrfConstant = 60;
+        private int maxPerDomain = 2;
+        private int concurrency = 2;
     }
 
     @Data

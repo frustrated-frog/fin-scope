@@ -34,6 +34,16 @@ finscope:
     enabled: true
     provider: tavily
     api-key: "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"
+    any-search:
+      enabled: true
+      api-key: ""
+      base-url: https://api.anysearch.com
+      timeout-ms: 15000
+      max-response-bytes: 2097152
+    fusion:
+      rrf-constant: 60
+      max-per-domain: 2
+      concurrency: 2
   python-market-data:
     base-url: http://127.0.0.1:8000
   acquisition:

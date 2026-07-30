@@ -11,9 +11,12 @@ import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.domain.instrument.Instrument;
-import com.finscope.domain.search.SearchResult;
 import com.finscope.rpc.llm.LlmChatClient;
-import com.finscope.rpc.search.WebSearchClient;
+import com.finscope.service.search.evidence.SearchDepth;
+import com.finscope.service.search.evidence.SearchEvidence;
+import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceGateway;
+import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -36,7 +39,7 @@ import java.util.Set;
 @Slf4j
 public class AttributionAgent {
     @Resource
-    private WebSearchClient webSearchClient;
+    private SearchEvidenceGateway searchEvidenceGateway;
     @Resource
     private LlmChatClient llmChatClient;
     @Resource
@@ -106,7 +109,7 @@ public class AttributionAgent {
 
         // ② web-search
         long t1 = System.currentTimeMillis();
-        if (webSearchClient.isConfigured()) {
+        if (searchEvidenceGateway.isConfigured(SearchDepth.DEEP)) {
             progressListener.stageStarted("web-search");
             publisher.publish(taskId, AttributionProgressEvent.stage("web-search", "正在检索全网线索"));
             int successfulQueries = 0;
@@ -130,10 +133,18 @@ public class AttributionAgent {
                 trackResult.attempted();
                 progressListener.trackUpdated(trackResult);
                 try {
-                    List<SearchResult> hits = webSearchClient.search(q, 4);
+                    long remainingMs = deadline == Long.MAX_VALUE ? 15_000L
+                            : Math.max(100L, Math.min(15_000L, deadline - System.currentTimeMillis()));
+                    boolean chinese = q.matches(".*[\\u4e00-\\u9fa5].*");
+                    SearchEvidenceBatch batch = searchEvidenceGateway.search(new SearchEvidenceRequest(
+                            q, SearchDepth.DEEP, 4, 4, chinese ? "cn" : "intl",
+                            chinese ? "zh" : "en", remainingMs));
+                    if (batch.isAllProvidersFailed()) {
+                        throw new IllegalStateException("所有搜索供应商均不可用");
+                    }
                     successfulQueries++;
                     trackResult.succeeded();
-                    for (SearchResult hit : hits) {
+                    for (SearchEvidence hit : batch.getEvidence()) {
                         AttributionEvidence evidence = toEvidence(hit, queryTracks.get(q));
                         if (addEvidenceIfAbsent(evidences, evidenceKeys, evidence)) {
                             trackResult.foundEvidence();
@@ -143,9 +154,9 @@ public class AttributionAgent {
                     }
                     progressListener.trackUpdated(trackResult);
                 } catch (Exception ex) {
-                    log.warn("归因搜索失败 q={} message={}", q, ex.getMessage());
-                    failures.add(StringUtils.firstNonBlank(ex.getMessage(), "未知错误"));
-                    trackResult.setLastError(StringUtils.firstNonBlank(ex.getMessage(), "未知错误"));
+                    log.warn("归因搜索失败 q={} type={}", q, ex.getClass().getSimpleName());
+                    failures.add("公开资料搜索失败");
+                    trackResult.setLastError("公开资料搜索失败");
                     progressListener.trackUpdated(trackResult);
                 }
             }
@@ -165,10 +176,10 @@ public class AttributionAgent {
             publisher.publish(taskId, AttributionProgressEvent.stage("web-search", "未配置联网搜索，跳过"));
             report.setWarningMessage("未配置联网搜索，本次归因仅基于本地新闻与行情信息。");
             agentRunRepository.record("attribution:web-search", "SKIPPED", null, null,
-                    "WebSearchClient not configured", System.currentTimeMillis() - t1);
+                    "SearchEvidenceGateway not configured", System.currentTimeMillis() - t1);
             for (String track : queryTracks.values()) {
                 execution.track(track).setBudgetStopped(true);
-                execution.track(track).setLastError("WebSearchClient not configured");
+                execution.track(track).setLastError("SearchEvidenceGateway not configured");
                 progressListener.trackFinished(execution.track(track));
             }
         }
@@ -294,7 +305,7 @@ public class AttributionAgent {
         return 2;
     }
 
-    private AttributionEvidence toEvidence(SearchResult hit, String track) {
+    private AttributionEvidence toEvidence(SearchEvidence hit, String track) {
         AttributionEvidence evidence = new AttributionEvidence();
         evidence.setOrigin("WEB_SEARCH");
         evidence.setTitle(hit.getTitle());
@@ -303,7 +314,9 @@ public class AttributionAgent {
         evidence.setSourceDomain(hit.getSourceDomain());
         evidence.setSourceTier(hit.getSourceTier());
         evidence.setPublishedAt(hit.getPublishedAt());
-        evidence.setRelevance(hit.getScore() == null ? 50 : (int) Math.round(hit.getScore() * 100));
+        evidence.setRelevance(hit.getProviderScore() == null
+                ? Math.max(50, Math.min(100, (int) Math.round(hit.getFusionScore() * 3000D)))
+                : (int) Math.round(hit.getProviderScore() * 100));
         evidence.setEventType(StringUtils.firstNonBlank(track, "COMPANY"));
         evidence.setStance("COUNTER".equals(track) ? "COUNTER" : "SUPPORT");
         evidence.setDirectness("COMPANY".equals(track) ? "DIRECT" : "INDIRECT");
