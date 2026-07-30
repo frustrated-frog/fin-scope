@@ -15,8 +15,10 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.search.evidence.SearchDepth;
 import com.finscope.service.search.evidence.SearchEvidence;
 import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchEvidenceRequest;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +42,8 @@ import java.util.Set;
 public class AttributionAgent {
     @Resource
     private SearchEvidenceGateway searchEvidenceGateway;
+    @Resource
+    private SearchEvidenceContentService searchEvidenceContentService;
     @Resource
     private LlmChatClient llmChatClient;
     @Resource
@@ -144,8 +148,13 @@ public class AttributionAgent {
                     }
                     successfulQueries++;
                     trackResult.succeeded();
+                    int fullTextReads = 0;
                     for (SearchEvidence hit : batch.getEvidence()) {
-                        AttributionEvidence evidence = toEvidence(hit, queryTracks.get(q));
+                        boolean readFullText = fullTextReads < 1;
+                        if (readFullText) fullTextReads++;
+                        ResearchEvidenceAcquisitionResult acquired = searchEvidenceContentService.acquire(
+                                hit, q, instrument.getName(), readFullText);
+                        AttributionEvidence evidence = toEvidence(hit, acquired, queryTracks.get(q));
                         if (addEvidenceIfAbsent(evidences, evidenceKeys, evidence)) {
                             trackResult.foundEvidence();
                             publisher.publish(taskId, AttributionProgressEvent.clue(
@@ -305,12 +314,13 @@ public class AttributionAgent {
         return 2;
     }
 
-    private AttributionEvidence toEvidence(SearchEvidence hit, String track) {
+    private AttributionEvidence toEvidence(SearchEvidence hit, ResearchEvidenceAcquisitionResult acquired,
+                                           String track) {
         AttributionEvidence evidence = new AttributionEvidence();
         evidence.setOrigin("WEB_SEARCH");
         evidence.setTitle(hit.getTitle());
         evidence.setUrl(hit.getUrl());
-        evidence.setSnippet(shorten(hit.getContent(), 200));
+        evidence.setSnippet(shorten(acquired.getContent(), 200));
         evidence.setSourceDomain(hit.getSourceDomain());
         evidence.setSourceTier(hit.getSourceTier());
         evidence.setPublishedAt(hit.getPublishedAt());

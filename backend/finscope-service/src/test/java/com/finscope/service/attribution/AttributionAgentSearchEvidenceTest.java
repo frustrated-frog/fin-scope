@@ -8,6 +8,7 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.search.evidence.SearchDepth;
 import com.finscope.service.search.evidence.SearchEvidence;
 import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 
 class AttributionAgentSearchEvidenceTest {
     @Test
@@ -43,6 +45,11 @@ class AttributionAgentSearchEvidenceTest {
 
         AttributionAgent agent = new AttributionAgent();
         ReflectionTestUtils.setField(agent, "searchEvidenceGateway", gateway);
+        SearchEvidenceContentService contentService = mock(SearchEvidenceContentService.class);
+        when(contentService.acquire(any(SearchEvidence.class), any(String.class), any(String.class), any(Boolean.class)))
+                .thenReturn(new ResearchEvidenceAcquisitionResult("公告显示订单和收入增长", "搜索摘要",
+                        "FULL_TEXT", "html:readability", "SUCCESS", 12));
+        ReflectionTestUtils.setField(agent, "searchEvidenceContentService", contentService);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(false);
         ReflectionTestUtils.setField(agent, "llmChatClient", llm);

@@ -12,6 +12,7 @@ import com.finscope.service.research.agent.BoundedResearchOrchestrator;
 import com.finscope.service.search.evidence.SearchDepth;
 import com.finscope.service.search.evidence.SearchEvidence;
 import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +38,7 @@ class PublicNewsSearchToolTest {
     private SearchEvidenceGateway gateway;
     private ResearchSearchEvidenceRepository evidenceRepository;
     private ResearchEvidenceAcquisitionService acquisitionService;
+    private SearchEvidenceContentService contentService;
     private PublicNewsSearchTool tool;
 
     @BeforeEach
@@ -44,13 +46,14 @@ class PublicNewsSearchToolTest {
         gateway = mock(SearchEvidenceGateway.class);
         evidenceRepository = mock(ResearchSearchEvidenceRepository.class);
         acquisitionService = mock(ResearchEvidenceAcquisitionService.class);
+        contentService = new SearchEvidenceContentService(acquisitionService);
         when(acquisitionService.acquire(any(String.class), any(String.class), any(String.class), any(String.class)))
                 .thenAnswer(invocation -> new ResearchEvidenceAcquisitionResult(
                         "[S2] 原文片段：" + invocation.getArgument(2), invocation.getArgument(2), "FULL_TEXT",
                         "web:generic-score", "FETCHED", 1680));
         when(gateway.isConfigured(any(SearchDepth.class))).thenReturn(true);
         OfficialFinancialSourceRegistry registry = new OfficialFinancialSourceRegistry();
-        tool = new PublicNewsSearchTool(gateway, evidenceRepository, acquisitionService,
+        tool = new PublicNewsSearchTool(gateway, evidenceRepository, contentService,
                 new FinancialSourceQueryPolicy(registry), registry, new BoundedResearchOrchestrator());
     }
 
@@ -128,7 +131,7 @@ class PublicNewsSearchToolTest {
     void primaryIntentSearchesOfficialLaneAndOverridesTierFromRegistry() throws Exception {
         OfficialFinancialSourceRegistry registry = new OfficialFinancialSourceRegistry();
         FinancialSourceQueryPolicy queryPolicy = new FinancialSourceQueryPolicy(registry);
-        tool = new PublicNewsSearchTool(gateway, evidenceRepository, acquisitionService, queryPolicy, registry,
+        tool = new PublicNewsSearchTool(gateway, evidenceRepository, contentService, queryPolicy, registry,
                 new BoundedResearchOrchestrator());
         SearchEvidence official = evidence("上市公告", "https://static.sse.com.cn/disclosure/a.pdf",
                 "募集资金用于先进制程研发", "T3");
@@ -221,7 +224,7 @@ class PublicNewsSearchToolTest {
             return value;
         });
         OfficialFinancialSourceRegistry registry = new OfficialFinancialSourceRegistry();
-        tool = new PublicNewsSearchTool(gateway, evidenceRepository, acquisitionService,
+        tool = new PublicNewsSearchTool(gateway, evidenceRepository, contentService,
                 new FinancialSourceQueryPolicy(registry), registry, new BoundedResearchOrchestrator());
 
         ResearchToolObservation observation = tool.execute(

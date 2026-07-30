@@ -8,13 +8,13 @@ import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.service.research.agent.ResearchOrchestrator;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
-import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
 import com.finscope.service.research.source.FinancialSourceQueryPolicy;
 import com.finscope.service.research.source.FinancialSourceSearchPlan;
 import com.finscope.service.research.source.OfficialFinancialSourceRegistry;
 import com.finscope.service.search.evidence.SearchDepth;
 import com.finscope.service.search.evidence.SearchEvidence;
 import com.finscope.service.search.evidence.SearchEvidenceBatch;
+import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +35,7 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     private static final int MAX_RESULTS = 5;
     private final SearchEvidenceGateway searchGateway;
     private final ResearchSearchEvidenceRepository evidenceRepository;
-    private final ResearchEvidenceAcquisitionService acquisitionService;
+    private final SearchEvidenceContentService contentService;
     private final FinancialSourceQueryPolicy queryPolicy;
     private final OfficialFinancialSourceRegistry sourceRegistry;
     private final ResearchOrchestrator orchestrator;
@@ -43,13 +43,13 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
     @Autowired
     public PublicNewsSearchTool(SearchEvidenceGateway searchGateway,
                                 ResearchSearchEvidenceRepository evidenceRepository,
-                                ResearchEvidenceAcquisitionService acquisitionService,
+                                SearchEvidenceContentService contentService,
                                 FinancialSourceQueryPolicy queryPolicy,
                                 OfficialFinancialSourceRegistry sourceRegistry,
                                 ResearchOrchestrator orchestrator) {
         this.searchGateway = searchGateway;
         this.evidenceRepository = evidenceRepository;
-        this.acquisitionService = acquisitionService;
+        this.contentService = contentService;
         this.queryPolicy = queryPolicy;
         this.sourceRegistry = sourceRegistry;
         this.orchestrator = orchestrator;
@@ -190,12 +190,11 @@ public class PublicNewsSearchTool implements ResearchAgentTool {
         value.setIntent(intent);
         value.setTitle(text(hit.getTitle()));
         value.setUrl(text(hit.getUrl()));
-        ResearchEvidenceAcquisitionResult acquired = acquisitionService == null || !readFullText
-                ? new ResearchEvidenceAcquisitionResult(text(hit.getContent()), text(hit.getContent()),
-                "SEARCH_SNIPPET", readFullText ? "snippet:fallback:not-configured" : "snippet:fallback:mode-budget",
-                "NOT_ATTEMPTED",
-                text(hit.getContent()).length())
-                : acquisitionService.acquire(text(hit.getUrl()), query, text(hit.getContent()), query);
+        SearchEvidence searchEvidence = new SearchEvidence();
+        searchEvidence.setUrl(hit.getUrl());
+        searchEvidence.setContent(hit.getContent());
+        ResearchEvidenceAcquisitionResult acquired = contentService.acquire(searchEvidence, query, query,
+                readFullText);
         value.setContent(acquired.getContent());
         value.setSearchSnippet(acquired.getSearchSnippet());
         value.setContentOrigin(acquired.getContentOrigin());
