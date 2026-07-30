@@ -24,6 +24,16 @@ test('renders research runs as a telemetry list', () => {
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
 });
 
+test('keeps the open thesis count in a dedicated non-overlapping header', () => {
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  const heading = screen.getByRole('heading', { name: '研究命题' });
+  const header = heading.closest('.research-thesis-panel-head');
+
+  expect(header).not.toBeNull();
+  expect(within(header as HTMLElement).getByText('1 open')).toHaveClass('subtle-badge');
+});
+
 test('defaults to deep research mode and submits the selected quick mode', async () => {
   const onRun = vi.fn().mockResolvedValue(undefined);
   renderView(legacyDetail(), { onRun });

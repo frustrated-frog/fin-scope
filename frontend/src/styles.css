@@ -11748,6 +11748,19 @@ input[type="checkbox"] {
   padding: clamp(1.2rem, 2.4vw, 1.75rem);
 }
 
+.research-apple-workbench .research-thesis-panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 1rem;
+}
+
+.research-apple-workbench .research-thesis-panel-head > .subtle-badge {
+  align-self: start;
+  justify-self: end;
+  margin-top: .15rem;
+}
+
 .research-apple-workbench .panel-head h3,
 .research-apple-workbench .research-run-heading h3,
 .research-apple-workbench .research-detail-head h3 {

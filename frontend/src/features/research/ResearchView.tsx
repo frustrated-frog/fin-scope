@@ -179,7 +179,7 @@ export function ResearchView({
 
       <div className="research-thesis-layout research-material" aria-label="研究命题工作区">
         <div className="research-thesis-panel">
-          <div className="panel-head">
+          <div className="panel-head research-thesis-panel-head">
             <div>
               <p className="eyebrow">01 · Research thesis</p>
               <h3>研究命题</h3>
