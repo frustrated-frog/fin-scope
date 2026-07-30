@@ -157,7 +157,9 @@ public class TavilyWebSearchClient implements WebSearchClient {
         String responseText = readAll(in);
         connection.disconnect();
         if (code < 200 || code >= 300) {
-            throw new IllegalStateException("Tavily 搜索失败 HTTP " + code + ": " + responseText);
+            throw new WebSearchProviderException(providerCode(), code,
+                    code == 429 || code >= 500,
+                    providerCode() + " request failed with HTTP " + code);
         }
         return responseText;
     }

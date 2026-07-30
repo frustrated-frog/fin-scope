@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TavilyWebSearchClientTest {
     private HttpServer server;
@@ -45,5 +47,26 @@ class TavilyWebSearchClientTest {
         assertEquals(1, results.get(0).getProviderRank());
         assertEquals(0.91D, results.get(0).getScore(), 0.001D);
         assertEquals(2, results.get(1).getProviderRank());
+    }
+
+    @Test
+    void redactsProviderResponseFromErrors() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/search", exchange -> {
+            byte[] body = "{\"error\":\"invalid test-key\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(401, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        TavilyWebSearchClient provider = new TavilyWebSearchClient(true, "test-key",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/search", 2000);
+
+        WebSearchProviderException error = assertThrows(WebSearchProviderException.class,
+                () -> provider.search(new WebSearchRequest("market", 3, "cn", "zh")));
+
+        assertEquals(401, error.getStatusCode());
+        assertFalse(error.getMessage().contains("test-key"));
+        assertFalse(error.getMessage().contains("invalid"));
     }
 }
