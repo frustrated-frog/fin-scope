@@ -33,7 +33,9 @@ const event = {
 const liveItem = {
   id: 'CLS:1', kind: 'FLASH', title: '宁德时代发布新一代电池', content: '新品正式发布。',
   url: 'https://example.com/1', publishedAt: '2026-07-31T15:55:00', providerCode: 'CLS',
-  sourceName: '财联社', sourceTier: 'TIER_1', categoryCode: 'COMPANY'
+  sourceName: '财联社', sourceTier: 'TIER_1', categoryCode: 'COMPANY', categoryName: '公司动态',
+  agentCategoryCode: 'COMPANY', classificationConfidence: 0.65, classificationReason: '公司发布新产品',
+  reviewStatus: 'PENDING_REVIEW', manuallyReviewed: false
 };
 
 const snapshot = {
@@ -58,12 +60,17 @@ const detail = {
   ]
 };
 
-const categories = [{ code: 'COMPANY', name: '公司动态', enabled: true, displayOrder: 10 }];
+const categories = [
+  { code: 'COMPANY', name: '公司动态', enabled: true, displayOrder: 10 },
+  { code: 'INDUSTRY', name: '行业产业', enabled: true, displayOrder: 20 }
+];
 
 const newsSnapshot = {
   refreshedAt: '2026-07-31T16:00:00',
   sourceCount: 2,
   warnings: [],
+  categoryCounts: { ALL: 2, COMPANY: 2, INDUSTRY: 0, PENDING_REVIEW: 1 },
+  unclassifiedCount: 1,
   items: [
     liveItem,
     { ...liveItem, id: 'THS:article', kind: 'ARTICLE', title: '上市公司要闻精华', providerCode: 'THS', sourceName: '同花顺' }
@@ -96,6 +103,69 @@ test('keeps the original realtime wire as the default and offers radar as a seco
 
   await openRadar();
   expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20');
+});
+
+test('shows category quality counts and explainable agent decisions', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+
+  expect(await screen.findByRole('button', { name: '公司动态 2' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '待确认 1' })).toBeInTheDocument();
+  expect(screen.getByText('待分类 1')).toBeInTheDocument();
+  expect(screen.getAllByText('65%').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('公司发布新产品').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('待确认').length).toBeGreaterThan(0);
+});
+
+test('uses the existing realtime view when switching to pending review', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await screen.findByRole('button', { name: '待确认 1' });
+
+  fireEvent.click(screen.getByRole('button', { name: '待确认 1' }));
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=PENDING_REVIEW&limit=100'));
+  expect(screen.getByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
+});
+
+test('corrects a classification and reloads the current realtime category', async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path === '/api/news/classifications/review') return Promise.resolve({
+      itemId: 'CLS:1', agentCategoryCode: 'COMPANY', effectiveCategoryCode: 'INDUSTRY',
+      agentConfidence: 0.65, agentReason: '公司发布新产品', reviewStatus: 'CORRECTED'
+    });
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  const reviewButtons = await screen.findAllByRole('button', { name: '确认或修正分类' });
+
+  await userEvent.click(reviewButtons[0]);
+  await userEvent.selectOptions(screen.getAllByLabelText('调整分类')[0], 'INDUSTRY');
+  await userEvent.type(screen.getAllByLabelText('复核备注')[0], '产业链影响');
+  await userEvent.click(screen.getAllByRole('button', { name: '保存分类' })[0]);
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news/classifications/review', {
+    method: 'POST',
+    body: JSON.stringify({ itemId: 'CLS:1', categoryCode: 'INDUSTRY', reason: '产业链影响' })
+  }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100'));
+});
+
+test('keeps the news visible when classification review fails', async () => {
+  const addToast = vi.fn();
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path === '/api/news/classifications/review') return Promise.reject(new Error('复核保存失败'));
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={addToast} onResearch={vi.fn()} />);
+  await userEvent.click((await screen.findAllByRole('button', { name: '确认或修正分类' }))[0]);
+
+  await userEvent.click(screen.getAllByRole('button', { name: '保存分类' })[0]);
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('复核保存失败', 'error'));
+  expect(screen.getAllByText('宁德时代发布新一代电池').length).toBeGreaterThan(0);
 });
 
 test('renders explainable priority cards before the live wire', async () => {

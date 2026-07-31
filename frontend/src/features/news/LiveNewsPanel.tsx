@@ -12,6 +12,14 @@ type NewsFeedItem = {
   providerCode: string;
   sourceName: string;
   sourceTier: string;
+  categoryCode?: string;
+  categoryName?: string;
+  agentCategoryCode?: string;
+  classificationConfidence?: number;
+  classificationReason?: string;
+  reviewStatus?: 'AUTO_CONFIRMED' | 'PENDING_REVIEW' | 'CONFIRMED' | 'CORRECTED';
+  manuallyReviewed?: boolean;
+  manualReason?: string;
 };
 
 type NewsFeedSnapshot = {
@@ -19,6 +27,8 @@ type NewsFeedSnapshot = {
   warnings: string[];
   refreshedAt: string;
   sourceCount: number;
+  categoryCounts?: Record<string, number>;
+  unclassifiedCount?: number;
 };
 
 type NewsCategory = {
@@ -30,6 +40,7 @@ type NewsCategory = {
 };
 
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
+const PENDING_REVIEW_CATEGORY: NewsCategory = { code: 'PENDING_REVIEW', name: '待确认' };
 const REFRESH_INTERVAL_MS = 45_000;
 
 export function LiveNewsPanel({ setMessage, addToast }: {
@@ -99,12 +110,28 @@ export function LiveNewsPanel({ setMessage, addToast }: {
     setPendingCount(0);
   }
 
+  async function reviewClassification(itemId: string, categoryCode: string, reason: string) {
+    try {
+      await api('/api/news/classifications/review', {
+        method: 'POST',
+        body: JSON.stringify({ itemId, categoryCode, reason })
+      });
+      addToast('分类复核已保存', 'success');
+      await load(false, false, selectedCategoryRef.current);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '分类复核保存失败';
+      addToast(message, 'error');
+      throw error;
+    }
+  }
+
   useEffect(() => {
     mounted.current = true;
     void load();
     void api<NewsCategory[]>('/api/news/categories')
       .then((values) => {
-        if (mounted.current) setCategories([ALL_CATEGORY, ...values.filter((value) => value.code !== 'ALL')]);
+        if (mounted.current) setCategories([ALL_CATEGORY, ...values.filter((value) =>
+          value.code !== 'ALL' && value.code !== 'PENDING_REVIEW'), PENDING_REVIEW_CATEGORY]);
       })
       .catch(() => undefined);
     const timer = window.setInterval(() => {
@@ -128,6 +155,8 @@ export function LiveNewsPanel({ setMessage, addToast }: {
   const flashes = filtered.filter((item) => item.kind === 'FLASH');
   const articles = filtered.filter((item) => item.kind === 'ARTICLE');
   const latest = flashes[0] ?? articles[0];
+  const businessCategories = categories.filter((category) =>
+    category.code !== 'ALL' && category.code !== 'PENDING_REVIEW');
 
   return (
     <section className="news-view" aria-label="市场资讯">
@@ -149,8 +178,11 @@ export function LiveNewsPanel({ setMessage, addToast }: {
       <nav className="news-category-rail" aria-label="资讯分类">
         {categories.map((category) => (
           <button type="button" key={category.code} className={selectedCategory === category.code ? 'active' : ''}
-            aria-pressed={selectedCategory === category.code} onClick={() => switchCategory(category.code)}>{category.name}</button>
+            aria-pressed={selectedCategory === category.code} onClick={() => switchCategory(category.code)}>
+            <span>{category.name}</span><b>{snapshot?.categoryCounts?.[category.code] ?? 0}</b>
+          </button>
         ))}
+        <span className="news-unclassified-count">待分类 {snapshot?.unclassifiedCount ?? 0}</span>
       </nav>
 
       <div className="news-filter-rail">
@@ -172,28 +204,81 @@ export function LiveNewsPanel({ setMessage, addToast }: {
           <div className="news-section-heading"><div><span>01 · LIVE SIGNAL</span><h2 id="news-flash-heading">实时快讯</h2></div><strong>{flashes.length} 条</strong></div>
           {loading && !snapshot ? <NewsSkeleton /> : flashes.length ? (
             <div className="news-timeline" role="feed" aria-label="实时快讯时间线">
-              {flashes.map((item, index) => <FlashItem key={item.id} item={item} latest={index === 0} />)}
+              {flashes.map((item, index) => <FlashItem key={item.id} item={item} latest={index === 0}
+                categories={businessCategories} onReview={reviewClassification} />)}
             </div>
           ) : <EmptyState label="没有匹配的实时快讯" />}
         </section>
 
         <aside className="news-depth-panel" role="region" aria-label="深度资讯">
           <div className="news-section-heading"><div><span>02 · READ DEEPER</span><h2>要闻精华</h2></div><strong>{articles.length} 篇</strong></div>
-          <div className="news-depth-list">{articles.length ? articles.map((item) => <ArticleCard key={item.id} item={item} />) : <EmptyState label="暂无匹配的深度资讯" />}</div>
+          <div className="news-depth-list">{articles.length ? articles.map((item) => <ArticleCard key={item.id} item={item}
+            categories={businessCategories} onReview={reviewClassification} />) : <EmptyState label="暂无匹配的深度资讯" />}</div>
         </aside>
       </div>
     </section>
   );
 }
 
-function FlashItem({ item, latest }: { item: NewsFeedItem; latest: boolean }) {
+function FlashItem({ item, latest, categories, onReview }: {
+  item: NewsFeedItem;
+  latest: boolean;
+  categories: NewsCategory[];
+  onReview: (itemId: string, categoryCode: string, reason: string) => Promise<void>;
+}) {
   const content = <><div className="news-flash-meta"><span>{item.sourceName}</span><small>{item.sourceTier}</small>{latest ? <em>NEW</em> : null}</div><h3>{item.title}</h3><p>{item.content}</p></>;
-  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" />{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-flash-content">{content}</a> : <div className="news-flash-content">{content}</div>}</article>;
+  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" /><div className="news-flash-content">{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-item-link">{content}</a> : content}<ClassificationReview item={item} categories={categories} onReview={onReview} /></div></article>;
 }
 
-function ArticleCard({ item }: { item: NewsFeedItem }) {
+function ArticleCard({ item, categories, onReview }: {
+  item: NewsFeedItem;
+  categories: NewsCategory[];
+  onReview: (itemId: string, categoryCode: string, reason: string) => Promise<void>;
+}) {
   const body = <><div className="news-card-meta"><span>{item.sourceName}</span><time dateTime={item.publishedAt}>{formatDateTime(item.publishedAt)}</time></div><h3>{item.title}</h3><p>{item.content}</p><span className="news-card-action">阅读原文 <b aria-hidden="true">↗</b></span></>;
-  return item.url ? <a className="news-depth-card" href={item.url} target="_blank" rel="noreferrer">{body}</a> : <article className="news-depth-card">{body}</article>;
+  return <article className="news-depth-card">{item.url ? <a className="news-item-link" href={item.url} target="_blank" rel="noreferrer">{body}</a> : body}<ClassificationReview item={item} categories={categories} onReview={onReview} /></article>;
+}
+
+function ClassificationReview({ item, categories, onReview }: {
+  item: NewsFeedItem;
+  categories: NewsCategory[];
+  onReview: (itemId: string, categoryCode: string, reason: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [categoryCode, setCategoryCode] = useState(item.categoryCode ?? categories[0]?.code ?? '');
+  const [reason, setReason] = useState(item.manualReason ?? '');
+  const [saving, setSaving] = useState(false);
+  if (!item.categoryCode) return <div className="news-classification is-pending">Agent 分类中</div>;
+  const status = item.reviewStatus === 'PENDING_REVIEW' ? '待确认'
+    : item.reviewStatus === 'CORRECTED' ? '已纠正'
+      : item.reviewStatus === 'CONFIRMED' ? '已确认' : '已分类';
+  const confidence = item.classificationConfidence == null ? '--' : `${Math.round(item.classificationConfidence * 100)}%`;
+
+  async function save() {
+    if (!categoryCode || saving) return;
+    setSaving(true);
+    try {
+      await onReview(item.id, categoryCode, reason.trim());
+      setOpen(false);
+    } catch {
+      // The parent keeps the current snapshot and reports the error.
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className={`news-classification ${item.reviewStatus === 'PENDING_REVIEW' ? 'needs-review' : ''}`}>
+    <div className="news-classification-summary">
+      <span>{item.categoryName ?? item.categoryCode}</span><b>{confidence}</b><em>{status}</em>
+      {categories.length ? <button type="button" aria-label="确认或修正分类" onClick={() => setOpen((value) => !value)}>确认/修正</button> : null}
+    </div>
+    {item.classificationReason ? <p>{item.classificationReason}</p> : null}
+    {open ? <div className="news-classification-form">
+      <label>分类<select aria-label="调整分类" value={categoryCode} onChange={(event) => setCategoryCode(event.target.value)}>{categories.map((category) => <option key={category.code} value={category.code}>{category.name}</option>)}</select></label>
+      <label>备注<input aria-label="复核备注" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="可选：说明调整依据" /></label>
+      <button type="button" onClick={() => void save()} disabled={saving}>{saving ? '保存中' : '保存分类'}</button>
+    </div> : null}
+  </div>;
 }
 
 function NewsSkeleton() { return <div className="news-skeleton" aria-label="正在加载资讯"><span /><span /><span /></div>; }

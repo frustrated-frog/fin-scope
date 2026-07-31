@@ -1,6 +1,8 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.news.NewsCategory;
+import com.finscope.service.news.NewsClassificationReviewService;
+import com.finscope.service.news.NewsClassificationView;
 import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
 import com.finscope.web.config.FinScopeProperties;
@@ -17,6 +19,7 @@ import java.util.Collections;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -27,6 +30,8 @@ class NewsFeedControllerTest {
     private MockMvc mockMvc;
     @MockBean
     private NewsFeedService newsFeedService;
+    @MockBean
+    private NewsClassificationReviewService reviewService;
 
     @Test
     void passesCategoryToFeedService() throws Exception {
@@ -49,5 +54,25 @@ class NewsFeedControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].code").value("COMPANY"))
                 .andExpect(jsonPath("$.data[0].name").value("公司动态"));
+    }
+
+    @Test
+    void reviewsNewsClassification() throws Exception {
+        when(reviewService.review(org.mockito.ArgumentMatchers.argThat(request ->
+                "CLS:1".equals(request.getItemId())
+                        && "INDUSTRY".equals(request.getCategoryCode())
+                        && "产业链影响".equals(request.getReason())))).thenReturn(
+                new NewsClassificationView("CLS:1", "COMPANY", "INDUSTRY", 0.65,
+                        "公司公告", "CORRECTED", "产业链影响",
+                        LocalDateTime.of(2026, 8, 1, 10, 0)));
+
+        mockMvc.perform(post("/api/news/classifications/review")
+                        .contentType("application/json")
+                        .content("{\"itemId\":\"CLS:1\",\"categoryCode\":\"INDUSTRY\","
+                                + "\"reason\":\"产业链影响\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentCategoryCode").value("COMPANY"))
+                .andExpect(jsonPath("$.data.effectiveCategoryCode").value("INDUSTRY"))
+                .andExpect(jsonPath("$.data.reviewStatus").value("CORRECTED"));
     }
 }

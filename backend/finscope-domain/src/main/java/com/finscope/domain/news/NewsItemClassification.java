@@ -10,10 +10,22 @@ public final class NewsItemClassification {
     private final String reason;
     private final String modelName;
     private final String errorMessage;
+    private final String manualCategoryCode;
+    private final String manualReason;
+    private final String reviewStatus;
+    private final LocalDateTime reviewedAt;
     private final LocalDateTime updatedAt;
 
     public NewsItemClassification(String itemId, String status, String categoryCode, double confidence,
                                   String reason, String modelName, String errorMessage, LocalDateTime updatedAt) {
+        this(itemId, status, categoryCode, confidence, reason, modelName, errorMessage,
+                null, null, null, null, updatedAt);
+    }
+
+    public NewsItemClassification(String itemId, String status, String categoryCode, double confidence,
+                                  String reason, String modelName, String errorMessage,
+                                  String manualCategoryCode, String manualReason, String reviewStatus,
+                                  LocalDateTime reviewedAt, LocalDateTime updatedAt) {
         this.itemId = itemId;
         this.status = status;
         this.categoryCode = categoryCode;
@@ -21,6 +33,10 @@ public final class NewsItemClassification {
         this.reason = reason;
         this.modelName = modelName;
         this.errorMessage = errorMessage;
+        this.manualCategoryCode = manualCategoryCode;
+        this.manualReason = manualReason;
+        this.reviewStatus = reviewStatus;
+        this.reviewedAt = reviewedAt;
         this.updatedAt = updatedAt;
     }
 
@@ -31,5 +47,14 @@ public final class NewsItemClassification {
     public String getReason() { return reason; }
     public String getModelName() { return modelName; }
     public String getErrorMessage() { return errorMessage; }
+    public String getManualCategoryCode() { return manualCategoryCode; }
+    public String getManualReason() { return manualReason; }
+    public String getReviewStatus() { return reviewStatus; }
+    public LocalDateTime getReviewedAt() { return reviewedAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public String getEffectiveCategoryCode() {
+        return manualCategoryCode == null ? categoryCode : manualCategoryCode;
+    }
+    public boolean isPendingReview() { return "PENDING_REVIEW".equals(reviewStatus); }
+    public boolean isManuallyReviewed() { return manualCategoryCode != null; }
 }
