@@ -26,7 +26,7 @@ test('searches on the server after debounce and keeps creation in a dialog', asy
     />
   );
 
-  fireEvent.change(screen.getByRole('searchbox', { name: '搜索主题' }), {
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索认识或材料' }), {
     target: { value: 'agent' }
   });
   await act(async () => {

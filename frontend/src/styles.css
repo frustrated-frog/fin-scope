@@ -1053,10 +1053,14 @@ a:focus-visible {
 }
 
 .daily-change-lead > p {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   color: var(--knowledge-slate);
   font-size: 13px;
   line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .daily-judgment-chain {
@@ -1204,6 +1208,27 @@ a:focus-visible {
 .recognition-recent {
   padding: 16px 20px;
   border-top: 1px solid var(--knowledge-rule);
+}
+
+.recognition-draft-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 20px;
+  border-top: 1px solid var(--knowledge-rule);
+  color: var(--knowledge-slate);
+  font-size: 11px;
+}
+
+.recognition-draft-note button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--knowledge-pine);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
 }
 
 .recognition-recent > span {

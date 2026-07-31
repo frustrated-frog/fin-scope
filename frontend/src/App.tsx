@@ -251,7 +251,7 @@ export default function App() {
       case 'evidence':
         return 'Evidence Ledger';
       case 'knowledge':
-        return '知识工作台';
+        return '投资认识工作台';
       case 'contentStudio':
         return 'Studio';
       case 'agents':

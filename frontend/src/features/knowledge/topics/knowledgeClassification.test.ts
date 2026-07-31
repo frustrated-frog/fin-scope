@@ -23,7 +23,11 @@ describe('classifyKnowledgeTopic', () => {
 
   test('recognizes multi-source or actively developed files as investment recognition', () => {
     expect(classifyKnowledgeTopic(topic({ articleCount: 2 }))).toBe('RECOGNITION');
-    expect(classifyKnowledgeTopic(topic({ masteryStatus: 'BUILDING' }))).toBe('RECOGNITION');
+    expect(classifyKnowledgeTopic(topic({ masteryStatus: 'BUILDING', revision: 2 }))).toBe('RECOGNITION');
     expect(classifyKnowledgeTopic(topic(), 1)).toBe('RECOGNITION');
+  });
+
+  test('keeps an automatically marked building file as material until it is revised', () => {
+    expect(classifyKnowledgeTopic(topic({ masteryStatus: 'BUILDING', revision: 0 }))).toBe('MATERIAL');
   });
 });

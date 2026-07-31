@@ -14,8 +14,9 @@ export function projectDailyResearch(snapshot?: ResearchRadarSnapshot | null): D
   const liveItems = Array.isArray(snapshot.liveItems) ? snapshot.liveItems : [];
   const warnings = Array.isArray(snapshot.warnings) ? snapshot.warnings : [];
   const changes = [...events]
+    .filter((event) => event.priorityScore >= 55 || event.watchlistRelated)
     .sort((left, right) => right.priorityScore - left.priorityScore || timestamp(right.lastSeenAt) - timestamp(left.lastSeenAt))
-    .slice(0, 8);
+    .slice(0, 5);
   const seen = new Set<string>();
   const flashes = [...liveItems]
     .filter((item) => item.kind === 'FLASH')
@@ -29,6 +30,17 @@ export function projectDailyResearch(snapshot?: ResearchRadarSnapshot | null): D
     .slice(0, 12);
 
   return { changes, flashes, warnings, refreshedAt: snapshot.refreshedAt };
+}
+
+export function describeVerificationGap(event: RadarEvent) {
+  const uncertainty = event.uncertainty?.trim();
+  if ((event.evidenceCount || 0) > 0 || event.evidenceStatus === 'CONFIRMED') {
+    return uncertainty || '已有补充材料，仍需持续观察后续变化';
+  }
+  if (!uncertainty || uncertainty.includes('暂未发现明显信息缺口')) {
+    return '尚未核对公告、监管或公司一手材料';
+  }
+  return `${uncertainty}；尚未核对一手材料`;
 }
 
 function normalizeHeadline(value: string) {

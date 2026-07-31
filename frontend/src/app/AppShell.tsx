@@ -128,8 +128,8 @@ export function AppShell({
                 <span>Articles</span>
                 <strong>{articlesCount}</strong>
               </div>
-              <div className="topbar-readout" aria-label={`主题数量 ${topicsCount}`}>
-                <span>Topics</span>
+              <div className="topbar-readout" aria-label={view === 'knowledge' ? `认识档案 ${topicsCount}` : `主题数量 ${topicsCount}`}>
+                <span>{view === 'knowledge' ? 'Files' : 'Topics'}</span>
                 <strong>{topicsCount}</strong>
               </div>
             </div>

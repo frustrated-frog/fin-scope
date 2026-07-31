@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { ResearchRadarSnapshot } from '../../news/researchRadarTypes';
-import { projectDailyResearch } from './dailyResearchProjection';
+import { describeVerificationGap, projectDailyResearch } from './dailyResearchProjection';
 
 const snapshot: ResearchRadarSnapshot = {
   overview: { eventCount: 3, highPriorityCount: 1, watchlistRelatedCount: 1, sourceCount: 6 },
@@ -34,6 +34,27 @@ describe('projectDailyResearch', () => {
     const result = projectDailyResearch(snapshot);
 
     expect(result.changes.map((item) => item.id)).toEqual([2, 3, 1]);
+  });
+
+  test('keeps low-priority news in the flash stream unless it directly relates to the watchlist', () => {
+    const lowPriority = { ...snapshot.events[0], id: 9, priorityScore: 34, title: '普通单源消息' };
+    const related = { ...lowPriority, id: 10, title: '与自选直接相关', watchlistRelated: true };
+    const result = projectDailyResearch({ ...snapshot, events: [lowPriority, related] });
+
+    expect(result.changes.map((item) => item.id)).toEqual([10]);
+  });
+
+  test('does not call an unverified media cluster gap-free', () => {
+    expect(describeVerificationGap({
+      ...snapshot.events[0],
+      uncertainty: '暂未发现明显信息缺口',
+      evidenceCount: 0
+    })).toBe('尚未核对公告、监管或公司一手材料');
+    expect(describeVerificationGap({
+      ...snapshot.events[0],
+      uncertainty: '尚缺第二个独立来源确认',
+      evidenceCount: 0
+    })).toBe('尚缺第二个独立来源确认；尚未核对一手材料');
   });
 
   test('keeps only deduplicated flashes and orders them newest first', () => {

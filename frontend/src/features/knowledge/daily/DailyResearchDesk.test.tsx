@@ -47,7 +47,7 @@ test('turns daily news into research changes without calling flashes knowledge',
   const changes = screen.getByRole('region', { name: '今日市场变化' });
   expect(within(changes).getByText('储能系统报价出现变化')).toBeInTheDocument();
   expect(within(changes).getByText('尚待确认')).toBeInTheDocument();
-  expect(within(changes).getByText('报价能否持续仍需确认')).toBeInTheDocument();
+  expect(within(changes).getByText('报价能否持续仍需确认；尚未核对一手材料')).toBeInTheDocument();
   expect(within(changes).getByText('下一观察')).toBeInTheDocument();
   expect(screen.getByRole('complementary', { name: '今日快讯流水' })).toHaveTextContent('某公司披露新订单');
   expect(screen.queryByText('快讯知识')).not.toBeInTheDocument();
@@ -62,4 +62,16 @@ test('keeps the recognition desk available when the news feed is degraded', () =
   expect(screen.getByRole('status')).toHaveTextContent('今日资讯暂不可用');
   expect(screen.getByRole('heading', { name: '需要更新的认识' })).toBeInTheDocument();
   expect(screen.getByText('复查需求判断')).toBeInTheDocument();
+});
+
+test('keeps article-derived learning drafts out of investment recognition updates', () => {
+  render(<DailyResearchDesk overview={{
+    ...overview,
+    acceptedTaskCount: 2,
+    actions: [{ type: 'CONTINUE_TASK', title: '某篇文章背后的变量是什么？', reason: '继续学习', routeTarget: '?section=learning&task=9', taskId: 9 }]
+  }} radar={radar} onNavigate={vi.fn()} />);
+
+  expect(screen.queryByText('某篇文章背后的变量是什么？')).not.toBeInTheDocument();
+  expect(screen.getByText('2 个学习草稿尚未计入投资认识')).toBeInTheDocument();
+  expect(screen.getByText('当前没有必须更新的判断')).toBeInTheDocument();
 });

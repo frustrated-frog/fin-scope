@@ -7,7 +7,7 @@ test('groups the workspace and exposes one knowledge entry', () => {
   render(
     <AppShell
       view="knowledge"
-      currentTitle="知识工作台"
+      currentTitle="投资认识工作台"
       theme="light"
       articlesCount={2}
       topicsCount={3}
@@ -33,4 +33,6 @@ test('groups the workspace and exposes one knowledge entry', () => {
   expect(screen.queryByRole('button', { name: '研究雷达' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Topics' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Learning' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('认识档案 3')).toHaveTextContent('Files');
+  expect(screen.queryByLabelText('主题数量 3')).not.toBeInTheDocument();
 });

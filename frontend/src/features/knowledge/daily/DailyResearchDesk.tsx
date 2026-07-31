@@ -1,6 +1,6 @@
 import { KnowledgeOverview } from '../knowledgeTypes';
 import { ResearchRadarSnapshot } from '../../news/researchRadarTypes';
-import { projectDailyResearch } from './dailyResearchProjection';
+import { describeVerificationGap, projectDailyResearch } from './dailyResearchProjection';
 
 const actionLabels: Record<string, string> = {
   CONTINUE_TASK: '继续回答',
@@ -21,7 +21,9 @@ export function DailyResearchDesk({
   onNavigate: (target: string) => void;
 }) {
   const daily = projectDailyResearch(radar);
-  const actions = overview.actions.slice(0, 3);
+  const actions = overview.actions
+    .filter((action) => action.type === 'REVIEW_TOPIC' || action.type === 'CHECK_NEW_EVIDENCE')
+    .slice(0, 3);
 
   return (
     <div className="daily-research-desk">
@@ -70,7 +72,7 @@ export function DailyResearchDesk({
                     </div>
                     <div>
                       <dt>尚待确认</dt>
-                      <dd>{change.uncertainty || '当前报道尚不足以确认变化的持续性'}</dd>
+                      <dd>{describeVerificationGap(change)}</dd>
                     </div>
                     <div>
                       <dt>下一观察</dt>
@@ -124,6 +126,12 @@ export function DailyResearchDesk({
           </div>
         ) : (
           <div className="daily-research-empty"><strong>当前没有必须更新的判断</strong><p>这不是“没有新闻”，而是今天的变化尚未触发已有认识。</p></div>
+        )}
+        {overview.acceptedTaskCount > 0 && (
+          <div className="recognition-draft-note">
+            <span>{overview.acceptedTaskCount} 个学习草稿尚未计入投资认识</span>
+            <button type="button" onClick={() => onNavigate('?section=learning')}>查看学习草稿</button>
+          </div>
         )}
         {overview.recentEntries.length > 0 && (
           <div className="recognition-recent">

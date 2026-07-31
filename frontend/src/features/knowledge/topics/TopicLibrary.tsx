@@ -65,7 +65,7 @@ export function TopicLibrary({
           <span>搜索认识或材料</span>
           <input
             type="search"
-            aria-label="搜索主题"
+            aria-label="搜索认识或材料"
             placeholder="名称、描述或关键词"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -93,8 +93,8 @@ export function TopicLibrary({
               <h3 id="new-topic-title">新建投资问题</h3>
               <p>写一个需要持续更新的判断问题，不要粘贴文章标题。</p>
             </div>
-            <label>主题名称<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-            <label>研究范围<textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+            <label>投资问题<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+            <label>判断范围<textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             <div className="knowledge-dialog-actions">
               <button type="button" onClick={() => setDialogOpen(false)}>取消</button>
               <button className="knowledge-primary-button" type="submit" disabled={!onCreate}>建立认识档案</button>
