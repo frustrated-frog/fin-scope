@@ -27,12 +27,16 @@ describe('projectFactCandidates', () => {
       evidence({ id: 31, eventId: 3, sourceTier: 'MEDIA', evidenceType: 'TIMELINE', confidence: 73 })
     ]);
 
-    expect(result.map((item) => [item.event.id, item.verificationState])).toEqual([
+    expect(result.map((item) => [item.event.id, item.verificationState]).sort((left, right) => Number(left[0]) - Number(right[0]))).toEqual([
       [1, 'SUBSTANTIAL'],
       [2, 'UNVERIFIED'],
       [3, 'NEEDS_CORROBORATION']
     ]);
-    expect(result[0]).toMatchObject({ directEvidenceCount: 1, primaryEvidenceCount: 1, maxConfidence: 82 });
+    expect(result.find((item) => item.event.id === 1)).toMatchObject({
+      directEvidenceCount: 1,
+      primaryEvidenceCount: 1,
+      maxConfidence: 82
+    });
   });
 
   test('sorts supporting material by source quality before confidence', () => {
@@ -51,5 +55,14 @@ describe('projectFactCandidates', () => {
     ]);
 
     expect(candidate.gaps).toEqual(['缺少可直接引用的事实或时间线材料', '缺少监管、官方或公司一手来源']);
+  });
+
+  test('prioritizes actionable dossiers and leaves empty candidates at the end', () => {
+    const result = projectFactCandidates(events, [
+      evidence({ id: 21, eventId: 2, sourceTier: 'MEDIA', evidenceType: 'IMPACT' }),
+      evidence({ id: 31, eventId: 3, sourceTier: 'OFFICIAL', evidenceType: 'IMPACT' })
+    ]);
+
+    expect(result.map((item) => item.event.id)).toEqual([3, 2, 1]);
   });
 });

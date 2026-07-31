@@ -99,7 +99,7 @@ Expected: `facts` 区段和组件不存在，测试失败。
 
 - [ ] **Step 3: 最小实现**
 
-将 `facts` 加入 `KnowledgeSection` 和合法 URL 区段。`KnowledgeView` 仅在该区段读取现有 `/api/events/paged?page=0&pageSize=100` 与 `/api/evidence/paged?page=0&pageSize=200`，将结果传入 `FactWorkbench`。组件实现摘要指标、搜索、状态筛选、候选列表和证据详情。
+将 `facts` 加入 `KnowledgeSection` 和合法 URL 区段，并将内部主导航收敛为工作台、事实核验、知识库。`KnowledgeView` 仅在该区段读取现有 `/api/events/paged?page=0&pageSize=100` 与 `/api/evidence/paged?page=0&pageSize=200`，将结果传入 `FactWorkbench`。组件实现摘要指标、搜索、状态筛选、默认隐藏无材料候选、候选列表和证据详情。
 
 - [ ] **Step 4: 验证测试通过**
 
@@ -148,4 +148,3 @@ git add frontend/src/styles.css frontend/src/features/knowledge/facts
 git commit -m "feat: 完善事实核验工作台体验"
 git push
 ```
-

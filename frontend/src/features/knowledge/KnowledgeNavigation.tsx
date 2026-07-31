@@ -1,10 +1,9 @@
 import { KnowledgeSection } from './knowledgeTypes';
 
 const sections: Array<{ id: KnowledgeSection; label: string; hint: string }> = [
-  { id: 'home', label: '工作台首页', hint: '下一步' },
-  { id: 'topics', label: '主题档案', hint: '知识地图' },
-  { id: 'learning', label: '学习队列', hint: '回答问题' },
-  { id: 'review', label: '到期复习', hint: '更新判断' }
+  { id: 'home', label: '工作台', hint: '今日待办' },
+  { id: 'facts', label: '事实核验', hint: '证据卷宗' },
+  { id: 'topics', label: '知识库', hint: '长期判断' }
 ];
 
 export function KnowledgeNavigation({
@@ -14,6 +13,7 @@ export function KnowledgeNavigation({
   section: KnowledgeSection;
   onChange: (section: KnowledgeSection) => void;
 }) {
+  const activeSection = section === 'learning' ? 'home' : section === 'review' ? 'topics' : section;
   return (
     <nav className="knowledge-navigation" aria-label="知识工作台">
       {sections.map((item) => (
@@ -21,8 +21,8 @@ export function KnowledgeNavigation({
           key={item.id}
           type="button"
           aria-label={item.label}
-          aria-current={section === item.id ? 'page' : undefined}
-          className={section === item.id ? 'knowledge-nav-item active' : 'knowledge-nav-item'}
+          aria-current={activeSection === item.id ? 'page' : undefined}
+          className={activeSection === item.id ? 'knowledge-nav-item active' : 'knowledge-nav-item'}
           onClick={() => onChange(item.id)}
         >
           <span>{item.label}</span>

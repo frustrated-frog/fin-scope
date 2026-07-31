@@ -35,24 +35,40 @@ export function projectFactCandidates(events: EventCluster[], evidenceItems: Evi
     const gaps: string[] = [];
     if (directEvidenceCount === 0) gaps.push('缺少可直接引用的事实或时间线材料');
     if (primaryEvidenceCount === 0) gaps.push('缺少监管、官方或公司一手来源');
+    const verificationState: FactVerificationState = directEvidenceCount > 0 && primaryEvidenceCount > 0
+      ? 'SUBSTANTIAL'
+      : directEvidenceCount > 0 || primaryEvidenceCount > 0
+        ? 'NEEDS_CORROBORATION'
+        : 'UNVERIFIED';
 
     return {
       event,
       evidence,
-      verificationState: directEvidenceCount > 0 && primaryEvidenceCount > 0
-        ? 'SUBSTANTIAL'
-        : directEvidenceCount > 0 || primaryEvidenceCount > 0
-          ? 'NEEDS_CORROBORATION'
-          : 'UNVERIFIED',
+      verificationState,
       directEvidenceCount,
       primaryEvidenceCount,
       maxConfidence: evidence.reduce((maximum, item) => Math.max(maximum, item.confidence || 0), 0),
       gaps
     };
-  });
+  }).sort(compareCandidates);
 }
 
 function compareEvidence(left: EvidenceItem, right: EvidenceItem) {
   const tierDifference = (tierRanks[right.sourceTier] ?? -1) - (tierRanks[left.sourceTier] ?? -1);
   return tierDifference || (right.confidence || 0) - (left.confidence || 0);
+}
+
+function compareCandidates(left: FactCandidate, right: FactCandidate) {
+  const rankDifference = actionabilityRank(left) - actionabilityRank(right);
+  if (rankDifference !== 0) return rankDifference;
+  const leftTime = Date.parse(left.event.lastMeaningfulUpdateAt || left.event.updatedAt || left.event.lastSeenAt || '') || 0;
+  const rightTime = Date.parse(right.event.lastMeaningfulUpdateAt || right.event.updatedAt || right.event.lastSeenAt || '') || 0;
+  return rightTime - leftTime || right.event.id - left.event.id;
+}
+
+function actionabilityRank(candidate: FactCandidate) {
+  if (candidate.verificationState === 'NEEDS_CORROBORATION') return 0;
+  if (candidate.verificationState === 'UNVERIFIED' && candidate.evidence.length > 0) return 1;
+  if (candidate.verificationState === 'SUBSTANTIAL') return 2;
+  return 3;
 }

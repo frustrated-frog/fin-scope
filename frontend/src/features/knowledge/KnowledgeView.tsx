@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { api } from '../../shared/api/client';
+import { EventCluster, EvidenceItem, PageResponse } from '../../shared/types';
 import { KnowledgeNavigation } from './KnowledgeNavigation';
 import { KnowledgeHome } from './KnowledgeHome';
 import { knowledgeApi } from './knowledgeApi';
@@ -18,8 +20,9 @@ import { TopicLibrary } from './topics/TopicLibrary';
 import { LearningWorkspace } from './learning/LearningWorkspace';
 import { TopicWorkspace } from './topics/TopicWorkspace';
 import { ReviewQueue } from './review/ReviewQueue';
+import { FactWorkbench } from './facts/FactWorkbench';
 
-const validSections = new Set<KnowledgeSection>(['home', 'topics', 'learning', 'review']);
+const validSections = new Set<KnowledgeSection>(['home', 'facts', 'topics', 'learning', 'review']);
 
 function locationState() {
   const params = new URLSearchParams(window.location.search);
@@ -55,6 +58,8 @@ export function KnowledgeView({
   const [draft, setDraft] = useState<KnowledgeEntry | undefined>();
   const [topicWorkspace, setTopicWorkspace] = useState<KnowledgeTopicWorkspace | null>(null);
   const [dueTopics, setDueTopics] = useState<KnowledgeTopic[]>([]);
+  const [factEvents, setFactEvents] = useState<EventCluster[]>([]);
+  const [factEvidence, setFactEvidence] = useState<EvidenceItem[]>([]);
 
   const restoreLocation = useCallback(() => {
     const next = locationState();
@@ -95,6 +100,14 @@ export function KnowledgeView({
     setLoading(true);
     const load = section === 'home'
       ? knowledgeApi.overview().then(setOverview)
+      : section === 'facts'
+        ? Promise.all([
+          api<PageResponse<EventCluster>>('/api/events/paged?page=0&pageSize=100'),
+          api<PageResponse<EvidenceItem>>('/api/evidence/paged?page=0&pageSize=200')
+        ]).then(([eventPage, evidencePage]) => {
+          setFactEvents(eventPage.items || []);
+          setFactEvidence(evidencePage.items || []);
+        })
       : section === 'topics'
         ? topicId
           ? knowledgeApi.topicWorkspace(topicId).then(setTopicWorkspace)
@@ -234,18 +247,23 @@ export function KnowledgeView({
 
   return (
     <section className="knowledge-workbench" data-testid="knowledge-view" data-topic-id={topicId}>
-      <header className="knowledge-header">
-        <div>
-          <p className="knowledge-kicker">Knowledge workbench</p>
-          <h1>把信息变成可复用的判断</h1>
-        </div>
-        <p>从证据出发，完成问题、记录结论，并在新事实出现时回来复习。</p>
-      </header>
+      {section === 'home' && (
+        <header className="knowledge-header">
+          <div>
+            <p className="knowledge-kicker">Knowledge workbench</p>
+            <h1>把信息变成可复用的判断</h1>
+          </div>
+          <p>从证据出发，完成问题、记录结论，并在新事实出现时回来复习。</p>
+        </header>
+      )}
       <KnowledgeNavigation section={section} onChange={navigate} />
 
       {section === 'home' && (overview
         ? <KnowledgeHome overview={overview} onNavigate={navigateTarget} />
         : <section className="knowledge-loading" aria-label="正在加载知识首页"><span /></section>)}
+      {section === 'facts' && (loading
+        ? <section className="knowledge-loading" aria-label="正在加载事实核验"><span /></section>
+        : <FactWorkbench events={factEvents} evidenceItems={factEvidence} />)}
       {section === 'topics' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
         : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}

@@ -485,6 +485,12 @@ const responses: Record<string, unknown> = {
 
 beforeEach(() => {
   const state = JSON.parse(JSON.stringify(responses)) as Record<string, any>;
+  state['/api/events/paged?page=0&pageSize=100'] = {
+    items: state['/api/events'], totalCount: state['/api/events'].length, page: 0, pageSize: 100, totalPages: 1
+  };
+  state['/api/evidence/paged?page=0&pageSize=200'] = {
+    items: state['/api/evidence'], totalCount: state['/api/evidence'].length, page: 0, pageSize: 200, totalPages: 1
+  };
   vi.stubGlobal('confirm', vi.fn(() => true));
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
@@ -657,7 +663,7 @@ test('renders the FinScope workspace shell and dashboard metrics', async () => {
 test('opens the unified knowledge workbench without globally loading learning tasks', async () => {
   render(<App />);
 
-  await userEvent.click(screen.getByRole('button', { name: 'Knowledge' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Facts & Knowledge' }));
 
   expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith('/api/knowledge/overview', expect.any(Object));
@@ -1015,58 +1021,18 @@ test('brief reader places the outline overview above the document body', async (
   expect(overview.compareDocumentPosition(document) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('events view shows research event cards with evidence and article counts', async () => {
+test('facts and knowledge keeps event context and supporting evidence in one dossier', async () => {
   render(<App />);
 
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-
-  expect((await screen.findAllByText('美联储降息预期升温，黄金ETF出现增量资金')).length).toBeGreaterThan(0);
-  expect(screen.getAllByText('FOLLOW_UP').length).toBeGreaterThan(0);
-  expect(screen.getByText(/证据 2/)).toBeInTheDocument();
-  expect(screen.getByText(/文章 2/)).toBeInTheDocument();
-});
-
-test('event card opens an in-app archive and returns to the event queue', async () => {
-  render(<App />);
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Facts & Knowledge' }));
+  await userEvent.click(await screen.findByRole('button', { name: '事实核验' }));
   await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
 
-  expect(await screen.findByRole('region', { name: '事件详情' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '返回事件队列' }));
-  expect(await screen.findByText('事件研究台')).toBeInTheDocument();
-  expect(screen.queryByRole('region', { name: '事件详情' })).not.toBeInTheDocument();
-});
-
-test('events view can filter evidence by source tier and shows novelty distribution', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-
-  expect(await screen.findByText('FOLLOW_UP 1')).toBeInTheDocument();
-  expect(screen.getByText('NEW 1')).toBeInTheDocument();
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
-  const detail = screen.getByRole('region', { name: '事件详情' });
-  expect(within(detail).getAllByText('MEDIA').length).toBeGreaterThan(0);
-  expect(within(detail).getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
-  expect(within(detail).getAllByText('REGULATOR').length).toBeGreaterThan(0);
-  expect(within(detail).getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
-
-  await userEvent.selectOptions(within(detail).getByLabelText('证据来源层级'), 'REGULATOR');
-
-  expect(within(detail).getAllByText('REGULATOR').length).toBeGreaterThan(0);
-  expect(within(detail).getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
-  expect(within(detail).queryByText('黄金ETF单周流入12亿美元。')).not.toBeInTheDocument();
-});
-
-test('evidence ledger shows source tiers and evidence types in one workspace', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Evidence' }));
-
-  expect(await screen.findByText('证据账本')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '美联储降息预期升温，黄金ETF出现增量资金' })).toBeInTheDocument();
   expect(screen.getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
-  expect(screen.getAllByText('REGULATOR').length).toBeGreaterThan(0);
-  expect(screen.getByText('TIMELINE')).toBeInTheDocument();
+  expect(screen.getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
 });
 
 test('content studio shows idea score and outline for generated topics', async () => {
@@ -1188,65 +1154,6 @@ test('research workbench runs a full research job and shows agent trace', async 
   expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
 });
 
-test('events view presents the selected event as a structured detail panel', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
-
-  const detail = await screen.findByRole('region', { name: '事件详情' });
-
-  expect(within(detail).getByRole('heading', { name: '美联储降息预期升温，黄金ETF出现增量资金' })).toBeInTheDocument();
-  expect(within(detail).getByText('市场重新交易实际利率下行与黄金定价。')).toBeInTheDocument();
-  expect(within(detail).getByText('重要性')).toBeInTheDocument();
-  expect(within(detail).getByText('86')).toBeInTheDocument();
-  expect(within(detail).getAllByText('关联文章').length).toBeGreaterThan(0);
-  expect(within(detail).getByText('2 篇')).toBeInTheDocument();
-  expect(within(detail).getAllByText('事件证据').length).toBeGreaterThan(0);
-  expect(within(detail).getByText('2 条')).toBeInTheDocument();
-  expect(within(detail).getByLabelText('证据来源层级')).toBeInTheDocument();
-
-  const timelineKinds = Array.from(detail.querySelectorAll('.event-timeline-kind'));
-  const followUpKind = timelineKinds.find((item) => item.textContent === 'FOLLOW_UP');
-  expect(followUpKind).toHaveClass('follow_up');
-});
-
-test('events workbench explains timeline, merge basis, evidence strength and event outputs', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
-
-  const detail = await screen.findByRole('region', { name: '事件详情' });
-
-  expect(screen.getByRole('button', { name: '返回事件队列' })).toBeInTheDocument();
-  expect(within(detail).getByText('事件时间线')).toBeInTheDocument();
-  expect(within(detail).getByText('归并依据')).toBeInTheDocument();
-  expect(within(detail).getByText('证据强度')).toBeInTheDocument();
-  expect(within(detail).getByText('学习任务')).toBeInTheDocument();
-  expect(within(detail).getByText('内容选题')).toBeInTheDocument();
-  expect(within(detail).getByText(/匹配 88%/)).toBeInTheDocument();
-  expect(within(detail).getByText('命中历史事件，包含新的数据、时间线或市场反应')).toBeInTheDocument();
-  expect(within(detail).getByText('最高可信证据')).toBeInTheDocument();
-  expect(within(detail).getByText('暂无学习任务。事件仍可先用于观察证据和新变量。')).toBeInTheDocument();
-  expect(within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
-});
-
-test('event output ideas use compact editorial controls', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
-
-  const detail = await screen.findByRole('region', { name: '事件详情' });
-  const ideaCard = within(detail).getByText('为什么市场还没等到降息，黄金已经先涨了？').closest('article') as HTMLElement;
-
-  expect(ideaCard).toHaveClass('event-output-card', 'event-output-card-idea');
-  expect(within(ideaCard).getByText('X_THREAD')).toHaveClass('event-output-format');
-  expect(within(ideaCard).getByLabelText('内容选题状态-1').closest('.event-output-status')).toBeInTheDocument();
-  expect(within(ideaCard).getByRole('button', { name: '保存状态' })).toHaveClass('event-output-save');
-});
-
 test('events stylesheet prevents long article urls from widening the workbench', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
@@ -1281,35 +1188,6 @@ test('dark theme keeps ghost buttons visually subordinate', () => {
   expect(styles).toMatch(/\[data-theme="dark"\]\s+\.ghost-button:hover:not\(:disabled\)\s*{/s);
   expect(styles).toMatch(/\[data-theme="dark"\]\s+\.ghost-button:focus-visible\s*{/s);
   expect(styles).not.toMatch(/\[data-theme="dark"\]\s+\.ghost-button\s*{[^}]*background:\s*(?:#fff(?:fff)?|white)\b/is);
-});
-
-test('events governance panel updates status, merges events and moves articles', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Events' }));
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
-
-  const detail = await screen.findByRole('region', { name: '事件详情' });
-  await userEvent.selectOptions(within(detail).getByLabelText('事件状态'), 'COOLING');
-  await userEvent.click(within(detail).getByRole('button', { name: '保存事件状态' }));
-  expect(fetch).toHaveBeenCalledWith('/api/events/1/status', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ status: 'COOLING' })
-  }));
-
-  await userEvent.selectOptions(within(detail).getByLabelText('移动文章目标-2'), 'NEW_EVENT');
-  await userEvent.click(within(detail).getByRole('button', { name: '移动文章-2' }));
-  expect(fetch).toHaveBeenCalledWith('/api/events/1/articles/2/move', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ createNewEvent: true })
-  }));
-
-  await userEvent.selectOptions(within(detail).getByLabelText('合并到事件'), '2');
-  await userEvent.click(within(detail).getByRole('button', { name: '合并事件' }));
-  expect(fetch).toHaveBeenCalledWith('/api/events/1/merge', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ targetEventId: 2 })
-  }));
 });
 
 test('content studio updates idea status through the typed endpoint', async () => {

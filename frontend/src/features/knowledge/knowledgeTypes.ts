@@ -1,6 +1,6 @@
 import { PageResponse } from '../../shared/types';
 
-export type KnowledgeSection = 'home' | 'topics' | 'learning' | 'review';
+export type KnowledgeSection = 'home' | 'facts' | 'topics' | 'learning' | 'review';
 
 export type KnowledgeAction = {
   type: 'CONTINUE_TASK' | 'REVIEW_TOPIC' | 'START_TASK' | 'CHECK_NEW_EVIDENCE';

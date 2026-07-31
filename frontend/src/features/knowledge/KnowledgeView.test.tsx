@@ -21,7 +21,9 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/?section=topics&topic=11');
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const value = url === '/api/knowledge/topics/11'
+    const value = url.startsWith('/api/events/paged') || url.startsWith('/api/evidence/paged')
+      ? { items: [], totalCount: 0, page: 0, pageSize: 100, totalPages: 0 }
+      : url === '/api/knowledge/topics/11'
       ? {
         topic: { id: 11, name: 'Agent 工程化', lifecycleStatus: 'ACTIVE', masteryStatus: 'BUILDING', revision: 1 },
         events: [], evidence: [], tasks: [], entries: []
@@ -50,10 +52,10 @@ test('rejects unknown sections and keeps navigation state in the URL', async () 
   render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '学习队列' }));
+  await userEvent.click(screen.getByRole('button', { name: '事实核验' }));
 
   await waitFor(() => {
-    expect(new URLSearchParams(window.location.search).get('section')).toBe('learning');
+    expect(new URLSearchParams(window.location.search).get('section')).toBe('facts');
   });
 });
 
@@ -68,11 +70,27 @@ test('restores the workbench when browser history changes', async () => {
   expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
 });
 
-test('top-level navigation clears stale topic and task selection', async () => {
+test('lets the fact desk own the page hierarchy without repeating the generic knowledge hero', async () => {
+  window.history.replaceState({}, '', '/?section=facts');
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('还没有可核验的事实候选')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '把信息变成可复用的判断' })).not.toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: '知识工作台' })).toBeInTheDocument();
+});
+
+test('exposes only the three primary knowledge tasks and clears stale selection', async () => {
   render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
   expect(await screen.findByRole('heading', { name: 'Agent 工程化' })).toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole('button', { name: '学习队列' }));
+  const navigation = screen.getByRole('navigation', { name: '知识工作台' });
+  expect(navigation).toHaveTextContent('工作台');
+  expect(navigation).toHaveTextContent('事实核验');
+  expect(navigation).toHaveTextContent('知识库');
+  expect(navigation).not.toHaveTextContent('学习队列');
+  expect(navigation).not.toHaveTextContent('到期复习');
+
+  await userEvent.click(screen.getByRole('button', { name: '事实核验' }));
 
   await waitFor(() => {
     const params = new URLSearchParams(window.location.search);
