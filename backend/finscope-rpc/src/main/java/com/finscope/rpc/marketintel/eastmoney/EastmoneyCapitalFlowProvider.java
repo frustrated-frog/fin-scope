@@ -217,16 +217,25 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
             try {
                 LocalDateTime observed = daily ? LocalDate.parse(fields[0]).atTime(15, 0) : LocalDateTime.parse(fields[0], MINUTE);
                 CapitalFlowPoint point = new CapitalFlowPoint();
-                point.setInstrumentId(instrument.getId()); point.setProviderCode(providerCode()); point.setGranularity(granularity);
-                point.setDataDate(observed.toLocalDate()); point.setObservedAt(observed);
+                point.setInstrumentId(instrument.getId());
+                point.setProviderCode(providerCode());
+                point.setGranularity(granularity);
+                point.setDataDate(observed.toLocalDate());
+                point.setObservedAt(observed);
                 BigDecimal[] rawFlow = new BigDecimal[]{decimal(fields[1]), decimal(fields[2]), decimal(fields[3]), decimal(fields[4]), decimal(fields[5])};
-                if (!daily && (previousDate == null || !previousDate.equals(observed.toLocalDate()))) previousCumulativeFlow = null;
+                if (!daily && (previousDate == null || !previousDate.equals(observed.toLocalDate()))) {
+                    previousCumulativeFlow = null;
+                }
                 BigDecimal[] normalizedFlow = daily ? rawFlow : flowDelta(rawFlow, previousCumulativeFlow);
-                point.setMainNetInflow(normalizedFlow[0]); point.setSmallNetInflow(normalizedFlow[1]);
-                point.setMediumNetInflow(normalizedFlow[2]); point.setLargeNetInflow(normalizedFlow[3]);
-                point.setSuperLargeNetInflow(normalizedFlow[4]); point.setCalculationVersion("eastmoney-v3");
+                point.setMainNetInflow(normalizedFlow[0]);
+                point.setSmallNetInflow(normalizedFlow[1]);
+                point.setMediumNetInflow(normalizedFlow[2]);
+                point.setLargeNetInflow(normalizedFlow[3]);
+                point.setSuperLargeNetInflow(normalizedFlow[4]);
+                point.setCalculationVersion("eastmoney-v3");
                 point.setRetrievedAt(LocalDateTime.ofInstant(response.getRetrievedAt(), ZoneId.systemDefault()));
-                point.setPayloadHash(response.getPayloadHash()); point.setQualityStatus("COMPLETE");
+                point.setPayloadHash(response.getPayloadHash());
+                point.setQualityStatus("COMPLETE");
                 MarketPoint context = market.get(observed);
                 if (context != null) {
                     point.setPrice(context.price); point.setTradeVolume(context.volume); point.setIntervalTradeAmount(context.amount);
