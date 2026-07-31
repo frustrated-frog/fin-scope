@@ -1,5 +1,10 @@
 package com.finscope.service.news;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.dao.news.NewsCategoryRepository;
+import com.finscope.dao.news.NewsClassificationRepository;
+import com.finscope.domain.news.NewsCategory;
+import com.finscope.domain.news.NewsItemClassification;
 import com.finscope.domain.research.material.ResearchMaterial;
 import com.finscope.domain.research.material.ResearchMaterialType;
 import com.finscope.service.research.material.ResearchMaterialGateway;
@@ -12,12 +17,15 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class NewsFeedServiceTest {
@@ -59,6 +67,77 @@ class NewsFeedServiceTest {
         assertEquals(1, result.getItems().size());
         assertEquals("较新内容", result.getItems().get(0).getContent());
         assertTrue(result.getWarnings().isEmpty());
+    }
+
+    @Test
+    void returnsAllItemsImmediatelyAndSchedulesAgentClassification() {
+        ResearchMaterialGateway gateway = gatewayWithTwoItems();
+        NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        NewsClassificationCoordinator coordinator = mock(NewsClassificationCoordinator.class);
+        when(classifications.findByItemIds(argThat(ids -> ids.size() == 2))).thenReturn(Collections.emptyMap());
+        NewsFeedService service = new NewsFeedService(gateway, classifications, categories, coordinator, fixedClock());
+
+        NewsFeedSnapshot result = service.load("ALL", 20);
+
+        assertEquals(2, result.getItems().size());
+        verify(coordinator).schedule(argThat(values -> values.size() == 2));
+    }
+
+    @Test
+    void filtersSpecificCategoryUsingPersistedAgentDecision() {
+        ResearchMaterialGateway gateway = gatewayWithTwoItems();
+        NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        NewsClassificationCoordinator coordinator = mock(NewsClassificationCoordinator.class);
+        when(categories.findEnabledByCode("COMPANY")).thenReturn(java.util.Optional.of(category("COMPANY", "公司动态")));
+        Map<String, NewsItemClassification> saved = new LinkedHashMap<String, NewsItemClassification>();
+        saved.put("CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", classification("CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", "COMPANY"));
+        saved.put("THS_NEWS_DIGEST:THS_NEWS_DIGEST-30", classification("THS_NEWS_DIGEST:THS_NEWS_DIGEST-30", "INDUSTRY"));
+        when(classifications.findByItemIds(argThat(ids -> ids.size() == 2))).thenReturn(saved);
+        NewsFeedService service = new NewsFeedService(gateway, classifications, categories, coordinator, fixedClock());
+
+        NewsFeedSnapshot result = service.load("COMPANY", 20);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("盘中快讯", result.getItems().get(0).getTitle());
+        assertEquals("COMPANY", result.getItems().get(0).getCategoryCode());
+        assertEquals("公司动态", result.getItems().get(0).getCategoryName());
+    }
+
+    @Test
+    void rejectsUnknownCategoryBeforeFetchingNews() {
+        ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        NewsFeedService service = new NewsFeedService(gateway, mock(NewsClassificationRepository.class),
+                categories, mock(NewsClassificationCoordinator.class), fixedClock());
+
+        try {
+            service.load("UNKNOWN", 20);
+        } catch (BusinessException ex) {
+            assertEquals("未知或已停用的资讯分类：UNKNOWN", ex.getMessage());
+            return;
+        }
+        throw new AssertionError("expected BusinessException");
+    }
+
+    private static ResearchMaterialGateway gatewayWithTwoItems() {
+        ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
+        when(gateway.search(eq(ResearchMaterialType.NEWS_FLASH), argThat(request -> true)))
+                .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(
+                        material("THS_NEWS_DIGEST", "THS", "专题要闻", "完整专题内容", 9, 30),
+                        material("CLS_NEWS_FLASH", "CLS", "盘中快讯", "完整快讯内容", 9, 45)
+                ), Collections.emptyList()));
+        return gateway;
+    }
+
+    private static NewsCategory category(String code, String name) {
+        return new NewsCategory(code, name, name + "指导", true, 10);
+    }
+
+    private static NewsItemClassification classification(String itemId, String categoryCode) {
+        return new NewsItemClassification(itemId, "CLASSIFIED", categoryCode, 0.9,
+                "Agent 分类", "model-a", null, LocalDateTime.of(2026, 7, 31, 10, 0));
     }
 
     private static ResearchMaterial material(String provider, String family, String title,
