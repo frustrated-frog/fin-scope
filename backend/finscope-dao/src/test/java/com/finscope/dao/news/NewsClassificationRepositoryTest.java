@@ -110,4 +110,32 @@ class NewsClassificationRepositoryTest {
         assertEquals("CORRECTED", value.getReviewStatus());
         assertTrue(value.isManuallyReviewed());
     }
+
+    @Test
+    void migratesExistingClassificationTableAndBackfillsReviewStatus() throws Exception {
+        SQLiteDataSource legacyDataSource = new SQLiteDataSource();
+        legacyDataSource.setUrl("jdbc:sqlite:" + dataRoot.resolve("legacy.db"));
+        JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
+        legacyJdbc.execute("CREATE TABLE news_item_classification (item_id TEXT PRIMARY KEY,status TEXT NOT NULL,"
+                + "category_code TEXT,confidence REAL,reason TEXT,model_name TEXT,error_message TEXT,"
+                + "created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        legacyJdbc.update("INSERT INTO news_item_classification(item_id,status,category_code,confidence,reason,"
+                        + "model_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                "LEGACY:1", "CLASSIFIED", "COMPANY", 0.68, "旧分类结果", "model-a",
+                "2026-07-31T10:00:00", "2026-07-31T10:00:00");
+        DatabaseInitializer initializer = new DatabaseInitializer();
+        ReflectionTestUtils.setField(initializer, "jdbcTemplate", legacyJdbc);
+        ReflectionTestUtils.setField(initializer, "dataRoot", dataRoot.toString());
+
+        initializer.afterPropertiesSet();
+
+        NewsItemClassification migrated = new NewsClassificationRepository(legacyJdbc)
+                .findByItemIds(Arrays.asList("LEGACY:1")).get("LEGACY:1");
+        assertEquals("PENDING_REVIEW", migrated.getReviewStatus());
+        assertEquals("COMPANY", migrated.getEffectiveCategoryCode());
+        List<Map<String, Object>> columns = legacyJdbc.queryForList(
+                "PRAGMA table_info(news_item_classification)");
+        assertTrue(columns.stream().anyMatch(column -> "manual_category_code".equals(column.get("name"))));
+        assertTrue(columns.stream().anyMatch(column -> "reviewed_at".equals(column.get("name"))));
+    }
 }
