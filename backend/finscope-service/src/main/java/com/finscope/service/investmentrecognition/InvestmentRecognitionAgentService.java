@@ -102,7 +102,7 @@ public class InvestmentRecognitionAgentService {
             fallback.setMechanism(draft.mechanism.trim());
             fallback.setCounterData(trimmed(draft.counterData));
             fallback.setValidationMetrics(trimmed(draft.validationMetrics));
-            fallback.setInvalidationConditions(draft.invalidationConditions.trim());
+            fallback.setInvalidationConditions(joined(draft.invalidationConditions));
             fallback.setHorizon(draft.horizon.trim());
             fallback.setConfidence(draft.confidence.trim().toUpperCase(Locale.ROOT));
             trace(fallback, input, "SUCCESS", null, System.currentTimeMillis() - started);
@@ -208,7 +208,8 @@ public class InvestmentRecognitionAgentService {
                 + "不得把输入中没有的订单、财务、资金、重组、政策或市场传闻写成已知事实；只能把它们表述为待验证假设或验证指标。"
                 + "输出单个纯 JSON，只允许 thesis、mechanism、counterData、validationMetrics、"
                 + "invalidationConditions、horizon、confidence；counterData 与 validationMetrics 必须是字符串数组，"
-                + "例如 \"counterData\":[\"反证项\"],\"validationMetrics\":[\"验证指标\"]；"
+                + "例如 \"counterData\":[\"反证项\"],\"validationMetrics\":[\"验证指标\"],"
+                + "\"invalidationConditions\":\"失效条件\"；"
                 + "confidence 仅允许 LOW、MEDIUM、HIGH。";
     }
 
@@ -216,7 +217,7 @@ public class InvestmentRecognitionAgentService {
         List<String> counterData = draft == null ? new ArrayList<String>() : trimmed(draft.counterData);
         List<String> validationMetrics = draft == null ? new ArrayList<String>() : trimmed(draft.validationMetrics);
         if (draft == null || blank(draft.thesis) || blank(draft.mechanism)
-                || blank(draft.invalidationConditions) || blank(draft.horizon)
+                || blank(joined(draft.invalidationConditions)) || blank(draft.horizon)
                 || counterData.isEmpty() || validationMetrics.isEmpty()
                 || !("LOW".equalsIgnoreCase(draft.confidence) || "MEDIUM".equalsIgnoreCase(draft.confidence)
                 || "HIGH".equalsIgnoreCase(draft.confidence))) {
@@ -254,6 +255,9 @@ public class InvestmentRecognitionAgentService {
         for (String value : values) if (!blank(value)) result.add(value.trim());
         return result;
     }
+    private String joined(List<String> values) {
+        return String.join("；", trimmed(values));
+    }
     private RadarEvent matchTrigger(WatchlistItem item, List<RadarEvent> events) {
         if (events == null) return null;
         String code = safe(item.getCode(), "").toLowerCase(Locale.ROOT);
@@ -288,7 +292,7 @@ public class InvestmentRecognitionAgentService {
         public String mechanism;
         public List<String> counterData;
         public List<String> validationMetrics;
-        public String invalidationConditions;
+        public List<String> invalidationConditions;
         public String horizon;
         public String confidence;
     }

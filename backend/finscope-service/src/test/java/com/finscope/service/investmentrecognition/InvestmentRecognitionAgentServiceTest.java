@@ -200,6 +200,26 @@ class InvestmentRecognitionAgentServiceTest {
     }
 
     @Test
+    void acceptsGlmArrayForInvalidationConditions() throws Exception {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(any(), any(), any(Integer.class), any(Integer.class)))
+                .thenReturn("{\"thesis\":\"命题\",\"mechanism\":\"机制\","
+                        + "\"counterData\":[\"反证\"],\"validationMetrics\":[\"指标\"],"
+                        + "\"invalidationConditions\":[\"价格反转\",\"公告否认\"],"
+                        + "\"horizon\":\"五日\",\"confidence\":\"MEDIUM\"}");
+        when(watchlist.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.singletonList(view(3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = service(watchlist, candidates, runs, llm).run();
+
+        assertEquals("价格反转；公告否认", result.getCandidates().get(0).getInvalidationConditions());
+    }
+
+    @Test
     void givesTheModelAnExplicitJsonArrayContract() throws Exception {
         WatchlistService watchlist = mock(WatchlistService.class);
         InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
@@ -207,7 +227,8 @@ class InvestmentRecognitionAgentServiceTest {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(argThat(prompt -> prompt.contains("\"counterData\":[\"反证项\"]")
-                        && prompt.contains("\"validationMetrics\":[\"验证指标\"]")),
+                        && prompt.contains("\"validationMetrics\":[\"验证指标\"]")
+                        && prompt.contains("\"invalidationConditions\":\"失效条件\"")),
                 any(), any(Integer.class), any(Integer.class)))
                 .thenReturn("{\"thesis\":\"命题\",\"mechanism\":\"机制\","
                         + "\"counterData\":[\"反证\"],\"validationMetrics\":[\"指标\"],"
