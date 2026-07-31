@@ -163,6 +163,19 @@ test('supports watchlist-only filtering and degraded snapshots', async () => {
   expect(screen.getByText('实时来源暂不可用，当前展示最近一次雷达结果')).toBeInTheDocument();
 });
 
+test('describes a busy radar refresh without blaming realtime sources', async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    return Promise.resolve({ ...snapshot, warnings: ['雷达正在刷新，已展示最近一次结果'] });
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
+
+  expect(screen.getByText('雷达正在后台刷新，当前展示最近一次结果')).toBeInTheDocument();
+  expect(screen.queryByText('实时来源暂不可用，当前展示最近一次雷达结果')).not.toBeInTheDocument();
+});
+
 test('polling waits for confirmation before inserting a new live item', async () => {
   vi.useFakeTimers();
   let calls = 0;

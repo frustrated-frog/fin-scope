@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Service
@@ -36,17 +38,18 @@ public class ResearchRadarService {
     private final RadarPriorityService priority;
     private final WatchlistRepository watchlist;
     private final Clock clock;
-    private final RadarEvidenceOrchestrator evidenceOrchestrator;
+    private final RadarEventEnhancementScheduler enhancementScheduler;
     private final RadarEvidenceRepository evidenceRepository;
     private final AgentRunRepository agentRuns;
     private final ReentrantLock refreshLock = new ReentrantLock();
+    private volatile NewsFeedSnapshot lastNewsSnapshot;
 
     @Autowired
     public ResearchRadarService(NewsFeedService news, RadarRepository repository,
                                 RadarClusteringService clustering, RadarPriorityService priority,
-                                WatchlistRepository watchlist, RadarEvidenceOrchestrator evidenceOrchestrator,
+                                WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                                 RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns) {
-        this(news, repository, clustering, priority, watchlist, evidenceOrchestrator, evidenceRepository,
+        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository,
                 agentRuns, Clock.systemDefaultZone());
     }
 
@@ -58,11 +61,11 @@ public class ResearchRadarService {
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
-                         WatchlistRepository watchlist, RadarEvidenceOrchestrator evidenceOrchestrator,
+                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns, Clock clock) {
         this.news=news; this.repository=repository; this.clustering=clustering;
         this.priority=priority; this.watchlist=watchlist; this.clock=clock;
-        this.evidenceOrchestrator=evidenceOrchestrator; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
+        this.enhancementScheduler=enhancementScheduler; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
@@ -72,12 +75,14 @@ public class ResearchRadarService {
         if (!refreshLock.tryLock()) return fallback(category, watchlistOnly, limit, now, "雷达正在刷新，已展示最近一次结果");
         try {
             NewsFeedSnapshot snapshot = news.load(category, 100);
+            lastNewsSnapshot = snapshot;
             for (NewsFeedItem item : snapshot.getItems()) repository.capture(toSignal(item), now);
             repository.expireSignals(now.minusHours(48), now);
             List<RadarSignal> active = repository.findActiveSignals(now.minusHours(48), 500);
             List<WatchlistItem> followed = watchlist.findByTypes(Arrays.asList("STOCK", "FUND"));
             List<RadarEvent> savedEvents = new ArrayList<RadarEvent>();
-            int evidenceRefreshes = 0;
+            Set<String> activeEventKeys = new HashSet<String>();
+            int evidenceSchedules = 0;
             for (RadarClusteringService.ClusterResult cluster : clustering.cluster(active)) {
                 RadarEvent event = cluster.getEvent();
                 RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
@@ -85,23 +90,15 @@ public class ResearchRadarService {
                 event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
                 event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
                 RadarEvent saved = repository.saveEvent(event); repository.replaceEventSignals(saved.getId(), cluster.getLinks());
-                if (evidenceOrchestrator != null && evidenceRefreshes < 2 && saved.getPriorityScore() >= 75) {
-                    try {
-                        RadarEvidenceOrchestrator.Outcome outcome = evidenceOrchestrator.enrich(saved, cluster.getSignals());
-                        if (!"CACHED".equals(outcome.getStatus()) && !"SKIPPED".equals(outcome.getStatus())) {
-                            saved.setEvidenceStatus(outcome.getStatus()); saved.setEvidenceSummary(outcome.getSummary());
-                            saved.setEvidenceWarning(outcome.getWarning()); saved.setEvidenceCount(outcome.getEvidenceCount());
-                            saved.setEvidenceSourceCount(outcome.getSourceCount());
-                            if (outcome.getNextObservation()!=null&&!outcome.getNextObservation().trim().isEmpty()) saved.setNextObservation(outcome.getNextObservation());
-                            if (!"DEGRADED".equals(outcome.getStatus())) saved.setEvidenceFingerprint(outcome.getFingerprint());
-                            saved.setEvidenceUpdatedAt(now); saved = repository.saveEvent(saved); evidenceRefreshes++;
-                        }
-                    } catch (RuntimeException ignored) {
-                        // 证据增强失败不能阻断雷达事件与实时资讯。
-                    }
+                activeEventKeys.add(saved.getEventKey());
+                boolean includeEvidence = evidenceSchedules < 2 && saved.getPriorityScore() >= 75;
+                if (enhancementScheduler != null && (cluster.getSignals().size() > 1 || includeEvidence)) {
+                    enhancementScheduler.schedule(saved, cluster.getSignals(), now, includeEvidence);
+                    if (includeEvidence) evidenceSchedules++;
                 }
                 if (matches(category, saved) && (!watchlistOnly || saved.getWatchlistRelevance()>0)) savedEvents.add(saved);
             }
+            repository.expireEventsExcept(activeEventKeys, now);
             savedEvents.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
                     .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
             if (savedEvents.size()>limit) savedEvents=new ArrayList<RadarEvent>(savedEvents.subList(0,limit));
@@ -124,8 +121,10 @@ public class ResearchRadarService {
     }
 
     private ResearchRadarView fallback(String category,boolean watchlistOnly,int limit,LocalDateTime now,String warning) {
-        return new ResearchRadarView(cards(repository.findRanked(category,watchlistOnly,limit)),Collections.<NewsFeedItem>emptyList(),
-                Collections.singletonList(warning),now);
+        NewsFeedSnapshot cached = lastNewsSnapshot;
+        return new ResearchRadarView(cards(repository.findRanked(category,watchlistOnly,limit)),
+                cached==null?Collections.<NewsFeedItem>emptyList():cached.getItems(),
+                Collections.singletonList(warning),cached==null?now:cached.getRefreshedAt());
     }
     private List<ResearchRadarView.EventCard> cards(List<RadarEvent> events) {
         List<ResearchRadarView.EventCard> cards=new ArrayList<ResearchRadarView.EventCard>();

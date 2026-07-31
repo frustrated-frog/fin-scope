@@ -98,6 +98,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const liveItems = useMemo(() => (snapshot?.liveItems ?? []).filter((item) =>
     !normalizedQuery || `${item.title} ${item.content} ${item.sourceName}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
+  const radarRefreshing = snapshot?.warnings.some((warning) => warning.includes('雷达正在刷新')) ?? false;
 
   return (
     <section className="news-view radar-view" aria-label="研究雷达">
@@ -130,7 +131,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
         <label className="news-search"><span>检索</span><input type="search" aria-label="搜索资讯" placeholder="搜索公司、行业或事件" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       </div>
 
-      {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>实时来源暂不可用，当前展示最近一次雷达结果</div> : null}
+      {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台刷新，当前展示最近一次结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
       {pendingCount > 0 ? <button type="button" className="news-update-notice" onClick={applyPendingSnapshot}>发现 {pendingCount} 条新资讯</button> : null}
 
       <div className="news-board radar-board" data-testid="research-radar-board">

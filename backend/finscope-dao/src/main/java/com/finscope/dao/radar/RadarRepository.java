@@ -76,6 +76,34 @@ public class RadarRepository {
         return stored;
     }
 
+    public void updateEvidenceEnhancement(RadarEvent event) {
+        jdbc.update("UPDATE radar_event SET canonical_title=?,next_observation=?,evidence_status=?,evidence_summary=?,"
+                        + "evidence_warning=?,evidence_fingerprint=?,evidence_count=?,evidence_source_count=?,"
+                        + "evidence_updated_at=? WHERE id=? AND updated_at=?",
+                event.getCanonicalTitle(), event.getNextObservation(), event.getEvidenceStatus(),
+                event.getEvidenceSummary(), event.getEvidenceWarning(), event.getEvidenceFingerprint(),
+                event.getEvidenceCount(), event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()),
+                event.getId(), TimeUtil.text(event.getUpdatedAt()));
+    }
+
+    public void expireEventsExcept(java.util.Set<String> activeEventKeys, LocalDateTime now) {
+        if (activeEventKeys == null || activeEventKeys.isEmpty()) {
+            jdbc.update("UPDATE radar_event SET status='EXPIRED',updated_at=? WHERE status IN ('ACTIVE','QUIET')",
+                    TimeUtil.text(now));
+            return;
+        }
+        StringBuilder placeholders = new StringBuilder();
+        List<Object> args = new ArrayList<Object>();
+        args.add(TimeUtil.text(now));
+        for (String eventKey : activeEventKeys) {
+            if (placeholders.length() > 0) placeholders.append(',');
+            placeholders.append('?');
+            args.add(eventKey);
+        }
+        jdbc.update("UPDATE radar_event SET status='EXPIRED',updated_at=? WHERE status IN ('ACTIVE','QUIET') "
+                + "AND event_key NOT IN (" + placeholders + ")", args.toArray());
+    }
+
     @Transactional
     public void replaceEventSignals(Long eventId, List<RadarEventSignal> links) {
         jdbc.update("DELETE FROM radar_event_signal WHERE event_id=?", eventId);
