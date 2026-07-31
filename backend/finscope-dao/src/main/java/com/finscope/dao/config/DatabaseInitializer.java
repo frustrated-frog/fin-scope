@@ -181,6 +181,11 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE,"
                 + "FOREIGN KEY(signal_id) REFERENCES radar_signal(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_signal_signal ON radar_event_signal(signal_id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_pair_decision ("
+                + "pair_key TEXT PRIMARY KEY,left_fingerprint TEXT NOT NULL,right_fingerprint TEXT NOT NULL,"
+                + "same_event INTEGER NOT NULL,confidence REAL NOT NULL,reason TEXT,decision_source TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_pair_decision_updated ON radar_pair_decision(updated_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brief ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "brief_date TEXT NOT NULL UNIQUE,"
