@@ -51,6 +51,7 @@ public class InvestmentRecognitionAgentService {
         this.llm = llm;
         this.json = json.copy()
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                .enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     }
@@ -204,8 +205,11 @@ public class InvestmentRecognitionAgentService {
                 + "不得检索或引用文章、新闻正文、摘要和文章知识库；不得补造财务、资金或宏观事实。"
                 + "quickNewsTrigger 只解释为何现在检查，不得写入支持数据或作为结论证据。"
                 + "必须围绕给定股票、基金、ETF、指数、行业或宏观财富变量，说明盈利、估值或风险机制。"
+                + "不得把输入中没有的订单、财务、资金、重组、政策或市场传闻写成已知事实；只能把它们表述为待验证假设或验证指标。"
                 + "输出单个纯 JSON，只允许 thesis、mechanism、counterData、validationMetrics、"
-                + "invalidationConditions、horizon、confidence；confidence 仅允许 LOW、MEDIUM、HIGH。";
+                + "invalidationConditions、horizon、confidence；counterData 与 validationMetrics 必须是字符串数组，"
+                + "例如 \"counterData\":[\"反证项\"],\"validationMetrics\":[\"验证指标\"]；"
+                + "confidence 仅允许 LOW、MEDIUM、HIGH。";
     }
 
     private void validate(Draft draft) {

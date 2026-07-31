@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -175,6 +176,49 @@ class InvestmentRecognitionAgentServiceTest {
 
         assertEquals(2, result.getCandidates().get(0).getCounterData().size());
         assertEquals(3, result.getCandidates().get(0).getValidationMetrics().size());
+    }
+
+    @Test
+    void acceptsGlmSingleStringsForArrayFields() throws Exception {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(any(), any(), any(Integer.class), any(Integer.class)))
+                .thenReturn("```json\n{\"thesis\":\"命题\",\"mechanism\":\"机制\","
+                        + "\"counterData\":\"单项反证\",\"validationMetrics\":\"单项指标\","
+                        + "\"invalidationConditions\":\"失效\",\"horizon\":\"五日\","
+                        + "\"confidence\":\"MEDIUM\"}\n```");
+        when(watchlist.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.singletonList(view(3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = service(watchlist, candidates, runs, llm).run();
+
+        assertEquals(Collections.singletonList("单项反证"), result.getCandidates().get(0).getCounterData());
+        assertEquals(Collections.singletonList("单项指标"), result.getCandidates().get(0).getValidationMetrics());
+    }
+
+    @Test
+    void givesTheModelAnExplicitJsonArrayContract() throws Exception {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(argThat(prompt -> prompt.contains("\"counterData\":[\"反证项\"]")
+                        && prompt.contains("\"validationMetrics\":[\"验证指标\"]")),
+                any(), any(Integer.class), any(Integer.class)))
+                .thenReturn("{\"thesis\":\"命题\",\"mechanism\":\"机制\","
+                        + "\"counterData\":[\"反证\"],\"validationMetrics\":[\"指标\"],"
+                        + "\"invalidationConditions\":\"失效\",\"horizon\":\"五日\","
+                        + "\"confidence\":\"MEDIUM\"}");
+        when(watchlist.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.singletonList(view(3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = service(watchlist, candidates, runs, llm).run();
+
+        assertEquals("命题", result.getCandidates().get(0).getThesis());
     }
 
     private InvestmentRecognitionAgentService service(WatchlistService watchlist,
