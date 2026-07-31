@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { KnowledgeReviewInput, KnowledgeTopicWorkspace } from '../knowledgeTypes';
 import { TopicTimeline } from './TopicTimeline';
+import { classifyKnowledgeTopic } from './knowledgeClassification';
 
 export function TopicWorkspace({
   workspace,
@@ -19,17 +20,21 @@ export function TopicWorkspace({
   const [interval, setInterval] = useState<KnowledgeReviewInput['intervalDays']>(14);
   const [evidenceIds, setEvidenceIds] = useState<number[]>([]);
   const latest = workspace.entries[0];
+  const classification = classifyKnowledgeTopic(workspace.topic, workspace.entries.length);
+  const isMaterial = classification === 'MATERIAL';
 
   return (
     <article className="topic-workspace">
       <header>
-        <button type="button" onClick={onBack}>← 返回{reviewMode ? '复习队列' : '主题档案'}</button>
-        <div><p className="knowledge-kicker">Topic dossier</p><h2>{workspace.topic.name}</h2><p>{workspace.topic.description}</p></div>
-        <span className="knowledge-state">{workspace.topic.masteryStatus}</span>
+        <button type="button" onClick={onBack}>← 返回{reviewMode ? '复习队列' : '投资认识'}</button>
+        <div><p className="knowledge-kicker">{isMaterial ? '待提炼材料' : '投资认识档案'}</p><h2>{workspace.topic.name}</h2><p>{workspace.topic.description}</p></div>
+        <span className="knowledge-state">{isMaterial ? '尚未提炼' : workspace.topic.masteryStatus}</span>
       </header>
       <div className="topic-workspace-grid">
         <main>
-          <section className="topic-current-judgment"><p className="knowledge-kicker">Current judgment</p><h3>当前判断</h3><p>{latest?.contentMarkdown || '还没有形成结论。先完成一个学习问题，让证据开始沉淀。'}</p></section>
+          {isMaterial
+            ? <section className="topic-current-judgment is-material"><p className="knowledge-kicker">材料不等于认识</p><h3>尚未形成投资认识</h3><p>当前档案只有单一来源，也没有独立结论。请先提炼一个可持续验证的问题，再决定它是否值得长期维护。</p></section>
+            : <section className="topic-current-judgment"><p className="knowledge-kicker">当前可检验结论</p><h3>当前判断</h3><p>{latest?.contentMarkdown || '还没有形成结论。先完成一个学习问题，让证据开始沉淀。'}</p></section>}
           <TopicTimeline workspace={workspace} />
         </main>
         <aside>
@@ -37,7 +42,7 @@ export function TopicWorkspace({
           <section><h3>复习节奏</h3><p>已复习 {workspace.reviewState?.reviewCount || 0} 次</p><p>间隔 {workspace.reviewState?.intervalDays || 7} 天</p></section>
         </aside>
       </div>
-      {reviewMode && (
+      {reviewMode && !isMaterial && (
         <section className="topic-review-editor">
           <div><p className="knowledge-kicker">Review</p><h3>用新证据重新检查结论</h3><p>先比较原结论和新增证据，再决定保持、修正或推翻。</p></div>
           <div className="topic-review-compare"><article><span>原结论</span><p>{latest?.contentMarkdown || '暂无结论'}</p></article><article><span>本次证据</span>{workspace.evidence.map((item) => <label key={item.id}><input type="checkbox" checked={evidenceIds.includes(item.id)} onChange={() => setEvidenceIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id])} />{item.claim}</label>)}</article></div>

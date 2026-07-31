@@ -10,11 +10,14 @@ export type DailyResearchProjection = {
 export function projectDailyResearch(snapshot?: ResearchRadarSnapshot | null): DailyResearchProjection {
   if (!snapshot) return { changes: [], flashes: [], warnings: [] };
 
-  const changes = [...snapshot.events]
+  const events = Array.isArray(snapshot.events) ? snapshot.events : [];
+  const liveItems = Array.isArray(snapshot.liveItems) ? snapshot.liveItems : [];
+  const warnings = Array.isArray(snapshot.warnings) ? snapshot.warnings : [];
+  const changes = [...events]
     .sort((left, right) => right.priorityScore - left.priorityScore || timestamp(right.lastSeenAt) - timestamp(left.lastSeenAt))
     .slice(0, 8);
   const seen = new Set<string>();
-  const flashes = [...snapshot.liveItems]
+  const flashes = [...liveItems]
     .filter((item) => item.kind === 'FLASH')
     .sort((left, right) => timestamp(right.publishedAt) - timestamp(left.publishedAt))
     .filter((item) => {
@@ -25,7 +28,7 @@ export function projectDailyResearch(snapshot?: ResearchRadarSnapshot | null): D
     })
     .slice(0, 12);
 
-  return { changes, flashes, warnings: snapshot.warnings || [], refreshedAt: snapshot.refreshedAt };
+  return { changes, flashes, warnings, refreshedAt: snapshot.refreshedAt };
 }
 
 function normalizeHeadline(value: string) {

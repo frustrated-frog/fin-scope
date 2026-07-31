@@ -21,6 +21,15 @@ const snapshot: ResearchRadarSnapshot = {
 };
 
 describe('projectDailyResearch', () => {
+  test('degrades malformed news data to an empty research stream', () => {
+    expect(projectDailyResearch({} as ResearchRadarSnapshot)).toEqual({
+      changes: [],
+      flashes: [],
+      warnings: [],
+      refreshedAt: undefined
+    });
+  });
+
   test('orders market changes by research value and recency', () => {
     const result = projectDailyResearch(snapshot);
 

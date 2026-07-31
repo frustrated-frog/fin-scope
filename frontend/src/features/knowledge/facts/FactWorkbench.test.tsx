@@ -47,10 +47,12 @@ const evidence: EvidenceItem[] = [
 test('presents a fact index and a focused evidence dossier in one workspace', async () => {
   render(<FactWorkbench events={events} evidenceItems={evidence} />);
 
-  expect(screen.getByRole('heading', { name: '先核验事实，再形成知识' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '把新闻核成事实，再决定是否更新判断' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: new RegExp(events[0].canonicalTitle) }));
   expect(screen.getAllByText('证据较充分')).toHaveLength(2);
   expect(screen.getByRole('heading', { name: events[0].canonicalTitle })).toBeInTheDocument();
+  expect(screen.getByText('公司经营')).toBeInTheDocument();
+  expect(screen.queryByText('COMPANY')).not.toBeInTheDocument();
   expect(screen.getByText('公司半年报披露海外收入同比增长 38%。')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '打开原文' })).toHaveAttribute('href', 'https://example.com/report');
 });

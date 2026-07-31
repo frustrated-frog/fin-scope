@@ -28,6 +28,16 @@ const typeLabels: Record<string, string> = {
   IMPACT: '影响判断'
 };
 
+const observationLabels: Record<string, string> = {
+  COMPANY: '公司经营',
+  INDUSTRY: '行业供需',
+  POLICY: '政策影响',
+  MACRO: '宏观环境',
+  MARKET: '市场交易',
+  TECHNOLOGY: '技术进展',
+  OTHER: '其他变化'
+};
+
 type StateFilter = 'ALL' | FactVerificationState;
 
 export function FactWorkbench({
@@ -92,9 +102,9 @@ export function FactWorkbench({
     <section className="fact-workbench" aria-label="事实核验">
       <header className="fact-workbench-intro">
         <div>
-          <p className="knowledge-kicker">Fact verification desk</p>
-          <h2>先核验事实，再形成知识</h2>
-          <p>把事件当作事实候选，把来源放回上下文。状态来自当前材料覆盖，只用于审阅，不写入数据库。</p>
+          <p className="knowledge-kicker">从信号到可信变化</p>
+          <h2>把新闻核成事实，再决定是否更新判断</h2>
+          <p>新闻只是线索。这里检查直接材料与一手来源，避免把重复报道或媒体判断当成已经确认的事实。</p>
         </div>
         <div className="fact-verification-summary" aria-label="事实核验摘要">
           <span><strong>{counts.UNVERIFIED}</strong>待核验</span>
@@ -212,7 +222,7 @@ function FactDossier({ candidate }: { candidate: FactCandidate }) {
           <span className={`fact-state fact-state-${candidate.verificationState.toLowerCase()}`}>
             {stateLabels[candidate.verificationState]}
           </span>
-          <span>{candidate.event.themeCode || '未分类'}</span>
+          <span>{observationLabels[candidate.event.themeCode] || '其他变化'}</span>
           {updatedAt && <time dateTime={updatedAt}>{updatedAt.slice(0, 10)}</time>}
         </div>
         <h2>{candidate.event.canonicalTitle}</h2>

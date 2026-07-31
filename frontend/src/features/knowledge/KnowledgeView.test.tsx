@@ -17,6 +17,14 @@ const overview = {
   recentEntries: []
 };
 
+const radar = {
+  overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 0, sourceCount: 2 },
+  events: [{ id: 7, title: '行业报价发生变化', summary: '两个来源指向报价变化', priorityScore: 80, recommendation: '重点关注', reasons: ['多来源'], watchlistRelated: false, watchlistExplanation: '', sourceCount: 2, signalCount: 2, uncertainty: '持续性未知', nextObservation: '观察订单', suggestedResearchQuestion: '' }],
+  liveItems: [{ id: 'f1', kind: 'FLASH', title: '公司披露订单', content: '订单同比增加', providerCode: 'CLS', sourceName: '财联社', sourceTier: 'MEDIA' }],
+  warnings: [],
+  refreshedAt: '2026-08-01T10:00:00'
+};
+
 beforeEach(() => {
   window.history.replaceState({}, '', '/?section=topics&topic=11');
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -30,6 +38,8 @@ beforeEach(() => {
       }
       : url.startsWith('/api/knowledge/topics')
       ? { items: [], totalCount: 0, page: 0, pageSize: 20, totalPages: 0 }
+      : url.startsWith('/api/research-radar')
+      ? radar
       : overview;
     return { ok: true, status: 200, text: async () => JSON.stringify(apiEnvelope(value)) } as Response;
   }));
@@ -51,8 +61,8 @@ test('rejects unknown sections and keeps navigation state in the URL', async () 
   window.history.replaceState({}, '', '/?section=unknown');
   render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '事实核验' }));
+  expect(await screen.findByRole('heading', { name: '今天哪些变化，值得修正我的判断？' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '事实与变化' }));
 
   await waitFor(() => {
     expect(new URLSearchParams(window.location.search).get('section')).toBe('facts');
@@ -66,7 +76,7 @@ test('restores the workbench when browser history changes', async () => {
   window.history.replaceState({}, '', '/?section=home');
   window.dispatchEvent(new PopStateEvent('popstate'));
 
-  expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '今天哪些变化，值得修正我的判断？' })).toBeInTheDocument();
   expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
 });
 
@@ -84,13 +94,13 @@ test('exposes only the three primary knowledge tasks and clears stale selection'
   expect(await screen.findByRole('heading', { name: 'Agent 工程化' })).toBeInTheDocument();
 
   const navigation = screen.getByRole('navigation', { name: '知识工作台' });
-  expect(navigation).toHaveTextContent('工作台');
-  expect(navigation).toHaveTextContent('事实核验');
-  expect(navigation).toHaveTextContent('知识库');
+  expect(navigation).toHaveTextContent('今日研究');
+  expect(navigation).toHaveTextContent('事实与变化');
+  expect(navigation).toHaveTextContent('投资认识');
   expect(navigation).not.toHaveTextContent('学习队列');
   expect(navigation).not.toHaveTextContent('到期复习');
 
-  await userEvent.click(screen.getByRole('button', { name: '事实核验' }));
+  await userEvent.click(screen.getByRole('button', { name: '事实与变化' }));
 
   await waitFor(() => {
     const params = new URLSearchParams(window.location.search);
@@ -98,6 +108,30 @@ test('exposes only the three primary knowledge tasks and clears stale selection'
     expect(params.get('task')).toBeNull();
     expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
   });
+});
+
+test('loads daily changes and flashes into the knowledge workbench', async () => {
+  window.history.replaceState({}, '', '/?section=home');
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('行业报价发生变化')).toBeInTheDocument();
+  expect(screen.getByRole('complementary', { name: '今日快讯流水' })).toHaveTextContent('公司披露订单');
+  expect(fetch).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=8', expect.anything());
+  expect(screen.queryByRole('heading', { name: '把信息变成可复用的判断' })).not.toBeInTheDocument();
+});
+
+test('keeps knowledge actions visible when daily news fails', async () => {
+  window.history.replaceState({}, '', '/?section=home');
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('/api/research-radar')) throw new Error('offline');
+    return { ok: true, status: 200, text: async () => JSON.stringify(apiEnvelope(overview)) } as Response;
+  }));
+
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('heading', { name: '需要更新的认识' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('今日资讯暂不可用');
 });
 
 test('centers and scales the four knowledge navigation labels', () => {

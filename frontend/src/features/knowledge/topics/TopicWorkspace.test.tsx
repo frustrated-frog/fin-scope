@@ -34,3 +34,14 @@ test('compares the current conclusion with evidence and schedules next review', 
   await userEvent.click(screen.getByRole('button', { name: '完成复习' }));
   expect(onReview).toHaveBeenCalledWith(expect.objectContaining({ intervalDays: 30, expectedRevision: 3 }));
 });
+
+test('does not present an article-only file as established investment recognition', () => {
+  render(<TopicWorkspace workspace={{
+    topic: { id: 4, name: '一篇新闻的内容摘要', lifecycleStatus: 'ACTIVE', masteryStatus: 'EXPLORING', revision: 1, articleCount: 1 },
+    events: [], evidence: [], tasks: [], entries: []
+  }} onBack={vi.fn()} onReview={vi.fn()} />);
+
+  expect(screen.getByText('待提炼材料')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '尚未形成投资认识' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '当前判断' })).not.toBeInTheDocument();
+});

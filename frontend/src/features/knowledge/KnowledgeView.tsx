@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { EventCluster, EvidenceItem, PageResponse } from '../../shared/types';
+import { ResearchRadarSnapshot } from '../news/researchRadarTypes';
 import { KnowledgeNavigation } from './KnowledgeNavigation';
-import { KnowledgeHome } from './KnowledgeHome';
 import { knowledgeApi } from './knowledgeApi';
 import {
   KnowledgeEntryInput,
@@ -21,6 +21,7 @@ import { LearningWorkspace } from './learning/LearningWorkspace';
 import { TopicWorkspace } from './topics/TopicWorkspace';
 import { ReviewQueue } from './review/ReviewQueue';
 import { FactWorkbench } from './facts/FactWorkbench';
+import { DailyResearchDesk } from './daily/DailyResearchDesk';
 
 const validSections = new Set<KnowledgeSection>(['home', 'facts', 'topics', 'learning', 'review']);
 
@@ -60,6 +61,8 @@ export function KnowledgeView({
   const [dueTopics, setDueTopics] = useState<KnowledgeTopic[]>([]);
   const [factEvents, setFactEvents] = useState<EventCluster[]>([]);
   const [factEvidence, setFactEvidence] = useState<EvidenceItem[]>([]);
+  const [radar, setRadar] = useState<ResearchRadarSnapshot | null>(null);
+  const [radarError, setRadarError] = useState('');
 
   const restoreLocation = useCallback(() => {
     const next = locationState();
@@ -99,7 +102,18 @@ export function KnowledgeView({
   useEffect(() => {
     setLoading(true);
     const load = section === 'home'
-      ? knowledgeApi.overview().then(setOverview)
+      ? Promise.all([
+        knowledgeApi.overview().then(setOverview),
+        api<ResearchRadarSnapshot>('/api/research-radar?category=ALL&watchlistOnly=false&limit=8')
+          .then((snapshot) => {
+            setRadar(snapshot);
+            setRadarError('');
+          })
+          .catch(() => {
+            setRadar(null);
+            setRadarError('今日资讯暂不可用，已有认识和复查任务仍可继续。');
+          })
+      ])
       : section === 'facts'
         ? Promise.all([
           api<PageResponse<EventCluster>>('/api/events/paged?page=0&pageSize=100'),
@@ -190,7 +204,7 @@ export function KnowledgeView({
 
   async function createTopic(input: { name: string; description: string }) {
     const created = await knowledgeApi.createTopic(input);
-    addToast('主题档案已建立', 'success');
+    addToast('投资认识档案已建立', 'success');
     navigateTarget(`?section=topics&topic=${created.id}`);
   }
 
@@ -227,7 +241,7 @@ export function KnowledgeView({
     const completed = await knowledgeApi.completeTask(taskId, input);
     setDraft(undefined);
     await loadLearning(null);
-    addToast('答案已沉淀到主题档案', 'success');
+    addToast('答案已沉淀到投资认识', 'success');
     return completed;
   }
 
@@ -247,19 +261,10 @@ export function KnowledgeView({
 
   return (
     <section className="knowledge-workbench" data-testid="knowledge-view" data-topic-id={topicId}>
-      {section === 'home' && (
-        <header className="knowledge-header">
-          <div>
-            <p className="knowledge-kicker">Knowledge workbench</p>
-            <h1>把信息变成可复用的判断</h1>
-          </div>
-          <p>从证据出发，完成问题、记录结论，并在新事实出现时回来复习。</p>
-        </header>
-      )}
       <KnowledgeNavigation section={section} onChange={navigate} />
 
       {section === 'home' && (overview
-        ? <KnowledgeHome overview={overview} onNavigate={navigateTarget} />
+        ? <DailyResearchDesk overview={overview} radar={radar} radarError={radarError} onNavigate={navigateTarget} />
         : <section className="knowledge-loading" aria-label="正在加载知识首页"><span /></section>)}
       {section === 'facts' && (loading
         ? <section className="knowledge-loading" aria-label="正在加载事实核验"><span /></section>

@@ -36,6 +36,29 @@ test('searches on the server after debounce and keeps creation in a dialog', asy
   vi.useRealTimers();
 
   expect(screen.queryByText(/vault/i)).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '新建主题' }));
-  expect(screen.getByRole('dialog', { name: '新建研究主题' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '新建投资问题' }));
+  expect(screen.getByRole('dialog', { name: '新建投资问题' })).toBeInTheDocument();
+});
+
+test('separates investment recognition from single-article material', async () => {
+  render(
+    <TopicLibrary
+      topics={[
+        { id: 1, name: '需求周期判断', lifecycleStatus: 'ACTIVE', masteryStatus: 'BUILDING', revision: 2, articleCount: 3 },
+        { id: 2, name: '某篇文章的自动摘要', lifecycleStatus: 'ACTIVE', masteryStatus: 'EXPLORING', revision: 1, articleCount: 1 }
+      ]}
+      totalCount={2}
+      loading={false}
+      onSearch={vi.fn(async () => undefined)}
+      onOpenTopic={vi.fn()}
+    />
+  );
+
+  expect(screen.getByRole('heading', { name: '投资认识' })).toBeInTheDocument();
+  expect(screen.getByText('需求周期判断')).toBeInTheDocument();
+  expect(screen.queryByText('某篇文章的自动摘要')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '待提炼材料 1' }));
+  expect(screen.getByText('某篇文章的自动摘要')).toBeInTheDocument();
+  expect(screen.queryByText('需求周期判断')).not.toBeInTheDocument();
 });

@@ -665,7 +665,7 @@ test('opens the unified knowledge workbench without globally loading learning ta
 
   await userEvent.click(screen.getByRole('button', { name: 'Facts & Knowledge' }));
 
-  expect(await screen.findByRole('heading', { name: '今天从这里继续' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '今天哪些变化，值得修正我的判断？' })).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith('/api/knowledge/overview', expect.any(Object));
   expect(fetch).not.toHaveBeenCalledWith('/api/topics', expect.anything());
   expect(fetch).not.toHaveBeenCalledWith('/api/learning-tasks', expect.anything());
@@ -1025,7 +1025,7 @@ test('facts and knowledge keeps event context and supporting evidence in one dos
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Facts & Knowledge' }));
-  await userEvent.click(await screen.findByRole('button', { name: '事实核验' }));
+  await userEvent.click(await screen.findByRole('button', { name: '事实与变化' }));
   await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
 
   expect(await screen.findByRole('heading', { name: '美联储降息预期升温，黄金ETF出现增量资金' })).toBeInTheDocument();

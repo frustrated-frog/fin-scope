@@ -1,9 +1,9 @@
 import { KnowledgeSection } from './knowledgeTypes';
 
 const sections: Array<{ id: KnowledgeSection; label: string; hint: string }> = [
-  { id: 'home', label: '工作台', hint: '今日待办' },
-  { id: 'facts', label: '事实核验', hint: '证据卷宗' },
-  { id: 'topics', label: '知识库', hint: '长期判断' }
+  { id: 'home', label: '今日研究', hint: '新闻与变化' },
+  { id: 'facts', label: '事实与变化', hint: '核验材料' },
+  { id: 'topics', label: '投资认识', hint: '长期判断' }
 ];
 
 export function KnowledgeNavigation({
