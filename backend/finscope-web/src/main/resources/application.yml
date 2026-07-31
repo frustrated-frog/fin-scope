@@ -25,11 +25,11 @@ finscope:
   cors-origin: http://localhost:*
   llm:
     enabled: true
-    base-url: http://llm-gw.jd.local/v1
-    api-key: ecacd6e33a5b4ca3a6ae1f0a3ebf3da0
-    model: GPT-5.5-joybuilder
+    base-url: https://modelservice.jdcloud.com/v1
+    api-key: pk-1439bbdb-a7a8-47d3-a7f1-0d9e3bd103ea
+    model: GLM-5
     timeout-ms: 300000
-    temperature: 1
+    temperature: 0.2
   search:
     enabled: true
     provider: tavily
