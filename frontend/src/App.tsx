@@ -243,7 +243,7 @@ export default function App() {
       case 'research':
         return 'Research';
       case 'news':
-        return '研究雷达 · 市场与自选';
+        return 'News Wire · 市场资讯';
       case 'events':
         return 'Events';
       case 'eventDetail':

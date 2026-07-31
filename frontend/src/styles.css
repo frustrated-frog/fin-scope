@@ -14579,6 +14579,11 @@ input[type="checkbox"] {
   padding: 4px 2px 34px;
 }
 
+.news-workspace { display: grid; gap: 14px; }
+.news-mode-switcher { display: inline-flex; justify-self: start; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 92%, transparent); }
+.news-mode-switcher button { padding: 8px 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 750; cursor: pointer; }
+.news-mode-switcher button.active { background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); color: var(--ink); }
+
 .news-command-bar {
   position: relative;
   overflow: hidden;

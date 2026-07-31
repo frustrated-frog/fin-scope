@@ -4,7 +4,7 @@
 
 **Goal:** 将现有 News Wire 升级为零策略配置的个人研究雷达，聚合跨来源实时资讯，按固定可解释规则排序，并说明与自选标的的直接关系、判断依据和信息缺口。
 
-**Architecture:** 保留 `/api/news` 原契约，新增短期 `radar_signal/radar_event/radar_event_signal` 持久化层和 `/api/research-radar` 组合用例。第一版使用确定性文本特征、标题相似度和固定五因子评分；`EventCluster` 继续只承载长期研究资产。前端沿用 `news` View，将导航改名为“研究雷达”，主栏展示聚合事件，侧栏保留实时快讯。
+**Architecture:** 保留 `/api/news` 原契约，新增短期 `radar_signal/radar_event/radar_event_signal` 持久化层和 `/api/research-radar` 组合用例。第一版使用确定性文本特征、标题相似度和固定五因子评分；`EventCluster` 继续只承载长期研究资产。前端保留 `News Wire` 顶层入口和实时资讯默认页，在同页二级视图中展示研究雷达。
 
 **Tech Stack:** Java 8、Spring Boot 2.7、JdbcTemplate、SQLite、JUnit 5、Mockito、React 18、TypeScript、Vite、Vitest、Testing Library。
 
@@ -35,9 +35,10 @@
 
 - `frontend/src/features/news/researchRadarTypes.ts`：雷达 API 类型。
 - `frontend/src/features/news/RadarEventCard.tsx`：小白可读事件卡和依据展开。
-- `frontend/src/features/news/NewsView.tsx`：改为研究雷达容器，保留轮询竞态保护。
+- `frontend/src/features/news/NewsView.tsx`：提供“实时资讯 / 研究雷达”二级切换并保留轮询竞态保护。
+- `frontend/src/features/news/LiveNewsPanel.tsx`：保留原实时快讯、要闻精华和 `/api/news` 读取链路。
 - `frontend/src/features/news/NewsView.test.tsx`：雷达、筛选、详情、降级和预填测试。
-- `frontend/src/app/AppShell.tsx`、`frontend/src/App.tsx`：导航和标题改名，传递研究问题预填动作。
+- `frontend/src/app/AppShell.tsx`、`frontend/src/App.tsx`：保留 `News Wire` 导航与标题，传递研究问题预填动作。
 - `frontend/src/features/research/ResearchView.tsx`：接收可选预填问题并只填充表单，不自动运行。
 - `frontend/src/styles.css`：雷达概览、卡片、原因和详情样式。
 
@@ -373,17 +374,17 @@ Expected: FAIL。
 
 - [ ] **Step 4: 重构 NewsView**
 
-保留当前 45 秒轮询、请求序号和“发现 N 条新资讯”的竞态保护，但请求改为 `/api/research-radar`。主网格左侧“今天值得关注”，右侧“实时发生”；分类保留动态目录并增加“与我相关”。自动刷新不得打断阅读。
+实时资讯继续使用 `/api/news`、45 秒轮询、请求序号和“发现 N 条新资讯”的竞态保护。切换到雷达后才请求 `/api/research-radar`，主网格左侧“今天值得关注”，右侧“实时发生”；分类保留动态目录并增加“与我相关”。自动刷新不得打断阅读。
 
 - [ ] **Step 5: 修改导航与研究预填**
 
-`AppShell` 中 `news` 改为：
+`AppShell` 中 `news` 保持为：
 
 ```ts
-{ id: 'news', label: '研究雷达', hint: '市场与自选', code: 'RD' }
+{ id: 'news', label: 'News Wire', hint: '实时资讯', code: 'NW' }
 ```
 
-`App` 标题改为“研究雷达 · 市场与自选”。点击“围绕此事研究”时设置 `researchQuestionDraft` 后切换到 `research`；`ResearchView` 只初始化输入框，绝不自动调用创建运行接口。
+`App` 标题保持“News Wire · 市场资讯”。点击“围绕此事研究”时设置 `researchQuestionDraft` 后切换到 `research`；`ResearchView` 只初始化输入框，绝不自动调用创建运行接口。
 
 - [ ] **Step 6: 增加响应式样式**
 

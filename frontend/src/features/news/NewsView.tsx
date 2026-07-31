@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { LiveNewsPanel } from './LiveNewsPanel';
 import { RadarEventCard } from './RadarEventCard';
 import type { RadarNewsItem, ResearchRadarSnapshot } from './researchRadarTypes';
 
@@ -10,6 +11,24 @@ const RELATED_CATEGORY: NewsCategory = { code: 'RELATED', name: '与我相关' }
 const REFRESH_INTERVAL_MS = 45_000;
 
 export function NewsView({ setMessage, addToast, onResearch }: {
+  setMessage: (message: string) => void;
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onResearch?: (question: string) => void;
+}) {
+  const [mode, setMode] = useState<'live' | 'radar'>('live');
+  const props = { setMessage, addToast, onResearch };
+  return (
+    <section className="news-workspace" aria-label="News Wire 工作区">
+      <nav className="news-mode-switcher" aria-label="News Wire 视图">
+        <button type="button" className={mode === 'live' ? 'active' : ''} aria-pressed={mode === 'live'} onClick={() => setMode('live')}>实时资讯</button>
+        <button type="button" className={mode === 'radar' ? 'active' : ''} aria-pressed={mode === 'radar'} onClick={() => setMode('radar')}>研究雷达</button>
+      </nav>
+      {mode === 'live' ? <LiveNewsPanel setMessage={setMessage} addToast={addToast} /> : <ResearchRadarPanel {...props} />}
+    </section>
+  );
+}
+
+function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onResearch?: (question: string) => void;

@@ -49,18 +49,47 @@ const detail = {
 
 const categories = [{ code: 'COMPANY', name: '公司动态', enabled: true, displayOrder: 10 }];
 
+const newsSnapshot = {
+  refreshedAt: '2026-07-31T16:00:00',
+  sourceCount: 2,
+  warnings: [],
+  items: [
+    liveItem,
+    { ...liveItem, id: 'THS:article', kind: 'ARTICLE', title: '上市公司要闻精华', providerCode: 'THS', sourceName: '同花顺' }
+  ]
+};
+
 beforeEach(() => {
   vi.useRealTimers();
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
     return Promise.resolve(snapshot);
   });
 });
 
+async function openRadar() {
+  fireEvent.click(screen.getByRole('button', { name: '研究雷达' }));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByRole('heading', { name: '今天值得关注' })).toBeInTheDocument();
+}
+
+test('keeps the original realtime wire as the default and offers radar as a secondary view', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+
+  expect(await screen.findByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '要闻精华' })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100');
+
+  await openRadar();
+  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20');
+});
+
 test('renders explainable priority cards before the live wire', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
 
   const focus = await screen.findByRole('heading', { name: '今天值得关注' });
   expect(screen.getByText('与自选「宁德时代」直接相关')).toBeInTheDocument();
@@ -72,6 +101,7 @@ test('renders explainable priority cards before the live wire', async () => {
 
 test('loads original signals only when the user asks for evidence', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
   await screen.findByRole('heading', { name: event.title });
 
   await userEvent.click(screen.getByRole('button', { name: '查看依据' }));
@@ -84,6 +114,7 @@ test('loads original signals only when the user asks for evidence', async () => 
 test('research action only hands the suggested question to the parent', async () => {
   const onResearch = vi.fn();
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={onResearch} />);
+  await openRadar();
   await screen.findByRole('heading', { name: event.title });
 
   await userEvent.click(screen.getByRole('button', { name: '围绕此事研究' }));
@@ -95,9 +126,11 @@ test('research action only hands the suggested question to the parent', async ()
 test('supports watchlist-only filtering and degraded snapshots', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve({ ...snapshot, warnings: ['实时资讯暂不可用，已展示最近一次结果'] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
   await screen.findByRole('button', { name: '与我相关' });
 
   fireEvent.click(screen.getByRole('button', { name: '与我相关' }));
@@ -112,9 +145,11 @@ test('polling waits for confirmation before inserting a new live item', async ()
   const updated = { ...snapshot, liveItems: [{ ...liveItem, id: 'THS:2', title: '新的实时消息' }, ...snapshot.liveItems] };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
     calls += 1; return Promise.resolve(calls === 1 ? snapshot : updated);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
   await act(async () => { await Promise.resolve(); });
 
   await act(async () => { vi.advanceTimersByTime(45_000); await Promise.resolve(); });
