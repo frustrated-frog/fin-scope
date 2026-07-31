@@ -46,6 +46,20 @@ test('defaults to deep research mode and submits the selected quick mode', async
   expect(onRun).toHaveBeenCalledWith(expect.objectContaining({ mode: 'QUICK' }));
 });
 
+test('prefills a radar question without creating or running research', () => {
+  const onCreateThesis = vi.fn();
+  const onRun = vi.fn();
+  renderView(legacyDetail(), {
+    initialQuestion: '围绕宁德时代新电池，哪些事实已经确认？',
+    onCreateThesis,
+    onRun
+  });
+
+  expect(screen.getByLabelText('研究问题')).toHaveValue('围绕宁德时代新电池，哪些事实已经确认？');
+  expect(onCreateThesis).not.toHaveBeenCalled();
+  expect(onRun).not.toHaveBeenCalled();
+});
+
 test('counts public and structured material calls against the same search budget', () => {
   const detail = legacyDetail();
   detail.run.mode = 'DEEP';

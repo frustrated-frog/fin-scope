@@ -1,0 +1,14 @@
+[
+  {"category":"COMPANY","leftTitle":"宁德时代发布新一代电池","rightTitle":"宁德时代新电池正式发布","expectedSame":true,"reason":"同公司、同产品发布"},
+  {"category":"COMPANY","leftTitle":"比亚迪发布新款汽车","rightTitle":"比亚迪新汽车正式发布","expectedSame":true,"reason":"同公司、同新车发布"},
+  {"category":"COMPANY","leftTitle":"小米发布年度财报","rightTitle":"小米年度财报正式发布","expectedSame":true,"reason":"同公司、同财报发布"},
+  {"category":"COMPANY","leftTitle":"苹果发布新款芯片","rightTitle":"苹果新芯片正式发布","expectedSame":true,"reason":"同公司、同芯片发布"},
+  {"category":"MACRO_POLICY","leftTitle":"美联储宣布加息","rightTitle":"美联储加息决定正式发布","expectedSame":true,"reason":"同机构、同政策动作"},
+  {"category":"COMPANY","leftTitle":"宁德时代发布新一代电池","rightTitle":"小米发布新款汽车","expectedSame":false,"reason":"主要公司不同"},
+  {"category":"MACRO_POLICY","leftTitle":"美联储宣布维持利率不变","rightTitle":"中国央行开展逆回购操作","expectedSame":false,"reason":"政策机构与动作不同"},
+  {"category":"COMPANY","leftTitle":"特斯拉发布新款汽车","rightTitle":"苹果发布新款芯片","expectedSame":false,"reason":"公司与产品不同"},
+  {"category":"COMPANY","leftTitle":"微软发布新一代芯片","rightTitle":"英伟达发布新款芯片","expectedSame":false,"reason":"同类动作但公司不同"},
+  {"category":"COMPANY","leftTitle":"比亚迪发布新款汽车","rightTitle":"小米发布新款汽车","expectedSame":false,"reason":"相似标题但主体不同"},
+  {"category":"MARKET_MOVE","leftTitle":"存储芯片板块持续走强","rightTitle":"芯片股午后集体上涨","expectedSame":false,"reason":"主题相近但缺少明确事件主体"},
+  {"category":"MARKET_MOVE","leftTitle":"黄金价格持续上涨","rightTitle":"芯片板块午后回落","expectedSame":false,"reason":"市场变量不同"}
+]
