@@ -148,6 +148,25 @@ export interface QuantStrategyVersion {
   strategyFingerprint: string; datasetFingerprint: string; engineVersion: string; source: string;
 }
 
+export type QuantStrategyCompatibilityStatus = 'ADAPTABLE' | 'NEEDS_FACTOR' | 'UNSUPPORTED';
+
+export interface QuantStrategyCatalogSource {
+  code: string; repositoryUrl?: string; branch?: string; commitSha: string;
+  status: string; lastSyncedAt: string; errorMessage?: string;
+}
+
+export interface QuantStrategyCandidate {
+  id: number; title: string; assetClass: 'EQUITY'; sourceCommitSha: string;
+  reportedSharpe?: number; reportedVolatility?: number; rebalanceCadence?: string;
+  implementationUrl?: string; paperUrl?: string;
+  compatibilityStatus: QuantStrategyCompatibilityStatus; adaptationNote: string;
+  mappedFactors: string[]; missingFactors: string[]; archived: boolean;
+}
+
+export interface QuantStrategyCatalogSyncResult {
+  sourceCode: string; commitSha: string; importedCount: number; activeCount: number; syncedAt: string;
+}
+
 export interface BacktestMetrics {
   totalReturn: number; annualizedReturn: number; annualizedVolatility: number; maxDrawdown: number;
   sharpeRatio: number; calmarRatio: number; winRate: number; turnover: number; tradeCount: number;
