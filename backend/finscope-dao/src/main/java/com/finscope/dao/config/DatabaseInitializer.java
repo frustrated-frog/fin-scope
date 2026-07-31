@@ -157,11 +157,24 @@ public class DatabaseInitializer implements InitializingBean {
                 + "reason TEXT,"
                 + "model_name TEXT,"
                 + "error_message TEXT,"
+                + "manual_category_code TEXT,"
+                + "manual_reason TEXT,"
+                + "review_status TEXT,"
+                + "reviewed_at TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL,"
                 + "FOREIGN KEY(category_code) REFERENCES news_category(code))");
+        ensureColumn("news_item_classification", "manual_category_code", "TEXT");
+        ensureColumn("news_item_classification", "manual_reason", "TEXT");
+        ensureColumn("news_item_classification", "review_status", "TEXT");
+        ensureColumn("news_item_classification", "reviewed_at", "TEXT");
+        jdbcTemplate.update("UPDATE news_item_classification SET review_status="
+                + "CASE WHEN confidence < 0.70 THEN 'PENDING_REVIEW' ELSE 'AUTO_CONFIRMED' END "
+                + "WHERE status='CLASSIFIED' AND review_status IS NULL");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_classification_category "
                 + "ON news_item_classification(status,category_code,updated_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_classification_review "
+                + "ON news_item_classification(status,review_status,updated_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_signal ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL UNIQUE,provider_code TEXT,source_name TEXT,"
                 + "source_tier TEXT,category_code TEXT,title TEXT NOT NULL,content TEXT,url TEXT,published_at TEXT,"

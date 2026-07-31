@@ -77,4 +77,37 @@ class NewsClassificationRepositoryTest {
         assertTrue(classifications.claim("THS:2", failedAt.plusMinutes(6), failedAt.plusMinutes(1)));
         assertEquals("PENDING", classifications.findByItemIds(Arrays.asList("THS:2")).get("THS:2").getStatus());
     }
+
+    @Test
+    void marksLowConfidenceItemsForReview() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 10, 0);
+        assertTrue(classifications.claim("CLS:LOW", now, now.minusMinutes(5)));
+
+        classifications.markClassified("CLS:LOW", "COMPANY", 0.69,
+                "主体可能同时涉及行业变化", "model-a", now.plusSeconds(1));
+
+        NewsItemClassification value = classifications.findByItemIds(Arrays.asList("CLS:LOW")).get("CLS:LOW");
+        assertEquals("PENDING_REVIEW", value.getReviewStatus());
+        assertTrue(value.isPendingReview());
+        assertEquals("COMPANY", value.getEffectiveCategoryCode());
+    }
+
+    @Test
+    void manualCorrectionPreservesAgentDecision() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 10, 0);
+        assertTrue(classifications.claim("CLS:CORRECT", now, now.minusMinutes(5)));
+        classifications.markClassified("CLS:CORRECT", "COMPANY", 0.65,
+                "公司公告", "model-a", now.plusSeconds(1));
+
+        classifications.review("CLS:CORRECT", "INDUSTRY", "产业链影响", now.plusMinutes(1));
+
+        NewsItemClassification value = classifications.findByItemIds(Arrays.asList("CLS:CORRECT"))
+                .get("CLS:CORRECT");
+        assertEquals("COMPANY", value.getCategoryCode());
+        assertEquals("公司公告", value.getReason());
+        assertEquals("INDUSTRY", value.getEffectiveCategoryCode());
+        assertEquals("产业链影响", value.getManualReason());
+        assertEquals("CORRECTED", value.getReviewStatus());
+        assertTrue(value.isManuallyReviewed());
+    }
 }
