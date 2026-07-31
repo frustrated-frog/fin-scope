@@ -70,6 +70,8 @@ export function NewsView({
       } else {
         snapshotRef.current = next;
         setSnapshot(next);
+        setPendingSnapshot(undefined);
+        setPendingCount(0);
       }
       setMessage(next.warnings.length ? '资讯已更新，部分来源暂不可用' : '资讯流已同步');
       if (manual) addToast('资讯已更新', 'success');
