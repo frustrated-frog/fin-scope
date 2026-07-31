@@ -1875,42 +1875,58 @@ a:focus-visible {
 
 .recognition-desk {
   display: grid;
-  gap: 18px;
-  padding: 0 0 36px;
+  gap: 16px;
+  padding: 28px clamp(20px, 4vw, 38px) 44px;
 }
 
 .recognition-agent-hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 22px;
-  padding: 30px;
-  border: 1px solid var(--knowledge-border);
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(13, 29, 38, 0.98), rgba(18, 43, 49, 0.94));
-  color: #f4f2e9;
-  box-shadow: 0 18px 50px rgba(10, 24, 29, 0.1);
+  gap: 20px 28px;
+  overflow: hidden;
+  padding: 26px 28px 24px;
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 16px;
+  background: var(--knowledge-paper);
+  color: var(--knowledge-ink);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--knowledge-ink) 7%, transparent);
+}
+
+.recognition-agent-hero::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--knowledge-pine) 0 34%, var(--knowledge-amber) 34% 41%, transparent 41%);
+  content: "";
 }
 
 .recognition-agent-hero h2 {
-  max-width: 760px;
-  margin: 4px 0 10px;
-  font-family: var(--knowledge-serif);
-  font-size: clamp(27px, 3.2vw, 42px);
-  line-height: 1.14;
+  max-width: 720px;
+  margin: 4px 0 8px;
+  color: var(--knowledge-ink);
+  font-family: "Iowan Old Style", "Songti SC", STSong, serif;
+  font-size: clamp(28px, 2.7vw, 38px);
+  font-weight: 650;
+  letter-spacing: -.025em;
+  line-height: 1.12;
 }
 
 .recognition-agent-hero > div > p:last-child {
-  max-width: 780px;
+  max-width: 740px;
   margin: 0;
-  color: rgba(244, 242, 233, 0.68);
-  line-height: 1.75;
+  color: var(--knowledge-slate);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .recognition-agent-hero > .knowledge-primary-button {
   align-self: start;
-  border-color: #d1b56d;
-  background: #d1b56d;
-  color: #142227;
+  min-height: 40px;
+  border-color: var(--knowledge-pine);
+  background: var(--knowledge-pine);
+  color: var(--knowledge-paper);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--knowledge-pine) 22%, transparent);
 }
 
 .recognition-agent-metrics {
@@ -1918,59 +1934,71 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
-  margin: 2px 0 0;
+  margin: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 10px;
+  background: var(--knowledge-rule);
 }
 
-.recognition-agent-metrics div { padding: 15px 17px; background: rgba(9, 24, 29, 0.78); }
-.recognition-agent-metrics dt { color: rgba(244, 242, 233, 0.55); font-size: 12px; }
-.recognition-agent-metrics dd { margin: 6px 0 0; color: #fff; font-size: 20px; font-weight: 700; }
+.recognition-agent-metrics div { padding: 12px 15px; background: color-mix(in srgb, var(--knowledge-canvas) 58%, var(--knowledge-paper)); }
+.recognition-agent-metrics dt { color: var(--knowledge-slate); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
+.recognition-agent-metrics dd { margin: 4px 0 0; color: var(--knowledge-ink); font: 700 19px/1.25 SFMono-Regular, Menlo, monospace; }
 
 .recognition-status-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   padding: 5px;
   overflow-x: auto;
-  border: 1px solid var(--knowledge-border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 12px;
+  background: var(--knowledge-paper);
 }
 
 .recognition-status-tabs button {
   flex: 0 0 auto;
-  padding: 9px 14px;
+  min-height: 38px;
+  padding: 8px 13px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--knowledge-muted);
-  font-weight: 700;
+  color: var(--knowledge-slate);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 100ms ease-out;
 }
 
 .recognition-status-tabs button[aria-pressed="true"] {
-  background: #18353b;
-  color: #fff;
-  box-shadow: 0 5px 14px rgba(14, 39, 45, 0.14);
+  background: color-mix(in srgb, var(--knowledge-pine) 14%, var(--knowledge-paper));
+  color: var(--knowledge-pine);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--knowledge-pine) 24%, transparent);
 }
+
+.recognition-status-tabs button:active,
+.recognition-agent-hero > .knowledge-primary-button:active { transform: scale(.97); }
+
+.recognition-status-tabs button:focus-visible,
+.recognition-agent-hero > .knowledge-primary-button:focus-visible { outline: 2px solid var(--knowledge-pine); outline-offset: 2px; }
 
 .recognition-candidate-list { display: grid; gap: 14px; }
 
 .recognition-candidate {
   overflow: hidden;
-  border: 1px solid var(--knowledge-border);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 12px 35px rgba(31, 45, 48, 0.06);
+  border: 1px solid var(--knowledge-rule);
+  border-radius: 14px;
+  background: var(--knowledge-paper);
+  color: var(--knowledge-ink);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--knowledge-ink) 5%, transparent);
 }
 
-.recognition-candidate > header { padding: 22px 24px 17px; border-bottom: 1px solid var(--knowledge-border); }
-.recognition-candidate > header h3 { max-width: 900px; margin: 13px 0 0; font-family: var(--knowledge-serif); font-size: 23px; line-height: 1.42; }
+.recognition-candidate > header { padding: 22px 24px 17px; border-bottom: 1px solid var(--knowledge-rule); }
+.recognition-candidate > header h3 { max-width: 900px; margin: 13px 0 0; color: var(--knowledge-ink); font-family: "Iowan Old Style", "Songti SC", STSong, serif; font-size: 22px; line-height: 1.42; }
 .recognition-subject { display: flex; align-items: center; gap: 9px; }
-.recognition-subject span { padding: 3px 7px; border-radius: 6px; background: #e3ece9; color: #27544f; font-size: 11px; font-weight: 800; }
-.recognition-subject code { color: var(--knowledge-muted); font-size: 12px; }
-.recognition-confidence { float: right; margin-top: -21px; color: var(--knowledge-muted); font-size: 12px; }
+.recognition-subject span { padding: 3px 7px; border-radius: 6px; background: color-mix(in srgb, var(--knowledge-pine) 12%, var(--knowledge-paper)); color: var(--knowledge-pine); font-size: 10px; font-weight: 800; }
+.recognition-subject code { color: var(--knowledge-slate); font-size: 12px; }
+.recognition-confidence { float: right; margin-top: -21px; color: var(--knowledge-slate); font-size: 12px; }
 
 .recognition-reasoning-grid {
   display: grid;
@@ -1978,25 +2006,32 @@ a:focus-visible {
   gap: 0;
 }
 
-.recognition-reason-block { min-height: 118px; padding: 19px 24px; border-right: 1px solid var(--knowledge-border); border-bottom: 1px solid var(--knowledge-border); }
+.recognition-reason-block { min-height: 118px; padding: 19px 24px; border-right: 1px solid var(--knowledge-rule); border-bottom: 1px solid var(--knowledge-rule); }
 .recognition-reason-block:nth-child(even) { border-right: 0; }
-.recognition-reason-block h4 { margin: 0 0 9px; color: #6b786f; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
-.recognition-reason-block p, .recognition-reason-block ul { margin: 0; color: #2c3c3d; line-height: 1.7; }
+.recognition-reason-block h4 { margin: 0 0 9px; color: var(--knowledge-slate); font-size: 10px; letter-spacing: .08em; }
+.recognition-reason-block p, .recognition-reason-block ul { margin: 0; color: var(--knowledge-ink); font-size: 13px; line-height: 1.7; }
 .recognition-reason-block ul { padding-left: 18px; }
-.recognition-reason-block.counter { background: rgba(151, 87, 65, 0.045); }
-.recognition-reason-block.counter h4 { color: #975741; }
+.recognition-reason-block.counter { background: color-mix(in srgb, var(--danger) 5%, var(--knowledge-paper)); }
+.recognition-reason-block.counter h4 { color: color-mix(in srgb, var(--danger) 76%, var(--knowledge-ink)); }
 
-.recognition-candidate > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 24px; color: var(--knowledge-muted); font-size: 13px; }
+.recognition-candidate > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 24px; color: var(--knowledge-slate); font-size: 12px; }
 .recognition-candidate > footer div { display: flex; gap: 8px; }
-.recognition-candidate > footer button { padding: 8px 12px; border: 1px solid var(--knowledge-border); border-radius: 9px; background: #fff; }
-.recognition-candidate > footer .knowledge-primary-button { border-color: #18353b; background: #18353b; color: #fff; }
+.recognition-candidate > footer button { padding: 8px 12px; border: 1px solid var(--knowledge-rule); border-radius: 8px; background: var(--knowledge-paper); color: var(--knowledge-ink); }
+.recognition-candidate > footer .knowledge-primary-button { border-color: var(--knowledge-pine); background: var(--knowledge-pine); color: var(--knowledge-paper); }
 
-.recognition-empty { padding: 46px 28px; border: 1px dashed var(--knowledge-border); border-radius: 17px; background: rgba(255,255,255,.55); text-align: center; }
-.recognition-empty strong { display: block; margin-bottom: 8px; font-family: var(--knowledge-serif); font-size: 20px; }
-.recognition-empty p { max-width: 620px; margin: 0 auto; color: var(--knowledge-muted); line-height: 1.7; }
+.recognition-empty { display: grid; place-items: center; min-height: 210px; padding: 38px 28px; border: 1px dashed var(--knowledge-rule); border-radius: 14px; background: var(--knowledge-paper); color: var(--knowledge-ink); text-align: center; }
+.recognition-empty::before { display: block; margin-bottom: 12px; color: var(--knowledge-pine); font: 400 25px/1 SFMono-Regular, Menlo, monospace; content: "○"; opacity: .72; }
+.recognition-empty strong { display: block; margin-bottom: 7px; color: var(--knowledge-ink); font-family: "Iowan Old Style", "Songti SC", STSong, serif; font-size: 19px; }
+.recognition-empty p { max-width: 600px; margin: 0 auto; color: var(--knowledge-slate); font-size: 13px; line-height: 1.65; }
+
+@media (prefers-reduced-motion: reduce) {
+  .recognition-status-tabs button,
+  .recognition-agent-hero > .knowledge-primary-button { transition: none; }
+}
 
 @media (max-width: 760px) {
-  .recognition-agent-hero { grid-template-columns: 1fr; padding: 24px 20px; }
+  .recognition-desk { padding: 20px 14px 34px; }
+  .recognition-agent-hero { grid-template-columns: 1fr; padding: 23px 20px 20px; }
   .recognition-agent-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .recognition-reasoning-grid { grid-template-columns: 1fr; }
   .recognition-reason-block { border-right: 0; }

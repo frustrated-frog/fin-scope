@@ -199,3 +199,18 @@ test('centers and scales the four knowledge navigation labels', () => {
     /\.knowledge-nav-item small\s*{[^}]*font-size:\s*11px;[^}]*font-weight:\s*500;[^}]*line-height:\s*1\.2;/s
   );
 });
+
+test('investment recognition surfaces stay inside the knowledge theme in light and dark modes', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+  const recognitionStyles = styles.slice(
+    styles.indexOf('.recognition-desk'),
+    styles.indexOf('.knowledge-section-heading', styles.indexOf('.recognition-desk'))
+  );
+
+  expect(recognitionStyles).not.toMatch(/--knowledge-(?:border|muted|serif)/);
+  expect(recognitionStyles).not.toMatch(/background:\s*(?:#fff(?:fff)?|rgba\(255\s*,\s*255\s*,\s*255)/i);
+  expect(recognitionStyles).toMatch(/\.recognition-status-tabs\s*{[^}]*background:\s*var\(--knowledge-paper\)/s);
+  expect(recognitionStyles).toMatch(/\.recognition-empty\s*{[^}]*background:\s*var\(--knowledge-paper\)/s);
+  expect(recognitionStyles).toMatch(/\.recognition-candidate\s*{[^}]*background:\s*var\(--knowledge-paper\)/s);
+});
