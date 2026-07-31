@@ -39,6 +39,11 @@ public class AppConfig {
     }
 
     @Bean
+    public com.finscope.service.radar.RadarTextAnalyzer radarTextAnalyzer(FingerprintService fingerprintService) {
+        return new com.finscope.service.radar.RadarTextAnalyzer(fingerprintService);
+    }
+
+    @Bean
     public BriefGenerator briefGenerator() {
         return new BriefGenerator();
     }
