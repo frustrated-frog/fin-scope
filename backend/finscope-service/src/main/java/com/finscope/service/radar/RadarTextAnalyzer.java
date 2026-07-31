@@ -52,7 +52,7 @@ public class RadarTextAnalyzer {
         String variable = first(features.variables);
         String fallback = features.normalizedTitle.length() <= 32
                 ? features.normalizedTitle : features.normalizedTitle.substring(0, 32);
-        return features.category + ":" + nonBlank(subject, variable, fallback) + ":"
+        return features.category + ":" + nonBlank(subject, fallback) + ":"
                 + nonBlank(action, "事件") + ":" + nonBlank(variable, "信息");
     }
 
