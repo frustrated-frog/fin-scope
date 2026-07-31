@@ -111,6 +111,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "newsClassificationExecutor")
+    public Executor newsClassificationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("news-classification-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(20);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "quoteTaskExecutor")
     public Executor quoteTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
