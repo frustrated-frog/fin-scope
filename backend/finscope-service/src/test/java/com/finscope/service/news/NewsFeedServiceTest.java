@@ -121,6 +121,72 @@ class NewsFeedServiceTest {
         throw new AssertionError("expected BusinessException");
     }
 
+    @Test
+    void returnsOnlyLowConfidenceUnreviewedItemsForPendingReview() {
+        ResearchMaterialGateway gateway = gatewayWithTwoItems();
+        NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        Map<String, NewsItemClassification> saved = new LinkedHashMap<String, NewsItemClassification>();
+        saved.put("CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", classification(
+                "CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", "COMPANY", 0.65, null, "PENDING_REVIEW"));
+        saved.put("THS_NEWS_DIGEST:THS_NEWS_DIGEST-30", classification(
+                "THS_NEWS_DIGEST:THS_NEWS_DIGEST-30", "INDUSTRY", 0.92, null, "AUTO_CONFIRMED"));
+        when(classifications.findByItemIds(argThat(ids -> ids.size() == 2))).thenReturn(saved);
+        NewsFeedService service = new NewsFeedService(gateway, classifications, categories,
+                mock(NewsClassificationCoordinator.class), fixedClock());
+
+        NewsFeedSnapshot result = service.load("PENDING_REVIEW", 20);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("盘中快讯", result.getItems().get(0).getTitle());
+        assertEquals("PENDING_REVIEW", result.getItems().get(0).getReviewStatus());
+    }
+
+    @Test
+    void filtersBusinessCategoryUsingManualEffectiveDecision() {
+        ResearchMaterialGateway gateway = gatewayWithTwoItems();
+        NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        when(categories.findEnabledByCode("INDUSTRY")).thenReturn(java.util.Optional.of(
+                category("INDUSTRY", "行业产业")));
+        Map<String, NewsItemClassification> saved = new LinkedHashMap<String, NewsItemClassification>();
+        saved.put("CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", classification(
+                "CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", "COMPANY", 0.65, "INDUSTRY", "CORRECTED"));
+        when(classifications.findByItemIds(argThat(ids -> ids.size() == 2))).thenReturn(saved);
+        NewsFeedService service = new NewsFeedService(gateway, classifications, categories,
+                mock(NewsClassificationCoordinator.class), fixedClock());
+
+        NewsFeedSnapshot result = service.load("INDUSTRY", 20);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("INDUSTRY", result.getItems().get(0).getCategoryCode());
+        assertEquals("COMPANY", result.getItems().get(0).getAgentCategoryCode());
+        assertTrue(result.getItems().get(0).isManuallyReviewed());
+    }
+
+    @Test
+    void reportsCategoryCountsAndUnclassifiedCountForCurrentSnapshot() {
+        ResearchMaterialGateway gateway = gatewayWithTwoItems();
+        NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        when(categories.findEnabled()).thenReturn(Arrays.asList(
+                category("COMPANY", "公司动态"), category("INDUSTRY", "行业产业")));
+        Map<String, NewsItemClassification> saved = new LinkedHashMap<String, NewsItemClassification>();
+        saved.put("CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", classification(
+                "CLS_NEWS_FLASH:CLS_NEWS_FLASH-45", "COMPANY", 0.65, null, "PENDING_REVIEW"));
+        when(classifications.findByItemIds(argThat(ids -> ids.size() == 2))).thenReturn(saved);
+        NewsFeedService service = new NewsFeedService(gateway, classifications, categories,
+                mock(NewsClassificationCoordinator.class), fixedClock());
+
+        NewsFeedSnapshot result = service.load("ALL", 20);
+
+        assertEquals(Integer.valueOf(2), result.getCategoryCounts().get("ALL"));
+        assertEquals(Integer.valueOf(1), result.getCategoryCounts().get("COMPANY"));
+        assertEquals(Integer.valueOf(0), result.getCategoryCounts().get("INDUSTRY"));
+        assertEquals(Integer.valueOf(1), result.getCategoryCounts().get("PENDING_REVIEW"));
+        assertEquals(1, result.getUnclassifiedCount());
+    }
+
     private static ResearchMaterialGateway gatewayWithTwoItems() {
         ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
         when(gateway.search(eq(ResearchMaterialType.NEWS_FLASH), argThat(request -> true)))
@@ -138,6 +204,14 @@ class NewsFeedServiceTest {
     private static NewsItemClassification classification(String itemId, String categoryCode) {
         return new NewsItemClassification(itemId, "CLASSIFIED", categoryCode, 0.9,
                 "Agent 分类", "model-a", null, LocalDateTime.of(2026, 7, 31, 10, 0));
+    }
+
+    private static NewsItemClassification classification(String itemId, String categoryCode, double confidence,
+                                                         String manualCategoryCode, String reviewStatus) {
+        return new NewsItemClassification(itemId, "CLASSIFIED", categoryCode, confidence,
+                "Agent 分类", "model-a", null, manualCategoryCode, null, reviewStatus,
+                manualCategoryCode == null ? null : LocalDateTime.of(2026, 8, 1, 10, 0),
+                LocalDateTime.of(2026, 8, 1, 10, 0));
     }
 
     private static ResearchMaterial material(String provider, String family, String title,

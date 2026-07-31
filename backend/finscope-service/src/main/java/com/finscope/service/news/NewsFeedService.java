@@ -64,16 +64,14 @@ public class NewsFeedService {
 
     public NewsFeedSnapshot load(String requestedCategory, int requestedLimit) {
         String category = normalizeCategory(requestedCategory);
-        List<NewsCategory> enabledCategories;
-        if ("ALL".equals(category)) {
-            enabledCategories = categories();
-        } else {
+        List<NewsCategory> enabledCategories = new ArrayList<NewsCategory>(categories());
+        if (!"ALL".equals(category) && !"PENDING_REVIEW".equals(category)) {
             NewsCategory selected = categories == null ? null : categories.findEnabledByCode(category).orElse(null);
             if (selected == null) {
                 throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                         "未知或已停用的资讯分类：" + category);
             }
-            enabledCategories = Collections.singletonList(selected);
+            if (!containsCategory(enabledCategories, selected.getCode())) enabledCategories.add(selected);
         }
 
         int limit = Math.max(1, Math.min(requestedLimit, 100));
@@ -100,6 +98,8 @@ public class NewsFeedService {
 
         Map<String, String> categoryNames = new LinkedHashMap<String, String>();
         for (NewsCategory value : enabledCategories) categoryNames.put(value.getCode(), value.getName());
+        Map<String, Integer> categoryCounts = categoryCounts(baseItems, saved, enabledCategories);
+        int unclassifiedCount = unclassifiedCount(baseItems, saved);
         List<NewsFeedItem> items = new ArrayList<NewsFeedItem>();
         Set<String> sources = new LinkedHashSet<String>();
         for (NewsFeedItem item : baseItems) {
@@ -110,7 +110,8 @@ public class NewsFeedService {
             items.add(enriched);
             sources.add(enriched.getSourceName());
         }
-        return new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size());
+        return new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size(),
+                categoryCounts, unclassifiedCount);
     }
 
     public List<NewsCategory> categories() {
@@ -118,9 +119,10 @@ public class NewsFeedService {
     }
 
     private boolean matches(String requestedCategory, NewsItemClassification classification) {
-        return "ALL".equals(requestedCategory) || (classification != null
-                && "CLASSIFIED".equals(classification.getStatus())
-                && requestedCategory.equals(classification.getCategoryCode()));
+        if ("ALL".equals(requestedCategory)) return true;
+        if (classification == null || !"CLASSIFIED".equals(classification.getStatus())) return false;
+        if ("PENDING_REVIEW".equals(requestedCategory)) return classification.isPendingReview();
+        return requestedCategory.equals(classification.getEffectiveCategoryCode());
     }
 
     private NewsFeedItem map(ResearchMaterial value) {
@@ -135,10 +137,47 @@ public class NewsFeedService {
                                 Map<String, String> categoryNames) {
         return new NewsFeedItem(item.getId(), item.getKind(), item.getTitle(), item.getContent(), item.getUrl(),
                 item.getPublishedAt(), item.getProviderCode(), item.getSourceName(), item.getSourceTier(),
+                classification == null ? null : classification.getEffectiveCategoryCode(),
+                classification == null ? null : categoryNames.get(classification.getEffectiveCategoryCode()),
                 classification == null ? null : classification.getCategoryCode(),
-                classification == null ? null : categoryNames.get(classification.getCategoryCode()),
                 classification == null ? null : classification.getConfidence(),
-                classification == null ? null : classification.getReason());
+                classification == null ? null : classification.getReason(),
+                classification == null ? null : classification.getReviewStatus(),
+                classification != null && classification.isManuallyReviewed(),
+                classification == null ? null : classification.getManualReason());
+    }
+
+    private Map<String, Integer> categoryCounts(List<NewsFeedItem> items,
+                                                Map<String, NewsItemClassification> saved,
+                                                List<NewsCategory> enabledCategories) {
+        Map<String, Integer> values = new LinkedHashMap<String, Integer>();
+        values.put("ALL", items.size());
+        for (NewsCategory category : enabledCategories) values.put(category.getCode(), 0);
+        values.put("PENDING_REVIEW", 0);
+        for (NewsFeedItem item : items) {
+            NewsItemClassification classification = saved.get(item.getId());
+            if (classification == null || !"CLASSIFIED".equals(classification.getStatus())) continue;
+            String effective = classification.getEffectiveCategoryCode();
+            if (values.containsKey(effective)) values.put(effective, values.get(effective) + 1);
+            if (classification.isPendingReview()) {
+                values.put("PENDING_REVIEW", values.get("PENDING_REVIEW") + 1);
+            }
+        }
+        return values;
+    }
+
+    private int unclassifiedCount(List<NewsFeedItem> items, Map<String, NewsItemClassification> saved) {
+        int count = 0;
+        for (NewsFeedItem item : items) {
+            NewsItemClassification classification = saved.get(item.getId());
+            if (classification == null || !"CLASSIFIED".equals(classification.getStatus())) count++;
+        }
+        return count;
+    }
+
+    private boolean containsCategory(List<NewsCategory> values, String code) {
+        for (NewsCategory value : values) if (code.equals(value.getCode())) return true;
+        return false;
     }
 
     private List<String> itemIds(List<NewsFeedItem> items) {
