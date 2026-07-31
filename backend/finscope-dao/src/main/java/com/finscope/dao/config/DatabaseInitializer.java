@@ -162,6 +162,25 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(category_code) REFERENCES news_category(code))");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_classification_category "
                 + "ON news_item_classification(status,category_code,updated_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_signal ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL UNIQUE,provider_code TEXT,source_name TEXT,"
+                + "source_tier TEXT,category_code TEXT,title TEXT NOT NULL,content TEXT,url TEXT,published_at TEXT,"
+                + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,content_hash TEXT NOT NULL,status TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_signal_active ON radar_signal(status,last_seen_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_signal_category ON radar_signal(category_code,last_seen_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,canonical_title TEXT NOT NULL,summary TEXT,"
+                + "category_code TEXT,status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
+                + "source_count INTEGER NOT NULL DEFAULT 0,signal_count INTEGER NOT NULL DEFAULT 0,"
+                + "priority_score INTEGER NOT NULL DEFAULT 0,score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,"
+                + "watchlist_explanation TEXT,uncertainty TEXT,next_observation TEXT,updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_rank ON radar_event(status,category_code,priority_score DESC,last_seen_at DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_signal ("
+                + "event_id INTEGER NOT NULL,signal_id INTEGER NOT NULL,relation_type TEXT NOT NULL,match_score REAL NOT NULL,"
+                + "match_reason TEXT,PRIMARY KEY(event_id,signal_id),"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE,"
+                + "FOREIGN KEY(signal_id) REFERENCES radar_signal(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_signal_signal ON radar_event_signal(signal_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brief ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "brief_date TEXT NOT NULL UNIQUE,"
