@@ -23,6 +23,45 @@ const responses: Record<string, unknown> = {
     dueReviewCount: 0,
     activeTopicCount: 1
   },
+  '/api/knowledge/topics?page=0&size=100&lifecycle=ACTIVE': {
+    items: [{
+      id: 41,
+      name: '实际利率下行有利于黄金定价',
+      description: '持续检验降息预期、实际利率与黄金资金流。',
+      lifecycleStatus: 'ACTIVE',
+      masteryStatus: 'REVIEWING',
+      revision: 2,
+      articleCount: 3
+    }],
+    totalCount: 1,
+    page: 0,
+    pageSize: 100,
+    totalPages: 1
+  },
+  '/api/knowledge/topics/41': {
+    topic: {
+      id: 41,
+      name: '实际利率下行有利于黄金定价',
+      description: '持续检验降息预期、实际利率与黄金资金流。',
+      lifecycleStatus: 'ACTIVE',
+      masteryStatus: 'REVIEWING',
+      revision: 2,
+      articleCount: 3
+    },
+    events: [{ id: 1, canonicalTitle: '美联储降息预期升温，黄金ETF出现增量资金' }],
+    evidence: [{
+      id: 1,
+      eventId: 1,
+      sourceTier: 'MEDIA',
+      evidenceType: 'FACT',
+      claim: '黄金ETF单周流入12亿美元。',
+      confidence: 75,
+      articleTitle: '黄金ETF单周流入12亿美元',
+      articleUrl: 'https://example.com/gold-etf'
+    }],
+    tasks: [],
+    entries: []
+  },
   '/api/sources': [
     {
       id: 1,
@@ -1021,16 +1060,15 @@ test('brief reader places the outline overview above the document body', async (
   expect(overview.compareDocumentPosition(document) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('facts and knowledge keeps event context and supporting evidence in one dossier', async () => {
+test('facts and knowledge verifies a proposition only when it affects a recognition', async () => {
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Facts & Knowledge' }));
-  await userEvent.click(await screen.findByRole('button', { name: '事实与变化' }));
-  await userEvent.click(await screen.findByRole('button', { name: /美联储降息预期升温/ }));
+  await userEvent.click(await screen.findByRole('button', { name: '核验队列' }));
 
-  expect(await screen.findByRole('heading', { name: '美联储降息预期升温，黄金ETF出现增量资金' })).toBeInTheDocument();
-  expect(screen.getByText('黄金ETF单周流入12亿美元。')).toBeInTheDocument();
-  expect(screen.getByText('美联储官员释放偏鸽措辞。')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '黄金ETF单周流入12亿美元。' })).toBeInTheDocument();
+  expect(screen.getAllByText('实际利率下行有利于黄金定价').length).toBeGreaterThan(0);
+  expect(screen.getByText('需要找到公告、监管或公司一手材料')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
 });

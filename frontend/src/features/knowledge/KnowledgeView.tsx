@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { EventCluster, EvidenceItem, PageResponse } from '../../shared/types';
 import { ResearchRadarSnapshot } from '../news/researchRadarTypes';
 import { KnowledgeNavigation } from './KnowledgeNavigation';
 import { knowledgeApi } from './knowledgeApi';
@@ -20,8 +19,9 @@ import { TopicLibrary } from './topics/TopicLibrary';
 import { LearningWorkspace } from './learning/LearningWorkspace';
 import { TopicWorkspace } from './topics/TopicWorkspace';
 import { ReviewQueue } from './review/ReviewQueue';
-import { FactWorkbench } from './facts/FactWorkbench';
+import { VerificationQueue } from './facts/VerificationQueue';
 import { DailyResearchDesk } from './daily/DailyResearchDesk';
+import { classifyKnowledgeTopic } from './topics/knowledgeClassification';
 
 const validSections = new Set<KnowledgeSection>(['home', 'facts', 'topics', 'learning', 'review']);
 
@@ -59,8 +59,7 @@ export function KnowledgeView({
   const [draft, setDraft] = useState<KnowledgeEntry | undefined>();
   const [topicWorkspace, setTopicWorkspace] = useState<KnowledgeTopicWorkspace | null>(null);
   const [dueTopics, setDueTopics] = useState<KnowledgeTopic[]>([]);
-  const [factEvents, setFactEvents] = useState<EventCluster[]>([]);
-  const [factEvidence, setFactEvidence] = useState<EvidenceItem[]>([]);
+  const [verificationWorkspaces, setVerificationWorkspaces] = useState<KnowledgeTopicWorkspace[]>([]);
   const [radar, setRadar] = useState<ResearchRadarSnapshot | null>(null);
   const [radarError, setRadarError] = useState('');
 
@@ -115,12 +114,10 @@ export function KnowledgeView({
           })
       ])
       : section === 'facts'
-        ? Promise.all([
-          api<PageResponse<EventCluster>>('/api/events/paged?page=0&pageSize=100'),
-          api<PageResponse<EvidenceItem>>('/api/evidence/paged?page=0&pageSize=200')
-        ]).then(([eventPage, evidencePage]) => {
-          setFactEvents(eventPage.items || []);
-          setFactEvidence(evidencePage.items || []);
+        ? knowledgeApi.topics({ lifecycle: 'ACTIVE', size: 100 }).then(async (page) => {
+          const recognitions = (page.items || []).filter((topic) => classifyKnowledgeTopic(topic) === 'RECOGNITION');
+          const workspaces = await Promise.all(recognitions.map((topic) => knowledgeApi.topicWorkspace(topic.id)));
+          setVerificationWorkspaces(workspaces);
         })
       : section === 'topics'
         ? topicId
@@ -267,8 +264,8 @@ export function KnowledgeView({
         ? <DailyResearchDesk overview={overview} radar={radar} radarError={radarError} onNavigate={navigateTarget} />
         : <section className="knowledge-loading" aria-label="正在加载知识首页"><span /></section>)}
       {section === 'facts' && (loading
-        ? <section className="knowledge-loading" aria-label="正在加载事实核验"><span /></section>
-        : <FactWorkbench events={factEvents} evidenceItems={factEvidence} />)}
+        ? <section className="knowledge-loading" aria-label="正在加载核验队列"><span /></section>
+        : <VerificationQueue workspaces={verificationWorkspaces} onNavigate={navigateTarget} />)}
       {section === 'topics' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
         : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}

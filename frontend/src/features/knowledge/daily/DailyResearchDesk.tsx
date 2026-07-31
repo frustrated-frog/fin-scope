@@ -50,7 +50,7 @@ export function DailyResearchDesk({
         <section className="daily-change-ledger" aria-label="今日市场变化">
           <div className="daily-section-heading">
             <div><span>聚合后再阅读</span><h2>值得研究的变化</h2></div>
-            <button type="button" onClick={() => onNavigate('?section=facts')}>查看事实与变化</button>
+            <button type="button" onClick={() => onNavigate('?section=facts')}>打开核验队列</button>
           </div>
           {daily.changes.length > 0 ? (
             <div className="daily-change-list">

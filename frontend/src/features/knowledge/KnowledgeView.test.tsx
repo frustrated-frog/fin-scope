@@ -62,7 +62,7 @@ test('rejects unknown sections and keeps navigation state in the URL', async () 
   render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByRole('heading', { name: '今天哪些变化，值得修正我的判断？' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '事实与变化' }));
+  await userEvent.click(screen.getByRole('button', { name: '核验队列' }));
 
   await waitFor(() => {
     expect(new URLSearchParams(window.location.search).get('section')).toBe('facts');
@@ -80,13 +80,59 @@ test('restores the workbench when browser history changes', async () => {
   expect(screen.getByTestId('knowledge-view')).not.toHaveAttribute('data-topic-id');
 });
 
-test('lets the fact desk own the page hierarchy without repeating the generic knowledge hero', async () => {
+test('lets the verification queue own the page hierarchy without repeating the generic knowledge hero', async () => {
   window.history.replaceState({}, '', '/?section=facts');
   render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByText('还没有可核验的事实候选')).toBeInTheDocument();
+  expect(await screen.findByText('当前没有需要核验的投资命题')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '把信息变成可复用的判断' })).not.toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: '知识工作台' })).toBeInTheDocument();
+});
+
+test('loads verification propositions only from formed recognition workspaces', async () => {
+  window.history.replaceState({}, '', '/?section=facts');
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const value = url.startsWith('/api/knowledge/topics?page=0&size=100')
+      ? {
+        items: [
+          { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 3 },
+          { id: 8, name: '一篇文章的自动主题', lifecycleStatus: 'ACTIVE', masteryStatus: 'EXPLORING', revision: 0, articleCount: 1 }
+        ],
+        totalCount: 2,
+        page: 0,
+        pageSize: 100,
+        totalPages: 1
+      }
+      : url === '/api/knowledge/topics/7'
+        ? {
+          topic: { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 3 },
+          events: [{ id: 31, canonicalTitle: '公司季度经营更新' }],
+          evidence: [{
+            id: 1,
+            eventId: 31,
+            sourceTier: 'MEDIA',
+            evidenceType: 'FACT',
+            claim: '公司披露二季度先进封装收入同比增长 28%。',
+            confidence: 76,
+            articleTitle: '季度经营数据报道',
+            articleUrl: 'https://news.example.com/quarter'
+          }],
+          tasks: [],
+          entries: []
+        }
+        : {};
+    return { ok: true, status: 200, text: async () => JSON.stringify(apiEnvelope(value)) } as Response;
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  render(<KnowledgeView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('heading', { name: '公司披露二季度先进封装收入同比增长 28%。' })).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith('/api/knowledge/topics/7', expect.anything());
+  expect(fetchMock).not.toHaveBeenCalledWith('/api/knowledge/topics/8', expect.anything());
+  expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/events/paged'))).toBe(false);
+  expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/evidence/paged'))).toBe(false);
 });
 
 test('exposes only the three primary knowledge tasks and clears stale selection', async () => {
@@ -95,12 +141,12 @@ test('exposes only the three primary knowledge tasks and clears stale selection'
 
   const navigation = screen.getByRole('navigation', { name: '知识工作台' });
   expect(navigation).toHaveTextContent('今日研究');
-  expect(navigation).toHaveTextContent('事实与变化');
+  expect(navigation).toHaveTextContent('核验队列');
   expect(navigation).toHaveTextContent('投资认识');
   expect(navigation).not.toHaveTextContent('学习队列');
   expect(navigation).not.toHaveTextContent('到期复习');
 
-  await userEvent.click(screen.getByRole('button', { name: '事实与变化' }));
+  await userEvent.click(screen.getByRole('button', { name: '核验队列' }));
 
   await waitFor(() => {
     const params = new URLSearchParams(window.location.search);

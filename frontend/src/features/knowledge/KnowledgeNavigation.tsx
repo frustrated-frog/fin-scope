@@ -2,7 +2,7 @@ import { KnowledgeSection } from './knowledgeTypes';
 
 const sections: Array<{ id: KnowledgeSection; label: string; hint: string }> = [
   { id: 'home', label: '今日研究', hint: '新闻与变化' },
-  { id: 'facts', label: '事实与变化', hint: '核验材料' },
+  { id: 'facts', label: '核验队列', hint: '影响判断' },
   { id: 'topics', label: '投资认识', hint: '长期判断' }
 ];
 
