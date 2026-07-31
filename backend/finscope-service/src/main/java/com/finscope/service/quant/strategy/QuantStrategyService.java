@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantStrategyRepository;
+import com.finscope.dao.quant.QuantStrategyCatalogRepository;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
@@ -29,6 +30,7 @@ public class QuantStrategyService {
     @Resource private QuantStrategyAgent agent;
     @Resource private FactorRegistry factors;
     @Resource private FactorProviderRegistry factorProviders;
+    @Resource private QuantStrategyCatalogRepository catalogRepository;
     private final ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
@@ -88,7 +90,11 @@ public class QuantStrategyService {
             value.setVersion(repository.nextVersion(spec.getName())); value.setSpecJson(draft.getNormalizedSpec());
             value.setDatasetFingerprint(dataset.getFingerprint()); value.setEngineVersion(ENGINE_VERSION);
             value.setStrategyFingerprint(sha256(draft.getNormalizedSpec() + "|" + dataset.getFingerprint() + "|" + ENGINE_VERSION));
-            value.setSource("AGENT"); return repository.saveVersion(value);
+            boolean catalogOrigin = catalogRepository != null && catalogRepository.findCandidateIdByDraft(draftId).isPresent();
+            value.setSource(catalogOrigin ? "CATALOG_AGENT" : "AGENT");
+            QuantStrategyVersion saved = repository.saveVersion(value);
+            if (catalogOrigin) catalogRepository.linkVersionForDraft(draftId, saved.getId());
+            return saved;
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {

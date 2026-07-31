@@ -20,6 +20,12 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import org.springframework.http.ResponseEntity;
 import java.net.URI;
+import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
+import com.finscope.domain.quant.catalog.QuantStrategyCatalogSource;
+import com.finscope.domain.quant.catalog.QuantStrategyCatalogSyncResult;
+import com.finscope.service.quant.catalog.QuantStrategyCandidateDraftService;
+import com.finscope.service.quant.catalog.QuantStrategyCatalogService;
+import com.finscope.web.request.quant.CreateCatalogStrategyDraftRequest;
 
 @RestController
 @RequestMapping("/api/quant")
@@ -33,6 +39,47 @@ public class QuantController {
     private DatasetFactorAnalysisService datasetFactorAnalysisService;
     @Resource
     private QuantExperimentService quantExperimentService;
+    @Resource
+    private QuantStrategyCatalogService quantStrategyCatalogService;
+    @Resource
+    private QuantStrategyCandidateDraftService quantStrategyCandidateDraftService;
+
+    @PostMapping("/catalog/sync")
+    public ApiResponse<QuantStrategyCatalogSyncResult> syncCatalog() {
+        return ApiResponses.success(quantStrategyCatalogService.sync());
+    }
+
+    @GetMapping("/catalog/source")
+    public ApiResponse<QuantStrategyCatalogSource> catalogSource() {
+        return ApiResponses.success(quantStrategyCatalogService.source().orElseThrow(() ->
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略素材库尚未同步")));
+    }
+
+    @GetMapping("/catalog/candidates")
+    public ApiResponse<List<QuantStrategyCandidate>> catalogCandidates(
+            @RequestParam(required = false) String compatibility,
+            @RequestParam(required = false) String query) {
+        if (compatibility != null && !compatibility.trim().isEmpty()
+                && !java.util.Arrays.asList("ADAPTABLE", "NEEDS_FACTOR", "UNSUPPORTED").contains(compatibility.trim())) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知的兼容状态");
+        }
+        return ApiResponses.success(quantStrategyCatalogService.list(compatibility, query));
+    }
+
+    @GetMapping("/catalog/candidates/{id}")
+    public ApiResponse<QuantStrategyCandidate> catalogCandidate(@PathVariable Long id) {
+        return ApiResponses.success(quantStrategyCatalogService.find(id).orElseThrow(() ->
+                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略候选不存在")));
+    }
+
+    @PostMapping("/catalog/candidates/{id}/drafts")
+    public ApiResponse<QuantStrategyDraft> generateCatalogDraft(@PathVariable Long id,
+                                                                 @RequestBody CreateCatalogStrategyDraftRequest request) {
+        if (request == null || request.getDatasetId() == null) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集不能为空");
+        }
+        return ApiResponses.success(quantStrategyCandidateDraftService.generate(id, request.getDatasetId()));
+    }
 
     /**
      * 根据数据集和提示词生成量化策略草稿。

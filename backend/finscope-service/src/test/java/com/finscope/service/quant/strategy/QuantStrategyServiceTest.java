@@ -2,6 +2,7 @@ package com.finscope.service.quant.strategy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.quant.QuantStrategyRepository;
+import com.finscope.dao.quant.QuantStrategyCatalogRepository;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
@@ -19,8 +20,36 @@ import com.finscope.common.exception.BusinessException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class QuantStrategyServiceTest {
+    @Test
+    void marksConfirmedCatalogDraftWithItsCandidateOrigin() throws Exception {
+        QuantStrategyRepository repository = mock(QuantStrategyRepository.class);
+        QuantStrategyCatalogRepository catalog = mock(QuantStrategyCatalogRepository.class);
+        QuantDatasetService datasets = mock(QuantDatasetService.class);
+        QuantStrategyDraft draft = new QuantStrategyDraft();
+        QuantStrategySpec spec = QuantStrategySpecValidatorTest.validSpec();
+        draft.setId(7L); draft.setDatasetId(1L); draft.setStatus("VALIDATED"); draft.setValidatedDatasetFingerprint("dataset-sha");
+        spec.setStartDate(java.time.LocalDate.of(2024,1,1)); spec.setEndDate(java.time.LocalDate.of(2024,12,31));
+        draft.setNormalizedSpec(new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).writeValueAsString(spec));
+        when(repository.findDraft(7L)).thenReturn(Optional.of(draft)); when(repository.nextVersion(spec.getName())).thenReturn(1);
+        when(repository.saveVersion(any())).thenAnswer(invocation -> { QuantStrategyVersion value = invocation.getArgument(0); value.setId(9L); return value; });
+        when(catalog.findCandidateIdByDraft(7L)).thenReturn(Optional.of(3L));
+        QuantDataset dataset = new QuantDataset(); dataset.setId(1L); dataset.setFingerprint("dataset-sha"); dataset.setStatus("READY");
+        dataset.setStartDate(java.time.LocalDate.of(2024,1,1)); dataset.setEndDate(java.time.LocalDate.of(2024,12,31));
+        when(datasets.get(1L)).thenReturn(dataset);
+        when(datasets.availableFactorCodes(1L)).thenReturn(new java.util.HashSet<String>(java.util.Arrays.asList("ROE","MOMENTUM_20D")));
+        QuantStrategyService service = new QuantStrategyService();
+        ReflectionTestUtils.setField(service, "repository", repository); ReflectionTestUtils.setField(service, "catalogRepository", catalog);
+        ReflectionTestUtils.setField(service, "datasets", datasets); ReflectionTestUtils.setField(service, "factors", new FactorRegistry());
+
+        QuantStrategyVersion version = service.confirm(7L);
+
+        assertEquals("CATALOG_AGENT", version.getSource());
+        verify(catalog).linkVersionForDraft(7L, 9L);
+    }
+
     @Test
     void confirmsValidatedDraftAsFingerprintBoundVersion() throws Exception {
         QuantStrategyRepository repository = mock(QuantStrategyRepository.class);
