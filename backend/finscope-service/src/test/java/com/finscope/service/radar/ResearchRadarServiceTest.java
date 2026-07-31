@@ -24,6 +24,8 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -95,6 +97,28 @@ class ResearchRadarServiceTest {
     }
 
     @Test
+    void busyRefreshKeepsTheLastSuccessfulLiveItems() throws Exception {
+        NewsFeedItem item = item("CLS:1", "CLS", "财联社", "已缓存的实时资讯", NOW.minusMinutes(5));
+        NewsFeedSnapshot snapshot = new NewsFeedSnapshot(Collections.singletonList(item), Collections.emptyList(), NOW, 1);
+        CountDownLatch entered = new CountDownLatch(1); CountDownLatch release = new CountDownLatch(1);
+        when(news.load("ALL",100)).thenReturn(snapshot).thenAnswer(invocation -> {
+            entered.countDown(); release.await(3, TimeUnit.SECONDS); return snapshot;
+        });
+        when(repository.findActiveSignals(NOW.minusHours(48),500)).thenReturn(Collections.emptyList());
+        when(watchlist.findByTypes(Arrays.asList("STOCK","FUND"))).thenReturn(Collections.emptyList());
+        service.load("ALL",false,20);
+        Thread refreshing = new Thread(() -> service.load("ALL",false,20)); refreshing.start();
+        assertTrue(entered.await(1,TimeUnit.SECONDS));
+
+        ResearchRadarView busy = service.load("ALL",false,20);
+        release.countDown(); refreshing.join(3_000);
+
+        assertEquals(1,busy.getLiveItems().size());
+        assertEquals("已缓存的实时资讯",busy.getLiveItems().get(0).getTitle());
+        assertTrue(busy.getWarnings().get(0).contains("正在刷新"));
+    }
+
+    @Test
     void preservesCategoryValidationErrors() {
         when(news.load("UNKNOWN", 100)).thenThrow(
                 new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知或已停用的资讯分类：UNKNOWN"));
@@ -102,13 +126,13 @@ class ResearchRadarServiceTest {
     }
 
     @Test
-    void enrichesOnlyHighPriorityEventsAndReturnsEvidenceWithSanitizedTrace() {
-        RadarEvidenceOrchestrator orchestrator = mock(RadarEvidenceOrchestrator.class);
+    void schedulesHighPriorityEnhancementAndReturnsEvidenceWithSanitizedTrace() {
+        RadarEventEnhancementScheduler scheduler = mock(RadarEventEnhancementScheduler.class);
         RadarEvidenceRepository evidence = mock(RadarEvidenceRepository.class);
         AgentRunRepository runs = mock(AgentRunRepository.class);
         service = new ResearchRadarService(news, repository,
                 new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
-                new RadarPriorityService(), watchlist, orchestrator, evidence, runs,
+                new RadarPriorityService(), watchlist, scheduler, evidence, runs,
                 Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
         NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", NOW.minusMinutes(30));
         NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", NOW.minusMinutes(20));
@@ -118,13 +142,10 @@ class ResearchRadarServiceTest {
         com.finscope.domain.instrument.WatchlistItem followed = new com.finscope.domain.instrument.WatchlistItem();
         followed.setName("宁德时代"); followed.setCode("300750"); followed.setType("STOCK");
         when(watchlist.findByTypes(Arrays.asList("STOCK","FUND"))).thenReturn(Collections.singletonList(followed));
-        when(orchestrator.enrich(any(RadarEvent.class),any())).thenReturn(
-                new RadarEvidenceOrchestrator.Outcome("SUCCESS","已补充2条证据，来自2个来源","",2,2,"fp"));
-
         ResearchRadarView view = service.load("ALL",false,20);
 
-        verify(orchestrator).enrich(any(RadarEvent.class),any());
-        assertEquals("SUCCESS",view.getEvents().get(0).getEvidenceStatus());
+        verify(scheduler).schedule(any(RadarEvent.class),any(),eq(NOW),eq(true));
+        assertEquals(1,view.getEvents().size());
 
         RadarEvent stored=new RadarEvent();stored.setId(10L);stored.setCanonicalTitle("宁德时代发布新一代电池");stored.setEvidenceStatus("SUCCESS");
         when(repository.findEvent(10L)).thenReturn(java.util.Optional.of(stored));

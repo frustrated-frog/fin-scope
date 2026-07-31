@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,6 +74,34 @@ class RadarRepositoryTest {
         assertTrue(repository.findActiveSignals(now.minusHours(48), 500).isEmpty());
         assertEquals("EXPIRED", jdbc.queryForObject(
                 "SELECT status FROM radar_signal WHERE item_id='OLD:1'", String.class));
+    }
+
+    @Test
+    void staleBackgroundEnhancementCannotOverwriteANewerRefresh() {
+        RadarEvent stale = repository.saveEvent(event("event:stale"));
+        RadarEvent refreshed = event("event:stale");
+        refreshed.setCanonicalTitle("新一轮规则标题");
+        refreshed.setUpdatedAt(now.plusMinutes(1));
+        repository.saveEvent(refreshed);
+
+        stale.setCanonicalTitle("旧后台Agent标题");
+        stale.setEvidenceStatus("SUCCESS");
+        repository.updateEvidenceEnhancement(stale);
+
+        RadarEvent actual = repository.findEvent(stale.getId()).get();
+        assertEquals("新一轮规则标题", actual.getCanonicalTitle());
+        assertEquals(null, actual.getEvidenceStatus());
+    }
+
+    @Test
+    void eventsMissingFromTheLatestGenerationAreExpired() {
+        RadarEvent retained = repository.saveEvent(event("event:retained"));
+        RadarEvent obsolete = repository.saveEvent(event("event:obsolete"));
+
+        repository.expireEventsExcept(new HashSet<String>(Collections.singletonList("event:retained")), now.plusMinutes(1));
+
+        assertEquals("ACTIVE", repository.findEvent(retained.getId()).get().getStatus());
+        assertEquals("EXPIRED", repository.findEvent(obsolete.getId()).get().getStatus());
     }
 
     private RadarSignal signal(String itemId, String category) {

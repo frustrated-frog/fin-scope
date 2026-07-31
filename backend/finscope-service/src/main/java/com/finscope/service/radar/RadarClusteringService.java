@@ -30,26 +30,17 @@ public class RadarClusteringService {
     private static final int MAX_AGENT_PAIR_CALLS = 24;
     private final RadarTextAnalyzer analyzer;
     private final RadarPairDecisionRepository decisions;
-    private final RadarEventMatchAgent matchAgent;
-    private final RadarCanonicalTitleAgent titleAgent;
+    private final RadarPairDecisionScheduler scheduler;
 
-    public RadarClusteringService(RadarTextAnalyzer analyzer) { this(analyzer, null, null, null); }
-
-    public RadarClusteringService(RadarTextAnalyzer analyzer,
-                                  RadarPairDecisionRepository decisions,
-                                  RadarEventMatchAgent matchAgent) {
-        this(analyzer, decisions, matchAgent, null);
-    }
+    public RadarClusteringService(RadarTextAnalyzer analyzer) { this(analyzer, null, null); }
 
     @Autowired
     public RadarClusteringService(RadarTextAnalyzer analyzer,
                                   RadarPairDecisionRepository decisions,
-                                  RadarEventMatchAgent matchAgent,
-                                  RadarCanonicalTitleAgent titleAgent) {
+                                  RadarPairDecisionScheduler scheduler) {
         this.analyzer = analyzer;
         this.decisions = decisions;
-        this.matchAgent = matchAgent;
-        this.titleAgent = titleAgent;
+        this.scheduler = scheduler;
     }
 
     public MatchDecision decide(RadarSignal left, RadarSignal right) {
@@ -116,18 +107,13 @@ public class RadarClusteringService {
         }
         for (ClusterResult cluster : clusters) {
             cluster.finish(analyzer);
-            if (titleAgent != null && cluster.signals.size() > 1) {
-                RadarCanonicalTitleAgent.Result title = titleAgent.generate(
-                        cluster.signals, cluster.event.getCanonicalTitle());
-                cluster.event.setCanonicalTitle(title.getTitle());
-            }
         }
         return clusters;
     }
 
     private MatchDecision resolve(RadarSignal left, RadarSignal right, int[] agentCalls) {
         MatchDecision rule = decide(left, right);
-        if (!"AMBIGUOUS".equals(rule.reasonCode) || decisions == null || matchAgent == null) return rule;
+        if (!"AMBIGUOUS".equals(rule.reasonCode) || decisions == null) return rule;
         String leftFingerprint = semanticFingerprint(left);
         String rightFingerprint = semanticFingerprint(right);
         String pairKey = RadarPairDecision.pairKey(leftFingerprint, rightFingerprint);
@@ -145,33 +131,8 @@ public class RadarClusteringService {
             return new MatchDecision("AMBIGUOUS", rule.score, "灰区判断达到本轮预算，保守拆分");
         }
         agentCalls[0]++;
-        RadarEventMatchAgent.Decision agentDecision = matchAgent.decide(left, right);
-        boolean generatedByAgent = "AGENT".equals(agentDecision.getSource());
-        MatchDecision resolved = new MatchDecision(agentDecision.isSameEvent() ? "SAME_AGENT" : "DIFFERENT_AGENT",
-                agentDecision.getConfidence(), (generatedByAgent ? "Agent判定：" : "回退判定：")
-                + agentDecision.getReason());
-        if (!generatedByAgent) {
-            return resolved;
-        }
-        try {
-            RadarPairDecision stored = new RadarPairDecision();
-            stored.setPairKey(pairKey);
-            if (leftFingerprint.compareTo(rightFingerprint) <= 0) {
-                stored.setLeftFingerprint(leftFingerprint);
-                stored.setRightFingerprint(rightFingerprint);
-            } else {
-                stored.setLeftFingerprint(rightFingerprint);
-                stored.setRightFingerprint(leftFingerprint);
-            }
-            stored.setSameEvent(agentDecision.isSameEvent());
-            stored.setConfidence(agentDecision.getConfidence());
-            stored.setReason(agentDecision.getReason());
-            stored.setDecisionSource(agentDecision.getSource());
-            decisions.save(stored);
-        } catch (RuntimeException ignored) {
-            // 判定结果仍可用于本轮聚类，缓存写入失败仅损失复用能力。
-        }
-        return resolved;
+        if (scheduler != null) scheduler.schedule(left, right, leftFingerprint, rightFingerprint);
+        return new MatchDecision("AMBIGUOUS", rule.score, "灰区判断已转入后台，本轮保守拆分");
     }
 
     private MatchDecision firstAcceptedLink(int signalIndex, List<Integer> component,

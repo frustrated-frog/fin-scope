@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,29 +80,9 @@ class RadarClusteringServiceTest {
     }
 
     @Test
-    void ambiguousPairCanBeMergedByAgentAndStoredInCache() {
-        RadarPairDecisionRepository decisions = mock(RadarPairDecisionRepository.class);
-        RadarEventMatchAgent agent = mock(RadarEventMatchAgent.class);
-        when(decisions.find(any())).thenReturn(Optional.empty());
-        when(agent.decide(any(), any())).thenReturn(
-                RadarEventMatchAgent.Decision.agent(true, 0.90D, "同一板块、同一时段和相同上涨驱动"));
-        RadarClusteringService agentClustering = new RadarClusteringService(
-                new RadarTextAnalyzer(new FingerprintService()), decisions, agent);
-
-        List<RadarClusteringService.ClusterResult> clusters = agentClustering.cluster(Arrays.asList(
-                signal(1L, "CLS", "存储芯片板块持续走强", "MARKET_MOVE"),
-                signal(2L, "THS", "芯片股午后集体上涨", "MARKET_MOVE")));
-
-        assertEquals(1, clusters.size());
-        assertEquals("Agent判定：同一板块、同一时段和相同上涨驱动",
-                clusters.get(0).getLinks().get(1).getMatchReason());
-        verify(decisions).save(any(RadarPairDecision.class));
-    }
-
-    @Test
     void cachedPairDecisionAvoidsRepeatedAgentCall() {
         RadarPairDecisionRepository decisions = mock(RadarPairDecisionRepository.class);
-        RadarEventMatchAgent agent = mock(RadarEventMatchAgent.class);
+        RadarPairDecisionScheduler scheduler = mock(RadarPairDecisionScheduler.class);
         RadarPairDecision cached = new RadarPairDecision();
         cached.setSameEvent(true);
         cached.setConfidence(0.88D);
@@ -111,7 +90,7 @@ class RadarClusteringServiceTest {
         cached.setDecisionSource("AGENT");
         when(decisions.find(any())).thenReturn(Optional.of(cached));
         RadarClusteringService cachedClustering = new RadarClusteringService(
-                new RadarTextAnalyzer(new FingerprintService()), decisions, agent);
+                new RadarTextAnalyzer(new FingerprintService()), decisions, scheduler);
 
         List<RadarClusteringService.ClusterResult> clusters = cachedClustering.cluster(Arrays.asList(
                 signal(1L, "CLS", "存储芯片板块持续走强", "MARKET_MOVE"),
@@ -119,23 +98,23 @@ class RadarClusteringServiceTest {
 
         assertEquals(1, clusters.size());
         assertEquals("缓存判定：历史灰区判断确认同一事件", clusters.get(0).getLinks().get(1).getMatchReason());
-        verify(agent, never()).decide(any(), any());
+        verify(scheduler, org.mockito.Mockito.never()).schedule(any(), any(), any(), any());
     }
 
     @Test
     void graphClusteringKeepsIndirectlyConnectedSignalsTogether() {
         RadarPairDecisionRepository decisions = mock(RadarPairDecisionRepository.class);
-        RadarEventMatchAgent agent = mock(RadarEventMatchAgent.class);
-        when(decisions.find(any())).thenReturn(Optional.empty());
-        when(agent.decide(any(), any())).thenAnswer(invocation -> {
-            RadarSignal left = invocation.getArgument(0);
-            RadarSignal right = invocation.getArgument(1);
-            long sum = left.getId() + right.getId();
-            return RadarEventMatchAgent.Decision.agent(sum == 3L || sum == 5L, 0.86D,
-                    sum == 3L || sum == 5L ? "相邻报道确认同一事件" : "关键事实不同");
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(decisions.find(any())).thenAnswer(invocation -> {
+            int call = calls.incrementAndGet();
+            RadarPairDecision cached = new RadarPairDecision();
+            cached.setSameEvent(call == 1 || call == 3);
+            cached.setConfidence(0.86D);
+            cached.setReason(cached.isSameEvent() ? "相邻报道确认同一事件" : "关键事实不同");
+            return Optional.of(cached);
         });
         RadarClusteringService graphClustering = new RadarClusteringService(
-                new RadarTextAnalyzer(new FingerprintService()), decisions, agent);
+                new RadarTextAnalyzer(new FingerprintService()), decisions, mock(RadarPairDecisionScheduler.class));
 
         List<RadarClusteringService.ClusterResult> clusters = graphClustering.cluster(Arrays.asList(
                 signal(1L, "A", "存储芯片板块持续走强", "MARKET_MOVE"),
@@ -147,21 +126,19 @@ class RadarClusteringServiceTest {
     }
 
     @Test
-    void fallbackAgentDecisionIsNotPersistedAsSemanticTruth() {
-        RadarPairDecisionRepository decisions = mock(RadarPairDecisionRepository.class);
-        RadarEventMatchAgent agent = mock(RadarEventMatchAgent.class);
+    void uncachedAmbiguousPairIsScheduledAndConservativelySplitForCurrentRefresh() {
+        RadarPairDecisionRepository decisions=mock(RadarPairDecisionRepository.class);
+        RadarPairDecisionScheduler scheduler=mock(RadarPairDecisionScheduler.class);
         when(decisions.find(any())).thenReturn(Optional.empty());
-        when(agent.decide(any(), any())).thenReturn(
-                RadarEventMatchAgent.Decision.fallback("MODEL_DISABLED", "模型未配置，保守拆分"));
-        RadarClusteringService fallbackClustering = new RadarClusteringService(
-                new RadarTextAnalyzer(new FingerprintService()), decisions, agent);
+        RadarClusteringService asynchronous=new RadarClusteringService(
+                new RadarTextAnalyzer(new FingerprintService()),decisions,scheduler);
 
-        List<RadarClusteringService.ClusterResult> clusters = fallbackClustering.cluster(Arrays.asList(
-                signal(1L, "CLS", "存储芯片板块持续走强", "MARKET_MOVE"),
-                signal(2L, "THS", "芯片股午后集体上涨", "MARKET_MOVE")));
+        List<RadarClusteringService.ClusterResult> clusters=asynchronous.cluster(Arrays.asList(
+                signal(1L,"CLS","存储芯片板块持续走强","MARKET_MOVE"),
+                signal(2L,"THS","芯片股午后集体上涨","MARKET_MOVE")));
 
-        assertEquals(2, clusters.size());
-        verify(decisions, never()).save(any(RadarPairDecision.class));
+        assertEquals(2,clusters.size());
+        verify(scheduler).schedule(any(),any(),any(),any());
     }
 
     private RadarSignal signal(Long id, String provider, String title, String category) {
