@@ -3,6 +3,8 @@ package com.finscope.service.radar;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.WatchlistRepository;
+import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
@@ -34,20 +36,33 @@ public class ResearchRadarService {
     private final RadarPriorityService priority;
     private final WatchlistRepository watchlist;
     private final Clock clock;
+    private final RadarEvidenceOrchestrator evidenceOrchestrator;
+    private final RadarEvidenceRepository evidenceRepository;
+    private final AgentRunRepository agentRuns;
     private final ReentrantLock refreshLock = new ReentrantLock();
 
     @Autowired
     public ResearchRadarService(NewsFeedService news, RadarRepository repository,
                                 RadarClusteringService clustering, RadarPriorityService priority,
-                                WatchlistRepository watchlist) {
-        this(news, repository, clustering, priority, watchlist, Clock.systemDefaultZone());
+                                WatchlistRepository watchlist, RadarEvidenceOrchestrator evidenceOrchestrator,
+                                RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns) {
+        this(news, repository, clustering, priority, watchlist, evidenceOrchestrator, evidenceRepository,
+                agentRuns, Clock.systemDefaultZone());
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, Clock clock) {
+        this(news,repository,clustering,priority,watchlist,null,null,null,clock);
+    }
+
+    ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarEvidenceOrchestrator evidenceOrchestrator,
+                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns, Clock clock) {
         this.news=news; this.repository=repository; this.clustering=clustering;
         this.priority=priority; this.watchlist=watchlist; this.clock=clock;
+        this.evidenceOrchestrator=evidenceOrchestrator; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
@@ -62,6 +77,7 @@ public class ResearchRadarService {
             List<RadarSignal> active = repository.findActiveSignals(now.minusHours(48), 500);
             List<WatchlistItem> followed = watchlist.findByTypes(Arrays.asList("STOCK", "FUND"));
             List<RadarEvent> savedEvents = new ArrayList<RadarEvent>();
+            int evidenceRefreshes = 0;
             for (RadarClusteringService.ClusterResult cluster : clustering.cluster(active)) {
                 RadarEvent event = cluster.getEvent();
                 RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
@@ -69,6 +85,21 @@ public class ResearchRadarService {
                 event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
                 event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
                 RadarEvent saved = repository.saveEvent(event); repository.replaceEventSignals(saved.getId(), cluster.getLinks());
+                if (evidenceOrchestrator != null && evidenceRefreshes < 2 && saved.getPriorityScore() >= 75) {
+                    try {
+                        RadarEvidenceOrchestrator.Outcome outcome = evidenceOrchestrator.enrich(saved, cluster.getSignals());
+                        if (!"CACHED".equals(outcome.getStatus()) && !"SKIPPED".equals(outcome.getStatus())) {
+                            saved.setEvidenceStatus(outcome.getStatus()); saved.setEvidenceSummary(outcome.getSummary());
+                            saved.setEvidenceWarning(outcome.getWarning()); saved.setEvidenceCount(outcome.getEvidenceCount());
+                            saved.setEvidenceSourceCount(outcome.getSourceCount());
+                            if (outcome.getNextObservation()!=null&&!outcome.getNextObservation().trim().isEmpty()) saved.setNextObservation(outcome.getNextObservation());
+                            if (!"DEGRADED".equals(outcome.getStatus())) saved.setEvidenceFingerprint(outcome.getFingerprint());
+                            saved.setEvidenceUpdatedAt(now); saved = repository.saveEvent(saved); evidenceRefreshes++;
+                        }
+                    } catch (RuntimeException ignored) {
+                        // 证据增强失败不能阻断雷达事件与实时资讯。
+                    }
+                }
                 if (matches(category, saved) && (!watchlistOnly || saved.getWatchlistRelevance()>0)) savedEvents.add(saved);
             }
             savedEvents.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
@@ -87,7 +118,9 @@ public class ResearchRadarService {
 
     public ResearchRadarView.EventDetail detail(Long id) {
         RadarEvent event=repository.findEvent(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,"雷达事件不存在"));
-        return new ResearchRadarView.EventDetail(event,repository.findSignalsByEventId(id),repository.findEventSignals(id));
+        return new ResearchRadarView.EventDetail(event,repository.findSignalsByEventId(id),repository.findEventSignals(id),
+                evidenceRepository==null?Collections.emptyList():evidenceRepository.findByEventId(id),
+                agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id));
     }
 
     private ResearchRadarView fallback(String category,boolean watchlistOnly,int limit,LocalDateTime now,String warning) {

@@ -21,6 +21,11 @@ const event = {
   signalCount: 4,
   uncertainty: '价格与量产节奏仍待公告确认',
   nextObservation: '观察公司公告和供应链反馈',
+  evidenceStatus: 'SUCCESS',
+  evidenceSummary: '已补充2条证据，来自2个来源',
+  evidenceWarning: '',
+  evidenceCount: 2,
+  evidenceSourceCount: 2,
   suggestedResearchQuestion: '围绕“宁德时代发布新一代电池”，哪些事实已经确认，后续应重点观察什么？',
   lastSeenAt: '2026-07-31T15:55:00'
 };
@@ -44,6 +49,12 @@ const detail = {
   signals: [
     { id: 1, title: event.title, content: '新品正式发布。', url: 'https://example.com/1', sourceName: '财联社', sourceTier: 'TIER_1', publishedAt: liveItem.publishedAt, relationType: 'PRIMARY', matchScore: 1, matchReason: '代表信号' },
     { id: 2, title: '宁德时代新电池正式发布', content: '发布会信息。', sourceName: '同花顺', sourceTier: 'TIER_1', publishedAt: liveItem.publishedAt, relationType: 'SUPPORTING', matchScore: 0.84, matchReason: '主体、动作和标题语义一致' }
+  ],
+  evidence: [
+    { id: 31, toolCode: 'research_material_search', evidenceType: 'ANNOUNCEMENT', title: '深交所公告', summary: '公司披露新产品量产安排。', url: 'https://example.com/announcement', sourceName: '深交所', sourceTier: 'T1', publishedAt: '2026-07-31T15:30:00' }
+  ],
+  agentTrace: [
+    { nodeName: 'radar-evidence-plan', status: 'SUCCESS', summary: 'actions=2', durationMs: 920, fallbackUsed: false }
   ]
 };
 
@@ -109,6 +120,19 @@ test('loads original signals only when the user asks for evidence', async () => 
   expect(await screen.findByText('3 个独立来源共同报道')).toBeInTheDocument();
   expect(screen.getByText('同花顺')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10');
+});
+
+test('shows external evidence and a sanitized agent trace without prompts', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
+  await userEvent.click(await screen.findByRole('button', { name: '查看依据' }));
+
+  expect(await screen.findByText('智能补证：已补充2条证据，来自2个来源')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '深交所公告' })).toBeInTheDocument();
+  await userEvent.click(screen.getByText('Agent 执行轨迹'));
+  expect(screen.getByText('证据规划')).toBeInTheDocument();
+  expect(screen.getByText(/actions=2/)).toBeInTheDocument();
+  expect(screen.queryByText(/完整提示词/)).not.toBeInTheDocument();
 });
 
 test('research action only hands the suggested question to the parent', async () => {

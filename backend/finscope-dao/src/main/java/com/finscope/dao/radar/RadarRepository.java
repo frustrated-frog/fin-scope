@@ -49,17 +49,29 @@ public class RadarRepository {
     public RadarEvent saveEvent(RadarEvent event) {
         jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,status,first_seen_at,last_seen_at,"
                         + "source_count,signal_count,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
-                        + "uncertainty,next_observation,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "uncertainty,next_observation,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
+                        + "evidence_count,evidence_source_count,evidence_updated_at,updated_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_key) DO UPDATE SET canonical_title=excluded.canonical_title,summary=excluded.summary,"
                         + "category_code=excluded.category_code,status=excluded.status,last_seen_at=excluded.last_seen_at,"
                         + "source_count=excluded.source_count,signal_count=excluded.signal_count,priority_score=excluded.priority_score,"
                         + "score_explanation=excluded.score_explanation,watchlist_relevance=excluded.watchlist_relevance,"
                         + "watchlist_explanation=excluded.watchlist_explanation,uncertainty=excluded.uncertainty,"
-                        + "next_observation=excluded.next_observation,updated_at=excluded.updated_at",
+                        + "next_observation=excluded.next_observation,"
+                        + "evidence_status=COALESCE(excluded.evidence_status,evidence_status),"
+                        + "evidence_summary=CASE WHEN excluded.evidence_status IS NULL THEN evidence_summary ELSE excluded.evidence_summary END,"
+                        + "evidence_warning=CASE WHEN excluded.evidence_status IS NULL THEN evidence_warning ELSE excluded.evidence_warning END,"
+                        + "evidence_fingerprint=COALESCE(excluded.evidence_fingerprint,evidence_fingerprint),"
+                        + "evidence_count=CASE WHEN excluded.evidence_status IS NULL THEN evidence_count ELSE excluded.evidence_count END,"
+                        + "evidence_source_count=CASE WHEN excluded.evidence_status IS NULL THEN evidence_source_count ELSE excluded.evidence_source_count END,"
+                        + "evidence_updated_at=CASE WHEN excluded.evidence_status IS NULL THEN evidence_updated_at ELSE excluded.evidence_updated_at END,"
+                        + "updated_at=excluded.updated_at",
                 event.getEventKey(), event.getCanonicalTitle(), event.getSummary(), event.getCategoryCode(), event.getStatus(),
                 TimeUtil.text(event.getFirstSeenAt()), TimeUtil.text(event.getLastSeenAt()), event.getSourceCount(),
                 event.getSignalCount(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
-                event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), TimeUtil.text(event.getUpdatedAt()));
+                event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getEvidenceStatus(),
+                event.getEvidenceSummary(), event.getEvidenceWarning(), event.getEvidenceFingerprint(), event.getEvidenceCount(),
+                event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()), TimeUtil.text(event.getUpdatedAt()));
         RadarEvent stored = jdbc.queryForObject("SELECT * FROM radar_event WHERE event_key=?", eventMapper(), event.getEventKey());
         return stored;
     }
@@ -127,6 +139,11 @@ public class RadarRepository {
             value.setSignalCount(rs.getInt("signal_count")); value.setPriorityScore(rs.getInt("priority_score"));
             value.setScoreExplanation(rs.getString("score_explanation")); value.setWatchlistRelevance(rs.getInt("watchlist_relevance"));
             value.setWatchlistExplanation(rs.getString("watchlist_explanation")); value.setUncertainty(rs.getString("uncertainty"));
-            value.setNextObservation(rs.getString("next_observation")); value.setUpdatedAt(TimeUtil.localDateTime(rs,"updated_at")); return value; };
+            value.setNextObservation(rs.getString("next_observation")); value.setEvidenceStatus(rs.getString("evidence_status"));
+            value.setEvidenceSummary(rs.getString("evidence_summary")); value.setEvidenceWarning(rs.getString("evidence_warning"));
+            value.setEvidenceFingerprint(rs.getString("evidence_fingerprint")); value.setEvidenceCount(rs.getInt("evidence_count"));
+            value.setEvidenceSourceCount(rs.getInt("evidence_source_count"));
+            value.setEvidenceUpdatedAt(TimeUtil.localDateTime(rs,"evidence_updated_at"));
+            value.setUpdatedAt(TimeUtil.localDateTime(rs,"updated_at")); return value; };
     }
 }

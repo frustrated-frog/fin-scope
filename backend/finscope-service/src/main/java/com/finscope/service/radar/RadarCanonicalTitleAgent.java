@@ -33,7 +33,7 @@ public class RadarCanonicalTitleAgent {
 
     public Result generate(List<RadarSignal> signals, String fallbackTitle) {
         long started = System.currentTimeMillis();
-        String safeFallback = compact(fallbackTitle, TITLE_LIMIT);
+        String safeFallback = compact(fallbackTitle, 200);
         if (llm == null || !llm.isConfigured()) {
             Result fallback = Result.fallback(safeFallback, "MODEL_DISABLED");
             trace(signals, fallback, started, null);

@@ -2,7 +2,9 @@ package com.finscope.service.radar;
 
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
+import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.domain.agent.AgentRun;
 import com.finscope.service.news.NewsFeedItem;
 
 import java.time.LocalDateTime;
@@ -74,6 +76,11 @@ public final class ResearchRadarView {
         private final int signalCount;
         private final String uncertainty;
         private final String nextObservation;
+        private final String evidenceStatus;
+        private final String evidenceSummary;
+        private final String evidenceWarning;
+        private final int evidenceCount;
+        private final int evidenceSourceCount;
         private final String suggestedResearchQuestion;
         private final LocalDateTime lastSeenAt;
 
@@ -84,6 +91,9 @@ public final class ResearchRadarView {
             this.watchlistRelated=event.getWatchlistRelevance()>0; this.watchlistExplanation=event.getWatchlistExplanation();
             this.sourceCount=event.getSourceCount(); this.signalCount=event.getSignalCount();
             this.uncertainty=event.getUncertainty(); this.nextObservation=event.getNextObservation();
+            this.evidenceStatus=event.getEvidenceStatus(); this.evidenceSummary=event.getEvidenceSummary();
+            this.evidenceWarning=event.getEvidenceWarning(); this.evidenceCount=event.getEvidenceCount();
+            this.evidenceSourceCount=event.getEvidenceSourceCount();
             this.suggestedResearchQuestion="围绕“" + safe(event.getCanonicalTitle()) + "”，哪些事实已经确认，后续应重点观察什么？";
             this.lastSeenAt=event.getLastSeenAt();
         }
@@ -107,6 +117,11 @@ public final class ResearchRadarView {
         public int getSignalCount() { return signalCount; }
         public String getUncertainty() { return uncertainty; }
         public String getNextObservation() { return nextObservation; }
+        public String getEvidenceStatus() { return evidenceStatus; }
+        public String getEvidenceSummary() { return evidenceSummary; }
+        public String getEvidenceWarning() { return evidenceWarning; }
+        public int getEvidenceCount() { return evidenceCount; }
+        public int getEvidenceSourceCount() { return evidenceSourceCount; }
         public String getSuggestedResearchQuestion() { return suggestedResearchQuestion; }
         public LocalDateTime getLastSeenAt() { return lastSeenAt; }
     }
@@ -129,12 +144,45 @@ public final class ResearchRadarView {
     public static final class EventDetail {
         private final EventCard event;
         private final List<SignalView> signals;
+        private final List<EvidenceView> evidence;
+        private final List<AgentTraceView> agentTrace;
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links) {
+            this(event,signals,links,Collections.<RadarEvidence>emptyList(),Collections.<AgentRun>emptyList());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces) {
             this.event = new EventCard(event); Map<Long,RadarEventSignal> bySignal=new LinkedHashMap<Long,RadarEventSignal>();
             for (RadarEventSignal link:links) bySignal.put(link.getSignalId(),link);
             List<SignalView> values=new ArrayList<SignalView>(); for(RadarSignal signal:signals) values.add(new SignalView(signal,bySignal.get(signal.getId())));
             this.signals=Collections.unmodifiableList(values);
+            List<EvidenceView> evidenceViews=new ArrayList<EvidenceView>();
+            if(evidence!=null)for(RadarEvidence item:evidence)evidenceViews.add(new EvidenceView(item));
+            this.evidence=Collections.unmodifiableList(evidenceViews);
+            List<AgentTraceView> traceViews=new ArrayList<AgentTraceView>();
+            if(traces!=null)for(AgentRun trace:traces)traceViews.add(new AgentTraceView(trace));
+            this.agentTrace=Collections.unmodifiableList(traceViews);
         }
         public EventCard getEvent(){return event;} public List<SignalView> getSignals(){return signals;}
+        public List<EvidenceView> getEvidence(){return evidence;} public List<AgentTraceView> getAgentTrace(){return agentTrace;}
+    }
+
+    public static final class EvidenceView {
+        private final Long id; private final String toolCode,evidenceType,title,summary,url,sourceName,sourceTier;
+        private final LocalDateTime publishedAt;
+        EvidenceView(RadarEvidence value){id=value.getId();toolCode=value.getToolCode();evidenceType=value.getEvidenceType();
+            title=value.getTitle();summary=value.getSummary();url=value.getUrl();sourceName=value.getSourceName();
+            sourceTier=value.getSourceTier();publishedAt=value.getPublishedAt();}
+        public Long getId(){return id;} public String getToolCode(){return toolCode;} public String getEvidenceType(){return evidenceType;}
+        public String getTitle(){return title;} public String getSummary(){return summary;} public String getUrl(){return url;}
+        public String getSourceName(){return sourceName;} public String getSourceTier(){return sourceTier;} public LocalDateTime getPublishedAt(){return publishedAt;}
+    }
+
+    public static final class AgentTraceView {
+        private final String nodeName,status,summary,errorType,fallbackReason; private final long durationMs; private final boolean fallbackUsed;
+        AgentTraceView(AgentRun value){nodeName=value.getNodeName();status=value.getStatus();summary=value.getOutput();
+            errorType=value.getErrorType();fallbackUsed=value.isFallbackUsed();fallbackReason=value.getFallbackReason();durationMs=value.getDurationMs();}
+        public String getNodeName(){return nodeName;} public String getStatus(){return status;} public String getSummary(){return summary;}
+        public String getErrorType(){return errorType;} public boolean isFallbackUsed(){return fallbackUsed;}
+        public String getFallbackReason(){return fallbackReason;} public long getDurationMs(){return durationMs;}
     }
 }

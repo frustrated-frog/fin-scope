@@ -3,9 +3,13 @@ package com.finscope.service.radar;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.WatchlistRepository;
+import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.domain.radar.RadarEvidence;
+import com.finscope.domain.agent.AgentRun;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
@@ -29,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class ResearchRadarServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 7, 31, 16, 0);
@@ -94,6 +99,46 @@ class ResearchRadarServiceTest {
         when(news.load("UNKNOWN", 100)).thenThrow(
                 new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知或已停用的资讯分类：UNKNOWN"));
         assertThrows(BusinessException.class, () -> service.load("UNKNOWN", false, 20));
+    }
+
+    @Test
+    void enrichesOnlyHighPriorityEventsAndReturnsEvidenceWithSanitizedTrace() {
+        RadarEvidenceOrchestrator orchestrator = mock(RadarEvidenceOrchestrator.class);
+        RadarEvidenceRepository evidence = mock(RadarEvidenceRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, orchestrator, evidence, runs,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", NOW.minusMinutes(30));
+        NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", NOW.minusMinutes(20));
+        when(news.load("ALL",100)).thenReturn(new NewsFeedSnapshot(Arrays.asList(first,second),Collections.emptyList(),NOW,2));
+        when(repository.findActiveSignals(NOW.minusHours(48),500)).thenReturn(Arrays.asList(captured(1L,first),captured(2L,second)));
+        when(repository.saveEvent(any(RadarEvent.class))).thenAnswer(invocation->{RadarEvent value=invocation.getArgument(0);value.setId(10L);return value;});
+        com.finscope.domain.instrument.WatchlistItem followed = new com.finscope.domain.instrument.WatchlistItem();
+        followed.setName("宁德时代"); followed.setCode("300750"); followed.setType("STOCK");
+        when(watchlist.findByTypes(Arrays.asList("STOCK","FUND"))).thenReturn(Collections.singletonList(followed));
+        when(orchestrator.enrich(any(RadarEvent.class),any())).thenReturn(
+                new RadarEvidenceOrchestrator.Outcome("SUCCESS","已补充2条证据，来自2个来源","",2,2,"fp"));
+
+        ResearchRadarView view = service.load("ALL",false,20);
+
+        verify(orchestrator).enrich(any(RadarEvent.class),any());
+        assertEquals("SUCCESS",view.getEvents().get(0).getEvidenceStatus());
+
+        RadarEvent stored=new RadarEvent();stored.setId(10L);stored.setCanonicalTitle("宁德时代发布新一代电池");stored.setEvidenceStatus("SUCCESS");
+        when(repository.findEvent(10L)).thenReturn(java.util.Optional.of(stored));
+        when(repository.findSignalsByEventId(10L)).thenReturn(Collections.emptyList());
+        when(repository.findEventSignals(10L)).thenReturn(Collections.emptyList());
+        RadarEvidence external=new RadarEvidence();external.setTitle("公司公告");external.setSourceName("深交所");
+        when(evidence.findByEventId(10L)).thenReturn(Collections.singletonList(external));
+        AgentRun trace=new AgentRun();trace.setNodeName("radar-evidence-plan");trace.setStatus("SUCCESS");trace.setInput("完整提示词不应返回");trace.setOutput("actions=2");
+        when(runs.findBySubject("RADAR_EVENT",10L)).thenReturn(Collections.singletonList(trace));
+
+        ResearchRadarView.EventDetail detail=service.detail(10L);
+        assertEquals(1,detail.getEvidence().size());
+        assertEquals("radar-evidence-plan",detail.getAgentTrace().get(0).getNodeName());
+        assertEquals("actions=2",detail.getAgentTrace().get(0).getSummary());
     }
 
     private NewsFeedItem item(String id, String provider, String source, String title, LocalDateTime time) {

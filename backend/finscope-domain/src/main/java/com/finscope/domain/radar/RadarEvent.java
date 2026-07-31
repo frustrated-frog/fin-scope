@@ -19,6 +19,13 @@ public class RadarEvent {
     private String watchlistExplanation;
     private String uncertainty;
     private String nextObservation;
+    private String evidenceStatus;
+    private String evidenceSummary;
+    private String evidenceWarning;
+    private String evidenceFingerprint;
+    private int evidenceCount;
+    private int evidenceSourceCount;
+    private LocalDateTime evidenceUpdatedAt;
     private LocalDateTime updatedAt;
 
     public Long getId() { return id; }
@@ -53,6 +60,20 @@ public class RadarEvent {
     public void setUncertainty(String uncertainty) { this.uncertainty = uncertainty; }
     public String getNextObservation() { return nextObservation; }
     public void setNextObservation(String nextObservation) { this.nextObservation = nextObservation; }
+    public String getEvidenceStatus() { return evidenceStatus; }
+    public void setEvidenceStatus(String evidenceStatus) { this.evidenceStatus = evidenceStatus; }
+    public String getEvidenceSummary() { return evidenceSummary; }
+    public void setEvidenceSummary(String evidenceSummary) { this.evidenceSummary = evidenceSummary; }
+    public String getEvidenceWarning() { return evidenceWarning; }
+    public void setEvidenceWarning(String evidenceWarning) { this.evidenceWarning = evidenceWarning; }
+    public String getEvidenceFingerprint() { return evidenceFingerprint; }
+    public void setEvidenceFingerprint(String evidenceFingerprint) { this.evidenceFingerprint = evidenceFingerprint; }
+    public int getEvidenceCount() { return evidenceCount; }
+    public void setEvidenceCount(int evidenceCount) { this.evidenceCount = evidenceCount; }
+    public int getEvidenceSourceCount() { return evidenceSourceCount; }
+    public void setEvidenceSourceCount(int evidenceSourceCount) { this.evidenceSourceCount = evidenceSourceCount; }
+    public LocalDateTime getEvidenceUpdatedAt() { return evidenceUpdatedAt; }
+    public void setEvidenceUpdatedAt(LocalDateTime evidenceUpdatedAt) { this.evidenceUpdatedAt = evidenceUpdatedAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

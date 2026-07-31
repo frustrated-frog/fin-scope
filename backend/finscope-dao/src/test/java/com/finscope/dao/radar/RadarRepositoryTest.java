@@ -122,7 +122,9 @@ class RadarRepositoryTest {
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"
                 + "signal_count INTEGER NOT NULL DEFAULT 0,priority_score INTEGER NOT NULL DEFAULT 0,"
                 + "score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,watchlist_explanation TEXT,"
-                + "uncertainty TEXT,next_observation TEXT,updated_at TEXT NOT NULL)");
+                + "uncertainty TEXT,next_observation TEXT,evidence_status TEXT,evidence_summary TEXT,evidence_warning TEXT,"
+                + "evidence_fingerprint TEXT,evidence_count INTEGER NOT NULL DEFAULT 0,"
+                + "evidence_source_count INTEGER NOT NULL DEFAULT 0,evidence_updated_at TEXT,updated_at TEXT NOT NULL)");
         jdbc.execute("CREATE TABLE radar_event_signal(event_id INTEGER NOT NULL,signal_id INTEGER NOT NULL,"
                 + "relation_type TEXT NOT NULL,match_score REAL NOT NULL,match_reason TEXT,"
                 + "PRIMARY KEY(event_id,signal_id),FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE,"

@@ -52,8 +52,22 @@ export function RadarEventCard({ event, onResearch }: { event: RadarEvent; onRes
             <strong>{event.sourceCount} 个独立来源共同报道</strong>
             <p><b>尚待确认：</b>{event.uncertainty}</p>
             <p><b>下一步观察：</b>{event.nextObservation}</p>
+            {event.evidenceSummary ? <p className="radar-evidence-summary">{`智能补证：${event.evidenceSummary}`}</p> : null}
+            {event.evidenceWarning ? <p className="radar-evidence-warning">{event.evidenceWarning}</p> : null}
             {loading ? <span>正在读取原始来源…</span> : null}
             {detailError ? <span role="alert">{detailError}</span> : null}
+            {detail?.evidence?.length ? (
+              <section className="radar-external-evidence" aria-label="外部补充证据">
+                <h4>外部补充证据</h4>
+                {detail.evidence.map((item, index) => (
+                  <article key={item.id ?? `${item.toolCode}-${index}`}>
+                    <div><span>{item.sourceName || evidenceTypeLabel(item.evidenceType)}</span><small>{evidenceTypeLabel(item.evidenceType)}</small></div>
+                    {item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.title}</a> : <strong>{item.title}</strong>}
+                    {item.summary ? <p>{item.summary}</p> : null}
+                  </article>
+                ))}
+              </section>
+            ) : null}
             {detail?.signals.map((signal) => (
               <article className="radar-signal" key={signal.id}>
                 <div><span>{signal.sourceName}</span><time dateTime={signal.publishedAt}>{formatDateTime(signal.publishedAt)}</time></div>
@@ -61,11 +75,40 @@ export function RadarEventCard({ event, onResearch }: { event: RadarEvent; onRes
                 <small>{signal.matchReason}</small>
               </article>
             ))}
+            {detail?.agentTrace?.length ? (
+              <details className="radar-agent-trace">
+                <summary>Agent 执行轨迹</summary>
+                <ol>
+                  {detail.agentTrace.map((trace, index) => (
+                    <li key={`${trace.nodeName}-${index}`}>
+                      <div><strong>{agentNodeLabel(trace.nodeName)}</strong><span>{trace.status} · {trace.durationMs}ms</span></div>
+                      {trace.summary ? <p>{trace.summary}</p> : null}
+                      {trace.fallbackUsed ? <small>已降级：{trace.fallbackReason || trace.errorType || '使用确定性结果'}</small> : null}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ) : null}
           </div>
         ) : null}
       </div>
     </article>
   );
+}
+
+function evidenceTypeLabel(value?: string) {
+  if (value === 'ANNOUNCEMENT') return '公司公告';
+  if (value === 'INTERACTION') return '互动问答';
+  if (value === 'BROKER_REPORT') return '机构研报';
+  if (value === 'NEWS_FLASH' || value === 'PUBLIC_NEWS') return '公开资讯';
+  return '补充资料';
+}
+
+function agentNodeLabel(value: string) {
+  if (value === 'radar-evidence-plan') return '证据规划';
+  if (value === 'radar-evidence-synthesis') return '证据综合';
+  if (value.startsWith('radar-tool-')) return '多源检索';
+  return value;
 }
 
 function parseDate(value?: string) { return value ? new Date(value) : undefined; }
