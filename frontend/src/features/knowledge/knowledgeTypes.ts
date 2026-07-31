@@ -135,3 +135,37 @@ export type KnowledgeReviewResult = {
   reviewCount: number;
   revision: number;
 };
+
+export type InvestmentRecognitionStatus = 'CANDIDATE' | 'NEEDS_EVIDENCE' | 'ACCEPTED' | 'DISMISSED' | 'INVALIDATED';
+
+export type InvestmentRecognitionCandidate = {
+  id: number;
+  subjectType: string;
+  subjectCode: string;
+  subjectName: string;
+  status: InvestmentRecognitionStatus;
+  thesis: string;
+  observedChange: string;
+  mechanism: string;
+  supportingData: string[];
+  counterData: string[];
+  validationMetrics: string[];
+  invalidationConditions: string;
+  horizon: string;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  evidenceCompleteness: string;
+  triggerSummary?: string;
+  dataAsOf?: string;
+  topicId?: number;
+  revision: number;
+  generatedAt?: string;
+  updatedAt?: string;
+};
+
+export type InvestmentRecognitionRun = {
+  checkedObjects: number;
+  candidateCount: number;
+  needsEvidenceCount: number;
+  generatedAt: string;
+  candidates: InvestmentRecognitionCandidate[];
+};

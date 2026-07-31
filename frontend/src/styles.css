@@ -1873,6 +1873,137 @@ a:focus-visible {
   padding: 32px 38px 48px;
 }
 
+.recognition-desk {
+  display: grid;
+  gap: 18px;
+  padding: 0 0 36px;
+}
+
+.recognition-agent-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px;
+  padding: 30px;
+  border: 1px solid var(--knowledge-border);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(13, 29, 38, 0.98), rgba(18, 43, 49, 0.94));
+  color: #f4f2e9;
+  box-shadow: 0 18px 50px rgba(10, 24, 29, 0.1);
+}
+
+.recognition-agent-hero h2 {
+  max-width: 760px;
+  margin: 4px 0 10px;
+  font-family: var(--knowledge-serif);
+  font-size: clamp(27px, 3.2vw, 42px);
+  line-height: 1.14;
+}
+
+.recognition-agent-hero > div > p:last-child {
+  max-width: 780px;
+  margin: 0;
+  color: rgba(244, 242, 233, 0.68);
+  line-height: 1.75;
+}
+
+.recognition-agent-hero > .knowledge-primary-button {
+  align-self: start;
+  border-color: #d1b56d;
+  background: #d1b56d;
+  color: #142227;
+}
+
+.recognition-agent-metrics {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.recognition-agent-metrics div { padding: 15px 17px; background: rgba(9, 24, 29, 0.78); }
+.recognition-agent-metrics dt { color: rgba(244, 242, 233, 0.55); font-size: 12px; }
+.recognition-agent-metrics dd { margin: 6px 0 0; color: #fff; font-size: 20px; font-weight: 700; }
+
+.recognition-status-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--knowledge-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.recognition-status-tabs button {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--knowledge-muted);
+  font-weight: 700;
+}
+
+.recognition-status-tabs button[aria-pressed="true"] {
+  background: #18353b;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(14, 39, 45, 0.14);
+}
+
+.recognition-candidate-list { display: grid; gap: 14px; }
+
+.recognition-candidate {
+  overflow: hidden;
+  border: 1px solid var(--knowledge-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 12px 35px rgba(31, 45, 48, 0.06);
+}
+
+.recognition-candidate > header { padding: 22px 24px 17px; border-bottom: 1px solid var(--knowledge-border); }
+.recognition-candidate > header h3 { max-width: 900px; margin: 13px 0 0; font-family: var(--knowledge-serif); font-size: 23px; line-height: 1.42; }
+.recognition-subject { display: flex; align-items: center; gap: 9px; }
+.recognition-subject span { padding: 3px 7px; border-radius: 6px; background: #e3ece9; color: #27544f; font-size: 11px; font-weight: 800; }
+.recognition-subject code { color: var(--knowledge-muted); font-size: 12px; }
+.recognition-confidence { float: right; margin-top: -21px; color: var(--knowledge-muted); font-size: 12px; }
+
+.recognition-reasoning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.recognition-reason-block { min-height: 118px; padding: 19px 24px; border-right: 1px solid var(--knowledge-border); border-bottom: 1px solid var(--knowledge-border); }
+.recognition-reason-block:nth-child(even) { border-right: 0; }
+.recognition-reason-block h4 { margin: 0 0 9px; color: #6b786f; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.recognition-reason-block p, .recognition-reason-block ul { margin: 0; color: #2c3c3d; line-height: 1.7; }
+.recognition-reason-block ul { padding-left: 18px; }
+.recognition-reason-block.counter { background: rgba(151, 87, 65, 0.045); }
+.recognition-reason-block.counter h4 { color: #975741; }
+
+.recognition-candidate > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 24px; color: var(--knowledge-muted); font-size: 13px; }
+.recognition-candidate > footer div { display: flex; gap: 8px; }
+.recognition-candidate > footer button { padding: 8px 12px; border: 1px solid var(--knowledge-border); border-radius: 9px; background: #fff; }
+.recognition-candidate > footer .knowledge-primary-button { border-color: #18353b; background: #18353b; color: #fff; }
+
+.recognition-empty { padding: 46px 28px; border: 1px dashed var(--knowledge-border); border-radius: 17px; background: rgba(255,255,255,.55); text-align: center; }
+.recognition-empty strong { display: block; margin-bottom: 8px; font-family: var(--knowledge-serif); font-size: 20px; }
+.recognition-empty p { max-width: 620px; margin: 0 auto; color: var(--knowledge-muted); line-height: 1.7; }
+
+@media (max-width: 760px) {
+  .recognition-agent-hero { grid-template-columns: 1fr; padding: 24px 20px; }
+  .recognition-agent-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recognition-reasoning-grid { grid-template-columns: 1fr; }
+  .recognition-reason-block { border-right: 0; }
+  .recognition-confidence { float: none; margin: 9px 0 0; }
+  .recognition-candidate > footer { align-items: flex-start; flex-direction: column; }
+}
+
 .knowledge-section-heading {
   display: flex;
   align-items: flex-end;

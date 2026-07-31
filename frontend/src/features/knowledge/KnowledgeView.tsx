@@ -8,6 +8,9 @@ import {
   KnowledgeEntryInput,
   KnowledgeEntry,
   KnowledgeEvidence,
+  InvestmentRecognitionCandidate,
+  InvestmentRecognitionRun,
+  InvestmentRecognitionStatus,
   KnowledgeOverview,
   KnowledgeReviewInput,
   KnowledgeSection,
@@ -15,7 +18,7 @@ import {
   KnowledgeTopic,
   KnowledgeTopicWorkspace
 } from './knowledgeTypes';
-import { TopicLibrary } from './topics/TopicLibrary';
+import { InvestmentRecognitionDesk } from './topics/InvestmentRecognitionDesk';
 import { LearningWorkspace } from './learning/LearningWorkspace';
 import { TopicWorkspace } from './topics/TopicWorkspace';
 import { ReviewQueue } from './review/ReviewQueue';
@@ -61,6 +64,8 @@ export function KnowledgeView({
   const [verificationWorkspaces, setVerificationWorkspaces] = useState<KnowledgeTopicWorkspace[]>([]);
   const [radar, setRadar] = useState<ResearchRadarSnapshot | null>(null);
   const [radarError, setRadarError] = useState('');
+  const [recognitionCandidates, setRecognitionCandidates] = useState<InvestmentRecognitionCandidate[]>([]);
+  const [recognitionAgentRunning, setRecognitionAgentRunning] = useState(false);
 
   const restoreLocation = useCallback(() => {
     const next = locationState();
@@ -121,9 +126,13 @@ export function KnowledgeView({
       : section === 'topics'
         ? topicId
           ? knowledgeApi.topicWorkspace(topicId).then(setTopicWorkspace)
-          : knowledgeApi.topics().then((page) => {
+          : Promise.all([
+            knowledgeApi.topics(),
+            api<InvestmentRecognitionCandidate[]>('/api/knowledge/investment-recognitions')
+          ]).then(([page, nextCandidates]) => {
             setTopicWorkspace(null);
             setTopics(page.items);
+            setRecognitionCandidates(Array.isArray(nextCandidates) ? nextCandidates : []);
           })
         : section === 'learning'
           ? loadLearning(taskStatus)
@@ -202,6 +211,47 @@ export function KnowledgeView({
     navigateTarget(`?section=topics&topic=${created.id}`);
   }
 
+  async function runRecognitionAgent() {
+    setRecognitionAgentRunning(true);
+    try {
+      const result = await api<InvestmentRecognitionRun>('/api/knowledge/investment-recognitions/run', { method: 'POST' });
+      const [nextCandidates, page] = await Promise.all([
+        api<InvestmentRecognitionCandidate[]>('/api/knowledge/investment-recognitions'),
+        knowledgeApi.topics()
+      ]);
+      setRecognitionCandidates(Array.isArray(nextCandidates) ? nextCandidates : []);
+      setTopics(page.items);
+      addToast(`Agent 已检查 ${result.checkedObjects} 个投资对象，形成 ${result.candidateCount} 条候选`, 'success');
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '投资 Agent 运行失败', 'error');
+    } finally {
+      setRecognitionAgentRunning(false);
+    }
+  }
+
+  async function acceptRecognitionCandidate(id: number, revision: number) {
+    await api(`/api/knowledge/investment-recognitions/${id}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ expectedRevision: revision })
+    });
+    const [page, nextCandidates] = await Promise.all([
+      knowledgeApi.topics(),
+      api<InvestmentRecognitionCandidate[]>('/api/knowledge/investment-recognitions')
+    ]);
+    setTopics(page.items);
+    setRecognitionCandidates(nextCandidates);
+    addToast('Agent 候选已沉淀为正式投资认识', 'success');
+  }
+
+  async function updateRecognitionCandidate(id: number, status: InvestmentRecognitionStatus, revision: number) {
+    const updated = await api<InvestmentRecognitionCandidate>(`/api/knowledge/investment-recognitions/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, expectedRevision: revision })
+    });
+    setRecognitionCandidates((current) => current.map((item) => item.id === id ? updated : item));
+    addToast(status === 'NEEDS_EVIDENCE' ? '已转入待补证据' : '已更新候选状态', 'info');
+  }
+
   function selectTask(id: number) {
     const params = new URLSearchParams(window.location.search);
     params.set('section', 'learning');
@@ -265,7 +315,18 @@ export function KnowledgeView({
         : <VerificationQueue workspaces={verificationWorkspaces} onNavigate={navigateTarget} />)}
       {section === 'topics' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
-        : <TopicLibrary topics={topics} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
+        : <InvestmentRecognitionDesk
+          candidates={recognitionCandidates}
+          topics={topics.filter((topic) => classifyKnowledgeTopic(topic) === 'RECOGNITION')}
+          loading={loading}
+          running={recognitionAgentRunning}
+          onRun={runRecognitionAgent}
+          onAccept={acceptRecognitionCandidate}
+          onStatus={updateRecognitionCandidate}
+          onSearch={searchTopics}
+          onCreate={createTopic}
+          onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)}
+        />)}
       {section === 'learning' && <LearningWorkspace
         tasks={tasks}
         topics={topics}
