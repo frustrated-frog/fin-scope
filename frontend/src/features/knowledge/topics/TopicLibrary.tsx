@@ -2,18 +2,16 @@ import { FormEvent, useEffect, useState } from 'react';
 
 import { KnowledgeTopic } from '../knowledgeTypes';
 import { TopicCard } from './TopicCard';
-import { classifyKnowledgeTopic, KnowledgeClassification } from './knowledgeClassification';
+import { classifyKnowledgeTopic } from './knowledgeClassification';
 
 export function TopicLibrary({
   topics,
-  totalCount,
   loading,
   onSearch,
   onOpenTopic,
   onCreate
 }: {
   topics: KnowledgeTopic[];
-  totalCount: number;
   loading: boolean;
   onSearch: (query: string) => Promise<void>;
   onOpenTopic: (topicId: number) => void;
@@ -23,10 +21,7 @@ export function TopicLibrary({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [classification, setClassification] = useState<KnowledgeClassification>('RECOGNITION');
   const recognitions = topics.filter((topic) => classifyKnowledgeTopic(topic) === 'RECOGNITION');
-  const materials = topics.filter((topic) => classifyKnowledgeTopic(topic) === 'MATERIAL');
-  const visibleTopics = classification === 'RECOGNITION' ? recognitions : materials;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -55,32 +50,27 @@ export function TopicLibrary({
         <button className="knowledge-primary-button" type="button" onClick={() => setDialogOpen(true)}>新建投资问题</button>
       </div>
 
-      <div className="knowledge-classification-tabs" role="group" aria-label="认识分类">
-        <button type="button" aria-pressed={classification === 'RECOGNITION'} onClick={() => setClassification('RECOGNITION')}>已形成认识 {recognitions.length}</button>
-        <button type="button" aria-pressed={classification === 'MATERIAL'} onClick={() => setClassification('MATERIAL')}>待提炼材料 {materials.length}</button>
-      </div>
-
       <div className="topic-library-toolbar">
         <label>
-          <span>搜索认识或材料</span>
+          <span>搜索投资认识</span>
           <input
             type="search"
-            aria-label="搜索认识或材料"
+            aria-label="搜索投资认识"
             placeholder="名称、描述或关键词"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <span>{loading ? '正在检索…' : `共 ${totalCount} 个档案`}</span>
+        <span>{loading ? '正在检索…' : `共 ${recognitions.length} 个认识档案`}</span>
       </div>
 
       <div className="knowledge-topic-grid">
-        {visibleTopics.length > 0 ? visibleTopics.map((topic) => (
-          <TopicCard key={topic.id} topic={topic} classification={classification} onOpen={() => onOpenTopic(topic.id)} />
+        {recognitions.length > 0 ? recognitions.map((topic) => (
+          <TopicCard key={topic.id} topic={topic} classification="RECOGNITION" onOpen={() => onOpenTopic(topic.id)} />
         )) : (
           <div className="knowledge-library-empty">
-            <strong>{query ? '没有匹配的档案' : classification === 'MATERIAL' ? '没有等待提炼的材料' : '还没有形成投资认识'}</strong>
-            <p>{query ? '换一个关键词，或清除筛选查看全部档案。' : classification === 'MATERIAL' ? '单篇文章和自动摘要会先进入这里。' : '从一个能持续被事实检验的投资问题开始。'}</p>
+            <strong>{query ? '没有匹配的认识' : '还没有形成投资认识'}</strong>
+            <p>{query ? '换一个关键词，或清除筛选查看全部认识。' : '运行投资 Agent，或从一个能持续被事实检验的投资问题开始。'}</p>
           </div>
         )}
       </div>

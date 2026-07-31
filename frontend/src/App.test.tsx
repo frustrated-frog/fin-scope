@@ -952,7 +952,6 @@ test('market article insight derives category-aware sections from legacy fields'
       }}
       isExpanded
       onToggle={vi.fn()}
-      onCompound={vi.fn()}
       onDelete={vi.fn()}
       categoryColor="#f0b90b"
     />
@@ -967,16 +966,14 @@ test('market article insight derives category-aware sections from legacy fields'
   expect(screen.queryByText('背景是什么')).not.toBeInTheDocument();
 });
 
-test('can compound an inbox article into a topic', async () => {
+test('does not offer article compounding in the independent article library', async () => {
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Article' }));
   await userEvent.click(await screen.findByText('美联储释放降息信号 黄金走强'));
-  await userEvent.click(await screen.findByText('沉淀到主题库'));
 
-  expect(fetch).toHaveBeenCalledWith('/api/topics/from-article/1', expect.objectContaining({ method: 'POST' }));
+  expect(screen.queryByRole('button', { name: '沉淀到主题库' })).not.toBeInTheDocument();
   expect(await screen.findByRole('heading', { name: '文章情报台' })).toBeInTheDocument();
-  expect(screen.queryByText('主题库')).not.toBeInTheDocument();
 });
 
 test('batch selection controls use the same compact pill shape', async () => {
@@ -1031,19 +1028,14 @@ test('opens a magazine-style brief reader from the briefs list', async () => {
   expect(screen.getByRole('button', { name: '返回简报列表' })).toBeInTheDocument();
 });
 
-test('compounds a brief in place without opening a removed topic page', async () => {
+test('keeps briefs independent from investment recognition', async () => {
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Briefs' }));
   await userEvent.click(await screen.findByRole('button', { name: '查看简报' }));
-  await userEvent.click(await screen.findByRole('button', { name: '沉淀主题' }));
 
-  expect(fetch).toHaveBeenCalledWith(
-    '/api/topics/from-brief/2026-06-25',
-    expect.objectContaining({ method: 'POST' })
-  );
+  expect(screen.queryByRole('button', { name: '沉淀主题' })).not.toBeInTheDocument();
   expect(await screen.findByRole('button', { name: '返回简报列表' })).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: '主题库' })).not.toBeInTheDocument();
 });
 
 test('brief reader places the outline overview above the document body', async () => {

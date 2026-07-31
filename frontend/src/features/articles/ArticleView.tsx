@@ -31,7 +31,6 @@ export function ArticleView({
   const [ingestError, setIngestError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
-  const [compoundingArticleIds, setCompoundingArticleIds] = useState<Set<number>>(new Set());
   const highlightClearTimerRef = useRef<number | null>(null);
   const ingestChannelRef = useRef<IngestTaskChannel | null>(null);
   const ingestGenerationRef = useRef(0);
@@ -199,33 +198,6 @@ export function ArticleView({
     }, 5000);
   }
 
-  async function compoundArticle(articleId: number) {
-    if (compoundingArticleIds.has(articleId)) {
-      return;
-    }
-    setCompoundingArticleIds((current) => new Set(current).add(articleId));
-    addToast('正在将文章沉淀到主题库', 'info');
-    try {
-      const topic = await api<{ id: number; name: string }>(`/api/topics/from-article/${articleId}`, { method: 'POST' });
-      addToast(topic?.name ? `文章已沉淀到主题「${topic.name}」` : '文章已沉淀到主题库', 'success');
-      await Promise.all([
-        fetchArticles(),
-        onWorkspaceChanged().catch((error) => {
-          const message = error instanceof Error ? error.message : '工作区刷新失败';
-          addToast(`主题已创建，但工作区刷新失败：${message}`, 'error');
-        })
-      ]);
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : '文章沉淀失败，请稍后重试', 'error');
-    } finally {
-      setCompoundingArticleIds((current) => {
-        const next = new Set(current);
-        next.delete(articleId);
-        return next;
-      });
-    }
-  }
-
   async function deleteArticle(id: number) {
     try {
       await api(`/api/articles/${id}`, { method: 'DELETE' });
@@ -348,7 +320,7 @@ export function ArticleView({
       <header className="article-control-hero article-command-hero">
         <p className="eyebrow">Signal intake</p>
         <h3>文章情报台</h3>
-        <p>把外部链接转化为可追踪、可沉淀的研究素材，先筛信号，再进入主题库。</p>
+        <p>把外部链接转化为可追踪、可检索的阅读资产，独立保存在文章知识库。</p>
         <div className="article-hero-readouts" aria-label="文章总览">
           <span><small>当前队列</small><strong>{totalCount}</strong></span>
           <span><small>本页信号</small><strong>{pagedArticles.length}</strong></span>
@@ -495,9 +467,7 @@ export function ArticleView({
                   article={article}
                   isExpanded={expandedArticleId === article.id}
                   isHighlighted={highlightedArticleId === article.id}
-                  isCompounding={compoundingArticleIds.has(article.id)}
                   onToggle={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
-                  onCompound={() => compoundArticle(article.id)}
                   onDelete={() => setShowDeleteConfirm(article.id)}
                   categoryColor={getCategoryColor(article.category)}
                 />

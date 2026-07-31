@@ -52,7 +52,6 @@ export function KnowledgeView({
   const [taskStatus, setTaskStatus] = useState<string | undefined>(initial.taskStatus);
   const [overview, setOverview] = useState<KnowledgeOverview | null>(null);
   const [topics, setTopics] = useState<KnowledgeTopic[]>([]);
-  const [topicCount, setTopicCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<KnowledgeTask[]>([]);
   const [evidence, setEvidence] = useState<KnowledgeEvidence[]>([]);
@@ -125,7 +124,6 @@ export function KnowledgeView({
           : knowledgeApi.topics().then((page) => {
             setTopicWorkspace(null);
             setTopics(page.items);
-            setTopicCount(page.totalCount);
           })
         : section === 'learning'
           ? loadLearning(taskStatus)
@@ -193,7 +191,6 @@ export function KnowledgeView({
     try {
       const page = await knowledgeApi.topics({ query });
       setTopics(page.items);
-      setTopicCount(page.totalCount);
     } finally {
       setLoading(false);
     }
@@ -268,7 +265,7 @@ export function KnowledgeView({
         : <VerificationQueue workspaces={verificationWorkspaces} onNavigate={navigateTarget} />)}
       {section === 'topics' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
-        : <TopicLibrary topics={topics} totalCount={topicCount} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
+        : <TopicLibrary topics={topics} loading={loading} onSearch={searchTopics} onCreate={createTopic} onOpenTopic={(id) => navigateTarget(`?section=topics&topic=${id}`)} />)}
       {section === 'learning' && <LearningWorkspace
         tasks={tasks}
         topics={topics}

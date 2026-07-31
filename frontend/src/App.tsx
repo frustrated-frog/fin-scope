@@ -82,7 +82,6 @@ export default function App() {
   const [researchReport, setResearchReport] = useState<ResearchReport | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchReportBusy, setResearchReportBusy] = useState(false);
-  const [compoundingBriefDates, setCompoundingBriefDates] = useState<Set<string>>(new Set());
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -434,31 +433,6 @@ export default function App() {
     return candidates;
   }
 
-  async function compoundBriefToTopics(date: string) {
-    if (compoundingBriefDates.has(date)) {
-      return;
-    }
-    setCompoundingBriefDates((current) => new Set(current).add(date));
-    setMessage('正在将简报沉淀到主题库');
-    addToast('正在将简报沉淀到主题库', 'info');
-    try {
-      await api(`/api/topics/from-brief/${date}`, { method: 'POST' });
-      await refresh();
-      setMessage('简报已沉淀到主题库');
-      addToast('简报已沉淀到主题库', 'success');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '简报沉淀失败，请稍后重试';
-      setMessage(errorMessage);
-      addToast(errorMessage, 'error');
-    } finally {
-      setCompoundingBriefDates((current) => {
-        const next = new Set(current);
-        next.delete(date);
-        return next;
-      });
-    }
-  }
-
   async function updateContentIdeaStatus(ideaId: number, status: string) {
     await api(`/api/content-ideas/${ideaId}/status`, {
       method: 'POST',
@@ -545,8 +519,6 @@ export default function App() {
           onChanged={refresh}
           setMessage={setMessage}
           onOpenBrief={openBrief}
-          onCompound={compoundBriefToTopics}
-          compoundingBriefDates={compoundingBriefDates}
         />
       )}
       {view === 'briefReader' && (
@@ -554,8 +526,6 @@ export default function App() {
           brief={selectedBrief}
           researchContext={selectedBriefContext}
           onBack={() => setView('briefs')}
-          onCompound={compoundBriefToTopics}
-          isCompounding={compoundingBriefDates.has(selectedBrief?.briefDate ?? '')}
         />
       )}
       {view === 'research' && (

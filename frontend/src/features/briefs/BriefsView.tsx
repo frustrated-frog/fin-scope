@@ -5,16 +5,12 @@ export function BriefsView({
   briefs,
   onChanged,
   setMessage,
-  onOpenBrief,
-  onCompound,
-  compoundingBriefDates
+  onOpenBrief
 }: {
   briefs: Brief[];
   onChanged: () => Promise<void>;
   setMessage: (message: string) => void;
   onOpenBrief: (date: string) => Promise<void>;
-  onCompound: (date: string) => Promise<void>;
-  compoundingBriefDates: Set<string>;
 }) {
   async function generateBrief() {
     await api('/api/briefs/generate', { method: 'POST' });
@@ -37,15 +33,6 @@ export function BriefsView({
             </div>
             <div className="item-actions">
               <button className="ghost-button" onClick={() => onOpenBrief(brief.briefDate)}>查看简报</button>
-              <button
-                className="compact-button"
-                type="button"
-                aria-busy={compoundingBriefDates.has(brief.briefDate)}
-                disabled={compoundingBriefDates.has(brief.briefDate)}
-                onClick={() => onCompound(brief.briefDate)}
-              >
-                {compoundingBriefDates.has(brief.briefDate) ? '沉淀中...' : '沉淀主题'}
-              </button>
               <span className="badge">{brief.briefDate}</span>
             </div>
           </article>
