@@ -32,6 +32,7 @@ public class DatabaseInitializer implements InitializingBean {
         Files.createDirectories(Paths.get(dataRoot).resolve("raw"));
         Files.createDirectories(Paths.get(dataRoot).resolve("exports"));
         createSchema();
+        seedNewsCategories();
         seedStrategyPlaybooks();
     }
 
@@ -140,6 +141,27 @@ public class DatabaseInitializer implements InitializingBean {
                 + "analysis_sections TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS news_category ("
+                + "code TEXT PRIMARY KEY,"
+                + "name TEXT NOT NULL,"
+                + "classification_guidance TEXT NOT NULL,"
+                + "enabled INTEGER NOT NULL DEFAULT 1,"
+                + "display_order INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS news_item_classification ("
+                + "item_id TEXT PRIMARY KEY,"
+                + "status TEXT NOT NULL,"
+                + "category_code TEXT,"
+                + "confidence REAL,"
+                + "reason TEXT,"
+                + "model_name TEXT,"
+                + "error_message TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(category_code) REFERENCES news_category(code))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_classification_category "
+                + "ON news_item_classification(status,category_code,updated_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brief ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "brief_date TEXT NOT NULL UNIQUE,"
@@ -905,6 +927,21 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_step_run ON attribution_research_step(run_id)");
         initializeMarketDataSchema();
         initializeQuantSchema();
+    }
+
+    private void seedNewsCategories() {
+        String now = LocalDateTime.now().toString();
+        insertNewsCategory("COMPANY", "公司动态", "单一或多家公司的公告、业绩、订单、产品、并购、治理和经营变化", 10, now);
+        insertNewsCategory("INDUSTRY", "行业产业", "行业供需、产业链、技术路线、产能、价格和竞争格局变化", 20, now);
+        insertNewsCategory("MACRO_POLICY", "政策宏观", "监管政策、财政货币政策和重要宏观经济数据", 30, now);
+        insertNewsCategory("GLOBAL", "全球市场", "海外市场、地缘政治、汇率及国际大宗商品事件", 40, now);
+        insertNewsCategory("MARKET_MOVE", "市场异动", "指数、板块、个股、成交、资金或波动异常", 50, now);
+    }
+
+    private void insertNewsCategory(String code, String name, String guidance, int order, String now) {
+        jdbcTemplate.update("INSERT OR IGNORE INTO news_category(code,name,classification_guidance,enabled,"
+                        + "display_order,created_at,updated_at) VALUES(?,?,?,1,?,?,?)",
+                code, name, guidance, order, now, now);
     }
 
     private void initializeMarketDataSchema() {
