@@ -87,6 +87,7 @@ export default function App() {
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
+  const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -242,7 +243,7 @@ export default function App() {
       case 'research':
         return 'Research';
       case 'news':
-        return 'News Wire · 市场资讯';
+        return '研究雷达 · 市场与自选';
       case 'events':
         return 'Events';
       case 'eventDetail':
@@ -559,6 +560,7 @@ export default function App() {
       )}
       {view === 'research' && (
         <ResearchView
+          initialQuestion={researchQuestionDraft}
           runs={researchRuns}
           theses={researchTheses}
           detail={researchRunDetail}
@@ -575,7 +577,18 @@ export default function App() {
           onCloseReport={() => setResearchReport(null)}
         />
       )}
-      {view === 'news' && <NewsView setMessage={setMessage} addToast={addToast} />}
+      {view === 'news' && (
+        <NewsView
+          setMessage={setMessage}
+          addToast={addToast}
+          onResearch={(question) => {
+            setResearchQuestionDraft(question);
+            setResearchReport(null);
+            setView('research');
+            setMessage('研究问题已预填，请补充研究对象后再创建命题');
+          }}
+        />
+      )}
       {view === 'events' && (
         <EventsView
           events={events}

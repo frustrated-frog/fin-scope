@@ -15,6 +15,7 @@ import {
 } from './researchPresentation';
 
 export function ResearchView({
+  initialQuestion,
   runs,
   theses,
   detail,
@@ -30,6 +31,7 @@ export function ResearchView({
   onEvaluateRun,
   onCloseReport
 }: {
+  initialQuestion?: string;
   runs: ResearchRun[];
   theses: ResearchThesis[];
   detail: ResearchRunDetail | null;
@@ -64,6 +66,10 @@ export function ResearchView({
   const [creatingThesis, setCreatingThesis] = useState(false);
   const [thesisFormError, setThesisFormError] = useState('');
   const [runtimeAction, setRuntimeAction] = useState<'resume' | 'evaluate' | null>(null);
+
+  useEffect(() => {
+    if (initialQuestion?.trim()) setQuestion(initialQuestion.trim());
+  }, [initialQuestion]);
 
   async function runRuntimeAction(action: 'resume' | 'evaluate', runId: number) {
     if (runtimeAction) return;
