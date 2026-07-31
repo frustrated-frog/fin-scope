@@ -1124,6 +1124,25 @@ public class DatabaseInitializer implements InitializingBean {
                 + "engine_version TEXT NOT NULL,source TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(dataset_id) REFERENCES quant_dataset(id) ON DELETE RESTRICT,UNIQUE(name,version))");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_strategy_dataset ON quant_strategy_version(dataset_id,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_catalog_source ("
+                + "code TEXT PRIMARY KEY,repository_url TEXT NOT NULL,branch TEXT NOT NULL,commit_sha TEXT NOT NULL,"
+                + "status TEXT NOT NULL,last_synced_at TEXT NOT NULL,error_message TEXT)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_strategy_candidate ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,source_code TEXT NOT NULL,external_key TEXT NOT NULL,"
+                + "source_commit_sha TEXT NOT NULL,title TEXT NOT NULL,asset_class TEXT NOT NULL,reported_sharpe REAL,"
+                + "reported_volatility REAL,rebalance_cadence TEXT,implementation_url TEXT,paper_url TEXT,"
+                + "compatibility_status TEXT NOT NULL CHECK(compatibility_status IN ('ADAPTABLE','NEEDS_FACTOR','UNSUPPORTED')),"
+                + "adaptation_note TEXT NOT NULL,mapped_factors TEXT NOT NULL DEFAULT '',missing_factors TEXT NOT NULL DEFAULT '',"
+                + "archived INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(source_code) REFERENCES quant_catalog_source(code) ON DELETE RESTRICT,"
+                + "UNIQUE(source_code,external_key))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_candidate_active_status "
+                + "ON quant_strategy_candidate(archived,compatibility_status,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_strategy_candidate_origin ("
+                + "candidate_id INTEGER NOT NULL,draft_id INTEGER NOT NULL UNIQUE,version_id INTEGER,created_at TEXT NOT NULL,"
+                + "FOREIGN KEY(candidate_id) REFERENCES quant_strategy_candidate(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_candidate_origin_candidate "
+                + "ON quant_strategy_candidate_origin(candidate_id,draft_id DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,strategy_version_id INTEGER NOT NULL,request_fingerprint TEXT NOT NULL,"
                 + "dataset_fingerprint TEXT NOT NULL,engine_version TEXT NOT NULL,status TEXT NOT NULL,error_message TEXT,"
