@@ -3,9 +3,11 @@ package com.finscope.service.investmentrecognition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.investmentrecognition.InvestmentRecognitionCandidateRepository;
+import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.investmentrecognition.InvestmentRecognitionRun;
+import com.finscope.domain.radar.RadarEvent;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.service.instrument.WatchlistService;
@@ -22,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InvestmentRecognitionAgentServiceTest {
     @Test
@@ -82,11 +85,105 @@ class InvestmentRecognitionAgentServiceTest {
         verify(llm, never()).complete(any(), any(), any(Integer.class), any(Integer.class));
     }
 
+    @Test
+    void usesStoredQuickNewsOnlyAsATriggerAndNeverAsSupportingData() {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        RadarRepository radar = mock(RadarRepository.class);
+        RadarEvent event = new RadarEvent();
+        event.setCanonicalTitle("贵州茅台披露经营快讯");
+        event.setSummary("市场关注后续经营数据");
+        event.setWatchlistExplanation("命中自选：贵州茅台");
+        when(radar.findRanked("ALL", true, 30)).thenReturn(Collections.singletonList(event));
+        when(llm.isConfigured()).thenReturn(false);
+        when(watchlist.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.singletonList(view(3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = new InvestmentRecognitionAgentService(
+                watchlist, candidates, runs, radar, llm, new ObjectMapper()).run();
+
+        assertEquals("贵州茅台披露经营快讯", result.getCandidates().get(0).getTriggerSummary());
+        assertFalse(result.getCandidates().get(0).getSupportingData().contains("贵州茅台披露经营快讯"));
+        assertTrue(result.getCandidates().get(0).getSupportingData().stream().allMatch(value -> !value.contains("快讯")));
+    }
+
+    @Test
+    void describesConfirmedFundNavInsteadOfFabricatingAZeroPrice() {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        WatchlistItem item = new WatchlistItem();
+        item.setType("FUND");
+        item.setCode("110011");
+        item.setName("易方达中小盘");
+        Quote quote = new Quote();
+        quote.setInstrumentCode("110011");
+        quote.setConfirmedNav(1.2345D);
+        quote.setConfirmedNavDate("2026-07-31");
+        quote.setConfirmedNavChangePct(2.1D);
+        quote.setValid(true);
+        quote.setAsOf(LocalDateTime.of(2026, 8, 1, 10, 0));
+        when(llm.isConfigured()).thenReturn(false);
+        when(watchlist.listInvestmentItemsWithQuotes(false))
+                .thenReturn(Collections.singletonList(new WatchlistItemView(item, quote, null)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = service(watchlist, candidates, runs, llm).run();
+
+        assertTrue(result.getCandidates().get(0).getObservedChange().contains("确认单位净值 1.2345（2026-07-31）"));
+        assertFalse(result.getCandidates().get(0).getObservedChange().contains("最新价格 0.00"));
+    }
+
+    @Test
+    void createsDifferentFingerprintsWhenTheObservationDirectionReverses() {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(false);
+        when(watchlist.listInvestmentItemsWithQuotes(false))
+                .thenReturn(Collections.singletonList(view(3.2, true)))
+                .thenReturn(Collections.singletonList(view(-3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        String rising = service(watchlist, candidates, runs, llm).run().getCandidates().get(0).getFingerprint();
+        String falling = service(watchlist, candidates, runs, llm).run().getCandidates().get(0).getFingerprint();
+
+        assertFalse(rising.equals(falling));
+        assertTrue(rising.endsWith("UP_3_TO_5"));
+        assertTrue(falling.endsWith("DOWN_3_TO_5"));
+    }
+
+    @Test
+    void fallsBackWhenTheModelReturnsOnlyBlankEvidenceItems() throws Exception {
+        WatchlistService watchlist = mock(WatchlistService.class);
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(any(), any(), any(Integer.class), any(Integer.class)))
+                .thenReturn("{\"thesis\":\"命题\",\"mechanism\":\"机制\",\"counterData\":[\" \"],"
+                        + "\"validationMetrics\":[\" \"],\"invalidationConditions\":\"失效\","
+                        + "\"horizon\":\"五日\",\"confidence\":\"MEDIUM\"}");
+        when(watchlist.listInvestmentItemsWithQuotes(false)).thenReturn(Collections.singletonList(view(3.2, true)));
+        when(candidates.saveOrRefresh(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InvestmentRecognitionRun result = service(watchlist, candidates, runs, llm).run();
+
+        assertEquals(2, result.getCandidates().get(0).getCounterData().size());
+        assertEquals(3, result.getCandidates().get(0).getValidationMetrics().size());
+    }
+
     private InvestmentRecognitionAgentService service(WatchlistService watchlist,
                                                        InvestmentRecognitionCandidateRepository candidates,
                                                        AgentRunRepository runs,
                                                        LlmChatClient llm) {
-        return new InvestmentRecognitionAgentService(watchlist, candidates, runs, llm, new ObjectMapper());
+        RadarRepository radar = mock(RadarRepository.class);
+        when(radar.findRanked("ALL", true, 30)).thenReturn(Collections.emptyList());
+        return new InvestmentRecognitionAgentService(watchlist, candidates, runs, radar, llm, new ObjectMapper());
     }
 
     private WatchlistItemView view(Double changePct, boolean valid) {

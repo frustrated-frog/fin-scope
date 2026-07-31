@@ -31,13 +31,19 @@ const responses: Record<string, unknown> = {
       lifecycleStatus: 'ACTIVE',
       masteryStatus: 'REVIEWING',
       revision: 2,
-      articleCount: 3
+      articleCount: 0
     }],
     totalCount: 1,
     page: 0,
     pageSize: 100,
     totalPages: 1
   },
+  '/api/knowledge/investment-recognitions': [{
+    id: 81,
+    status: 'ACCEPTED',
+    topicId: 41,
+    revision: 1
+  }],
   '/api/knowledge/topics/41': {
     topic: {
       id: 41,
@@ -46,7 +52,7 @@ const responses: Record<string, unknown> = {
       lifecycleStatus: 'ACTIVE',
       masteryStatus: 'REVIEWING',
       revision: 2,
-      articleCount: 3
+      articleCount: 0
     },
     events: [{ id: 1, canonicalTitle: '美联储降息预期升温，黄金ETF出现增量资金' }],
     evidence: [{

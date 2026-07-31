@@ -13,9 +13,11 @@ import java.util.Arrays;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class InvestmentRecognitionServiceTest {
@@ -53,6 +55,22 @@ class InvestmentRecognitionServiceTest {
         verify(entries).finalizeDraft(12L, 0L);
     }
 
+    @Test
+    void rejectsARecognitionWhoseEvidenceStructureIsIncomplete() {
+        InvestmentRecognitionCandidateRepository candidates = mock(InvestmentRecognitionCandidateRepository.class);
+        KnowledgeTopicService topics = mock(KnowledgeTopicService.class);
+        TopicRepository topicRepository = mock(TopicRepository.class);
+        KnowledgeEntryRepository entries = mock(KnowledgeEntryRepository.class);
+        InvestmentRecognitionCandidate candidate = candidate();
+        candidate.setCounterData(Arrays.asList(" "));
+        when(candidates.findById(7L)).thenReturn(Optional.of(candidate));
+
+        assertThrows(RuntimeException.class, () -> new InvestmentRecognitionService(
+                candidates, topics, topicRepository, entries).accept(7L, 0L));
+
+        verify(topics, never()).create(any(), any());
+    }
+
     private InvestmentRecognitionCandidate candidate() {
         InvestmentRecognitionCandidate value = new InvestmentRecognitionCandidate();
         value.setId(7L);
@@ -70,6 +88,7 @@ class InvestmentRecognitionServiceTest {
         value.setInvalidationConditions("收入增速未改善");
         value.setHorizon("下一财报期");
         value.setConfidence("MEDIUM");
+        value.setEvidenceCompleteness("SUFFICIENT");
         return value;
     }
 }

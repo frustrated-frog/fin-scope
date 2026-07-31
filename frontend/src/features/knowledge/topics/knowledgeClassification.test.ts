@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { KnowledgeTopic } from '../knowledgeTypes';
-import { classifyKnowledgeTopic } from './knowledgeClassification';
+import { classifyKnowledgeTopic, isFormalInvestmentRecognition } from './knowledgeClassification';
 
 function topic(input: Partial<KnowledgeTopic> = {}): KnowledgeTopic {
   return {
@@ -32,5 +32,17 @@ describe('classifyKnowledgeTopic', () => {
 
   test('keeps an automatically marked building file as material until it is revised', () => {
     expect(classifyKnowledgeTopic(topic({ masteryStatus: 'BUILDING', revision: 0 }))).toBe('MATERIAL');
+  });
+});
+
+describe('isFormalInvestmentRecognition', () => {
+  test('excludes historical and mixed article-derived topics from the formal desk', () => {
+    expect(isFormalInvestmentRecognition(topic({ masteryStatus: 'REVIEWING', articleCount: 1 }))).toBe(false);
+    expect(isFormalInvestmentRecognition(topic({ masteryStatus: 'MATURE', articleCount: 1, briefCount: 1 }))).toBe(false);
+  });
+
+  test('keeps agent-accepted topics and manually developed article-free recognitions', () => {
+    expect(isFormalInvestmentRecognition(topic(), new Set([1]))).toBe(true);
+    expect(isFormalInvestmentRecognition(topic({ articleCount: 0, masteryStatus: 'REVIEWING' }))).toBe(true);
   });
 });

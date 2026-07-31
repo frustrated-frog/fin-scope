@@ -24,7 +24,7 @@ import { TopicWorkspace } from './topics/TopicWorkspace';
 import { ReviewQueue } from './review/ReviewQueue';
 import { VerificationQueue } from './facts/VerificationQueue';
 import { DailyResearchDesk } from './daily/DailyResearchDesk';
-import { classifyKnowledgeTopic } from './topics/knowledgeClassification';
+import { isFormalInvestmentRecognition } from './topics/knowledgeClassification';
 
 const validSections = new Set<KnowledgeSection>(['home', 'facts', 'topics', 'learning', 'review']);
 
@@ -118,8 +118,15 @@ export function KnowledgeView({
           })
       ])
       : section === 'facts'
-        ? knowledgeApi.topics({ lifecycle: 'ACTIVE', size: 100 }).then(async (page) => {
-          const recognitions = (page.items || []).filter((topic) => classifyKnowledgeTopic(topic) === 'RECOGNITION');
+        ? Promise.all([
+          knowledgeApi.topics({ lifecycle: 'ACTIVE', size: 100 }),
+          api<InvestmentRecognitionCandidate[]>('/api/knowledge/investment-recognitions')
+        ]).then(async ([page, nextCandidates]) => {
+          const acceptedTopicIds = new Set((Array.isArray(nextCandidates) ? nextCandidates : [])
+            .filter((candidate) => candidate.status === 'ACCEPTED' && candidate.topicId)
+            .map((candidate) => candidate.topicId as number));
+          const recognitions = (page.items || []).filter((topic) =>
+            isFormalInvestmentRecognition(topic, acceptedTopicIds));
           const workspaces = await Promise.all(recognitions.map((topic) => knowledgeApi.topicWorkspace(topic.id)));
           setVerificationWorkspaces(workspaces);
         })
@@ -210,6 +217,10 @@ export function KnowledgeView({
     addToast('投资认识档案已建立', 'success');
     navigateTarget(`?section=topics&topic=${created.id}`);
   }
+
+  const acceptedRecognitionTopicIds = useMemo(() => new Set(recognitionCandidates
+    .filter((candidate) => candidate.status === 'ACCEPTED' && candidate.topicId)
+    .map((candidate) => candidate.topicId as number)), [recognitionCandidates]);
 
   async function runRecognitionAgent() {
     setRecognitionAgentRunning(true);
@@ -317,7 +328,7 @@ export function KnowledgeView({
         ? <TopicWorkspace workspace={topicWorkspace} onBack={() => navigateTarget('?section=topics')} onReview={reviewTopic} />
         : <InvestmentRecognitionDesk
           candidates={recognitionCandidates}
-          topics={topics.filter((topic) => classifyKnowledgeTopic(topic) === 'RECOGNITION')}
+          topics={topics.filter((topic) => isFormalInvestmentRecognition(topic, acceptedRecognitionTopicIds))}
           loading={loading}
           running={recognitionAgentRunning}
           onRun={runRecognitionAgent}

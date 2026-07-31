@@ -63,15 +63,17 @@ public class InvestmentRecognitionCandidateRepository {
                 return current;
             }
             LocalDateTime now = LocalDateTime.now();
-            jdbc.update("UPDATE investment_recognition_candidate SET subject_name=?,status=?,thesis=?,"
+            int updated = jdbc.update("UPDATE investment_recognition_candidate SET subject_name=?,status=?,thesis=?,"
                             + "observed_change=?,mechanism=?,supporting_data_json=?,counter_data_json=?,"
                             + "validation_metrics_json=?,invalidation_conditions=?,horizon=?,confidence=?,"
-                            + "evidence_completeness=?,trigger_summary=?,data_as_of=?,revision=revision+1,updated_at=? WHERE id=?",
+                            + "evidence_completeness=?,trigger_summary=?,data_as_of=?,revision=revision+1,updated_at=? "
+                            + "WHERE id=? AND revision=? AND status IN ('CANDIDATE','NEEDS_EVIDENCE')",
                     value.getSubjectName(), value.getStatus(), value.getThesis(), value.getObservedChange(),
                     value.getMechanism(), writeList(value.getSupportingData()), writeList(value.getCounterData()),
                     writeList(value.getValidationMetrics()), value.getInvalidationConditions(), value.getHorizon(),
                     value.getConfidence(), value.getEvidenceCompleteness(), value.getTriggerSummary(), value.getDataAsOf(),
-                    TimeUtil.text(now), current.getId());
+                    TimeUtil.text(now), current.getId(), current.getRevision());
+            if (updated == 0) return findById(current.getId()).orElse(current);
             return findById(current.getId()).orElse(value);
         }
         LocalDateTime now = LocalDateTime.now();

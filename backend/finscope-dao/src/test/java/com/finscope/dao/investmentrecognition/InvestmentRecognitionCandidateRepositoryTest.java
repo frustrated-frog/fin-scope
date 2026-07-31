@@ -61,6 +61,20 @@ class InvestmentRecognitionCandidateRepositoryTest {
         assertEquals(1, repository.findAll().size());
     }
 
+    @Test
+    void neverRefreshesATerminalCandidateBackIntoTheAgentQueue() {
+        InvestmentRecognitionCandidate saved = repository.saveOrRefresh(candidate());
+        assertTrue(repository.updateStatus(saved.getId(), "ACCEPTED", saved.getRevision(), 9L));
+        InvestmentRecognitionCandidate regenerated = candidate();
+        regenerated.setThesis("Agent 再次生成的命题");
+
+        InvestmentRecognitionCandidate result = repository.saveOrRefresh(regenerated);
+
+        assertEquals("ACCEPTED", result.getStatus());
+        assertEquals("价格变化值得检查盈利预期是否上修", result.getThesis());
+        assertEquals(1L, result.getRevision());
+    }
+
     private InvestmentRecognitionCandidate candidate() {
         InvestmentRecognitionCandidate value = new InvestmentRecognitionCandidate();
         value.setFingerprint("STOCK:600519:2026-08-01:+3.20");

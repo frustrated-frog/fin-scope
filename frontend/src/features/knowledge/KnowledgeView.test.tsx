@@ -31,6 +31,8 @@ beforeEach(() => {
     const url = String(input);
     const value = url.startsWith('/api/events/paged') || url.startsWith('/api/evidence/paged')
       ? { items: [], totalCount: 0, page: 0, pageSize: 100, totalPages: 0 }
+      : url === '/api/knowledge/investment-recognitions'
+      ? []
       : url === '/api/knowledge/topics/11'
       ? {
         topic: { id: 11, name: 'Agent 工程化', lifecycleStatus: 'ACTIVE', masteryStatus: 'BUILDING', revision: 1 },
@@ -93,10 +95,12 @@ test('loads verification propositions only from formed recognition workspaces', 
   window.history.replaceState({}, '', '/?section=facts');
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const value = url.startsWith('/api/knowledge/topics?page=0&size=100')
+    const value = url === '/api/knowledge/investment-recognitions'
+      ? [{ id: 21, status: 'ACCEPTED', topicId: 7, revision: 1 }]
+      : url.startsWith('/api/knowledge/topics?page=0&size=100')
       ? {
         items: [
-          { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 3 },
+          { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 0 },
           { id: 8, name: '一篇文章的自动主题', lifecycleStatus: 'ACTIVE', masteryStatus: 'EXPLORING', revision: 0, articleCount: 1 }
         ],
         totalCount: 2,
@@ -106,7 +110,7 @@ test('loads verification propositions only from formed recognition workspaces', 
       }
       : url === '/api/knowledge/topics/7'
         ? {
-          topic: { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 3 },
+          topic: { id: 7, name: '先进封装供需上行', lifecycleStatus: 'ACTIVE', masteryStatus: 'REVIEWING', revision: 2, articleCount: 0 },
           events: [{ id: 31, canonicalTitle: '公司季度经营更新' }],
           evidence: [{
             id: 1,

@@ -9,3 +9,12 @@ export function classifyKnowledgeTopic(topic: KnowledgeTopic, entryCount = 0): K
     ? 'RECOGNITION'
     : 'MATERIAL';
 }
+
+export function isFormalInvestmentRecognition(
+  topic: KnowledgeTopic,
+  acceptedTopicIds: ReadonlySet<number> = new Set<number>()
+): boolean {
+  if (acceptedTopicIds.has(topic.id)) return true;
+  const hasArticleProvenance = (topic.articleCount || 0) > 0 || (topic.briefCount || 0) > 0;
+  return !hasArticleProvenance && classifyKnowledgeTopic(topic) === 'RECOGNITION';
+}

@@ -44,6 +44,7 @@ public class InvestmentRecognitionService {
         if (!"CANDIDATE".equals(candidate.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有 Agent 候选可以沉淀为正式认识");
         }
+        requireCompleteEvidence(candidate);
         Topic topic = topics.create(topicName(candidate), topicDescription(candidate));
         if (!topicRepository.updateKnowledgeState(topic.getId(), "ACTIVE", "REVIEWING", topic.getRevision())) {
             throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "认识档案状态已变化");
@@ -113,6 +114,20 @@ public class InvestmentRecognitionService {
     }
     private String topicDescription(InvestmentRecognitionCandidate value) {
         return value.getSubjectType() + " " + value.getSubjectCode() + "；观察窗口：" + value.getHorizon();
+    }
+    private void requireCompleteEvidence(InvestmentRecognitionCandidate value) {
+        if (!"SUFFICIENT".equals(value.getEvidenceCompleteness())
+                || blank(value.getThesis()) || blank(value.getObservedChange()) || blank(value.getMechanism())
+                || blank(value.getInvalidationConditions()) || blank(value.getHorizon())
+                || empty(value.getSupportingData()) || empty(value.getCounterData())
+                || empty(value.getValidationMetrics())) {
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "候选证据结构不完整，请先补齐再沉淀");
+        }
+    }
+    private boolean empty(List<String> values) {
+        if (values == null || values.isEmpty()) return true;
+        for (String value : values) if (!blank(value)) return false;
+        return true;
     }
     private InvestmentRecognitionCandidate require(long id) {
         return candidates.findById(id).orElseThrow(() ->

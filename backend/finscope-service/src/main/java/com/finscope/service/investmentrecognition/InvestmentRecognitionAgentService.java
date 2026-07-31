@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.investmentrecognition.InvestmentRecognitionCandidateRepository;
+import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.investmentrecognition.InvestmentRecognitionCandidate;
 import com.finscope.domain.investmentrecognition.InvestmentRecognitionRun;
+import com.finscope.domain.radar.RadarEvent;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.service.instrument.WatchlistService;
@@ -32,17 +34,20 @@ public class InvestmentRecognitionAgentService {
     private final WatchlistService watchlist;
     private final InvestmentRecognitionCandidateRepository candidates;
     private final AgentRunRepository runs;
+    private final RadarRepository radar;
     private final LlmChatClient llm;
     private final ObjectMapper json;
 
     public InvestmentRecognitionAgentService(WatchlistService watchlist,
                                              InvestmentRecognitionCandidateRepository candidates,
                                              AgentRunRepository runs,
+                                             RadarRepository radar,
                                              LlmChatClient llm,
                                              ObjectMapper json) {
         this.watchlist = watchlist;
         this.candidates = candidates;
         this.runs = runs;
+        this.radar = radar;
         this.llm = llm;
         this.json = json.copy()
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
@@ -52,9 +57,10 @@ public class InvestmentRecognitionAgentService {
 
     public InvestmentRecognitionRun run() {
         List<WatchlistItemView> universe = watchlist.listInvestmentItemsWithQuotes(false);
+        List<RadarEvent> triggers = radar.findRanked("ALL", true, 30);
         List<InvestmentRecognitionCandidate> generated = new ArrayList<InvestmentRecognitionCandidate>();
         for (WatchlistItemView view : universe) {
-            InvestmentRecognitionCandidate value = inspect(view);
+            InvestmentRecognitionCandidate value = inspect(view, triggers);
             if (value != null) generated.add(candidates.saveOrRefresh(value));
         }
         InvestmentRecognitionRun result = new InvestmentRecognitionRun();
@@ -66,19 +72,22 @@ public class InvestmentRecognitionAgentService {
         return result;
     }
 
-    private InvestmentRecognitionCandidate inspect(WatchlistItemView view) {
+    private InvestmentRecognitionCandidate inspect(WatchlistItemView view, List<RadarEvent> triggers) {
         WatchlistItem item = view.getItem();
         Quote quote = view.getQuote();
+        RadarEvent trigger = matchTrigger(item, triggers);
         Double changePct = effectiveChangePct(quote);
         if (quote == null || !quote.isValid() || changePct == null) {
             InvestmentRecognitionCandidate missing = missingEvidence(item, quote);
-            trace(missing, structuredInput(item, quote), "FALLBACK", "MARKET_DATA_MISSING", 0L);
+            applyTrigger(missing, trigger);
+            trace(missing, structuredInput(item, quote, trigger), "FALLBACK", "MARKET_DATA_MISSING", 0L);
             return missing;
         }
         if (Math.abs(changePct) < MATERIAL_MOVE_PCT) return null;
 
         InvestmentRecognitionCandidate fallback = deterministicCandidate(item, quote, changePct);
-        String input = structuredInput(item, quote);
+        applyTrigger(fallback, trigger);
+        String input = structuredInput(item, quote, trigger);
         if (llm == null || !llm.isConfigured()) {
             trace(fallback, input, "FALLBACK", "MODEL_DISABLED", 0L);
             return fallback;
@@ -109,8 +118,14 @@ public class InvestmentRecognitionAgentService {
         InvestmentRecognitionCandidate value = base(item, quote, changePct);
         value.setStatus("CANDIDATE");
         value.setThesis(item.getName() + "的" + direction + "是否反映盈利、估值或风险预期变化，值得继续验证");
-        value.setObservedChange(String.format(Locale.ROOT, "最新价格 %.2f，当期%s %.2f%%",
-                quote.getPrice() == null ? 0D : quote.getPrice(), direction, Math.abs(changePct)));
+        if (quote.getPrice() != null) {
+            value.setObservedChange(String.format(Locale.ROOT, "最新价格 %.2f，当期%s %.2f%%",
+                    quote.getPrice(), direction, Math.abs(changePct)));
+        } else {
+            value.setObservedChange(String.format(Locale.ROOT, "确认单位净值 %.4f（%s），当期%s %.2f%%",
+                    quote.getConfirmedNav(), safe(quote.getConfirmedNavDate(), "日期待确认"),
+                    direction, Math.abs(changePct)));
+        }
         value.setMechanism("若后续基本面或资金数据与价格方向一致，变化可能由预期重估驱动；否则更可能是短期交易波动。");
         List<String> support = new ArrayList<String>();
         support.add(String.format(Locale.ROOT, "涨跌幅 %+.2f%%", changePct));
@@ -146,7 +161,7 @@ public class InvestmentRecognitionAgentService {
         String asOf = quote == null ? null : String.valueOf(quote.getAsOf() == null ? quote.getQuoteTime() : quote.getAsOf());
         String date = asOf == null || "null".equals(asOf) ? LocalDate.now().toString() : asOf.substring(0, 10);
         InvestmentRecognitionCandidate value = new InvestmentRecognitionCandidate();
-        value.setFingerprint(item.getType() + ":" + item.getCode() + ":" + date);
+        value.setFingerprint(item.getType() + ":" + item.getCode() + ":" + date + ":" + movementBand(changePct));
         value.setSubjectType(item.getType());
         value.setSubjectCode(item.getCode());
         value.setSubjectName(item.getName() == null ? item.getCode() : item.getName());
@@ -154,7 +169,7 @@ public class InvestmentRecognitionAgentService {
         return value;
     }
 
-    private String structuredInput(WatchlistItem item, Quote quote) {
+    private String structuredInput(WatchlistItem item, Quote quote, RadarEvent trigger) {
         try {
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("subjectType", item.getType());
@@ -171,6 +186,13 @@ public class InvestmentRecognitionAgentService {
             market.put("qualityStatus", quote == null ? null : quote.getQualityStatus());
             market.put("sourceCode", quote == null ? null : quote.getSourceCode());
             payload.put("marketObservation", market);
+            if (trigger != null) {
+                Map<String, Object> triggerValue = new LinkedHashMap<String, Object>();
+                triggerValue.put("role", "TRIGGER_ONLY_NOT_EVIDENCE");
+                triggerValue.put("title", trigger.getCanonicalTitle());
+                triggerValue.put("lastSeenAt", trigger.getLastSeenAt() == null ? null : trigger.getLastSeenAt().toString());
+                payload.put("quickNewsTrigger", triggerValue);
+            }
             return json.writeValueAsString(payload);
         } catch (Exception error) {
             throw new IllegalArgumentException("无法组装投资数据快照", error);
@@ -180,16 +202,18 @@ public class InvestmentRecognitionAgentService {
     private String systemPrompt() {
         return "你是投资认识 Agent，只能依据用户消息中的结构化行情数据提出可检验的投资命题。"
                 + "不得检索或引用文章、新闻正文、摘要和文章知识库；不得补造财务、资金或宏观事实。"
+                + "quickNewsTrigger 只解释为何现在检查，不得写入支持数据或作为结论证据。"
                 + "必须围绕给定股票、基金、ETF、指数、行业或宏观财富变量，说明盈利、估值或风险机制。"
                 + "输出单个纯 JSON，只允许 thesis、mechanism、counterData、validationMetrics、"
                 + "invalidationConditions、horizon、confidence；confidence 仅允许 LOW、MEDIUM、HIGH。";
     }
 
     private void validate(Draft draft) {
+        List<String> counterData = draft == null ? new ArrayList<String>() : trimmed(draft.counterData);
+        List<String> validationMetrics = draft == null ? new ArrayList<String>() : trimmed(draft.validationMetrics);
         if (draft == null || blank(draft.thesis) || blank(draft.mechanism)
                 || blank(draft.invalidationConditions) || blank(draft.horizon)
-                || draft.counterData == null || draft.counterData.isEmpty()
-                || draft.validationMetrics == null || draft.validationMetrics.isEmpty()
+                || counterData.isEmpty() || validationMetrics.isEmpty()
                 || !("LOW".equalsIgnoreCase(draft.confidence) || "MEDIUM".equalsIgnoreCase(draft.confidence)
                 || "HIGH".equalsIgnoreCase(draft.confidence))) {
             throw new IllegalArgumentException("Agent 输出缺少投资认识必需字段");
@@ -222,9 +246,31 @@ public class InvestmentRecognitionAgentService {
     }
     private List<String> trimmed(List<String> values) {
         List<String> result = new ArrayList<String>();
+        if (values == null) return result;
         for (String value : values) if (!blank(value)) result.add(value.trim());
         return result;
     }
+    private RadarEvent matchTrigger(WatchlistItem item, List<RadarEvent> events) {
+        if (events == null) return null;
+        String code = safe(item.getCode(), "").toLowerCase(Locale.ROOT);
+        String name = safe(item.getName(), "").toLowerCase(Locale.ROOT);
+        for (RadarEvent event : events) {
+            String text = (safe(event.getCanonicalTitle(), "") + " " + safe(event.getSummary(), "") + " "
+                    + safe(event.getWatchlistExplanation(), "")).toLowerCase(Locale.ROOT);
+            if ((!code.isEmpty() && text.contains(code)) || (!name.isEmpty() && text.contains(name))) return event;
+        }
+        return null;
+    }
+    private void applyTrigger(InvestmentRecognitionCandidate value, RadarEvent trigger) {
+        if (trigger != null) value.setTriggerSummary(trigger.getCanonicalTitle());
+    }
+    private String movementBand(Double changePct) {
+        if (changePct == null) return "MISSING";
+        double absolute = Math.abs(changePct);
+        String magnitude = absolute >= 5D ? "5_PLUS" : absolute >= 3D ? "3_TO_5" : "1_5_TO_3";
+        return (changePct >= 0D ? "UP_" : "DOWN_") + magnitude;
+    }
+    private String safe(String value, String fallback) { return blank(value) ? fallback : value; }
     private String extractJson(String raw) {
         if (raw == null) return "";
         int start = raw.indexOf('{');
