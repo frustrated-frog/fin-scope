@@ -4,6 +4,7 @@ import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsClassificationRepository;
 import com.finscope.domain.news.NewsCategory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ public class NewsClassificationCoordinator {
     private final Executor executor;
     private final Clock clock;
 
+    @Autowired
     public NewsClassificationCoordinator(NewsClassificationRepository repository,
                                          NewsCategoryRepository categories,
                                          NewsClassificationAgent agent,

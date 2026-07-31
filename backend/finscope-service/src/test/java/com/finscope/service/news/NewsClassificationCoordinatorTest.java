@@ -5,6 +5,7 @@ import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsClassificationRepository;
 import com.finscope.domain.news.NewsCategory;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -26,6 +28,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class NewsClassificationCoordinatorTest {
+    @Test
+    void springContainerSelectsTheProductionConstructor() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(NewsClassificationRepository.class,
+                    () -> mock(NewsClassificationRepository.class));
+            context.registerBean(NewsCategoryRepository.class, () -> mock(NewsCategoryRepository.class));
+            context.registerBean(NewsClassificationAgent.class, () -> mock(NewsClassificationAgent.class));
+            context.registerBean(AgentRunRepository.class, () -> mock(AgentRunRepository.class));
+            context.registerBean("newsClassificationExecutor", Executor.class, () -> Runnable::run);
+            context.register(NewsClassificationCoordinator.class);
+
+            context.refresh();
+
+            assertNotNull(context.getBean(NewsClassificationCoordinator.class));
+        }
+    }
+
     @Test
     void schedulesOnlyClaimedItemsAndPersistsAgentDecision() throws Exception {
         NewsClassificationRepository repository = mock(NewsClassificationRepository.class);
