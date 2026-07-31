@@ -23,6 +23,16 @@ type NewsFeedSnapshot = {
   sourceCount: number;
 };
 
+type NewsCategory = {
+  code: string;
+  name: string;
+  classificationGuidance?: string;
+  enabled?: boolean;
+  displayOrder?: number;
+};
+
+const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
+
 const REFRESH_INTERVAL_MS = 45_000;
 
 export function NewsView({
@@ -33,17 +43,34 @@ export function NewsView({
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }) {
   const [snapshot, setSnapshot] = useState<NewsFeedSnapshot>();
+  const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY]);
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [pendingSnapshot, setPendingSnapshot] = useState<NewsFeedSnapshot>();
+  const [pendingCount, setPendingCount] = useState(0);
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const mounted = useRef(true);
+  const snapshotRef = useRef<NewsFeedSnapshot>();
+  const selectedCategoryRef = useRef('ALL');
+  const requestSequence = useRef(0);
 
-  async function load(manual = false) {
+  async function load(manual = false, polling = false, category = selectedCategoryRef.current) {
+    const requestId = ++requestSequence.current;
     try {
       if (manual) setLoading(true);
-      const next = await api<NewsFeedSnapshot>('/api/news?limit=100');
-      if (!mounted.current) return;
-      setSnapshot(next);
+      const next = await api<NewsFeedSnapshot>(`/api/news?category=${encodeURIComponent(category)}&limit=100`);
+      if (!mounted.current || requestId !== requestSequence.current || category !== selectedCategoryRef.current) return;
+      const current = snapshotRef.current;
+      const currentIds = new Set(current?.items.map((item) => item.id) ?? []);
+      const added = polling && current ? next.items.filter((item) => !currentIds.has(item.id)).length : 0;
+      if (added > 0) {
+        setPendingSnapshot(next);
+        setPendingCount(added);
+      } else {
+        snapshotRef.current = next;
+        setSnapshot(next);
+      }
       setMessage(next.warnings.length ? '资讯已更新，部分来源暂不可用' : '资讯流已同步');
       if (manual) addToast('资讯已更新', 'success');
     } catch (error) {
@@ -52,15 +79,40 @@ export function NewsView({
       setMessage(message);
       if (manual) addToast(message, 'error');
     } finally {
-      if (mounted.current) setLoading(false);
+      if (mounted.current && requestId === requestSequence.current) setLoading(false);
     }
+  }
+
+  function switchCategory(code: string) {
+    if (code === selectedCategoryRef.current) return;
+    selectedCategoryRef.current = code;
+    setSelectedCategory(code);
+    setPendingSnapshot(undefined);
+    setPendingCount(0);
+    setQuery('');
+    setSource('ALL');
+    setLoading(true);
+    void load(false, false, code);
+  }
+
+  function applyPendingSnapshot() {
+    if (!pendingSnapshot) return;
+    snapshotRef.current = pendingSnapshot;
+    setSnapshot(pendingSnapshot);
+    setPendingSnapshot(undefined);
+    setPendingCount(0);
   }
 
   useEffect(() => {
     mounted.current = true;
     void load();
+    void api<NewsCategory[]>('/api/news/categories')
+      .then((values) => {
+        if (mounted.current) setCategories([ALL_CATEGORY, ...values.filter((value) => value.code !== 'ALL')]);
+      })
+      .catch(() => undefined);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+      if (document.visibilityState === 'visible') void load(false, true, selectedCategoryRef.current);
     }, REFRESH_INTERVAL_MS);
     return () => {
       mounted.current = false;
@@ -98,6 +150,20 @@ export function NewsView({
         </div>
       </header>
 
+      <nav className="news-category-rail" aria-label="资讯分类">
+        {categories.map((category) => (
+          <button
+            type="button"
+            key={category.code}
+            className={selectedCategory === category.code ? 'active' : ''}
+            aria-pressed={selectedCategory === category.code}
+            onClick={() => switchCategory(category.code)}
+          >
+            {category.name}
+          </button>
+        ))}
+      </nav>
+
       <div className="news-filter-rail">
         <label className="news-search">
           <span>检索</span>
@@ -116,6 +182,12 @@ export function NewsView({
           <span aria-hidden="true">!</span>
           部分来源暂不可用，已展示可用资讯
         </div>
+      ) : null}
+
+      {pendingCount > 0 ? (
+        <button type="button" className="news-update-notice" onClick={applyPendingSnapshot}>
+          发现 {pendingCount} 条新资讯
+        </button>
       ) : null}
 
       <div className="news-board">
