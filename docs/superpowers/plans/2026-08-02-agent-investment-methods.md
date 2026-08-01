@@ -20,27 +20,27 @@
 - Create: `backend/finscope-service/src/main/java/com/finscope/service/research/method/ResearchMethodRegistry.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/method/ResearchMethodRegistryTest.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试财报问题自动返回 `FINANCIAL_STATEMENT_QUALITY` 和 `COMPANY_QUALITY`，普通股票公司判断只返回 `COMPANY_QUALITY`，主题研究不错误套用公司方法，并断言财报方法包含现金流、非经常性损益、反证和完成条件。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchMethodRegistryTest test`
 
 Expected: FAIL，原因是 `research.method` 类型尚不存在。
 
-- [ ] **Step 3: 最小实现方法模型与注册表**
+- [x] **Step 3: 最小实现方法模型与注册表**
 
 `ResearchMethodDefinition` 使用不可变列表保存 `code`、`name`、`description`、`requiredQuestions`、`requiredEvidence`、`requiredCalculations`、`counterChecks`、`completionCriteria` 和 `requiredIntents`。`ResearchMethodRegistry#recommend(ResearchPlanningInput)` 使用对象类型与中英文关键词确定候选，并保证稳定顺序和编码唯一。
 
-- [ ] **Step 4: 运行测试并确认 GREEN**
+- [x] **Step 4: 运行测试并确认 GREEN**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchMethodRegistryTest test`
 
 Expected: PASS，0 failures。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add backend/finscope-service/src/main/java/com/finscope/service/research/method backend/finscope-service/src/test/java/com/finscope/service/research/method
