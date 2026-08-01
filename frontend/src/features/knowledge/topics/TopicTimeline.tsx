@@ -1,4 +1,5 @@
 import { KnowledgeTopicWorkspace } from '../knowledgeTypes';
+import { KnowledgeMarkdown } from '../KnowledgeMarkdown';
 
 export function TopicTimeline({ workspace }: { workspace: KnowledgeTopicWorkspace }) {
   const latest = workspace.entries[0];
@@ -15,7 +16,7 @@ export function TopicTimeline({ workspace }: { workspace: KnowledgeTopicWorkspac
       {steps.filter((step) => step.values.length > 0).map((step) => (
         <li key={step.label}>
           <span aria-hidden="true" />
-          <div><h3>{step.label}</h3>{step.values.slice(0, 4).map((value, index) => <p key={`${value}-${index}`}>{value}</p>)}</div>
+          <div><h3>{step.label}</h3>{step.values.slice(0, 4).map((value, index) => <KnowledgeMarkdown key={`${value}-${index}`} value={value} />)}</div>
         </li>
       ))}
     </ol>

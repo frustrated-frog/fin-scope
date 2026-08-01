@@ -30,11 +30,23 @@ test('renders markdown conclusions as structured reading content', () => {
     entries: [{ ...workspace.entries[0], contentMarkdown: '## 投资命题\n景气度回升。\n\n- 跟踪营收' }]
   }} onBack={vi.fn()} onReview={vi.fn()} />);
 
-  expect(screen.getByRole('heading', { name: '投资命题' })).toBeInTheDocument();
+  const currentJudgment = screen.getByRole('heading', { name: '当前判断' }).closest('section') as HTMLElement;
+  expect(within(currentJudgment).getByRole('heading', { name: '投资命题' })).toBeInTheDocument();
   expect(screen.getAllByText('景气度回升。').length).toBeGreaterThan(0);
   expect(screen.getAllByRole('list').length).toBeGreaterThan(0);
-  const currentJudgment = screen.getByRole('heading', { name: '当前判断' }).closest('section') as HTMLElement;
   expect(within(currentJudgment).queryByText(/## 投资命题/)).not.toBeInTheDocument();
+});
+
+test('uses structured markdown rendering in the knowledge timeline', () => {
+  render(<TopicWorkspace workspace={{
+    ...workspace,
+    entries: [{ ...workspace.entries[0], contentMarkdown: '## 支持数据\n- 净值上涨 2.41%' }]
+  }} onBack={vi.fn()} onReview={vi.fn()} />);
+
+  const timeline = screen.getByRole('list', { name: '知识脉络' });
+  expect(within(timeline).getAllByRole('heading', { name: '支持数据' })).toHaveLength(2);
+  expect(within(timeline).getAllByText('净值上涨 2.41%')).toHaveLength(2);
+  expect(within(timeline).queryByText(/## 支持数据/)).not.toBeInTheDocument();
 });
 
 test('compares the current conclusion with evidence and schedules next review', async () => {
