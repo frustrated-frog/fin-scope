@@ -26,6 +26,9 @@ const event = {
   evidenceWarning: '',
   evidenceCount: 2,
   evidenceSourceCount: 2,
+  changeType: 'MULTI_SOURCE',
+  changeSummary: '新增独立来源确认同一事件',
+  interpretationStatus: 'SUCCESS',
   suggestedResearchQuestion: '围绕“宁德时代发布新一代电池”，哪些事实已经确认，后续应重点观察什么？',
   lastSeenAt: '2026-07-31T15:55:00'
 };
@@ -41,7 +44,8 @@ const liveItem = {
 const snapshot = {
   overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 1, sourceCount: 3 },
   events: [event],
-  liveItems: [liveItem],
+  latestChanges: [event],
+  liveItems: [],
   warnings: [],
   refreshedAt: '2026-07-31T16:00:00'
 };
@@ -57,7 +61,19 @@ const detail = {
   ],
   agentTrace: [
     { nodeName: 'radar-evidence-plan', status: 'SUCCESS', summary: 'actions=2', durationMs: 920, fallbackUsed: false }
-  ]
+  ],
+  interpretation: {
+    id: 41, eventId: 10, status: 'SUCCESS', stale: false, durationMs: 1280,
+    result: {
+      factSummary: '公司发布新产品，两家来源确认发布事实。',
+      newDevelopment: '新增量产时间信息。',
+      whyItMatters: '量产节奏可能影响相关产业链订单预期。',
+      impactChain: ['产品发布→量产验证→供应链订单'],
+      uncertainties: ['价格尚未披露'],
+      nextObservations: ['观察公司正式公告'],
+      evidenceRefs: ['signal:1', 'evidence:31']
+    }
+  }
 };
 
 const categories = [
@@ -91,7 +107,7 @@ beforeEach(() => {
 async function openRadar() {
   fireEvent.click(screen.getByRole('button', { name: '研究雷达' }));
   await act(async () => { await Promise.resolve(); });
-  expect(screen.getByRole('heading', { name: '今天值得关注' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '高优先级事件' })).toBeInTheDocument();
 }
 
 test('keeps the original realtime wire as the default and offers radar as a secondary view', async () => {
@@ -168,26 +184,29 @@ test('keeps the news visible when classification review fails', async () => {
   expect(screen.getAllByText('宁德时代发布新一代电池').length).toBeGreaterThan(0);
 });
 
-test('renders explainable priority cards before the live wire', async () => {
+test('renders latest changes and full-width priority cards without duplicating the live wire', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  const focus = await screen.findByRole('heading', { name: '今天值得关注' });
+  const latest = await screen.findByRole('heading', { name: '最新变化' });
+  const focus = screen.getByRole('heading', { name: '高优先级事件' });
   expect(screen.getByText('与自选「宁德时代」直接相关')).toBeInTheDocument();
   expect(screen.getByText('92')).toBeInTheDocument();
   const board = screen.getByTestId('research-radar-board');
-  expect(within(board).getAllByRole('heading')[0]).toBe(focus);
-  expect(screen.getByRole('heading', { name: '实时发生' })).toBeInTheDocument();
+  expect(within(board).getAllByRole('heading')[0]).toBe(latest);
+  expect(within(board).getAllByRole('heading')).toContain(focus);
+  expect(screen.queryByRole('heading', { name: '实时发生' })).not.toBeInTheDocument();
 });
 
-test('loads original signals only when the user asks for evidence', async () => {
+test('loads original signals only when the user opens the interpretation drawer', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
   await screen.findByRole('heading', { name: event.title });
 
-  await userEvent.click(screen.getByRole('button', { name: '查看依据' }));
+  await userEvent.click(screen.getByRole('button', { name: '查看解读' }));
 
-  expect(await screen.findByText('3 个独立来源共同报道')).toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: event.title })).toBeInTheDocument();
+  expect(screen.getByText('3 个独立来源共同报道')).toBeInTheDocument();
   expect(screen.getByText('同花顺')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10');
 });
@@ -195,11 +214,10 @@ test('loads original signals only when the user asks for evidence', async () => 
 test('shows external evidence and a sanitized agent trace without prompts', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
-  await userEvent.click(await screen.findByRole('button', { name: '查看依据' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
 
-  expect(await screen.findByText('智能补证：已补充2条证据，来自2个来源')).toBeInTheDocument();
+  expect(await screen.findByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '深交所公告' })).toBeInTheDocument();
-  await userEvent.click(screen.getByText('Agent 执行轨迹'));
   expect(screen.getByText('证据规划')).toBeInTheDocument();
   expect(screen.getByText(/actions=2/)).toBeInTheDocument();
   expect(screen.queryByText(/完整提示词/)).not.toBeInTheDocument();
@@ -246,10 +264,11 @@ test('describes a busy radar refresh without blaming realtime sources', async ()
   expect(screen.queryByText('实时来源暂不可用，当前展示最近一次雷达结果')).not.toBeInTheDocument();
 });
 
-test('polling waits for confirmation before inserting a new live item', async () => {
+test('polling applies newly ranked radar events without waiting for confirmation', async () => {
   vi.useFakeTimers();
   let calls = 0;
-  const updated = { ...snapshot, liveItems: [{ ...liveItem, id: 'THS:2', title: '新的实时消息' }, ...snapshot.liveItems] };
+  const updatedEvent = { ...event, id: 11, title: '新的雷达事件', lastSeenAt: '2026-07-31T16:01:00' };
+  const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events], latestChanges: [updatedEvent, event] };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
@@ -261,7 +280,33 @@ test('polling waits for confirmation before inserting a new live item', async ()
 
   await act(async () => { vi.advanceTimersByTime(45_000); await Promise.resolve(); });
 
-  expect(screen.queryByText('新的实时消息')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '发现 1 条新资讯' }));
-  expect(screen.getByText('新的实时消息')).toBeInTheDocument();
+  expect(screen.getAllByText('新的雷达事件').length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button', { name: /发现 .* 条新资讯/ })).not.toBeInTheDocument();
+});
+
+test('opens immediately and generates a missing interpretation in the background', async () => {
+  vi.useFakeTimers();
+  let detailCalls = 0;
+  vi.mocked(api).mockImplementation((path, options) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/research-radar/events/10/interpretation' && options?.method === 'POST') {
+      return Promise.resolve({ eventId: 10, status: 'QUEUED', stale: false });
+    }
+    if (path === '/api/research-radar/events/10') {
+      detailCalls += 1;
+      return Promise.resolve(detailCalls === 1 ? { ...detail, interpretation: undefined } : detail);
+    }
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
+
+  fireEvent.click(screen.getByRole('button', { name: '查看解读' }));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+  expect(screen.getByRole('dialog', { name: event.title })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', { method: 'POST' });
+  await act(async () => { vi.advanceTimersByTime(1_500); await Promise.resolve(); await Promise.resolve(); });
+  expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
 });

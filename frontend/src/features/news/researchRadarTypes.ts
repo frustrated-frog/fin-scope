@@ -30,8 +30,32 @@ export type RadarEvent = {
   evidenceWarning?: string;
   evidenceCount?: number;
   evidenceSourceCount?: number;
+  changeType?: string;
+  changeSummary?: string;
+  interpretationStatus?: string;
   suggestedResearchQuestion: string;
   lastSeenAt?: string;
+};
+
+export type RadarInterpretationResult = {
+  factSummary: string;
+  newDevelopment: string;
+  whyItMatters: string;
+  impactChain: string[];
+  uncertainties: string[];
+  nextObservations: string[];
+  evidenceRefs: string[];
+};
+
+export type RadarInterpretation = {
+  id?: number;
+  eventId: number;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'UNAVAILABLE';
+  stale: boolean;
+  failureCode?: string;
+  failureMessage?: string;
+  durationMs?: number;
+  result?: RadarInterpretationResult;
 };
 
 export type RadarSignal = {
@@ -74,12 +98,14 @@ export type RadarEventDetail = {
   signals: RadarSignal[];
   evidence?: RadarEvidence[];
   agentTrace?: RadarAgentTrace[];
+  interpretation?: RadarInterpretation;
 };
 
 export type ResearchRadarSnapshot = {
   overview: { eventCount: number; highPriorityCount: number; watchlistRelatedCount: number; sourceCount: number };
   events: RadarEvent[];
-  liveItems: RadarNewsItem[];
+  latestChanges?: RadarEvent[];
+  liveItems?: RadarNewsItem[];
   warnings: string[];
   refreshedAt: string;
 };

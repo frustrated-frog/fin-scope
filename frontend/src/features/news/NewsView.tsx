@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { LiveNewsPanel } from './LiveNewsPanel';
 import { RadarEventCard } from './RadarEventCard';
-import type { RadarNewsItem, ResearchRadarSnapshot } from './researchRadarTypes';
+import { RadarEventDetailDrawer } from './RadarEventDetailDrawer';
+import type { RadarEvent, ResearchRadarSnapshot } from './researchRadarTypes';
 
 type NewsCategory = { code: string; name: string; enabled?: boolean; displayOrder?: number };
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
@@ -36,8 +37,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const [snapshot, setSnapshot] = useState<ResearchRadarSnapshot>();
   const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY, RELATED_CATEGORY]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [pendingSnapshot, setPendingSnapshot] = useState<ResearchRadarSnapshot>();
-  const [pendingCount, setPendingCount] = useState(0);
+  const [selectedEvent, setSelectedEvent] = useState<RadarEvent>();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const mounted = useRef(true);
@@ -45,7 +45,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const selectedCategoryRef = useRef('ALL');
   const requestSequence = useRef(0);
 
-  async function load(manual = false, polling = false, selection = selectedCategoryRef.current) {
+  async function load(manual = false, selection = selectedCategoryRef.current) {
     const requestId = ++requestSequence.current;
     const watchlistOnly = selection === 'RELATED';
     const category = watchlistOnly ? 'ALL' : selection;
@@ -53,11 +53,8 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       if (manual) setLoading(true);
       const next = await api<ResearchRadarSnapshot>(`/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20`);
       if (!mounted.current || requestId !== requestSequence.current || selection !== selectedCategoryRef.current) return;
-      const current = snapshotRef.current;
-      const currentIds = new Set(current?.liveItems.map((item) => item.id) ?? []);
-      const added = polling && current ? next.liveItems.filter((item) => !currentIds.has(item.id)).length : 0;
-      if (added > 0) { setPendingSnapshot(next); setPendingCount(added); }
-      else { snapshotRef.current = next; setSnapshot(next); setPendingSnapshot(undefined); setPendingCount(0); }
+      snapshotRef.current = next;
+      setSnapshot(next);
       setMessage(next.warnings.length ? '雷达已更新，当前使用部分最近结果' : '研究雷达已同步');
       if (manual) addToast('研究雷达已更新', 'success');
     } catch (error) {
@@ -72,12 +69,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   function switchCategory(code: string) {
     if (code === selectedCategoryRef.current) return;
     selectedCategoryRef.current = code; setSelectedCategory(code); setQuery('');
-    setPendingSnapshot(undefined); setPendingCount(0); setLoading(true); void load(false, false, code);
-  }
-
-  function applyPendingSnapshot() {
-    if (!pendingSnapshot) return;
-    snapshotRef.current = pendingSnapshot; setSnapshot(pendingSnapshot); setPendingSnapshot(undefined); setPendingCount(0);
+    setSelectedEvent(undefined); setLoading(true); void load(false, code);
   }
 
   useEffect(() => {
@@ -86,7 +78,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       if (mounted.current) setCategories([ALL_CATEGORY, RELATED_CATEGORY, ...values.filter((value) => value.code !== 'ALL')]);
     }).catch(() => undefined);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(false, true, selectedCategoryRef.current);
+      if (document.visibilityState === 'visible') void load(false, selectedCategoryRef.current);
     }, REFRESH_INTERVAL_MS);
     return () => { mounted.current = false; window.clearInterval(timer); };
   }, []);
@@ -95,8 +87,8 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const events = useMemo(() => (snapshot?.events ?? []).filter((event) =>
     !normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
-  const liveItems = useMemo(() => (snapshot?.liveItems ?? []).filter((item) =>
-    !normalizedQuery || `${item.title} ${item.content} ${item.sourceName}`.toLocaleLowerCase().includes(normalizedQuery)
+  const latestChanges = useMemo(() => (snapshot?.latestChanges ?? snapshot?.events ?? []).filter((event) =>
+    !normalizedQuery || `${event.title} ${event.summary} ${event.changeSummary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
   const radarRefreshing = snapshot?.warnings.some((warning) => warning.includes('雷达正在刷新')) ?? false;
 
@@ -132,26 +124,31 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       </div>
 
       {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台刷新，当前展示最近一次结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
-      {pendingCount > 0 ? <button type="button" className="news-update-notice" onClick={applyPendingSnapshot}>发现 {pendingCount} 条新资讯</button> : null}
 
-      <div className="news-board radar-board" data-testid="research-radar-board">
-        <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
-          <div className="news-section-heading"><div><span>01 · RESEARCH FIRST</span><h2 id="radar-focus-heading">今天值得关注</h2></div><strong>{events.length} 件</strong></div>
-          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} onResearch={onResearch} />)}</div> : <EmptyState label="暂时没有匹配的聚合事件" />}
+      <div className="news-board radar-board radar-board-single" data-testid="research-radar-board">
+        <section className="radar-latest-panel" aria-labelledby="radar-latest-heading">
+          <div className="news-section-heading"><div><span>01 · CHANGE TAPE</span><h2 id="radar-latest-heading">最新变化</h2></div><strong>{latestChanges.length} 件</strong></div>
+          {loading && !snapshot ? <NewsSkeleton /> : latestChanges.length ? (
+            <div className="radar-change-tape">{latestChanges.map((item) => (
+              <button type="button" className="radar-change-item" key={item.id} onClick={() => setSelectedEvent(item)}>
+                <div><span>{changeTypeLabel(item.changeType)}</span><time dateTime={item.lastSeenAt}>{formatTime(item.lastSeenAt)}</time></div>
+                <strong>{item.title}</strong>
+                <p>{item.changeSummary || item.summary}</p>
+              </button>
+            ))}</div>
+          ) : <EmptyState label="暂时没有新的事件变化" />}
         </section>
-        <aside className="news-depth-panel radar-live-panel" aria-labelledby="radar-live-heading">
-          <div className="news-section-heading"><div><span>02 · LIVE CONTEXT</span><h2 id="radar-live-heading">实时发生</h2></div><strong>{liveItems.length} 条</strong></div>
-          <div className="radar-live-list">{liveItems.length ? liveItems.map((item, index) => <LiveItem key={item.id} item={item} latest={index === 0} />) : <EmptyState label="暂无匹配的实时资讯" />}</div>
-        </aside>
+        <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
+          <div className="news-section-heading"><div><span>02 · RESEARCH FIRST</span><h2 id="radar-focus-heading">高优先级事件</h2></div><strong>{events.length} 件</strong></div>
+          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} onResearch={onResearch} onOpen={setSelectedEvent} />)}</div> : <EmptyState label="暂时没有匹配的聚合事件" />}
+        </section>
       </div>
+      {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)} /> : null}
     </section>
   );
 }
 
-function LiveItem({ item, latest }: { item: RadarNewsItem; latest: boolean }) {
-  const body = <><div className="news-flash-meta"><span>{item.sourceName}</span><small>{item.sourceTier}</small>{latest ? <em>NEW</em> : null}</div><strong className="radar-live-title">{item.title}</strong><p>{item.content}</p></>;
-  return <article className={latest ? 'radar-live-item is-latest' : 'radar-live-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}</time>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{body}</a> : <div>{body}</div>}</article>;
-}
 function NewsSkeleton() { return <div className="news-skeleton" aria-label="正在加载雷达"><span /><span /><span /></div>; }
 function EmptyState({ label }: { label: string }) { return <div className="news-empty"><span aria-hidden="true">∅</span><p>{label}</p></div>; }
 function formatTime(value?: string) { const date = value ? new Date(value) : undefined; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--'; }
+function changeTypeLabel(value?: string) { if (value === 'MULTI_SOURCE') return '多源确认'; if (value === 'EVIDENCE_ADDED') return '新增证据'; if (value === 'MATERIAL_UPDATE') return '实质进展'; if (value === 'NEW_EVENT') return '新事件'; return '事件更新'; }
