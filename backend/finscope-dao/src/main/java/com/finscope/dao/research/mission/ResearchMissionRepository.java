@@ -3,6 +3,7 @@ package com.finscope.dao.research.mission;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMethodBlueprint;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -30,6 +31,12 @@ public class ResearchMissionRepository {
         value.setSubject(rs.getString("subject"));
         value.setScopeSummary(rs.getString("scope_summary"));
         value.setSuccessCriteria(parseList(rs.getString("success_criteria")));
+        value.setResearchType(rs.getString("research_type"));
+        value.setMethodCodes(parseList(rs.getString("method_codes")));
+        value.setRequiredEvidence(parseList(rs.getString("required_evidence")));
+        value.setRequiredCalculations(parseList(rs.getString("required_calculations")));
+        value.setCounterChecks(parseList(rs.getString("counter_checks")));
+        value.setCompletionCriteria(parseList(rs.getString("completion_criteria")));
         value.setStatus(rs.getString("status"));
         value.setPlanningMode(rs.getString("planning_mode"));
         value.setPlanVersion(rs.getInt("plan_version"));
@@ -112,6 +119,19 @@ public class ResearchMissionRepository {
                                        List<ResearchMissionTask> tasks,
                                        String fallbackReason,
                                        String fallbackDetail) {
+        return replacePlan(runId, planningMode, scopeSummary, successCriteria,
+                new ResearchMethodBlueprint(), tasks, fallbackReason, fallbackDetail);
+    }
+
+    @Transactional
+    public ResearchMission replacePlan(Long runId,
+                                       String planningMode,
+                                       String scopeSummary,
+                                       List<String> successCriteria,
+                                       ResearchMethodBlueprint blueprint,
+                                       List<ResearchMissionTask> tasks,
+                                       String fallbackReason,
+                                       String fallbackDetail) {
         LocalDateTime now = LocalDateTime.now();
         jdbcTemplate.update("DELETE FROM research_mission_task WHERE research_run_id=?", runId);
         if (tasks != null) {
@@ -119,10 +139,16 @@ public class ResearchMissionRepository {
                 insertTask(runId, task, now);
             }
         }
+        ResearchMethodBlueprint methods = blueprint == null ? new ResearchMethodBlueprint() : blueprint;
         int updated = jdbcTemplate.update("UPDATE research_mission SET scope_summary=?,success_criteria=?,"
+                        + "research_type=?,method_codes=?,required_evidence=?,required_calculations=?,"
+                        + "counter_checks=?,completion_criteria=?,"
                         + "status='RUNNING',planning_mode=?,plan_version=plan_version+1,active_task_key=NULL,"
                         + "fallback_reason=?,fallback_detail=?,updated_at=? WHERE research_run_id=?",
-                scopeSummary, joinList(successCriteria), planningMode, fallbackReason, fallbackDetail,
+                scopeSummary, joinList(successCriteria), methods.getResearchType(), joinList(methods.getMethodCodes()),
+                joinList(methods.getRequiredEvidence()), joinList(methods.getRequiredCalculations()),
+                joinList(methods.getCounterChecks()), joinList(methods.getCompletionCriteria()),
+                planningMode, fallbackReason, fallbackDetail,
                 TimeUtil.text(now), runId);
         if (updated != 1) {
             throw new IllegalStateException("Research mission not found: " + runId);

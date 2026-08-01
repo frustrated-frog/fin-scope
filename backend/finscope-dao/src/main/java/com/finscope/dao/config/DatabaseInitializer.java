@@ -423,6 +423,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "subject TEXT,"
                 + "scope_summary TEXT NOT NULL,"
                 + "success_criteria TEXT NOT NULL,"
+                + "research_type TEXT,"
+                + "method_codes TEXT,"
+                + "required_evidence TEXT,"
+                + "required_calculations TEXT,"
+                + "counter_checks TEXT,"
+                + "completion_criteria TEXT,"
                 + "status TEXT NOT NULL,"
                 + "planning_mode TEXT NOT NULL,"
                 + "plan_version INTEGER NOT NULL DEFAULT 1,"
@@ -434,6 +440,12 @@ public class DatabaseInitializer implements InitializingBean {
                 + "updated_at TEXT NOT NULL,"
                 + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE)");
         ensureColumn("research_mission", "fallback_detail", "TEXT");
+        ensureColumn("research_mission", "research_type", "TEXT");
+        ensureColumn("research_mission", "method_codes", "TEXT");
+        ensureColumn("research_mission", "required_evidence", "TEXT");
+        ensureColumn("research_mission", "required_calculations", "TEXT");
+        ensureColumn("research_mission", "counter_checks", "TEXT");
+        ensureColumn("research_mission", "completion_criteria", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_mission_status "
                 + "ON research_mission(status,updated_at)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_mission_task ("

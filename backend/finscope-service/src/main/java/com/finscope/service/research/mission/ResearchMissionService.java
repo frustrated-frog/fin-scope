@@ -6,6 +6,7 @@ import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMethodBlueprint;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.research.mission.ResearchMissionView;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
@@ -77,8 +78,15 @@ public class ResearchMissionService {
         for (ResearchMissionTaskDraft task : result.getDraft().getTasks()) {
             tasks.add(task.toDomain());
         }
+        ResearchMethodBlueprint blueprint = new ResearchMethodBlueprint();
+        blueprint.setResearchType(result.getDraft().getResearchType());
+        blueprint.setMethodCodes(result.getDraft().getMethodCodes());
+        blueprint.setRequiredEvidence(result.getDraft().getRequiredEvidence());
+        blueprint.setRequiredCalculations(result.getDraft().getRequiredCalculations());
+        blueprint.setCounterChecks(result.getDraft().getCounterChecks());
+        blueprint.setCompletionCriteria(result.getDraft().getCompletionCriteria());
         repository.replacePlan(run.getId(), result.getPlanningMode(), result.getDraft().getScopeSummary(),
-                result.getDraft().getSuccessCriteria(), tasks, result.getFallbackReason(),
+                result.getDraft().getSuccessCriteria(), blueprint, tasks, result.getFallbackReason(),
                 result.getRejectionDetail());
         return result;
     }

@@ -2,6 +2,7 @@ package com.finscope.dao.research.mission;
 
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMethodBlueprint;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class ResearchMissionRepositoryTest {
         repository.initialize(9L, "验证AI资本开支能否持续", "AI基础设施",
                 "聚焦需求、供给与反方风险", Arrays.asList("至少两个独立来源", "包含正反证据"), 12);
         repository.replacePlan(9L, "LLM_VALIDATED", "聚焦产业链兑现",
-                Arrays.asList("至少六条证据"), Arrays.asList(
+                Arrays.asList("至少六条证据"), blueprint(), Arrays.asList(
                         task("baseline_scan", "基线扫描", "source_scan", "BASELINE"),
                         task("search_counter", "反方证据搜索", "public_news_search", "COUNTER")),
                 "PLAN_REJECTED", "任务 search_counter 使用了未注册工具 external_browser");
@@ -64,6 +65,13 @@ class ResearchMissionRepositoryTest {
 
         assertEquals("RUNNING", repository.findMission(9L).get().getStatus());
         assertEquals("LLM_VALIDATED", repository.findMission(9L).get().getPlanningMode());
+        assertEquals("COMPANY_FINANCIAL", repository.findMission(9L).get().getResearchType());
+        assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
+                repository.findMission(9L).get().getMethodCodes());
+        assertTrue(repository.findMission(9L).get().getRequiredEvidence().contains("现金流量表"));
+        assertTrue(repository.findMission(9L).get().getRequiredCalculations().contains("杜邦拆解"));
+        assertTrue(repository.findMission(9L).get().getCounterChecks().contains("非经常性损益"));
+        assertTrue(repository.findMission(9L).get().getCompletionCriteria().contains("完成现金流验证"));
         assertEquals("任务 search_counter 使用了未注册工具 external_browser",
                 repository.findMission(9L).get().getFallbackDetail());
         assertEquals(Arrays.asList("baseline_scan", "search_counter"),
@@ -155,6 +163,17 @@ class ResearchMissionRepositoryTest {
         task.setRationale("补齐研究证据");
         task.setExpectedEvidence("公开一手资料");
         return task;
+    }
+
+    private ResearchMethodBlueprint blueprint() {
+        ResearchMethodBlueprint value = new ResearchMethodBlueprint();
+        value.setResearchType("COMPANY_FINANCIAL");
+        value.setMethodCodes(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"));
+        value.setRequiredEvidence(Arrays.asList("现金流量表", "财报附注"));
+        value.setRequiredCalculations(Arrays.asList("杜邦拆解"));
+        value.setCounterChecks(Arrays.asList("非经常性损益"));
+        value.setCompletionCriteria(Arrays.asList("完成现金流验证"));
+        return value;
     }
 
     private ResearchMissionGap gap(Long runId,

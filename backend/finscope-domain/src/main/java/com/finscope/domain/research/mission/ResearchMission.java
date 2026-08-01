@@ -10,6 +10,12 @@ public class ResearchMission {
     private String goal;
     private String subject;
     private String scopeSummary;
+    private String researchType;
+    private List<String> methodCodes = Collections.emptyList();
+    private List<String> requiredEvidence = Collections.emptyList();
+    private List<String> requiredCalculations = Collections.emptyList();
+    private List<String> counterChecks = Collections.emptyList();
+    private List<String> completionCriteria = Collections.emptyList();
     private List<String> successCriteria = Collections.emptyList();
     private String status;
     private String planningMode;
@@ -52,6 +58,19 @@ public class ResearchMission {
     public void setScopeSummary(String scopeSummary) {
         this.scopeSummary = scopeSummary;
     }
+
+    public String getResearchType() { return researchType; }
+    public void setResearchType(String researchType) { this.researchType = researchType; }
+    public List<String> getMethodCodes() { return methodCodes; }
+    public void setMethodCodes(List<String> values) { this.methodCodes = immutable(values); }
+    public List<String> getRequiredEvidence() { return requiredEvidence; }
+    public void setRequiredEvidence(List<String> values) { this.requiredEvidence = immutable(values); }
+    public List<String> getRequiredCalculations() { return requiredCalculations; }
+    public void setRequiredCalculations(List<String> values) { this.requiredCalculations = immutable(values); }
+    public List<String> getCounterChecks() { return counterChecks; }
+    public void setCounterChecks(List<String> values) { this.counterChecks = immutable(values); }
+    public List<String> getCompletionCriteria() { return completionCriteria; }
+    public void setCompletionCriteria(List<String> values) { this.completionCriteria = immutable(values); }
 
     public List<String> getSuccessCriteria() {
         return successCriteria;

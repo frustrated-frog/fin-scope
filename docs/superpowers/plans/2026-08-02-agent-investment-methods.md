@@ -96,27 +96,27 @@ git push
 - Test: `backend/finscope-dao/src/test/java/com/finscope/dao/research/mission/ResearchMissionRepositoryTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/mission/ResearchMissionServiceTest.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 仓储测试保存并读取研究类型、方法编码、证据要求、计算要求、反证和完成条件；服务测试断言 `ResearchPlanningResult` 的完整蓝图传给仓储，重启读取后内容不丢失。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 Run: `cd backend && mvn -pl finscope-dao,finscope-service -Dtest=ResearchMissionRepositoryTest,ResearchMissionServiceTest test`
 
 Expected: FAIL，原因是 Mission 和数据库尚无蓝图字段。
 
-- [ ] **Step 3: 增加向后兼容字段和仓储映射**
+- [x] **Step 3: 增加向后兼容字段和仓储映射**
 
 为 `research_mission` 增加 `research_type`、`method_codes`、`required_evidence`、`required_calculations`、`counter_checks`、`completion_criteria` 六列，并对旧数据库逐列执行 `ensureColumn`。Repository 使用现有单元分隔符保存列表，`replacePlan` 原子替换任务和方法蓝图；Service 从 Draft 传递全部字段。
 
-- [ ] **Step 4: 运行测试并确认 GREEN**
+- [x] **Step 4: 运行测试并确认 GREEN**
 
 Run: `cd backend && mvn -pl finscope-dao,finscope-service -Dtest=ResearchMissionRepositoryTest,ResearchMissionServiceTest test`
 
 Expected: PASS，0 failures。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add backend/finscope-domain backend/finscope-dao backend/finscope-service

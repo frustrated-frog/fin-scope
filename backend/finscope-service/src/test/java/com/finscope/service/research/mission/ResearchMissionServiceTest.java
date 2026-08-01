@@ -4,6 +4,7 @@ import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMethodBlueprint;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.service.research.report.EvidenceSufficiency;
 import com.finscope.service.research.report.ResearchReportService;
@@ -57,9 +58,11 @@ class ResearchMissionServiceTest {
         verify(repository).initialize(21L, "AI资本开支能否持续？", "AI算力",
                 "等待研究规划", Arrays.asList("形成可验证的阶段性结论"), 12);
         ArgumentCaptor<List> tasks = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<ResearchMethodBlueprint> blueprint = ArgumentCaptor.forClass(ResearchMethodBlueprint.class);
         verify(repository).replacePlan(eq(21L), eq("DETERMINISTIC"), anyString(), anyList(),
-                tasks.capture(), eq("PLAN_REJECTED"),
+                blueprint.capture(), tasks.capture(), eq("PLAN_REJECTED"),
                 eq("任务 search_counter 使用了未注册工具 external_browser"));
+        assertEquals("GENERAL_RESEARCH", blueprint.getValue().getResearchType());
         assertEquals(6, tasks.getValue().size());
         assertEquals("baseline_scan", ((ResearchMissionTask) tasks.getValue().get(0)).getTaskKey());
         assertEquals("DETERMINISTIC", result.getPlanningMode());
