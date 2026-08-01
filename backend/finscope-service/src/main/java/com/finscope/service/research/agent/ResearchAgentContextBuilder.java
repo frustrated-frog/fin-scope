@@ -65,6 +65,7 @@ public class ResearchAgentContextBuilder {
         context.setMission(mission);
         context.setState(state);
         context.setLatestGap(latestGap);
+        context.setTasks(tasks);
         context.setAttemptedFingerprints(state.getAttemptedFingerprints());
         context.setPrompt(buildPrompt(mission, tasks, state, latestGap, trace, context.getRemainingActions()));
         return context;
@@ -156,7 +157,8 @@ public class ResearchAgentContextBuilder {
             ResearchAgentDecision decision = decisions.get(index);
             prompt.append("- #").append(decision.getIteration()).append(' ')
                     .append(decision.getDecisionType()).append(' ')
-                    .append(safe(decision.getToolCode())).append("：")
+                    .append(safe(decision.getToolCode())).append(" task=")
+                    .append(safe(decision.getMissionTaskKey())).append("：")
                     .append(limit(safe(decision.getDecisionSummary()), 800)).append('\n');
             ResearchToolObservation observation = byDecision.get(decision.getId());
             if (observation != null) {

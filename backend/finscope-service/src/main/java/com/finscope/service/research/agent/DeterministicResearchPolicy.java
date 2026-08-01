@@ -1,8 +1,8 @@
 package com.finscope.service.research.agent;
 
 import com.finscope.domain.research.agent.ResearchAgentDecision;
-import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -53,27 +53,12 @@ public class DeterministicResearchPolicy {
     private ResearchAgentDecision firstUntriedSearch(ResearchDecisionContext context,
                                                      String intent,
                                                      ResearchMissionGap gap) {
-        String subject = subject(context.getMission());
-        if ("PRIMARY".equals(intent)) {
-            ResearchAgentDecision material = firstUntriedPrimaryMaterial(context, subject, gap);
-            if (material != null) return material;
+        if (context.getTasks() == null || context.getTasks().isEmpty()) {
+            return legacySearch(context, intent, gap);
         }
-        String[][] templates = templates(subject, intent);
-        for (String[] template : templates) {
-            ResearchDecisionDraft draft = new ResearchDecisionDraft();
-            draft.setDecisionType("TOOL_CALL");
-            draft.setCurrentSubgoal(template[0]);
-            draft.setToolCode("public_news_search");
-            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
-            arguments.put("query", template[1]);
-            arguments.put("intent", intent);
-            draft.setArguments(arguments);
-            draft.setTargetGap(targetGap(gap));
-            draft.setExpectedObservation("获得能改变证据缺口的独立公开来源");
-            draft.setDecisionSummary(template[2]);
-            draft.setConfidence(0.66D);
+        for (ResearchMissionTask task : orderedReadyTasks(context, intent)) {
             try {
-                return validated(draft, context);
+                return validated(toolDecision(task, gap), context);
             } catch (IllegalArgumentException repeated) {
                 if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) {
                     throw repeated;
@@ -83,47 +68,93 @@ public class DeterministicResearchPolicy {
         return null;
     }
 
-    private ResearchAgentDecision firstUntriedPrimaryMaterial(ResearchDecisionContext context,
-                                                               String subject,
-                                                               ResearchMissionGap gap) {
+    private ResearchAgentDecision legacySearch(ResearchDecisionContext context,
+                                                String intent,
+                                                ResearchMissionGap gap) {
+        String subject = context.getMission() == null || context.getMission().getSubject() == null
+                ? "研究对象" : context.getMission().getSubject();
         Matcher matcher = A_SHARE_CODE.matcher(subject);
-        if (!matcher.find()) return null;
-        String stockCode = matcher.group(1);
-        String[][] candidates = {
-                {"ANNOUNCEMENT", "财报 业绩 经营", "读取公司公告建立一手事实基线"},
-                {"INTERACTION", "经营 订单 客户", "用公司互动回复补充公告未覆盖的经营细节"},
-                {"BROKER_REPORT", "经营 行业 估值", "用专业资料交叉核对公司披露"},
-                {"NEWS_FLASH", subject.replaceAll("（?" + stockCode + "）?", "").trim(), "用财经快讯补充近期变化"}
-        };
-        for (String[] candidate : candidates) {
-            ResearchDecisionDraft draft = new ResearchDecisionDraft();
-            draft.setDecisionType("TOOL_CALL");
-            draft.setCurrentSubgoal("补充" + candidate[0] + "资料");
-            draft.setToolCode("research_material_search");
-            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
-            arguments.put("stockCode", stockCode);
-            arguments.put("materialType", candidate[0]);
-            arguments.put("query", candidate[1]);
-            draft.setArguments(arguments);
-            draft.setTargetGap(targetGap(gap));
-            draft.setExpectedObservation("获得可追溯的结构化研究材料");
-            draft.setDecisionSummary(candidate[2]);
-            draft.setConfidence(0.78D);
-            try {
-                return validated(draft, context);
-            } catch (IllegalArgumentException repeated) {
-                if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) {
-                    throw repeated;
+        if ("PRIMARY".equals(intent) && matcher.find()) {
+            String stockCode = matcher.group(1);
+            String[][] materials = {{"ANNOUNCEMENT", "财报 业绩 经营"}, {"INTERACTION", "经营 订单 客户"}};
+            for (String[] material : materials) {
+                ResearchDecisionDraft draft = new ResearchDecisionDraft();
+                draft.setDecisionType("TOOL_CALL");
+                draft.setCurrentSubgoal("补充" + material[0] + "资料");
+                draft.setToolCode("research_material_search");
+                Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+                arguments.put("stockCode", stockCode);
+                arguments.put("materialType", material[0]);
+                arguments.put("query", material[1]);
+                draft.setArguments(arguments);
+                draft.setTargetGap(targetGap(gap));
+                draft.setExpectedObservation("获得可追溯的结构化研究材料");
+                draft.setDecisionSummary("优先读取与缺口匹配的一手或专业资料");
+                draft.setConfidence(0.78D);
+                try {
+                    return validated(draft, context);
+                } catch (IllegalArgumentException repeated) {
+                    if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) throw repeated;
                 }
             }
         }
+        String[][] queries = "COUNTER".equals(intent)
+                ? new String[][]{{subject + " 风险 下调 延迟 反方证据", "寻找反方证据"},
+                {subject + " 指引 下修 订单 资本开支 公司公告", "寻找反方一手材料"}}
+                : new String[][]{{subject + " 订单 需求 资本开支 最新公告", "补齐支持证据"},
+                {subject + " 公司公告 财报 监管披露", "增加独立一手来源"}};
+        for (String[] query : queries) {
+            ResearchDecisionDraft draft = new ResearchDecisionDraft();
+            draft.setDecisionType("TOOL_CALL");
+            draft.setCurrentSubgoal(query[1]);
+            draft.setToolCode("public_news_search");
+            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+            arguments.put("query", query[0]);
+            arguments.put("intent", intent);
+            draft.setArguments(arguments);
+            draft.setTargetGap(targetGap(gap));
+            draft.setExpectedObservation("获得能改变证据缺口的独立公开来源");
+            draft.setDecisionSummary("按最新证据缺口执行受控检索");
+            draft.setConfidence(0.66D);
+            try {
+                return validated(draft, context);
+            } catch (IllegalArgumentException repeated) {
+                if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) throw repeated;
+            }
+        }
         return null;
+    }
+
+    private ResearchDecisionDraft toolDecision(ResearchMissionTask task, ResearchMissionGap gap) {
+        ResearchDecisionDraft draft = new ResearchDecisionDraft();
+        draft.setDecisionType("TOOL_CALL");
+        draft.setCurrentSubgoal(task.getTitle());
+        draft.setMissionTaskKey(task.getTaskKey());
+        draft.setToolCode(task.getToolCode());
+        Map<String, Object> arguments = new LinkedHashMap<String, Object>();
+        if ("public_news_search".equals(task.getToolCode())) {
+            arguments.put("query", task.getQueryText());
+            arguments.put("intent", task.getIntent());
+        } else if ("research_material_search".equals(task.getToolCode())) {
+            String[] parts = task.getQueryText().trim().split("\\s+", 3);
+            arguments.put("stockCode", parts[0]);
+            arguments.put("materialType", parts[1]);
+            arguments.put("query", parts.length == 3 ? parts[2] : "");
+        }
+        draft.setArguments(arguments);
+        draft.setTargetGap(targetGap(gap));
+        draft.setExpectedObservation(task.getExpectedEvidence());
+        draft.setDecisionSummary(task.getRationale());
+        draft.setConfidence("research_material_search".equals(task.getToolCode()) ? 0.78D : 0.66D);
+        return draft;
     }
 
     private ResearchAgentDecision assess(ResearchDecisionContext context, String summary) {
         ResearchDecisionDraft draft = new ResearchDecisionDraft();
         draft.setDecisionType("TOOL_CALL");
         draft.setCurrentSubgoal("刷新证据缺口判断");
+        ResearchMissionTask task = firstReadyTask(context, "ASSESS", "evidence_assess");
+        if (task != null) draft.setMissionTaskKey(task.getTaskKey());
         draft.setToolCode("evidence_assess");
         draft.setArguments(Collections.<String, Object>emptyMap());
         draft.setTargetGap(context.getLatestGap() == null ? "NO_GAP" : context.getLatestGap().getStateHash());
@@ -156,37 +187,47 @@ public class DeterministicResearchPolicy {
         return null;
     }
 
-    private String[][] templates(String subject, String intent) {
-        if ("COUNTER".equals(intent)) {
-            return new String[][]{
-                    {"补齐反方证据", subject + " 风险 下调 延迟 反方证据", "当前材料偏向支持，优先寻找可能证伪命题的事实"},
-                    {"寻找反方一手材料", subject + " 指引 下修 订单 资本开支 公司公告", "上一候选动作已尝试，改用公司指引和订单下修信号验证风险"}
-            };
+    private java.util.List<ResearchMissionTask> orderedReadyTasks(ResearchDecisionContext context, String intent) {
+        java.util.List<ResearchMissionTask> values = new java.util.ArrayList<ResearchMissionTask>();
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (ready(context, task) && intent.equals(task.getIntent()) && isSearch(task)) values.add(task);
         }
-        if ("SUPPORT".equals(intent)) {
-            return new String[][]{
-                    {"补齐支持证据", subject + " 订单 需求 资本开支 最新公告", "支持材料不足，优先验证核心驱动是否真实兑现"},
-                    {"寻找支持一手材料", subject + " 财报 指引 合同 公司公告", "改用公司披露验证支持命题的关键事实"}
-            };
+        if (!values.isEmpty()) return values;
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (ready(context, task) && isSearch(task)) values.add(task);
         }
-        if ("PRIMARY".equals(intent)) {
-            return new String[][]{
-                    {"增加独立一手来源", subject + " 公司公告 财报 监管披露", "当前独立来源不足，优先寻找可核验的一手披露"},
-                    {"扩展一手来源覆盖", subject + " 行业数据 官方统计 原始报告", "改用行业和官方数据提升来源独立性"}
-            };
+        return values;
+    }
+
+    private ResearchMissionTask firstReadyTask(ResearchDecisionContext context, String intent, String tool) {
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (ready(context, task) && intent.equals(task.getIntent()) && tool.equals(task.getToolCode())) return task;
         }
-        return new String[][]{
-                {"寻找最新进展", subject + " 最新进展 公告 数据", "当前证据需要时间维度更新，搜索最新可核验事实"},
-                {"补充近期变化", subject + " 近期变化 行业数据 公司披露", "从公司和行业披露补充最新变化"}
-        };
+        return null;
+    }
+
+    private boolean ready(ResearchDecisionContext context, ResearchMissionTask task) {
+        if (!("PENDING".equals(task.getStatus()) || "FAILED".equals(task.getStatus())
+                || "INTERRUPTED".equals(task.getStatus()))) return false;
+        for (String dependency : task.getDependencies()) {
+            ResearchMissionTask value = null;
+            for (ResearchMissionTask candidate : context.getTasks()) {
+                if (dependency.equals(candidate.getTaskKey())) value = candidate;
+            }
+            if (value == null || !("COMPLETED".equals(value.getStatus())
+                    || ("SKIPPED".equals(value.getStatus())
+                    && "SUFFICIENT_EVIDENCE".equals(value.getSkipReason())))) return false;
+        }
+        return true;
+    }
+
+    private boolean isSearch(ResearchMissionTask task) {
+        return "public_news_search".equals(task.getToolCode())
+                || "research_material_search".equals(task.getToolCode());
     }
 
     private String targetGap(ResearchMissionGap gap) {
         return "intent=" + resolveIntent(gap) + ",state=" + gap.getStateHash();
     }
 
-    private String subject(ResearchMission mission) {
-        return mission == null || mission.getSubject() == null || mission.getSubject().trim().isEmpty()
-                ? "研究对象" : mission.getSubject().trim();
-    }
 }

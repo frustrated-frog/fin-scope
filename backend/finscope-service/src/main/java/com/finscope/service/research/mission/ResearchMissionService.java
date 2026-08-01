@@ -145,6 +145,7 @@ public class ResearchMissionService {
         if (gap.isSufficient()) {
             repository.skipPendingTasksByTool(runId, "public_news_search", "SUFFICIENT_EVIDENCE");
             repository.skipPendingTasksByTool(runId, "research_material_search", "SUFFICIENT_EVIDENCE");
+            completeSufficientAssessment(runId, gap);
         }
         return gap;
     }
@@ -252,20 +253,36 @@ public class ResearchMissionService {
     }
 
     private ResearchMissionTask matchingTask(Long runId, ResearchAgentDecision decision) {
-        if (decision == null || blank(decision.getToolCode())) return null;
+        if (decision == null || blank(decision.getToolCode()) || blank(decision.getMissionTaskKey())) return null;
+        Optional<ResearchMissionTask> found = repository.findTask(runId, decision.getMissionTaskKey().trim());
+        if (!found.isPresent()) return null;
+        ResearchMissionTask task = found.get();
+        if (!eligible(task) || !decision.getToolCode().equals(task.getToolCode())) return null;
         Map<String, Object> arguments = parseArguments(decision.getArgumentsJson());
-        String requestedIntent = upper(arguments.get("intent"));
-        String stockCode = text(arguments.get("stockCode"));
-        String materialType = upper(arguments.get("materialType"));
-        for (ResearchMissionTask task : repository.findTasks(runId)) {
-            if (!eligible(task) || !decision.getToolCode().equals(task.getToolCode())) continue;
-            if ("public_news_search".equals(decision.getToolCode())
-                    && !requestedIntent.equals(task.getIntent())) continue;
-            if ("research_material_search".equals(decision.getToolCode())
-                    && !matchesMaterial(task, stockCode, materialType)) continue;
-            return task;
+        if ("public_news_search".equals(decision.getToolCode())) {
+            String query = text(arguments.get("query"));
+            if (!task.getIntent().equals(upper(arguments.get("intent")))
+                    || query == null || !task.getQueryText().equals(query.trim())) return null;
         }
-        return null;
+        if ("research_material_search".equals(decision.getToolCode())
+                && !matchesMaterial(task, text(arguments.get("stockCode")), upper(arguments.get("materialType")),
+                text(arguments.get("query")))) {
+            return null;
+        }
+        return task;
+    }
+
+    private void completeSufficientAssessment(Long runId, ResearchMissionGap gap) {
+        for (ResearchMissionTask task : repository.findTasks(runId)) {
+            if (eligible(task) && "evidence_assess".equals(task.getToolCode())
+                    && "ASSESS".equals(task.getIntent()) && repository.startTask(runId, task.getTaskKey())) {
+                repository.completeTask(runId, task.getTaskKey(),
+                        "自动证据评估已达到门槛：证据=" + gap.getEvidenceCount()
+                                + "，独立来源=" + gap.getSourceCount() + "，支持=" + gap.getSupportCount()
+                                + "，反方=" + gap.getCounterCount(), 0, 0);
+                return;
+            }
+        }
     }
 
     private Map<String, Object> parseArguments(String json) {
@@ -282,9 +299,13 @@ public class ResearchMissionService {
                 || "FAILED".equals(task.getStatus()) || "INTERRUPTED".equals(task.getStatus()));
     }
 
-    private boolean matchesMaterial(ResearchMissionTask task, String stockCode, String materialType) {
+    private boolean matchesMaterial(ResearchMissionTask task, String stockCode, String materialType, String query) {
         if (blank(stockCode) || blank(materialType) || blank(task.getQueryText())) return false;
-        return task.getQueryText().startsWith(stockCode.trim() + " " + materialType.trim());
+        String[] expected = task.getQueryText().trim().split("\\s+", 3);
+        String expectedQuery = expected.length == 3 ? expected[2] : "";
+        return expected.length >= 2 && expected[0].equals(stockCode.trim())
+                && expected[1].equals(materialType.trim())
+                && expectedQuery.equals(query == null ? "" : query.trim());
     }
 
     private boolean isFailure(ResearchToolObservation observation) {

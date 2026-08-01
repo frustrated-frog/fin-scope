@@ -3,6 +3,7 @@ package com.finscope.service.research.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -44,6 +45,7 @@ public class ResearchDecisionValidator {
         }
         if ("TOOL_CALL".equals(type)) {
             validateToolCall(draft);
+            validateMissionTask(draft, context);
             if (isExternalTool(draft.getToolCode()) && context.getRemainingActions() <= 0) {
                 throw rejected("外部动作预算已用尽");
             }
@@ -55,13 +57,14 @@ public class ResearchDecisionValidator {
                 throw rejected("PLAN_PATCH 不得携带工具调用参数");
             }
             validatePlanPatch(draft.getPlanPatch());
-        } else if (hasText(draft.getToolCode()) || !empty(draft.getArguments())) {
+        } else if (hasText(draft.getToolCode()) || hasText(draft.getMissionTaskKey())
+                || !empty(draft.getArguments())) {
             throw rejected(type + " 不得携带工具或工具参数");
         }
 
         String argumentsJson = json("PLAN_PATCH".equals(type) ? draft.getPlanPatch() : draft.getArguments());
         String fingerprint = "TOOL_CALL".equals(type)
-                ? fingerprint(draft.getToolCode(), argumentsJson, draft.getTargetGap())
+                ? fingerprint(draft.getToolCode(), draft.getMissionTaskKey(), argumentsJson, draft.getTargetGap())
                 : null;
         if (fingerprint != null && context.getAttemptedFingerprints().contains(fingerprint)) {
             throw rejected("动作指纹已经执行，禁止重复调用");
@@ -72,6 +75,7 @@ public class ResearchDecisionValidator {
         value.setIteration(context.getNextIteration());
         value.setDecisionType(type);
         value.setCurrentSubgoal(compact(draft.getCurrentSubgoal()));
+        value.setMissionTaskKey(compactNullable(draft.getMissionTaskKey(), 48));
         value.setToolCode(hasText(draft.getToolCode()) ? draft.getToolCode().trim() : null);
         value.setArgumentsJson(argumentsJson);
         value.setTargetGap(compactNullable(draft.getTargetGap(), 320));
@@ -137,6 +141,57 @@ public class ResearchDecisionValidator {
         throw rejected("工具不在 Agent 可执行白名单中：" + tool);
     }
 
+    private void validateMissionTask(ResearchDecisionDraft draft, ResearchDecisionContext context) {
+        if (context.getTasks() == null || context.getTasks().isEmpty()) return;
+        requireText(draft.getMissionTaskKey(), "missionTaskKey", 48);
+        ResearchMissionTask selected = null;
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (draft.getMissionTaskKey().trim().equals(task.getTaskKey())) {
+                selected = task;
+                break;
+            }
+        }
+        if (selected == null) throw rejected("missionTaskKey 不属于当前计划");
+        if (!("PENDING".equals(selected.getStatus()) || "FAILED".equals(selected.getStatus())
+                || "INTERRUPTED".equals(selected.getStatus()))) {
+            throw rejected("missionTaskKey 不是可执行任务");
+        }
+        if (!draft.getToolCode().trim().equals(selected.getToolCode())) {
+            throw rejected("missionTaskKey 与工具不匹配");
+        }
+        for (String dependency : selected.getDependencies()) {
+            ResearchMissionTask dependencyTask = task(context, dependency);
+            if (dependencyTask == null || !("COMPLETED".equals(dependencyTask.getStatus())
+                    || ("SKIPPED".equals(dependencyTask.getStatus())
+                    && "SUFFICIENT_EVIDENCE".equals(dependencyTask.getSkipReason())))) {
+                throw rejected("missionTaskKey 依赖尚未完成：" + dependency);
+            }
+        }
+        Map<String, Object> arguments = draft.getArguments();
+        if ("public_news_search".equals(selected.getToolCode())) {
+            if (!selected.getIntent().equals(upper(text(arguments.get("intent"))))
+                    || !selected.getQueryText().equals(compact(text(arguments.get("query"))))) {
+                throw rejected("公开搜索参数与 missionTaskKey 不匹配");
+            }
+        } else if ("research_material_search".equals(selected.getToolCode())) {
+            String[] expected = selected.getQueryText() == null
+                    ? new String[0] : selected.getQueryText().trim().split("\\s+", 3);
+            String expectedQuery = expected.length == 3 ? expected[2] : "";
+            if (expected.length < 2 || !expected[0].equals(text(arguments.get("stockCode")))
+                    || !expected[1].equals(upper(text(arguments.get("materialType"))))
+                    || !expectedQuery.equals(compact(text(arguments.get("query"))))) {
+                throw rejected("结构化资料参数与 missionTaskKey 不匹配");
+            }
+        }
+    }
+
+    private ResearchMissionTask task(ResearchDecisionContext context, String taskKey) {
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (taskKey.equals(task.getTaskKey())) return task;
+        }
+        return null;
+    }
+
     private void validatePlanPatch(Map<String, Object> patch) {
         Set<String> fields = new HashSet<String>(Arrays.asList(
                 "operation", "taskKey", "title", "question", "toolCode", "intent", "queryText", "reason"));
@@ -168,8 +223,9 @@ public class ResearchDecisionValidator {
         patch.put("intent", intent);
     }
 
-    private String fingerprint(String toolCode, String argumentsJson, String targetGap) {
-        String canonical = toolCode.trim() + "|" + argumentsJson + "|" + compactNullable(targetGap, 320);
+    private String fingerprint(String toolCode, String missionTaskKey, String argumentsJson, String targetGap) {
+        String canonical = toolCode.trim() + "|" + compactNullable(missionTaskKey, 48)
+                + "|" + argumentsJson + "|" + compactNullable(targetGap, 320);
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));

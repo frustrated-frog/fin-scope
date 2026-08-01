@@ -3,6 +3,7 @@ package com.finscope.service.research.agent;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,6 +17,7 @@ public class ResearchDecisionContext {
     private ResearchMission mission;
     private ResearchAgentState state;
     private ResearchMissionGap latestGap;
+    private List<ResearchMissionTask> tasks = Collections.emptyList();
     private List<String> attemptedFingerprints = Collections.emptyList();
     private String finishRejectionReason;
 
@@ -33,6 +35,11 @@ public class ResearchDecisionContext {
     public void setState(ResearchAgentState state) { this.state = state; }
     public ResearchMissionGap getLatestGap() { return latestGap; }
     public void setLatestGap(ResearchMissionGap latestGap) { this.latestGap = latestGap; }
+    public List<ResearchMissionTask> getTasks() { return tasks; }
+    public void setTasks(List<ResearchMissionTask> tasks) {
+        this.tasks = tasks == null || tasks.isEmpty() ? Collections.<ResearchMissionTask>emptyList()
+                : Collections.unmodifiableList(new ArrayList<ResearchMissionTask>(tasks));
+    }
     public List<String> getAttemptedFingerprints() { return attemptedFingerprints; }
     public void setAttemptedFingerprints(List<String> attemptedFingerprints) {
         this.attemptedFingerprints = attemptedFingerprints == null || attemptedFingerprints.isEmpty()

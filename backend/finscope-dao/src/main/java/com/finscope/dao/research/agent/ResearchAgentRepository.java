@@ -56,6 +56,7 @@ public class ResearchAgentRepository {
         value.setIteration(rs.getInt("iteration"));
         value.setDecisionType(rs.getString("decision_type"));
         value.setCurrentSubgoal(rs.getString("current_subgoal"));
+        value.setMissionTaskKey(rs.getString("mission_task_key"));
         value.setToolCode(rs.getString("tool_code"));
         value.setArgumentsJson(rs.getString("arguments_json"));
         value.setTargetGap(rs.getString("target_gap"));
@@ -127,26 +128,27 @@ public class ResearchAgentRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
                     "INSERT INTO research_agent_decision(research_run_id,iteration,decision_type,current_subgoal,"
-                            + "tool_code,arguments_json,target_gap,expected_observation,decision_summary,confidence,"
+                            + "mission_task_key,tool_code,arguments_json,target_gap,expected_observation,decision_summary,confidence,"
                             + "decision_mode,action_fingerprint,status,validation_error,created_at,updated_at) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             statement.setLong(1, decision.getResearchRunId());
             statement.setInt(2, decision.getIteration());
             statement.setString(3, decision.getDecisionType());
             statement.setString(4, decision.getCurrentSubgoal());
-            statement.setString(5, decision.getToolCode());
-            statement.setString(6, decision.getArgumentsJson());
-            statement.setString(7, decision.getTargetGap());
-            statement.setString(8, decision.getExpectedObservation());
-            statement.setString(9, decision.getDecisionSummary());
-            statement.setDouble(10, decision.getConfidence());
-            statement.setString(11, decision.getDecisionMode());
-            statement.setString(12, decision.getActionFingerprint());
-            statement.setString(13, decision.getStatus());
-            statement.setString(14, decision.getValidationError());
-            statement.setString(15, TimeUtil.text(now));
+            statement.setString(5, decision.getMissionTaskKey());
+            statement.setString(6, decision.getToolCode());
+            statement.setString(7, decision.getArgumentsJson());
+            statement.setString(8, decision.getTargetGap());
+            statement.setString(9, decision.getExpectedObservation());
+            statement.setString(10, decision.getDecisionSummary());
+            statement.setDouble(11, decision.getConfidence());
+            statement.setString(12, decision.getDecisionMode());
+            statement.setString(13, decision.getActionFingerprint());
+            statement.setString(14, decision.getStatus());
+            statement.setString(15, decision.getValidationError());
             statement.setString(16, TimeUtil.text(now));
+            statement.setString(17, TimeUtil.text(now));
             return statement;
         }, keys);
         decision.setId(requiredKey(keys));

@@ -1,6 +1,7 @@
 package com.finscope.service.research.agent;
 
 import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -126,6 +127,29 @@ class ResearchDecisionValidatorTest {
         assertThrows(IllegalArgumentException.class, () -> validator.validate(invalidCode, context, "MODEL"));
     }
 
+    @Test
+    void bindsToolCallToExactReadyMissionTaskAndRejectsQueryOrDependencyMismatch() {
+        ResearchMissionTask baseline = task("baseline_scan", "source_scan", "BASELINE", "COMPLETED", null,
+                Collections.<String>emptyList());
+        ResearchMissionTask counter = task("counter_accounting", "public_news_search", "COUNTER", "PENDING",
+                "AI资本开支 下调 风险", Collections.singletonList("baseline_scan"));
+        context.setTasks(Arrays.asList(baseline, counter));
+        ResearchDecisionDraft exact = searchDraft();
+        exact.setMissionTaskKey("counter_accounting");
+
+        ResearchAgentDecision accepted = validator.validate(exact, context, "MODEL");
+
+        assertEquals("counter_accounting", accepted.getMissionTaskKey());
+        ResearchDecisionDraft wrongQuery = searchDraft();
+        wrongQuery.setMissionTaskKey("counter_accounting");
+        wrongQuery.getArguments().put("query", "另一个反方查询");
+        assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(wrongQuery, context, "MODEL"));
+
+        baseline.setStatus("PENDING");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(exact, context, "MODEL"));
+    }
+
     private ResearchDecisionDraft searchDraft() {
         ResearchDecisionDraft draft = new ResearchDecisionDraft();
         draft.setDecisionType("TOOL_CALL");
@@ -170,5 +194,21 @@ class ResearchDecisionValidatorTest {
         draft.setDecisionSummary("优先用公告建立事实基线");
         draft.setConfidence(0.9D);
         return draft;
+    }
+
+    private ResearchMissionTask task(String key,
+                                     String tool,
+                                     String intent,
+                                     String status,
+                                     String query,
+                                     java.util.List<String> dependencies) {
+        ResearchMissionTask value = new ResearchMissionTask();
+        value.setTaskKey(key);
+        value.setToolCode(tool);
+        value.setIntent(intent);
+        value.setStatus(status);
+        value.setQueryText(query);
+        value.setDependencies(dependencies);
+        return value;
     }
 }

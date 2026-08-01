@@ -519,6 +519,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "iteration INTEGER NOT NULL,"
                 + "decision_type TEXT NOT NULL,"
                 + "current_subgoal TEXT NOT NULL,"
+                + "mission_task_key TEXT,"
                 + "tool_code TEXT,"
                 + "arguments_json TEXT,"
                 + "target_gap TEXT,"
@@ -533,6 +534,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "updated_at TEXT NOT NULL,"
                 + "UNIQUE(research_run_id,iteration),"
                 + "FOREIGN KEY(research_run_id) REFERENCES research_run(id) ON DELETE CASCADE)");
+        ensureColumn("research_agent_decision", "mission_task_key", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_agent_decision_run "
                 + "ON research_agent_decision(research_run_id,iteration)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_tool_observation ("

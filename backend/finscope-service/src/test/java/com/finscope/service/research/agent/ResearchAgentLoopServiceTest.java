@@ -9,6 +9,7 @@ import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.research.agent.tool.ResearchAgentTool;
@@ -17,7 +18,10 @@ import com.finscope.service.research.agent.tool.ResearchAgentToolRegistry;
 import com.finscope.service.research.agent.tool.ResearchToolDispatcher;
 import com.finscope.service.research.agent.tool.ResearchToolRetryExecutor;
 import com.finscope.service.research.mission.ResearchMissionService;
+import com.finscope.service.research.mission.ResearchEvidenceGapAnalyzer;
 import com.finscope.service.research.mission.ResearchToolRegistry;
+import com.finscope.service.research.report.EvidenceSufficiency;
+import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +40,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -75,6 +78,12 @@ class ResearchAgentLoopServiceTest {
 
     @Test
     void feedsFirstToolObservationIntoSecondModelDecisionAndFinishes() throws Exception {
+        missions.replacePlan(66L, "DETERMINISTIC", "验证正反证据",
+                Collections.singletonList("包含独立正反证据"),
+                java.util.Arrays.asList(
+                        missionTask("search_counter", "public_news_search", "COUNTER"),
+                        missionTask("assess_evidence", "evidence_assess", "ASSESS")),
+                null, null);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         AtomicInteger calls = new AtomicInteger();
@@ -98,8 +107,11 @@ class ResearchAgentLoopServiceTest {
         ResearchFinishVerifier finishVerifier = mock(ResearchFinishVerifier.class);
         when(finishVerifier.verify(66L)).thenReturn(
                 new ResearchFinishVerdict(true, "ACCEPTED", Collections.<String>emptyList()));
-        ResearchMissionService missionService = mock(ResearchMissionService.class);
-        when(missionService.assess(eq(66L), anyString())).thenReturn(sufficientGap());
+        ResearchReportService reports = mock(ResearchReportService.class);
+        when(reports.assessSufficiency(66L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3));
+        ResearchMissionService missionService = new ResearchMissionService(missions,
+                mock(com.finscope.service.research.mission.ResearchPlanningAgent.class), reports,
+                new ResearchEvidenceGapAnalyzer(), new ResearchToolRegistry());
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
                 new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService,
@@ -116,9 +128,10 @@ class ResearchAgentLoopServiceTest {
         assertEquals(1, agents.findObservations(66L).size());
         verify(runtimeService).completeNode(eq(66L), anyString(), eq("next-state"), eq(2),
                 eq("first-observation-added-counter-evidence"));
-        verify(missionService).assess(eq(66L), anyString());
-        verify(missionService).recordAgentToolResult(eq(66L), any(ResearchAgentDecision.class),
-                any(ResearchToolObservation.class));
+        assertEquals("COMPLETED", missions.findTask(66L, "search_counter").get().getStatus());
+        assertEquals("first-observation-added-counter-evidence",
+                missions.findTask(66L, "search_counter").get().getOutputSummary());
+        assertEquals("COMPLETED", missions.findTask(66L, "assess_evidence").get().getStatus());
     }
 
     @Test
@@ -293,6 +306,7 @@ class ResearchAgentLoopServiceTest {
 
     private String searchDecision() {
         return "{\"decisionType\":\"TOOL_CALL\",\"currentSubgoal\":\"补齐反方证据\","
+                + "\"missionTaskKey\":\"search_counter\","
                 + "\"toolCode\":\"public_news_search\","
                 + "\"arguments\":{\"query\":\"AI算力 风险 下调\",\"intent\":\"COUNTER\"},"
                 + "\"targetGap\":\"缺少反方证据\",\"expectedObservation\":\"获得独立反方来源\","
@@ -303,6 +317,26 @@ class ResearchAgentLoopServiceTest {
         return "{\"decisionType\":\"FINISH\",\"currentSubgoal\":\"提交完成校验\","
                 + "\"arguments\":{},\"planPatch\":{},"
                 + "\"decisionSummary\":\"最新 Observation 已补齐关键证据\",\"confidence\":0.9}";
+    }
+
+    private ResearchMissionTask missionTask(String key, String toolCode, String intent) {
+        ResearchMissionTask value = new ResearchMissionTask();
+        value.setTaskKey(key);
+        value.setTitle("反方证据搜索");
+        value.setQuestion("哪些事实可能推翻命题？");
+        value.setTaskType("SEARCH");
+        value.setToolCode(toolCode);
+        value.setIntent(intent);
+        value.setDependencies(Collections.<String>emptyList());
+        value.setQueryText("AI算力 风险 下调");
+        value.setRationale("补齐反方证据");
+        value.setExpectedEvidence("独立反方来源");
+        if ("evidence_assess".equals(toolCode)) {
+            value.setTaskType("ASSESS");
+            value.setDependencies(Collections.singletonList("search_counter"));
+            value.setQueryText(null);
+        }
+        return value;
     }
 
     private static class ObservationTool implements ResearchAgentTool {

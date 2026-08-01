@@ -6,6 +6,7 @@ import java.util.Map;
 public class ResearchDecisionDraft {
     private String decisionType;
     private String currentSubgoal;
+    private String missionTaskKey;
     private String toolCode;
     private Map<String, Object> arguments = new LinkedHashMap<String, Object>();
     private String targetGap;
@@ -18,6 +19,8 @@ public class ResearchDecisionDraft {
     public void setDecisionType(String decisionType) { this.decisionType = decisionType; }
     public String getCurrentSubgoal() { return currentSubgoal; }
     public void setCurrentSubgoal(String currentSubgoal) { this.currentSubgoal = currentSubgoal; }
+    public String getMissionTaskKey() { return missionTaskKey; }
+    public void setMissionTaskKey(String missionTaskKey) { this.missionTaskKey = missionTaskKey; }
     public String getToolCode() { return toolCode; }
     public void setToolCode(String toolCode) { this.toolCode = toolCode; }
     public Map<String, Object> getArguments() { return arguments; }

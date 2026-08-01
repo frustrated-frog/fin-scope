@@ -83,6 +83,7 @@ class ResearchAgentRepositoryTest {
         assertEquals(Arrays.asList("public_news_search:counter:v1"), saved.getAttemptedFingerprints());
         assertEquals(1, repository.findDecisions(91L).size());
         assertEquals("MODEL", repository.findDecisions(91L).get(0).getDecisionMode());
+        assertEquals("search_counter", repository.findDecisions(91L).get(0).getMissionTaskKey());
         assertEquals("COMPLETED", repository.findDecisions(91L).get(0).getStatus());
         assertEquals(1, repository.findObservations(91L).size());
         assertEquals(Arrays.asList("article:501", "evidence:701"),
@@ -122,6 +123,7 @@ class ResearchAgentRepositoryTest {
         value.setIteration(iteration);
         value.setDecisionType("TOOL_CALL");
         value.setCurrentSubgoal("补齐反方证据");
+        value.setMissionTaskKey("search_counter");
         value.setToolCode("public_news_search");
         value.setArgumentsJson("{\"query\":\"AI资本开支 下调 风险\",\"intent\":\"COUNTER\"}");
         value.setTargetGap("counter=0");

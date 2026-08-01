@@ -101,7 +101,7 @@ class ResearchMissionServiceTest {
     void recordsSuccessfulAgentToolCallAgainstMatchingMissionTask() {
         ResearchMissionTask counter = missionTask("search_counter", "public_news_search", "COUNTER", "PENDING",
                 "宁德时代 盈利质量 风险");
-        when(repository.findTasks(21L)).thenReturn(Arrays.asList(counter));
+        when(repository.findTask(21L, "search_counter")).thenReturn(java.util.Optional.of(counter));
         when(repository.startTask(21L, "search_counter")).thenReturn(true);
         when(repository.completeTask(21L, "search_counter", "找到独立反方证据", 2, 1)).thenReturn(true);
         ResearchAgentDecision decision = decision("public_news_search",
@@ -118,7 +118,7 @@ class ResearchMissionServiceTest {
     @Test
     void recordsEvidenceAssessmentAndFailedToolCallsWithTerminalTaskState() {
         ResearchMissionTask assess = missionTask("assess_evidence", "evidence_assess", "ASSESS", "PENDING", null);
-        when(repository.findTasks(21L)).thenReturn(Arrays.asList(assess));
+        when(repository.findTask(21L, "assess_evidence")).thenReturn(java.util.Optional.of(assess));
         when(repository.startTask(21L, "assess_evidence")).thenReturn(true);
         when(repository.failTask(21L, "assess_evidence", "评估失败")).thenReturn(true);
 
@@ -127,6 +127,41 @@ class ResearchMissionServiceTest {
 
         assertEquals("assess_evidence", taskKey);
         verify(repository).failTask(21L, "assess_evidence", "评估失败");
+    }
+
+    @Test
+    void recordsOnlyTheMissionTaskExplicitlySelectedByAgentDecision() {
+        ResearchMissionTask first = missionTask("counter_accounting", "public_news_search", "COUNTER", "PENDING",
+                "宁德时代 应收 存货 风险");
+        ResearchMissionTask second = missionTask("counter_governance", "public_news_search", "COUNTER", "PENDING",
+                "宁德时代 治理 资本配置 风险");
+        when(repository.findTask(21L, "counter_governance")).thenReturn(java.util.Optional.of(second));
+        when(repository.startTask(21L, "counter_governance")).thenReturn(true);
+        when(repository.completeTask(21L, "counter_governance", "治理反证完成", 1, 1)).thenReturn(true);
+        ResearchAgentDecision decision = decision("public_news_search",
+                "{\"query\":\"宁德时代 治理 资本配置 风险\",\"intent\":\"COUNTER\"}");
+        decision.setMissionTaskKey("counter_governance");
+
+        String taskKey = service.recordAgentToolResult(21L, decision,
+                observation("SUCCESS", "治理反证完成", 1, 1));
+
+        assertEquals("counter_governance", taskKey);
+        verify(repository).startTask(21L, "counter_governance");
+        verify(repository, org.mockito.Mockito.never()).startTask(21L, first.getTaskKey());
+    }
+
+    @Test
+    void sufficientAutomaticAssessmentCompletesAssessmentMissionTask() {
+        ResearchMissionTask assess = missionTask("assess_evidence", "evidence_assess", "ASSESS", "PENDING", null);
+        when(reportService.assessSufficiency(21L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3));
+        when(repository.findTasks(21L)).thenReturn(Arrays.asList(assess));
+        when(repository.startTask(21L, "assess_evidence")).thenReturn(true);
+        when(repository.completeTask(eq(21L), eq("assess_evidence"), anyString(), eq(0), eq(0))).thenReturn(true);
+
+        ResearchMissionGap gap = service.assess(21L, "agent-decision-9");
+
+        assertTrue(gap.isSufficient());
+        verify(repository).completeTask(eq(21L), eq("assess_evidence"), anyString(), eq(0), eq(0));
     }
 
     @Test
@@ -208,6 +243,7 @@ class ResearchMissionServiceTest {
         ResearchAgentDecision value = new ResearchAgentDecision();
         value.setToolCode(tool);
         value.setArgumentsJson(argumentsJson);
+        value.setMissionTaskKey("evidence_assess".equals(tool) ? "assess_evidence" : "search_counter");
         return value;
     }
 
