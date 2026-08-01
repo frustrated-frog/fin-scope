@@ -295,7 +295,10 @@ public interface ResearchMethod {
 - 模型只能选择方法编码，证据、计算、反证和完成条件由服务端注册表重新生成；
 - 模型不可用或计划无效时，确定性规划器根据研究对象和问题自动选择方法；
 - 方法蓝图随 Research Mission 持久化，旧 SQLite 数据库启动时自动增加兼容字段；
-- Agent 决策上下文包含方法蓝图，方法所需意图未完成时 Finish Verifier 拒绝提前结束；
+- 规划 Agent 能看到方法的必查问题、证据、计算、反证、完成条件与必需意图，缺少必需意图的计划会被服务端拒绝；
+- 确定性规划器会把财报质量与公司质量要求写入一手披露、专业资料、交叉核对和反方检索任务；
+- Agent 工具 Observation 会匹配并终结对应 Mission Task，任务状态与真实工具执行保持一致；
+- Agent 决策上下文包含方法蓝图，方法所需意图未完成时 Finish Verifier 拒绝提前结束；只有因证据充分而跳过的任务可以满足方法门禁；
 - 财报质量方法和公司质量方法已有方法选择、严格校验、持久化及完成门禁测试。
 
 本阶段尚未把 `FinancialInterpretationAgent`、`CapitalInterpretationAgent` 和 `AttributionAgent` 注册成通用 Research Tool，也尚未增加产业链、事件驱动、资金行为和估值方法；这些仍属于第二、三阶段范围。

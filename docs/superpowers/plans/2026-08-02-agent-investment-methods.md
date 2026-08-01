@@ -145,7 +145,7 @@ Expected: FAIL，原因是 Context 和 Finish Verifier 尚未消费方法蓝图�
 
 - [x] **Step 3: 实现方法完成策略**
 
-`ResearchMethodCompletionPolicy` 从注册表读取每个方法的 `requiredIntents`，检查 Mission Task 是否存在对应意图且状态属于 `COMPLETED` 或 `SKIPPED`；返回明确缺口文本。Context Builder 把完整方法蓝图加入受长度限制的 Prompt；Finish Verifier 将方法缺口与现有证据、活动任务和运行时缺口合并，并优先返回 `METHOD_INCOMPLETE`。
+`ResearchMethodCompletionPolicy` 从注册表读取每个方法的 `requiredIntents`，检查 Mission Task 是否存在对应意图且状态属于 `COMPLETED`，或以 `SUFFICIENT_EVIDENCE` 原因进入 `SKIPPED`；返回明确缺口文本。Context Builder 把完整方法蓝图加入受长度限制的 Prompt；Finish Verifier 将方法缺口与现有证据、活动任务和运行时缺口合并，并优先返回 `METHOD_INCOMPLETE`。
 
 - [x] **Step 4: 运行测试并确认 GREEN**
 
@@ -160,6 +160,25 @@ git add backend/finscope-service/src/main/java/com/finscope/service/research bac
 git commit -m "feat: 增加投研方法完成门禁"
 git push
 ```
+
+### Task 6: 修复方法执行状态闭环
+
+**Files:**
+- Modify: `ResearchPlanningAgent`、`ResearchPlanValidator`、`DeterministicResearchPlanner`
+- Modify: `ResearchAgentTurnService`、`ResearchMissionService`、`ResearchMethodCompletionPolicy`
+- Test: 规划、Agent Loop、Mission Service、Finish Verifier 和旧库迁移测试
+
+- [x] **Step 1: 复现 Agent 工具完成但 Mission Task 仍为 PENDING**
+
+- [x] **Step 2: 将工具 Observation 匹配并回写对应 Mission Task**
+
+- [x] **Step 3: 仅接受因证据充分产生的 SKIPPED 方法任务**
+
+- [x] **Step 4: 向规划 Agent 暴露完整方法合同并校验必需意图**
+
+- [x] **Step 5: 让确定性任务和检索词体现财报质量、公司质量方法要求**
+
+- [x] **Step 6: 增加旧 SQLite 表升级回归并通过相关测试**
 
 ### Task 5: 全量回归与文档同步
 
