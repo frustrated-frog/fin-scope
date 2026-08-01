@@ -133,27 +133,27 @@ git push
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchAgentContextBuilderTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/agent/ResearchFinishVerifierTest.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 上下文测试断言 Prompt 显示所选方法、必需证据、计算、反证和完成条件；完成门禁测试断言方法要求的 `PRIMARY`、`SUPPORT`、`COUNTER`、`ASSESS` 任务未终态时拒绝完成，全部完成或因证据充分跳过时允许继续。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchAgentContextBuilderTest,ResearchFinishVerifierTest test`
 
 Expected: FAIL，原因是 Context 和 Finish Verifier 尚未消费方法蓝图。
 
-- [ ] **Step 3: 实现方法完成策略**
+- [x] **Step 3: 实现方法完成策略**
 
 `ResearchMethodCompletionPolicy` 从注册表读取每个方法的 `requiredIntents`，检查 Mission Task 是否存在对应意图且状态属于 `COMPLETED` 或 `SKIPPED`；返回明确缺口文本。Context Builder 把完整方法蓝图加入受长度限制的 Prompt；Finish Verifier 将方法缺口与现有证据、活动任务和运行时缺口合并，并优先返回 `METHOD_INCOMPLETE`。
 
-- [ ] **Step 4: 运行测试并确认 GREEN**
+- [x] **Step 4: 运行测试并确认 GREEN**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchAgentContextBuilderTest,ResearchFinishVerifierTest test`
 
 Expected: PASS，0 failures。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add backend/finscope-service/src/main/java/com/finscope/service/research backend/finscope-service/src/test/java/com/finscope/service/research

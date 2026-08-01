@@ -54,6 +54,11 @@ class ResearchAgentContextBuilderTest {
         assertTrue(context.getPrompt().contains("public_news_search"));
         assertTrue(context.getPrompt().contains("evidence_assess"));
         assertTrue(context.getPrompt().contains("000001 ANNOUNCEMENT 财报 经营"));
+        assertTrue(context.getPrompt().contains("投研方法：[FINANCIAL_STATEMENT_QUALITY]"));
+        assertTrue(context.getPrompt().contains("必需证据：[现金流量表]"));
+        assertTrue(context.getPrompt().contains("确定性计算：[经营现金流与净利润匹配度]"));
+        assertTrue(context.getPrompt().contains("反证检查：[非经常性损益对利润增长的贡献]"));
+        assertTrue(context.getPrompt().contains("方法完成条件：[完成现金流验证]"));
         assertTrue(context.getPrompt().contains(
                 "public_news_search：使用多源公开搜索补充本次研究证据，搜索材料不进入文章库；"
                         + "input={query=不含协议头的公开搜索词, "
@@ -82,6 +87,12 @@ class ResearchAgentContextBuilderTest {
         value.setSubject("光模块");
         value.setScopeSummary("需求、供给、兑现和风险");
         value.setSuccessCriteria(Arrays.asList("至少两个独立来源", "同时包含正反证据"));
+        value.setResearchType("COMPANY_FINANCIAL");
+        value.setMethodCodes(Collections.singletonList("FINANCIAL_STATEMENT_QUALITY"));
+        value.setRequiredEvidence(Collections.singletonList("现金流量表"));
+        value.setRequiredCalculations(Collections.singletonList("经营现金流与净利润匹配度"));
+        value.setCounterChecks(Collections.singletonList("非经常性损益对利润增长的贡献"));
+        value.setCompletionCriteria(Collections.singletonList("完成现金流验证"));
         value.setPlanVersion(2);
         value.setMaxActions(12);
         return value;
