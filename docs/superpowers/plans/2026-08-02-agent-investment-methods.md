@@ -48,6 +48,15 @@ git commit -m "feat: 增加首批投研方法注册表"
 git push
 ```
 
+### Task 6: 加固 Agent 决策与 Mission Task 执行闭环
+
+- [x] **Step 1: 在 Agent 决策与持久化表中增加 `missionTaskKey`**
+- [x] **Step 2: 校验任务归属、执行状态、依赖、工具、意图和查询参数**
+- [x] **Step 3: Observation 仅按明确任务键回写，不再按同意图任务猜测匹配**
+- [x] **Step 4: 证据充分时自动跳过剩余检索并完成评估任务**
+- [x] **Step 5: 增加重复同意图任务、自动评估和端到端执行闭环测试**
+- [x] **Step 6: 运行服务模块全量回归（670 tests，0 failures/errors）**
+
 ### Task 2: 让规划 Agent 自动选择并校验方法
 
 **Files:**
