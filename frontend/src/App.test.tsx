@@ -696,13 +696,28 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('renders the FinScope workspace shell and dashboard metrics', async () => {
+test('renders the FinScope workspace shell and dashboard', async () => {
   render(<App />);
 
   expect(screen.getByText('FinScope')).toBeInTheDocument();
-  expect(await screen.findByText('信息源')).toBeInTheDocument();
-  expect(screen.getByText('文章池')).toBeInTheDocument();
-  expect(screen.getByText('简报')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '今天的研究脉冲' })).toBeInTheDocument();
+});
+
+test('dashboard presents the research command sections from loaded workspace data', async () => {
+  render(<App />);
+
+  expect(await screen.findByRole('heading', { name: '今天的研究脉冲' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '优先处理' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '工作区概览' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '运行账本' })).toBeInTheDocument();
+});
+
+test('dashboard directs a priority item to its owning workspace', async () => {
+  render(<App />);
+
+  await userEvent.click(await screen.findByRole('button', { name: '查看研究流' }));
+
+  expect(screen.getByRole('heading', { name: '事件研究台' })).toBeInTheDocument();
 });
 
 test('opens the unified knowledge workbench without globally loading learning tasks', async () => {
