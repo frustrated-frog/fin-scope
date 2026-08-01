@@ -48,6 +48,8 @@ public class ResearchRadarService {
     private final AgentRunRepository agentRuns;
     private final RadarEventInterpretationService interpretations;
     private final RadarEventWorkspaceService workspace;
+    private final RadarEventTimelineService timeline;
+    private final RadarEvidenceTrustService trust;
     private final ReentrantLock refreshLock = new ReentrantLock();
     private volatile NewsFeedSnapshot lastNewsSnapshot;
 
@@ -57,22 +59,23 @@ public class ResearchRadarService {
                                 WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                                 RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                                 RadarEventInterpretationService interpretations,
-                                RadarEventWorkspaceService workspace) {
+                                RadarEventWorkspaceService workspace, RadarEventTimelineService timeline,
+                                RadarEvidenceTrustService trust) {
         this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository,
-                agentRuns, interpretations, workspace, Clock.systemDefaultZone());
+                agentRuns, interpretations, workspace, timeline, trust, Clock.systemDefaultZone());
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, Clock clock) {
-        this(news,repository,clustering,priority,watchlist,null,null,null,null,null,clock);
+        this(news,repository,clustering,priority,watchlist,null,null,null,null,null,null,null,clock);
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns, Clock clock) {
-        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,null,null,clock);
+        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,null,null,null,null,clock);
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
@@ -80,7 +83,7 @@ public class ResearchRadarService {
                          WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                          RadarEventInterpretationService interpretations, Clock clock) {
-        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,interpretations,null,clock);
+        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,interpretations,null,null,null,clock);
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
@@ -88,11 +91,21 @@ public class ResearchRadarService {
                          WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                          RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace, Clock clock) {
+        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,interpretations,workspace,null,null,clock);
+    }
+
+    ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
+                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
+                         RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
+                         RadarEventTimelineService timeline, RadarEvidenceTrustService trust, Clock clock) {
         this.news=news; this.repository=repository; this.clustering=clustering;
         this.priority=priority; this.watchlist=watchlist; this.clock=clock;
         this.enhancementScheduler=enhancementScheduler; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
         this.interpretations=interpretations;
         this.workspace=workspace;
+        this.timeline=timeline; this.trust=trust;
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
@@ -152,9 +165,13 @@ public class ResearchRadarService {
         List<RadarEvidence> evidence=evidenceRepository==null?Collections.emptyList():evidenceRepository.findByEventId(id);
         RadarEventInterpretation interpretation=interpretations==null?null:interpretations.current(event,signals,evidence).orElse(null);
         RadarEventWorkspaceService.OpenedEvent opened=workspace==null?null:workspace.open(event);
+        List<RadarEventWorkspace.TimelineEntry> timelineEntries=timeline==null?Collections.<RadarEventWorkspace.TimelineEntry>emptyList()
+                :timeline.timeline(event,signals,evidence,interpretation);
+        RadarEventWorkspace.Trust trustView=trust==null?new RadarEventWorkspace.Trust():trust.assess(signals,evidence,interpretation);
         return new ResearchRadarView.EventDetail(event,signals,repository.findEventSignals(id),evidence,
                 agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id),interpretation,
-                opened==null?null:opened.getState(),opened==null?Collections.<RadarEventWorkspace.Observation>emptyList():opened.getObservations());
+                opened==null?null:opened.getState(),opened==null?Collections.<RadarEventWorkspace.Observation>emptyList():opened.getObservations(),
+                timelineEntries,trustView);
     }
 
     public ResearchRadarView.InterpretationView requestInterpretation(Long id) {

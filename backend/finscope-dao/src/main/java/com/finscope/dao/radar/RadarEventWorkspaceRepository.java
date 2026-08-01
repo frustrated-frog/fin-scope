@@ -103,6 +103,20 @@ public class RadarEventWorkspaceRepository {
                 this::mapObservation, eventId);
     }
 
+    public void appendTimeline(Long eventId, String eventFingerprint, String eventType, String title,
+                               String summary, String referenceType, Long referenceId, LocalDateTime occurredAt) {
+        requireEventId(eventId); LocalDateTime now = LocalDateTime.now();
+        jdbc.update("INSERT INTO radar_event_timeline(event_id,event_fingerprint,event_type,title,summary,reference_type,reference_id,occurred_at,created_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id,event_fingerprint,event_type,reference_type,reference_id) DO NOTHING",
+                eventId, eventFingerprint, eventType, title, summary, referenceType, referenceId,
+                TimeUtil.text(occurredAt == null ? now : occurredAt), TimeUtil.text(now));
+    }
+
+    public List<RadarEventWorkspace.TimelineEntry> findTimeline(Long eventId) {
+        return jdbc.query("SELECT * FROM radar_event_timeline WHERE event_id=? ORDER BY occurred_at DESC,id DESC",
+                this::mapTimeline, eventId);
+    }
+
     private void insertObservation(Long eventId, String content, String source) {
         requireEventId(eventId); String value = validateObservation(content); String normalized = normalizeObservation(value);
         LocalDateTime now = LocalDateTime.now();
@@ -142,6 +156,14 @@ public class RadarEventWorkspaceRepository {
         value.setStatus(rs.getString("status")); value.setSource(rs.getString("source"));
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at")); value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
         value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at")); return value;
+    }
+
+    private RadarEventWorkspace.TimelineEntry mapTimeline(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        RadarEventWorkspace.TimelineEntry value = new RadarEventWorkspace.TimelineEntry();
+        value.setId(rs.getLong("id")); value.setEventId(rs.getLong("event_id")); value.setEventType(rs.getString("event_type"));
+        value.setTitle(rs.getString("title")); value.setSummary(rs.getString("summary"));
+        value.setReferenceType(rs.getString("reference_type")); value.setReferenceId(rs.getLong("reference_id"));
+        value.setOccurredAt(TimeUtil.localDateTime(rs, "occurred_at")); return value;
     }
 
     private String validateObservation(String value) {
