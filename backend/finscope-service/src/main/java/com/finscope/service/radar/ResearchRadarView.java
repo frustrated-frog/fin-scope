@@ -4,6 +4,7 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarEventInterpretation;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.service.news.NewsFeedItem;
@@ -94,12 +95,23 @@ public final class ResearchRadarView {
         private final String changeType;
         private final String changeSummary;
         private final String interpretationStatus;
+        private final boolean read;
+        private final boolean followed;
+        private final String disposition;
+        private final int observationCount;
+        private final int openObservationCount;
+        private final int researchRunCount;
+        private final int unreadNotificationCount;
 
         public EventCard(RadarEvent event) {
             this(event, null);
         }
 
         public EventCard(RadarEvent event, RadarEventInterpretation interpretation) {
+            this(event, interpretation, null);
+        }
+
+        public EventCard(RadarEvent event, RadarEventInterpretation interpretation, RadarEventWorkspace.Summary workspace) {
             this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
             this.categoryCode=event.getCategoryCode(); this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
@@ -113,6 +125,12 @@ public final class ResearchRadarView {
             this.lastSeenAt=event.getLastSeenAt();
             this.changeType=changeType(event); this.changeSummary=changeSummary(event, this.changeType);
             this.interpretationStatus=interpretation==null?null:interpretation.getStatus();
+            this.read=workspace!=null&&workspace.isRead(); this.followed=workspace!=null&&workspace.isFollowed();
+            this.disposition=workspace==null?"ACTIVE":workspace.getDisposition();
+            this.observationCount=workspace==null?0:workspace.getObservationCount();
+            this.openObservationCount=workspace==null?0:workspace.getOpenObservationCount();
+            this.researchRunCount=workspace==null?0:workspace.getResearchRunCount();
+            this.unreadNotificationCount=workspace==null?0:workspace.getUnreadNotificationCount();
         }
         private static String recommendation(int score) { return score>=75 ? "重点关注" : score>=55 ? "值得浏览" : "暂存观察"; }
         private static List<String> splitReasons(String value) {
@@ -154,6 +172,10 @@ public final class ResearchRadarView {
         public LocalDateTime getLastSeenAt() { return lastSeenAt; }
         public String getChangeType(){return changeType;} public String getChangeSummary(){return changeSummary;}
         public String getInterpretationStatus(){return interpretationStatus;}
+        public boolean isRead(){return read;} public boolean isFollowed(){return followed;}
+        public String getDisposition(){return disposition;} public int getObservationCount(){return observationCount;}
+        public int getOpenObservationCount(){return openObservationCount;} public int getResearchRunCount(){return researchRunCount;}
+        public int getUnreadNotificationCount(){return unreadNotificationCount;}
     }
 
     public static final class SignalView {
@@ -177,6 +199,8 @@ public final class ResearchRadarView {
         private final List<EvidenceView> evidence;
         private final List<AgentTraceView> agentTrace;
         private final InterpretationView interpretation;
+        private final RadarEventWorkspace.State workspaceState;
+        private final List<RadarEventWorkspace.Observation> observations;
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links) {
             this(event,signals,links,Collections.<RadarEvidence>emptyList(),Collections.<AgentRun>emptyList());
         }
@@ -187,6 +211,12 @@ public final class ResearchRadarView {
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
                            List<RadarEvidence> evidence, List<AgentRun> traces,
                            RadarEventInterpretation interpretation) {
+            this(event,signals,links,evidence,traces,interpretation,null,Collections.<RadarEventWorkspace.Observation>emptyList());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
+                           List<RadarEventWorkspace.Observation> observations) {
             this.event = new EventCard(event); Map<Long,RadarEventSignal> bySignal=new LinkedHashMap<Long,RadarEventSignal>();
             for (RadarEventSignal link:links) bySignal.put(link.getSignalId(),link);
             List<SignalView> values=new ArrayList<SignalView>(); for(RadarSignal signal:signals) values.add(new SignalView(signal,bySignal.get(signal.getId())));
@@ -198,10 +228,14 @@ public final class ResearchRadarView {
             if(traces!=null)for(AgentRun trace:traces)traceViews.add(new AgentTraceView(trace));
             this.agentTrace=Collections.unmodifiableList(traceViews);
             this.interpretation=interpretation==null?null:new InterpretationView(interpretation);
+            this.workspaceState=workspaceState;
+            this.observations=immutable(observations);
         }
         public EventCard getEvent(){return event;} public List<SignalView> getSignals(){return signals;}
         public List<EvidenceView> getEvidence(){return evidence;} public List<AgentTraceView> getAgentTrace(){return agentTrace;}
         public InterpretationView getInterpretation(){return interpretation;}
+        public RadarEventWorkspace.State getWorkspaceState(){return workspaceState;}
+        public List<RadarEventWorkspace.Observation> getObservations(){return observations;}
     }
 
     public static final class InterpretationView {

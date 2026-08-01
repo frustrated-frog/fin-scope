@@ -7,6 +7,7 @@ import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.agent.AgentRun;
@@ -23,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 class ResearchRadarServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 7, 31, 16, 0);
@@ -95,6 +99,29 @@ class ResearchRadarServiceTest {
         assertEquals(1, view.getEvents().size());
         assertTrue(view.getWarnings().get(0).contains("最近一次"));
         assertTrue(view.getLiveItems().isEmpty());
+    }
+
+    @Test
+    void loadsWorkspaceSummariesOnceForBothRadarLists() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        when(news.load("ALL", 100)).thenThrow(new IllegalStateException("upstream unavailable"));
+        RadarEvent saved = new RadarEvent(); saved.setId(9L); saved.setCanonicalTitle("已有事件");
+        saved.setPriorityScore(60); saved.setLastSeenAt(NOW.minusMinutes(5));
+        when(repository.findRanked("ALL", false, 20)).thenReturn(Collections.singletonList(saved));
+        RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(9L);
+        summary.setFollowed(true); summary.setOpenObservationCount(2);
+        Map<Long, RadarEventWorkspace.Summary> values = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();
+        values.put(9L, summary); when(workspace.summaries(Collections.singletonList(9L))).thenReturn(values);
+
+        ResearchRadarView view = service.load("ALL", false, 20);
+
+        assertTrue(view.getEvents().get(0).isFollowed());
+        assertEquals(2, view.getEvents().get(0).getOpenObservationCount());
+        verify(workspace, times(1)).summaries(Collections.singletonList(9L));
     }
 
     @Test
