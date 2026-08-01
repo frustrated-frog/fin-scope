@@ -41,6 +41,7 @@ test('scopes the market-glass visual system to the watchlist page', () => {
   expect(styles).toMatch(
     /\.watchlist-page\s+\.watchlist-card\s*{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*18px;[^}]*box-shadow:/s
   );
+  expect(styles).toMatch(/\.watchlist-group\s+\.watchlist-grid\s*{[^}]*padding:\s*14px;/s);
   expect(styles).toMatch(/\.watchlist-page\s+\.watchlist-card::before\s*{/s);
   expect(styles).toMatch(/@media\s*\(prefers-reduced-transparency:\s*reduce\)[\s\S]*\.watchlist-page\s+\.watchlist-card/s);
   expect(styles).toMatch(/@media\s*\(prefers-contrast:\s*more\)[\s\S]*\.watchlist-page\s+\.watchlist-card/s);
