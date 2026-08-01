@@ -167,25 +167,25 @@ git push
 - Modify: `docs/superpowers/specs/2026-08-01-agent-investment-methods-design.md`
 - Modify: `docs/superpowers/plans/2026-08-02-agent-investment-methods.md`
 
-- [ ] **Step 1: 运行服务模块回归**
+- [x] **Step 1: 运行服务模块回归**
 
 Run: `cd backend && mvn -pl finscope-service -am test`
 
 Expected: BUILD SUCCESS，0 failures/errors。
 
-- [ ] **Step 2: 运行全部后端测试**
+- [x] **Step 2: 运行全部后端测试**
 
 Run: `cd backend && mvn test`
 
 Expected: BUILD SUCCESS，0 failures/errors。
 
-- [ ] **Step 3: 检查工作树与敏感信息**
+- [x] **Step 3: 检查工作树与敏感信息**
 
 Run: `git diff --check && git status --short && git diff --cached --check`
 
 Expected: 无空白错误；只有本功能明确修改的文件；配置中的固定密钥没有被读取、打印或移动。
 
-- [ ] **Step 4: 更新计划状态并提交推送**
+- [x] **Step 4: 更新计划状态并提交推送**
 
 将已执行步骤改为 `[x]`，在设计文档分阶段实施处标记第一阶段实际落地范围，不写未经验证的完成声明。
 
