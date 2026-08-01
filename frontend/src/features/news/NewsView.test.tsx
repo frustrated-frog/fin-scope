@@ -29,6 +29,13 @@ const event = {
   changeType: 'MULTI_SOURCE',
   changeSummary: '新增独立来源确认同一事件',
   interpretationStatus: 'SUCCESS',
+  read: false,
+  followed: false,
+  disposition: 'ACTIVE',
+  observationCount: 1,
+  openObservationCount: 1,
+  researchRunCount: 1,
+  unreadNotificationCount: 0,
   suggestedResearchQuestion: '围绕“宁德时代发布新一代电池”，哪些事实已经确认，后续应重点观察什么？',
   lastSeenAt: '2026-07-31T15:55:00'
 };
@@ -62,6 +69,11 @@ const detail = {
   agentTrace: [
     { nodeName: 'radar-evidence-plan', status: 'SUCCESS', summary: 'actions=2', durationMs: 920, fallbackUsed: false }
   ],
+  workspaceState: { eventId: 10, read: true, followed: false, disposition: 'ACTIVE', readAt: '2026-07-31T16:01:00' },
+  observations: [{ id: 51, eventId: 10, content: '观察公司正式公告', status: 'OPEN', source: 'SYSTEM', createdAt: '2026-07-31T16:01:00' }],
+  timeline: [{ id: 61, eventId: 10, eventType: 'SIGNAL', title: '新增来源消息', summary: '同花顺补充量产信息', occurredAt: '2026-07-31T15:55:00' }],
+  trust: { independentSourceCount: 3, sourceTierCounts: { TIER_1: 3 }, citationCoveredCount: 2, citationTotalCount: 2, concentration: '来源较分散', conflicts: [], limitation: '仅基于当前已收集证据' },
+  researchLinks: [{ id: 71, eventId: 10, researchRunId: 41, questionSnapshot: '量产节奏是否兑现？', status: 'SUCCESS', summary: '量产仍需跟踪', createdAt: '2026-07-31T16:02:00' }],
   interpretation: {
     id: 41, eventId: 10, status: 'SUCCESS', stale: false, durationMs: 1280,
     result: {
@@ -100,6 +112,8 @@ beforeEach(() => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
+    if (path === '/api/research-radar/events/10/state') return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
+    if (path === '/api/research-radar/notifications?limit=30') return Promise.resolve({ items: [], unreadCount: 0, todayCount: 0 });
     return Promise.resolve(snapshot);
   });
 });
@@ -207,6 +221,7 @@ test('loads original signals only when the user opens the interpretation drawer'
 
   expect(await screen.findByRole('dialog', { name: event.title })).toBeInTheDocument();
   expect(screen.getByText('3 个独立来源共同报道')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '证据' }));
   expect(screen.getByText('同花顺')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10');
 });
@@ -217,10 +232,30 @@ test('shows external evidence and a sanitized agent trace without prompts', asyn
   await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
 
   expect(await screen.findByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: '证据' }));
   expect(screen.getByRole('link', { name: '深交所公告' })).toBeInTheDocument();
   expect(screen.getByText('证据规划')).toBeInTheDocument();
   expect(screen.getByText(/actions=2/)).toBeInTheDocument();
   expect(screen.queryByText(/完整提示词/)).not.toBeInTheDocument();
+});
+
+test('keeps tracking details behind explicit dossier tabs', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar(); await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
+  await userEvent.click(await screen.findByRole('button', { name: '事件脉络' }));
+  expect(await screen.findByText('新增来源消息')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '证据' }));
+  expect(screen.getByText('2/2')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '跟踪' }));
+  expect(screen.getByText('观察公司正式公告')).toBeInTheDocument();
+  expect(screen.getByText('研究运行 #41')).toBeInTheDocument();
+});
+
+test('does not load reminders until the user opens them', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />); await openRadar();
+  expect(api).not.toHaveBeenCalledWith('/api/research-radar/notifications?limit=30');
+  await userEvent.click(screen.getByRole('button', { name: /关注提醒/ }));
+  expect(api).toHaveBeenCalledWith('/api/research-radar/notifications?limit=30');
 });
 
 test('research action only hands the suggested question to the parent', async () => {

@@ -4,7 +4,9 @@ import { api } from '../../shared/api/client';
 import { LiveNewsPanel } from './LiveNewsPanel';
 import { RadarEventCard } from './RadarEventCard';
 import { RadarEventDetailDrawer } from './RadarEventDetailDrawer';
-import type { RadarEvent, ResearchRadarSnapshot } from './researchRadarTypes';
+import { RadarStateFilters, matchesRadarState } from './RadarStateFilters';
+import { RadarNotificationPanel } from './RadarNotificationPanel';
+import type { RadarEvent, RadarStateFilter, RadarWorkspaceState, ResearchRadarSnapshot } from './researchRadarTypes';
 
 type NewsCategory = { code: string; name: string; enabled?: boolean; displayOrder?: number };
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
@@ -39,6 +41,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedEvent, setSelectedEvent] = useState<RadarEvent>();
   const [query, setQuery] = useState('');
+  const [stateFilter,setStateFilter]=useState<RadarStateFilter>('ALL');
   const [loading, setLoading] = useState(true);
   const mounted = useRef(true);
   const snapshotRef = useRef<ResearchRadarSnapshot>();
@@ -72,6 +75,14 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
     setSelectedEvent(undefined); setLoading(true); void load(false, code);
   }
 
+  function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const updated={...current,events:current.events.map((item)=>item.id===next.id?next:item),latestChanges:current.latestChanges?.map((item)=>item.id===next.id?next:item)};snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
+  function openEvent(item:RadarEvent){const next={...item,read:true};replaceEvent(next);setSelectedEvent(next);}
+  async function updateState(item:RadarEvent,patch:{followed?:boolean;disposition?:'ACTIVE'|'LATER'|'IGNORED'}){
+    try{const state=await api<RadarWorkspaceState>(`/api/research-radar/events/${item.id}/state`,{method:'PATCH',body:JSON.stringify(patch)});replaceEvent({...item,read:state.read,followed:state.followed,disposition:state.disposition});addToast('事件处理状态已更新','success');}
+    catch(error){addToast(error instanceof Error?error.message:'事件状态更新失败','error');}
+  }
+  function openNotificationEvent(eventId:number){const item=snapshotRef.current?.events.find((value)=>value.id===eventId);if(item)openEvent(item);}
+
   useEffect(() => {
     mounted.current = true; void load();
     void api<NewsCategory[]>('/api/news/categories').then((values) => {
@@ -84,9 +95,9 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   }, []);
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const events = useMemo(() => (snapshot?.events ?? []).filter((event) =>
+  const events = useMemo(() => (snapshot?.events ?? []).filter((event) => matchesRadarState(event,stateFilter)).filter((event) =>
     !normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery)
-  ), [normalizedQuery, snapshot]);
+  ), [normalizedQuery, snapshot,stateFilter]);
   const latestChanges = useMemo(() => (snapshot?.latestChanges ?? snapshot?.events ?? []).filter((event) =>
     !normalizedQuery || `${event.title} ${event.summary} ${event.changeSummary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
@@ -122,6 +133,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
         <article><span>与我相关</span><strong>{snapshot?.overview.watchlistRelatedCount ?? 0}</strong></article>
         <label className="news-search"><span>检索</span><input type="search" aria-label="搜索资讯" placeholder="搜索公司、行业或事件" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       </div>
+      <div className="radar-work-rail"><RadarStateFilters value={stateFilter} events={snapshot?.events??[]} onChange={setStateFilter}/><RadarNotificationPanel hint={(snapshot?.events??[]).reduce((sum,item)=>sum+(item.unreadNotificationCount??0),0)} onOpenEvent={openNotificationEvent}/></div>
 
       {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台刷新，当前展示最近一次结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
 
@@ -130,7 +142,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
           <div className="news-section-heading"><div><span>01 · CHANGE TAPE</span><h2 id="radar-latest-heading">最新变化</h2></div><strong>{latestChanges.length} 件</strong></div>
           {loading && !snapshot ? <NewsSkeleton /> : latestChanges.length ? (
             <div className="radar-change-tape">{latestChanges.map((item) => (
-              <button type="button" className="radar-change-item" key={item.id} onClick={() => setSelectedEvent(item)}>
+              <button type="button" className="radar-change-item" key={item.id} onClick={() => openEvent(item)}>
                 <div><span>{changeTypeLabel(item.changeType)}</span><time dateTime={item.lastSeenAt}>{formatTime(item.lastSeenAt)}</time></div>
                 <strong>{item.title}</strong>
                 <p>{item.changeSummary || item.summary}</p>
@@ -140,10 +152,10 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
         </section>
         <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
           <div className="news-section-heading"><div><span>02 · RESEARCH FIRST</span><h2 id="radar-focus-heading">高优先级事件</h2></div><strong>{events.length} 件</strong></div>
-          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} onResearch={onResearch} onOpen={setSelectedEvent} />)}</div> : <EmptyState label="暂时没有匹配的聚合事件" />}
+          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} onResearch={onResearch} onOpen={openEvent} onStateChange={(target,patch)=>void updateState(target,patch)} />)}</div> : <EmptyState label="当前筛选下没有事件" />}
         </section>
       </div>
-      {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)} /> : null}
+      {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)} onEventChange={replaceEvent} /> : null}
     </section>
   );
 }

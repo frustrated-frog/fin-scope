@@ -1,9 +1,10 @@
 import type { RadarEvent } from './researchRadarTypes';
 
-export function RadarEventCard({ event, onResearch, onOpen }: {
+export function RadarEventCard({ event, onResearch, onOpen, onStateChange }: {
   event: RadarEvent;
   onResearch?: (eventId: number, question: string) => void;
   onOpen: (event: RadarEvent) => void;
+  onStateChange?: (event: RadarEvent, patch: { followed?: boolean; disposition?: 'ACTIVE' | 'LATER' | 'IGNORED' }) => void;
 }) {
   const reasons = event.reasons.filter((reason) => reason !== event.watchlistExplanation);
 
@@ -17,6 +18,8 @@ export function RadarEventCard({ event, onResearch, onOpen }: {
           <div className="radar-event-badges">
             <span className="radar-recommendation">{event.recommendation}</span>
             {event.interpretationStatus === 'SUCCESS' ? <span className="radar-interpretation-ready">已有解读</span> : null}
+            {!event.read ? <span className="radar-event-unread">未读</span> : null}
+            {event.followed ? <span className="radar-event-followed">关注中</span> : null}
           </div>
           <time dateTime={event.lastSeenAt}>{formatTime(event.lastSeenAt)}</time>
         </div>
@@ -31,6 +34,11 @@ export function RadarEventCard({ event, onResearch, onOpen }: {
         <div className="radar-event-actions">
           <button type="button" className="ghost-button" onClick={() => onOpen(event)}>查看解读</button>
           <button type="button" className="secondary-button" onClick={() => onResearch?.(event.id, event.suggestedResearchQuestion)}>围绕此事研究</button>
+        </div>
+        <div className="radar-event-disposition">
+          <button type="button" aria-pressed={Boolean(event.followed)} onClick={() => onStateChange?.(event,{followed:!event.followed})}>{event.followed?'取消关注':'关注变化'}</button>
+          <button type="button" aria-pressed={event.disposition==='LATER'} onClick={() => onStateChange?.(event,{disposition:event.disposition==='LATER'?'ACTIVE':'LATER'})}>{event.disposition==='LATER'?'移回进行中':'稍后看'}</button>
+          <button type="button" onClick={() => onStateChange?.(event,{disposition:'IGNORED'})}>忽略</button>
         </div>
       </div>
     </article>
