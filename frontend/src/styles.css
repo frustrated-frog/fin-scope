@@ -7951,28 +7951,42 @@ input[type="checkbox"] {
 }
 
 .research-finding-lane {
+  --finding-tone: color-mix(in srgb, var(--muted) 55%, var(--line));
   display: flex;
   min-width: 0;
-  min-height: 170px;
+  min-height: 220px;
   flex-direction: column;
-  padding: 15px;
+  padding: 17px;
   border: 1px solid var(--line);
-  border-top: 2px solid color-mix(in srgb, var(--muted) 55%, var(--line));
+  border-top: 3px solid var(--finding-tone);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--finding-tone) 5%, transparent), transparent 70px),
+    color-mix(in srgb, var(--surface-2) 84%, transparent);
 }
 
-.research-finding-lane.support { border-top-color: #62c58b; }
-.research-finding-lane.counter { border-top-color: #d78373; }
-.research-finding-lane.unknown { border-top-color: #d7aa5b; }
+.research-finding-lane.support { --finding-tone: #62c58b; }
+.research-finding-lane.counter { --finding-tone: #d78373; }
+.research-finding-lane.unknown { --finding-tone: #d7aa5b; }
 .research-finding-lane header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .research-finding-lane header > div { display: grid; gap: 3px; }
+.research-finding-lane header strong { font-size: 14px; letter-spacing: -.01em; }
 .research-finding-lane header span { color: var(--muted); font-size: 11px; }
-.research-finding-lane header small { display: grid; min-width: 24px; height: 24px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); font-size: 10px; }
-.research-finding-lane ul { display: grid; gap: 8px; margin: 14px 0 0; padding: 0 0 0 16px; }
-.research-finding-lane li { color: color-mix(in srgb, var(--ink) 88%, var(--muted)); font-size: 12px; line-height: 1.55; }
+.research-finding-lane header small { display: grid; min-width: 26px; height: 26px; place-items: center; border: 1px solid color-mix(in srgb, var(--finding-tone) 35%, var(--line)); border-radius: 50%; color: color-mix(in srgb, var(--finding-tone) 72%, var(--ink)); font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.research-finding-lane ul { display: grid; gap: 9px; margin: 15px 0 0; padding: 0; list-style: none; }
+.research-finding-lane li { min-width: 0; }
+.research-finding-card { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 11px 12px 11px 10px; border: 1px solid color-mix(in srgb, var(--finding-tone) 15%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--surface) 72%, transparent); }
+.research-finding-marker { display: grid; width: 20px; height: 20px; place-items: center; margin-top: 1px; border-radius: 5px; background: color-mix(in srgb, var(--finding-tone) 14%, transparent); color: color-mix(in srgb, var(--finding-tone) 82%, var(--ink)); font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.research-finding-summary { margin: 0; color: color-mix(in srgb, var(--ink) 92%, var(--muted)); font-size: 12px; font-weight: 650; line-height: 1.65; text-wrap: pretty; }
+.research-finding-summary.is-unreadable { color: var(--muted); font-weight: 600; }
+.research-finding-disclosure { margin-top: 8px; }
+.research-finding-disclosure summary { width: max-content; cursor: pointer; color: color-mix(in srgb, var(--finding-tone) 72%, var(--ink)); font-size: 10px; font-weight: 750; list-style: none; }
+.research-finding-disclosure summary::-webkit-details-marker { display: none; }
+.research-finding-disclosure summary::after { display: inline-block; margin-left: 5px; content: '↘'; font-size: 9px; transition: transform 140ms ease; }
+.research-finding-disclosure[open] summary::after { transform: rotate(180deg); }
+.research-finding-disclosure > p { max-height: 210px; overflow: auto; margin: 9px 0 0; padding: 9px 10px; border-left: 1px solid color-mix(in srgb, var(--finding-tone) 42%, var(--line)); background: color-mix(in srgb, var(--surface-2) 74%, transparent); color: var(--muted); font-size: 10px; line-height: 1.65; white-space: normal; }
 .research-finding-empty { margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
-.research-finding-remainder { margin-top: auto; padding-top: 12px; color: var(--muted); font-size: 11px; }
+.research-finding-remainder { margin-top: auto; padding-top: 13px; color: color-mix(in srgb, var(--finding-tone) 62%, var(--muted)); font-size: 10px; font-weight: 700; }
 
 .research-decision-meta {
   display: flex;

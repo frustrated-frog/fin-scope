@@ -184,6 +184,66 @@ test('limits each evidence lane to two findings and reports the remainder', asyn
   expect(screen.getByText('另有 1 条')).toBeInTheDocument();
 });
 
+test('presents noisy evidence as a concise finding with expandable source text', async () => {
+  const detail = thesisDetail();
+  detail.findings[0] = finding(1, 'SUPPORT',
+    '本报告最后部分的分析师披露、商业关系披露和免责声明为报告的一部分，必须阅读。'
+    + '下载本公司研究报告。## 核心结论 **2025 年营收同比增长 17%，经营现金流同步改善。** '
+    + '后续仍需复核订单与产能利用率。');
+  stubThesisDetail(detail);
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
+  await screen.findByRole('region', { name: '命题决策摘要' });
+
+  expect(screen.getByText('2025 年营收同比增长 17%，经营现金流同步改善。')).toHaveClass('research-finding-summary');
+  const disclosure = screen.getByText('展开证据原文').closest('details');
+  expect(disclosure).not.toHaveAttribute('open');
+  await userEvent.click(screen.getByText('展开证据原文'));
+  expect(disclosure).toHaveAttribute('open');
+});
+
+test('skips filing boilerplate and promotes the first decision-useful metric', async () => {
+  const detail = thesisDetail();
+  detail.findings[4] = finding(5, 'UNKNOWN',
+    '四、报告期内在指定网站公开披露过的所有公司文件的正本及公告原稿。'
+    + '以上备查文件的备置地点为公司住所。'
+    + '营业收入同比增长 22.01%，但归母净利润仍待下一披露期确认。');
+  stubThesisDetail(detail);
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
+  await screen.findByRole('region', { name: '命题决策摘要' });
+
+  expect(screen.getByText('营业收入同比增长 22.01%，但归母净利润仍待下一披露期确认。')).toHaveClass('research-finding-summary');
+});
+
+test('removes research-download navigation before presenting a useful claim', async () => {
+  const detail = thesisDetail();
+  detail.findings[0] = finding(1, 'SUPPORT',
+    '下载本公司之研究报告，可从彭博搜寻 NH BCM 或登录研究部网站 交银国际研究 财务模型更新 '
+    + '宁德时代全年业绩超预期，盈利维持韧性。');
+  stubThesisDetail(detail);
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
+  await screen.findByRole('region', { name: '命题决策摘要' });
+
+  expect(screen.getByText('交银国际研究 财务模型更新 宁德时代全年业绩超预期，盈利维持韧性。')).toHaveClass('research-finding-summary');
+});
+
+test('marks filing-only material as unreadable instead of presenting boilerplate as a finding', async () => {
+  const detail = thesisDetail();
+  detail.findings[4] = finding(5, 'UNKNOWN', '二、载有公司负责人、主管会计工作负责人签名并盖章的财务报表。');
+  stubThesisDetail(detail);
+  renderView(legacyDetail(), { theses: [thesis()] });
+
+  await userEvent.click(screen.getAllByRole('button', { name: /半导体设备/ }).find((button) => button.classList.contains('research-thesis-card'))!);
+  await screen.findByRole('region', { name: '命题决策摘要' });
+
+  expect(screen.getByText('原始材料未形成可读判断，请展开核对证据。')).toHaveClass('research-finding-summary', 'is-unreadable');
+});
+
 test('keeps sources and traces collapsed and limits the expanded source preview', async () => {
   renderView(detailWithSources());
 

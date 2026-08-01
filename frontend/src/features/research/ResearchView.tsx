@@ -13,6 +13,7 @@ import {
   presentThesisStage,
   summarizeResearchDiagnostics
 } from './researchPresentation';
+import { presentFinding } from './findingPresentation';
 
 export function ResearchView({
   initialQuestion,
@@ -681,7 +682,25 @@ function FindingLane({
         <small>{lane.total}</small>
       </header>
       {lane.items.length ? (
-        <ul>{lane.items.map((finding) => <li key={finding.id}>{finding.summary}</li>)}</ul>
+        <ul>{lane.items.map((finding, index) => {
+          const presented = presentFinding(finding.summary);
+          return (
+            <li key={finding.id}>
+              <article className="research-finding-card">
+                <span className="research-finding-marker" aria-hidden="true">{index + 1}</span>
+                <div>
+                  <p className={`research-finding-summary${presented.readable ? '' : ' is-unreadable'}`}>{presented.summary}</p>
+                  {presented.expandable && (
+                    <details className="research-finding-disclosure">
+                      <summary>展开证据原文</summary>
+                      <p>{presented.fullText}</p>
+                    </details>
+                  )}
+                </div>
+              </article>
+            </li>
+          );
+        })}</ul>
       ) : <p className="research-finding-empty">{empty}</p>}
       {lane.remaining > 0 && <span className="research-finding-remainder">另有 {lane.remaining} 条</span>}
     </section>
