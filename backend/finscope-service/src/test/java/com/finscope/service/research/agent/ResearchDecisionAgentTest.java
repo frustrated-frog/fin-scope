@@ -1,10 +1,13 @@
 package com.finscope.service.research.agent;
 
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -39,6 +42,36 @@ class ResearchDecisionAgentTest {
         assertEquals("COUNTER", result.getArguments().get("intent"));
         assertNull(result.getFallbackReason());
         verify(llm).complete(anyString(), anyString(), eq(20000), eq(1200));
+    }
+
+    @Test
+    void rebuildsToolAndArgumentsFromTheMissionTaskSelectedByModel() throws Exception {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        ResearchMissionTask baseline = task("baseline_scan", "source_scan", "BASELINE", "COMPLETED", null,
+                Collections.<String>emptyList());
+        ResearchMissionTask counter = task("search_counter", "public_news_search", "COUNTER", "PENDING",
+                "宁德时代 资本开支 风险 下调 延迟 反方证据", Collections.singletonList("baseline_scan"));
+        context.setTasks(Arrays.asList(baseline, counter));
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn("{"
+                + "\"decisionType\":\"TOOL_CALL\","
+                + "\"currentSubgoal\":\"补齐反方证据\","
+                + "\"missionTaskKey\":\"search_counter\","
+                + "\"toolCode\":\"research_material_search\","
+                + "\"arguments\":{\"stockCode\":\"300750\",\"materialType\":\"ANNOUNCEMENT\",\"query\":\"风险\"},"
+                + "\"targetGap\":\"缺少反方证据\","
+                + "\"expectedObservation\":\"获得独立反方来源\","
+                + "\"decisionSummary\":\"选择计划中的反方任务\","
+                + "\"confidence\":0.83}");
+
+        ResearchDecisionResult result = agent.decide(context);
+
+        assertEquals("MODEL", result.getDecision().getDecisionMode());
+        assertEquals("search_counter", result.getDecision().getMissionTaskKey());
+        assertEquals("public_news_search", result.getDecision().getToolCode());
+        assertEquals("宁德时代 资本开支 风险 下调 延迟 反方证据", result.getArguments().get("query"));
+        assertEquals("COUNTER", result.getArguments().get("intent"));
+        assertNull(result.getFallbackReason());
     }
 
     @Test
@@ -125,5 +158,24 @@ class ResearchDecisionAgentTest {
                 + "\"expectedObservation\":\"获得独立反方来源\","
                 + "\"decisionSummary\":\"当前材料单边，优先验证反方事实\","
                 + "\"confidence\":0.83} ";
+    }
+
+    private ResearchMissionTask task(String key,
+                                     String tool,
+                                     String intent,
+                                     String status,
+                                     String query,
+                                     java.util.List<String> dependencies) {
+        ResearchMissionTask value = new ResearchMissionTask();
+        value.setTaskKey(key);
+        value.setTitle("反方证据搜索");
+        value.setToolCode(tool);
+        value.setIntent(intent);
+        value.setStatus(status);
+        value.setQueryText(query);
+        value.setRationale("补齐反方证据");
+        value.setExpectedEvidence("获得独立反方来源");
+        value.setDependencies(dependencies);
+        return value;
     }
 }
