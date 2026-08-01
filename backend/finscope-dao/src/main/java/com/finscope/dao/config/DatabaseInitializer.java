@@ -219,6 +219,40 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_interpretation_event "
                 + "ON radar_event_interpretation(event_id,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_user_state("
+                + "event_id INTEGER PRIMARY KEY,read_at TEXT,followed INTEGER NOT NULL DEFAULT 0,"
+                + "disposition TEXT NOT NULL DEFAULT 'ACTIVE',last_viewed_fingerprint TEXT,updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_user_state_filter "
+                + "ON radar_event_user_state(disposition,followed,read_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_observation("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,content TEXT NOT NULL,"
+                + "normalized_content TEXT NOT NULL,status TEXT NOT NULL,source TEXT NOT NULL,created_at TEXT NOT NULL,"
+                + "completed_at TEXT,updated_at TEXT NOT NULL,UNIQUE(event_id,normalized_content,source),"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_observation_event "
+                + "ON radar_event_observation(event_id,status,created_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_timeline("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,event_fingerprint TEXT NOT NULL,"
+                + "event_type TEXT NOT NULL,title TEXT NOT NULL,summary TEXT,reference_type TEXT,reference_id INTEGER,"
+                + "occurred_at TEXT NOT NULL,created_at TEXT NOT NULL,"
+                + "UNIQUE(event_id,event_fingerprint,event_type,reference_type,reference_id),"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_timeline_event "
+                + "ON radar_event_timeline(event_id,occurred_at DESC,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_research_link("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,research_run_id INTEGER NOT NULL,"
+                + "question_snapshot TEXT,created_at TEXT NOT NULL,UNIQUE(event_id,research_run_id),"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_research_link_event "
+                + "ON radar_event_research_link(event_id,created_at DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_notification("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER,notification_type TEXT NOT NULL,"
+                + "fingerprint TEXT NOT NULL,title TEXT NOT NULL,message TEXT,read_at TEXT,created_at TEXT NOT NULL,"
+                + "UNIQUE(notification_type,fingerprint),"
+                + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_notification_unread "
+                + "ON radar_event_notification(read_at,created_at DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brief ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "brief_date TEXT NOT NULL UNIQUE,"
