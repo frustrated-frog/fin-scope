@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -22,6 +22,19 @@ test('renders a real evidence-to-judgment thread without inventing steps', () =>
   expect(screen.getByText('待回答问题')).toBeInTheDocument();
   expect(screen.getByText('我的回答')).toBeInTheDocument();
   expect(screen.getByText('资料来源')).toBeInTheDocument();
+});
+
+test('renders markdown conclusions as structured reading content', () => {
+  render(<TopicWorkspace workspace={{
+    ...workspace,
+    entries: [{ ...workspace.entries[0], contentMarkdown: '## 投资命题\n景气度回升。\n\n- 跟踪营收' }]
+  }} onBack={vi.fn()} onReview={vi.fn()} />);
+
+  expect(screen.getByRole('heading', { name: '投资命题' })).toBeInTheDocument();
+  expect(screen.getAllByText('景气度回升。').length).toBeGreaterThan(0);
+  expect(screen.getAllByRole('list').length).toBeGreaterThan(0);
+  const currentJudgment = screen.getByRole('heading', { name: '当前判断' }).closest('section') as HTMLElement;
+  expect(within(currentJudgment).queryByText(/## 投资命题/)).not.toBeInTheDocument();
 });
 
 test('compares the current conclusion with evidence and schedules next review', async () => {

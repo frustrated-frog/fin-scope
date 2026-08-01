@@ -2787,6 +2787,18 @@ a:focus-visible {
 .topic-review-editor h3 { margin: 0; font-family: "Iowan Old Style", "Songti SC", STSong, serif; font-size: 23px; }
 .topic-current-judgment > p:last-child { margin: 10px 0 0; font-size: 15px; line-height: 1.8; }
 
+.knowledge-markdown { color: var(--knowledge-ink); font-size: 15px; line-height: 1.8; }
+.knowledge-markdown > :first-child { margin-top: 0; }
+.knowledge-markdown > :last-child { margin-bottom: 0; }
+.knowledge-markdown > h4 { margin: 19px 0 6px; font-family: "Iowan Old Style", "Songti SC", STSong, serif; font-size: 17px; line-height: 1.45; }
+.knowledge-markdown > p { margin: 10px 0 0; }
+.knowledge-markdown > ul,
+.knowledge-markdown > ol { margin: 10px 0 0; padding-left: 1.35em; }
+.knowledge-markdown > li + li { margin-top: 3px; }
+.topic-current-judgment > .knowledge-markdown { margin-top: 10px; }
+.topic-review-compare .knowledge-markdown { margin-top: 8px; font-size: 14px; line-height: 1.65; }
+.topic-review-compare .knowledge-markdown > h4 { margin-top: 14px; font-size: 15px; }
+
 .knowledge-thread { position: relative; display: grid; gap: 0; margin: 24px 0 0; padding: 0; list-style: none; }
 .knowledge-thread::before { content: ""; position: absolute; top: 14px; bottom: 20px; left: 7px; width: 1px; background: var(--knowledge-rule); }
 .knowledge-thread li { position: relative; display: grid; grid-template-columns: 16px 1fr; gap: 16px; padding: 0 0 24px; }
