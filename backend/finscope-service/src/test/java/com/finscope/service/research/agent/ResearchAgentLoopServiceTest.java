@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -101,7 +102,8 @@ class ResearchAgentLoopServiceTest {
         when(missionService.assess(eq(66L), anyString())).thenReturn(sufficientGap());
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
-                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService,
+                        missionService),
                 new ResearchAgentStateReducer(agents),
                 finishVerifier, missionService, runtimeService);
 
@@ -115,6 +117,8 @@ class ResearchAgentLoopServiceTest {
         verify(runtimeService).completeNode(eq(66L), anyString(), eq("next-state"), eq(2),
                 eq("first-observation-added-counter-evidence"));
         verify(missionService).assess(eq(66L), anyString());
+        verify(missionService).recordAgentToolResult(eq(66L), any(ResearchAgentDecision.class),
+                any(ResearchToolObservation.class));
     }
 
     @Test

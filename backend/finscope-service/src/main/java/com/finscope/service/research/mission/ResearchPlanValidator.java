@@ -79,6 +79,7 @@ public class ResearchPlanValidator {
 
         List<ResearchMissionTaskDraft> sorted = topologicalSort(byKey);
         requireContractTasks(sorted);
+        requireMethodTasks(draft, sorted);
         draft.setTasks(sorted);
         return draft;
     }
@@ -225,6 +226,18 @@ public class ResearchPlanValidator {
         }
         if (baseline != 1 || support < 1 || counter < 1 || assess != 1 || synthesis != 1) {
             throw invalid("计划必须包含基线、支持、反方、证据判断和报告合成任务");
+        }
+    }
+
+    private void requireMethodTasks(ResearchMissionDraft draft, List<ResearchMissionTaskDraft> tasks) {
+        Set<String> plannedIntents = new HashSet<String>();
+        for (ResearchMissionTaskDraft task : tasks) plannedIntents.add(task.getIntent());
+        for (String code : draft.getMethodCodes()) {
+            for (String intent : methodRegistry.required(code).getRequiredIntents()) {
+                if (!plannedIntents.contains(intent)) {
+                    throw invalid("投研方法 " + code + " 缺少 " + intent + " 意图任务");
+                }
+            }
         }
     }
 

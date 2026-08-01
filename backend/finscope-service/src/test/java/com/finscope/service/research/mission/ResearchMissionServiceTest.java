@@ -3,6 +3,8 @@ package com.finscope.service.research.mission;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMethodBlueprint;
 import com.finscope.domain.research.mission.ResearchMissionTask;
@@ -96,6 +98,38 @@ class ResearchMissionServiceTest {
     }
 
     @Test
+    void recordsSuccessfulAgentToolCallAgainstMatchingMissionTask() {
+        ResearchMissionTask counter = missionTask("search_counter", "public_news_search", "COUNTER", "PENDING",
+                "宁德时代 盈利质量 风险");
+        when(repository.findTasks(21L)).thenReturn(Arrays.asList(counter));
+        when(repository.startTask(21L, "search_counter")).thenReturn(true);
+        when(repository.completeTask(21L, "search_counter", "找到独立反方证据", 2, 1)).thenReturn(true);
+        ResearchAgentDecision decision = decision("public_news_search",
+                "{\"query\":\"宁德时代 盈利质量 风险\",\"intent\":\"COUNTER\"}");
+        ResearchToolObservation observation = observation("SUCCESS", "找到独立反方证据", 2, 1);
+
+        String taskKey = service.recordAgentToolResult(21L, decision, observation);
+
+        assertEquals("search_counter", taskKey);
+        verify(repository).startTask(21L, "search_counter");
+        verify(repository).completeTask(21L, "search_counter", "找到独立反方证据", 2, 1);
+    }
+
+    @Test
+    void recordsEvidenceAssessmentAndFailedToolCallsWithTerminalTaskState() {
+        ResearchMissionTask assess = missionTask("assess_evidence", "evidence_assess", "ASSESS", "PENDING", null);
+        when(repository.findTasks(21L)).thenReturn(Arrays.asList(assess));
+        when(repository.startTask(21L, "assess_evidence")).thenReturn(true);
+        when(repository.failTask(21L, "assess_evidence", "评估失败")).thenReturn(true);
+
+        String taskKey = service.recordAgentToolResult(21L, decision("evidence_assess", "{}"),
+                observation("TERMINAL_ERROR", "评估失败", 0, 0));
+
+        assertEquals("assess_evidence", taskKey);
+        verify(repository).failTask(21L, "assess_evidence", "评估失败");
+    }
+
+    @Test
     void terminalMissionSkipsUnfinishedTasksWithRuntimeReason() {
         when(repository.updateMissionStatus(21L, "PARTIAL_SUCCESS")).thenReturn(true);
 
@@ -158,5 +192,31 @@ class ResearchMissionServiceTest {
         input.setMaxActions(12);
         input.setCurrentDate(LocalDate.of(2026, 7, 26));
         return input;
+    }
+
+    private ResearchMissionTask missionTask(String key, String tool, String intent, String status, String query) {
+        ResearchMissionTask value = new ResearchMissionTask();
+        value.setTaskKey(key);
+        value.setToolCode(tool);
+        value.setIntent(intent);
+        value.setStatus(status);
+        value.setQueryText(query);
+        return value;
+    }
+
+    private ResearchAgentDecision decision(String tool, String argumentsJson) {
+        ResearchAgentDecision value = new ResearchAgentDecision();
+        value.setToolCode(tool);
+        value.setArgumentsJson(argumentsJson);
+        return value;
+    }
+
+    private ResearchToolObservation observation(String status, String summary, int evidenceDelta, int sourceDelta) {
+        ResearchToolObservation value = new ResearchToolObservation();
+        value.setStatus(status);
+        value.setObservationSummary(summary);
+        value.setEvidenceDelta(evidenceDelta);
+        value.setSourceDelta(sourceDelta);
+        return value;
     }
 }

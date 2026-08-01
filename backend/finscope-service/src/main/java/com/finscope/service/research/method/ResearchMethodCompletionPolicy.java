@@ -48,7 +48,9 @@ public class ResearchMethodCompletionPolicy {
     private boolean hasTerminalIntent(List<ResearchMissionTask> tasks, String intent) {
         for (ResearchMissionTask task : tasks) {
             if (intent.equals(task.getIntent())
-                    && ("COMPLETED".equals(task.getStatus()) || "SKIPPED".equals(task.getStatus()))) {
+                    && ("COMPLETED".equals(task.getStatus())
+                    || ("SKIPPED".equals(task.getStatus())
+                    && "SUFFICIENT_EVIDENCE".equals(task.getSkipReason())))) {
                 return true;
             }
         }

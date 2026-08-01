@@ -1,9 +1,13 @@
 package com.finscope.service.research.mission;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMethodBlueprint;
@@ -13,12 +17,14 @@ import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.service.research.report.EvidenceSufficiency;
 import com.finscope.service.research.report.ResearchReportService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -29,6 +35,7 @@ public class ResearchMissionService {
     private final ResearchReportService reportService;
     private final ResearchEvidenceGapAnalyzer gapAnalyzer;
     private final ResearchToolRegistry toolRegistry;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ResearchMissionService(ResearchMissionRepository repository,
                                   ResearchPlanningAgent planningAgent,
@@ -109,6 +116,26 @@ public class ResearchMissionService {
 
     public void failTask(Long runId, String taskKey, String message) {
         repository.failTask(runId, taskKey, compact(message, 300));
+    }
+
+    @Transactional
+    public String recordAgentToolResult(Long runId,
+                                        ResearchAgentDecision decision,
+                                        ResearchToolObservation observation) {
+        ResearchMissionTask task = matchingTask(runId, decision);
+        if (task == null || !repository.startTask(runId, task.getTaskKey())) {
+            return null;
+        }
+        String summary = compact(observation == null ? null : observation.getObservationSummary(), 300);
+        if (isFailure(observation)) {
+            repository.failTask(runId, task.getTaskKey(), blank(summary) ? "Agent 工具执行失败" : summary);
+        } else {
+            int evidenceDelta = observation == null ? 0 : observation.getEvidenceDelta();
+            int sourceDelta = observation == null ? 0 : observation.getSourceDelta();
+            repository.completeTask(runId, task.getTaskKey(),
+                    blank(summary) ? "Agent 工具执行完成" : summary, evidenceDelta, sourceDelta);
+        }
+        return task.getTaskKey();
     }
 
     public ResearchMissionGap assess(Long runId, String afterTaskKey) {
@@ -222,6 +249,56 @@ public class ResearchMissionService {
 
     private boolean blank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private ResearchMissionTask matchingTask(Long runId, ResearchAgentDecision decision) {
+        if (decision == null || blank(decision.getToolCode())) return null;
+        Map<String, Object> arguments = parseArguments(decision.getArgumentsJson());
+        String requestedIntent = upper(arguments.get("intent"));
+        String stockCode = text(arguments.get("stockCode"));
+        String materialType = upper(arguments.get("materialType"));
+        for (ResearchMissionTask task : repository.findTasks(runId)) {
+            if (!eligible(task) || !decision.getToolCode().equals(task.getToolCode())) continue;
+            if ("public_news_search".equals(decision.getToolCode())
+                    && !requestedIntent.equals(task.getIntent())) continue;
+            if ("research_material_search".equals(decision.getToolCode())
+                    && !matchesMaterial(task, stockCode, materialType)) continue;
+            return task;
+        }
+        return null;
+    }
+
+    private Map<String, Object> parseArguments(String json) {
+        if (blank(json)) return java.util.Collections.emptyMap();
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() { });
+        } catch (Exception ignored) {
+            return java.util.Collections.emptyMap();
+        }
+    }
+
+    private boolean eligible(ResearchMissionTask task) {
+        return task != null && ("PENDING".equals(task.getStatus())
+                || "FAILED".equals(task.getStatus()) || "INTERRUPTED".equals(task.getStatus()));
+    }
+
+    private boolean matchesMaterial(ResearchMissionTask task, String stockCode, String materialType) {
+        if (blank(stockCode) || blank(materialType) || blank(task.getQueryText())) return false;
+        return task.getQueryText().startsWith(stockCode.trim() + " " + materialType.trim());
+    }
+
+    private boolean isFailure(ResearchToolObservation observation) {
+        return observation == null || "TERMINAL_ERROR".equals(observation.getStatus())
+                || "RETRYABLE_ERROR".equals(observation.getStatus())
+                || "FAILED".equals(observation.getStatus());
+    }
+
+    private String upper(Object value) {
+        return value == null ? "" : String.valueOf(value).trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private String text(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private String compact(String value, int maxLength) {

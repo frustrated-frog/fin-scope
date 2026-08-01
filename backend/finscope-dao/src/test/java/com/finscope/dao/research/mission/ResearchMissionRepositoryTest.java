@@ -88,6 +88,29 @@ class ResearchMissionRepositoryTest {
     }
 
     @Test
+    void upgradesLegacyMissionTableWithResearchMethodBlueprintColumns() throws Exception {
+        SQLiteDataSource legacyDataSource = new SQLiteDataSource();
+        legacyDataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("legacy.db"));
+        JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
+        legacyJdbc.execute("CREATE TABLE research_mission ("
+                + "research_run_id INTEGER PRIMARY KEY,goal TEXT NOT NULL,subject TEXT,"
+                + "scope_summary TEXT NOT NULL,success_criteria TEXT NOT NULL,status TEXT NOT NULL,"
+                + "planning_mode TEXT NOT NULL,plan_version INTEGER NOT NULL DEFAULT 1,"
+                + "max_actions INTEGER NOT NULL,active_task_key TEXT,fallback_reason TEXT,"
+                + "fallback_detail TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        DatabaseInitializer initializer = new DatabaseInitializer();
+        ReflectionTestUtils.setField(initializer, "jdbcTemplate", legacyJdbc);
+        ReflectionTestUtils.setField(initializer, "dataRoot", tempDir.toString());
+
+        initializer.afterPropertiesSet();
+
+        List<String> columns = legacyJdbc.queryForList("PRAGMA table_info(research_mission)").stream()
+                .map(row -> String.valueOf(row.get("name"))).collect(Collectors.toList());
+        assertTrue(columns.containsAll(Arrays.asList("research_type", "method_codes", "required_evidence",
+                "required_calculations", "counter_checks", "completion_criteria")));
+    }
+
+    @Test
     void skipsOnlyPendingSearchTasksAndKeepsCompletedTasksImmutable() {
         repository.initialize(9L, "目标", "对象", "范围", Arrays.asList("标准"), 8);
         repository.replacePlan(9L, "DETERMINISTIC", "范围", Arrays.asList("标准"), Arrays.asList(

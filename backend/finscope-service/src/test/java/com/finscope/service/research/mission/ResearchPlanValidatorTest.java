@@ -1,5 +1,8 @@
 package com.finscope.service.research.mission;
 
+import com.finscope.service.research.method.ResearchMethod;
+import com.finscope.service.research.method.ResearchMethodDefinition;
+import com.finscope.service.research.method.ResearchMethodRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -81,6 +84,37 @@ class ResearchPlanValidatorTest {
                 "evidence_assess", "ASSESS",
                 Arrays.asList("search_support", "search_counter", "search_primary")));
         assertThrows(IllegalArgumentException.class, () -> validator.validate(duplicateAssessment));
+    }
+
+    @Test
+    void rejectsSelectedMethodWhenItsRequiredIntentIsMissingFromTaskGraph() {
+        ResearchMethod breadthMethod = new ResearchMethod() {
+            @Override
+            public ResearchMethodDefinition definition() {
+                return new ResearchMethodDefinition("BREADTH_REQUIRED", "广度验证", "要求行业广度证据",
+                        Collections.singletonList("行业是否一致？"), Collections.singletonList("行业资料"),
+                        Collections.<String>emptyList(), Collections.<String>emptyList(),
+                        Collections.singletonList("完成广度验证"), Collections.singletonList("BREADTH"));
+            }
+
+            @Override
+            public boolean supports(ResearchPlanningInput input) {
+                return true;
+            }
+        };
+        ResearchPlanValidator methodValidator = new ResearchPlanValidator(new ResearchToolRegistry(),
+                new ResearchMethodRegistry(Collections.singletonList(breadthMethod)));
+        ResearchMissionDraft draft = validDraft();
+        draft.setMethodCodes(Collections.singletonList("BREADTH_REQUIRED"));
+        ResearchPlanningInput input = new ResearchPlanningInput();
+        input.setQuestion("行业是否一致？");
+        input.setSubjectName("测试行业");
+        input.setSubjectType("THEME");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> methodValidator.validate(draft, input));
+
+        assertTrue(error.getMessage().contains("缺少 BREADTH 意图任务"));
     }
 
     private ResearchMissionDraft validDraft() {

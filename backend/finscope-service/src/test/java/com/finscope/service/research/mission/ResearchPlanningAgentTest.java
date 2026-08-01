@@ -170,6 +170,11 @@ class ResearchPlanningAgentTest {
         assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
                 result.getDraft().getMethodCodes());
         assertFalse(result.getDraft().getCompletionCriteria().isEmpty());
+        assertTrue(result.getDraft().task("primary_disclosure").getQueryText().contains("经营现金流"));
+        assertTrue(result.getDraft().task("professional_context").getQueryText().contains("杜邦"));
+        assertTrue(result.getDraft().task("crosscheck_chain").getQueryText().contains("商业模式"));
+        assertTrue(result.getDraft().task("search_counter").getQueryText().contains("非经常性损益"));
+        assertTrue(result.getDraft().task("search_counter").getExpectedEvidence().contains("应收"));
     }
 
     @Test
@@ -188,6 +193,12 @@ class ResearchPlanningAgentTest {
         assertTrue(systemPrompt.get().contains("methodCodes只能使用可用投研方法中的编码"));
         assertTrue(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
         assertTrue(userPrompt.get().contains("COMPANY_QUALITY"));
+        assertTrue(userPrompt.get().contains("必查问题=[增长由收入、毛利率还是费用变化驱动？"));
+        assertTrue(userPrompt.get().contains("必需证据=[多期利润表, 资产负债表, 现金流量表"));
+        assertTrue(userPrompt.get().contains("确定性计算=[同比与环比趋势"));
+        assertTrue(userPrompt.get().contains("反证检查=[非经常性损益对利润增长的贡献"));
+        assertTrue(userPrompt.get().contains("完成条件=[覆盖利润、现金流和资产质量"));
+        assertTrue(userPrompt.get().contains("必需意图=[PRIMARY, SUPPORT, COUNTER, ASSESS]"));
         assertFalse(userPrompt.get().contains("MAGIC_STOCK_PICKING"));
     }
 

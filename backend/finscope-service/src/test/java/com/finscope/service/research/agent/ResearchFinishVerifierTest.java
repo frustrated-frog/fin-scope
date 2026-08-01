@@ -88,11 +88,33 @@ class ResearchFinishVerifierTest {
         when(reports.assessSufficiency(71L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3));
         when(missions.findMission(71L)).thenReturn(Optional.of(mission));
         when(missions.findTasks(71L)).thenReturn(Arrays.asList(
-                task("PRIMARY", "COMPLETED"), task("SUPPORT", "SKIPPED"),
+                task("PRIMARY", "COMPLETED"), task("SUPPORT", "SKIPPED", "SUFFICIENT_EVIDENCE"),
                 task("COUNTER", "COMPLETED"), task("ASSESS", "COMPLETED")));
         when(runtimes.findCheckpoint(71L)).thenReturn(Optional.of(runtime("RUNNING")));
 
         assertTrue(verifier.verify(71L).isAccepted());
+    }
+
+    @Test
+    void rejectsMethodIntentSkippedBecauseRuntimeTerminated() {
+        ResearchReportService reports = mock(ResearchReportService.class);
+        ResearchMissionRepository missions = mock(ResearchMissionRepository.class);
+        ResearchRuntimeRepository runtimes = mock(ResearchRuntimeRepository.class);
+        ResearchFinishVerifier verifier = new ResearchFinishVerifier(reports, missions, runtimes);
+        ResearchMission mission = mission(null);
+        mission.setMethodCodes(Collections.singletonList("FINANCIAL_STATEMENT_QUALITY"));
+        when(reports.assessSufficiency(71L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3));
+        when(missions.findMission(71L)).thenReturn(Optional.of(mission));
+        when(missions.findTasks(71L)).thenReturn(Arrays.asList(
+                task("PRIMARY", "COMPLETED"),
+                task("SUPPORT", "SKIPPED", "RUNTIME_TERMINATED:NO_PROGRESS"),
+                task("COUNTER", "COMPLETED"), task("ASSESS", "COMPLETED")));
+        when(runtimes.findCheckpoint(71L)).thenReturn(Optional.of(runtime("RUNNING")));
+
+        ResearchFinishVerdict verdict = verifier.verify(71L);
+
+        assertFalse(verdict.isAccepted());
+        assertEquals("METHOD_INCOMPLETE", verdict.getReasonCode());
     }
 
     private ResearchMission mission(String activeTask) {
@@ -110,9 +132,14 @@ class ResearchFinishVerifierTest {
     }
 
     private ResearchMissionTask task(String intent, String status) {
+        return task(intent, status, null);
+    }
+
+    private ResearchMissionTask task(String intent, String status, String skipReason) {
         ResearchMissionTask value = new ResearchMissionTask();
         value.setIntent(intent);
         value.setStatus(status);
+        value.setSkipReason(skipReason);
         return value;
     }
 }

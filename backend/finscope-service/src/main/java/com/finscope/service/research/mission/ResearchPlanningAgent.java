@@ -127,7 +127,13 @@ public class ResearchPlanningAgent {
         value.append("可用投研方法：\n");
         for (ResearchMethodDefinition method : methodRegistry.list()) {
             value.append("- ").append(method.getCode()).append("：").append(method.getName())
-                    .append("；").append(method.getDescription()).append('\n');
+                    .append("；").append(method.getDescription())
+                    .append("；必查问题=").append(method.getRequiredQuestions())
+                    .append("；必需证据=").append(method.getRequiredEvidence())
+                    .append("；确定性计算=").append(method.getRequiredCalculations())
+                    .append("；反证检查=").append(method.getCounterChecks())
+                    .append("；完成条件=").append(method.getCompletionCriteria())
+                    .append("；必需意图=").append(method.getRequiredIntents()).append('\n');
         }
         value.append("请生成完整研究合同和任务图。搜索queryText只写自然语言关键词，不得包含协议头。");
         return value.toString();
