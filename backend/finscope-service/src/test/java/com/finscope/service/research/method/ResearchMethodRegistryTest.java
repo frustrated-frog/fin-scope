@@ -41,6 +41,11 @@ class ResearchMethodRegistryTest {
     }
 
     @Test
+    void doesNotForceCompanyQualityMethodOntoShortTermEventResearch() {
+        assertTrue(registry.recommend(input("STOCK", "宁德时代", "今天为什么突然上涨？")).isEmpty());
+    }
+
+    @Test
     void financialMethodCarriesDeterministicEvidenceAndCounterContracts() {
         ResearchMethodDefinition method = registry.required("FINANCIAL_STATEMENT_QUALITY");
 

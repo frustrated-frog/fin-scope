@@ -27,7 +27,15 @@ public class CompanyQualityMethod implements ResearchMethod {
     @Override
     public boolean supports(ResearchPlanningInput input) {
         String type = input == null || input.getSubjectType() == null ? "" : input.getSubjectType().trim();
-        return "STOCK".equalsIgnoreCase(type) || "COMPANY".equalsIgnoreCase(type)
-                || "EQUITY".equalsIgnoreCase(type);
+        if (!("STOCK".equalsIgnoreCase(type) || "COMPANY".equalsIgnoreCase(type)
+                || "EQUITY".equalsIgnoreCase(type))) return false;
+        String text = ((input.getQuestion() == null ? "" : input.getQuestion()) + " "
+                + (input.getSubjectName() == null ? "" : input.getSubjectName())).toLowerCase();
+        String[] keywords = {"公司质量", "基本面", "商业模式", "竞争", "壁垒", "护城河", "管理层", "治理",
+                "资本配置", "长期", "成长", "盈利", "利润", "财报", "业绩", "现金流", "营收", "毛利",
+                "company quality", "fundamental", "business model", "moat", "management", "governance",
+                "earnings", "cash flow"};
+        for (String keyword : keywords) if (text.contains(keyword)) return true;
+        return false;
     }
 }
