@@ -8,6 +8,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,6 +50,20 @@ class RadarEventWorkspaceServiceTest {
     void rejectsUpdatesForMissingEvents() {
         when(radar.findEvent(99L)).thenReturn(Optional.empty());
         assertThrows(RuntimeException.class, () -> service.updateState(99L, true, true, "ACTIVE"));
+    }
+
+    @Test
+    void createsOneNotificationWhenAFollowedEventChanges() {
+        RadarEvent event = event(); event.setLastSeenAt(java.time.LocalDateTime.of(2026,8,1,18,0));
+        RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(10L);
+        summary.setFollowed(true); summary.setLastViewedFingerprint("older-version");
+        Map<Long,RadarEventWorkspace.Summary> summaries=new LinkedHashMap<Long,RadarEventWorkspace.Summary>();summaries.put(10L,summary);
+        when(workspace.createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("关注事件出现新变化"),eq("宁德时代发布新电池"))).thenReturn(true);
+
+        service.createChangeNotifications(Collections.singletonList(event),summaries);
+
+        assertEquals(1,summary.getUnreadNotificationCount());
+        verify(workspace).createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("关注事件出现新变化"),eq("宁德时代发布新电池"));
     }
 
     private RadarEvent event() {

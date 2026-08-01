@@ -14,6 +14,8 @@ import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.time.LocalDate;
 
 @Service
 public class RadarEventWorkspaceService {
@@ -36,6 +38,25 @@ public class RadarEventWorkspaceService {
                 ? Collections.<Long, RadarEventWorkspace.Summary>emptyMap() : workspace.findSummaries(eventIds);
     }
 
+    public void createChangeNotifications(List<RadarEvent> events,Map<Long,RadarEventWorkspace.Summary> summaries){
+        if(events==null||summaries==null)return;
+        for(RadarEvent event:events){RadarEventWorkspace.Summary summary=summaries.get(event.getId());
+            if(summary==null||!summary.isFollowed()||summary.getLastViewedFingerprint()==null)continue;
+            String current=fingerprint(event);if(current.equals(summary.getLastViewedFingerprint()))continue;
+            if(workspace.createNotification(event.getId(),"FOLLOWED_EVENT_CHANGED",event.getId()+":"+current,
+                    "关注事件出现新变化",text(event.getCanonicalTitle(),"事件内容已更新"))){
+                summary.setUnreadNotificationCount(summary.getUnreadNotificationCount()+1);
+            }
+        }
+    }
+
+    public NotificationCenter notifications(int limit){
+        return new NotificationCenter(workspace.findNotifications(limit),workspace.countUnreadNotifications(),
+                workspace.countNotificationsOn(LocalDate.now()));
+    }
+    public void readNotification(Long id){workspace.markNotificationRead(id);}
+    public void readAllNotifications(){workspace.markAllNotificationsRead();}
+
     public OpenedEvent open(RadarEvent event) {
         RadarEventWorkspace.State state = workspace.updateState(event.getId(), true, null, null, fingerprint(event));
         String observation = text(event.getNextObservation(), "关注事件是否出现新的独立来源、数据或正式公告");
@@ -48,7 +69,7 @@ public class RadarEventWorkspaceService {
         RadarEvent event = requireEvent(eventId);
         try {
             RadarEventWorkspace.State state = workspace.updateState(eventId, Boolean.TRUE.equals(read), normalize(disposition), followed,
-                    Boolean.TRUE.equals(read) ? fingerprint(event) : null);
+                    Boolean.TRUE.equals(read) || Boolean.TRUE.equals(followed) ? fingerprint(event) : null);
             if (followed != null) action(eventId, "followed:" + followed, "FOLLOW", followed ? "已关注事件" : "已取消关注", null, "STATE", eventId);
             if (normalize(disposition) != null) action(eventId, "disposition:" + normalize(disposition), "DISPOSITION", "处理状态已更新", normalize(disposition), "STATE", eventId);
             if (Boolean.TRUE.equals(read)) action(eventId, fingerprint(event), "READ", "已查看事件", "事件详情已读", "STATE", eventId);
@@ -119,5 +140,15 @@ public class RadarEventWorkspaceService {
         public RadarEventWorkspace.State getState() { return state; }
         public List<RadarEventWorkspace.Observation> getObservations() { return observations; }
         public List<RadarEventWorkspace.ResearchLink> getResearchLinks(){return researchLinks;}
+    }
+
+    public static final class NotificationCenter{
+        private final List<RadarEventWorkspace.Notification> items;private final int unreadCount;private final int todayCount;
+        NotificationCenter(List<RadarEventWorkspace.Notification> items,int unreadCount,int todayCount){
+            this.items=items==null?new ArrayList<RadarEventWorkspace.Notification>():new ArrayList<RadarEventWorkspace.Notification>(items);
+            this.unreadCount=unreadCount;this.todayCount=todayCount;
+        }
+        public List<RadarEventWorkspace.Notification> getItems(){return Collections.unmodifiableList(items);}
+        public int getUnreadCount(){return unreadCount;}public int getTodayCount(){return todayCount;}
     }
 }

@@ -85,4 +85,15 @@ public class ResearchRadarController {
                                                                       @RequestBody(required=false) RadarResearchLinkRequest request){
         return ApiResponses.success(researchLinks.link(id,runId,request==null?null:request.getQuestion()));
     }
+
+    @GetMapping("/notifications")
+    public ApiResponse<RadarEventWorkspaceService.NotificationCenter> notifications(@RequestParam(defaultValue="30") int limit){
+        return ApiResponses.success(workspace.notifications(limit));
+    }
+
+    @PostMapping("/notifications/{id}/read")
+    public ResponseEntity<Void> readNotification(@PathVariable Long id){workspace.readNotification(id);return ResponseEntity.noContent().build();}
+
+    @PostMapping("/notifications/read-all")
+    public ResponseEntity<Void> readAllNotifications(){workspace.readAllNotifications();return ResponseEntity.noContent().build();}
 }

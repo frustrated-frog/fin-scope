@@ -196,6 +196,7 @@ public class ResearchRadarService {
         Map<Long,RadarEventInterpretation> latest=interpretations==null?Collections.<Long,RadarEventInterpretation>emptyMap()
                 :interpretations.latestByEventIds(ids);
         Map<Long,RadarEventWorkspace.Summary> summaries=workspace==null?Collections.<Long,RadarEventWorkspace.Summary>emptyMap():workspace.summaries(ids);
+        if(workspace!=null)workspace.createChangeNotifications(new ArrayList<RadarEvent>(unique.values()),summaries);
         Map<Long,ResearchRadarView.EventCard> result=new LinkedHashMap<Long,ResearchRadarView.EventCard>();
         for(RadarEvent event:unique.values())result.put(event.getId(),new ResearchRadarView.EventCard(event,latest.get(event.getId()),summaries.get(event.getId())));
         return result;

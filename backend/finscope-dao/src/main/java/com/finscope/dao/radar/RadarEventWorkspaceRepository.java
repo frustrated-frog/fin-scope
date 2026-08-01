@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -129,6 +130,36 @@ public class RadarEventWorkspaceRepository {
         return jdbc.query(researchLinkSql()+" WHERE l.event_id=? ORDER BY l.created_at DESC,l.id DESC",this::mapResearchLink,eventId);
     }
 
+    public boolean createNotification(Long eventId,String notificationType,String fingerprint,String title,String message){
+        LocalDateTime now=LocalDateTime.now();
+        return jdbc.update("INSERT INTO radar_event_notification(event_id,notification_type,fingerprint,title,message,created_at) "
+                        + "VALUES(?,?,?,?,?,?) ON CONFLICT(notification_type,fingerprint) DO NOTHING",
+                eventId,notificationType,fingerprint,title,message,TimeUtil.text(now))>0;
+    }
+
+    public List<RadarEventWorkspace.Notification> findNotifications(int limit){
+        return jdbc.query("SELECT * FROM radar_event_notification ORDER BY created_at DESC,id DESC LIMIT ?",this::mapNotification,
+                Math.max(1,Math.min(limit,100)));
+    }
+
+    public int countUnreadNotifications(){
+        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE read_at IS NULL",Integer.class);
+        return value==null?0:value;
+    }
+
+    public int countNotificationsOn(LocalDate date){
+        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE substr(created_at,1,10)=?",Integer.class,date.toString());
+        return value==null?0:value;
+    }
+
+    public void markNotificationRead(Long id){
+        jdbc.update("UPDATE radar_event_notification SET read_at=COALESCE(read_at,?) WHERE id=?",TimeUtil.text(LocalDateTime.now()),id);
+    }
+
+    public void markAllNotificationsRead(){
+        jdbc.update("UPDATE radar_event_notification SET read_at=? WHERE read_at IS NULL",TimeUtil.text(LocalDateTime.now()));
+    }
+
     private String researchLinkSql() {
         return "SELECT l.*,r.status research_status,r.summary research_summary FROM radar_event_research_link l "
                 + "JOIN research_run r ON r.id=l.research_run_id";
@@ -188,6 +219,13 @@ public class RadarEventWorkspaceRepository {
         value.setId(rs.getLong("id"));value.setEventId(rs.getLong("event_id"));value.setResearchRunId(rs.getLong("research_run_id"));
         value.setQuestionSnapshot(rs.getString("question_snapshot"));value.setStatus(rs.getString("research_status"));
         value.setSummary(rs.getString("research_summary"));value.setCreatedAt(TimeUtil.localDateTime(rs,"created_at"));return value;
+    }
+
+    private RadarEventWorkspace.Notification mapNotification(java.sql.ResultSet rs,int row)throws java.sql.SQLException{
+        RadarEventWorkspace.Notification value=new RadarEventWorkspace.Notification();value.setId(rs.getLong("id"));
+        long eventId=rs.getLong("event_id");value.setEventId(rs.wasNull()?null:eventId);value.setNotificationType(rs.getString("notification_type"));
+        value.setTitle(rs.getString("title"));value.setMessage(rs.getString("message"));value.setReadAt(TimeUtil.localDateTime(rs,"read_at"));
+        value.setCreatedAt(TimeUtil.localDateTime(rs,"created_at"));return value;
     }
 
     private String validateObservation(String value) {
