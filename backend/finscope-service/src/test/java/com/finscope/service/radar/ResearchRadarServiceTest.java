@@ -76,7 +76,8 @@ class ResearchRadarServiceTest {
         assertEquals(1, view.getEvents().size());
         assertEquals(2, view.getEvents().get(0).getSourceCount());
         assertEquals("未发现与当前自选标的的直接关系", view.getEvents().get(0).getWatchlistExplanation());
-        assertEquals(2, view.getLiveItems().size());
+        assertEquals(1, view.getLatestChanges().size());
+        assertTrue(view.getLiveItems().isEmpty());
         assertEquals(1, view.getOverview().getEventCount());
     }
 
@@ -97,7 +98,7 @@ class ResearchRadarServiceTest {
     }
 
     @Test
-    void busyRefreshKeepsTheLastSuccessfulLiveItems() throws Exception {
+    void busyRefreshKeepsRadarAvailableWithoutReturningTheDuplicateLiveWire() throws Exception {
         NewsFeedItem item = item("CLS:1", "CLS", "财联社", "已缓存的实时资讯", NOW.minusMinutes(5));
         NewsFeedSnapshot snapshot = new NewsFeedSnapshot(Collections.singletonList(item), Collections.emptyList(), NOW, 1);
         CountDownLatch entered = new CountDownLatch(1); CountDownLatch release = new CountDownLatch(1);
@@ -113,8 +114,7 @@ class ResearchRadarServiceTest {
         ResearchRadarView busy = service.load("ALL",false,20);
         release.countDown(); refreshing.join(3_000);
 
-        assertEquals(1,busy.getLiveItems().size());
-        assertEquals("已缓存的实时资讯",busy.getLiveItems().get(0).getTitle());
+        assertTrue(busy.getLiveItems().isEmpty());
         assertTrue(busy.getWarnings().get(0).contains("正在刷新"));
     }
 

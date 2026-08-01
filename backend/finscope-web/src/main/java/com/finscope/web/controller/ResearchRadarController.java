@@ -6,6 +6,7 @@ import com.finscope.service.radar.ResearchRadarView;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,5 +27,10 @@ public class ResearchRadarController {
     @GetMapping("/events/{id}")
     public ApiResponse<ResearchRadarView.EventDetail> detail(@PathVariable Long id){
         return ApiResponses.success(service.detail(id));
+    }
+
+    @PostMapping("/events/{id}/interpretation")
+    public ApiResponse<ResearchRadarView.InterpretationView> requestInterpretation(@PathVariable Long id){
+        return ApiResponses.success(service.requestInterpretation(id));
     }
 }

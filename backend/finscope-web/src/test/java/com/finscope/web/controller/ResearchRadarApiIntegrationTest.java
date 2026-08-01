@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,8 +32,22 @@ class ResearchRadarApiIntegrationTest {
         mvc.perform(get("/api/research-radar"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.events").isArray())
+                .andExpect(jsonPath("$.data.latestChanges").isArray())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
                 .andExpect(jsonPath("$.data.overview.eventCount").value(0));
         verify(service).load("ALL", false, 20);
+    }
+
+    @Test
+    void submitsEventInterpretationWithoutWaitingForCompletion() throws Exception {
+        ResearchRadarView.InterpretationView queued = ResearchRadarView.InterpretationView.queued(10L);
+        when(service.requestInterpretation(10L)).thenReturn(queued);
+
+        mvc.perform(post("/api/research-radar/events/10/interpretation"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.eventId").value(10))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"));
+
+        verify(service).requestInterpretation(10L);
     }
 }

@@ -8,7 +8,9 @@ import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventSignal;
+import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
@@ -26,6 +28,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
@@ -41,6 +44,7 @@ public class ResearchRadarService {
     private final RadarEventEnhancementScheduler enhancementScheduler;
     private final RadarEvidenceRepository evidenceRepository;
     private final AgentRunRepository agentRuns;
+    private final RadarEventInterpretationService interpretations;
     private final ReentrantLock refreshLock = new ReentrantLock();
     private volatile NewsFeedSnapshot lastNewsSnapshot;
 
@@ -48,24 +52,34 @@ public class ResearchRadarService {
     public ResearchRadarService(NewsFeedService news, RadarRepository repository,
                                 RadarClusteringService clustering, RadarPriorityService priority,
                                 WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                                RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns) {
+                                RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
+                                RadarEventInterpretationService interpretations) {
         this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository,
-                agentRuns, Clock.systemDefaultZone());
+                agentRuns, interpretations, Clock.systemDefaultZone());
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, Clock clock) {
-        this(news,repository,clustering,priority,watchlist,null,null,null,clock);
+        this(news,repository,clustering,priority,watchlist,null,null,null,null,clock);
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns, Clock clock) {
+        this(news,repository,clustering,priority,watchlist,enhancementScheduler,evidenceRepository,agentRuns,null,clock);
+    }
+
+    ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
+                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
+                         RadarEventInterpretationService interpretations, Clock clock) {
         this.news=news; this.repository=repository; this.clustering=clustering;
         this.priority=priority; this.watchlist=watchlist; this.clock=clock;
         this.enhancementScheduler=enhancementScheduler; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
+        this.interpretations=interpretations;
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
@@ -99,10 +113,15 @@ public class ResearchRadarService {
                 if (matches(category, saved) && (!watchlistOnly || saved.getWatchlistRelevance()>0)) savedEvents.add(saved);
             }
             repository.expireEventsExcept(activeEventKeys, now);
+            List<RadarEvent> latestEvents=new ArrayList<RadarEvent>(savedEvents);
+            latestEvents.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
+                    Comparator.nullsLast(Comparator.reverseOrder())));
+            if(latestEvents.size()>5)latestEvents=new ArrayList<RadarEvent>(latestEvents.subList(0,5));
             savedEvents.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
                     .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
             if (savedEvents.size()>limit) savedEvents=new ArrayList<RadarEvent>(savedEvents.subList(0,limit));
-            return new ResearchRadarView(cards(savedEvents), snapshot.getItems(), snapshot.getWarnings(), snapshot.getRefreshedAt());
+            return new ResearchRadarView(cards(savedEvents),cards(latestEvents),Collections.<NewsFeedItem>emptyList(),
+                    snapshot.getWarnings(),snapshot.getRefreshedAt());
         } catch (BusinessException ex) {
             if (ex.getErrorCode()==ErrorCode.REQUEST_PARAMETER_INVALID) throw ex;
             return fallback(category,watchlistOnly,limit,now,"实时资讯暂不可用，已展示最近一次结果");
@@ -115,20 +134,32 @@ public class ResearchRadarService {
 
     public ResearchRadarView.EventDetail detail(Long id) {
         RadarEvent event=repository.findEvent(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,"雷达事件不存在"));
-        return new ResearchRadarView.EventDetail(event,repository.findSignalsByEventId(id),repository.findEventSignals(id),
-                evidenceRepository==null?Collections.emptyList():evidenceRepository.findByEventId(id),
-                agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id));
+        List<RadarSignal> signals=repository.findSignalsByEventId(id);
+        List<RadarEvidence> evidence=evidenceRepository==null?Collections.emptyList():evidenceRepository.findByEventId(id);
+        RadarEventInterpretation interpretation=interpretations==null?null:interpretations.current(event,signals,evidence).orElse(null);
+        return new ResearchRadarView.EventDetail(event,signals,repository.findEventSignals(id),evidence,
+                agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id),interpretation);
+    }
+
+    public ResearchRadarView.InterpretationView requestInterpretation(Long id) {
+        if(interpretations==null)throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR,"雷达事件解读暂不可用");
+        return new ResearchRadarView.InterpretationView(interpretations.request(id));
     }
 
     private ResearchRadarView fallback(String category,boolean watchlistOnly,int limit,LocalDateTime now,String warning) {
         NewsFeedSnapshot cached = lastNewsSnapshot;
-        return new ResearchRadarView(cards(repository.findRanked(category,watchlistOnly,limit)),
-                cached==null?Collections.<NewsFeedItem>emptyList():cached.getItems(),
+        List<RadarEvent> ranked=repository.findRanked(category,watchlistOnly,limit);
+        List<RadarEvent> latest=new ArrayList<RadarEvent>(ranked);latest.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));if(latest.size()>5)latest=new ArrayList<RadarEvent>(latest.subList(0,5));
+        return new ResearchRadarView(cards(ranked),cards(latest),Collections.<NewsFeedItem>emptyList(),
                 Collections.singletonList(warning),cached==null?now:cached.getRefreshedAt());
     }
     private List<ResearchRadarView.EventCard> cards(List<RadarEvent> events) {
+        List<Long> ids=new ArrayList<Long>();for(RadarEvent event:events)if(event.getId()!=null)ids.add(event.getId());
+        Map<Long,RadarEventInterpretation> latest=interpretations==null?Collections.<Long,RadarEventInterpretation>emptyMap()
+                :interpretations.latestByEventIds(ids);
         List<ResearchRadarView.EventCard> cards=new ArrayList<ResearchRadarView.EventCard>();
-        for(RadarEvent event:events) cards.add(new ResearchRadarView.EventCard(event)); return cards;
+        for(RadarEvent event:events) cards.add(new ResearchRadarView.EventCard(event,latest.get(event.getId()))); return cards;
     }
     private boolean matches(String category,RadarEvent event){return "ALL".equals(category)||category.equalsIgnoreCase(event.getCategoryCode());}
     private String normalizeCategory(String value){return value==null||value.trim().isEmpty()?"ALL":value.trim().toUpperCase(Locale.ROOT);}
