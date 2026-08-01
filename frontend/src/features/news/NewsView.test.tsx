@@ -231,7 +231,7 @@ test('research action only hands the suggested question to the parent', async ()
 
   await userEvent.click(screen.getByRole('button', { name: '围绕此事研究' }));
 
-  expect(onResearch).toHaveBeenCalledWith(event.suggestedResearchQuestion);
+  expect(onResearch).toHaveBeenCalledWith(event.id, event.suggestedResearchQuestion);
   expect(api).not.toHaveBeenCalledWith('/api/research/runs', expect.anything());
 });
 

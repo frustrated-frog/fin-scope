@@ -4,9 +4,11 @@ import com.finscope.common.api.ApiResponse;
 import com.finscope.service.radar.ResearchRadarService;
 import com.finscope.service.radar.ResearchRadarView;
 import com.finscope.service.radar.RadarEventWorkspaceService;
+import com.finscope.service.radar.RadarResearchLinkService;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.web.request.RadarObservationRequest;
 import com.finscope.web.request.UpdateRadarEventStateRequest;
+import com.finscope.web.request.RadarResearchLinkRequest;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,8 +28,10 @@ import java.util.List;
 public class ResearchRadarController {
     private final ResearchRadarService service;
     private final RadarEventWorkspaceService workspace;
-    public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace){
-        this.service=service; this.workspace=workspace;
+    private final RadarResearchLinkService researchLinks;
+    public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace,
+                                   RadarResearchLinkService researchLinks){
+        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks;
     }
 
     @GetMapping
@@ -74,5 +78,11 @@ public class ResearchRadarController {
     @DeleteMapping("/events/{id}/observations/{observationId}")
     public ResponseEntity<Void> deleteObservation(@PathVariable Long id, @PathVariable Long observationId) {
         workspace.deleteObservation(id, observationId); return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/events/{id}/research-links/{runId}")
+    public ApiResponse<RadarEventWorkspace.ResearchLink> linkResearch(@PathVariable Long id,@PathVariable Long runId,
+                                                                      @RequestBody(required=false) RadarResearchLinkRequest request){
+        return ApiResponses.success(researchLinks.link(id,runId,request==null?null:request.getQuestion()));
     }
 }

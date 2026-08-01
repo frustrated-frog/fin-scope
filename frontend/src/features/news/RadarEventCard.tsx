@@ -2,7 +2,7 @@ import type { RadarEvent } from './researchRadarTypes';
 
 export function RadarEventCard({ event, onResearch, onOpen }: {
   event: RadarEvent;
-  onResearch?: (question: string) => void;
+  onResearch?: (eventId: number, question: string) => void;
   onOpen: (event: RadarEvent) => void;
 }) {
   const reasons = event.reasons.filter((reason) => reason !== event.watchlistExplanation);
@@ -30,7 +30,7 @@ export function RadarEventCard({ event, onResearch, onOpen }: {
         </ul>
         <div className="radar-event-actions">
           <button type="button" className="ghost-button" onClick={() => onOpen(event)}>查看解读</button>
-          <button type="button" className="secondary-button" onClick={() => onResearch?.(event.suggestedResearchQuestion)}>围绕此事研究</button>
+          <button type="button" className="secondary-button" onClick={() => onResearch?.(event.id, event.suggestedResearchQuestion)}>围绕此事研究</button>
         </div>
       </div>
     </article>

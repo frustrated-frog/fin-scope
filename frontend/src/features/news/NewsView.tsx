@@ -14,7 +14,7 @@ const REFRESH_INTERVAL_MS = 45_000;
 export function NewsView({ setMessage, addToast, onResearch }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onResearch?: (question: string) => void;
+  onResearch?: (eventId: number, question: string) => void;
 }) {
   const [mode, setMode] = useState<'live' | 'radar'>('live');
   const props = { setMessage, addToast, onResearch };
@@ -32,7 +32,7 @@ export function NewsView({ setMessage, addToast, onResearch }: {
 function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onResearch?: (question: string) => void;
+  onResearch?: (eventId: number, question: string) => void;
 }) {
   const [snapshot, setSnapshot] = useState<ResearchRadarSnapshot>();
   const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY, RELATED_CATEGORY]);

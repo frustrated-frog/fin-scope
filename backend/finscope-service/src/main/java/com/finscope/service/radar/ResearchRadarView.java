@@ -203,6 +203,7 @@ public final class ResearchRadarView {
         private final List<RadarEventWorkspace.Observation> observations;
         private final List<RadarEventWorkspace.TimelineEntry> timeline;
         private final RadarEventWorkspace.Trust trust;
+        private final List<RadarEventWorkspace.ResearchLink> researchLinks;
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links) {
             this(event,signals,links,Collections.<RadarEvidence>emptyList(),Collections.<AgentRun>emptyList());
         }
@@ -227,6 +228,15 @@ public final class ResearchRadarView {
                            RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
                            List<RadarEventWorkspace.Observation> observations,
                            List<RadarEventWorkspace.TimelineEntry> timeline, RadarEventWorkspace.Trust trust) {
+            this(event,signals,links,evidence,traces,interpretation,workspaceState,observations,timeline,trust,
+                    Collections.<RadarEventWorkspace.ResearchLink>emptyList());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
+                           List<RadarEventWorkspace.Observation> observations,
+                           List<RadarEventWorkspace.TimelineEntry> timeline, RadarEventWorkspace.Trust trust,
+                           List<RadarEventWorkspace.ResearchLink> researchLinks) {
             this.event = new EventCard(event); Map<Long,RadarEventSignal> bySignal=new LinkedHashMap<Long,RadarEventSignal>();
             for (RadarEventSignal link:links) bySignal.put(link.getSignalId(),link);
             List<SignalView> values=new ArrayList<SignalView>(); for(RadarSignal signal:signals) values.add(new SignalView(signal,bySignal.get(signal.getId())));
@@ -241,6 +251,7 @@ public final class ResearchRadarView {
             this.workspaceState=workspaceState;
             this.observations=immutable(observations);
             this.timeline=immutable(timeline); this.trust=trust==null?new RadarEventWorkspace.Trust():trust;
+            this.researchLinks=immutable(researchLinks);
         }
         public EventCard getEvent(){return event;} public List<SignalView> getSignals(){return signals;}
         public List<EvidenceView> getEvidence(){return evidence;} public List<AgentTraceView> getAgentTrace(){return agentTrace;}
@@ -249,6 +260,7 @@ public final class ResearchRadarView {
         public List<RadarEventWorkspace.Observation> getObservations(){return observations;}
         public List<RadarEventWorkspace.TimelineEntry> getTimeline(){return timeline;}
         public RadarEventWorkspace.Trust getTrust(){return trust;}
+        public List<RadarEventWorkspace.ResearchLink> getResearchLinks(){return researchLinks;}
     }
 
     public static final class InterpretationView {

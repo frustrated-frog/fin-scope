@@ -41,7 +41,7 @@ public class RadarEventWorkspaceService {
         String observation = text(event.getNextObservation(), "关注事件是否出现新的独立来源、数据或正式公告");
         List<RadarEventWorkspace.Observation> observations = workspace.ensureDefaultObservation(event.getId(), observation);
         action(event.getId(), fingerprint(event), "READ", "已查看事件", "事件详情已读", "STATE", event.getId());
-        return new OpenedEvent(state, observations);
+        return new OpenedEvent(state, observations, workspace.findResearchLinks(event.getId()));
     }
 
     public RadarEventWorkspace.State updateState(Long eventId, Boolean read, Boolean followed, String disposition) {
@@ -111,10 +111,13 @@ public class RadarEventWorkspaceService {
     public static final class OpenedEvent {
         private final RadarEventWorkspace.State state;
         private final List<RadarEventWorkspace.Observation> observations;
-        OpenedEvent(RadarEventWorkspace.State state, List<RadarEventWorkspace.Observation> observations) {
-            this.state = state; this.observations = observations;
+        private final List<RadarEventWorkspace.ResearchLink> researchLinks;
+        OpenedEvent(RadarEventWorkspace.State state, List<RadarEventWorkspace.Observation> observations,
+                    List<RadarEventWorkspace.ResearchLink> researchLinks) {
+            this.state = state; this.observations = observations; this.researchLinks=researchLinks;
         }
         public RadarEventWorkspace.State getState() { return state; }
         public List<RadarEventWorkspace.Observation> getObservations() { return observations; }
+        public List<RadarEventWorkspace.ResearchLink> getResearchLinks(){return researchLinks;}
     }
 }

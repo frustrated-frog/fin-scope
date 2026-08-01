@@ -171,7 +171,7 @@ public class ResearchRadarService {
         return new ResearchRadarView.EventDetail(event,signals,repository.findEventSignals(id),evidence,
                 agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id),interpretation,
                 opened==null?null:opened.getState(),opened==null?Collections.<RadarEventWorkspace.Observation>emptyList():opened.getObservations(),
-                timelineEntries,trustView);
+                timelineEntries,trustView,opened==null?Collections.<RadarEventWorkspace.ResearchLink>emptyList():opened.getResearchLinks());
     }
 
     public ResearchRadarView.InterpretationView requestInterpretation(Long id) {

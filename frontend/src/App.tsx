@@ -88,6 +88,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
+  const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -392,6 +393,16 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify(input)
       });
+      if (pendingRadarEventId !== null) {
+        try {
+          await api(`/api/research-radar/events/${pendingRadarEventId}/research-links/${run.id}`, {
+            method: 'POST', body: JSON.stringify({ question: researchQuestionDraft })
+          });
+          setPendingRadarEventId(null);
+        } catch (linkError) {
+          addToast(linkError instanceof Error ? linkError.message : '雷达事件与研究运行关联失败', 'error');
+        }
+      }
       upsertResearchRun(run);
       const detail = await openResearchRun(run.id);
       if (isResearchRunActive(detail.run.status)) {
@@ -569,7 +580,8 @@ export default function App() {
         <NewsView
           setMessage={setMessage}
           addToast={addToast}
-          onResearch={(question) => {
+          onResearch={(eventId, question) => {
+            setPendingRadarEventId(eventId);
             setResearchQuestionDraft(question);
             setResearchReport(null);
             setView('research');

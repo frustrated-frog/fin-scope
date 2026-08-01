@@ -117,6 +117,23 @@ public class RadarEventWorkspaceRepository {
                 this::mapTimeline, eventId);
     }
 
+    public RadarEventWorkspace.ResearchLink linkResearchRun(Long eventId, Long researchRunId, String questionSnapshot) {
+        requireEventId(eventId); LocalDateTime now=LocalDateTime.now();
+        jdbc.update("INSERT INTO radar_event_research_link(event_id,research_run_id,question_snapshot,created_at) VALUES(?,?,?,?) "
+                        + "ON CONFLICT(event_id,research_run_id) DO NOTHING",
+                eventId,researchRunId,questionSnapshot==null?null:questionSnapshot.trim(),TimeUtil.text(now));
+        return jdbc.query(researchLinkSql()+" WHERE l.event_id=? AND l.research_run_id=?",this::mapResearchLink,eventId,researchRunId).get(0);
+    }
+
+    public List<RadarEventWorkspace.ResearchLink> findResearchLinks(Long eventId) {
+        return jdbc.query(researchLinkSql()+" WHERE l.event_id=? ORDER BY l.created_at DESC,l.id DESC",this::mapResearchLink,eventId);
+    }
+
+    private String researchLinkSql() {
+        return "SELECT l.*,r.status research_status,r.summary research_summary FROM radar_event_research_link l "
+                + "JOIN research_run r ON r.id=l.research_run_id";
+    }
+
     private void insertObservation(Long eventId, String content, String source) {
         requireEventId(eventId); String value = validateObservation(content); String normalized = normalizeObservation(value);
         LocalDateTime now = LocalDateTime.now();
@@ -164,6 +181,13 @@ public class RadarEventWorkspaceRepository {
         value.setTitle(rs.getString("title")); value.setSummary(rs.getString("summary"));
         value.setReferenceType(rs.getString("reference_type")); value.setReferenceId(rs.getLong("reference_id"));
         value.setOccurredAt(TimeUtil.localDateTime(rs, "occurred_at")); return value;
+    }
+
+    private RadarEventWorkspace.ResearchLink mapResearchLink(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        RadarEventWorkspace.ResearchLink value=new RadarEventWorkspace.ResearchLink();
+        value.setId(rs.getLong("id"));value.setEventId(rs.getLong("event_id"));value.setResearchRunId(rs.getLong("research_run_id"));
+        value.setQuestionSnapshot(rs.getString("question_snapshot"));value.setStatus(rs.getString("research_status"));
+        value.setSummary(rs.getString("research_summary"));value.setCreatedAt(TimeUtil.localDateTime(rs,"created_at"));return value;
     }
 
     private String validateObservation(String value) {
