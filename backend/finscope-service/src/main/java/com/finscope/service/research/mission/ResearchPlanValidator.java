@@ -1,5 +1,8 @@
 package com.finscope.service.research.mission;
 
+import com.finscope.service.research.method.ResearchMethodRegistry;
+import com.finscope.service.research.method.ResearchMethodSelection;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
@@ -26,15 +29,27 @@ public class ResearchPlanValidator {
             "COLLECT", "SEARCH", "ASSESS", "SYNTHESIS"));
 
     private final ResearchToolRegistry toolRegistry;
+    private final ResearchMethodRegistry methodRegistry;
 
     public ResearchPlanValidator(ResearchToolRegistry toolRegistry) {
+        this(toolRegistry, ResearchMethodRegistry.defaults());
+    }
+
+    @Autowired
+    public ResearchPlanValidator(ResearchToolRegistry toolRegistry, ResearchMethodRegistry methodRegistry) {
         this.toolRegistry = toolRegistry;
+        this.methodRegistry = methodRegistry;
     }
 
     public ResearchMissionDraft validate(ResearchMissionDraft draft) {
+        return validate(draft, null);
+    }
+
+    public ResearchMissionDraft validate(ResearchMissionDraft draft, ResearchPlanningInput input) {
         if (draft == null) {
             throw invalid("计划为空");
         }
+        applyMethodContract(draft, input);
         requireText(draft.getScopeSummary(), "研究范围", 240);
         if (draft.getSuccessCriteria() == null || draft.getSuccessCriteria().isEmpty()
                 || draft.getSuccessCriteria().size() > 5) {
@@ -66,6 +81,20 @@ public class ResearchPlanValidator {
         requireContractTasks(sorted);
         draft.setTasks(sorted);
         return draft;
+    }
+
+    private void applyMethodContract(ResearchMissionDraft draft, ResearchPlanningInput input) {
+        try {
+            ResearchMethodSelection selection = methodRegistry.selection(draft.getMethodCodes(), input);
+            draft.setResearchType(selection.getResearchType());
+            draft.setMethodCodes(selection.getMethodCodes());
+            draft.setRequiredEvidence(selection.getRequiredEvidence());
+            draft.setRequiredCalculations(selection.getRequiredCalculations());
+            draft.setCounterChecks(selection.getCounterChecks());
+            draft.setCompletionCriteria(selection.getCompletionCriteria());
+        } catch (IllegalArgumentException error) {
+            throw invalid(error.getMessage());
+        }
     }
 
     private void validateTask(ResearchMissionTaskDraft task) {

@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -129,6 +130,67 @@ class ResearchPlanningAgentTest {
         assertEquals(Arrays.asList("crosscheck_chain"), result.getDraft().task("search_counter").getDependencies());
     }
 
+    @Test
+    void acceptsRegisteredMethodsSelectedByAgentForStockFinancialResearch() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenReturn(stockMethodJson("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"));
+        ResearchPlanningInput stock = stockFinancialInput();
+
+        ResearchPlanningResult result = agent.plan(stock);
+
+        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertEquals("COMPANY_FINANCIAL", result.getDraft().getResearchType());
+        assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
+                result.getDraft().getMethodCodes());
+        assertTrue(result.getDraft().getRequiredEvidence().contains("现金流量表"));
+        assertTrue(result.getDraft().getCounterChecks().contains("非经常性损益对利润增长的贡献"));
+    }
+
+    @Test
+    void rejectsUnknownMethodAndFallsBackToRegisteredRecommendations() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenReturn(stockMethodJson("MAGIC_STOCK_PICKING"));
+
+        ResearchPlanningResult result = agent.plan(stockFinancialInput());
+
+        assertEquals("DETERMINISTIC", result.getPlanningMode());
+        assertEquals("PLAN_REJECTED", result.getFallbackReason());
+        assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
+                result.getDraft().getMethodCodes());
+    }
+
+    @Test
+    void deterministicPlannerSelectsMethodsWhenModelIsUnavailable() {
+        when(llm.isConfigured()).thenReturn(false);
+
+        ResearchPlanningResult result = agent.plan(stockFinancialInput());
+
+        assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
+                result.getDraft().getMethodCodes());
+        assertFalse(result.getDraft().getCompletionCriteria().isEmpty());
+    }
+
+    @Test
+    void exposesOnlyRegisteredMethodContractsToPlanner() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        AtomicReference<String> systemPrompt = new AtomicReference<String>();
+        AtomicReference<String> userPrompt = new AtomicReference<String>();
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenAnswer(invocation -> {
+            systemPrompt.set(invocation.getArgument(0));
+            userPrompt.set(invocation.getArgument(1));
+            return stockMethodJson("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY");
+        });
+
+        agent.plan(stockFinancialInput());
+
+        assertTrue(systemPrompt.get().contains("methodCodes只能使用可用投研方法中的编码"));
+        assertTrue(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
+        assertTrue(userPrompt.get().contains("COMPANY_QUALITY"));
+        assertFalse(userPrompt.get().contains("MAGIC_STOCK_PICKING"));
+    }
+
     private ResearchPlanningInput input() {
         ResearchPlanningInput input = new ResearchPlanningInput();
         input.setQuestion("AI资本开支能否持续？");
@@ -139,6 +201,25 @@ class ResearchPlanningAgentTest {
         input.setMaxActions(12);
         input.setCurrentDate(LocalDate.of(2026, 7, 26));
         return input;
+    }
+
+    private ResearchPlanningInput stockFinancialInput() {
+        ResearchPlanningInput input = input();
+        input.setQuestion("最新财报是否说明盈利质量改善？");
+        input.setSubjectName("宁德时代");
+        input.setSubjectType("STOCK");
+        input.setSubjectCode("300750");
+        return input;
+    }
+
+    private String stockMethodJson(String... methodCodes) {
+        String methods = Arrays.stream(methodCodes)
+                .map(value -> "\"" + value + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+        String generic = validJson();
+        return "{\"researchType\":\"COMPANY_FINANCIAL\",\"methodCodes\":[" + methods + "],"
+                + "\"requiredEvidence\":[],\"requiredCalculations\":[],\"counterChecks\":[],"
+                + "\"completionCriteria\":[]," + generic.substring(1);
     }
 
     private String validJson() {

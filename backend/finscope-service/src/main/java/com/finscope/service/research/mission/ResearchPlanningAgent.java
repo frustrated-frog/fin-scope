@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.research.method.ResearchMethodDefinition;
+import com.finscope.service.research.method.ResearchMethodRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -20,16 +23,27 @@ public class ResearchPlanningAgent {
     private final ResearchToolRegistry toolRegistry;
     private final ResearchPlanValidator validator;
     private final DeterministicResearchPlanner deterministicPlanner;
+    private final ResearchMethodRegistry methodRegistry;
     private final ObjectMapper objectMapper;
 
     public ResearchPlanningAgent(LlmChatClient llmChatClient,
                                  ResearchToolRegistry toolRegistry,
                                  ResearchPlanValidator validator,
                                  DeterministicResearchPlanner deterministicPlanner) {
+        this(llmChatClient, toolRegistry, validator, deterministicPlanner, ResearchMethodRegistry.defaults());
+    }
+
+    @Autowired
+    public ResearchPlanningAgent(LlmChatClient llmChatClient,
+                                 ResearchToolRegistry toolRegistry,
+                                 ResearchPlanValidator validator,
+                                 DeterministicResearchPlanner deterministicPlanner,
+                                 ResearchMethodRegistry methodRegistry) {
         this.llmChatClient = llmChatClient;
         this.toolRegistry = toolRegistry;
         this.validator = validator;
         this.deterministicPlanner = deterministicPlanner;
+        this.methodRegistry = methodRegistry;
         this.objectMapper = new ObjectMapper()
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -48,7 +62,7 @@ public class ResearchPlanningAgent {
                 throw new IllegalArgumentException("研究计划校验失败：模型输出超过字符上限");
             }
             ResearchMissionDraft draft = objectMapper.readValue(json, ResearchMissionDraft.class);
-            return new ResearchPlanningResult(validator.validate(draft), "LLM_VALIDATED", null, null);
+            return new ResearchPlanningResult(validator.validate(draft, input), "LLM_VALIDATED", null, null);
         } catch (IllegalArgumentException exception) {
             return fallback(input, "PLAN_REJECTED", safeDetail(exception.getMessage()));
         } catch (Exception exception) {
@@ -63,7 +77,7 @@ public class ResearchPlanningAgent {
     }
 
     private ResearchPlanningResult fallback(ResearchPlanningInput input, String reason, String detail) {
-        ResearchMissionDraft fallback = validator.validate(deterministicPlanner.plan(input));
+        ResearchMissionDraft fallback = validator.validate(deterministicPlanner.plan(input), input);
         return new ResearchPlanningResult(fallback, "DETERMINISTIC", reason, detail);
     }
 
@@ -71,6 +85,9 @@ public class ResearchPlanningAgent {
         return "你是 FinScope 的受控研究规划器。只负责把研究命题拆成有限任务图，不执行工具。"
                 + "只能使用用户消息中列出的工具编码，不得输出HTTP地址、SQL、Shell、文件路径或额外字段。"
                 + "必须返回单个JSON对象，不要Markdown。任务不超过8个，公开搜索不超过4个，依赖必须无环。"
+                + "methodCodes只能使用可用投研方法中的编码；不得创造方法。"
+                + "必须输出researchType、methodCodes、requiredEvidence、requiredCalculations、counterChecks、completionCriteria；"
+                + "除methodCodes外的方法蓝图字段由服务端按注册表重新生成，模型不得降低要求。"
                 + "必须包含BASELINE、SUPPORT、COUNTER、ASSESS、SYNTHESIS意图。"
                 + "taskKey必须匹配[a-z][a-z0-9_]{2,47}，例如baseline_scan；"
                 + "dependencies只能精确引用同一计划中的taskKey。"
@@ -87,7 +104,8 @@ public class ResearchPlanningAgent {
                 + "优先一手材料，再用专业与新闻语境交叉核对，并主动寻找替代解释和证据缺口；"
                 + "evidence_assess只能搭配ASSESS和ASSESS；"
                 + "report_synthesis只能搭配SYNTHESIS和SYNTHESIS。"
-                + "JSON字段严格为scopeSummary、successCriteria、tasks；任务字段严格为taskKey、title、question、"
+                + "JSON字段严格为researchType、methodCodes、requiredEvidence、requiredCalculations、counterChecks、"
+                + "completionCriteria、scopeSummary、successCriteria、tasks；任务字段严格为taskKey、title、question、"
                 + "taskType、toolCode、intent、dependencies、parallelGroup、queryText、rationale、expectedEvidence。";
     }
 
@@ -105,6 +123,11 @@ public class ResearchPlanningAgent {
             value.append("- ").append(tool.getCode()).append("：")
                     .append(tool.getName()).append("；").append(tool.getDescription())
                     .append("；预算=").append(tool.getBudgetType()).append('\n');
+        }
+        value.append("可用投研方法：\n");
+        for (ResearchMethodDefinition method : methodRegistry.list()) {
+            value.append("- ").append(method.getCode()).append("：").append(method.getName())
+                    .append("；").append(method.getDescription()).append('\n');
         }
         value.append("请生成完整研究合同和任务图。搜索queryText只写自然语言关键词，不得包含协议头。");
         return value.toString();

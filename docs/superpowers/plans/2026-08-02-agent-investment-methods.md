@@ -58,27 +58,27 @@ git push
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/mission/ResearchPlanningAgentTest.java`
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/research/mission/ResearchPlanValidatorTest.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 增加以下行为测试：模型为股票财报研究选择合法方法后通过；输出未知方法、重复方法或不支持当前对象的方法时整份计划被拒绝；模型不可用时确定性规划器自动选择两个首批方法；系统 Prompt 和用户 Prompt 只暴露注册表中的方法编码及方法契约。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchPlanningAgentTest,ResearchPlanValidatorTest test`
 
 Expected: FAIL，原因是 Draft 没有方法蓝图字段，Validator 不认识方法注册表。
 
-- [ ] **Step 3: 扩展严格规划契约**
+- [x] **Step 3: 扩展严格规划契约**
 
 在 `ResearchMissionDraft` 增加 `researchType`、`methodCodes`、`requiredEvidence`、`requiredCalculations`、`counterChecks` 和 `completionCriteria`。`ResearchPlanningAgent` 将注册方法的编码、说明和要求加入提示词；`ResearchPlanValidator#validate(draft,input)` 校验编码白名单、重复项和对象支持性，并以注册表定义重新生成聚合要求，拒绝模型伪造的方法要求。确定性规划器使用同一个注册表生成相同蓝图。
 
-- [ ] **Step 4: 运行测试并确认 GREEN**
+- [x] **Step 4: 运行测试并确认 GREEN**
 
 Run: `cd backend && mvn -pl finscope-service -Dtest=ResearchPlanningAgentTest,ResearchPlanValidatorTest test`
 
 Expected: PASS，0 failures。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add backend/finscope-service/src/main/java/com/finscope/service/research/mission backend/finscope-service/src/test/java/com/finscope/service/research/mission

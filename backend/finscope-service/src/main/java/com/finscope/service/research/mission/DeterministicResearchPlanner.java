@@ -1,5 +1,8 @@
 package com.finscope.service.research.mission;
 
+import com.finscope.service.research.method.ResearchMethodRegistry;
+import com.finscope.service.research.method.ResearchMethodSelection;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,10 +12,28 @@ import java.util.List;
 
 @Component
 public class DeterministicResearchPlanner {
+    private final ResearchMethodRegistry methodRegistry;
+
+    public DeterministicResearchPlanner() {
+        this(ResearchMethodRegistry.defaults());
+    }
+
+    @Autowired
+    public DeterministicResearchPlanner(ResearchMethodRegistry methodRegistry) {
+        this.methodRegistry = methodRegistry;
+    }
+
     public ResearchMissionDraft plan(ResearchPlanningInput input) {
         String subject = compact(input == null ? null : input.getSubjectName(), "研究对象");
         String question = compact(input == null ? null : input.getQuestion(), "研究命题");
         ResearchMissionDraft draft = new ResearchMissionDraft();
+        ResearchMethodSelection methods = methodRegistry.recommendedSelection(input);
+        draft.setResearchType(methods.getResearchType());
+        draft.setMethodCodes(methods.getMethodCodes());
+        draft.setRequiredEvidence(methods.getRequiredEvidence());
+        draft.setRequiredCalculations(methods.getRequiredCalculations());
+        draft.setCounterChecks(methods.getCounterChecks());
+        draft.setCompletionCriteria(methods.getCompletionCriteria());
         draft.setScopeSummary("围绕“" + question + "”核对需求、供给、公司兑现与反方风险");
         draft.setSuccessCriteria(Arrays.asList(
                 "至少六条有效证据",
