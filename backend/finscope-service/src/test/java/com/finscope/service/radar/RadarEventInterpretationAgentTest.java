@@ -33,6 +33,23 @@ class RadarEventInterpretationAgentTest {
     }
 
     @Test
+    void normalizesSingleTextAnalysisFieldsReturnedByTheModel() throws Exception {
+        LlmChatClient llm = configuredLlm();
+        String response = validJson()
+                .replace("[\"产品发布→量产验证→供应链订单\"]", "\"产品发布→量产验证→供应链订单\"")
+                .replace("[\"价格尚未披露\"]", "\"价格尚未披露\"")
+                .replace("[\"观察公司正式公告\"]", "\"观察公司正式公告\"");
+        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900))).thenReturn(response);
+
+        RadarEventInterpretation.Result result = agent(llm).interpret(event(),
+                Collections.singletonList(signal()), Collections.singletonList(evidence()));
+
+        assertEquals(Collections.singletonList("产品发布→量产验证→供应链订单"), result.getImpactChain());
+        assertEquals(Collections.singletonList("价格尚未披露"), result.getUncertainties());
+        assertEquals(Collections.singletonList("观察公司正式公告"), result.getNextObservations());
+    }
+
+    @Test
     void rejectsReferencesOutsideTheInputEvidenceSet() throws Exception {
         LlmChatClient llm = configuredLlm();
         when(llm.complete(anyString(), anyString(), eq(20_000), eq(900)))

@@ -97,6 +97,22 @@ class RadarEventInterpretationServiceTest {
     }
 
     @Test
+    void retriesAFailedInterpretationForTheSameEventVersion() {
+        RadarEventInterpretation failed = queued();
+        failed.setStatus("FAILED"); failed.setFailureCode("INVALID_OUTPUT");
+        failed.setFailureMessage("模型解读输出不可用");
+        when(interpretations.findByEventFingerprint(eq(10L), any())).thenReturn(Optional.of(failed));
+        when(agent.interpret(eq(event), any(), any())).thenReturn(successResult());
+
+        RadarEventInterpretation returned = service.request(10L);
+
+        assertEquals("QUEUED", returned.getStatus());
+        assertEquals(1, executor.tasks.size());
+        executor.runNext();
+        assertEquals("SUCCESS", returned.getStatus());
+    }
+
+    @Test
     void marksInvalidAgentOutputAsFailedWithoutThrowingFromTheRequest() {
         RadarEventInterpretation queued = queued();
         when(interpretations.findByEventFingerprint(eq(10L), any())).thenReturn(Optional.empty());

@@ -1,8 +1,10 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
@@ -46,8 +48,7 @@ public class RadarEventInterpretationAgent {
         try {
             String raw = llm.complete(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
                     TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            RadarEventInterpretation.Result result = json.readValue(extractJson(raw),
-                    RadarEventInterpretation.Result.class);
+            RadarEventInterpretation.Result result = parseResult(raw);
             validate(result, allowedRefs(signals, evidence));
             trace(event, "SUCCESS", null, null, started, result);
             return result;
@@ -130,8 +131,27 @@ public class RadarEventInterpretationAgent {
     private String systemPrompt() {
         return "你是个人研究雷达的事件解读 Agent。只能使用输入中的事件、原始信号和证据，不得补充外部事实。"
                 + "输出单个纯JSON对象，只允许factSummary、newDevelopment、whyItMatters、impactChain、uncertainties、"
-                + "nextObservations、evidenceRefs字段。清楚区分事实、影响推演与未知项；每个判断引用输入ref；"
+                + "nextObservations、evidenceRefs字段。factSummary、newDevelopment、whyItMatters必须是字符串；"
+                + "impactChain、uncertainties、nextObservations、evidenceRefs必须是字符串数组，即使只有一项也必须使用数组。"
+                + "清楚区分事实、影响推演与未知项；每个判断引用输入ref；"
                 + "不得给出买卖、仓位或目标价建议，不得输出Markdown或思维链。";
+    }
+
+    private RadarEventInterpretation.Result parseResult(String raw) throws Exception {
+        JsonNode root = json.readTree(extractJson(raw));
+        if (root == null || !root.isObject()) throw new IllegalArgumentException("解读输出必须是JSON对象");
+        ObjectNode object = (ObjectNode) root;
+        normalizeTextArray(object, "impactChain");
+        normalizeTextArray(object, "uncertainties");
+        normalizeTextArray(object, "nextObservations");
+        return json.treeToValue(object, RadarEventInterpretation.Result.class);
+    }
+
+    private void normalizeTextArray(ObjectNode object, String field) {
+        JsonNode value = object.get(field);
+        if (value != null && value.isTextual()) {
+            object.set(field, json.createArrayNode().add(value.asText()));
+        }
     }
 
     private void trace(RadarEvent event, String status, String errorType, String fallbackReason,
