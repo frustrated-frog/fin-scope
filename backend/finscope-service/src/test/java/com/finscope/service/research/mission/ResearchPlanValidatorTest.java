@@ -36,6 +36,16 @@ class ResearchPlanValidatorTest {
     }
 
     @Test
+    void normalizesSearchQueryWhitespaceBeforePersistence() {
+        ResearchMissionDraft draft = validDraft();
+        draft.getTasks().get(1).setQueryText("AI算力  风险\t最新进展");
+
+        ResearchMissionDraft validated = validator.validate(draft);
+
+        assertEquals("AI算力 风险 最新进展", validated.getTasks().get(1).getQueryText());
+    }
+
+    @Test
     void rejectsUnknownToolCycleDuplicateKeyAndMissingCounterIntent() {
         ResearchMissionDraft unknownTool = validDraft();
         unknownTool.getTasks().get(1).setToolCode("shell");

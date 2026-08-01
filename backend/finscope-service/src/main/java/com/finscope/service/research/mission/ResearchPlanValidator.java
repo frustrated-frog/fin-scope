@@ -114,6 +114,7 @@ public class ResearchPlanValidator {
         optionalText(task.getParallelGroup(), "并行组", 48);
         optionalText(task.getRationale(), "选择理由", 240);
         optionalText(task.getExpectedEvidence(), "预期证据", 180);
+        task.setQueryText(ResearchQueryNormalizer.normalizeNullable(task.getQueryText()));
         if ("public_news_search".equals(task.getToolCode())) {
             requireText(task.getQueryText(), "搜索词", 180);
             if (PROTOCOL_PREFIX.matcher(task.getQueryText()).matches() || hasControlCharacter(task.getQueryText())) {

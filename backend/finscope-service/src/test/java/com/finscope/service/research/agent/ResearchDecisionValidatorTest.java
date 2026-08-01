@@ -88,7 +88,7 @@ class ResearchDecisionValidatorTest {
         values.put("question", "是否存在指引下修？");
         values.put("toolCode", "public_news_search");
         values.put("intent", "COUNTER");
-        values.put("queryText", "光模块 指引 下调 公司公告");
+        values.put("queryText", "光模块  指引\t下调 公司公告");
         values.put("reason", "原查询没有新增独立来源");
         patch.setPlanPatch(values);
 
@@ -96,6 +96,7 @@ class ResearchDecisionValidatorTest {
 
         assertEquals("PLAN_PATCH", decision.getDecisionType());
         assertTrue(decision.getArgumentsJson().contains("adaptive_counter_2"));
+        assertTrue(decision.getArgumentsJson().contains("光模块 指引 下调 公司公告"));
     }
 
     @Test
@@ -132,7 +133,7 @@ class ResearchDecisionValidatorTest {
         ResearchMissionTask baseline = task("baseline_scan", "source_scan", "BASELINE", "COMPLETED", null,
                 Collections.<String>emptyList());
         ResearchMissionTask counter = task("counter_accounting", "public_news_search", "COUNTER", "PENDING",
-                "AI资本开支 下调 风险", Collections.singletonList("baseline_scan"));
+                "AI资本开支  下调\t风险", Collections.singletonList("baseline_scan"));
         context.setTasks(Arrays.asList(baseline, counter));
         ResearchDecisionDraft exact = searchDraft();
         exact.setMissionTaskKey("counter_accounting");

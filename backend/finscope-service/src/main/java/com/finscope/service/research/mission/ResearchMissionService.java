@@ -262,7 +262,8 @@ public class ResearchMissionService {
         if ("public_news_search".equals(decision.getToolCode())) {
             String query = text(arguments.get("query"));
             if (!task.getIntent().equals(upper(arguments.get("intent")))
-                    || query == null || !task.getQueryText().equals(query.trim())) return null;
+                    || query == null || !ResearchQueryNormalizer.normalize(task.getQueryText())
+                    .equals(ResearchQueryNormalizer.normalize(query))) return null;
         }
         if ("research_material_search".equals(decision.getToolCode())
                 && !matchesMaterial(task, text(arguments.get("stockCode")), upper(arguments.get("materialType")),
@@ -302,10 +303,10 @@ public class ResearchMissionService {
     private boolean matchesMaterial(ResearchMissionTask task, String stockCode, String materialType, String query) {
         if (blank(stockCode) || blank(materialType) || blank(task.getQueryText())) return false;
         String[] expected = task.getQueryText().trim().split("\\s+", 3);
-        String expectedQuery = expected.length == 3 ? expected[2] : "";
+        String expectedQuery = expected.length == 3 ? ResearchQueryNormalizer.normalize(expected[2]) : "";
         return expected.length >= 2 && expected[0].equals(stockCode.trim())
                 && expected[1].equals(materialType.trim())
-                && expectedQuery.equals(query == null ? "" : query.trim());
+                && expectedQuery.equals(ResearchQueryNormalizer.normalize(query));
     }
 
     private boolean isFailure(ResearchToolObservation observation) {

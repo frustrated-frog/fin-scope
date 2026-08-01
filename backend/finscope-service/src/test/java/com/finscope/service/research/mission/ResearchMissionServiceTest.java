@@ -100,7 +100,7 @@ class ResearchMissionServiceTest {
     @Test
     void recordsSuccessfulAgentToolCallAgainstMatchingMissionTask() {
         ResearchMissionTask counter = missionTask("search_counter", "public_news_search", "COUNTER", "PENDING",
-                "宁德时代 盈利质量 风险");
+                "宁德时代  盈利质量\t风险");
         when(repository.findTask(21L, "search_counter")).thenReturn(java.util.Optional.of(counter));
         when(repository.startTask(21L, "search_counter")).thenReturn(true);
         when(repository.completeTask(21L, "search_counter", "找到独立反方证据", 2, 1)).thenReturn(true);

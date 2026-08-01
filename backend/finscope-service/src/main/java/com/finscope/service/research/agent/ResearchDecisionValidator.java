@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.mission.ResearchMissionTask;
+import com.finscope.service.research.mission.ResearchQueryNormalizer;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -170,16 +171,17 @@ public class ResearchDecisionValidator {
         Map<String, Object> arguments = draft.getArguments();
         if ("public_news_search".equals(selected.getToolCode())) {
             if (!selected.getIntent().equals(upper(text(arguments.get("intent"))))
-                    || !selected.getQueryText().equals(compact(text(arguments.get("query"))))) {
+                    || !ResearchQueryNormalizer.normalize(selected.getQueryText())
+                    .equals(ResearchQueryNormalizer.normalize(text(arguments.get("query"))))) {
                 throw rejected("公开搜索参数与 missionTaskKey 不匹配");
             }
         } else if ("research_material_search".equals(selected.getToolCode())) {
             String[] expected = selected.getQueryText() == null
                     ? new String[0] : selected.getQueryText().trim().split("\\s+", 3);
-            String expectedQuery = expected.length == 3 ? expected[2] : "";
+            String expectedQuery = expected.length == 3 ? ResearchQueryNormalizer.normalize(expected[2]) : "";
             if (expected.length < 2 || !expected[0].equals(text(arguments.get("stockCode")))
                     || !expected[1].equals(upper(text(arguments.get("materialType"))))
-                    || !expectedQuery.equals(compact(text(arguments.get("query"))))) {
+                    || !expectedQuery.equals(ResearchQueryNormalizer.normalize(text(arguments.get("query"))))) {
                 throw rejected("结构化资料参数与 missionTaskKey 不匹配");
             }
         }
@@ -221,6 +223,7 @@ public class ResearchDecisionValidator {
         }
         requireText(text(patch.get("reason")), "planPatch.reason", 240);
         patch.put("intent", intent);
+        patch.put("queryText", ResearchQueryNormalizer.normalize(query));
     }
 
     private String fingerprint(String toolCode, String missionTaskKey, String argumentsJson, String targetGap) {
