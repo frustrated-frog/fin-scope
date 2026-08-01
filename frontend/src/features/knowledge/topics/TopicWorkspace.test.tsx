@@ -1,5 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 
 import { TopicWorkspace } from './TopicWorkspace';
@@ -47,6 +49,14 @@ test('uses structured markdown rendering in the knowledge timeline', () => {
   expect(within(timeline).getAllByRole('heading', { name: '支持数据' })).toHaveLength(2);
   expect(within(timeline).getAllByText('净值上涨 2.41%')).toHaveLength(2);
   expect(within(timeline).queryByText(/## 支持数据/)).not.toBeInTheDocument();
+});
+
+test('limits timeline node layout styles to top-level timeline items', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toContain('.knowledge-thread > li {');
+  expect(styles).not.toContain('.knowledge-thread li {');
 });
 
 test('compares the current conclusion with evidence and schedules next review', async () => {

@@ -2801,7 +2801,7 @@ a:focus-visible {
 
 .knowledge-thread { position: relative; display: grid; gap: 0; margin: 24px 0 0; padding: 0; list-style: none; }
 .knowledge-thread::before { content: ""; position: absolute; top: 14px; bottom: 20px; left: 7px; width: 1px; background: var(--knowledge-rule); }
-.knowledge-thread li { position: relative; display: grid; grid-template-columns: 16px 1fr; gap: 16px; padding: 0 0 24px; }
+.knowledge-thread > li { position: relative; display: grid; grid-template-columns: 16px 1fr; gap: 16px; padding: 0 0 24px; }
 .knowledge-thread li > span { z-index: 1; width: 15px; height: 15px; margin-top: 4px; border: 3px solid var(--knowledge-canvas); border-radius: 50%; background: var(--knowledge-pine); box-shadow: 0 0 0 1px var(--knowledge-pine); }
 .knowledge-thread h3 { margin: 0 0 8px; color: var(--knowledge-slate); font-family: SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .08em; }
 .knowledge-thread > li > div > .knowledge-markdown { margin: 0 0 6px; border-bottom: 1px solid var(--knowledge-rule); padding: 0 0 7px; font-size: 13px; line-height: 1.6; }
