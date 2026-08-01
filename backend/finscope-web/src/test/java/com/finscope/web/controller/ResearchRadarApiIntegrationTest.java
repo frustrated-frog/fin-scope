@@ -2,6 +2,8 @@ package com.finscope.web.controller;
 
 import com.finscope.service.radar.ResearchRadarService;
 import com.finscope.service.radar.ResearchRadarView;
+import com.finscope.service.radar.RadarEventWorkspaceService;
+import com.finscope.service.radar.RadarResearchLinkService;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ResearchRadarApiIntegrationTest {
     @Autowired private MockMvc mvc;
     @MockBean private ResearchRadarService service;
+    @MockBean private RadarEventWorkspaceService workspaceService;
+    @MockBean private RadarResearchLinkService researchLinkService;
 
     @Test
     void returnsUnifiedRadarEnvelope() throws Exception {

@@ -37,13 +37,13 @@ class RadarEventTimelineServiceTest {
         assertEquals(1, service.timeline(event, Collections.singletonList(signal),
                 Collections.singletonList(evidence), interpretation).size());
 
-        verify(repository).appendTimeline(eq(10L), any(), eq("FIRST_SEEN"), eq("事件首次进入雷达"),
+        verify(repository).appendTimeline(eq(10L), eq("event:10:first"), eq("FIRST_SEEN"), eq("事件首次进入雷达"),
                 any(), eq("EVENT"), eq(10L), eq(event.getFirstSeenAt()));
-        verify(repository).appendTimeline(eq(10L), any(), eq("SIGNAL"), eq("新增来源消息"),
+        verify(repository).appendTimeline(eq(10L), eq("signal:2"), eq("SIGNAL"), eq("新增来源消息"),
                 eq("公司发布电池"), eq("SIGNAL"), eq(2L), eq(signal.getPublishedAt()));
-        verify(repository).appendTimeline(eq(10L), any(), eq("EVIDENCE"), eq("新增研究证据"),
+        verify(repository).appendTimeline(eq(10L), eq("evidence:3"), eq("EVIDENCE"), eq("新增研究证据"),
                 eq("交易所公告"), eq("EVIDENCE"), eq(3L), eq(evidence.getPublishedAt()));
-        verify(repository).appendTimeline(eq(10L), any(), eq("INTERPRETATION"), eq("事件解读已更新"),
+        verify(repository).appendTimeline(eq(10L), eq("interpretation:4"), eq("INTERPRETATION"), eq("事件解读已更新"),
                 any(), eq("INTERPRETATION"), eq(4L), eq(interpretation.getCompletedAt()));
     }
 }
