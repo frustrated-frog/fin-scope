@@ -40,7 +40,7 @@ public class RadarEvidenceTrustService {
                 ? new ArrayList<String>() : interpretation.getResult().getEvidenceRefs();
         int covered = 0; Set<String> counted = new LinkedHashSet<String>();
         for (String ref : refs) if (validRefs.contains(ref) && counted.add(ref)) covered++;
-        trust.setCitationCoveredCount(covered); trust.setCitationTotalCount(refs.size());
+        trust.setCitationCoveredCount(covered); trust.setCitationTotalCount(validRefs.size());
         trust.setConcentration(sources.size() <= 1 ? "单一来源" : sourceConcentration(signals, evidence, sources.size()));
         trust.setConflicts(conflicts(numbers)); return trust;
     }

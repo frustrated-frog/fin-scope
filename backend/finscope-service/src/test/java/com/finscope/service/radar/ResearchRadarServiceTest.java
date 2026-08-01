@@ -92,7 +92,7 @@ class ResearchRadarServiceTest {
         saved.setSummary("最近一次成功结果"); saved.setPriorityScore(60); saved.setSourceCount(2); saved.setSignalCount(2);
         saved.setScoreExplanation("多个来源确认；近期新信息");
         saved.setWatchlistExplanation("未发现与当前自选标的的直接关系"); saved.setLastSeenAt(NOW.minusMinutes(5));
-        when(repository.findRanked("ALL", false, 20)).thenReturn(Collections.singletonList(saved));
+        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
 
         ResearchRadarView view = service.load("ALL", false, 20);
 
@@ -111,7 +111,7 @@ class ResearchRadarServiceTest {
         when(news.load("ALL", 100)).thenThrow(new IllegalStateException("upstream unavailable"));
         RadarEvent saved = new RadarEvent(); saved.setId(9L); saved.setCanonicalTitle("已有事件");
         saved.setPriorityScore(60); saved.setLastSeenAt(NOW.minusMinutes(5));
-        when(repository.findRanked("ALL", false, 20)).thenReturn(Collections.singletonList(saved));
+        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
         RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(9L);
         summary.setFollowed(true); summary.setOpenObservationCount(2);
         Map<Long, RadarEventWorkspace.Summary> values = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();

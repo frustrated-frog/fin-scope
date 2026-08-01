@@ -31,7 +31,7 @@ class ResearchRadarApiIntegrationTest {
 
     @Test
     void returnsUnifiedRadarEnvelope() throws Exception {
-        when(service.load("ALL", false, 20)).thenReturn(ResearchRadarView.empty(LocalDateTime.of(2026, 7, 31, 16, 0)));
+        when(service.load("ALL", false, 20, "ALL")).thenReturn(ResearchRadarView.empty(LocalDateTime.of(2026, 7, 31, 16, 0)));
 
         mvc.perform(get("/api/research-radar"))
                 .andExpect(status().isOk())
@@ -39,7 +39,7 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.latestChanges").isArray())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
                 .andExpect(jsonPath("$.data.overview.eventCount").value(0));
-        verify(service).load("ALL", false, 20);
+        verify(service).load("ALL", false, 20, "ALL");
     }
 
     @Test

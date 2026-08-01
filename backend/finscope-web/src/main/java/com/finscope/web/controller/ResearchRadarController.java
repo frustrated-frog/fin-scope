@@ -37,8 +37,10 @@ public class ResearchRadarController {
     @GetMapping
     public ApiResponse<ResearchRadarView> radar(@RequestParam(defaultValue="ALL") String category,
                                                 @RequestParam(defaultValue="false") boolean watchlistOnly,
-                                                @RequestParam(defaultValue="20") int limit){
-        return ApiResponses.success(service.load(category,watchlistOnly,limit));
+                                                @RequestParam(defaultValue="20") int limit,
+                                                @RequestParam(defaultValue="ALL") String state,
+                                                @RequestParam(defaultValue="true") boolean refresh){
+        return ApiResponses.success(refresh?service.load(category,watchlistOnly,limit,state):service.loadStored(category,watchlistOnly,limit,state));
     }
 
     @GetMapping("/events/{id}")

@@ -38,6 +38,12 @@ public class RadarEventWorkspaceService {
                 ? Collections.<Long, RadarEventWorkspace.Summary>emptyMap() : workspace.findSummaries(eventIds);
     }
 
+    public void reconcileRead(RadarEvent event, RadarEventWorkspace.Summary summary) {
+        if (event == null || summary == null) return;
+        summary.setRead(summary.getLastViewedFingerprint() != null
+                && summary.getLastViewedFingerprint().equals(fingerprint(event)));
+    }
+
     public void createChangeNotifications(List<RadarEvent> events,Map<Long,RadarEventWorkspace.Summary> summaries){
         if(events==null||summaries==null)return;
         for(RadarEvent event:events){RadarEventWorkspace.Summary summary=summaries.get(event.getId());
@@ -51,8 +57,14 @@ public class RadarEventWorkspaceService {
     }
 
     public NotificationCenter notifications(int limit){
-        return new NotificationCenter(workspace.findNotifications(limit),workspace.countUnreadNotifications(),
-                workspace.countNotificationsOn(LocalDate.now()));
+        LocalDate today=LocalDate.now();int newEvents=workspace.countNewEventsOn(today);
+        int followedChanges=workspace.countFollowedChangesOn(today);int openObservations=workspace.countOpenObservations();
+        List<RadarEventWorkspace.Notification> items=new ArrayList<RadarEventWorkspace.Notification>();
+        RadarEventWorkspace.Notification digest=new RadarEventWorkspace.Notification();digest.setNotificationType("DAILY_SUMMARY");
+        digest.setTitle("今日雷达摘要");digest.setMessage("新增事件 "+newEvents+" · 关注变化 "+followedChanges+" · 待处理观察 "+openObservations);
+        digest.setCreatedAt(LocalDate.now().atStartOfDay());items.add(digest);List<RadarEventWorkspace.Notification> stored=workspace.findNotifications(limit);
+        if(stored!=null)items.addAll(stored);
+        return new NotificationCenter(items,workspace.countUnreadNotifications(),newEvents,followedChanges,openObservations);
     }
     public void readNotification(Long id){workspace.markNotificationRead(id);}
     public void readAllNotifications(){workspace.markAllNotificationsRead();}
@@ -126,7 +138,8 @@ public class RadarEventWorkspaceService {
     private String normalize(String value) { return value == null || value.trim().isEmpty() ? null : value.trim().toUpperCase(); }
     private String text(String value, String fallback) { return value == null || value.trim().isEmpty() ? fallback : value.trim(); }
     private void action(Long eventId,String fingerprint,String type,String title,String summary,String referenceType,Long referenceId) {
-        if(timeline!=null)timeline.action(eventId,fingerprint,type,title,summary,referenceType,referenceId);
+        if(timeline!=null)try { timeline.action(eventId,fingerprint,type,title,summary,referenceType,referenceId); }
+        catch (RuntimeException ignored) { /* 辅助时间线失败不能阻断用户动作 */ }
     }
 
     public static final class OpenedEvent {
@@ -144,11 +157,13 @@ public class RadarEventWorkspaceService {
 
     public static final class NotificationCenter{
         private final List<RadarEventWorkspace.Notification> items;private final int unreadCount;private final int todayCount;
-        NotificationCenter(List<RadarEventWorkspace.Notification> items,int unreadCount,int todayCount){
+        private final int followedChangeCount;private final int openObservationCount;
+        NotificationCenter(List<RadarEventWorkspace.Notification> items,int unreadCount,int todayCount,int followedChangeCount,int openObservationCount){
             this.items=items==null?new ArrayList<RadarEventWorkspace.Notification>():new ArrayList<RadarEventWorkspace.Notification>(items);
-            this.unreadCount=unreadCount;this.todayCount=todayCount;
+            this.unreadCount=unreadCount;this.todayCount=todayCount;this.followedChangeCount=followedChangeCount;this.openObservationCount=openObservationCount;
         }
         public List<RadarEventWorkspace.Notification> getItems(){return Collections.unmodifiableList(items);}
         public int getUnreadCount(){return unreadCount;}public int getTodayCount(){return todayCount;}
+        public int getFollowedChangeCount(){return followedChangeCount;}public int getOpenObservationCount(){return openObservationCount;}
     }
 }

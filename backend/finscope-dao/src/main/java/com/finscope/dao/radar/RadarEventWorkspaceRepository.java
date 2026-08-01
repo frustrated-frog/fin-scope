@@ -152,6 +152,21 @@ public class RadarEventWorkspaceRepository {
         return value==null?0:value;
     }
 
+    public int countNewEventsOn(LocalDate date){
+        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event WHERE substr(first_seen_at,1,10)=?",Integer.class,date.toString());
+        return value==null?0:value;
+    }
+
+    public int countFollowedChangesOn(LocalDate date){
+        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE notification_type='FOLLOWED_EVENT_CHANGED' AND substr(created_at,1,10)=?",Integer.class,date.toString());
+        return value==null?0:value;
+    }
+
+    public int countOpenObservations(){
+        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_observation WHERE status='OPEN'",Integer.class);
+        return value==null?0:value;
+    }
+
     public void markNotificationRead(Long id){
         jdbc.update("UPDATE radar_event_notification SET read_at=COALESCE(read_at,?) WHERE id=?",TimeUtil.text(LocalDateTime.now()),id);
     }
@@ -161,8 +176,10 @@ public class RadarEventWorkspaceRepository {
     }
 
     private String researchLinkSql() {
-        return "SELECT l.*,r.status research_status,r.summary research_summary FROM radar_event_research_link l "
-                + "JOIN research_run r ON r.id=l.research_run_id";
+        return "SELECT l.*,r.status research_status,"
+                + "COALESCE(NULLIF(p.conclusion,''),NULLIF(p.executive_summary,''),r.summary) research_summary "
+                + "FROM radar_event_research_link l JOIN research_run r ON r.id=l.research_run_id "
+                + "LEFT JOIN research_report p ON p.research_run_id=r.id";
     }
 
     private void insertObservation(Long eventId, String content, String source) {

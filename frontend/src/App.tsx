@@ -398,9 +398,10 @@ export default function App() {
           await api(`/api/research-radar/events/${pendingRadarEventId}/research-links/${run.id}`, {
             method: 'POST', body: JSON.stringify({ question: researchQuestionDraft })
           });
-          setPendingRadarEventId(null);
         } catch (linkError) {
           addToast(linkError instanceof Error ? linkError.message : '雷达事件与研究运行关联失败', 'error');
+        } finally {
+          setPendingRadarEventId(null);
         }
       }
       upsertResearchRun(run);

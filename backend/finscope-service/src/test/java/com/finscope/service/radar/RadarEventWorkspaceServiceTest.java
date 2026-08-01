@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -64,6 +65,31 @@ class RadarEventWorkspaceServiceTest {
 
         assertEquals(1,summary.getUnreadNotificationCount());
         verify(workspace).createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("关注事件出现新变化"),eq("宁德时代发布新电池"));
+    }
+
+    @Test
+    void marksPreviouslyViewedEventUnreadWhenItsVersionChanges() {
+        RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary();
+        summary.setReadAt(java.time.LocalDateTime.of(2026,8,1,10,0));
+        summary.setLastViewedFingerprint("older-version");
+
+        service.reconcileRead(event(), summary);
+
+        assertFalse(summary.isRead());
+    }
+
+    @Test
+    void prependsDeterministicDailySummary() {
+        when(workspace.countNewEventsOn(org.mockito.ArgumentMatchers.any())).thenReturn(4);
+        when(workspace.countFollowedChangesOn(org.mockito.ArgumentMatchers.any())).thenReturn(2);
+        when(workspace.countOpenObservations()).thenReturn(3);
+        when(workspace.findNotifications(30)).thenReturn(Collections.emptyList());
+
+        RadarEventWorkspaceService.NotificationCenter center = service.notifications(30);
+
+        assertEquals("DAILY_SUMMARY", center.getItems().get(0).getNotificationType());
+        assertEquals("新增事件 4 · 关注变化 2 · 待处理观察 3", center.getItems().get(0).getMessage());
+        assertEquals(4, center.getTodayCount());
     }
 
     private RadarEvent event() {

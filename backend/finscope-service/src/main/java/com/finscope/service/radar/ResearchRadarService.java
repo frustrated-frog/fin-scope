@@ -109,10 +109,15 @@ public class ResearchRadarService {
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
+        return load(requestedCategory, watchlistOnly, requestedLimit, "ALL");
+    }
+
+    public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit, String requestedState) {
         String category = normalizeCategory(requestedCategory);
+        String state = normalizeState(requestedState);
         int limit = Math.max(1, Math.min(requestedLimit, 50));
         LocalDateTime now = LocalDateTime.now(clock);
-        if (!refreshLock.tryLock()) return fallback(category, watchlistOnly, limit, now, "雷达正在刷新，已展示最近一次结果");
+        if (!refreshLock.tryLock()) return fallback(category, watchlistOnly, limit, state, now, "雷达正在刷新，已展示最近一次结果");
         try {
             NewsFeedSnapshot snapshot = news.load(category, 100);
             lastNewsSnapshot = snapshot;
@@ -145,18 +150,28 @@ public class ResearchRadarService {
             if(latestEvents.size()>5)latestEvents=new ArrayList<RadarEvent>(latestEvents.subList(0,5));
             savedEvents.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
                     .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
-            if (savedEvents.size()>limit) savedEvents=new ArrayList<RadarEvent>(savedEvents.subList(0,limit));
+            if (savedEvents.size()>50) savedEvents=new ArrayList<RadarEvent>(savedEvents.subList(0,50));
             Map<Long,ResearchRadarView.EventCard> cardIndex=cardIndex(savedEvents,latestEvents);
-            return new ResearchRadarView(cards(savedEvents,cardIndex),cards(latestEvents,cardIndex),Collections.<NewsFeedItem>emptyList(),
+            return new ResearchRadarView(filteredCards(savedEvents,cardIndex,state,limit),filteredCards(latestEvents,cardIndex,state,5),Collections.<NewsFeedItem>emptyList(),
                     snapshot.getWarnings(),snapshot.getRefreshedAt());
         } catch (BusinessException ex) {
             if (ex.getErrorCode()==ErrorCode.REQUEST_PARAMETER_INVALID) throw ex;
-            return fallback(category,watchlistOnly,limit,now,"实时资讯暂不可用，已展示最近一次结果");
+            return fallback(category,watchlistOnly,limit,state,now,"实时资讯暂不可用，已展示最近一次结果");
         } catch (RuntimeException ex) {
-            return fallback(category,watchlistOnly,limit,now,"实时资讯暂不可用，已展示最近一次结果");
+            return fallback(category,watchlistOnly,limit,state,now,"实时资讯暂不可用，已展示最近一次结果");
         } finally {
             refreshLock.unlock();
         }
+    }
+
+    public ResearchRadarView loadStored(String requestedCategory, boolean watchlistOnly, int requestedLimit, String requestedState) {
+        String category=normalizeCategory(requestedCategory);String state=normalizeState(requestedState);
+        int limit=Math.max(1,Math.min(requestedLimit,50));List<RadarEvent> ranked=repository.findRanked(category,watchlistOnly,50);
+        List<RadarEvent> latest=new ArrayList<RadarEvent>(ranked);latest.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));if(latest.size()>5)latest=new ArrayList<RadarEvent>(latest.subList(0,5));
+        Map<Long,ResearchRadarView.EventCard> index=cardIndex(ranked,latest);NewsFeedSnapshot cached=lastNewsSnapshot;
+        return new ResearchRadarView(filteredCards(ranked,index,state,limit),filteredCards(latest,index,state,5),Collections.<NewsFeedItem>emptyList(),
+                Collections.<String>emptyList(),cached==null?LocalDateTime.now(clock):cached.getRefreshedAt());
     }
 
     public ResearchRadarView.EventDetail detail(Long id) {
@@ -164,10 +179,12 @@ public class ResearchRadarService {
         List<RadarSignal> signals=repository.findSignalsByEventId(id);
         List<RadarEvidence> evidence=evidenceRepository==null?Collections.emptyList():evidenceRepository.findByEventId(id);
         RadarEventInterpretation interpretation=interpretations==null?null:interpretations.current(event,signals,evidence).orElse(null);
-        RadarEventWorkspaceService.OpenedEvent opened=workspace==null?null:workspace.open(event);
-        List<RadarEventWorkspace.TimelineEntry> timelineEntries=timeline==null?Collections.<RadarEventWorkspace.TimelineEntry>emptyList()
-                :timeline.timeline(event,signals,evidence,interpretation);
-        RadarEventWorkspace.Trust trustView=trust==null?new RadarEventWorkspace.Trust():trust.assess(signals,evidence,interpretation);
+        RadarEventWorkspaceService.OpenedEvent opened=null;
+        List<RadarEventWorkspace.TimelineEntry> timelineEntries=Collections.emptyList();
+        RadarEventWorkspace.Trust trustView=new RadarEventWorkspace.Trust();
+        try { if(workspace!=null)opened=workspace.open(event); } catch(RuntimeException ignored) { }
+        try { if(timeline!=null)timelineEntries=timeline.timeline(event,signals,evidence,interpretation); } catch(RuntimeException ignored) { }
+        try { if(trust!=null)trustView=trust.assess(signals,evidence,interpretation); } catch(RuntimeException ignored) { }
         return new ResearchRadarView.EventDetail(event,signals,repository.findEventSignals(id),evidence,
                 agentRuns==null?Collections.emptyList():agentRuns.findBySubject("RADAR_EVENT",id),interpretation,
                 opened==null?null:opened.getState(),opened==null?Collections.<RadarEventWorkspace.Observation>emptyList():opened.getObservations(),
@@ -179,13 +196,13 @@ public class ResearchRadarService {
         return new ResearchRadarView.InterpretationView(interpretations.request(id));
     }
 
-    private ResearchRadarView fallback(String category,boolean watchlistOnly,int limit,LocalDateTime now,String warning) {
+    private ResearchRadarView fallback(String category,boolean watchlistOnly,int limit,String state,LocalDateTime now,String warning) {
         NewsFeedSnapshot cached = lastNewsSnapshot;
-        List<RadarEvent> ranked=repository.findRanked(category,watchlistOnly,limit);
+        List<RadarEvent> ranked=repository.findRanked(category,watchlistOnly,50);
         List<RadarEvent> latest=new ArrayList<RadarEvent>(ranked);latest.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));if(latest.size()>5)latest=new ArrayList<RadarEvent>(latest.subList(0,5));
         Map<Long,ResearchRadarView.EventCard> cardIndex=cardIndex(ranked,latest);
-        return new ResearchRadarView(cards(ranked,cardIndex),cards(latest,cardIndex),Collections.<NewsFeedItem>emptyList(),
+        return new ResearchRadarView(filteredCards(ranked,cardIndex,state,limit),filteredCards(latest,cardIndex,state,5),Collections.<NewsFeedItem>emptyList(),
                 Collections.singletonList(warning),cached==null?now:cached.getRefreshedAt());
     }
     private Map<Long,ResearchRadarView.EventCard> cardIndex(List<RadarEvent> events,List<RadarEvent> latestEvents) {
@@ -195,8 +212,12 @@ public class ResearchRadarService {
         List<Long> ids=new ArrayList<Long>(unique.keySet());
         Map<Long,RadarEventInterpretation> latest=interpretations==null?Collections.<Long,RadarEventInterpretation>emptyMap()
                 :interpretations.latestByEventIds(ids);
-        Map<Long,RadarEventWorkspace.Summary> summaries=workspace==null?Collections.<Long,RadarEventWorkspace.Summary>emptyMap():workspace.summaries(ids);
-        if(workspace!=null)workspace.createChangeNotifications(new ArrayList<RadarEvent>(unique.values()),summaries);
+        Map<Long,RadarEventWorkspace.Summary> summaries=Collections.emptyMap();
+        if(workspace!=null)try {
+            summaries=workspace.summaries(ids);
+            for(RadarEvent event:unique.values())workspace.reconcileRead(event,summaries.get(event.getId()));
+            workspace.createChangeNotifications(new ArrayList<RadarEvent>(unique.values()),summaries);
+        } catch(RuntimeException ignored) { summaries=Collections.emptyMap(); }
         Map<Long,ResearchRadarView.EventCard> result=new LinkedHashMap<Long,ResearchRadarView.EventCard>();
         for(RadarEvent event:unique.values())result.put(event.getId(),new ResearchRadarView.EventCard(event,latest.get(event.getId()),summaries.get(event.getId())));
         return result;
@@ -205,8 +226,21 @@ public class ResearchRadarService {
         List<ResearchRadarView.EventCard> cards=new ArrayList<ResearchRadarView.EventCard>();
         for(RadarEvent event:events) cards.add(index.get(event.getId())); return cards;
     }
+    private List<ResearchRadarView.EventCard> filteredCards(List<RadarEvent> events,Map<Long,ResearchRadarView.EventCard> index,String state,int limit) {
+        List<ResearchRadarView.EventCard> result=new ArrayList<ResearchRadarView.EventCard>();
+        for(RadarEvent event:events){ResearchRadarView.EventCard card=index.get(event.getId());if(card!=null&&matchesState(card,state))result.add(card);if(result.size()>=limit)break;}
+        return result;
+    }
+    private boolean matchesState(ResearchRadarView.EventCard card,String state){
+        if("UNREAD".equals(state))return !card.isRead()&&!"IGNORED".equals(card.getDisposition());
+        if("FOLLOWED".equals(state))return card.isFollowed()&&!"IGNORED".equals(card.getDisposition());
+        if("LATER".equals(state))return "LATER".equals(card.getDisposition());
+        if("IGNORED".equals(state))return "IGNORED".equals(card.getDisposition());
+        return !"IGNORED".equals(card.getDisposition());
+    }
     private boolean matches(String category,RadarEvent event){return "ALL".equals(category)||category.equalsIgnoreCase(event.getCategoryCode());}
     private String normalizeCategory(String value){return value==null||value.trim().isEmpty()?"ALL":value.trim().toUpperCase(Locale.ROOT);}
+    private String normalizeState(String value){String state=value==null?"ALL":value.trim().toUpperCase(Locale.ROOT);return Arrays.asList("ALL","UNREAD","FOLLOWED","LATER","IGNORED").contains(state)?state:"ALL";}
     private RadarSignal toSignal(NewsFeedItem item) {
         RadarSignal signal=new RadarSignal(); signal.setItemId(item.getId()); signal.setProviderCode(item.getProviderCode());
         signal.setSourceName(item.getSourceName()); signal.setSourceTier(item.getSourceTier()); signal.setCategoryCode(item.getCategoryCode());

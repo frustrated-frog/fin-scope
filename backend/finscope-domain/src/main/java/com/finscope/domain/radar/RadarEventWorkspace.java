@@ -13,6 +13,7 @@ public final class RadarEventWorkspace {
     public static class State {
         private Long eventId;
         private LocalDateTime readAt;
+        private Boolean read;
         private boolean followed;
         private String disposition = "ACTIVE";
         private String lastViewedFingerprint;
@@ -21,7 +22,8 @@ public final class RadarEventWorkspace {
         public void setEventId(Long value) { eventId = value; }
         public LocalDateTime getReadAt() { return readAt; }
         public void setReadAt(LocalDateTime value) { readAt = value; }
-        public boolean isRead() { return readAt != null; }
+        public boolean isRead() { return read == null ? readAt != null : read; }
+        public void setRead(boolean value) { read = value; }
         public boolean isFollowed() { return followed; }
         public void setFollowed(boolean value) { followed = value; }
         public String getDisposition() { return disposition; }

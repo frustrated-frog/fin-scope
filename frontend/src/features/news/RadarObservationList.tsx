@@ -4,7 +4,7 @@ import type { RadarObservation } from './researchRadarTypes';
 
 export function RadarObservationList({ eventId, items = [], onChange }: { eventId: number; items?: RadarObservation[]; onChange: (items: RadarObservation[]) => void }) {
   const [content,setContent]=useState(''); const [busy,setBusy]=useState(false);
-  async function add(){if(!content.trim()||busy)return;setBusy(true);try{const item=await api<RadarObservation>(`/api/research-radar/events/${eventId}/observations`,{method:'POST',body:JSON.stringify({content:content.trim()})});onChange([...items,item]);setContent('');}finally{setBusy(false);}}
+  async function add(){if(!content.trim()||busy)return;setBusy(true);try{const item=await api<RadarObservation>(`/api/research-radar/events/${eventId}/observations`,{method:'POST',body:JSON.stringify({content:content.trim()})});onChange(items.some((value)=>value.id===item.id)?items.map((value)=>value.id===item.id?item:value):[...items,item]);setContent('');}finally{setBusy(false);}}
   async function toggle(item:RadarObservation){const next=await api<RadarObservation>(`/api/research-radar/events/${eventId}/observations/${item.id}`,{method:'PATCH',body:JSON.stringify({status:item.status==='OPEN'?'DONE':'OPEN'})});onChange(items.map((value)=>value.id===item.id?next:value));}
   async function remove(item:RadarObservation){await api(`/api/research-radar/events/${eventId}/observations/${item.id}`,{method:'DELETE'});onChange(items.filter((value)=>value.id!==item.id));}
   return <div className="radar-observations">

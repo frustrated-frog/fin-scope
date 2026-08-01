@@ -132,7 +132,7 @@ test('keeps the original realtime wire as the default and offers radar as a seco
   expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100');
 
   await openRadar();
-  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20');
+  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL');
 });
 
 test('shows category quality counts and explainable agent decisions', async () => {
@@ -282,7 +282,7 @@ test('supports watchlist-only filtering and degraded snapshots', async () => {
 
   fireEvent.click(screen.getByRole('button', { name: '与我相关' }));
 
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=true&limit=20'));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=true&limit=20&state=ALL'));
   expect(screen.getByText('实时来源暂不可用，当前展示最近一次雷达结果')).toBeInTheDocument();
 });
 

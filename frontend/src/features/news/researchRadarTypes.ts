@@ -118,8 +118,8 @@ export type RadarObservation = { id: number; eventId: number; content: string; s
 export type RadarTimelineEntry = { id: number; eventId: number; eventType: string; title: string; summary?: string; referenceType?: string; referenceId?: number; occurredAt: string };
 export type RadarTrust = { independentSourceCount: number; sourceTierCounts: Record<string, number>; citationCoveredCount: number; citationTotalCount: number; concentration: string; conflicts: string[]; limitation: string };
 export type RadarResearchLink = { id: number; eventId: number; researchRunId: number; questionSnapshot?: string; status?: string; summary?: string; createdAt: string };
-export type RadarNotification = { id: number; eventId?: number; notificationType: string; title: string; message?: string; read: boolean; createdAt: string };
-export type RadarNotificationCenter = { items: RadarNotification[]; unreadCount: number; todayCount: number };
+export type RadarNotification = { id?: number; eventId?: number; notificationType: string; title: string; message?: string; read: boolean; createdAt: string };
+export type RadarNotificationCenter = { items: RadarNotification[]; unreadCount: number; todayCount: number; followedChangeCount?: number; openObservationCount?: number };
 export type RadarStateFilter = 'ALL' | 'UNREAD' | 'FOLLOWED' | 'LATER' | 'IGNORED';
 
 export type ResearchRadarSnapshot = {

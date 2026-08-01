@@ -35,6 +35,21 @@ class RadarEvidenceTrustServiceTest {
         assertTrue(trust.getConflicts().get(0).contains("30%"));
     }
 
+    @Test
+    void usesAllAvailableInputsAsCitationCoverageDenominator() {
+        RadarSignal first = signal(1L, "甲", "TIER_1", "https://a.example/x", "增长10%");
+        RadarSignal second = signal(2L, "乙", "TIER_2", "https://b.example/x", "增长10%");
+        RadarEvidence evidence = evidence(3L, "丙", "TIER_2", "https://c.example/x", "增长10%");
+        RadarEventInterpretation.Result result = new RadarEventInterpretation.Result();
+        result.setEvidenceRefs(Collections.singletonList("signal:1"));
+        RadarEventInterpretation interpretation = new RadarEventInterpretation(); interpretation.setResult(result);
+
+        RadarEventWorkspace.Trust trust = service.assess(Arrays.asList(first, second), Collections.singletonList(evidence), interpretation);
+
+        assertEquals(1, trust.getCitationCoveredCount());
+        assertEquals(3, trust.getCitationTotalCount());
+    }
+
     private RadarSignal signal(Long id, String source, String tier, String url, String content) {
         RadarSignal value = new RadarSignal(); value.setId(id); value.setSourceName(source); value.setSourceTier(tier);
         value.setUrl(url); value.setTitle(content); value.setContent(content); return value;
