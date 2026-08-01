@@ -5097,14 +5097,14 @@ td {
 
 .dashboard-pulse {
   display: grid;
-  grid-template-columns: minmax(250px, 0.72fr) minmax(0, 1.28fr);
-  gap: 24px;
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+  gap: 40px;
   align-items: stretch;
   border-top: 2px solid color-mix(in srgb, var(--accent) 74%, var(--line));
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   min-width: 0;
-  padding: 22px 0;
+  padding: 30px 32px;
 }
 
 .dashboard-pulse-intro {

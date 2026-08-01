@@ -728,6 +728,8 @@ test('dashboard uses a responsive research command layout', () => {
   expect(styles).toMatch(/\.dashboard-workspace-grid\s*{[^}]*grid-template-columns:/s);
   expect(styles).toMatch(/\.dashboard-command\s*{[^}]*min-width:\s*0/s);
   expect(styles).toMatch(/\.dashboard-command\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  expect(styles).toMatch(/\.dashboard-pulse\s*{[^}]*gap:\s*40px/s);
+  expect(styles).toMatch(/\.dashboard-pulse\s*{[^}]*padding:\s*30px\s+32px/s);
   expect(styles).toMatch(/@media \(max-width: 760px\)[\s\S]*\.dashboard-pulse[\s\S]*grid-template-columns:\s*1fr/s);
 });
 
