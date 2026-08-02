@@ -72,6 +72,18 @@ class ResearchDecisionAgentTest {
     }
 
     @Test
+    void normalizesEmptyStringForOptionalDecisionObjects() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(validDecisionJson()
+                .replace("\"confidence\":0.83", "\"confidence\":0.83,\"planPatch\":\"\""));
+
+        ResearchDecisionResult result = agent.decide(ResearchAgentTestFixtures.counterGapContext());
+
+        assertEquals("MODEL", result.getDecision().getDecisionMode());
+        assertNull(result.getFallbackReason());
+    }
+
+    @Test
     void rebuildsToolAndArgumentsFromTheMissionTaskSelectedByModel() throws Exception {
         ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
         ResearchMissionTask baseline = task("baseline_scan", "source_scan", "BASELINE", "COMPLETED", null,

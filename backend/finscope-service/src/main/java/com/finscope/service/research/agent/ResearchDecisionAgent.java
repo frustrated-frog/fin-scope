@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.research.ModelJsonShapeNormalizer;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -24,6 +25,7 @@ public class ResearchDecisionAgent {
     private final ResearchDecisionValidator validator;
     private final DeterministicResearchPolicy fallbackPolicy;
     private final ObjectMapper objectMapper;
+    private final ModelJsonShapeNormalizer shapeNormalizer;
 
     public ResearchDecisionAgent(LlmChatClient llmChatClient,
                                  ResearchDecisionValidator validator,
@@ -35,6 +37,7 @@ public class ResearchDecisionAgent {
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        this.shapeNormalizer = new ModelJsonShapeNormalizer(objectMapper);
     }
 
     public ResearchDecisionResult decide(ResearchDecisionContext context) {
@@ -123,18 +126,10 @@ public class ResearchDecisionAgent {
             return;
         }
         ObjectNode draft = (ObjectNode) root;
-        normalizeTextFields(draft, "currentSubgoal", "missionTaskKey", "toolCode", "targetGap",
+        shapeNormalizer.normalizeTextFields(draft, "currentSubgoal", "missionTaskKey", "toolCode", "targetGap",
                 "expectedObservation", "decisionSummary");
+        shapeNormalizer.normalizeObjectFields(draft, "arguments", "planPatch");
         normalizeConfidence(draft);
-    }
-
-    private void normalizeTextFields(ObjectNode draft, String... fields) throws Exception {
-        for (String field : fields) {
-            JsonNode value = draft.get(field);
-            if (value != null && !value.isNull() && !value.isTextual()) {
-                draft.put(field, objectMapper.writeValueAsString(value));
-            }
-        }
     }
 
     private void normalizeConfidence(ObjectNode root) {

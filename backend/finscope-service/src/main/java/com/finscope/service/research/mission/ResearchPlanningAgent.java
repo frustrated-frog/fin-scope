@@ -2,9 +2,12 @@ package com.finscope.service.research.mission;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.mission.ResearchToolDescriptor;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.research.ModelJsonShapeNormalizer;
 import com.finscope.service.research.method.ResearchMethodDefinition;
 import com.finscope.service.research.method.ResearchMethodRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +28,7 @@ public class ResearchPlanningAgent {
     private final DeterministicResearchPlanner deterministicPlanner;
     private final ResearchMethodRegistry methodRegistry;
     private final ObjectMapper objectMapper;
+    private final ModelJsonShapeNormalizer shapeNormalizer;
 
     public ResearchPlanningAgent(LlmChatClient llmChatClient,
                                  ResearchToolRegistry toolRegistry,
@@ -48,6 +52,7 @@ public class ResearchPlanningAgent {
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        this.shapeNormalizer = new ModelJsonShapeNormalizer(objectMapper);
     }
 
     public ResearchPlanningResult plan(ResearchPlanningInput input) {
@@ -61,7 +66,9 @@ public class ResearchPlanningAgent {
             if (json.length() > MAX_RAW_CHARACTERS) {
                 throw new IllegalArgumentException("研究计划校验失败：模型输出超过字符上限");
             }
-            ResearchMissionDraft draft = objectMapper.readValue(json, ResearchMissionDraft.class);
+            JsonNode root = objectMapper.readTree(json);
+            normalizeDraft(root);
+            ResearchMissionDraft draft = objectMapper.treeToValue(root, ResearchMissionDraft.class);
             return new ResearchPlanningResult(validator.validate(draft, input), "LLM_VALIDATED", null, null);
         } catch (IllegalArgumentException exception) {
             return fallback(input, "PLAN_REJECTED", safeDetail(exception.getMessage()));
@@ -79,6 +86,30 @@ public class ResearchPlanningAgent {
     private ResearchPlanningResult fallback(ResearchPlanningInput input, String reason, String detail) {
         ResearchMissionDraft fallback = validator.validate(deterministicPlanner.plan(input), input);
         return new ResearchPlanningResult(fallback, "DETERMINISTIC", reason, detail);
+    }
+
+    private void normalizeDraft(JsonNode root) throws Exception {
+        if (!(root instanceof ObjectNode)) {
+            return;
+        }
+        ObjectNode draft = (ObjectNode) root;
+        shapeNormalizer.normalizeTextFields(draft, "researchType", "scopeSummary");
+        shapeNormalizer.normalizeStringArrayFields(draft, "methodCodes", "requiredEvidence",
+                "requiredCalculations", "counterChecks", "completionCriteria", "successCriteria");
+        shapeNormalizer.normalizeObjectArrayField(draft, "tasks");
+        JsonNode tasks = draft.get("tasks");
+        if (tasks == null || !tasks.isArray()) {
+            return;
+        }
+        for (JsonNode task : tasks) {
+            if (!(task instanceof ObjectNode)) {
+                continue;
+            }
+            ObjectNode taskDraft = (ObjectNode) task;
+            shapeNormalizer.normalizeTextFields(taskDraft, "taskKey", "title", "question", "taskType",
+                    "toolCode", "intent", "parallelGroup", "queryText", "rationale", "expectedEvidence");
+            shapeNormalizer.normalizeStringArrayField(taskDraft, "dependencies");
+        }
     }
 
     private String systemPrompt() {

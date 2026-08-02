@@ -44,6 +44,29 @@ class ResearchPlanningAgentTest {
     }
 
     @Test
+    void normalizesCompatibleModelStringValuesForArrayFields() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        String compatibleJson = validJson()
+                .replace("\"successCriteria\":[\"至少两个独立来源\",\"同时覆盖支持与反方证据\"]",
+                        "\"successCriteria\":\"至少两个独立来源；同时覆盖支持与反方证据\"")
+                .replace("\"dependencies\":[]", "\"dependencies\":\"\"")
+                .replace("\"dependencies\":[\"baseline_scan\"]", "\"dependencies\":\"baseline_scan\"")
+                .replace("\"dependencies\":[\"search_support\",\"search_counter\",\"search_primary\"]",
+                        "\"dependencies\":\"search_support；search_counter；search_primary\"")
+                .replace("\"dependencies\":[\"assess_evidence\"]", "\"dependencies\":\"assess_evidence\"");
+        compatibleJson = "{\"requiredEvidence\":\"官方原文；政策核心条款；市场反馈\"," + compatibleJson.substring(1);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn(compatibleJson);
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertEquals(Arrays.asList("至少两个独立来源", "同时覆盖支持与反方证据"),
+                result.getDraft().getSuccessCriteria());
+        assertEquals(Arrays.asList("search_support", "search_counter", "search_primary"),
+                result.getDraft().task("assess_evidence").getDependencies());
+    }
+
+    @Test
     void tellsModelTheExactTaskKeyAndDependencyContract() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         AtomicReference<String> systemPrompt = new AtomicReference<String>();
