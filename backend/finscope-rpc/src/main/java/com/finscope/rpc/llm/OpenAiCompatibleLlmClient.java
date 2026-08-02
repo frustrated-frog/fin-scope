@@ -122,6 +122,11 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         request.put("temperature", temperature);
         request.put("stream", false);
         request.put("messages", messages(systemPrompt, userPrompt));
+        if (maxOutputTokens > 0 && isDeepSeekModel()) {
+            Map<String, String> thinking = new LinkedHashMap<String, String>();
+            thinking.put("type", "disabled");
+            request.put("thinking", thinking);
+        }
         if (maxOutputTokens > 0) {
             request.put("max_tokens", maxOutputTokens);
         }
@@ -134,6 +139,10 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
             request.put("response_format", responseFormat);
         }
         return request;
+    }
+
+    private boolean isDeepSeekModel() {
+        return model.toLowerCase(java.util.Locale.ROOT).startsWith("deepseek-");
     }
 
     private List<Map<String, String>> messages(String systemPrompt, String userPrompt) {

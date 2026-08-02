@@ -2,7 +2,9 @@ package com.finscope.service.research.agent;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.rpc.llm.LlmChatClient;
@@ -51,7 +53,9 @@ public class ResearchDecisionAgent {
             if (raw.length() > MAX_RAW_CHARACTERS) {
                 throw new IllegalArgumentException("模型决策超过字符上限");
             }
-            ResearchDecisionDraft draft = objectMapper.readValue(raw.trim(), ResearchDecisionDraft.class);
+            JsonNode root = objectMapper.readTree(raw.trim());
+            normalizeConfidence(root);
+            ResearchDecisionDraft draft = objectMapper.treeToValue(root, ResearchDecisionDraft.class);
             bindMissionTaskContract(draft, context);
             ResearchAgentDecision decision = validator.validate(draft, context, "MODEL");
             return new ResearchDecisionResult(decision, null, null);
@@ -72,6 +76,7 @@ public class ResearchDecisionAgent {
                 + "必须返回单个 JSON 对象，不要 Markdown，不得增加字段。"
                 + "字段仅允许 decisionType、currentSubgoal、missionTaskKey、toolCode、arguments、targetGap、"
                 + "expectedObservation、decisionSummary、confidence、planPatch。"
+                + "confidence必须是0到1之间的JSON数字，不得输出high、medium、low等字符串。"
                 + "decisionType 仅允许 TOOL_CALL、PLAN_PATCH、FINISH、ABORT。"
                 + "可执行工具仅允许 public_news_search、research_material_search 和 evidence_assess。"
                 + "TOOL_CALL只负责选择计划任务中精确的missionTaskKey；工具和参数由服务端按任务合同重建，"
@@ -110,6 +115,30 @@ public class ResearchDecisionAgent {
             draft.setArguments(arguments);
         } else if ("evidence_assess".equals(selected.getToolCode())) {
             draft.setArguments(Collections.<String, Object>emptyMap());
+        }
+    }
+
+    private void normalizeConfidence(JsonNode root) {
+        if (!(root instanceof ObjectNode)) {
+            return;
+        }
+        JsonNode confidence = root.get("confidence");
+        if (confidence == null || !confidence.isTextual()) {
+            return;
+        }
+        String value = confidence.asText().trim();
+        if ("HIGH".equalsIgnoreCase(value)) {
+            ((ObjectNode) root).put("confidence", 0.85D);
+        } else if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) {
+            ((ObjectNode) root).put("confidence", 0.65D);
+        } else if ("LOW".equalsIgnoreCase(value)) {
+            ((ObjectNode) root).put("confidence", 0.35D);
+        } else {
+            try {
+                ((ObjectNode) root).put("confidence", Double.parseDouble(value));
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException("confidence 必须是 0 到 1 之间的数字或 HIGH/MEDIUM/LOW");
+            }
         }
     }
 

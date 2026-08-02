@@ -84,6 +84,29 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    void disablesDeepSeekThinkingForStructuredCalls() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<String>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            requestBody.set(new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8));
+            byte[] body = "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "deepseek-v4-flash", 3000, 0.2);
+
+        client.complete("system", "user", 2000, 1200);
+
+        assertTrue(requestBody.get().contains("\"thinking\":{\"type\":\"disabled\"}"));
+    }
+
+    @Test
     void appliesThePerRequestTimeoutWhenItIsLowerThanTheGlobalTimeout() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
