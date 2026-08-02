@@ -8,7 +8,6 @@ import { BriefsView } from './features/briefs/BriefsView';
 import { ContentStudioView } from './features/content-studio/ContentStudioView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
-import { EventsView } from './features/events/EventsView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
@@ -70,7 +69,6 @@ export default function App() {
   const [selectedBriefContext, setSelectedBriefContext] = useState<BriefResearchContext | null>(null);
   const [events, setEvents] = useState<EventCluster[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
-  const [focusedEventId, setFocusedEventId] = useState<number | null>(null);
   const [activeTopicCount, setActiveTopicCount] = useState(0);
   const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
@@ -248,10 +246,6 @@ export default function App() {
         return 'Research';
       case 'news':
         return 'News Wire · 市场资讯';
-      case 'events':
-        return 'Events';
-      case 'eventDetail':
-        return 'Event Archive';
       case 'evidence':
         return 'Evidence Ledger';
       case 'knowledge':
@@ -274,11 +268,6 @@ export default function App() {
         return 'Dashboard';
     }
   }, [view]);
-
-  function openEvent(eventId: number) {
-    setFocusedEventId(eventId);
-    setView('eventDetail');
-  }
 
   async function openBrief(date: string) {
     setMessage('正在打开简报');
@@ -461,36 +450,6 @@ export default function App() {
     }
   }
 
-  async function updateEventStatus(eventId: number, status: string) {
-    await api<EventCluster>(`/api/events/${eventId}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ status })
-    });
-    setMessage(`事件状态已更新为 ${status}`);
-    await refresh();
-  }
-
-  async function mergeEvent(sourceEventId: number, targetEventId: number) {
-    await api<EventCluster>(`/api/events/${sourceEventId}/merge`, {
-      method: 'POST',
-      body: JSON.stringify({ targetEventId })
-    });
-    setMessage('事件已合并');
-    await refresh();
-  }
-
-  async function moveEventArticle(sourceEventId: number, articleId: number, input: {
-    targetEventId?: number;
-    createNewEvent?: boolean;
-  }) {
-    await api<EventCluster>(`/api/events/${sourceEventId}/articles/${articleId}/move`, {
-      method: 'POST',
-      body: JSON.stringify(input)
-    });
-    setMessage('文章归属已调整');
-    await refresh();
-  }
-
   return (
     <AppShell
       view={view}
@@ -590,42 +549,7 @@ export default function App() {
           }}
         />
       )}
-      {view === 'events' && (
-        <EventsView
-          events={events}
-          initialEventId={focusedEventId}
-          mode="queue"
-          onOpenEvent={openEvent}
-          learningTasks={learningTasks}
-          contentIdeas={contentIdeas}
-          onContentIdeaStatusChange={updateContentIdeaStatus}
-          onEventStatusChange={updateEventStatus}
-          onMergeEvent={mergeEvent}
-          onMoveEventArticle={moveEventArticle}
-          onChanged={refresh}
-          addToast={addToast}
-        />
-      )}
-      {view === 'eventDetail' && (
-        <EventsView
-          events={events}
-          initialEventId={focusedEventId}
-          mode="detail"
-          onOpenEvent={openEvent}
-          onBack={() => setView('events')}
-          learningTasks={learningTasks}
-          contentIdeas={contentIdeas}
-          onContentIdeaStatusChange={updateContentIdeaStatus}
-          onEventStatusChange={updateEventStatus}
-          onMergeEvent={mergeEvent}
-          onMoveEventArticle={moveEventArticle}
-          onChanged={refresh}
-          addToast={addToast}
-        />
-      )}
-      {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenEvent={(eventId) => {
-        openEvent(eventId);
-      }} />}
+      {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenNews={() => setView('news')} />}
       {view === 'knowledge' && (
         <KnowledgeView addToast={addToast} setMessage={setMessage} />
       )}

@@ -142,7 +142,7 @@ export function DashboardView({
             label="事件"
             count={priorityEvents.length}
             command="查看研究流"
-            onOpen={() => onChangeView('events')}
+            onOpen={() => onChangeView('news')}
             empty="暂时没有活跃事件，新的文章会先在文章工作区等待归并。"
             items={priorityEvents.map((event) => ({
               title: event.canonicalTitle,
@@ -154,8 +154,8 @@ export function DashboardView({
             label="学习"
             count={openTasks.length}
             command="查看学习任务"
-            onOpen={() => onChangeView('events')}
-            empty="暂无待完成学习任务，可以从事件研究台建立新的问题。"
+            onOpen={() => onChangeView('knowledge')}
+            empty="暂无待完成学习任务，可以从知识工作台建立新的问题。"
             items={openTasks.map((task) => ({
               title: task.question,
               meta: task.themeCode || '未分类主题',
@@ -190,8 +190,8 @@ export function DashboardView({
             label="研究流"
             value={`${events.length} 个事件`}
             detail={`${newArticleCount} 条新内容 · ${dashboard.sourceCount} 个信息源`}
-            command="进入事件研究台"
-            onOpen={() => onChangeView('events')}
+            command="进入市场资讯"
+            onOpen={() => onChangeView('news')}
           />
           <WorkspaceCard
             label="知识与判断"

@@ -64,7 +64,14 @@ export function LiveNewsPanel({ setMessage, addToast }: {
     const requestId = ++requestSequence.current;
     try {
       if (manual) setLoading(true);
-      const next = await api<NewsFeedSnapshot>(`/api/news?category=${encodeURIComponent(category)}&limit=100`);
+      const response = await api<NewsFeedSnapshot>(`/api/news?category=${encodeURIComponent(category)}&limit=100`);
+      const next: NewsFeedSnapshot = {
+        ...response,
+        items: Array.isArray(response?.items) ? response.items : [],
+        warnings: Array.isArray(response?.warnings) ? response.warnings : [],
+        refreshedAt: response?.refreshedAt ?? new Date().toISOString(),
+        sourceCount: response?.sourceCount ?? 0
+      };
       if (!mounted.current || requestId !== requestSequence.current || category !== selectedCategoryRef.current) return;
       const current = snapshotRef.current;
       const currentIds = new Set(current?.items.map((item) => item.id) ?? []);

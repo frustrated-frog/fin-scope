@@ -347,47 +347,6 @@ const responses: Record<string, unknown> = {
       summary: 'AI 开发者生态继续往 agent workflow 演进。'
     }
   ],
-  '/api/events/1/articles': [
-    {
-      eventId: 1,
-      articleId: 1,
-      relationType: 'PRIMARY',
-      matchScore: 1,
-      noveltyType: 'NEW',
-      noveltyReason: '首次进入事件记忆',
-      articleTitle: '美联储释放降息信号 黄金走强',
-      articleUrl: 'https://example.com/1'
-    },
-    {
-      eventId: 1,
-      articleId: 2,
-      relationType: 'SUPPORTING',
-      matchScore: 0.88,
-      noveltyType: 'FOLLOW_UP',
-      noveltyReason: '命中历史事件，包含新的数据、时间线或市场反应',
-      articleTitle: '黄金ETF单周流入12亿美元',
-      articleUrl: 'https://example.com/2'
-    }
-  ],
-  '/api/events/1/evidence': [
-    { id: 1, eventId: 1, sourceTier: 'MEDIA', evidenceType: 'DATA', claim: '黄金ETF单周流入12亿美元。', confidence: 75 },
-    { id: 2, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'TIMELINE', claim: '美联储官员释放偏鸽措辞。', confidence: 90 }
-  ],
-  '/api/events/2/articles': [
-    {
-      eventId: 2,
-      articleId: 3,
-      relationType: 'PRIMARY',
-      matchScore: 1,
-      noveltyType: 'NEW',
-      noveltyReason: '首次进入事件记忆',
-      articleTitle: 'Claude Code 推出新的多代理工作流',
-      articleUrl: 'https://example.com/3'
-    }
-  ],
-  '/api/events/2/evidence': [
-    { id: 3, eventId: 2, sourceTier: 'COMPANY', evidenceType: 'FACT', claim: '官方文档公布了多代理工作流能力。', confidence: 85 }
-  ],
   '/api/evidence': [
     { id: 1, eventId: 1, sourceTier: 'MEDIA', evidenceType: 'DATA', claim: '黄金ETF单周流入12亿美元。', confidence: 75 },
     { id: 2, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'TIMELINE', claim: '美联储官员释放偏鸽措辞。', confidence: 90 },
@@ -547,18 +506,6 @@ beforeEach(() => {
       state['/api/content-ideas'][0].status = payload.status;
       return mockApiResponse(state['/api/content-ideas'][0]);
     }
-    if (url === '/api/events/1/status' && init?.method === 'POST') {
-      const payload = JSON.parse(String(init.body));
-      state['/api/events'][0].status = payload.status;
-      return mockApiResponse(state['/api/events'][0]);
-    }
-    if (url === '/api/events/1/merge' && init?.method === 'POST') {
-      state['/api/events'][1].status = 'ARCHIVED';
-      return mockApiResponse(state['/api/events'][0]);
-    }
-    if (url === '/api/events/1/articles/2/move' && init?.method === 'POST') {
-      return mockApiResponse({ ...state['/api/events'][1], articleCount: 2 });
-    }
     if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       const [candidate] = state['/api/intake/candidates?status=PENDING'];
@@ -712,12 +659,12 @@ test('dashboard presents the research command sections from loaded workspace dat
   expect(screen.getByRole('heading', { name: '运行账本' })).toBeInTheDocument();
 });
 
-test('dashboard directs a priority item to its owning workspace', async () => {
+test('dashboard directs the event priority item to the current market news workspace', async () => {
   render(<App />);
 
   await userEvent.click(await screen.findByRole('button', { name: '查看研究流' }));
 
-  expect(screen.getByRole('heading', { name: '事件研究台' })).toBeInTheDocument();
+  expect(screen.getByText('News Wire · 市场资讯')).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {
@@ -1216,32 +1163,6 @@ test('research workbench runs a full research job and shows agent trace', async 
   expect(screen.getAllByText('LLM_UNCONFIGURED').length).toBeGreaterThan(0);
   expect(await screen.findByText('research orchestrate')).toBeInTheDocument();
   expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
-});
-
-test('events stylesheet prevents long article urls from widening the workbench', () => {
-  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
-  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
-
-  expect(styles).toMatch(/\.events-workbench\s*{[^}]*overflow-x:\s*hidden;/s);
-  expect(styles).toMatch(/\.event-card\s*{[^}]*min-width:\s*0;/s);
-  expect(styles).toMatch(/\.event-card-top\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
-  expect(styles).toMatch(/\.event-timeline-list\s+strong[\s\S]*overflow-wrap:\s*anywhere;/);
-});
-
-test('events timeline status stays inside its layout column', () => {
-  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
-  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
-
-  expect(styles).toMatch(/\.event-timeline-list\s+li\s*{[^}]*grid-template-columns:\s*96px\s+minmax\(0,\s*1fr\);/s);
-  expect(styles).toMatch(/\.event-timeline-kind\s*{[^}]*display:\s*inline-flex;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;/s);
-});
-
-test('dark event merge panel uses a restrained material instead of a white surface', () => {
-  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
-  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
-
-  expect(styles).toMatch(/\[data-theme="dark"\]\s+\.events-detail-grid\s+\.event-merge-section\s*{[^}]*background:/s);
-  expect(styles).not.toMatch(/\[data-theme="dark"\]\s+\.events-detail-grid\s+\.event-merge-section\s*{[^}]*background:\s*(?:#fff(?:fff)?|white)\b/is);
 });
 
 test('dark theme keeps ghost buttons visually subordinate', () => {

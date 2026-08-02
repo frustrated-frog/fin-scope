@@ -94,7 +94,7 @@ export function LearningAnswerEditor({
             />
             <span><strong>{item.claim}</strong><small>{item.sourceTier} · 可信度 {item.confidence}</small></span>
           </label>
-        )) : <p>当前事件还没有可引用证据。可以先保存草稿，再回到事件档案补充证据。</p>}
+        )) : <p>当前事件还没有可引用证据。可以先保存草稿，再到市场资讯补充证据。</p>}
       </fieldset>
       {error && <p className="knowledge-inline-error" role="alert">{error}</p>}
       <div className="learning-editor-actions">

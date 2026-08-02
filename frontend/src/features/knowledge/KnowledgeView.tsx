@@ -350,7 +350,7 @@ export function KnowledgeView({
         onSaveDraft={saveDraft}
         onComplete={completeTask}
         onDismiss={dismissTask}
-        onOpenEvent={() => addToast('请从事件档案查看完整来源', 'info')}
+        onOpenEvent={() => addToast('请从市场资讯查看完整来源', 'info')}
       />}
       {section === 'review' && (topicWorkspace
         ? <TopicWorkspace workspace={topicWorkspace} reviewMode onBack={() => navigateTarget('?section=review')} onReview={reviewTopic} />
