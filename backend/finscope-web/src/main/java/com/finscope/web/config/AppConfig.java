@@ -237,6 +237,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "radarInterpretationExecutor")
+    public Executor radarInterpretationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("radar-interpretation-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(12);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "financialInterpretationExecutor")
     public Executor financialInterpretationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

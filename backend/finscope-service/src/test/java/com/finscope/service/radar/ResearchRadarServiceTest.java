@@ -7,6 +7,7 @@ import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.agent.AgentRun;
@@ -23,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 class ResearchRadarServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 7, 31, 16, 0);
@@ -76,7 +80,8 @@ class ResearchRadarServiceTest {
         assertEquals(1, view.getEvents().size());
         assertEquals(2, view.getEvents().get(0).getSourceCount());
         assertEquals("未发现与当前自选标的的直接关系", view.getEvents().get(0).getWatchlistExplanation());
-        assertEquals(2, view.getLiveItems().size());
+        assertEquals(1, view.getLatestChanges().size());
+        assertTrue(view.getLiveItems().isEmpty());
         assertEquals(1, view.getOverview().getEventCount());
     }
 
@@ -87,7 +92,7 @@ class ResearchRadarServiceTest {
         saved.setSummary("最近一次成功结果"); saved.setPriorityScore(60); saved.setSourceCount(2); saved.setSignalCount(2);
         saved.setScoreExplanation("多个来源确认；近期新信息");
         saved.setWatchlistExplanation("未发现与当前自选标的的直接关系"); saved.setLastSeenAt(NOW.minusMinutes(5));
-        when(repository.findRanked("ALL", false, 20)).thenReturn(Collections.singletonList(saved));
+        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
 
         ResearchRadarView view = service.load("ALL", false, 20);
 
@@ -97,7 +102,30 @@ class ResearchRadarServiceTest {
     }
 
     @Test
-    void busyRefreshKeepsTheLastSuccessfulLiveItems() throws Exception {
+    void loadsWorkspaceSummariesOnceForBothRadarLists() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        when(news.load("ALL", 100)).thenThrow(new IllegalStateException("upstream unavailable"));
+        RadarEvent saved = new RadarEvent(); saved.setId(9L); saved.setCanonicalTitle("已有事件");
+        saved.setPriorityScore(60); saved.setLastSeenAt(NOW.minusMinutes(5));
+        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
+        RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(9L);
+        summary.setFollowed(true); summary.setOpenObservationCount(2);
+        Map<Long, RadarEventWorkspace.Summary> values = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();
+        values.put(9L, summary); when(workspace.summaries(Collections.singletonList(9L))).thenReturn(values);
+
+        ResearchRadarView view = service.load("ALL", false, 20);
+
+        assertTrue(view.getEvents().get(0).isFollowed());
+        assertEquals(2, view.getEvents().get(0).getOpenObservationCount());
+        verify(workspace, times(1)).summaries(Collections.singletonList(9L));
+    }
+
+    @Test
+    void busyRefreshKeepsRadarAvailableWithoutReturningTheDuplicateLiveWire() throws Exception {
         NewsFeedItem item = item("CLS:1", "CLS", "财联社", "已缓存的实时资讯", NOW.minusMinutes(5));
         NewsFeedSnapshot snapshot = new NewsFeedSnapshot(Collections.singletonList(item), Collections.emptyList(), NOW, 1);
         CountDownLatch entered = new CountDownLatch(1); CountDownLatch release = new CountDownLatch(1);
@@ -113,8 +141,7 @@ class ResearchRadarServiceTest {
         ResearchRadarView busy = service.load("ALL",false,20);
         release.countDown(); refreshing.join(3_000);
 
-        assertEquals(1,busy.getLiveItems().size());
-        assertEquals("已缓存的实时资讯",busy.getLiveItems().get(0).getTitle());
+        assertTrue(busy.getLiveItems().isEmpty());
         assertTrue(busy.getWarnings().get(0).contains("正在刷新"));
     }
 

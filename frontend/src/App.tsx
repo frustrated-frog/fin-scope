@@ -72,6 +72,7 @@ export default function App() {
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [focusedEventId, setFocusedEventId] = useState<number | null>(null);
   const [activeTopicCount, setActiveTopicCount] = useState(0);
+  const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
   const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
   const [contentIdeaPage, setContentIdeaPage] = useState<PageResponse<ContentIdea> | null>(null);
@@ -87,6 +88,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
+  const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -126,8 +128,11 @@ export default function App() {
     const briefData = value<Brief[]>(3); if (briefData) setBriefs(briefData);
     const eventData = value<EventCluster[]>(4); if (eventData) setEvents(eventData);
     const evidenceData = value<EvidenceItem[]>(5); if (evidenceData) setEvidenceItems(evidenceData);
-    const knowledgeOverview = value<KnowledgeOverview>(6);
-    if (knowledgeOverview) setActiveTopicCount(knowledgeOverview.activeTopicCount ?? 0);
+    const knowledgeOverviewData = value<KnowledgeOverview>(6);
+    if (knowledgeOverviewData) {
+      setKnowledgeOverview(knowledgeOverviewData);
+      setActiveTopicCount(knowledgeOverviewData.activeTopicCount ?? 0);
+    }
     const contentIdeaData = value<ContentIdea[]>(7); if (contentIdeaData) setContentIdeas(contentIdeaData);
     const researchRunData = value<ResearchRun[]>(8); if (researchRunData) setResearchRuns(researchRunData);
     const researchThesisData = value<ResearchThesis[]>(9); if (Array.isArray(researchThesisData)) setResearchTheses(researchThesisData);
@@ -388,6 +393,17 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify(input)
       });
+      if (pendingRadarEventId !== null) {
+        try {
+          await api(`/api/research-radar/events/${pendingRadarEventId}/research-links/${run.id}`, {
+            method: 'POST', body: JSON.stringify({ question: researchQuestionDraft })
+          });
+        } catch (linkError) {
+          addToast(linkError instanceof Error ? linkError.message : '雷达事件与研究运行关联失败', 'error');
+        } finally {
+          setPendingRadarEventId(null);
+        }
+      }
       upsertResearchRun(run);
       const detail = await openResearchRun(run.id);
       if (isResearchRunActive(detail.run.status)) {
@@ -488,7 +504,21 @@ export default function App() {
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       onRefresh={refreshWorkspace}
     >
-      {view === 'dashboard' && <DashboardView dashboard={dashboard} articles={articles} />}
+      {view === 'dashboard' && (
+        <DashboardView
+          dashboard={dashboard}
+          articles={articles}
+          events={events}
+          learningTasks={learningTasks}
+          contentIdeas={contentIdeas}
+          researchRuns={researchRuns}
+          researchTheses={researchTheses}
+          agentRuns={agentRuns}
+          intakeCandidates={intakeCandidates}
+          knowledgeOverview={knowledgeOverview}
+          onChangeView={setView}
+        />
+      )}
       {view === 'sources' && (
         <SourcesView
           sources={sources}
@@ -551,7 +581,8 @@ export default function App() {
         <NewsView
           setMessage={setMessage}
           addToast={addToast}
-          onResearch={(question) => {
+          onResearch={(eventId, question) => {
+            setPendingRadarEventId(eventId);
             setResearchQuestionDraft(question);
             setResearchReport(null);
             setView('research');

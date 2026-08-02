@@ -1,5 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 
 import { TopicWorkspace } from './TopicWorkspace';
@@ -22,6 +24,39 @@ test('renders a real evidence-to-judgment thread without inventing steps', () =>
   expect(screen.getByText('待回答问题')).toBeInTheDocument();
   expect(screen.getByText('我的回答')).toBeInTheDocument();
   expect(screen.getByText('资料来源')).toBeInTheDocument();
+});
+
+test('renders markdown conclusions as structured reading content', () => {
+  render(<TopicWorkspace workspace={{
+    ...workspace,
+    entries: [{ ...workspace.entries[0], contentMarkdown: '## 投资命题\n景气度回升。\n\n- 跟踪营收' }]
+  }} onBack={vi.fn()} onReview={vi.fn()} />);
+
+  const currentJudgment = screen.getByRole('heading', { name: '当前判断' }).closest('section') as HTMLElement;
+  expect(within(currentJudgment).getByRole('heading', { name: '投资命题' })).toBeInTheDocument();
+  expect(screen.getAllByText('景气度回升。').length).toBeGreaterThan(0);
+  expect(screen.getAllByRole('list').length).toBeGreaterThan(0);
+  expect(within(currentJudgment).queryByText(/## 投资命题/)).not.toBeInTheDocument();
+});
+
+test('uses structured markdown rendering in the knowledge timeline', () => {
+  render(<TopicWorkspace workspace={{
+    ...workspace,
+    entries: [{ ...workspace.entries[0], contentMarkdown: '## 支持数据\n- 净值上涨 2.41%' }]
+  }} onBack={vi.fn()} onReview={vi.fn()} />);
+
+  const timeline = screen.getByRole('list', { name: '知识脉络' });
+  expect(within(timeline).getAllByRole('heading', { name: '支持数据' })).toHaveLength(2);
+  expect(within(timeline).getAllByText('净值上涨 2.41%')).toHaveLength(2);
+  expect(within(timeline).queryByText(/## 支持数据/)).not.toBeInTheDocument();
+});
+
+test('limits timeline node layout styles to top-level timeline items', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toContain('.knowledge-thread > li {');
+  expect(styles).not.toContain('.knowledge-thread li {');
 });
 
 test('compares the current conclusion with evidence and schedules next review', async () => {

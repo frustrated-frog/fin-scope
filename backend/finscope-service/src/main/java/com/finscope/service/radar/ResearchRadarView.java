@@ -3,6 +3,8 @@ package com.finscope.service.radar;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEvidence;
+import com.finscope.domain.radar.RadarEventInterpretation;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.service.news.NewsFeedItem;
@@ -17,13 +19,19 @@ import java.util.Map;
 public final class ResearchRadarView {
     private final Overview overview;
     private final List<EventCard> events;
+    private final List<EventCard> latestChanges;
     private final List<NewsFeedItem> liveItems;
     private final List<String> warnings;
     private final LocalDateTime refreshedAt;
 
     public ResearchRadarView(List<EventCard> events, List<NewsFeedItem> liveItems,
                              List<String> warnings, LocalDateTime refreshedAt) {
-        this.events = immutable(events); this.liveItems = immutable(liveItems);
+        this(events, events, liveItems, warnings, refreshedAt);
+    }
+
+    public ResearchRadarView(List<EventCard> events, List<EventCard> latestChanges, List<NewsFeedItem> liveItems,
+                             List<String> warnings, LocalDateTime refreshedAt) {
+        this.events = immutable(events); this.latestChanges = immutable(latestChanges); this.liveItems = immutable(liveItems);
         this.warnings = immutable(warnings); this.refreshedAt = refreshedAt;
         this.overview = Overview.from(this.events);
     }
@@ -38,6 +46,7 @@ public final class ResearchRadarView {
     }
     public Overview getOverview() { return overview; }
     public List<EventCard> getEvents() { return events; }
+    public List<EventCard> getLatestChanges() { return latestChanges; }
     public List<NewsFeedItem> getLiveItems() { return liveItems; }
     public List<String> getWarnings() { return warnings; }
     public LocalDateTime getRefreshedAt() { return refreshedAt; }
@@ -83,8 +92,26 @@ public final class ResearchRadarView {
         private final int evidenceSourceCount;
         private final String suggestedResearchQuestion;
         private final LocalDateTime lastSeenAt;
+        private final String changeType;
+        private final String changeSummary;
+        private final String interpretationStatus;
+        private final boolean read;
+        private final boolean followed;
+        private final String disposition;
+        private final int observationCount;
+        private final int openObservationCount;
+        private final int researchRunCount;
+        private final int unreadNotificationCount;
 
         public EventCard(RadarEvent event) {
+            this(event, null);
+        }
+
+        public EventCard(RadarEvent event, RadarEventInterpretation interpretation) {
+            this(event, interpretation, null);
+        }
+
+        public EventCard(RadarEvent event, RadarEventInterpretation interpretation, RadarEventWorkspace.Summary workspace) {
             this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
             this.categoryCode=event.getCategoryCode(); this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
@@ -96,6 +123,14 @@ public final class ResearchRadarView {
             this.evidenceSourceCount=event.getEvidenceSourceCount();
             this.suggestedResearchQuestion="围绕“" + safe(event.getCanonicalTitle()) + "”，哪些事实已经确认，后续应重点观察什么？";
             this.lastSeenAt=event.getLastSeenAt();
+            this.changeType=changeType(event); this.changeSummary=changeSummary(event, this.changeType);
+            this.interpretationStatus=interpretation==null?null:interpretation.getStatus();
+            this.read=workspace!=null&&workspace.isRead(); this.followed=workspace!=null&&workspace.isFollowed();
+            this.disposition=workspace==null?"ACTIVE":workspace.getDisposition();
+            this.observationCount=workspace==null?0:workspace.getObservationCount();
+            this.openObservationCount=workspace==null?0:workspace.getOpenObservationCount();
+            this.researchRunCount=workspace==null?0:workspace.getResearchRunCount();
+            this.unreadNotificationCount=workspace==null?0:workspace.getUnreadNotificationCount();
         }
         private static String recommendation(int score) { return score>=75 ? "重点关注" : score>=55 ? "值得浏览" : "暂存观察"; }
         private static List<String> splitReasons(String value) {
@@ -104,6 +139,17 @@ public final class ResearchRadarView {
             return Collections.unmodifiableList(values);
         }
         private static String safe(String value) { return value == null ? "这件事" : value; }
+        private static String changeType(RadarEvent event) {
+            if(event.getFirstSeenAt()!=null&&event.getLastSeenAt()!=null
+                    &&event.getLastSeenAt().isAfter(event.getFirstSeenAt().plusMinutes(1)))return "FOLLOW_UP";
+            if(event.getSourceCount()>1||event.getSignalCount()>1)return "MULTI_SOURCE";
+            return "NEW_EVENT";
+        }
+        private static String changeSummary(RadarEvent event,String type) {
+            if("FOLLOW_UP".equals(type))return "事件出现后续信息，已更新聚合结果";
+            if("MULTI_SOURCE".equals(type))return "新增独立来源确认同一事件";
+            return "首次进入研究雷达";
+        }
         public Long getId() { return id; }
         public String getTitle() { return title; }
         public String getSummary() { return summary; }
@@ -124,6 +170,12 @@ public final class ResearchRadarView {
         public int getEvidenceSourceCount() { return evidenceSourceCount; }
         public String getSuggestedResearchQuestion() { return suggestedResearchQuestion; }
         public LocalDateTime getLastSeenAt() { return lastSeenAt; }
+        public String getChangeType(){return changeType;} public String getChangeSummary(){return changeSummary;}
+        public String getInterpretationStatus(){return interpretationStatus;}
+        public boolean isRead(){return read;} public boolean isFollowed(){return followed;}
+        public String getDisposition(){return disposition;} public int getObservationCount(){return observationCount;}
+        public int getOpenObservationCount(){return openObservationCount;} public int getResearchRunCount(){return researchRunCount;}
+        public int getUnreadNotificationCount(){return unreadNotificationCount;}
     }
 
     public static final class SignalView {
@@ -146,11 +198,45 @@ public final class ResearchRadarView {
         private final List<SignalView> signals;
         private final List<EvidenceView> evidence;
         private final List<AgentTraceView> agentTrace;
+        private final InterpretationView interpretation;
+        private final RadarEventWorkspace.State workspaceState;
+        private final List<RadarEventWorkspace.Observation> observations;
+        private final List<RadarEventWorkspace.TimelineEntry> timeline;
+        private final RadarEventWorkspace.Trust trust;
+        private final List<RadarEventWorkspace.ResearchLink> researchLinks;
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links) {
             this(event,signals,links,Collections.<RadarEvidence>emptyList(),Collections.<AgentRun>emptyList());
         }
         public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
                            List<RadarEvidence> evidence, List<AgentRun> traces) {
+            this(event,signals,links,evidence,traces,null);
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation) {
+            this(event,signals,links,evidence,traces,interpretation,null,Collections.<RadarEventWorkspace.Observation>emptyList());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
+                           List<RadarEventWorkspace.Observation> observations) {
+            this(event,signals,links,evidence,traces,interpretation,workspaceState,observations,
+                    Collections.<RadarEventWorkspace.TimelineEntry>emptyList(),new RadarEventWorkspace.Trust());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
+                           List<RadarEventWorkspace.Observation> observations,
+                           List<RadarEventWorkspace.TimelineEntry> timeline, RadarEventWorkspace.Trust trust) {
+            this(event,signals,links,evidence,traces,interpretation,workspaceState,observations,timeline,trust,
+                    Collections.<RadarEventWorkspace.ResearchLink>emptyList());
+        }
+        public EventDetail(RadarEvent event, List<RadarSignal> signals, List<RadarEventSignal> links,
+                           List<RadarEvidence> evidence, List<AgentRun> traces,
+                           RadarEventInterpretation interpretation, RadarEventWorkspace.State workspaceState,
+                           List<RadarEventWorkspace.Observation> observations,
+                           List<RadarEventWorkspace.TimelineEntry> timeline, RadarEventWorkspace.Trust trust,
+                           List<RadarEventWorkspace.ResearchLink> researchLinks) {
             this.event = new EventCard(event); Map<Long,RadarEventSignal> bySignal=new LinkedHashMap<Long,RadarEventSignal>();
             for (RadarEventSignal link:links) bySignal.put(link.getSignalId(),link);
             List<SignalView> values=new ArrayList<SignalView>(); for(RadarSignal signal:signals) values.add(new SignalView(signal,bySignal.get(signal.getId())));
@@ -161,9 +247,34 @@ public final class ResearchRadarView {
             List<AgentTraceView> traceViews=new ArrayList<AgentTraceView>();
             if(traces!=null)for(AgentRun trace:traces)traceViews.add(new AgentTraceView(trace));
             this.agentTrace=Collections.unmodifiableList(traceViews);
+            this.interpretation=interpretation==null?null:new InterpretationView(interpretation);
+            this.workspaceState=workspaceState;
+            this.observations=immutable(observations);
+            this.timeline=immutable(timeline); this.trust=trust==null?new RadarEventWorkspace.Trust():trust;
+            this.researchLinks=immutable(researchLinks);
         }
         public EventCard getEvent(){return event;} public List<SignalView> getSignals(){return signals;}
         public List<EvidenceView> getEvidence(){return evidence;} public List<AgentTraceView> getAgentTrace(){return agentTrace;}
+        public InterpretationView getInterpretation(){return interpretation;}
+        public RadarEventWorkspace.State getWorkspaceState(){return workspaceState;}
+        public List<RadarEventWorkspace.Observation> getObservations(){return observations;}
+        public List<RadarEventWorkspace.TimelineEntry> getTimeline(){return timeline;}
+        public RadarEventWorkspace.Trust getTrust(){return trust;}
+        public List<RadarEventWorkspace.ResearchLink> getResearchLinks(){return researchLinks;}
+    }
+
+    public static final class InterpretationView {
+        private final Long id,eventId; private final String status,failureCode,failureMessage;
+        private final boolean stale; private final Long durationMs; private final RadarEventInterpretation.Result result;
+        InterpretationView(RadarEventInterpretation value){id=value.getId();eventId=value.getEventId();status=value.getStatus();
+            failureCode=value.getFailureCode();failureMessage=value.getFailureMessage();stale=value.isStale();
+            durationMs=value.getDurationMs();result=value.getResult();}
+        public static InterpretationView queued(Long eventId){RadarEventInterpretation value=new RadarEventInterpretation();
+            value.setEventId(eventId);value.setStatus("QUEUED");return new InterpretationView(value);}
+        public Long getId(){return id;} public Long getEventId(){return eventId;} public String getStatus(){return status;}
+        public String getFailureCode(){return failureCode;} public String getFailureMessage(){return failureMessage;}
+        public boolean isStale(){return stale;} public Long getDurationMs(){return durationMs;}
+        public RadarEventInterpretation.Result getResult(){return result;}
     }
 
     public static final class EvidenceView {
