@@ -25,9 +25,9 @@ finscope:
   cors-origin: http://localhost:*
   llm:
     enabled: true
-    base-url: https://api.deepseek.com
-    api-key: sk-97f9352463e3417393b3201571ceaadc
-    model: deepseek-v4-flash
+    base-url: https://modelservice.jdcloud.com/v1
+    api-key: pk-1439bbdb-a7a8-47d3-a7f1-0d9e3bd103ea
+    model: GLM-5
     timeout-ms: 300000
     temperature: 0.2
   search:
