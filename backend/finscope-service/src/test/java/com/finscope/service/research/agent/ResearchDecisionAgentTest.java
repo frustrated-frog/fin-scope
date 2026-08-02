@@ -58,6 +58,20 @@ class ResearchDecisionAgentTest {
     }
 
     @Test
+    void normalizesStructuredTargetGapFromCompatibleModel() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(validDecisionJson()
+                .replace("\"targetGap\":\"缺少反方证据\"",
+                        "\"targetGap\":{\"evidenceGap\":3,\"sourceGap\":0}"));
+
+        ResearchDecisionResult result = agent.decide(ResearchAgentTestFixtures.counterGapContext());
+
+        assertEquals("MODEL", result.getDecision().getDecisionMode());
+        assertTrue(result.getDecision().getTargetGap().contains("\"evidenceGap\":3"));
+        assertNull(result.getFallbackReason());
+    }
+
+    @Test
     void rebuildsToolAndArgumentsFromTheMissionTaskSelectedByModel() throws Exception {
         ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
         ResearchMissionTask baseline = task("baseline_scan", "source_scan", "BASELINE", "COMPLETED", null,

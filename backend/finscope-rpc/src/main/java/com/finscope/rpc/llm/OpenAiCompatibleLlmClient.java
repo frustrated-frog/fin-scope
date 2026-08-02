@@ -23,6 +23,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private final double temperature;
     private final boolean jsonMode;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final int RETRY_OUTPUT_TOKEN_BUDGET = 4_096;
     private static final String USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                     + "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 FinScope/0.1";
@@ -79,13 +80,31 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
             throw new IllegalStateException("LLM is not configured");
         }
         int actualTimeoutMs = requestedTimeoutMs <= 0 ? timeoutMs : Math.min(timeoutMs, requestedTimeoutMs);
-        byte[] requestBody = objectMapper.writeValueAsBytes(
-                request(systemPrompt, userPrompt, maxOutputTokens));
+        long deadlineNanos = System.nanoTime() + actualTimeoutMs * 1_000_000L;
+        JsonNode root = requestCompletion(systemPrompt, userPrompt, maxOutputTokens, actualTimeoutMs);
+        String content = messageContent(root);
+        if (isBlank(content) && maxOutputTokens > 0) {
+            int remainingTimeoutMs = remainingTimeoutMs(deadlineNanos);
+            if (remainingTimeoutMs > 0) {
+                root = requestCompletion(systemPrompt, userPrompt, retryOutputTokenBudget(maxOutputTokens),
+                        remainingTimeoutMs);
+                content = messageContent(root);
+            }
+        }
+        if (isBlank(content)) {
+            throw noFinalContent(root);
+        }
+        return content;
+    }
+
+    private JsonNode requestCompletion(String systemPrompt, String userPrompt,
+                                       int maxOutputTokens, int requestTimeoutMs) throws Exception {
+        byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt, maxOutputTokens));
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
         try {
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(actualTimeoutMs);
-            connection.setReadTimeout(actualTimeoutMs);
+            connection.setConnectTimeout(requestTimeoutMs);
+            connection.setReadTimeout(requestTimeoutMs);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Accept", "application/json");
@@ -104,13 +123,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
                 throw new IllegalStateException("OpenAI compatible LLM request failed, HTTP " + status
                         + ": " + limit(responseBody, 4000));
             }
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode content = root.path("choices").path(0).path("message").path("content");
-            if (content.isMissingNode() || isBlank(content.asText())) {
-                throw new IllegalStateException("OpenAI compatible LLM response has no message content: "
-                        + limit(responseBody, 4000));
-            }
-            return content.asText();
+            return objectMapper.readTree(responseBody);
         } finally {
             connection.disconnect();
         }
@@ -122,11 +135,6 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         request.put("temperature", temperature);
         request.put("stream", false);
         request.put("messages", messages(systemPrompt, userPrompt));
-        if (maxOutputTokens > 0 && isDeepSeekModel()) {
-            Map<String, String> thinking = new LinkedHashMap<String, String>();
-            thinking.put("type", "disabled");
-            request.put("thinking", thinking);
-        }
         if (maxOutputTokens > 0) {
             request.put("max_tokens", maxOutputTokens);
         }
@@ -141,8 +149,29 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         return request;
     }
 
-    private boolean isDeepSeekModel() {
-        return model.toLowerCase(java.util.Locale.ROOT).startsWith("deepseek-");
+    private String messageContent(JsonNode root) {
+        return root.path("choices").path(0).path("message").path("content").asText();
+    }
+
+    private int retryOutputTokenBudget(int originalBudget) {
+        return Math.max(RETRY_OUTPUT_TOKEN_BUDGET, originalBudget * 3);
+    }
+
+    private int remainingTimeoutMs(long deadlineNanos) {
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        return remainingNanos <= 0L ? 0 : (int) Math.max(1L, remainingNanos / 1_000_000L);
+    }
+
+    private IllegalStateException noFinalContent(JsonNode root) {
+        JsonNode choice = root.path("choices").path(0);
+        boolean reasoningOnly = !choice.path("message").path("reasoning_content").asText().trim().isEmpty();
+        String finishReason = choice.path("finish_reason").asText().trim();
+        String detail = "OpenAI compatible LLM response completed without a final message content"
+                + (reasoningOnly ? " (provider returned reasoning only)" : "");
+        if (!finishReason.isEmpty()) {
+            detail += ", finishReason=" + limit(finishReason, 80);
+        }
+        return new IllegalStateException(detail);
     }
 
     private List<Map<String, String>> messages(String systemPrompt, String userPrompt) {

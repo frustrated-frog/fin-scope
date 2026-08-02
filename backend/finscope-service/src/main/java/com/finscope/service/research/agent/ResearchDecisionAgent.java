@@ -54,7 +54,7 @@ public class ResearchDecisionAgent {
                 throw new IllegalArgumentException("模型决策超过字符上限");
             }
             JsonNode root = objectMapper.readTree(raw.trim());
-            normalizeConfidence(root);
+            normalizeDraft(root);
             ResearchDecisionDraft draft = objectMapper.treeToValue(root, ResearchDecisionDraft.class);
             bindMissionTaskContract(draft, context);
             ResearchAgentDecision decision = validator.validate(draft, context, "MODEL");
@@ -118,24 +118,40 @@ public class ResearchDecisionAgent {
         }
     }
 
-    private void normalizeConfidence(JsonNode root) {
+    private void normalizeDraft(JsonNode root) throws Exception {
         if (!(root instanceof ObjectNode)) {
             return;
         }
+        ObjectNode draft = (ObjectNode) root;
+        normalizeTextFields(draft, "currentSubgoal", "missionTaskKey", "toolCode", "targetGap",
+                "expectedObservation", "decisionSummary");
+        normalizeConfidence(draft);
+    }
+
+    private void normalizeTextFields(ObjectNode draft, String... fields) throws Exception {
+        for (String field : fields) {
+            JsonNode value = draft.get(field);
+            if (value != null && !value.isNull() && !value.isTextual()) {
+                draft.put(field, objectMapper.writeValueAsString(value));
+            }
+        }
+    }
+
+    private void normalizeConfidence(ObjectNode root) {
         JsonNode confidence = root.get("confidence");
         if (confidence == null || !confidence.isTextual()) {
             return;
         }
         String value = confidence.asText().trim();
         if ("HIGH".equalsIgnoreCase(value)) {
-            ((ObjectNode) root).put("confidence", 0.85D);
+            root.put("confidence", 0.85D);
         } else if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) {
-            ((ObjectNode) root).put("confidence", 0.65D);
+            root.put("confidence", 0.65D);
         } else if ("LOW".equalsIgnoreCase(value)) {
-            ((ObjectNode) root).put("confidence", 0.35D);
+            root.put("confidence", 0.35D);
         } else {
             try {
-                ((ObjectNode) root).put("confidence", Double.parseDouble(value));
+                root.put("confidence", Double.parseDouble(value));
             } catch (NumberFormatException exception) {
                 throw new IllegalArgumentException("confidence 必须是 0 到 1 之间的数字或 HIGH/MEDIUM/LOW");
             }

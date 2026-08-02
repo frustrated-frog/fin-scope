@@ -11,9 +11,13 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -84,12 +88,15 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
-    void disablesDeepSeekThinkingForStructuredCalls() throws Exception {
-        AtomicReference<String> requestBody = new AtomicReference<String>();
+    void retriesStructuredCallWithExpandedBudgetWhenProviderReturnsOnlyReasoning() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> requestBodies = new ArrayList<String>();
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
-            requestBody.set(new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8));
-            byte[] body = "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}"
+            requestBodies.add(new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8));
+            byte[] body = (calls.getAndIncrement() == 0
+                    ? "{\"choices\":[{\"message\":{\"content\":\"\",\"reasoning_content\":\"provider reasoning\"}}]}"
+                    : "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}")
                     .getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, body.length);
             try (OutputStream output = exchange.getResponseBody()) {
@@ -99,11 +106,38 @@ class OpenAiCompatibleLlmClientTest {
         server.start();
         String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
         OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
-                true, baseUrl, "test-key", "deepseek-v4-flash", 3000, 0.2);
+                true, baseUrl, "test-key", "any-compatible-model", 3000, 0.2);
 
-        client.complete("system", "user", 2000, 1200);
+        String content = client.complete("system", "user", 2000, 1200);
 
-        assertTrue(requestBody.get().contains("\"thinking\":{\"type\":\"disabled\"}"));
+        assertEquals("{}", content);
+        assertEquals(2, calls.get());
+        assertTrue(requestBodies.get(0).contains("\"max_tokens\":1200"));
+        assertTrue(requestBodies.get(1).contains("\"max_tokens\":4096"));
+    }
+
+    @Test
+    void hidesProviderReasoningWhenStructuredRetriesStillHaveNoFinalContent() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            byte[] body = "{\"choices\":[{\"message\":{\"content\":\"\",\"reasoning_content\":\"provider reasoning\"}}]}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "any-compatible-model", 3000, 0.2);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> client.complete("system", "user", 2000, 1200));
+
+        assertTrue(error.getMessage().contains("without a final message content"));
+        assertFalse(error.getMessage().contains("provider reasoning"));
     }
 
     @Test
