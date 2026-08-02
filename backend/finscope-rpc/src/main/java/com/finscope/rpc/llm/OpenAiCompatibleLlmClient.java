@@ -1,5 +1,7 @@
 package com.finscope.rpc.llm;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -83,7 +85,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         long deadlineNanos = System.nanoTime() + actualTimeoutMs * 1_000_000L;
         JsonNode root = requestCompletion(systemPrompt, userPrompt, maxOutputTokens, actualTimeoutMs);
         String content = messageContent(root);
-        if (isBlank(content) && maxOutputTokens > 0) {
+        if (needsExpandedOutputRetry(root, content, maxOutputTokens)) {
             int remainingTimeoutMs = remainingTimeoutMs(deadlineNanos);
             if (remainingTimeoutMs > 0) {
                 root = requestCompletion(systemPrompt, userPrompt, retryOutputTokenBudget(maxOutputTokens),
@@ -93,6 +95,9 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         }
         if (isBlank(content)) {
             throw noFinalContent(root);
+        }
+        if (maxOutputTokens > 0 && hasIncompleteJsonContent(content)) {
+            throw new IllegalStateException("OpenAI compatible LLM response completed with incomplete JSON content");
         }
         return content;
     }
@@ -151,6 +156,27 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     private String messageContent(JsonNode root) {
         return root.path("choices").path(0).path("message").path("content").asText();
+    }
+
+    private boolean needsExpandedOutputRetry(JsonNode root, String content, int maxOutputTokens) {
+        return maxOutputTokens > 0 && (isBlank(content)
+                || "length".equalsIgnoreCase(root.path("choices").path(0).path("finish_reason").asText())
+                || hasIncompleteJsonContent(content));
+    }
+
+    private boolean hasIncompleteJsonContent(String content) {
+        String candidate = trim(content);
+        if (!(candidate.startsWith("{") || candidate.startsWith("["))) {
+            return false;
+        }
+        try {
+            objectMapper.readTree(candidate);
+            return false;
+        } catch (JsonEOFException ignored) {
+            return true;
+        } catch (JsonProcessingException ignored) {
+            return false;
+        }
     }
 
     private int retryOutputTokenBudget(int originalBudget) {

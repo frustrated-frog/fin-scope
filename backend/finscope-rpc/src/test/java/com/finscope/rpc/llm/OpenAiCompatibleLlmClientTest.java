@@ -117,6 +117,59 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    void retriesBoundedCallWhenProviderReturnsTruncatedJsonContent() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> requestBodies = new ArrayList<String>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            requestBodies.add(new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8));
+            byte[] body = (calls.getAndIncrement() == 0
+                    ? "{\"choices\":[{\"message\":{\"content\":\"{\\\"decisionType\\\":\\\"TOOL_CALL\\\",\\\"expectedObservation\\\":\\\"\"}}]}"
+                    : "{\"choices\":[{\"message\":{\"content\":\"{\\\"decisionType\\\":\\\"TOOL_CALL\\\"}\"}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "any-compatible-model", 3000, 0.2);
+
+        String content = client.complete("system", "user", 2000, 1200);
+
+        assertEquals("{\"decisionType\":\"TOOL_CALL\"}", content);
+        assertEquals(2, calls.get());
+        assertTrue(requestBodies.get(0).contains("\"max_tokens\":1200"));
+        assertTrue(requestBodies.get(1).contains("\"max_tokens\":4096"));
+    }
+
+    @Test
+    void hidesTruncatedJsonWhenExpandedBudgetRetryIsStillIncomplete() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            byte[] body = "{\"choices\":[{\"message\":{\"content\":\"{\\\"expectedObservation\\\":\\\"partial\"}}]}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "any-compatible-model", 3000, 0.2);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> client.complete("system", "user", 2000, 1200));
+
+        assertEquals("OpenAI compatible LLM response completed with incomplete JSON content", error.getMessage());
+        assertFalse(error.getMessage().contains("partial"));
+    }
+
+    @Test
     void hidesProviderReasoningWhenStructuredRetriesStillHaveNoFinalContent() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
