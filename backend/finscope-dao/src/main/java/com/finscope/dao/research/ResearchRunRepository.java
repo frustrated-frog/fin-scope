@@ -147,6 +147,33 @@ public class ResearchRunRepository {
         return runs.isEmpty() ? Optional.empty() : Optional.of(runs.get(0));
     }
 
+    /**
+     * Deletes a completed research run and only the records that belong to that run.
+     * Articles, events, evidence and other shared research outputs are intentionally retained.
+     */
+    public int deleteById(Long runId) {
+        jdbcTemplate.update("DELETE FROM research_evaluation_metric WHERE evaluation_id IN "
+                + "(SELECT id FROM research_evaluation WHERE research_run_id = ?)", runId);
+        jdbcTemplate.update("DELETE FROM research_evaluation WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_tool_observation WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_search_evidence WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_agent_decision WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_agent_state WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_runtime_event WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_runtime_checkpoint WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_mission_gap WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_mission_task WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_mission WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM thesis_finding WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_run_output WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_report WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_run_plan WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM research_run_source WHERE run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM agent_run WHERE research_run_id = ?", runId);
+        jdbcTemplate.update("DELETE FROM radar_event_research_link WHERE research_run_id = ?", runId);
+        return jdbcTemplate.update("DELETE FROM research_run WHERE id = ?", runId);
+    }
+
     public List<SourceProfile> findSourcesByRunId(Long runId) {
         return jdbcTemplate.query("SELECT * FROM research_run_source WHERE run_id = ? ORDER BY position ASC",
                 (rs, rowNum) -> {

@@ -51,6 +51,49 @@ class ResearchRunRepositoryTest {
                 .filter(item -> !item.getId().equals(saved.getId())).findFirst().get().getMode());
     }
 
+    @Test
+    void deletesOnlyTheSelectedRunAndItsScopedArtifacts() {
+        ResearchRun deleted = repository.save(run());
+        ResearchRun retained = repository.save(run());
+        String now = LocalDateTime.now().toString();
+
+        jdbc.update("INSERT INTO research_run_source(run_id,source_name,enabled,position) VALUES(?,?,?,?)",
+                deleted.getId(), "研究来源", 1, 0);
+        jdbc.update("INSERT INTO research_runtime_checkpoint(research_run_id,phase,status,max_actions,created_at,updated_at) "
+                        + "VALUES(?,?,?,?,?,?)",
+                deleted.getId(), "COLLECT", "COMPLETED", 6, now, now);
+        jdbc.update("INSERT INTO research_runtime_event(research_run_id,sequence_no,event_type,status,created_at) VALUES(?,?,?,?,?)",
+                deleted.getId(), 1, "TERMINATED", "COMPLETED", now);
+        jdbc.update("INSERT INTO research_run_output(research_run_id,output_type,output_id,created_at) VALUES(?,?,?,?)",
+                deleted.getId(), "REPORT", 1, now);
+        jdbc.update("INSERT INTO agent_run(research_run_id,node_name,status,created_at) VALUES(?,?,?,?)",
+                deleted.getId(), "research-orchestrate", "SUCCESS", now);
+        jdbc.update("INSERT INTO research_run_plan(research_run_id,step_id,title,step_type,executor,status,created_at,updated_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?)",
+                deleted.getId(), "collect", "收集资料", "COLLECT", "FetchService", "SUCCESS", now, now);
+        jdbc.update("INSERT INTO research_report(research_run_id,report_type,status,title,conclusion,conclusion_direction,"
+                        + "confidence,executive_summary,content_markdown,markdown_path,generation_mode,created_at,updated_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                deleted.getId(), "THESIS", "COMPLETED", "测试报告", "结论", "NEUTRAL", "MEDIUM", "摘要", "# 报告",
+                "data/vault/research/reports/run-test.md", "RULE", now, now);
+
+        assertEquals(1, repository.deleteById(deleted.getId()));
+
+        assertEquals(0, count("research_run", "id", deleted.getId()));
+        assertEquals(0, count("research_run_source", "run_id", deleted.getId()));
+        assertEquals(0, count("research_runtime_checkpoint", "research_run_id", deleted.getId()));
+        assertEquals(0, count("research_runtime_event", "research_run_id", deleted.getId()));
+        assertEquals(0, count("research_run_output", "research_run_id", deleted.getId()));
+        assertEquals(0, count("agent_run", "research_run_id", deleted.getId()));
+        assertEquals(0, count("research_run_plan", "research_run_id", deleted.getId()));
+        assertEquals(0, count("research_report", "research_run_id", deleted.getId()));
+        assertEquals(1, count("research_run", "id", retained.getId()));
+    }
+
+    private int count(String table, String column, Long value) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?", Integer.class, value);
+    }
+
     private ResearchRun run() {
         ResearchRun value = new ResearchRun();
         value.setRunDate(LocalDate.of(2026, 7, 29));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
 import { ResearchProgressPanel } from './ResearchProgressPanel';
@@ -30,6 +31,7 @@ export function ResearchView({
   onRegenerateReport,
   onResumeRun,
   onEvaluateRun,
+  onDeleteRun,
   onCloseReport
 }: {
   initialQuestion?: string;
@@ -51,6 +53,7 @@ export function ResearchView({
   onRegenerateReport: (runId: number) => Promise<void>;
   onResumeRun: (runId: number) => Promise<void>;
   onEvaluateRun: (runId: number) => Promise<void>;
+  onDeleteRun: (runId: number) => Promise<void>;
   onCloseReport: () => void;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -67,6 +70,9 @@ export function ResearchView({
   const [creatingThesis, setCreatingThesis] = useState(false);
   const [thesisFormError, setThesisFormError] = useState('');
   const [runtimeAction, setRuntimeAction] = useState<'resume' | 'evaluate' | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ResearchRun | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (initialQuestion?.trim()) setQuestion(initialQuestion.trim());
@@ -105,6 +111,20 @@ export function ResearchView({
 
   async function submit() {
     await onRun({ thesisId: selectedThesisId || undefined, mode, runDate, themeCodes });
+  }
+
+  async function deleteResearchRun() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await onDeleteRun(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : '研究运行删除失败，请稍后重试');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function createThesis() {
@@ -332,7 +352,16 @@ export function ResearchView({
             </div>
             <span className="research-run-count">共 {runs.length} 次</span>
           </div>
-          <ResearchRunList runs={runs} theses={theses} selectedRunId={detail?.run.id} onOpenRun={onOpenRun} />
+          <ResearchRunList
+            runs={runs}
+            theses={theses}
+            selectedRunId={detail?.run.id}
+            onOpenRun={onOpenRun}
+            onDeleteRun={(run) => {
+              setDeleteError('');
+              setDeleteTarget(run);
+            }}
+          />
         </section>
 
         <aside className="research-detail-panel research-material">
@@ -375,6 +404,28 @@ export function ResearchView({
           )}
         </aside>
       </div>
+      {deleteTarget && createPortal(
+        <div className="modal-overlay">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-research-run-title">
+            <div className="modal-header">
+              <h4 id="delete-research-run-title">删除研究运行</h4>
+            </div>
+            <div className="modal-content">
+              <p>确定要删除这次研究吗？关联的报告、执行过程、Agent 轨迹和评测数据也会一并删除，且无法撤销。</p>
+              {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>
+                取消
+              </button>
+              <button className="danger-button" type="button" disabled={deleting} onClick={deleteResearchRun}>
+                {deleting ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </section>
   );
 }
@@ -495,12 +546,14 @@ function ResearchRunList({
   runs,
   theses,
   selectedRunId,
-  onOpenRun
+  onOpenRun,
+  onDeleteRun
 }: {
   runs: ResearchRun[];
   theses: ResearchThesis[];
   selectedRunId?: number;
   onOpenRun: (id: number) => Promise<void | ResearchRunDetail>;
+  onDeleteRun: (run: ResearchRun) => void;
 }) {
   if (runs.length === 0) {
     return <p className="muted">还没有研究运行</p>;
@@ -509,13 +562,16 @@ function ResearchRunList({
   return (
     <div className="research-run-list" aria-label="研究运行列表">
       <div className="research-run-list-head">
-        <span>日期</span>
-        <span>命题</span>
-        <span>状态</span>
-        <span>来源</span>
-        <span>事件</span>
-        <span>证据</span>
-        <span>学习/选题</span>
+        <div className="research-run-list-head-grid">
+          <span>日期</span>
+          <span>命题</span>
+          <span>状态</span>
+          <span>来源</span>
+          <span>事件</span>
+          <span>证据</span>
+          <span>学习/选题</span>
+        </div>
+        <span>操作</span>
       </div>
       <div className="research-run-list-body">
         {runs.map((run) => (
@@ -525,6 +581,7 @@ function ResearchRunList({
             thesisName={researchRunThesisName(run, theses)}
             isSelected={selectedRunId === run.id}
             onOpen={() => onOpenRun(run.id)}
+            onDelete={() => onDeleteRun(run)}
           />
         ))}
       </div>
@@ -536,12 +593,14 @@ function ResearchRunRow({
   run,
   thesisName,
   isSelected,
-  onOpen
+  onOpen,
+  onDelete
 }: {
   run: ResearchRun;
   thesisName: string;
   isSelected: boolean;
   onOpen: () => void;
+  onDelete: () => void;
 }) {
   const fetchedSources = run.fetchedSourceCount ?? 0;
   const sourceCount = run.sourceCount || 0;
@@ -549,34 +608,41 @@ function ResearchRunRow({
   const tone = runStatusTone(run.status);
 
   return (
-    <button
-      className={`research-run-row ${tone}${isSelected ? ' selected' : ''}`}
-      type="button"
-      onClick={onOpen}
-      aria-current={isSelected ? 'true' : undefined}
-      aria-label={`打开研究运行 ${run.runDate} ${thesisName} ${presentRunStatus(run.status)}`}
-    >
-      <span className="research-run-date-cell">
-        <strong>{run.runDate}</strong>
-        <small>{run.mode === 'QUICK' ? 'QUICK' : 'DEEP'} · RUN #{run.id}</small>
-      </span>
-      <span className="research-run-thesis-cell">
-        <strong>{thesisName}</strong>
-        <small>{run.summary || '等待打开运行细节查看 agent trace'}</small>
-      </span>
-      <span className="research-run-status-cell">
-        <span className={`research-status-chip ${tone}`}>{presentRunStatus(run.status)}</span>
-      </span>
-      <span className="research-source-cell">
-        <strong>{fetchedSources}/{sourceCount}</strong>
-        <span className="research-source-mini-meter" aria-label={`来源进度 ${fetchedSources}/${sourceCount}`}>
-          <span style={{ width: `${sourcePercent}%` }} />
+    <div className="research-run-entry">
+      <button
+        className={`research-run-row ${tone}${isSelected ? ' selected' : ''}`}
+        type="button"
+        onClick={onOpen}
+        aria-current={isSelected ? 'true' : undefined}
+        aria-label={`打开研究运行 ${run.runDate} ${thesisName} ${presentRunStatus(run.status)}`}
+      >
+        <span className="research-run-date-cell">
+          <strong>{run.runDate}</strong>
+          <small>{run.mode === 'QUICK' ? 'QUICK' : 'DEEP'} · RUN #{run.id}</small>
         </span>
-      </span>
-      <span className="research-run-number-cell">{run.eventCount ?? 0}</span>
-      <span className="research-run-number-cell">{run.evidenceCount ?? 0}</span>
-      <span className="research-run-number-cell">{run.learningTaskCount ?? 0}/{run.contentIdeaCount ?? 0}</span>
-    </button>
+        <span className="research-run-thesis-cell">
+          <strong>{thesisName}</strong>
+          <small>{run.summary || '等待打开运行细节查看 agent trace'}</small>
+        </span>
+        <span className="research-run-status-cell">
+          <span className={`research-status-chip ${tone}`}>{presentRunStatus(run.status)}</span>
+        </span>
+        <span className="research-source-cell">
+          <strong>{fetchedSources}/{sourceCount}</strong>
+          <span className="research-source-mini-meter" aria-label={`来源进度 ${fetchedSources}/${sourceCount}`}>
+            <span style={{ width: `${sourcePercent}%` }} />
+          </span>
+        </span>
+        <span className="research-run-number-cell">{run.eventCount ?? 0}</span>
+        <span className="research-run-number-cell">{run.evidenceCount ?? 0}</span>
+        <span className="research-run-number-cell">{run.learningTaskCount ?? 0}/{run.contentIdeaCount ?? 0}</span>
+      </button>
+      {run.status !== 'RUNNING' && (
+        <button className="research-run-delete" type="button" aria-label={`删除研究运行 ${run.id}`} onClick={onDelete}>
+          删除
+        </button>
+      )}
+    </div>
   );
 }
 

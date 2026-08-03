@@ -369,6 +369,19 @@ export default function App() {
     }
   }
 
+  async function deleteResearchRun(id: number) {
+    await api<void>(`/api/research/runs/${id}`, { method: 'DELETE' });
+    setResearchRuns((current) => current.filter((run) => run.id !== id));
+    if (researchRunDetail?.run.id === id) {
+      setResearchRunDetail(null);
+    }
+    if (researchReport?.researchRunId === id) {
+      setResearchReport(null);
+    }
+    setMessage('研究运行已删除');
+    addToast('研究运行已删除', 'success');
+  }
+
   async function runResearch(input: {
     thesisId?: number;
     mode: 'QUICK' | 'DEEP';
@@ -533,6 +546,7 @@ export default function App() {
           onRegenerateReport={regenerateResearchReport}
           onResumeRun={resumeResearchRun}
           onEvaluateRun={evaluateResearchRun}
+          onDeleteRun={deleteResearchRun}
           onCloseReport={() => setResearchReport(null)}
         />
       )}

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -22,6 +22,19 @@ test('renders research runs as a telemetry list', () => {
   expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveClass('research-run-row');
   expect(screen.getByRole('button', { name: /打开研究运行/ })).toHaveAttribute('aria-current', 'true');
   expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
+});
+
+test('confirms before deleting a completed research run in a page-level dialog', async () => {
+  const onDeleteRun = vi.fn().mockResolvedValue(undefined);
+  renderView(legacyDetail(), { onDeleteRun });
+
+  await userEvent.click(screen.getByRole('button', { name: '删除研究运行 15' }));
+
+  const dialog = screen.getByRole('dialog', { name: '删除研究运行' });
+  expect(dialog.closest('.research-workbench')).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+  await waitFor(() => expect(onDeleteRun).toHaveBeenCalledWith(15));
 });
 
 test('keeps the open thesis count in a dedicated non-overlapping header', () => {
@@ -328,6 +341,7 @@ function renderView(
       onRegenerateReport={vi.fn()}
       onResumeRun={vi.fn()}
       onEvaluateRun={vi.fn()}
+      onDeleteRun={vi.fn()}
       onCloseReport={vi.fn()}
       {...overrides}
     />

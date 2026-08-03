@@ -8152,7 +8152,7 @@ input[type="checkbox"] {
   margin-top: 14px;
 }
 
-.research-run-list-head,
+.research-run-list-head-grid,
 .research-run-row {
   display: grid;
   grid-template-columns: var(--run-grid);
@@ -8161,6 +8161,9 @@ input[type="checkbox"] {
 }
 
 .research-run-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 8px;
   padding: 0 14px 4px;
   color: var(--muted);
   font-size: 11px;
@@ -8170,6 +8173,13 @@ input[type="checkbox"] {
 .research-run-list-body {
   display: grid;
   gap: 9px;
+}
+
+.research-run-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
 }
 
 .research-run-row {
@@ -8224,6 +8234,29 @@ input[type="checkbox"] {
 .research-run-row:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--run-tone) 58%, transparent);
   outline-offset: 3px;
+}
+
+.research-run-delete {
+  align-self: center;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 48%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.research-run-delete:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+}
+
+.research-run-delete:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger) 58%, transparent);
+  outline-offset: 2px;
 }
 
 .research-run-date-cell,

@@ -40,6 +40,7 @@ import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.ResearchRuntimePolicy;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
@@ -99,6 +100,15 @@ public class ResearchService {
     public ResearchRunPlan createRun(LocalDate runDate,
                                      List<String> themeCodes) {
         return createRun(null, runDate, themeCodes, ResearchMode.DEEP);
+    }
+
+    @Transactional
+    public void deleteRun(Long id) {
+        ResearchRun run = detail(id);
+        if (ResearchEnums.RUN_STATUS_RUNNING.equals(run.getStatus())) {
+            throw new BusinessConflictException("研究运行仍在执行，暂不能删除");
+        }
+        researchRunRepository.deleteById(id);
     }
 
     public ResearchRunPlan createRun(Long thesisId,
