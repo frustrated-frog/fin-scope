@@ -488,7 +488,7 @@ export type ResearchMission = {
   scopeSummary: string;
   successCriteria: string[];
   status: string;
-  planningMode: 'LLM_VALIDATED' | 'DETERMINISTIC' | 'PENDING';
+  planningMode: 'MODEL_ASSISTED' | 'CONTROLLED' | 'LLM_VALIDATED' | 'DETERMINISTIC' | 'PENDING';
   planVersion: number;
   maxActions: number;
   activeTaskKey?: string;

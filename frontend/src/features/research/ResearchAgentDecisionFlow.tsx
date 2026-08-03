@@ -74,7 +74,7 @@ export function ResearchAgentDecisionFlow({
         </article>
         <div className="research-agent-health-signals">
           <span>{retryCount} 次自动重试</span>
-          <span>{state.fallbackCount} 次规则降级</span>
+          <span>{state.fallbackCount} 次异常降级</span>
           <span>{state.noProgressCount} 次无新增</span>
           {trajectoryMetrics && <span className="quality">轨迹质量 {trajectoryMetrics.qualityScore}</span>}
         </div>
@@ -108,6 +108,8 @@ function DecisionEntry({
   const rejectedTool = decision.decisionType === 'TOOL_CALL' && decision.status === 'REJECTED';
   const modelTimeoutFallback = decision.decisionMode === 'DETERMINISTIC'
     && decision.validationError?.startsWith('MODEL_TIMEOUT');
+  const assistanceUnavailable = decision.decisionMode === 'CONTROLLED'
+    && decision.validationError?.startsWith('MODEL_ASSISTANCE_UNAVAILABLE');
   const tone = rejectedFinish || decision.status === 'FAILED'
     ? 'warning'
     : decision.decisionType === 'PLAN_PATCH'
@@ -130,6 +132,8 @@ function DecisionEntry({
             {decision.toolCode && <strong>{TOOL_LABELS[decision.toolCode] || decision.toolCode}</strong>}
           </div>
           <div className="research-agent-decision-badges">
+            {decision.decisionMode === 'MODEL_ASSISTED' && <span>模型辅助</span>}
+            {decision.decisionMode === 'CONTROLLED' && <span>受控编排</span>}
             {decision.decisionMode === 'DETERMINISTIC' && <span className="fallback">规则降级</span>}
             <span>{Math.round(decision.confidence * 100)}% 置信</span>
           </div>
@@ -143,7 +147,9 @@ function DecisionEntry({
         )}
         {decision.validationError && (
           <p
-            className={modelTimeoutFallback ? 'research-agent-fallback-detail' : 'research-agent-validation'}
+            className={modelTimeoutFallback || assistanceUnavailable
+              ? 'research-agent-fallback-detail'
+              : 'research-agent-validation'}
             role="status"
           >
             {decision.validationError}

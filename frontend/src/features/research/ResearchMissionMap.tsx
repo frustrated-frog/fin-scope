@@ -21,6 +21,8 @@ const MISSION_STATUS: Record<string, string> = {
 };
 
 const PLANNING_MODE_LABELS: Record<string, string> = {
+  MODEL_ASSISTED: '模型辅助计划',
+  CONTROLLED: '受控研究计划',
   LLM_VALIDATED: 'Agent 计划',
   DETERMINISTIC: '规则计划',
   PENDING: '等待计划'
@@ -34,6 +36,8 @@ export function ResearchMissionMap({ mission }: { mission?: ResearchMissionView 
   const progress = mission.tasks.length ? Math.round((completedTasks / mission.tasks.length) * 100) : 0;
   const activeTask = mission.tasks.find((task) => task.taskKey === mission.mission.activeTaskKey);
   const tools = new Map(mission.tools.map((tool) => [tool.code, tool]));
+  const assistanceUnavailable = mission.mission.planningMode === 'CONTROLLED'
+    && mission.mission.fallbackReason === 'MODEL_ASSISTANCE_UNAVAILABLE';
 
   return (
     <section className="research-mission-map" aria-label="研究作战图">
@@ -49,7 +53,7 @@ export function ResearchMissionMap({ mission }: { mission?: ResearchMissionView 
           <p>{mission.mission.scopeSummary}</p>
           {mission.mission.fallbackDetail && (
             <p className="research-mission-fallback-detail">
-              <strong>计划降级原因</strong>
+              <strong>{assistanceUnavailable ? '模型辅助状态' : '计划降级原因'}</strong>
               <span>{mission.mission.fallbackDetail}</span>
             </p>
           )}

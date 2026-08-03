@@ -224,12 +224,13 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
-    void boundsProviderErrorBodiesBeforeTheyReachTracesAndUi() throws Exception {
+    void excludesProviderErrorBodiesFromExceptionsAndKeepsOnlyRequestId() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
             readAll(exchange.getRequestBody());
             byte[] body = repeat("provider-secret-detail", 400).getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(500, body.length);
+            exchange.getResponseHeaders().add("x-request-id", "safe-request-42");
+            exchange.sendResponseHeaders(400, body.length);
             try (OutputStream output = exchange.getResponseBody()) {
                 output.write(body);
             }
@@ -242,9 +243,58 @@ class OpenAiCompatibleLlmClientTest {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> client.complete("system", "user"));
 
-        assertTrue(error.getMessage().contains("HTTP 500"));
-        assertTrue(error.getMessage().endsWith("…"));
-        assertTrue(error.getMessage().length() < 4100);
+        assertTrue(error.getMessage().contains("HTTP 400"));
+        assertTrue(error.getMessage().contains("requestId=safe-request-42"));
+        assertFalse(error.getMessage().contains("provider-secret-detail"));
+    }
+
+    @Test
+    void retriesTransientProviderFailureWithinTheCallBudget() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            int status = calls.getAndIncrement() == 0 ? 520 : 200;
+            byte[] body = (status == 520
+                    ? "{\"error\":\"temporarily unavailable\"}"
+                    : "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            if (status == 520) exchange.getResponseHeaders().add("Retry-After", "0");
+            exchange.sendResponseHeaders(status, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "test-model", 3000, 0.2);
+
+        assertEquals("{}", client.complete("system", "user", 2000, 300));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void acceptsArrayBasedMessageContentFromCompatibleProviders() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            byte[] body = ("{\"choices\":[{\"message\":{\"content\":["
+                    + "{\"type\":\"text\",\"text\":\"{\\\"missionTaskKey\\\":\"},"
+                    + "{\"type\":\"text\",\"text\":\"\\\"search_counter\\\"}\"}]}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(
+                true, baseUrl, "test-key", "test-model", 3000, 0.2);
+
+        assertEquals("{\"missionTaskKey\":\"search_counter\"}",
+                client.complete("system", "user", 2000, 300));
     }
 
     private String repeat(String value, int times) {

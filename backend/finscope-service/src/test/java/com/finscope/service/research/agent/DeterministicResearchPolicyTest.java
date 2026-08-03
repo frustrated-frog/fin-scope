@@ -2,9 +2,11 @@ package com.finscope.service.research.agent;
 
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.mission.ResearchMission;
+import com.finscope.domain.research.mission.ResearchMissionTask;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -54,5 +56,31 @@ class DeterministicResearchPolicyTest {
         assertEquals("research_material_search", decision.getToolCode());
         assertTrue(decision.getArgumentsJson().contains("000001"));
         assertTrue(decision.getArgumentsJson().contains("ANNOUNCEMENT"));
+    }
+
+    @Test
+    void startsTheFirstReadySearchTaskBeforeAnEvidenceGapExists() {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        context.setLatestGap(null);
+        ResearchMissionTask task = new ResearchMissionTask();
+        task.setTaskKey("search_primary");
+        task.setTitle("公司一手资料搜索");
+        task.setTaskType("SEARCH");
+        task.setToolCode("research_material_search");
+        task.setIntent("PRIMARY");
+        task.setStatus("PENDING");
+        task.setDependencies(Collections.<String>emptyList());
+        task.setQueryText("000001 ANNOUNCEMENT 财报 经营 订单");
+        task.setRationale("先核验公司披露");
+        task.setExpectedEvidence("获得可追溯的一手资料");
+        context.setTasks(Collections.singletonList(task));
+
+        ResearchAgentDecision decision = policy.decide(context);
+
+        assertEquals("TOOL_CALL", decision.getDecisionType());
+        assertEquals("search_primary", decision.getMissionTaskKey());
+        assertEquals("research_material_search", decision.getToolCode());
+        assertTrue(decision.getArgumentsJson().contains("000001"));
+        assertEquals("NO_GAP", decision.getTargetGap());
     }
 }

@@ -136,6 +136,9 @@ class ResearchAgentLoopServiceTest {
 
     @Test
     void abortsAfterRepeatedFinishRejectionWithoutEvidenceProgress() throws Exception {
+        com.finscope.domain.research.mission.ResearchMissionGap gap = sufficientGap();
+        gap.setResearchRunId(66L);
+        missions.appendGap(gap);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(finishDecision());
@@ -166,6 +169,10 @@ class ResearchAgentLoopServiceTest {
 
     @Test
     void retriesTransientToolFailureAndPersistsOnlyFinalObservation() throws Exception {
+        missions.replacePlan(66L, "CONTROLLED", "验证正反证据",
+                Collections.singletonList("包含独立正反证据"),
+                Collections.singletonList(missionTask("search_counter", "public_news_search", "COUNTER")),
+                null, null);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(20000), eq(1200)))
@@ -184,11 +191,17 @@ class ResearchAgentLoopServiceTest {
         ResearchFinishVerifier finishVerifier = mock(ResearchFinishVerifier.class);
         when(finishVerifier.verify(66L)).thenReturn(
                 new ResearchFinishVerdict(true, "ACCEPTED", Collections.<String>emptyList()));
+        ResearchMissionService missionService = mock(ResearchMissionService.class);
+        when(missionService.assess(eq(66L), anyString())).thenAnswer(invocation -> {
+            com.finscope.domain.research.mission.ResearchMissionGap gap = sufficientGap();
+            gap.setResearchRunId(66L);
+            return missions.appendGap(gap);
+        });
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
                 new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
                 new ResearchAgentStateReducer(agents),
-                finishVerifier, mock(ResearchMissionService.class), runtimeService);
+                finishVerifier, missionService, runtimeService);
 
         ResearchAgentLoopResult result = loop.run(66L);
 
@@ -202,6 +215,10 @@ class ResearchAgentLoopServiceTest {
 
     @Test
     void failsRuntimeNodeAndAbortsOnTerminalToolError() throws Exception {
+        missions.replacePlan(66L, "CONTROLLED", "验证正反证据",
+                Collections.singletonList("包含独立正反证据"),
+                Collections.singletonList(missionTask("search_counter", "public_news_search", "COUNTER")),
+                null, null);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(20000), eq(1200))).thenReturn(searchDecision());
@@ -292,6 +309,8 @@ class ResearchAgentLoopServiceTest {
         gap.setSupportCount(5);
         gap.setCounterCount(3);
         gap.setSufficient(true);
+        gap.setRecommendedIntent("NONE");
+        gap.setWarnings(Collections.<String>emptyList());
         gap.setStateHash("sufficient-gap");
         return gap;
     }

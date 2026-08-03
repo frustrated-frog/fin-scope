@@ -9,8 +9,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.ConnectException;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +32,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private final boolean jsonMode;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final int RETRY_OUTPUT_TOKEN_BUDGET = 4_096;
+    private static final int MAX_TRANSIENT_ATTEMPTS = 2;
     private static final String USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                     + "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 FinScope/0.1";
@@ -83,13 +90,14 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         }
         int actualTimeoutMs = requestedTimeoutMs <= 0 ? timeoutMs : Math.min(timeoutMs, requestedTimeoutMs);
         long deadlineNanos = System.nanoTime() + actualTimeoutMs * 1_000_000L;
-        JsonNode root = requestCompletion(systemPrompt, userPrompt, maxOutputTokens, actualTimeoutMs);
+        JsonNode root = requestCompletionWithTransientRetry(
+                systemPrompt, userPrompt, maxOutputTokens, deadlineNanos);
         String content = messageContent(root);
         if (needsExpandedOutputRetry(root, content, maxOutputTokens)) {
             int remainingTimeoutMs = remainingTimeoutMs(deadlineNanos);
             if (remainingTimeoutMs > 0) {
-                root = requestCompletion(systemPrompt, userPrompt, retryOutputTokenBudget(maxOutputTokens),
-                        remainingTimeoutMs);
+                root = requestCompletionWithTransientRetry(
+                        systemPrompt, userPrompt, retryOutputTokenBudget(maxOutputTokens), deadlineNanos);
                 content = messageContent(root);
             }
         }
@@ -102,14 +110,38 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         return content;
     }
 
+    private JsonNode requestCompletionWithTransientRetry(String systemPrompt,
+                                                         String userPrompt,
+                                                         int maxOutputTokens,
+                                                         long deadlineNanos) throws Exception {
+        Exception lastFailure = null;
+        for (int attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt++) {
+            int remaining = remainingTimeoutMs(deadlineNanos);
+            if (remaining <= 0) break;
+            try {
+                return requestCompletion(systemPrompt, userPrompt, maxOutputTokens, deadlineNanos);
+            } catch (Exception error) {
+                lastFailure = error;
+                if (attempt >= MAX_TRANSIENT_ATTEMPTS || !isTransient(error)) throw error;
+                waitBeforeRetry(error, deadlineNanos);
+            }
+        }
+        if (lastFailure != null) throw lastFailure;
+        throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
+    }
+
     private JsonNode requestCompletion(String systemPrompt, String userPrompt,
-                                       int maxOutputTokens, int requestTimeoutMs) throws Exception {
+                                       int maxOutputTokens, long deadlineNanos) throws Exception {
+        int connectTimeoutMs = remainingTimeoutMs(deadlineNanos);
+        if (connectTimeoutMs <= 0) {
+            throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
+        }
         byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt, maxOutputTokens));
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
         try {
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(requestTimeoutMs);
-            connection.setReadTimeout(requestTimeoutMs);
+            connection.setConnectTimeout(connectTimeoutMs);
+            connection.setReadTimeout(connectTimeoutMs);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Accept", "application/json");
@@ -118,6 +150,11 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(requestBody);
             }
+            int readTimeoutMs = remainingTimeoutMs(deadlineNanos);
+            if (readTimeoutMs <= 0) {
+                throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
+            }
+            connection.setReadTimeout(readTimeoutMs);
             int status = connection.getResponseCode();
             String responseBody;
             InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -125,13 +162,62 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
                 responseBody = new String(readAll(input), StandardCharsets.UTF_8);
             }
             if (status >= 400) {
-                throw new IllegalStateException("OpenAI compatible LLM request failed, HTTP " + status
-                        + ": " + limit(responseBody, 4000));
+                String requestId = firstHeader(connection, "x-request-id", "request-id", "trace-id");
+                throw new ProviderHttpException(status, retryAfterMillis(connection.getHeaderField("Retry-After")),
+                        "OpenAI compatible LLM request failed, HTTP " + status
+                                + (isBlank(requestId) ? "" : ", requestId=" + limit(requestId, 160)));
             }
             return objectMapper.readTree(responseBody);
         } finally {
             connection.disconnect();
         }
+    }
+
+    private boolean isTransient(Exception error) {
+        if (error instanceof ProviderHttpException) {
+            int status = ((ProviderHttpException) error).status;
+            return status == 408 || status == 429 || (status >= 500 && status <= 599);
+        }
+        return error instanceof SocketTimeoutException
+                || error instanceof ConnectException
+                || error instanceof SocketException;
+    }
+
+    private void waitBeforeRetry(Exception error, long deadlineNanos) throws Exception {
+        long delayMs = error instanceof ProviderHttpException
+                ? ((ProviderHttpException) error).retryAfterMillis : 100L;
+        delayMs = Math.max(0L, delayMs);
+        long remainingMs = remainingTimeoutMs(deadlineNanos);
+        if (delayMs <= 0L || remainingMs <= 1L) return;
+        try {
+            Thread.sleep(Math.min(delayMs, remainingMs - 1L));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw interrupted;
+        }
+    }
+
+    private long retryAfterMillis(String value) {
+        if (isBlank(value)) return 100L;
+        try {
+            return Math.max(0L, Long.parseLong(value.trim()) * 1_000L);
+        } catch (NumberFormatException ignored) {
+            try {
+                long delay = java.time.Duration.between(ZonedDateTime.now(),
+                        ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME)).toMillis();
+                return Math.max(0L, delay);
+            } catch (DateTimeParseException invalidDate) {
+                return 100L;
+            }
+        }
+    }
+
+    private String firstHeader(HttpURLConnection connection, String... names) {
+        for (String name : names) {
+            String value = connection.getHeaderField(name);
+            if (!isBlank(value)) return value.trim();
+        }
+        return "";
     }
 
     private Map<String, Object> request(String systemPrompt, String userPrompt, int maxOutputTokens) {
@@ -155,7 +241,22 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     }
 
     private String messageContent(JsonNode root) {
-        return root.path("choices").path(0).path("message").path("content").asText();
+        JsonNode choice = root.path("choices").path(0);
+        JsonNode content = choice.path("message").path("content");
+        if (content.isTextual()) return content.asText();
+        if (content.isArray()) {
+            StringBuilder text = new StringBuilder();
+            for (JsonNode part : content) {
+                if (part.isTextual()) {
+                    text.append(part.asText());
+                } else if (part.path("text").isTextual()) {
+                    text.append(part.path("text").asText());
+                }
+            }
+            return text.toString();
+        }
+        if (content.path("text").isTextual()) return content.path("text").asText();
+        return choice.path("text").asText();
     }
 
     private boolean needsExpandedOutputRetry(JsonNode root, String content, int maxOutputTokens) {
@@ -251,5 +352,16 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private static final class ProviderHttpException extends IllegalStateException {
+        private final int status;
+        private final long retryAfterMillis;
+
+        private ProviderHttpException(int status, long retryAfterMillis, String message) {
+            super(message);
+            this.status = status;
+            this.retryAfterMillis = retryAfterMillis;
+        }
     }
 }

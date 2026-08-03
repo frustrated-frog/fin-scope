@@ -171,7 +171,7 @@ public class ResearchAgentLoopService {
         decision.setArgumentsJson("{}");
         decision.setDecisionSummary(summary);
         decision.setConfidence(1D);
-        decision.setDecisionMode("DETERMINISTIC");
+        decision.setDecisionMode("CONTROLLED");
         decision.setStatus("PROPOSED");
         return decision;
     }
@@ -228,7 +228,7 @@ public class ResearchAgentLoopService {
         decision.setArgumentsJson("{}");
         decision.setDecisionSummary("控制循环达到上限，保留当前轨迹并安全终止");
         decision.setConfidence(1D);
-        decision.setDecisionMode("DETERMINISTIC");
+        decision.setDecisionMode("CONTROLLED");
         decision.setStatus("COMPLETED");
         repository.appendDecision(decision);
         reducer.recordAbort(state, decision);

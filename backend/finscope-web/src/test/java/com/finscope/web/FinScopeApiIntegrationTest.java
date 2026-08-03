@@ -1003,7 +1003,7 @@ class FinScopeApiIntegrationTest {
 
         mvc.perform(get("/api/research/runs/1/mission"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.mission.planningMode").value("DETERMINISTIC"))
+                .andExpect(jsonPath("$.data.mission.planningMode").value("CONTROLLED"))
                 .andExpect(jsonPath("$.data.tasks.length()").value(greaterThanOrEqualTo(6)))
                 .andExpect(jsonPath("$.data.gaps.length()").value(greaterThanOrEqualTo(1)));
 

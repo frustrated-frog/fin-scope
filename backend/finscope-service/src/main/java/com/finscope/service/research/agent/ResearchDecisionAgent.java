@@ -1,172 +1,215 @@
 package com.finscope.service.research.agent;
 
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
+import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMissionTask;
 import com.finscope.rpc.llm.LlmChatClient;
-import com.finscope.service.research.ModelJsonShapeNormalizer;
+import com.finscope.service.research.ModelJsonExtractor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 public class ResearchDecisionAgent {
     static final int TIMEOUT_MS = 20_000;
     static final int MAX_OUTPUT_TOKENS = 1_200;
-    private static final int MAX_RAW_CHARACTERS = 16_000;
+    private static final int MAX_RAW_CHARACTERS = 8_000;
+    private static final Logger LOG = LoggerFactory.getLogger(ResearchDecisionAgent.class);
 
     private final LlmChatClient llmChatClient;
-    private final ResearchDecisionValidator validator;
-    private final DeterministicResearchPolicy fallbackPolicy;
+    private final DeterministicResearchPolicy controlPolicy;
     private final ObjectMapper objectMapper;
-    private final ModelJsonShapeNormalizer shapeNormalizer;
 
     public ResearchDecisionAgent(LlmChatClient llmChatClient,
                                  ResearchDecisionValidator validator,
-                                 DeterministicResearchPolicy fallbackPolicy) {
+                                 DeterministicResearchPolicy controlPolicy) {
         this.llmChatClient = llmChatClient;
-        this.validator = validator;
-        this.fallbackPolicy = fallbackPolicy;
-        this.objectMapper = new ObjectMapper()
-                .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
-                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-        this.shapeNormalizer = new ModelJsonShapeNormalizer(objectMapper);
+        this.controlPolicy = controlPolicy;
+        this.objectMapper = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     }
 
     public ResearchDecisionResult decide(ResearchDecisionContext context) {
-        if (context != null && context.getLatestGap() != null && context.getLatestGap().isSufficient()) {
-            return new ResearchDecisionResult(fallbackPolicy.decide(context), null, null);
+        ResearchAgentDecision controlled = controlled(context);
+        if (!canUseModel(context, controlled)) {
+            return success(controlled);
         }
-        if (llmChatClient == null || !llmChatClient.isConfigured()) {
-            return fallback(context, "MODEL_DISABLED", null);
+        List<ResearchMissionTask> candidates = eligibleTasks(context);
+        if (candidates.isEmpty()) {
+            return success(controlled);
+        }
+
+        String raw;
+        try {
+            raw = call(systemPrompt(candidates), selectionPrompt(context, candidates));
+        } catch (Exception error) {
+            return assistanceUnavailable(context, controlled, error);
+        }
+        Exception formatFailure;
+        try {
+            return success(modelSelection(context, candidates, raw));
+        } catch (Exception error) {
+            formatFailure = error;
         }
         try {
-            String raw = llmChatClient.complete(systemPrompt(), context.getPrompt(),
-                    TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            if (raw == null || raw.trim().isEmpty()) {
-                throw new IllegalArgumentException("模型返回空决策");
-            }
-            if (raw.length() > MAX_RAW_CHARACTERS) {
-                throw new IllegalArgumentException("模型决策超过字符上限");
-            }
-            JsonNode root = objectMapper.readTree(raw.trim());
-            normalizeDraft(root);
-            ResearchDecisionDraft draft = objectMapper.treeToValue(root, ResearchDecisionDraft.class);
-            bindMissionTaskContract(draft, context);
-            ResearchAgentDecision decision = validator.validate(draft, context, "MODEL");
-            return new ResearchDecisionResult(decision, null, null);
-        } catch (Exception error) {
-            if (isTimeout(error)) {
-                return fallback(context, "MODEL_TIMEOUT", "模型决策响应超时，已切换规则决策");
-            }
-            return fallback(context, "DECISION_REJECTED", safeDetail(error));
+            String prompt = selectionPrompt(context, candidates)
+                    + "\n上一次输出无效（" + formatFailure.getClass().getSimpleName() + "）。"
+                    + "请只返回完整JSON对象。";
+            return success(modelSelection(context, candidates, call(systemPrompt(candidates), prompt)));
+        } catch (Exception repairFailure) {
+            return assistanceUnavailable(context, controlled, repairFailure);
         }
     }
 
-    private ResearchDecisionResult fallback(ResearchDecisionContext context, String reason, String detail) {
-        return new ResearchDecisionResult(fallbackPolicy.decide(context), reason, detail);
+    private String call(String system, String user) throws Exception {
+        return llmChatClient.complete(system, user, TIMEOUT_MS, MAX_OUTPUT_TOKENS);
     }
 
-    private String systemPrompt() {
-        return "你是 FinScope 的研究决策 Agent。每次只选择一个下一步动作，不输出思维链。"
-                + "必须返回单个 JSON 对象，不要 Markdown，不得增加字段。"
-                + "字段仅允许 decisionType、currentSubgoal、missionTaskKey、toolCode、arguments、targetGap、"
-                + "expectedObservation、decisionSummary、confidence、planPatch。"
-                + "confidence必须是0到1之间的JSON数字，不得输出high、medium、low等字符串。"
-                + "decisionType 仅允许 TOOL_CALL、PLAN_PATCH、FINISH、ABORT。"
-                + "可执行工具仅允许 public_news_search、research_material_search 和 evidence_assess。"
-                + "TOOL_CALL只负责选择计划任务中精确的missionTaskKey；工具和参数由服务端按任务合同重建，"
-                + "模型输出的toolCode和arguments不会改变任务合同。"
-                + "若研究对象包含六位A股代码，应优先使用research_material_search读取公告、互动问答、研报或快讯，"
-                + "其中参数必须且只能包含stockCode、materialType、query；"
-                + "decisionSummary 只写可审计的选择依据，不写详细内部推理过程。";
+    private ResearchDecisionResult success(ResearchAgentDecision decision) {
+        return new ResearchDecisionResult(decision, null, null);
     }
 
-    private void bindMissionTaskContract(ResearchDecisionDraft draft, ResearchDecisionContext context) {
-        if (draft == null || !"TOOL_CALL".equals(draft.getDecisionType()) || context == null
-                || context.getTasks() == null || context.getTasks().isEmpty()
-                || draft.getMissionTaskKey() == null) return;
-        ResearchMissionTask selected = null;
+    private ResearchDecisionResult assistanceUnavailable(ResearchDecisionContext context,
+                                                          ResearchAgentDecision controlled,
+                                                          Exception error) {
+        String category = isTimeout(error) ? "TIMEOUT" : error.getClass().getSimpleName();
+        LOG.warn("Research decision assistance unavailable; model={}, runId={}, category={}",
+                llmChatClient.modelName(), context == null ? null : context.getResearchRunId(), category);
+        return new ResearchDecisionResult(controlled, "MODEL_ASSISTANCE_UNAVAILABLE",
+                "模型辅助未采用（" + category + "），本轮继续使用服务端受控决策");
+    }
+
+    private ResearchAgentDecision controlled(ResearchDecisionContext context) {
+        ResearchAgentDecision decision = controlPolicy.decide(context);
+        decision.setDecisionMode("CONTROLLED");
+        return decision;
+    }
+
+    private boolean canUseModel(ResearchDecisionContext context, ResearchAgentDecision controlled) {
+        return controlled != null && "TOOL_CALL".equals(controlled.getDecisionType())
+                && isExternalTool(controlled.getToolCode())
+                && context != null && context.getRemainingActions() > 0
+                && context.getTasks() != null && !context.getTasks().isEmpty()
+                && llmChatClient != null && llmChatClient.isConfigured();
+    }
+
+    private List<ResearchMissionTask> eligibleTasks(ResearchDecisionContext context) {
+        List<ResearchMissionTask> values = new ArrayList<ResearchMissionTask>();
         for (ResearchMissionTask task : context.getTasks()) {
-            if (draft.getMissionTaskKey().trim().equals(task.getTaskKey())) {
-                selected = task;
-                break;
-            }
-        }
-        if (selected == null) return;
-        draft.setMissionTaskKey(selected.getTaskKey());
-        draft.setToolCode(selected.getToolCode());
-        if ("public_news_search".equals(selected.getToolCode())) {
-            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
-            arguments.put("query", selected.getQueryText());
-            arguments.put("intent", selected.getIntent());
-            draft.setArguments(arguments);
-        } else if ("research_material_search".equals(selected.getToolCode())) {
-            String queryText = selected.getQueryText() == null ? "" : selected.getQueryText().trim();
-            String[] parts = queryText.split("\\s+", 3);
-            Map<String, Object> arguments = new LinkedHashMap<String, Object>();
-            arguments.put("stockCode", parts.length > 0 ? parts[0] : "");
-            arguments.put("materialType", parts.length > 1 ? parts[1] : "");
-            arguments.put("query", parts.length > 2 ? parts[2] : "");
-            draft.setArguments(arguments);
-        } else if ("evidence_assess".equals(selected.getToolCode())) {
-            draft.setArguments(Collections.<String, Object>emptyMap());
-        }
-    }
-
-    private void normalizeDraft(JsonNode root) throws Exception {
-        if (!(root instanceof ObjectNode)) {
-            return;
-        }
-        ObjectNode draft = (ObjectNode) root;
-        shapeNormalizer.normalizeTextFields(draft, "currentSubgoal", "missionTaskKey", "toolCode", "targetGap",
-                "expectedObservation", "decisionSummary");
-        shapeNormalizer.normalizeObjectFields(draft, "arguments", "planPatch");
-        normalizeConfidence(draft);
-    }
-
-    private void normalizeConfidence(ObjectNode root) {
-        JsonNode confidence = root.get("confidence");
-        if (confidence == null || !confidence.isTextual()) {
-            return;
-        }
-        String value = confidence.asText().trim();
-        if ("HIGH".equalsIgnoreCase(value)) {
-            root.put("confidence", 0.85D);
-        } else if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) {
-            root.put("confidence", 0.65D);
-        } else if ("LOW".equalsIgnoreCase(value)) {
-            root.put("confidence", 0.35D);
-        } else {
+            if (!isExternalTool(task.getToolCode())) continue;
             try {
-                root.put("confidence", Double.parseDouble(value));
-            } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException("confidence 必须是 0 到 1 之间的数字或 HIGH/MEDIUM/LOW");
+                controlPolicy.decideTask(context, task.getTaskKey(), "MODEL_ASSISTED");
+                values.add(task);
+            } catch (IllegalArgumentException ignored) {
+                // Not ready, already attempted, or outside the active task contract.
             }
+        }
+        return values;
+    }
+
+    private ResearchAgentDecision modelSelection(ResearchDecisionContext context,
+                                                 List<ResearchMissionTask> candidates,
+                                                 String raw) throws Exception {
+        JsonNode root = objectMapper.readTree(ModelJsonExtractor.extractObject(raw, MAX_RAW_CHARACTERS));
+        String taskKey = text(root.get("missionTaskKey"));
+        if (!hasText(taskKey) || !containsTask(candidates, taskKey.trim())) {
+            throw new IllegalArgumentException("missionTaskKey 不属于服务端候选任务");
+        }
+        ResearchAgentDecision decision = controlPolicy.decideTask(context, taskKey.trim(), "MODEL_ASSISTED");
+        String summary = compact(text(root.get("decisionSummary")), 480);
+        if (hasText(summary)) decision.setDecisionSummary(summary);
+        decision.setConfidence(confidence(root.get("confidence"), decision.getConfidence()));
+        return decision;
+    }
+
+    private String systemPrompt(List<ResearchMissionTask> candidates) {
+        StringBuilder keys = new StringBuilder();
+        for (ResearchMissionTask task : candidates) {
+            if (keys.length() > 0) keys.append(',');
+            keys.append(task.getTaskKey());
+        }
+        return "你是 FinScope 的任务选择助手。工具、参数、缺口和任务合同均由服务端生成。"
+                + "你只能从候选任务键中选择一个。只返回单个JSON对象，不要Markdown。"
+                + "字段仅使用missionTaskKey、decisionSummary、confidence；confidence为0到1数字。"
+                + "候选任务键：" + keys + "。不得输出工具参数或计划补丁。";
+    }
+
+    private String selectionPrompt(ResearchDecisionContext context, List<ResearchMissionTask> candidates) {
+        StringBuilder prompt = new StringBuilder();
+        if (context.getMission() != null) {
+            prompt.append("研究目标：").append(compact(context.getMission().getGoal(), 240)).append('\n')
+                    .append("研究对象：").append(compact(context.getMission().getSubject(), 120)).append('\n');
+        }
+        ResearchMissionGap gap = context.getLatestGap();
+        if (gap != null) {
+            prompt.append("证据缺口：evidence=").append(gap.getEvidenceCount())
+                    .append(",sources=").append(gap.getSourceCount())
+                    .append(",support=").append(gap.getSupportCount())
+                    .append(",counter=").append(gap.getCounterCount())
+                    .append(",recommendedIntent=").append(gap.getRecommendedIntent()).append('\n');
+        }
+        prompt.append("候选任务：\n");
+        for (ResearchMissionTask task : candidates) {
+            prompt.append("- ").append(task.getTaskKey()).append("；intent=").append(task.getIntent())
+                    .append("；title=").append(compact(task.getTitle(), 100))
+                    .append("；reason=").append(compact(task.getRationale(), 180)).append('\n');
+        }
+        prompt.append("选择最能缩小当前证据缺口的一个任务。");
+        return prompt.toString();
+    }
+
+    private boolean containsTask(List<ResearchMissionTask> tasks, String key) {
+        for (ResearchMissionTask task : tasks) {
+            if (key.equals(task.getTaskKey())) return true;
+        }
+        return false;
+    }
+
+    private double confidence(JsonNode node, double fallback) {
+        if (node == null || node.isNull()) return fallback;
+        if (node.isNumber()) return bounded(node.asDouble(), fallback);
+        String value = node.asText().trim();
+        if ("HIGH".equalsIgnoreCase(value)) return 0.85D;
+        if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) return 0.65D;
+        if ("LOW".equalsIgnoreCase(value)) return 0.35D;
+        try {
+            return bounded(Double.parseDouble(value), fallback);
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 
-    private String safeDetail(Exception error) {
-        String detail = error.getMessage() == null
-                ? error.getClass().getSimpleName()
-                : error.getClass().getSimpleName() + "：" + error.getMessage();
-        detail = detail.replaceAll("[\\r\\n\\t]+", " ").trim();
-        return detail.length() <= 480 ? detail : detail.substring(0, 480);
+    private double bounded(double value, double fallback) {
+        return value >= 0D && value <= 1D ? value : fallback;
+    }
+
+    private String text(JsonNode node) {
+        return node == null || node.isNull() ? null : node.asText();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String compact(String value, int maxLength) {
+        if (value == null) return "";
+        String compacted = value.replaceAll("[\\r\\n\\t]+", " ").replaceAll("\\s{2,}", " ").trim();
+        return compacted.length() <= maxLength ? compacted : compacted.substring(0, maxLength);
+    }
+
+    private boolean isExternalTool(String toolCode) {
+        return "public_news_search".equals(toolCode) || "research_material_search".equals(toolCode);
     }
 
     private boolean isTimeout(Throwable error) {
         Throwable current = error;
         while (current != null) {
-            if (current instanceof java.net.SocketTimeoutException) {
-                return true;
-            }
+            if (current instanceof java.net.SocketTimeoutException) return true;
             current = current.getCause();
         }
         return false;

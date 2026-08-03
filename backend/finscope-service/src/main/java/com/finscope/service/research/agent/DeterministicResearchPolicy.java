@@ -32,6 +32,17 @@ public class DeterministicResearchPolicy {
                     "外部动作预算已经用尽，保留当前证据和轨迹并安全终止", 1D), context);
         }
         if (gap == null) {
+            if (context.getTasks() != null && !context.getTasks().isEmpty()) {
+                for (ResearchMissionTask task : context.getTasks()) {
+                    if (ready(context, task) && isSearch(task)) {
+                        return validated(toolDecision(task, null), context);
+                    }
+                }
+                if (firstReadyTask(context, "ASSESS", "evidence_assess") == null) {
+                    return validated(terminal("ABORT", "等待任务依赖完成",
+                            "当前没有可执行的搜索或评估任务，避免生成脱离计划的动作", 1D), context);
+                }
+            }
             return assess(context, "尚无证据缺口快照，先评估当前研究状态");
         }
 
@@ -48,6 +59,20 @@ public class DeterministicResearchPolicy {
             return validated(terminal("ABORT", "停止重复研究动作",
                     "没有可安全执行的新动作，避免重复搜索和循环空转", 1D), context);
         }
+    }
+
+    public ResearchAgentDecision decideTask(ResearchDecisionContext context,
+                                            String taskKey,
+                                            String decisionMode) {
+        if (context == null || taskKey == null || context.getTasks() == null) {
+            throw new IllegalArgumentException("研究任务选择上下文不能为空");
+        }
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (taskKey.equals(task.getTaskKey()) && ready(context, task) && isSearch(task)) {
+                return validator.validate(toolDecision(task, context.getLatestGap()), context, decisionMode);
+            }
+        }
+        throw new IllegalArgumentException("研究任务当前不可执行：" + taskKey);
     }
 
     private ResearchAgentDecision firstUntriedSearch(ResearchDecisionContext context,
@@ -227,6 +252,7 @@ public class DeterministicResearchPolicy {
     }
 
     private String targetGap(ResearchMissionGap gap) {
+        if (gap == null) return "NO_GAP";
         return "intent=" + resolveIntent(gap) + ",state=" + gap.getStateHash();
     }
 

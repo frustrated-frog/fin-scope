@@ -73,7 +73,7 @@ test('renders the live objective, budget and paired decision observations', () =
   expect(screen.getByText('当前缺口')).toBeInTheDocument();
   expect(screen.getByText('收敛状态')).toBeInTheDocument();
   expect(screen.getByText('1 次自动重试')).toBeInTheDocument();
-  expect(screen.getByText('1 次规则降级')).toBeInTheDocument();
+  expect(screen.getByText('1 次异常降级')).toBeInTheDocument();
   expect(screen.queryByText('已有三条支持证据，反方证据仍不足')).not.toBeInTheDocument();
 
   const firstDecision = screen.getByTestId('agent-decision-101');
@@ -98,6 +98,24 @@ test('presents model timeout fallback separately from decision rejection', () =>
   const fallback = screen.getByText('MODEL_TIMEOUT：模型决策响应超时，已切换规则决策');
   expect(fallback).toHaveClass('research-agent-fallback-detail');
   expect(fallback).not.toHaveClass('research-agent-validation');
+});
+
+test('presents unavailable model assistance as a controlled status instead of rejection', () => {
+  const assistedTrace = {
+    ...trace,
+    decisions: [{
+      ...trace.decisions[0],
+      decisionMode: 'CONTROLLED' as const,
+      validationError: 'MODEL_ASSISTANCE_UNAVAILABLE：模型辅助未采用（TIMEOUT），本轮继续使用服务端受控决策'
+    }]
+  };
+
+  render(<ResearchAgentDecisionFlow agentCore={assistedTrace} remainingActions={7} planVersion={2} />);
+
+  const status = screen.getByText(/MODEL_ASSISTANCE_UNAVAILABLE/);
+  expect(screen.getByText('受控编排')).toBeInTheDocument();
+  expect(status).toHaveClass('research-agent-fallback-detail');
+  expect(status).not.toHaveClass('research-agent-validation');
 });
 
 test('distinguishes an exhausted retry from a generic tool failure', () => {

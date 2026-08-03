@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,43 +32,111 @@ class ResearchPlanningAgentTest {
     }
 
     @Test
+    void keepsServerOwnedCompanyPlanAndOnlyAcceptsBoundedModelEnrichment() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn("{"
+                + "\"scopeSummary\":\"聚焦盈利质量、现金流与产业链验证\","
+                + "\"successCriteria\":[\"财报与产业链事实相互印证\"],"
+                + "\"taskRefinements\":[{\"taskKey\":\"search_counter\","
+                + "\"queryText\":\"宁德时代 应收 存货 减值 审计风险\","
+                + "\"rationale\":\"优先证伪利润质量改善\","
+                + "\"expectedEvidence\":\"资产质量与审计风险证据\"}],"
+                + "\"tasks\":[{\"taskKey\":\"unsafe\",\"toolCode\":\"shell\"}],"
+                + "\"methodCodes\":[\"MAGIC_STOCK_PICKING\"]}");
+
+        ResearchPlanningResult result = agent.plan(stockFinancialInput());
+
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
+                result.getDraft().getMethodCodes());
+        assertEquals(8, result.getDraft().getTasks().size());
+        assertEquals("research_material_search", result.getDraft().task("primary_disclosure").getToolCode());
+        assertEquals("public_news_search", result.getDraft().task("search_counter").getToolCode());
+        assertEquals("宁德时代 应收 存货 减值 审计风险",
+                result.getDraft().task("search_counter").getQueryText());
+    }
+
+    @Test
+    void repairsInvalidPlanEnrichmentOnceInsteadOfRejectingTheResearchPlan() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenReturn("{\"scopeSummary\":\"未闭合")
+                .thenReturn("{\"scopeSummary\":\"围绕需求、供给和反方风险验证\","
+                        + "\"successCriteria\":[\"至少两个独立来源\"],\"taskRefinements\":[]}");
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertEquals("围绕需求、供给和反方风险验证", result.getDraft().getScopeSummary());
+        assertEquals(null, result.getFallbackReason());
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(30000), eq(2000));
+    }
+
+    @Test
+    void continuesWithControlledPlanWhenModelEnrichmentCannotBeRecovered() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenReturn("not-json")
+                .thenReturn("still-not-json");
+
+        ResearchPlanningResult result = agent.plan(stockFinancialInput());
+
+        assertEquals("CONTROLLED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTANCE_UNAVAILABLE", result.getFallbackReason());
+        assertTrue(result.getRejectionDetail().contains("模型辅助未采用"));
+        assertEquals("research_material_search", result.getDraft().task("primary_disclosure").getToolCode());
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(30000), eq(2000));
+    }
+
+    @Test
     void acceptsStrictModelJsonOnlyAfterServerValidation() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn(validJson());
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
         assertEquals("public_news_search", result.getDraft().task("search_counter").getToolCode());
         assertEquals("COUNTER", result.getDraft().task("search_counter").getIntent());
         verify(llm).complete(anyString(), anyString(), eq(30000), eq(2000));
     }
 
     @Test
-    void normalizesCompatibleModelStringValuesForArrayFields() throws Exception {
+    void normalizesCompatibleShapesOnlyInsideTheBoundedEnrichmentContract() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
-        String compatibleJson = validJson()
-                .replace("\"successCriteria\":[\"至少两个独立来源\",\"同时覆盖支持与反方证据\"]",
-                        "\"successCriteria\":\"至少两个独立来源；同时覆盖支持与反方证据\"")
-                .replace("\"dependencies\":[]", "\"dependencies\":\"\"")
-                .replace("\"dependencies\":[\"baseline_scan\"]", "\"dependencies\":\"baseline_scan\"")
-                .replace("\"dependencies\":[\"search_support\",\"search_counter\",\"search_primary\"]",
-                        "\"dependencies\":\"search_support；search_counter；search_primary\"")
-                .replace("\"dependencies\":[\"assess_evidence\"]", "\"dependencies\":\"assess_evidence\"");
-        compatibleJson = "{\"requiredEvidence\":\"官方原文；政策核心条款；市场反馈\"," + compatibleJson.substring(1);
+        String compatibleJson = "{"
+                + "\"scopeSummary\":\"聚焦需求和风险\","
+                + "\"successCriteria\":\"至少两个独立来源；同时覆盖支持与反方证据\","
+                + "\"taskRefinements\":{\"taskKey\":\"search_counter\","
+                + "\"queryText\":\"AI算力 延期 下修 风险\"}}";
         when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn(compatibleJson);
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
         assertEquals(Arrays.asList("至少两个独立来源", "同时覆盖支持与反方证据"),
                 result.getDraft().getSuccessCriteria());
+        assertEquals("AI算力 延期 下修 风险", result.getDraft().task("search_counter").getQueryText());
         assertEquals(Arrays.asList("search_support", "search_counter", "search_primary"),
                 result.getDraft().task("assess_evidence").getDependencies());
     }
 
     @Test
-    void tellsModelTheExactTaskKeyAndDependencyContract() throws Exception {
+    void preservesServerOwnedStockCodeAndMaterialTypeWhenRefiningACompanyQuery() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenReturn("{"
+                + "\"taskRefinements\":[{\"taskKey\":\"primary_disclosure\","
+                + "\"queryText\":\"000001 interaction 订单和经营现金流\"}]}");
+
+        ResearchPlanningResult result = agent.plan(stockFinancialInput());
+
+        String query = result.getDraft().task("primary_disclosure").getQueryText();
+        assertTrue(query.startsWith("300750 ANNOUNCEMENT "));
+        assertTrue(query.endsWith("订单和经营现金流"));
+    }
+
+    @Test
+    void tellsModelThatTheServerOwnsTheTaskAndToolContract() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         AtomicReference<String> systemPrompt = new AtomicReference<String>();
         when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenAnswer(invocation -> {
@@ -77,24 +146,14 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("LLM_VALIDATED", result.getPlanningMode());
-        assertTrue(systemPrompt.get().contains("taskKey必须匹配[a-z][a-z0-9_]{2,47}"));
-        assertTrue(systemPrompt.get().contains("dependencies只能精确引用同一计划中的taskKey"));
-        assertTrue(systemPrompt.get().contains("successCriteria必须是JSON字符串数组"));
-        assertTrue(systemPrompt.get().contains("dependencies必须是JSON字符串数组"));
-        assertTrue(systemPrompt.get().contains("source_scan只能搭配COLLECT和BASELINE"));
-        assertTrue(systemPrompt.get().contains("evidence_assess只能搭配ASSESS和ASSESS"));
-        assertTrue(systemPrompt.get().contains("report_synthesis只能搭配SYNTHESIS和SYNTHESIS"));
-        assertTrue(systemPrompt.get().contains("以下五个必需任务不得删除、改名或替换工具与意图"));
-        assertTrue(systemPrompt.get().contains("baseline_scan|COLLECT|source_scan|BASELINE|[]"));
-        assertTrue(systemPrompt.get().contains("search_support|SEARCH|public_news_search|SUPPORT|[baseline_scan]"));
-        assertTrue(systemPrompt.get().contains("search_counter|SEARCH|public_news_search|COUNTER|[baseline_scan]"));
-        assertTrue(systemPrompt.get().contains("assess_evidence|ASSESS|evidence_assess|ASSESS|[search_support,search_counter]"));
-        assertTrue(systemPrompt.get().contains("synthesize_report|SYNTHESIS|report_synthesis|SYNTHESIS|[assess_evidence]"));
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertTrue(systemPrompt.get().contains("任务图、工具合同、依赖、方法和预算均由服务端确定"));
+        assertTrue(systemPrompt.get().contains("不得新增任务"));
+        assertTrue(systemPrompt.get().contains("不得输出工具、依赖、methodCodes"));
     }
 
     @Test
-    void rejectsWholeModelPlanAndUsesDeterministicFallback() throws Exception {
+    void ignoresModelAttemptsToReplaceTheServerOwnedPlan() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
                 .thenReturn("{\"scopeSummary\":\"越权\",\"successCriteria\":[\"任意\"],"
@@ -104,11 +163,11 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("DETERMINISTIC", result.getPlanningMode());
-        assertEquals("PLAN_REJECTED", result.getFallbackReason());
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertEquals(null, result.getFallbackReason());
         assertEquals(6, result.getDraft().getTasks().size());
         assertEquals("source_scan", result.getDraft().task("baseline_scan").getToolCode());
-        assertTrue(result.getRejectionDetail().startsWith("研究计划校验失败"));
+        assertEquals("public_news_search", result.getDraft().task("search_support").getToolCode());
     }
 
     @Test
@@ -119,9 +178,39 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("DETERMINISTIC", result.getPlanningMode());
-        assertEquals("MODEL_TIMEOUT", result.getFallbackReason());
-        assertEquals("模型规划响应超时，已使用规则计划", result.getRejectionDetail());
+        assertEquals("CONTROLLED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTANCE_UNAVAILABLE", result.getFallbackReason());
+        assertTrue(result.getRejectionDetail().contains("TIMEOUT"));
+        verify(llm, times(1)).complete(anyString(), anyString(), eq(30000), eq(2000));
+    }
+
+    @Test
+    void doesNotSendAFormatRepairRequestAfterProviderTransportFailure() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenThrow(new IllegalStateException("HTTP 503"));
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("CONTROLLED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTANCE_UNAVAILABLE", result.getFallbackReason());
+        verify(llm, times(1)).complete(anyString(), anyString(), eq(30000), eq(2000));
+    }
+
+    @Test
+    void rejectsObjectValuesForExecutableTextInsteadOfSerializingThemIntoQueries() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
+                .thenReturn("{\"taskRefinements\":[{\"taskKey\":\"search_counter\","
+                        + "\"queryText\":{\"query\":\"风险\"}}]}")
+                .thenReturn("{\"scopeSummary\":\"修复后的安全文本\"}");
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertEquals("AI算力 资本开支 风险 下调 延迟 反方证据",
+                result.getDraft().task("search_counter").getQueryText());
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(30000), eq(2000));
     }
 
     @Test
@@ -130,8 +219,8 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("DETERMINISTIC", result.getPlanningMode());
-        assertEquals("MODEL_DISABLED", result.getFallbackReason());
+        assertEquals("CONTROLLED", result.getPlanningMode());
+        assertEquals(null, result.getFallbackReason());
         assertEquals("AI算力 资本开支 订单 需求 最新公告",
                 result.getDraft().task("search_support").getQueryText());
         assertEquals("AI算力 资本开支 风险 下调 延迟 反方证据",
@@ -168,7 +257,7 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(stock);
 
-        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
         assertEquals("COMPANY_FINANCIAL", result.getDraft().getResearchType());
         assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
                 result.getDraft().getMethodCodes());
@@ -177,15 +266,15 @@ class ResearchPlanningAgentTest {
     }
 
     @Test
-    void rejectsUnknownMethodAndFallsBackToRegisteredRecommendations() throws Exception {
+    void ignoresUnknownModelMethodAndKeepsRegisteredRecommendations() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(anyString(), anyString(), eq(30000), eq(2000)))
                 .thenReturn(stockMethodJson("MAGIC_STOCK_PICKING"));
 
         ResearchPlanningResult result = agent.plan(stockFinancialInput());
 
-        assertEquals("DETERMINISTIC", result.getPlanningMode());
-        assertEquals("PLAN_REJECTED", result.getFallbackReason());
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertEquals(null, result.getFallbackReason());
         assertEquals(Arrays.asList("FINANCIAL_STATEMENT_QUALITY", "COMPANY_QUALITY"),
                 result.getDraft().getMethodCodes());
     }
@@ -219,15 +308,14 @@ class ResearchPlanningAgentTest {
 
         agent.plan(stockFinancialInput());
 
-        assertTrue(systemPrompt.get().contains("methodCodes只能使用当前研究对象适配的可用投研方法中的编码"));
+        assertTrue(systemPrompt.get().contains("方法和预算均由服务端确定"));
         assertTrue(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
         assertTrue(userPrompt.get().contains("COMPANY_QUALITY"));
-        assertTrue(userPrompt.get().contains("必查问题=[增长由收入、毛利率还是费用变化驱动？"));
-        assertTrue(userPrompt.get().contains("必需证据=[多期利润表, 资产负债表, 现金流量表"));
-        assertTrue(userPrompt.get().contains("确定性计算=[同比与环比趋势"));
-        assertTrue(userPrompt.get().contains("反证检查=[非经常性损益对利润增长的贡献"));
-        assertTrue(userPrompt.get().contains("完成条件=[覆盖利润、现金流和资产质量"));
-        assertTrue(userPrompt.get().contains("必需意图=[PRIMARY, SUPPORT, COUNTER, ASSESS]"));
+        assertTrue(userPrompt.get().contains("必需证据："));
+        assertTrue(userPrompt.get().contains("现金流量表"));
+        assertTrue(userPrompt.get().contains("反证检查："));
+        assertTrue(userPrompt.get().contains("非经常性损益对利润增长的贡献"));
+        assertTrue(userPrompt.get().contains("方法完成条件[FINANCIAL_STATEMENT_QUALITY]"));
         assertFalse(userPrompt.get().contains("MAGIC_STOCK_PICKING"));
     }
 
@@ -242,8 +330,8 @@ class ResearchPlanningAgentTest {
 
         ResearchPlanningResult result = agent.plan(input());
 
-        assertEquals("LLM_VALIDATED", result.getPlanningMode());
-        assertTrue(userPrompt.get().contains("可用投研方法：无（当前研究对象没有适配的注册方法）"));
+        assertEquals("MODEL_ASSISTED", result.getPlanningMode());
+        assertTrue(userPrompt.get().contains("服务端已选方法：[]"));
         assertFalse(userPrompt.get().contains("COMPANY_QUALITY"));
         assertFalse(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
     }

@@ -60,6 +60,31 @@ test('does not present a pending plan as deterministic fallback', () => {
   expect(screen.queryByText('规则计划')).not.toBeInTheDocument();
 });
 
+test('presents a controlled server plan as normal operation', () => {
+  const mission = runningMission();
+  mission.mission.planningMode = 'CONTROLLED';
+  mission.mission.fallbackReason = undefined;
+  mission.mission.fallbackDetail = undefined;
+
+  render(<ResearchMissionMap mission={mission} />);
+
+  expect(screen.getByText('受控研究计划')).toBeInTheDocument();
+  expect(screen.queryByText('规则计划')).not.toBeInTheDocument();
+});
+
+test('shows unavailable model assistance as a non-failure controlled status', () => {
+  const mission = runningMission();
+  mission.mission.planningMode = 'CONTROLLED';
+  mission.mission.fallbackReason = 'MODEL_ASSISTANCE_UNAVAILABLE';
+  mission.mission.fallbackDetail = '模型辅助未采用（TIMEOUT），研究继续使用服务端受控计划';
+
+  render(<ResearchMissionMap mission={mission} />);
+
+  expect(screen.getByText('受控研究计划')).toBeInTheDocument();
+  expect(screen.getByText('模型辅助状态')).toBeInTheDocument();
+  expect(screen.queryByText('计划降级原因')).not.toBeInTheDocument();
+});
+
 test('explains runtime termination for skipped mission tasks', () => {
   const mission = runningMission();
   mission.mission.status = 'PARTIAL_SUCCESS';
