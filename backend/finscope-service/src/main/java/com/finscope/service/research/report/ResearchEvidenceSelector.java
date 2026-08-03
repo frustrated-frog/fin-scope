@@ -72,6 +72,7 @@ public class ResearchEvidenceSelector {
             Article article = transientArticle(search);
             String fingerprint = normalize(firstNonBlank(article.getUrl(), article.getTitle()));
             if (!fingerprints.add(fingerprint)) continue;
+            if (isCompanyResearch(thesis) && !mentionsCompany(article, thesis.getSubjectName())) continue;
             int score = relevanceScore(article, null, subjectKeywords);
             int providerScore = search.getRelevanceScore() == null ? 0
                     : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 100D);
@@ -112,6 +113,36 @@ public class ResearchEvidenceSelector {
         article.setUrl(search.getUrl());
         article.setPublishedAt(parsePublishedAt(search.getPublishedAt()));
         return article;
+    }
+
+    private boolean isCompanyResearch(ResearchThesis thesis) {
+        String type = normalize(thesis == null ? null : thesis.getSubjectType());
+        return "company".equals(type) || "stock".equals(type) || "公司".equals(type) || "个股".equals(type);
+    }
+
+    private boolean mentionsCompany(Article article, String subjectName) {
+        String text = normalize(firstNonBlank(article.getTitle(), "") + " "
+                + firstNonBlank(article.getSummary(), "") + " " + firstNonBlank(article.getBody(), ""));
+        for (String alias : companyAliases(subjectName)) {
+            if (alias.length() >= 2 && text.contains(alias)) return true;
+        }
+        return false;
+    }
+
+    private Set<String> companyAliases(String subjectName) {
+        Set<String> aliases = new LinkedHashSet<String>();
+        add(aliases, subjectName);
+        String subject = normalize(subjectName);
+        if (subject.contains("长鑫")) aliases.addAll(Arrays.asList("cxmt", "changxin memory"));
+        if (subject.contains("微软")) aliases.addAll(Arrays.asList("microsoft", "msft"));
+        if (subject.contains("谷歌") || subject.contains("alphabet")) aliases.addAll(Arrays.asList("google", "alphabet", "googl"));
+        if (subject.contains("亚马逊")) aliases.addAll(Arrays.asList("amazon", "aws", "amzn"));
+        if (subject.contains("英伟达")) aliases.addAll(Arrays.asList("nvidia", "nvda"));
+        if (subject.contains("苹果")) aliases.addAll(Arrays.asList("apple", "aapl"));
+        if (subject.contains("特斯拉")) aliases.addAll(Arrays.asList("tesla", "tsla"));
+        if (subject.contains("阿里巴巴")) aliases.addAll(Arrays.asList("alibaba", "baba"));
+        if (subject.contains("腾讯")) aliases.addAll(Arrays.asList("tencent", "0700.hk"));
+        return aliases;
     }
 
     private LocalDateTime parsePublishedAt(String value) {

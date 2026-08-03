@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResearchClaimAuditorTest {
@@ -36,7 +37,7 @@ class ResearchClaimAuditorTest {
 
     @Test
     void distinguishesPartialSupportAndConflictingFigures() {
-        String report = "## 核心结论\n\n公司需求改善但盈利能力已全面恢复。[E1]\n\n"
+        String report = "## 核心证据链\n\n- **事实：** 公司需求改善但盈利能力已全面恢复。[E1]\n\n"
                 + "公司在2025年收入增长18%。[E2][E3]";
 
         ResearchClaimAudit audit = auditor.audit(report, Arrays.asList(
@@ -46,6 +47,34 @@ class ResearchClaimAuditorTest {
 
         assertEquals(1, audit.getPartialCount());
         assertEquals(1, audit.getConflictCount());
+    }
+
+    @Test
+    void auditsExplicitFactsButDoesNotMisclassifyCitedInferenceAsAStandaloneFact() {
+        String report = "## 核心证据链\n\n"
+                + "- **事实：** 公司订单需求出现改善。[E1]\n"
+                + "- **推理：** 订单改善可能逐步传导到收入和利润。[E1]";
+
+        ResearchClaimAudit audit = auditor.audit(report, Collections.singletonList(
+                evidence("E1", "公司披露订单需求出现改善，但利润率仍低于历史水平。")));
+
+        assertEquals(1, audit.getClaimCount());
+        assertEquals(1, audit.getSupportedCount());
+        assertFalse(audit.hasBlockingIssues());
+    }
+
+    @Test
+    void auditsVerifiableFactCellsInsideTheEvidenceTable() {
+        String report = "## 证据总表\n\n"
+                + "| 证据 | 立场 | 时间 | 可验证事实 | 来源层级 | 相关性 |\n"
+                + "|---|---|---|---|---|---:|\n"
+                + "| [E1] | 支持 | 2025-04-30 | 公司收入同比增长18% | T1 | 95/100 |";
+
+        ResearchClaimAudit audit = auditor.audit(report, Collections.singletonList(
+                evidence("E1", "公司披露2025年收入同比增长18%。")));
+
+        assertEquals(1, audit.getClaimCount());
+        assertEquals(1, audit.getSupportedCount());
     }
 
     @Test

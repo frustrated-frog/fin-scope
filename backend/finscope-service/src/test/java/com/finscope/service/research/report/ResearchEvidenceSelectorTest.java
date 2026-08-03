@@ -133,6 +133,20 @@ class ResearchEvidenceSelectorTest {
     }
 
     @Test
+    void rejectsHighProviderScoreWhenSearchResultDoesNotMentionTheCompany() {
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "Jialicheng IPO opens at 84.46 yuan",
+                "The PCB prototyping company raised nearly 4.7 billion yuan in a separate listing.",
+                0.99D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesisForChangxin(),
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertTrue(selected.isEmpty());
+    }
+
+    @Test
     void removesSearchRankingMarkersFromSelectedClaims() {
         ResearchSearchEvidence searchEvidence = searchEvidence(
                 "长鑫科技上市次日市值回落",
