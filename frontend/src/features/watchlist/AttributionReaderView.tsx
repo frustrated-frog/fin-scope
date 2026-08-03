@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { api } from '../../shared/api/client';
 import { AttributionDriver, AttributionProgress, AttributionReport, AttributionResearchRunView } from '../../shared/types';
@@ -594,7 +595,7 @@ export function AttributionReaderView({
         </aside>
         </div>
       )}
-      {deleteTarget && (
+      {deleteTarget && createPortal(
         <div className="modal-overlay">
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-attribution-title">
             <div className="modal-header">
@@ -612,7 +613,8 @@ export function AttributionReaderView({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

@@ -227,7 +227,9 @@ test('deletes one historical attribution report after confirmation', async () =>
   render(<AttributionReaderView reportId={202} code="600519" type="STOCK" onBack={vi.fn()} />);
 
   fireEvent.click(await screen.findByRole('button', { name: '删除归因报告 201' }));
-  expect(screen.getByRole('dialog', { name: '删除归因报告' })).toBeInTheDocument();
+  const dialog = screen.getByRole('dialog', { name: '删除归因报告' });
+  expect(dialog).toBeInTheDocument();
+  expect(dialog.closest('.attribution-panel')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/attribution/reports/201', { method: 'DELETE' }));
