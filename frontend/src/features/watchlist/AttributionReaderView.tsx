@@ -77,6 +77,8 @@ export function AttributionReaderView({
   const [done, setDone] = useState(false);
   const [researchRun, setResearchRun] = useState<AttributionResearchRunView | null>(null);
   const [history, setHistory] = useState<AttributionReport[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<AttributionReport | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
   const reachStage = (stage?: string) => {
@@ -183,6 +185,29 @@ export function AttributionReaderView({
       setReport(next);
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : '历史归因读取失败');
+    }
+  }
+
+  async function deleteHistoryReport() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api<void>(`/api/attribution/reports/${deleteTarget.id}`, { method: 'DELETE' });
+      const remaining = history.filter((item) => item.id !== deleteTarget.id);
+      setHistory(remaining);
+      setDeleteTarget(null);
+      if (report?.id === deleteTarget.id) {
+        const replacement = remaining[0];
+        if (replacement) {
+          await selectHistory(replacement.id);
+        } else {
+          onBack();
+        }
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '归因报告删除失败');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -540,23 +565,53 @@ export function AttributionReaderView({
               <section className="attribution-history-day" key={day}>
                 <div><time>{day}</time><span>{versions.length} 个版本</span></div>
                 {versions.map((item, index) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    aria-current={item.id === report.id ? 'true' : undefined}
-                    onClick={() => selectHistory(item.id)}
-                  >
-                    <span>{item.createdAt ? item.createdAt.slice(11, 16) : `版本 ${versions.length - index}`}</span>
-                    <strong className={(item.changePct ?? 0) > 0 ? 'watchlist-up' : (item.changePct ?? 0) < 0 ? 'watchlist-down' : ''}>
-                      {item.changePct == null ? '--' : `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
-                    </strong>
-                    <small>{item.summary}</small>
-                  </button>
+                  <div className="attribution-history-entry" key={item.id}>
+                    <button
+                      className="attribution-history-select"
+                      type="button"
+                      aria-current={item.id === report.id ? 'true' : undefined}
+                      onClick={() => selectHistory(item.id)}
+                    >
+                      <span>{item.createdAt ? item.createdAt.slice(11, 16) : `版本 ${versions.length - index}`}</span>
+                      <strong className={(item.changePct ?? 0) > 0 ? 'watchlist-up' : (item.changePct ?? 0) < 0 ? 'watchlist-down' : ''}>
+                        {item.changePct == null ? '--' : `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
+                      </strong>
+                      <small>{item.summary}</small>
+                    </button>
+                    <button
+                      className="attribution-history-delete"
+                      type="button"
+                      aria-label={`删除归因报告 ${item.id}`}
+                      onClick={() => setDeleteTarget(item)}
+                    >
+                      删除
+                    </button>
+                  </div>
                 ))}
               </section>
             ))}
           </div>
         </aside>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-attribution-title">
+            <div className="modal-header">
+              <h4 id="delete-attribution-title">删除归因报告</h4>
+            </div>
+            <div className="modal-content">
+              <p>确定要删除这次归因报告吗？关联的研究轨迹和证据也会一并删除，且无法撤销。</p>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>
+                取消
+              </button>
+              <button className="danger-button" type="button" disabled={deleting} onClick={deleteHistoryReport}>
+                {deleting ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

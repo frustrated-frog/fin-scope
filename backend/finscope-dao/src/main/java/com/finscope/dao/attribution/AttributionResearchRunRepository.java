@@ -121,6 +121,13 @@ public class AttributionResearchRunRepository {
         return jdbcTemplate.query("SELECT * FROM attribution_research_step WHERE run_id=? ORDER BY step_id ASC", stepMapper, runId);
     }
 
+    /** 删除报告对应的运行与所有轨道步骤。 */
+    public void deleteByReportId(Long reportId) {
+        jdbcTemplate.update("DELETE FROM attribution_research_step WHERE run_id IN "
+                + "(SELECT id FROM attribution_research_run WHERE report_id = ?)", reportId);
+        jdbcTemplate.update("DELETE FROM attribution_research_run WHERE report_id = ?", reportId);
+    }
+
     private int value(Integer value) {
         return value == null ? 0 : value;
     }

@@ -210,6 +210,30 @@ test('loads a persisted report and history without opening an event stream', asy
   expect(api).toHaveBeenCalledWith('/api/attribution/history?code=600519&type=STOCK&limit=50');
 });
 
+test('deletes one historical attribution report after confirmation', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path.includes('/history') ? [{
+      id: 202, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-13', createdAt: '2026-07-13T15:20:00', summary: '待删除归因', changePct: 2.1
+    }, {
+      id: 201, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-12', createdAt: '2026-07-12T15:20:00', summary: '保留归因', changePct: 1.2
+    }] : {
+      id: 202, instrumentCode: '600519', instrumentType: 'STOCK', status: 'COMPLETED',
+      reportDate: '2026-07-13', createdAt: '2026-07-13T15:20:00', summary: '待删除归因', drivers: []
+    }
+  ) as never);
+
+  render(<AttributionReaderView reportId={202} code="600519" type="STOCK" onBack={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole('button', { name: '删除归因报告 201' }));
+  expect(screen.getByRole('dialog', { name: '删除归因报告' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/attribution/reports/201', { method: 'DELETE' }));
+  expect(screen.queryByText('保留归因')).not.toBeInTheDocument();
+});
+
 test('loads history when a live attribution becomes completed', async () => {
   vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
     path.includes('/history') ? [

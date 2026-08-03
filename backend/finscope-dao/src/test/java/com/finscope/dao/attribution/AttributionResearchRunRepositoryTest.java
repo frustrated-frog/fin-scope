@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AttributionResearchRunRepositoryTest {
@@ -98,6 +99,20 @@ class AttributionResearchRunRepositoryTest {
         assertEquals(startedAt, savedRunning.getStartedAt());
         assertEquals(2, savedRunning.getAttempt());
         assertEquals("已获得 3 条证据", savedRunning.getOutputSummary());
+    }
+
+    @Test
+    void deletesRunAndAllRelatedStepsByReportId() {
+        AttributionResearchRun run = new AttributionResearchRun();
+        run.setReportId(45L);
+        run.setStatus("COMPLETED");
+        repository.createRun(run);
+        repository.saveStep(step(run.getId(), "company", "COMPANY", "COMPLETED"));
+
+        repository.deleteByReportId(45L);
+
+        assertFalse(repository.findByReportId(45L).isPresent());
+        assertTrue(repository.findStepsByRunId(run.getId()).isEmpty());
     }
 
     private AttributionResearchStep step(Long runId, String stepId, String track, String status) {

@@ -2,6 +2,7 @@ package com.finscope.dao.attribution;
 
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.attribution.AttributionDriver;
+import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,20 @@ class AttributionRepositoryTest {
                 restored.getNarrative().getCausalSteps());
         assertEquals("TRIGGER", restored.getDrivers().get(0).getRole());
         assertEquals("市场担心相关硬件需求推迟。", restored.getDrivers().get(0).getPlainExplanation());
+    }
+
+    @Test
+    void deletesReportAndItsEvidence() {
+        AttributionReport report = save("600519", "STOCK", LocalDate.of(2026, 7, 13), "待删除", 1.2, "COMPLETED");
+        AttributionEvidence evidence = new AttributionEvidence();
+        evidence.setReportId(report.getId());
+        evidence.setTitle("公司公告");
+        repository.saveEvidence(evidence);
+
+        repository.deleteById(report.getId());
+
+        assertFalse(repository.findById(report.getId()).isPresent());
+        assertEquals(0, repository.findEvidenceByReportId(report.getId()).size());
     }
 
     private AttributionReport save(String code, String type, LocalDate date, String summary, Double changePct, String status) {

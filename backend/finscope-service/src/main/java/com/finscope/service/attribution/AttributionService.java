@@ -2,6 +2,7 @@ package com.finscope.service.attribution;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.attribution.AttributionRepository;
 import com.finscope.dao.attribution.AttributionResearchRunRepository;
@@ -13,6 +14,7 @@ import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.domain.instrument.Instrument;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
@@ -132,6 +134,18 @@ public class AttributionService {
     public List<AttributionReport> getHistory(String code, String type, int limit) {
         int safeLimit = limit <= 0 ? 10 : Math.min(limit, 50);
         return attributionRepository.findHistoryByIdentity(normalizeCode(code), normalizeType(type), safeLimit);
+    }
+
+    /** 删除一份已结束的归因报告，以及它关联的研究运行和证据。 */
+    @Transactional
+    public void deleteReport(Long reportId) {
+        AttributionReport report = attributionRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("归因报告不存在: " + reportId));
+        if ("GENERATING".equals(report.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "归因研究仍在运行，暂不能删除");
+        }
+        researchRunRepository.deleteByReportId(reportId);
+        attributionRepository.deleteById(reportId);
     }
 
     private void reportSubmissionFailed(AttributionReport report, RuntimeException ex) {

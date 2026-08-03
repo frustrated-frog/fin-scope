@@ -225,6 +225,12 @@ public class AttributionRepository {
                 evidenceMapper, reportId);
     }
 
+    /** 删除报告及其已保存的归因证据。 */
+    public void deleteById(Long reportId) {
+        jdbcTemplate.update("DELETE FROM attribution_evidence WHERE report_id = ?", reportId);
+        jdbcTemplate.update("DELETE FROM attribution_report WHERE id = ?", reportId);
+    }
+
     /** 读取同一标的最近已完成报告中的高相关证据，仅作为历史背景。 */
     public List<AttributionEvidence> findRecentEvidenceContext(String code, String type, Long excludeReportId, int limit) {
         return jdbcTemplate.query("SELECT e.* FROM attribution_evidence e JOIN attribution_report r ON r.id=e.report_id "
