@@ -36,8 +36,8 @@ class ResearchReportQualityValidatorTest {
                         evidence("E2", "source-b", "COUNTER")));
 
         assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:核心结论"));
-        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:关键事实与 AI 解读"));
-        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:不同解释与不确定性"));
+        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:关键事实与数字"));
+        assertTrue(issues.contains("CORE_SECTION_UNGROUNDED:反方解释与争议"));
     }
 
     @Test
@@ -86,16 +86,16 @@ class ResearchReportQualityValidatorTest {
     }
 
     @Test
-    void rejectsMissingFactInterpretationPairsLegacyMetaSectionsAndTruncation() {
+    void requiresDetailedEvidenceTableAndRejectsTruncation() {
         String report = report("[E1]", "[E1][E2]", "[E2]", true)
-                .replace("**AI 解读：**", "**普通说明：**")
-                + "\n## 执行摘要\n系统使用了2条支持证据。\n\n（已截断）\n";
+                .replace("| 证据 | 立场 | 时间 | 可验证事实 | 来源层级 | 相关性 |",
+                        "普通事实列表")
+                + "\n（已截断）\n";
 
         List<String> issues = validator.validate(report, thesis(), Arrays.asList(
                 evidence("E1", "source-a", "SUPPORT"), evidence("E2", "source-b", "COUNTER")));
 
-        assertTrue(issues.contains("FACT_INTERPRETATION_MISMATCH"));
-        assertTrue(issues.contains("LEGACY_META_SECTION_PRESENT"));
+        assertTrue(issues.contains("EVIDENCE_TABLE_MISSING"));
         assertTrue(issues.contains("TRUNCATION_MARKER_PRESENT"));
     }
 
@@ -106,15 +106,24 @@ class ResearchReportQualityValidatorTest {
         StringBuilder markdown = new StringBuilder();
         markdown.append("# 测试公司深度研究报告\n\n")
                 .append("## 核心结论\n测试公司当前结论。 ").append(conclusionRefs).append("\n\n")
-                .append("## 关键事实与 AI 解读\n### 事实 1\n\n**事实：** 可验证事实 ")
-                .append(chainRefs).append("\n\n**AI 解读：** 该事实影响测试公司命题 ")
-                .append(chainRefs).append("\n\n")
-                .append("## 命题拆解与综合判断\n逐题判断 [E1]\n\n")
-                .append("## 影响机制\n事件如何影响命题 [E1]\n\n")
-                .append("## 不同解释与不确定性\n另一种解释 ").append(counterRefs).append("\n\n")
-                .append("## 情景推演\n情景推演 [E1][E2]\n\n")
-                .append("## 结论更新条件\n").append(monitoring).append("\n\n")
-                .append("## 资料来源\n[E1][E2]\n\n");
+                .append("## 关键认识\n- 对象特定认识 ").append(chainRefs).append("\n\n")
+                .append("## 执行摘要\n测试公司阶段性研究摘要 ").append(chainRefs).append("\n\n")
+                .append("## 研究范围与口径\n- 研究对象：测试公司\n- 观察范围：当前披露期\n\n")
+                .append("## 关键事实与数字\n")
+                .append("| 证据 | 立场 | 时间 | 可验证事实 | 来源层级 | 相关性 |\n")
+                .append("| --- | --- | --- | --- | --- | --- |\n")
+                .append("| ").append(chainRefs).append(" | 支持 | 2026-07-29 | 可验证事实 | MEDIA | 90/100 |\n\n")
+                .append("## 发生了什么\n对象特定变化 ").append(chainRefs).append("\n\n")
+                .append("## 命题拆解与逐题判断\n逐题判断 [E1]\n\n")
+                .append("## 核心证据链\n### 证据链 1\n**事实：** 可验证事实 ")
+                .append(chainRefs).append("\n\n**推理：** 影响关键变量\n\n**判断：** 阶段判断\n\n")
+                .append("### 证据链 2\n**事实：** 第二项事实 ").append(chainRefs)
+                .append("\n\n**推理：** 形成交叉验证\n\n**判断：** 保持条件性\n\n")
+                .append("## 反方解释与争议\n最强反方解释 ").append(counterRefs).append("\n\n")
+                .append("## 机制与情景推演\n### 基准情景\n基准 [E1]\n\n### 上行情景\n上行 [E1]\n\n### 下行情景\n下行 [E2]\n\n")
+                .append("## 最终认识与未知项\n当前认识与仍未知事项 [E1][E2]\n\n")
+                .append("## 跟踪清单与失效条件\n").append(monitoring).append("\n\n")
+                .append("## 证据附录\n<a id=\"evidence-e1\"></a>\n### E1 · 证据标题\n[E1]\n\n");
         while (markdown.length() < 6100) markdown.append("测试公司研究正文用于验证报告长度与结构。\n");
         return markdown.toString();
     }

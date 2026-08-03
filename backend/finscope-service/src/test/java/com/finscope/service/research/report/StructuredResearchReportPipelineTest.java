@@ -34,16 +34,24 @@ class StructuredResearchReportPipelineTest {
         String markdown = new StructuredResearchReportAssembler().assemble(thesis, blueprint, narrative, dossier);
 
         assertEquals(3, narrative.getSubQuestionAnalysis().size());
-        assertTrue(markdown.contains("## 关键事实与 AI 解读"));
+        assertTrue(markdown.contains("## 关键认识"));
+        assertTrue(markdown.contains("## 执行摘要"));
+        assertTrue(markdown.contains("## 研究范围与口径"));
+        assertTrue(markdown.contains("## 关键事实与数字"));
+        assertTrue(markdown.contains("| 证据 | 立场 | 时间 | 可验证事实 | 来源层级 | 相关性 |"));
+        assertTrue(markdown.contains("## 发生了什么"));
+        assertTrue(markdown.contains("## 命题拆解与逐题判断"));
+        assertTrue(markdown.contains("## 核心证据链"));
         assertTrue(markdown.contains("**事实：** 对象特定事实 1"));
-        assertTrue(markdown.contains("**AI 解读：**"));
-        assertTrue(markdown.contains("## 命题拆解与综合判断"));
-        assertTrue(markdown.contains("## 不同解释与不确定性"));
-        assertTrue(markdown.contains("## 资料来源"));
-        assertTrue(!markdown.contains("## 执行摘要"));
+        assertTrue(markdown.contains("**推理：** 机制推理 1"));
+        assertTrue(markdown.contains("## 反方解释与争议"));
+        assertTrue(markdown.contains("## 机制与情景推演"));
+        assertTrue(markdown.contains("## 最终认识与未知项"));
+        assertTrue(markdown.contains("## 跟踪清单与失效条件"));
+        assertTrue(markdown.contains("## 证据附录"));
         assertTrue(!markdown.contains("支持与反向证据比"));
         assertTrue(markdown.contains("[E1](#evidence-e1)"));
-        assertTrue(!markdown.contains("<a id=\"evidence-e1\"></a>"));
+        assertTrue(markdown.contains("<a id=\"evidence-e1\"></a>"));
         assertTrue(!markdown.contains("\\n"));
         verify(llm).complete(anyString(), anyString(), eq(120000), eq(7000));
     }
@@ -121,6 +129,23 @@ class StructuredResearchReportPipelineTest {
         value.setStrongestCounterargument(counter);
         value.setKnowledgeTakeaways(Arrays.asList("总市值不等于可交易资金规模", "两日行情不能证明长期价值"));
         value.setUnknowns(Collections.singletonList("稳定换手中枢"));
+        for (int index = 1; index <= 3; index++) {
+            ResearchReportBlueprint.Scenario scenario = new ResearchReportBlueprint.Scenario();
+            scenario.setName(index == 1 ? "基准" : index == 2 ? "上行" : "下行");
+            scenario.setTrigger("情景触发条件 " + index);
+            scenario.setMechanism("情景传导机制 " + index);
+            scenario.setObservableResult("可观察结果 " + index);
+            scenario.setImpact("对当前结论的影响 " + index);
+            scenario.setEvidenceRefs(Collections.singletonList(index == 3 ? "E2" : "E1"));
+            value.getScenarios().add(scenario);
+        }
+        ResearchReportBlueprint.WatchItem watch = new ResearchReportBlueprint.WatchItem();
+        watch.setMetric("成交与换手中枢");
+        watch.setBaseline("当前公开证据只覆盖上市前两个交易日");
+        watch.setFrequency("每个交易日和定期报告披露后");
+        watch.setUpgradeCondition("成交稳定且经营披露兑现");
+        watch.setDowngradeCondition("缩量下跌且基本面验证转弱");
+        value.getWatchItems().add(watch);
         return value;
     }
 
