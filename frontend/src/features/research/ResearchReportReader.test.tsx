@@ -57,6 +57,20 @@ test('presents the structured model generation mode', () => {
   expect(screen.getByText('结构化模型生成')).toBeInTheDocument();
 });
 
+test('presents a report whose factual claims were repaired without calling it a fallback', () => {
+  const report: ResearchReport = {
+    id: 7, researchRunId: 20, reportType: 'THESIS', status: 'COMPLETED', title: '事实修复报告',
+    conclusion: '阶段性结论成立。', conclusionDirection: 'MIXED', confidence: 'MEDIUM',
+    executiveSummary: '摘要', contentMarkdown: '## 核心结论\n\n结论\n\n## 证据附录\n\n来源',
+    markdownPath: '/tmp/run-20.md', generationMode: 'MODEL_CLAIM_REPAIRED', evidenceCount: 8, sourceCount: 5,
+    characterCount: 8000
+  };
+
+  render(<ResearchReportReader report={report} onBack={() => undefined} />);
+
+  expect(screen.getByText('模型事实审计修复后生成')).toBeInTheDocument();
+});
+
 test('hides legacy evidence anchor markup while preserving evidence navigation', () => {
   const report: ResearchReport = {
     id: 5, researchRunId: 18, reportType: 'THESIS', status: 'COMPLETED', title: '证据锚点兼容报告',

@@ -51,6 +51,7 @@ class ResearchReportGeneratorTest {
         assertTrue(report.getMarkdown().contains("[E1](#evidence-e1)"));
         assertTrue(report.getMarkdown().contains("### E1 ·"));
         assertTrue(report.getMarkdown().contains("<a id=\"evidence-e1\"></a>"));
+        assertTrue(report.getMarkdown().length() >= 6000);
         assertTrue(report.getMarkdown().length() <= ResearchReportPolicy.MAX_REPORT_CHARACTERS);
         assertTrue(report.getExecutiveSummary().length() > 100);
         assertTrue(report.getExecutiveSummary().length() <= ResearchReportPolicy.MAX_EXECUTIVE_SUMMARY_CHARACTERS);

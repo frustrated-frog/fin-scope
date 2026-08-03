@@ -92,6 +92,7 @@ function presentGenerationMode(mode: string) {
   if (mode === 'DETERMINISTIC') return '规则引擎保底生成';
   if (mode === 'MODEL_STRUCTURED') return '结构化模型生成';
   if (mode === 'MODEL_REPAIRED') return '模型修复后生成';
+  if (mode === 'MODEL_CLAIM_REPAIRED') return '模型事实审计修复后生成';
   if (mode === 'EVIDENCE_STRUCTURED_FALLBACK') return '证据结构化保底生成';
   return mode || '系统生成';
 }
