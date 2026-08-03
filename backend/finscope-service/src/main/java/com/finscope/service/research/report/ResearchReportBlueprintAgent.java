@@ -1,195 +1,202 @@
 package com.finscope.service.research.report;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class ResearchReportBlueprintAgent {
-    private static final int TIMEOUT_MS = 90000;
+    private static final int TIMEOUT_MS = 90_000;
+    private static final int OUTPUT_TOKENS = 3_000;
+    private static final int MINIMUM_MODEL_SECTIONS = 3;
+    private static final Pattern MODEL_REF = Pattern.compile("\\[(?:E|e)\\d+]", Pattern.CASE_INSENSITIVE);
+
     private final LlmChatClient llm;
     private final ResearchReportBlueprintValidator validator;
-    private final ObjectMapper mapper = new ObjectMapper()
-            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
-            .disable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
-            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-            .disable(JsonParser.Feature.ALLOW_TRAILING_COMMA);
+    private final DeterministicReportBlueprintBuilder baselineBuilder;
+    private final ResearchReportSectionParser sectionParser;
 
     public ResearchReportBlueprintAgent(LlmChatClient llm, ResearchReportBlueprintValidator validator) {
+        this(llm, validator, new DeterministicReportBlueprintBuilder(), new ResearchReportSectionParser());
+    }
+
+    ResearchReportBlueprintAgent(LlmChatClient llm,
+                                 ResearchReportBlueprintValidator validator,
+                                 DeterministicReportBlueprintBuilder baselineBuilder,
+                                 ResearchReportSectionParser sectionParser) {
         this.llm = llm;
         this.validator = validator;
+        this.baselineBuilder = baselineBuilder;
+        this.sectionParser = sectionParser;
     }
 
     public ResearchReportBlueprint generate(ResearchThesis thesis, List<ResearchEvidenceDossier> dossier)
             throws ResearchReportGenerationException {
-        String raw;
+        ResearchReportBlueprint blueprint = baselineBuilder.build(thesis, dossier, sufficient(dossier));
+        Set<String> allowed = allowedSections(blueprint);
+        blueprint.setExpectedModelSectionCount(allowed.size());
+        Map<String, String> sections = java.util.Collections.emptyMap();
+        boolean repairAttempted = false;
         try {
-            raw = llm.complete(systemPrompt(), userPrompt(thesis, dossier), TIMEOUT_MS, 3000);
-        } catch (Exception ex) {
-            throw new ResearchReportGenerationException("BLUEPRINT_FAILED:" + ex.getClass().getSimpleName(), ex);
+            String output = llm.complete(systemPrompt(), userPrompt(thesis, blueprint, dossier, allowed),
+                    TIMEOUT_MS, OUTPUT_TOKENS);
+            sections = sectionParser.parse(output, allowed);
+            if (sections.size() < MINIMUM_MODEL_SECTIONS) {
+                blueprint.getDiagnostics().add("BLUEPRINT_MODEL_FORMAT_UNUSABLE");
+                repairAttempted = true;
+                String repaired = llm.complete(systemPrompt(), repairPrompt(thesis, blueprint, dossier, allowed),
+                        TIMEOUT_MS, OUTPUT_TOKENS);
+                Map<String, String> repairedSections = sectionParser.parse(repaired, allowed);
+                if (!repairedSections.isEmpty()) sections = repairedSections;
+            }
+        } catch (Exception error) {
+            blueprint.getDiagnostics().add((repairAttempted
+                    ? "BLUEPRINT_MODEL_REPAIR_FAILED:" : "BLUEPRINT_MODEL_CALL_FAILED:")
+                    + error.getClass().getSimpleName());
         }
-        try {
-            return parseAndValidate(raw, dossier);
-        } catch (Exception firstFailure) {
-            return repair(thesis, dossier, raw, diagnostic(firstFailure));
-        }
-    }
-
-    private String systemPrompt() {
-        return "你是FinScope研究报告论证架构师。只能使用输入证据，不得补造事实、数字、来源或证据编号。"
-                + "输出单个严格JSON对象，不要Markdown、注释或额外字段。"
-                + "必须直接回答原问题，并按问题本身动态设计3到6个子问题，禁止套用固定公司经营模板。"
-                + "keyInsights为3到6项，argumentChains至少2项，必须给出有实质内容的最强反方解释。"
-                + "所有evidenceRefs只能使用输入给出的E编号；每项keyInsight、subQuestion和argumentChain都必须至少引用一条证据。"
-                + "每个argumentChain.fact必须从证据档案提炼为语义完整的事实段落，不得使用省略号或在句中截断；"
-                + "inference和judgment只做与命题直接相关的推理，不得新增外部事实。"
-                + "蓝图整体至少覆盖证据档案的一半；若档案含COUNTER证据，strongestCounterargument必须引用其中至少一条。"
-                + "字段严格为directAnswer,direction,confidence,confidenceBasis,timeRange,definitions,excludedQuestions,"
-                + "keyInsights,subQuestions,argumentChains,strongestCounterargument,scenarios,knowledgeTakeaways,unknowns,watchItems。"
-                + "direction只能是SUPPORT、PARTIAL_SUPPORT、MIXED、PARTIAL_CHALLENGE、CHALLENGE；confidence只能是HIGH、MEDIUM、LOW。"
-                + "嵌套字段契约严格如下，不得把数组写成字符串："
-                + "keyInsights=[{finding:string,meaning:string,evidenceRefs:string[]}];"
-                + "subQuestions=[{key:string,question:string,answer:string,evidenceRefs:string[],counterEvidenceRefs:string[],impact:string,unknowns:string[]}];"
-                + "argumentChains=[{fact:string,inference:string,judgment:string,alternativeExplanation:string,evidenceRefs:string[]}];"
-                + "strongestCounterargument={claim:string,evidenceRefs:string[],response:string,becomesDominantWhen:string[]};"
-                + "scenarios=[{name:string,trigger:string,mechanism:string,observableResult:string,impact:string,evidenceRefs:string[]}];"
-                + "watchItems=[{metric:string,baseline:string,frequency:string,upgradeCondition:string,downgradeCondition:string}]。"
-                + "definitions、excludedQuestions、knowledgeTakeaways、unknowns均为string[]。"
-                + "数组即使为空也输出[]；所有文本字段必须是JSON字符串。";
-    }
-
-    private ResearchReportBlueprint repair(ResearchThesis thesis,
-                                            List<ResearchEvidenceDossier> dossier,
-                                            String invalidRaw,
-                                            String firstDiagnostic) throws ResearchReportGenerationException {
-        try {
-            String repairPrompt = userPrompt(thesis, dossier)
-                    + "\n上一次JSON校验失败：" + firstDiagnostic
-                    + "\n请按系统消息中的精确嵌套字段契约修复以下输出。保留可用内容，只输出修复后的完整JSON：\n"
-                    + stripFence(invalidRaw);
-            String repairedRaw = llm.complete(systemPrompt(), repairPrompt, TIMEOUT_MS, 3000);
-            ResearchReportBlueprint repaired = parseAndValidate(repairedRaw, dossier);
-            repaired.setRepaired(true);
-            return repaired;
-        } catch (Exception repairFailure) {
-            throw new ResearchReportGenerationException("BLUEPRINT_REPAIR_FAILED:"
-                    + firstDiagnostic + ":" + diagnostic(repairFailure), repairFailure);
-        }
-    }
-
-    private ResearchReportBlueprint parseAndValidate(String raw, List<ResearchEvidenceDossier> dossier)
-            throws Exception {
-        JsonNode root = mapper.readTree(stripFence(raw));
-        if (!(root instanceof ObjectNode)) {
-            throw new ResearchReportGenerationException("BLUEPRINT_INVALID:ROOT_NOT_OBJECT");
-        }
-        boolean[] normalized = new boolean[]{false};
-        normalize((ObjectNode) root, normalized);
-        ResearchReportBlueprint result = mapper.treeToValue(root, ResearchReportBlueprint.class);
-        result.setRepaired(normalized[0]);
-        List<String> issues = validator.validate(result, dossier);
+        apply(blueprint, sections);
+        blueprint.setModelSectionCount(sections.size());
+        blueprint.setModelEnhanced(sections.size() >= MINIMUM_MODEL_SECTIONS);
+        blueprint.setRepaired(repairAttempted || (!sections.isEmpty() && sections.size() < allowed.size()));
+        List<String> issues = validator.validate(blueprint, dossier);
         if (!issues.isEmpty()) {
-            throw new ResearchReportGenerationException("BLUEPRINT_INVALID:" + String.join(",", issues));
+            ResearchReportBlueprint baseline = baselineBuilder.build(thesis, dossier, sufficient(dossier));
+            baseline.setExpectedModelSectionCount(allowed.size());
+            baseline.setDiagnostics(new ArrayList<String>(blueprint.getDiagnostics()));
+            baseline.getDiagnostics().add("BLUEPRINT_SERVER_VALIDATION_RESTORED_BASELINE");
+            return baseline;
         }
+        return blueprint;
+    }
+
+    private Set<String> allowedSections(ResearchReportBlueprint blueprint) {
+        Set<String> result = new LinkedHashSet<String>();
+        result.add("DIRECT_ANSWER");
+        result.add("CONFIDENCE_BASIS");
+        for (int index = 0; index < blueprint.getKeyInsights().size(); index++) {
+            result.add("KEY_INSIGHT_" + (index + 1) + "_FINDING");
+            result.add("KEY_INSIGHT_" + (index + 1) + "_MEANING");
+        }
+        for (int index = 0; index < blueprint.getSubQuestions().size(); index++) {
+            result.add("SUBQUESTION_" + (index + 1) + "_QUESTION");
+            result.add("SUBQUESTION_" + (index + 1) + "_ANSWER");
+            result.add("SUBQUESTION_" + (index + 1) + "_IMPACT");
+        }
+        for (int index = 0; index < blueprint.getArgumentChains().size(); index++) {
+            result.add("ARGUMENT_" + (index + 1) + "_INFERENCE");
+            result.add("ARGUMENT_" + (index + 1) + "_JUDGMENT");
+            result.add("ARGUMENT_" + (index + 1) + "_ALTERNATIVE");
+        }
+        result.add("COUNTER_CLAIM");
+        result.add("COUNTER_RESPONSE");
         return result;
     }
 
-    private void normalize(ObjectNode root, boolean[] changed) {
-        normalizeStringArrays(root, changed,
-                "definitions", "excludedQuestions", "knowledgeTakeaways", "unknowns");
-        normalizeObjectArrayFields(root.get("keyInsights"), changed, "evidenceRefs");
-        normalizeObjectArrayFields(root.get("subQuestions"), changed,
-                "evidenceRefs", "counterEvidenceRefs", "unknowns");
-        normalizeSubQuestionKeys(root.get("subQuestions"), changed);
-        normalizeObjectArrayFields(root.get("argumentChains"), changed, "evidenceRefs");
-        JsonNode counter = root.get("strongestCounterargument");
-        if (counter instanceof ObjectNode) {
-            normalizeStringArrays((ObjectNode) counter, changed, "evidenceRefs", "becomesDominantWhen");
+    private void apply(ResearchReportBlueprint blueprint, Map<String, String> sections) {
+        if (sections == null || sections.isEmpty()) return;
+        blueprint.setDirectAnswer(slot(sections, "DIRECT_ANSWER", blueprint.getDirectAnswer()));
+        blueprint.setConfidenceBasis(slot(sections, "CONFIDENCE_BASIS", blueprint.getConfidenceBasis()));
+        for (int index = 0; index < blueprint.getKeyInsights().size(); index++) {
+            ResearchReportBlueprint.KeyInsight item = blueprint.getKeyInsights().get(index);
+            String prefix = "KEY_INSIGHT_" + (index + 1);
+            item.setFinding(slot(sections, prefix + "_FINDING", item.getFinding()));
+            item.setMeaning(slot(sections, prefix + "_MEANING", item.getMeaning()));
         }
-        normalizeObjectArrayFields(root.get("scenarios"), changed, "evidenceRefs");
-    }
-
-    private void normalizeObjectArrayFields(JsonNode values, boolean[] changed, String... fields) {
-        if (values == null || !values.isArray()) return;
-        for (JsonNode value : values) {
-            if (value instanceof ObjectNode) normalizeStringArrays((ObjectNode) value, changed, fields);
+        for (int index = 0; index < blueprint.getSubQuestions().size(); index++) {
+            ResearchReportBlueprint.SubQuestion item = blueprint.getSubQuestions().get(index);
+            String prefix = "SUBQUESTION_" + (index + 1);
+            item.setQuestion(slot(sections, prefix + "_QUESTION", item.getQuestion()));
+            item.setAnswer(slot(sections, prefix + "_ANSWER", item.getAnswer()));
+            item.setImpact(slot(sections, prefix + "_IMPACT", item.getImpact()));
         }
-    }
-
-    private void normalizeStringArrays(ObjectNode value, boolean[] changed, String... fields) {
-        for (String field : fields) {
-            JsonNode node = value.get(field);
-            if (node == null || node.isArray()) continue;
-            if (node.isNull()) {
-                value.set(field, mapper.createArrayNode());
-                changed[0] = true;
-            } else if (node.isTextual()) {
-                ArrayNode array = mapper.createArrayNode();
-                String text = node.asText().trim();
-                if (!text.isEmpty()) array.add(text);
-                value.set(field, array);
-                changed[0] = true;
-            }
+        for (int index = 0; index < blueprint.getArgumentChains().size(); index++) {
+            ResearchReportBlueprint.ArgumentChain item = blueprint.getArgumentChains().get(index);
+            String prefix = "ARGUMENT_" + (index + 1);
+            item.setInference(slot(sections, prefix + "_INFERENCE", item.getInference()));
+            item.setJudgment(slot(sections, prefix + "_JUDGMENT", item.getJudgment()));
+            item.setAlternativeExplanation(slot(sections, prefix + "_ALTERNATIVE", item.getAlternativeExplanation()));
+        }
+        ResearchReportBlueprint.Counterargument counter = blueprint.getStrongestCounterargument();
+        if (counter != null) {
+            counter.setClaim(slot(sections, "COUNTER_CLAIM", counter.getClaim()));
+            counter.setResponse(slot(sections, "COUNTER_RESPONSE", counter.getResponse()));
         }
     }
 
-    private void normalizeSubQuestionKeys(JsonNode values, boolean[] changed) {
-        if (values == null || !values.isArray()) return;
-        Set<String> keys = new HashSet<String>();
-        int index = 0;
-        for (JsonNode value : values) {
-            index++;
-            if (!(value instanceof ObjectNode)) continue;
-            ObjectNode item = (ObjectNode) value;
-            String key = item.path("key").asText("").trim();
-            if (key.matches("[a-z][a-z0-9_]{2,47}") && keys.add(key)) continue;
-            String normalized = "question_" + index;
-            int suffix = 1;
-            while (keys.contains(normalized)) normalized = "question_" + index + "_" + suffix++;
-            item.put("key", normalized);
-            keys.add(normalized);
-            changed[0] = true;
-        }
+    private String slot(Map<String, String> sections, String name, String fallback) {
+        String value = sections.get(name);
+        if (value == null || value.trim().isEmpty()) return fallback;
+        return MODEL_REF.matcher(value).replaceAll("").replaceAll("\\s+", " ").trim();
     }
 
-    private String diagnostic(Exception ex) {
-        String message = ex.getMessage();
-        return ex.getClass().getSimpleName() + (message == null ? "" : "(" + message + ")");
+    private String systemPrompt() {
+        return "你是FinScope研究论证增强器。Java已经生成合法蓝图、数组和证据引用；你只能改写指定文本槽位。"
+                + "不要输出JSON、Markdown围栏、数组、对象、URL或证据编号，不得新增输入之外的事实、数字和日期。"
+                + "每个槽位严格使用<<<SLOT_NAME>>>开始、<<<END>>>结束；槽位名必须来自用户消息。"
+                + "正文使用中文，直接回答研究问题，区分事实、推理、判断和替代解释。";
     }
 
-    private String userPrompt(ResearchThesis thesis, List<ResearchEvidenceDossier> dossier) {
-        StringBuilder out = new StringBuilder();
-        out.append("研究问题：").append(value(thesis.getQuestion())).append('\n')
-                .append("研究对象：").append(value(thesis.getSubjectName())).append('\n')
-                .append("对象类型：").append(value(thesis.getSubjectType())).append("\n证据档案：\n");
-        for (ResearchEvidenceDossier item : dossier) {
-            out.append(item.getEvidenceRef()).append(" | stance=").append(item.getStance())
-                    .append(" | sourceTier=").append(item.getSourceTier())
-                    .append(" | publishedAt=").append(item.getPublishedAt())
-                    .append(" | source=").append(item.getSourceName())
-                    .append(" | title=").append(item.getTitle())
-                    .append(" | fact=").append(item.getFactExcerpt()).append('\n');
-        }
+    private String userPrompt(ResearchThesis thesis,
+                              ResearchReportBlueprint blueprint,
+                              List<ResearchEvidenceDossier> dossier,
+                              Set<String> allowed) {
+        StringBuilder out = context(thesis, blueprint, dossier);
+        out.append("\n请增强以下槽位，每个槽位都必须独立闭合：\n");
+        for (String name : allowed) out.append("<<<").append(name).append(">>>\n对象特定文本\n<<<END>>>\n");
         return out.toString();
     }
 
-    private String stripFence(String raw) {
-        String value = raw == null ? "" : raw.trim();
-        if (value.startsWith("```json")) value = value.substring(7);
-        else if (value.startsWith("```")) value = value.substring(3);
-        if (value.endsWith("```")) value = value.substring(0, value.length() - 3);
-        return value.trim();
+    private String repairPrompt(ResearchThesis thesis,
+                                ResearchReportBlueprint blueprint,
+                                List<ResearchEvidenceDossier> dossier,
+                                Set<String> allowed) {
+        StringBuilder out = context(thesis, blueprint, dossier);
+        out.append("\n上一次输出未使用分段协议。不要解释原因，不要输出JSON。至少返回以下关键槽位：\n")
+                .append("<<<DIRECT_ANSWER>>>\n直接回答原问题\n<<<END>>>\n")
+                .append("<<<KEY_INSIGHT_1_MEANING>>>\n第一项事实的研究含义\n<<<END>>>\n")
+                .append("<<<SUBQUESTION_1_ANSWER>>>\n第一个子问题的当前回答\n<<<END>>>\n");
+        return out.toString();
     }
 
-    private String value(String value) { return value == null ? "" : value.trim(); }
+    private StringBuilder context(ResearchThesis thesis,
+                                  ResearchReportBlueprint blueprint,
+                                  List<ResearchEvidenceDossier> dossier) {
+        StringBuilder out = new StringBuilder();
+        out.append("研究对象：").append(value(thesis.getSubjectName())).append('\n')
+                .append("研究问题：").append(value(thesis.getQuestion())).append('\n')
+                .append("服务端方向：").append(value(blueprint.getDirection())).append('\n')
+                .append("服务端置信度：").append(value(blueprint.getConfidence())).append("\n证据档案：\n");
+        if (dossier != null) for (ResearchEvidenceDossier item : dossier) {
+            out.append(item.getEvidenceRef()).append(" | stance=").append(item.getStance())
+                    .append(" | sourceTier=").append(item.getSourceTier())
+                    .append(" | title=").append(value(item.getTitle()))
+                    .append(" | fact=").append(value(item.getFactExcerpt())).append('\n');
+        }
+        return out;
+    }
+
+    private boolean sufficient(List<ResearchEvidenceDossier> dossier) {
+        if (dossier == null || dossier.size() < 6) return false;
+        Set<String> sources = new HashSet<String>();
+        boolean support = false;
+        boolean counter = false;
+        for (ResearchEvidenceDossier item : dossier) {
+            sources.add(value(item.getSourceIdentity()));
+            support |= "SUPPORT".equals(item.getStance());
+            counter |= "COUNTER".equals(item.getStance());
+        }
+        return sources.size() >= 2 && support && counter;
+    }
+
+    private String value(String value) {
+        return value == null ? "" : value.trim();
+    }
 }

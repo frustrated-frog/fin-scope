@@ -29,8 +29,10 @@ class ResearchReportSynthesisAgentTest {
         blueprint.setDirectAnswer("对象特定结论");
         blueprint.setDirection("MIXED");
         blueprint.setConfidence("MEDIUM");
+        blueprint.setModelEnhanced(true);
         ResearchReportNarrative narrative = new ResearchReportNarrative();
         narrative.setExecutiveSummary("对象特定执行摘要");
+        narrative.setModelEnhanced(true);
         when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
         when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
         when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
@@ -48,22 +50,62 @@ class ResearchReportSynthesisAgentTest {
     }
 
     @Test
-    void exposesTheFailedStageWhenNarrativeGenerationFallsBack() throws Exception {
+    void continuesNarrativeEnhancementWhenBlueprintModelStageFails() throws Exception {
         ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
         ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
         ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
-        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        StructuredResearchReportAssembler assembler = mock(StructuredResearchReportAssembler.class);
+        ResearchReportQualityValidator qualityValidator = mock(ResearchReportQualityValidator.class);
+        ResearchReportNarrative narrative = new ResearchReportNarrative();
+        narrative.setExecutiveSummary("模型仍然完成了对象特定正文");
+        narrative.setModelEnhanced(true);
         when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
-        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
-        when(narrativeAgent.generate(any(), any(), anyList()))
-                .thenThrow(new ResearchReportGenerationException("NARRATIVE_FAILED:SocketTimeoutException"));
+        when(blueprintAgent.generate(any(), anyList()))
+                .thenThrow(new ResearchReportGenerationException("BLUEPRINT_MODEL_CALL_FAILED:SocketTimeoutException"));
+        when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
+        when(assembler.assemble(any(), any(), any(), anyList())).thenReturn("结构化深度正文");
+        when(qualityValidator.validate(anyString(), any(), anyList())).thenReturn(Collections.<String>emptyList());
         ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent(dossierBuilder, blueprintAgent,
-                narrativeAgent, mock(StructuredResearchReportAssembler.class), mock(ResearchReportQualityValidator.class));
+                narrativeAgent, assembler, qualityValidator);
 
         GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback());
 
-        assertEquals("EVIDENCE_STRUCTURED_FALLBACK", result.getGenerationMode());
-        assertTrue(result.getWarning().contains("NARRATIVE_FAILED:SocketTimeoutException"));
+        assertEquals("MODEL_REPAIRED", result.getGenerationMode());
+        assertTrue(result.getWarning().contains("BLUEPRINT_MODEL_CALL_FAILED:SocketTimeoutException"));
+        verify(narrativeAgent).generate(any(), any(), anyList());
+    }
+
+    @Test
+    void marksPartiallyCompletedNarrativeAsModelRepairedInsteadOfFallingBack() throws Exception {
+        ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
+        ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
+        ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
+        StructuredResearchReportAssembler assembler = mock(StructuredResearchReportAssembler.class);
+        ResearchReportQualityValidator qualityValidator = mock(ResearchReportQualityValidator.class);
+        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        blueprint.setDirectAnswer("对象特定结论");
+        blueprint.setDirection("MIXED");
+        blueprint.setConfidence("MEDIUM");
+        blueprint.setModelEnhanced(true);
+        ResearchReportNarrative narrative = new ResearchReportNarrative();
+        narrative.setExecutiveSummary("模型正文与证据基线共同完成");
+        narrative.setModelEnhanced(true);
+        narrative.setRepaired(true);
+        narrative.setModelSectionCount(8);
+        narrative.setExpectedModelSectionCount(14);
+        narrative.getDiagnostics().add("NARRATIVE_MODEL_FORMAT_INCOMPLETE");
+        when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
+        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
+        when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
+        when(assembler.assemble(any(), any(), any(), anyList())).thenReturn("结构化深度正文");
+        when(qualityValidator.validate(anyString(), any(), anyList())).thenReturn(Collections.<String>emptyList());
+        ResearchReportSynthesisAgent agent = new ResearchReportSynthesisAgent(
+                dossierBuilder, blueprintAgent, narrativeAgent, assembler, qualityValidator);
+
+        GeneratedResearchReport result = agent.refine(new ResearchThesis(), sufficientEvidence(), fallback());
+
+        assertEquals("MODEL_REPAIRED", result.getGenerationMode());
+        assertTrue(result.getWarning().contains("NARRATIVE_MODEL_FORMAT_INCOMPLETE"));
     }
 
     @Test
@@ -81,8 +123,10 @@ class ResearchReportSynthesisAgentTest {
         blueprint.setDirectAnswer("对象特定结论");
         blueprint.setDirection("SUPPORT");
         blueprint.setConfidence("MEDIUM");
+        blueprint.setModelEnhanced(true);
         ResearchReportNarrative narrative = new ResearchReportNarrative();
         narrative.setExecutiveSummary("对象特定执行摘要");
+        narrative.setModelEnhanced(true);
         String unsupported = "## 核心结论\n\n公司披露2025年收入增长25%。[E1]";
         String repaired = "## 核心结论\n\n公司披露2025年收入增长18%。[E1]";
         when(dossierBuilder.build(anyList())).thenReturn(Collections.singletonList(dossier));

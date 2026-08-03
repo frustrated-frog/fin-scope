@@ -1,124 +1,191 @@
 package com.finscope.service.research.report;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class ResearchReportNarrativeAgent {
-    private static final int TIMEOUT_MS = 120000;
+    private static final int TIMEOUT_MS = 120_000;
+    private static final int OUTPUT_TOKENS = 7_000;
+    private static final Pattern MODEL_REF = Pattern.compile("\\[(?:E|e)\\d+]", Pattern.CASE_INSENSITIVE);
+
     private final LlmChatClient llm;
-    private final ObjectMapper mapper = new ObjectMapper()
-            .disable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
-            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-            .disable(JsonParser.Feature.ALLOW_TRAILING_COMMA);
+    private final DeterministicReportNarrativeBuilder baselineBuilder;
+    private final ResearchReportSectionParser sectionParser;
 
-    public ResearchReportNarrativeAgent(LlmChatClient llm) { this.llm = llm; }
+    public ResearchReportNarrativeAgent(LlmChatClient llm) {
+        this(llm, new DeterministicReportNarrativeBuilder(), new ResearchReportSectionParser());
+    }
 
-    public ResearchReportNarrative generate(ResearchThesis thesis, ResearchReportBlueprint blueprint,
+    ResearchReportNarrativeAgent(LlmChatClient llm,
+                                 DeterministicReportNarrativeBuilder baselineBuilder,
+                                 ResearchReportSectionParser sectionParser) {
+        this.llm = llm;
+        this.baselineBuilder = baselineBuilder;
+        this.sectionParser = sectionParser;
+    }
+
+    public ResearchReportNarrative generate(ResearchThesis thesis,
+                                            ResearchReportBlueprint blueprint,
                                             List<ResearchEvidenceDossier> dossier)
             throws ResearchReportGenerationException {
-        String raw;
+        ResearchReportNarrative narrative = baselineBuilder.build(thesis, blueprint, dossier);
+        Set<String> allowed = allowedSections(blueprint);
+        narrative.setExpectedModelSectionCount(allowed.size());
+        Map<String, String> sections = new LinkedHashMap<String, String>();
+        boolean repairAttempted = false;
         try {
-            raw = llm.complete(systemPrompt(), userPrompt(thesis, blueprint, dossier), TIMEOUT_MS, 7000);
-        } catch (Exception ex) {
-            throw new ResearchReportGenerationException("NARRATIVE_FAILED:" + ex.getClass().getSimpleName(), ex);
+            String output = llm.complete(systemPrompt(), userPrompt(thesis, blueprint, dossier, allowed),
+                    TIMEOUT_MS, OUTPUT_TOKENS);
+            sections.putAll(sectionParser.parse(output, allowed));
+            if (sections.size() < minimumCoverage(allowed.size())) {
+                narrative.getDiagnostics().add("NARRATIVE_MODEL_FORMAT_INCOMPLETE");
+                repairAttempted = true;
+                Set<String> missing = new LinkedHashSet<String>(allowed);
+                missing.removeAll(sections.keySet());
+                String repaired = llm.complete(systemPrompt(),
+                        repairPrompt(thesis, blueprint, dossier, missing), TIMEOUT_MS, OUTPUT_TOKENS);
+                Map<String, String> repairedSections = sectionParser.parse(repaired, missing);
+                for (Map.Entry<String, String> entry : repairedSections.entrySet()) {
+                    if (!sections.containsKey(entry.getKey())) sections.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } catch (Exception error) {
+            narrative.getDiagnostics().add((repairAttempted
+                    ? "NARRATIVE_MODEL_REPAIR_FAILED:" : "NARRATIVE_MODEL_CALL_FAILED:")
+                    + error.getClass().getSimpleName());
         }
-        try {
-            return parseAndValidate(raw, blueprint);
-        } catch (Exception firstFailure) {
-            return repair(thesis, blueprint, dossier, raw, diagnostic(firstFailure));
-        }
+        apply(narrative, blueprint, sections);
+        narrative.setModelSectionCount(sections.size());
+        narrative.setModelEnhanced(sections.size() >= minimumCoverage(allowed.size()));
+        narrative.setRepaired(repairAttempted || (!sections.isEmpty() && sections.size() < allowed.size()));
+        return narrative;
     }
 
-    private void validateShape(ResearchReportNarrative value, ResearchReportBlueprint blueprint)
-            throws ResearchReportGenerationException {
-        if (value == null || blank(value.getExecutiveSummary()) || blank(value.getWhatHappened())
-                || blank(value.getCounterAnalysis()) || blank(value.getKnowledgeSynthesis())
-                || blank(value.getMonitoringPlan())
-                || value.getSubQuestionAnalysis() == null
-                || value.getSubQuestionAnalysis().size() != blueprint.getSubQuestions().size()
-                || value.getArgumentAnalysis() == null
-                || value.getArgumentAnalysis().size() != blueprint.getArgumentChains().size()) {
-            throw new ResearchReportGenerationException("NARRATIVE_INVALID:FIELD_COVERAGE");
+    private Set<String> allowedSections(ResearchReportBlueprint blueprint) {
+        Set<String> result = new LinkedHashSet<String>();
+        result.add("EXECUTIVE_SUMMARY");
+        result.add("WHAT_HAPPENED");
+        for (int index = 0; index < blueprint.getSubQuestions().size(); index++) {
+            result.add("SUBQUESTION_" + (index + 1));
         }
-    }
-
-    private String systemPrompt() {
-        return "你是FinScope深度研究报告作者。只能使用已校验论证蓝图和证据档案，不得补造事实、数字、来源或链接。"
-                + "输出单个严格JSON对象，不要Markdown围栏和额外字段。字段严格为executiveSummary,whatHappened,"
-                + "subQuestionAnalysis,argumentAnalysis,counterAnalysis,scenarioAnalysis,knowledgeSynthesis,monitoringPlan。"
-                + "字段类型严格为：executiveSummary:string，whatHappened:string，subQuestionAnalysis:string[]，"
-                + "argumentAnalysis:string[]，counterAnalysis:string，scenarioAnalysis:string[]，"
-                + "knowledgeSynthesis:string，monitoringPlan:string。不得把数组写成字符串或对象。"
-                + "正文必须是中文、对象特定、信息密集；事实和数字后用[E1]格式引用。"
-                + "argumentAnalysis必须与论证链逐项对应，每项都是紧跟该事实的详细AI解读：解释事实与研究命题的关系、"
-                + "传导机制、能说明什么以及不能单独证明什么，不得新增证据档案之外的事实。"
-                + "明确区分事实、推理和判断，并呈现不同解释与未知项。"
-                + "目标总正文8000到16000中文字符；subQuestionAnalysis与蓝图子问题逐项对应，argumentAnalysis与论证链逐项对应。"
-                + "禁止复述研究执行过程，禁止输出支持/反对证据数量或比例，禁止省略号、截断标记、投资买卖指令，"
-                + "禁止用空泛风险提示填充长度。";
-    }
-
-    private ResearchReportNarrative repair(ResearchThesis thesis,
-                                            ResearchReportBlueprint blueprint,
-                                            List<ResearchEvidenceDossier> dossier,
-                                            String invalidRaw,
-                                            String firstDiagnostic) throws ResearchReportGenerationException {
-        try {
-            String repairPrompt = userPrompt(thesis, blueprint, dossier)
-                    + "\n上一次正文JSON校验失败：" + firstDiagnostic
-                    + "\n请按系统消息中的精确字段类型修复以下输出。数组长度必须与蓝图逐项对应，"
-                    + "保留已有详细分析，只输出修复后的完整JSON：\n" + stripFence(invalidRaw);
-            String repairedRaw = llm.complete(systemPrompt(), repairPrompt, TIMEOUT_MS, 7000);
-            ResearchReportNarrative repaired = parseAndValidate(repairedRaw, blueprint);
-            repaired.setRepaired(true);
-            return repaired;
-        } catch (Exception repairFailure) {
-            throw new ResearchReportGenerationException("NARRATIVE_REPAIR_FAILED:"
-                    + firstDiagnostic + ":" + diagnostic(repairFailure), repairFailure);
+        for (int index = 0; index < blueprint.getArgumentChains().size(); index++) {
+            result.add("ARGUMENT_" + (index + 1));
         }
-    }
-
-    private ResearchReportNarrative parseAndValidate(String raw, ResearchReportBlueprint blueprint)
-            throws Exception {
-        ResearchReportNarrative result = mapper.readValue(stripFence(raw), ResearchReportNarrative.class);
-        validateShape(result, blueprint);
+        result.add("COUNTER_ANALYSIS");
+        for (int index = 0; index < blueprint.getScenarios().size(); index++) {
+            result.add("SCENARIO_" + (index + 1));
+        }
+        result.add("KNOWLEDGE_SYNTHESIS");
+        result.add("MONITORING_PLAN");
         return result;
     }
 
-    private String diagnostic(Exception ex) {
-        String message = ex.getMessage();
-        return ex.getClass().getSimpleName() + (message == null ? "" : "(" + message + ")");
+    private void apply(ResearchReportNarrative narrative,
+                       ResearchReportBlueprint blueprint,
+                       Map<String, String> sections) {
+        narrative.setExecutiveSummary(slot(sections, "EXECUTIVE_SUMMARY", narrative.getExecutiveSummary()));
+        narrative.setWhatHappened(slot(sections, "WHAT_HAPPENED", narrative.getWhatHappened()));
+        for (int index = 0; index < blueprint.getSubQuestions().size(); index++) {
+            narrative.getSubQuestionAnalysis().set(index, slot(sections, "SUBQUESTION_" + (index + 1),
+                    narrative.getSubQuestionAnalysis().get(index)));
+        }
+        for (int index = 0; index < blueprint.getArgumentChains().size(); index++) {
+            narrative.getArgumentAnalysis().set(index, slot(sections, "ARGUMENT_" + (index + 1),
+                    narrative.getArgumentAnalysis().get(index)));
+        }
+        narrative.setCounterAnalysis(slot(sections, "COUNTER_ANALYSIS", narrative.getCounterAnalysis()));
+        for (int index = 0; index < blueprint.getScenarios().size(); index++) {
+            narrative.getScenarioAnalysis().set(index, slot(sections, "SCENARIO_" + (index + 1),
+                    narrative.getScenarioAnalysis().get(index)));
+        }
+        narrative.setKnowledgeSynthesis(slot(sections, "KNOWLEDGE_SYNTHESIS", narrative.getKnowledgeSynthesis()));
+        narrative.setMonitoringPlan(slot(sections, "MONITORING_PLAN", narrative.getMonitoringPlan()));
     }
 
-    private String userPrompt(ResearchThesis thesis, ResearchReportBlueprint blueprint,
-                              List<ResearchEvidenceDossier> dossier) throws Exception {
-        StringBuilder out = new StringBuilder();
-        out.append("研究问题：").append(value(thesis.getQuestion())).append('\n')
-                .append("研究对象：").append(value(thesis.getSubjectName())).append('\n')
-                .append("论证蓝图：").append(mapper.writeValueAsString(blueprint)).append("\n证据档案：\n");
-        for (ResearchEvidenceDossier item : dossier) {
-            out.append(item.getEvidenceRef()).append(" | ").append(item.getPublishedAt()).append(" | ")
-                    .append(item.getSourceTier()).append(" | ").append(item.getSourceName()).append(" | ")
-                    .append(item.getTitle()).append(" | ").append(item.getFactExcerpt()).append('\n');
-        }
+    private String slot(Map<String, String> sections, String name, String fallback) {
+        String value = sections.get(name);
+        if (value == null || value.trim().isEmpty()) return fallback;
+        return MODEL_REF.matcher(value).replaceAll("").trim();
+    }
+
+    private int minimumCoverage(int expected) {
+        return Math.max(4, (expected + 2) / 3);
+    }
+
+    private String systemPrompt() {
+        return "你是FinScope深度研究作者。Java已经固定报告章节、事实表、证据引用和附录；你只增强指定正文槽位。"
+                + "不要输出JSON、Markdown围栏、数组、对象、二级标题、URL或证据编号。"
+                + "不得新增证据档案之外的事实、数字和日期；需要引用的事实由Java在组装时绑定。"
+                + "每个槽位严格使用<<<SLOT_NAME>>>开始、<<<END>>>结束。"
+                + "分析必须使用中文，围绕研究对象解释事实如何影响关键变量、哪些结论可以形成、哪些不能形成，"
+                + "并呈现替代解释、未知项和可证伪条件。避免空泛风险提示和投资买卖指令。";
+    }
+
+    private String userPrompt(ResearchThesis thesis,
+                              ResearchReportBlueprint blueprint,
+                              List<ResearchEvidenceDossier> dossier,
+                              Set<String> allowed) {
+        StringBuilder out = context(thesis, blueprint, dossier);
+        out.append("\n请完整增强以下正文槽位。执行摘要和事件脉络各800至1600字；"
+                + "子问题、论证链和情景各300至700字；最终认识和监测计划各500至1000字。\n");
+        for (String name : allowed) out.append("<<<").append(name).append(">>>\n对象特定分析\n<<<END>>>\n");
         return out.toString();
     }
 
-    private String stripFence(String raw) {
-        String value = raw == null ? "" : raw.trim();
-        if (value.startsWith("```json")) value = value.substring(7);
-        else if (value.startsWith("```")) value = value.substring(3);
-        if (value.endsWith("```")) value = value.substring(0, value.length() - 3);
-        return value.trim();
+    private String repairPrompt(ResearchThesis thesis,
+                                ResearchReportBlueprint blueprint,
+                                List<ResearchEvidenceDossier> dossier,
+                                Set<String> missing) {
+        StringBuilder out = context(thesis, blueprint, dossier);
+        out.append("\n上一次输出缺少可解析正文。不要重复已完成内容，不要解释原因，不要输出JSON。"
+                + "只返回以下缺失槽位：\n");
+        for (String name : missing) out.append("<<<").append(name).append(">>>\n详细对象特定分析\n<<<END>>>\n");
+        return out.toString();
     }
 
-    private boolean blank(String value) { return value == null || value.trim().isEmpty(); }
-    private String value(String value) { return value == null ? "" : value.trim(); }
+    private StringBuilder context(ResearchThesis thesis,
+                                  ResearchReportBlueprint blueprint,
+                                  List<ResearchEvidenceDossier> dossier) {
+        StringBuilder out = new StringBuilder();
+        out.append("研究对象：").append(value(thesis.getSubjectName())).append('\n')
+                .append("研究问题：").append(value(thesis.getQuestion())).append('\n')
+                .append("直接回答：").append(value(blueprint.getDirectAnswer())).append('\n')
+                .append("方向与置信度：").append(value(blueprint.getDirection())).append(" / ")
+                .append(value(blueprint.getConfidence())).append("\n子问题：\n");
+        for (int index = 0; index < blueprint.getSubQuestions().size(); index++) {
+            ResearchReportBlueprint.SubQuestion item = blueprint.getSubQuestions().get(index);
+            out.append(index + 1).append(". ").append(value(item.getQuestion())).append(" | 当前回答=")
+                    .append(value(item.getAnswer())).append(" | 影响=").append(value(item.getImpact())).append('\n');
+        }
+        out.append("论证链：\n");
+        for (int index = 0; index < blueprint.getArgumentChains().size(); index++) {
+            ResearchReportBlueprint.ArgumentChain item = blueprint.getArgumentChains().get(index);
+            out.append(index + 1).append(". 事实=").append(value(item.getFact()))
+                    .append(" | 推理=").append(value(item.getInference()))
+                    .append(" | 判断=").append(value(item.getJudgment()))
+                    .append(" | 替代解释=").append(value(item.getAlternativeExplanation())).append('\n');
+        }
+        out.append("证据档案：\n");
+        if (dossier != null) for (ResearchEvidenceDossier item : dossier) {
+            out.append(item.getEvidenceRef()).append(" | stance=").append(item.getStance())
+                    .append(" | sourceTier=").append(item.getSourceTier())
+                    .append(" | title=").append(value(item.getTitle()))
+                    .append(" | fact=").append(value(item.getFactExcerpt())).append('\n');
+        }
+        return out;
+    }
+
+    private String value(String value) {
+        return value == null ? "" : value.trim();
+    }
 }

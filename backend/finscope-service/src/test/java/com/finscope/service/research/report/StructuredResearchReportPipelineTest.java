@@ -23,7 +23,7 @@ class StructuredResearchReportPipelineTest {
     @Test
     void generatesDeepNarrativeAndAssemblesTraceableReport() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000))).thenReturn(narrativeJson());
+        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000))).thenReturn(narrativeSections());
         ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
         ResearchThesis thesis = thesis();
         ResearchReportBlueprint blueprint = blueprint();
@@ -66,11 +66,11 @@ class StructuredResearchReportPipelineTest {
     }
 
     @Test
-    void repairsMalformedNarrativeOnceUsingArrayFieldContracts() throws Exception {
+    void repairsMalformedNarrativeOnceUsingMissingSectionMarkers() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
                 .thenReturn("{\"executiveSummary\":\"结构错误\",\"subQuestionAnalysis\":\"不是数组\"}")
-                .thenReturn(narrativeJson());
+                .thenReturn(narrativeSections());
         ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
 
         ResearchReportNarrative result = agent.generate(thesis(), blueprint(), dossier());
@@ -166,17 +166,23 @@ class StructuredResearchReportPipelineTest {
         return value;
     }
 
-    private String narrativeJson() {
+    private String narrativeSections() {
         String paragraph = "长鑫科技上市后的交易事实需要同时从流通结构、价格发现和时间跨度三个层面理解。[E1]"
                 + " 首日成交活跃说明市场关注度高，但总市值并不代表同等规模资金完成了交易。"
                 + " 次日高换手则说明买卖双方仍在重新评估价格，短期数据不能直接外推长期盈利能力。[E2]";
-        return "{\"executiveSummary\":\"" + paragraph + paragraph + "\","
-                + "\"whatHappened\":\"" + paragraph + paragraph + "\","
-                + "\"subQuestionAnalysis\":[\"" + paragraph + "\",\"" + paragraph + "\",\"" + paragraph + "\"],"
-                + "\"argumentAnalysis\":[\"" + paragraph + paragraph + "\",\"" + paragraph + paragraph + "\"],"
-                + "\"counterAnalysis\":\"" + paragraph + paragraph + "\","
-                + "\"scenarioAnalysis\":[\"" + paragraph + "\",\"" + paragraph + "\",\"" + paragraph + "\"],"
-                + "\"knowledgeSynthesis\":\"" + paragraph + paragraph + "\","
-                + "\"monitoringPlan\":\"" + paragraph + "\"}";
+        StringBuilder out = new StringBuilder();
+        out.append(slot("EXECUTIVE_SUMMARY", paragraph + paragraph));
+        out.append(slot("WHAT_HAPPENED", paragraph + paragraph));
+        for (int index = 1; index <= 3; index++) out.append(slot("SUBQUESTION_" + index, paragraph));
+        for (int index = 1; index <= 2; index++) out.append(slot("ARGUMENT_" + index, paragraph + paragraph));
+        out.append(slot("COUNTER_ANALYSIS", paragraph + paragraph));
+        for (int index = 1; index <= 3; index++) out.append(slot("SCENARIO_" + index, paragraph));
+        out.append(slot("KNOWLEDGE_SYNTHESIS", paragraph + paragraph));
+        out.append(slot("MONITORING_PLAN", paragraph));
+        return out.toString();
+    }
+
+    private String slot(String name, String value) {
+        return "<<<" + name + ">>>\n" + value + "\n<<<END>>>\n";
     }
 }

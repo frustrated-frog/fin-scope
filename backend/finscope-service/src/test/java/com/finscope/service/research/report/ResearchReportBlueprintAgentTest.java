@@ -7,84 +7,107 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchReportBlueprintAgentTest {
     @Test
-    void generatesStrictQuestionSpecificBlueprintWithinBudget() throws Exception {
+    void enhancesOnlyServerOwnedTextSlotsAndPreservesReferencesAndShape() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(validJson());
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(
+                slot("DIRECT_ANSWER", "上市两日的高市值主要反映流通约束下的集中价格发现，不能单独证明长期价值。")
+                        + slot("KEY_INSIGHT_1_MEANING", "总市值必须结合自由流通结构理解。")
+                        + slot("SUBQUESTION_1_ANSWER", "交易事实确认关注度高，但价格发现尚未稳定。")
+                        + slot("ARGUMENT_1_INFERENCE", "流通约束放大边际成交对价格的影响。")
+                        + slot("COUNTER_RESPONSE", "需要以后续成交衰减和价格稳定性区分短期投机。"));
         ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
                 new ResearchReportBlueprintValidator());
 
         ResearchReportBlueprint result = agent.generate(thesis(), dossier());
 
-        assertEquals("上市首日的高市值主要反映稀缺流通结构和集中定价，不能单独证明长期价值。", result.getDirectAnswer());
+        assertTrue(result.getDirectAnswer().startsWith("上市两日的高市值"));
+        assertTrue(result.isModelEnhanced());
         assertEquals(3, result.getKeyInsights().size());
-        assertEquals(3, result.getSubQuestions().size());
-        assertEquals(2, result.getArgumentChains().size());
+        assertEquals(4, result.getSubQuestions().size());
+        assertTrue(result.getArgumentChains().size() >= 2);
+        assertReferencesAreAllowed(result, new HashSet<String>(Arrays.asList("E1", "E2")));
         verify(llm).complete(anyString(), anyString(), eq(90000), eq(3000));
     }
 
     @Test
-    void rejectsReferencesOutsideTheEvidenceDossier() throws Exception {
+    void repairsJsonShapedProviderDriftWithASecondMarkerOnlyRequest() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
-                .thenReturn(validJson().replace("\"E2\"", "\"E99\""));
-        ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
-                new ResearchReportBlueprintValidator());
-
-        try {
-            agent.generate(thesis(), dossier());
-        } catch (ResearchReportGenerationException ex) {
-            assertTrue(ex.getMessage().contains("INVALID_EVIDENCE_REF"));
-            return;
-        }
-        throw new AssertionError("invalid evidence reference should be rejected");
-    }
-
-    @Test
-    void repairsMalformedBlueprintOnceUsingTheExactNestedContract() throws Exception {
-        LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
-                .thenReturn("{\"directAnswer\":\"结构错误\",\"keyInsights\":\"不是数组\"}")
-                .thenReturn(validJson());
+                .thenReturn("{\"directAnswer\":\"旧版对象\",\"keyInsights\":\"字符串\"}")
+                .thenReturn(slot("DIRECT_ANSWER", "修复后的直接回答")
+                        + slot("KEY_INSIGHT_1_MEANING", "修复后的对象特定含义")
+                        + slot("SUBQUESTION_1_ANSWER", "修复后的子问题回答"));
         ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
                 new ResearchReportBlueprintValidator());
 
         ResearchReportBlueprint result = agent.generate(thesis(), dossier());
 
+        assertEquals("修复后的直接回答", result.getDirectAnswer());
+        assertTrue(result.isModelEnhanced());
         assertTrue(result.isRepaired());
         verify(llm, times(2)).complete(anyString(), anyString(), eq(90000), eq(3000));
     }
 
     @Test
-    void normalizesRecoverableArrayAndSubQuestionKeyDriftWithoutDiscardingModelContent() throws Exception {
+    void returnsACompleteEvidenceBlueprintWhenBothModelCallsAreIncompatible() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        String recoverable = validJson()
-                .replace("\"key\":\"valuation\"", "\"key\":\"市值影响\"")
-                .replaceFirst("\"unknowns\":\\[\\]", "\"unknowns\":\"待确认自由流通口径\"");
-        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(recoverable);
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
+                .thenReturn("{\"keyInsights\":{\"unexpected\":true}}")
+                .thenThrow(new IllegalStateException("provider returned reasoning only"));
         ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
                 new ResearchReportBlueprintValidator());
 
         ResearchReportBlueprint result = agent.generate(thesis(), dossier());
 
-        assertTrue(result.isRepaired());
-        assertEquals("question_1", result.getSubQuestions().get(0).getKey());
-        assertEquals(Arrays.asList("待确认自由流通口径"), result.getSubQuestions().get(0).getUnknowns());
-        assertEquals("上市首日的高市值主要反映稀缺流通结构和集中定价，不能单独证明长期价值。",
-                result.getDirectAnswer());
-        verify(llm, times(1)).complete(anyString(), anyString(), eq(90000), eq(3000));
+        assertFalse(result.isModelEnhanced());
+        assertTrue(result.getDirectAnswer().contains("长鑫科技"));
+        assertEquals(3, result.getKeyInsights().size());
+        assertEquals(3, result.getScenarios().size());
+        assertFalse(result.getDiagnostics().isEmpty());
+        assertFalse(result.getDiagnostics().get(0).contains("provider returned reasoning only"));
+        assertReferencesAreAllowed(result, new HashSet<String>(Arrays.asList("E1", "E2")));
+    }
+
+    @Test
+    void stripsModelSuppliedEvidenceIdentifiersFromEditableText() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(
+                slot("DIRECT_ANSWER", "模型试图新增证据[E99]，也重复已有证据[E1]。")
+                        + slot("KEY_INSIGHT_1_MEANING", "对象特定含义")
+                        + slot("SUBQUESTION_1_ANSWER", "对象特定回答"));
+        ResearchReportBlueprintAgent agent = new ResearchReportBlueprintAgent(llm,
+                new ResearchReportBlueprintValidator());
+
+        ResearchReportBlueprint result = agent.generate(thesis(), dossier());
+
+        assertFalse(result.getDirectAnswer().contains("[E99]"));
+        assertFalse(result.getDirectAnswer().contains("[E1]"));
+    }
+
+    private void assertReferencesAreAllowed(ResearchReportBlueprint result, Set<String> allowed) {
+        for (ResearchReportBlueprint.KeyInsight item : result.getKeyInsights()) {
+            assertTrue(allowed.containsAll(item.getEvidenceRefs()));
+        }
+        for (ResearchReportBlueprint.ArgumentChain item : result.getArgumentChains()) {
+            assertTrue(allowed.containsAll(item.getEvidenceRefs()));
+        }
+        assertTrue(allowed.containsAll(result.getStrongestCounterargument().getEvidenceRefs()));
     }
 
     private ResearchThesis thesis() {
@@ -115,55 +138,7 @@ class ResearchReportBlueprintAgentTest {
         return article;
     }
 
-    private String validJson() {
-        return "{"
-                + "\"directAnswer\":\"上市首日的高市值主要反映稀缺流通结构和集中定价，不能单独证明长期价值。\","
-                + "\"direction\":\"MIXED\",\"confidence\":\"MEDIUM\","
-                + "\"confidenceBasis\":\"两项独立交易事实相互验证，但缺少更长观察期。\","
-                + "\"timeRange\":\"上市首日至第二个交易日\","
-                + "\"definitions\":[\"区分总市值与自由流通市值\"],"
-                + "\"excludedQuestions\":[\"长期盈利能力\"],"
-                + "\"keyInsights\":["
-                + insight("高总市值", "不能脱离流通结构解释", "E1") + ","
-                + insight("成交活跃", "市场关注与分歧同时升高", "E1", "E2") + ","
-                + insight("换手维持高位", "短期价格发现尚未结束", "E2") + "],"
-                + "\"subQuestions\":["
-                + sub("valuation", "市值应如何理解？", "需结合流通结构", "E1") + ","
-                + sub("trading", "成交说明什么？", "关注度与分歧并存", "E1", "E2") + ","
-                + sub("duration", "两日数据能否外推？", "不能直接外推长期价值", "E2") + "],"
-                + "\"argumentChains\":["
-                + chain("流通盘约束定价", "稀缺筹码放大价格弹性", "高市值含结构性溢价", "盈利预期也可能贡献", "E1") + ","
-                + chain("高换手持续", "买卖双方分歧仍大", "价格发现尚未稳定", "单纯获利回吐", "E2") + "],"
-                + "\"strongestCounterargument\":{\"claim\":\"高成交也可能只是短期投机\",\"evidenceRefs\":[\"E2\"],\"response\":\"需要后续成交衰减和价格稳定性验证\",\"becomesDominantWhen\":[\"成交快速萎缩且价格持续回落\"]},"
-                + "\"scenarios\":[{\"name\":\"基准\",\"trigger\":\"换手逐步下降\",\"mechanism\":\"价格发现趋稳\",\"observableResult\":\"波动收敛\",\"impact\":\"维持混合判断\",\"evidenceRefs\":[\"E2\"]}],"
-                + "\"knowledgeTakeaways\":[\"总市值不等于可交易资金规模\"],"
-                + "\"unknowns\":[\"稳定换手中枢\"],"
-                + "\"watchItems\":[{\"metric\":\"换手率\",\"baseline\":\"上市初期高位\",\"frequency\":\"每日\",\"upgradeCondition\":\"量价稳定\",\"downgradeCondition\":\"缩量持续下跌\"}]"
-                + "}";
-    }
-
-    private String insight(String finding, String meaning, String... refs) {
-        return "{\"finding\":\"" + finding + "\",\"meaning\":\"" + meaning
-                + "\",\"evidenceRefs\":" + refs(refs) + "}";
-    }
-
-    private String sub(String key, String question, String answer, String... refs) {
-        return "{\"key\":\"" + key + "\",\"question\":\"" + question + "\",\"answer\":\""
-                + answer + "\",\"evidenceRefs\":" + refs(refs)
-                + ",\"counterEvidenceRefs\":[],\"impact\":\"影响总判断\",\"unknowns\":[]}";
-    }
-
-    private String chain(String fact, String inference, String judgment, String alternative, String... refs) {
-        return "{\"fact\":\"" + fact + "\",\"inference\":\"" + inference + "\",\"judgment\":\""
-                + judgment + "\",\"alternativeExplanation\":\"" + alternative + "\",\"evidenceRefs\":" + refs(refs) + "}";
-    }
-
-    private String refs(String... refs) {
-        StringBuilder out = new StringBuilder("[");
-        for (int index = 0; index < refs.length; index++) {
-            if (index > 0) out.append(',');
-            out.append('\"').append(refs[index]).append('\"');
-        }
-        return out.append(']').toString();
+    private String slot(String name, String value) {
+        return "<<<" + name + ">>>\n" + value + "\n<<<END>>>\n";
     }
 }

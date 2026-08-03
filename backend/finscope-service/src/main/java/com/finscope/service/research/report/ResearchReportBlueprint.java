@@ -8,6 +8,10 @@ import java.util.List;
 @Data
 public class ResearchReportBlueprint {
     private transient boolean repaired;
+    private transient boolean modelEnhanced;
+    private transient int modelSectionCount;
+    private transient int expectedModelSectionCount;
+    private transient List<String> diagnostics = new ArrayList<String>();
     private String directAnswer;
     private String direction;
     private String confidence;
