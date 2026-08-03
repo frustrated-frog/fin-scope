@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 @Component
 public class ResearchReportNarrativeAgent {
-    private static final int TIMEOUT_MS = 120_000;
+    private static final int TIMEOUT_MS = 240_000;
     private static final int OUTPUT_TOKENS = 7_000;
     private static final Pattern MODEL_REF = Pattern.compile("\\[(?:E|e)\\d+]", Pattern.CASE_INSENSITIVE);
 

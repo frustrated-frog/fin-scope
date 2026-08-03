@@ -23,7 +23,7 @@ class StructuredResearchReportPipelineTest {
     @Test
     void generatesDeepNarrativeAndAssemblesTraceableReport() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000))).thenReturn(narrativeSections());
+        when(llm.complete(anyString(), anyString(), eq(240000), eq(7000))).thenReturn(narrativeSections());
         ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
         ResearchThesis thesis = thesis();
         ResearchReportBlueprint blueprint = blueprint();
@@ -53,7 +53,7 @@ class StructuredResearchReportPipelineTest {
         assertTrue(markdown.contains("[E1](#evidence-e1)"));
         assertTrue(markdown.contains("<a id=\"evidence-e1\"></a>"));
         assertTrue(!markdown.contains("\\n"));
-        verify(llm).complete(anyString(), anyString(), eq(120000), eq(7000));
+        verify(llm).complete(anyString(), anyString(), eq(240000), eq(7000));
     }
 
     @Test
@@ -68,7 +68,7 @@ class StructuredResearchReportPipelineTest {
     @Test
     void repairsMalformedNarrativeOnceUsingMissingSectionMarkers() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
+        when(llm.complete(anyString(), anyString(), eq(240000), eq(7000)))
                 .thenReturn("{\"executiveSummary\":\"结构错误\",\"subQuestionAnalysis\":\"不是数组\"}")
                 .thenReturn(narrativeSections());
         ResearchReportNarrativeAgent agent = new ResearchReportNarrativeAgent(llm);
@@ -76,7 +76,7 @@ class StructuredResearchReportPipelineTest {
         ResearchReportNarrative result = agent.generate(thesis(), blueprint(), dossier());
 
         assertTrue(result.isRepaired());
-        verify(llm, times(2)).complete(anyString(), anyString(), eq(120000), eq(7000));
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(240000), eq(7000));
     }
 
     private ResearchThesis thesis() {

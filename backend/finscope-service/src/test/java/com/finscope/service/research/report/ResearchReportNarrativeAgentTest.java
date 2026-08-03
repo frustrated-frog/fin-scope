@@ -23,7 +23,7 @@ class ResearchReportNarrativeAgentTest {
     void mergesACompleteMarkerResponseIntoEveryNarrativeSlot() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         ResearchReportBlueprint blueprint = blueprint();
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
+        when(llm.complete(anyString(), anyString(), eq(240000), eq(7000)))
                 .thenReturn(allSections(blueprint));
 
         ResearchReportNarrative result = new ResearchReportNarrativeAgent(llm)
@@ -35,14 +35,14 @@ class ResearchReportNarrativeAgentTest {
         assertEquals(blueprint.getSubQuestions().size(), result.getSubQuestionAnalysis().size());
         assertEquals(blueprint.getArgumentChains().size(), result.getArgumentAnalysis().size());
         assertEquals(blueprint.getScenarios().size(), result.getScenarioAnalysis().size());
-        verify(llm).complete(anyString(), anyString(), eq(120000), eq(7000));
+        verify(llm).complete(anyString(), anyString(), eq(240000), eq(7000));
     }
 
     @Test
     void keepsValidPartialSectionsAndRepairsOnlyMissingCriticalSections() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         ResearchReportBlueprint blueprint = blueprint();
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
+        when(llm.complete(anyString(), anyString(), eq(240000), eq(7000)))
                 .thenReturn(slot("EXECUTIVE_SUMMARY", "保留的模型摘要")
                         + slot("SUBQUESTION_1", "保留的第一子问题分析"))
                 .thenReturn(slot("WHAT_HAPPENED", "修复后的事件脉络")
@@ -59,14 +59,14 @@ class ResearchReportNarrativeAgentTest {
         assertEquals("保留的第一子问题分析", result.getSubQuestionAnalysis().get(0));
         assertEquals("修复后的事件脉络", result.getWhatHappened());
         assertEquals(blueprint.getArgumentChains().size(), result.getArgumentAnalysis().size());
-        verify(llm, times(2)).complete(anyString(), anyString(), eq(120000), eq(7000));
+        verify(llm, times(2)).complete(anyString(), anyString(), eq(240000), eq(7000));
     }
 
     @Test
     void returnsCompleteBaselineWhenProviderKeepsReturningIncompatibleStructures() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         ResearchReportBlueprint blueprint = blueprint();
-        when(llm.complete(anyString(), anyString(), eq(120000), eq(7000)))
+        when(llm.complete(anyString(), anyString(), eq(240000), eq(7000)))
                 .thenReturn("{\"scenarioAnalysis\":{\"baseline\":\"对象而非数组\"}}")
                 .thenThrow(new IllegalStateException("no final content with private reasoning"));
 
