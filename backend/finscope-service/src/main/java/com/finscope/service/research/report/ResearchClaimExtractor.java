@@ -44,7 +44,7 @@ public class ResearchClaimExtractor {
                 if (refs.isEmpty() && !paragraphRefs.isEmpty()) refs = paragraphRefs;
                 String text = cleanLabel(REF.matcher(raw).replaceAll("").trim());
                 List<String> numbers = matches(NUMBER, text);
-                if (!explicitFact && numbers.isEmpty()) continue;
+                if (!explicitFact && numbers.isEmpty() && (refs.isEmpty() || !isQualitativeFact(text))) continue;
                 result.add(new ResearchClaim(raw, text, refs, numbers));
             }
         }
@@ -74,6 +74,20 @@ public class ResearchClaimExtractor {
                 || value.startsWith("**判断：**") || value.startsWith("判断：")
                 || value.startsWith("**另一种解释：**") || value.startsWith("另一种解释：")
                 || value.startsWith("**AI 解读：**") || value.startsWith("AI 解读：");
+    }
+
+    private boolean isQualitativeFact(String value) {
+        String text = value == null ? "" : value.toLowerCase(java.util.Locale.ROOT);
+        if (containsAny(text, "可能", "或许", "预计", "预期", "推测", "意味着", "如果", "若", "取决于",
+                "不能证明", "尚待", "仍需", "could", "may", "might", "if ", "suggests")) return false;
+        return containsAny(text, "已经", "已获", "获得", "获批", "批准", "完成", "披露", "公告", "显示",
+                "发生", "维持", "增长", "下降", "上调", "下调", "达到", "签署", "发布", "confirmed",
+                "approved", "completed", "reported", "announced");
+    }
+
+    private boolean containsAny(String value, String... terms) {
+        for (String term : terms) if (value.contains(term)) return true;
+        return false;
     }
 
     private String cleanLabel(String value) {

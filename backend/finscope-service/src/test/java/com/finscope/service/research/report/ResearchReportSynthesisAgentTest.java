@@ -109,6 +109,38 @@ class ResearchReportSynthesisAgentTest {
     }
 
     @Test
+    void acceptsValidatedMixedReportEvenWhenModelCoverageIsBelowEnhancementThreshold() throws Exception {
+        ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
+        ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);
+        ResearchReportNarrativeAgent narrativeAgent = mock(ResearchReportNarrativeAgent.class);
+        StructuredResearchReportAssembler assembler = mock(StructuredResearchReportAssembler.class);
+        ResearchReportQualityValidator qualityValidator = mock(ResearchReportQualityValidator.class);
+        ResearchReportBlueprint blueprint = new ResearchReportBlueprint();
+        blueprint.setDirectAnswer("对象特定结论");
+        blueprint.setDirection("MIXED");
+        blueprint.setConfidence("MEDIUM");
+        blueprint.setModelEnhanced(true);
+        ResearchReportNarrative narrative = new ResearchReportNarrative();
+        narrative.setExecutiveSummary("两个模型段落与完整Java基线共同生成");
+        narrative.setModelEnhanced(false);
+        narrative.setModelSectionCount(2);
+        narrative.setExpectedModelSectionCount(14);
+        narrative.setRepaired(true);
+        when(dossierBuilder.build(anyList())).thenReturn(Collections.<ResearchEvidenceDossier>emptyList());
+        when(blueprintAgent.generate(any(), anyList())).thenReturn(blueprint);
+        when(narrativeAgent.generate(any(), any(), anyList())).thenReturn(narrative);
+        when(assembler.assemble(any(), any(), any(), anyList())).thenReturn("通过审计和质量校验的完整报告");
+        when(qualityValidator.validate(anyString(), any(), anyList())).thenReturn(Collections.<String>emptyList());
+
+        GeneratedResearchReport result = new ResearchReportSynthesisAgent(
+                dossierBuilder, blueprintAgent, narrativeAgent, assembler, qualityValidator)
+                .refine(new ResearchThesis(), sufficientEvidence(), fallback());
+
+        assertEquals("MODEL_REPAIRED", result.getGenerationMode());
+        assertEquals("通过审计和质量校验的完整报告", result.getMarkdown());
+    }
+
+    @Test
     void repairsUnsupportedClaimOnceBeforeAcceptingModelReport() throws Exception {
         ResearchEvidenceDossierBuilder dossierBuilder = mock(ResearchEvidenceDossierBuilder.class);
         ResearchReportBlueprintAgent blueprintAgent = mock(ResearchReportBlueprintAgent.class);

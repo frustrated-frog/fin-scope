@@ -57,7 +57,13 @@ public class ResearchReportBlueprintAgent {
                 String repaired = llm.complete(systemPrompt(), repairPrompt(thesis, blueprint, dossier, allowed),
                         TIMEOUT_MS, OUTPUT_TOKENS);
                 Map<String, String> repairedSections = sectionParser.parse(repaired, allowed);
-                if (!repairedSections.isEmpty()) sections = repairedSections;
+                if (!repairedSections.isEmpty()) {
+                    Map<String, String> merged = new java.util.LinkedHashMap<String, String>(sections);
+                    for (Map.Entry<String, String> entry : repairedSections.entrySet()) {
+                        if (!merged.containsKey(entry.getKey())) merged.put(entry.getKey(), entry.getValue());
+                    }
+                    sections = merged;
+                }
             }
         } catch (Exception error) {
             blueprint.getDiagnostics().add((repairAttempted

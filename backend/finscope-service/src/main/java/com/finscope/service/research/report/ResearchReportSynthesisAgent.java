@@ -88,13 +88,13 @@ public class ResearchReportSynthesisAgent {
                 diagnostics.add("REPORT_QUALITY_REJECTED:" + String.join(",", issues));
                 return fallback(fallback, String.join(";", diagnostics));
             }
-            if (!narrative.isModelEnhanced()) {
+            if (!narrative.isModelEnhanced() && narrative.getModelSectionCount() <= 0) {
                 if (diagnostics.isEmpty()) diagnostics.add("NARRATIVE_MODEL_COVERAGE_INSUFFICIENT");
                 return fallback(fallback, String.join(";", diagnostics));
             }
             String title = value(thesis.getSubjectName(), "研究命题") + "深度研究报告";
             boolean modelRepaired = blueprint.isRepaired() || narrative.isRepaired()
-                    || !blueprint.isModelEnhanced() || !diagnostics.isEmpty();
+                    || !blueprint.isModelEnhanced() || !narrative.isModelEnhanced() || !diagnostics.isEmpty();
             String mode = claimRepaired ? "MODEL_CLAIM_REPAIRED"
                     : modelRepaired ? "MODEL_REPAIRED" : "MODEL_STRUCTURED";
             if (claimRepaired) diagnostics.add("CLAIM_AUDIT_REPAIRED:" + auditSummary(audit));

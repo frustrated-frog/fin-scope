@@ -64,6 +64,20 @@ class ResearchClaimAuditorTest {
     }
 
     @Test
+    void auditsUnlabelledCitedQualitativeFactsButSkipsConditionalAnalysis() {
+        String report = "## 发生了什么\n\n"
+                + "公司已经获得监管批准。[E1]\n\n"
+                + "这可能推动后续商业化，但仍取决于执行进度。[E1]";
+
+        ResearchClaimAudit audit = auditor.audit(report, Collections.singletonList(
+                evidence("E1", "公司已向监管部门提交申请，审批结果尚未公布。")));
+
+        assertEquals(1, audit.getClaimCount());
+        assertEquals("CONFLICT", audit.getItems().get(0).getStatus());
+        assertTrue(audit.hasBlockingIssues());
+    }
+
+    @Test
     void auditsVerifiableFactCellsInsideTheEvidenceTable() {
         String report = "## 证据总表\n\n"
                 + "| 证据 | 立场 | 时间 | 可验证事实 | 来源层级 | 相关性 |\n"

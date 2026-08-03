@@ -99,6 +99,17 @@ class ResearchReportQualityValidatorTest {
         assertTrue(issues.contains("TRUNCATION_MARKER_PRESENT"));
     }
 
+    @Test
+    void doesNotTreatOrdinaryEllipsisInAQuestionOrNarrativeAsTruncation() {
+        String report = report("[E1]", "[E1][E2]", "[E2]", true)
+                .replace("测试公司当前结论。", "测试公司当前结论仍需观察……但现有证据支持阶段判断。");
+
+        List<String> issues = validator.validate(report, thesis(), Arrays.asList(
+                evidence("E1", "source-a", "SUPPORT"), evidence("E2", "source-b", "COUNTER")));
+
+        assertFalse(issues.contains("TRUNCATION_MARKER_PRESENT"));
+    }
+
     private String report(String conclusionRefs, String chainRefs, String counterRefs, boolean actionable) {
         String monitoring = actionable
                 ? "若收入增速连续两个季度下滑，则下调判断；若现金流转负，命题失效。"

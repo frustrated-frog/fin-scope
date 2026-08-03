@@ -44,6 +44,9 @@ public class ResearchClaimAuditor {
             return item(claim, "CONFLICT", "绑定证据对同一百分比事实给出冲突数值");
         }
         String combined = String.join(" ", excerpts);
+        if (hasCompletionConflict(claim.getText(), combined)) {
+            return item(claim, "CONFLICT", "主张声称事项已经完成，但绑定证据仍显示尚未完成");
+        }
         for (String number : claim.getNumbers()) {
             if (!containsNumber(combined, number)) {
                 return item(claim, "UNSUPPORTED", "引用材料不包含主张中的数字或日期：" + number);
@@ -66,6 +69,17 @@ public class ResearchClaimAuditor {
         Set<String> evidencePercent = new HashSet<String>();
         for (String excerpt : excerpts) evidencePercent.addAll(matches(PERCENT, excerpt));
         return evidencePercent.size() > 1 && evidencePercent.containsAll(claimedPercent);
+    }
+
+    private boolean hasCompletionConflict(String claim, String evidence) {
+        String claimed = text(claim);
+        String bound = text(evidence);
+        boolean claimsCompletion = containsAny(claimed, "获批", "获得批准", "已经批准", "已批准",
+                "已经完成", "已完成", "approved", "completed")
+                || (containsAny(claimed, "已经", "已获得", "已取得") && claimed.contains("批准"));
+        boolean evidencePending = containsAny(bound, "尚未", "未获批", "未批准", "未完成", "仍在审批",
+                "结果尚未", "pending", "not approved", "not completed");
+        return claimsCompletion && evidencePending;
     }
 
     private boolean containsNumber(String evidence, String number) {

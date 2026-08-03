@@ -65,6 +65,23 @@ class ResearchReportBlueprintAgentTest {
     }
 
     @Test
+    void mergesRepairSlotsWithoutDiscardingValidFirstPassSlots() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))
+                .thenReturn(slot("DIRECT_ANSWER", "首轮直接回答")
+                        + slot("KEY_INSIGHT_1_MEANING", "首轮关键含义"))
+                .thenReturn(slot("SUBQUESTION_1_ANSWER", "修复后的子问题回答"));
+
+        ResearchReportBlueprint result = new ResearchReportBlueprintAgent(
+                llm, new ResearchReportBlueprintValidator()).generate(thesis(), dossier());
+
+        assertEquals("首轮直接回答", result.getDirectAnswer());
+        assertEquals("首轮关键含义", result.getKeyInsights().get(0).getMeaning());
+        assertEquals("修复后的子问题回答", result.getSubQuestions().get(0).getAnswer());
+        assertTrue(result.isModelEnhanced());
+    }
+
+    @Test
     void returnsACompleteEvidenceBlueprintWhenBothModelCallsAreIncompatible() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.complete(anyString(), anyString(), eq(90000), eq(3000)))

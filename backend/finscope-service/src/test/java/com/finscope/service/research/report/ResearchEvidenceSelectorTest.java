@@ -147,6 +147,24 @@ class ResearchEvidenceSelectorTest {
     }
 
     @Test
+    void acceptsSafeSuffixStrippedChineseCompanyAlias() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("苹果公司");
+        thesis.setQuestion("苹果公司盈利预期是否仍在上修？");
+        ResearchSearchEvidence searchEvidence = searchEvidence(
+                "苹果上调新财年资本开支计划",
+                "苹果管理层同时维持收入和利润率指引。",
+                0.91D);
+
+        List<ResearchEvidenceCard> selected = selector.select(thesis,
+                Collections.<Article>emptyList(), Collections.emptyList(),
+                Collections.singletonList(searchEvidence));
+
+        assertEquals(1, selected.size());
+    }
+
+    @Test
     void removesSearchRankingMarkersFromSelectedClaims() {
         ResearchSearchEvidence searchEvidence = searchEvidence(
                 "长鑫科技上市次日市值回落",

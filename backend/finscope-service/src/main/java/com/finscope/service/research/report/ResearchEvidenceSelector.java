@@ -133,6 +133,7 @@ public class ResearchEvidenceSelector {
         Set<String> aliases = new LinkedHashSet<String>();
         add(aliases, subjectName);
         String subject = normalize(subjectName);
+        add(aliases, subject.replaceFirst("(?:集团股份有限公司|股份有限公司|有限责任公司|集团有限公司|控股有限公司|集团|公司)$", ""));
         if (subject.contains("长鑫")) aliases.addAll(Arrays.asList("cxmt", "changxin memory"));
         if (subject.contains("微软")) aliases.addAll(Arrays.asList("microsoft", "msft"));
         if (subject.contains("谷歌") || subject.contains("alphabet")) aliases.addAll(Arrays.asList("google", "alphabet", "googl"));

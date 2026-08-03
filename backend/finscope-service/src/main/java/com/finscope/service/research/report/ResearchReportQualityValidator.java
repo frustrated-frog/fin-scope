@@ -120,7 +120,7 @@ public class ResearchReportQualityValidator {
                 || markdown.contains("支持证据为") || markdown.contains("反向证据为")) {
             issues.add("GENERIC_EVIDENCE_COUNT_NARRATIVE");
         }
-        if (markdown.contains("（已截断）") || markdown.contains("…") || markdown.contains("...")) {
+        if (markdown.contains("（已截断）") || markdown.contains("[TRUNCATED]")) {
             issues.add("TRUNCATION_MARKER_PRESENT");
         }
     }
