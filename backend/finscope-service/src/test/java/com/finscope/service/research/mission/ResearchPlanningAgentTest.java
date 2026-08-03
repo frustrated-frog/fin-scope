@@ -213,7 +213,7 @@ class ResearchPlanningAgentTest {
 
         agent.plan(stockFinancialInput());
 
-        assertTrue(systemPrompt.get().contains("methodCodes只能使用可用投研方法中的编码"));
+        assertTrue(systemPrompt.get().contains("methodCodes只能使用当前研究对象适配的可用投研方法中的编码"));
         assertTrue(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
         assertTrue(userPrompt.get().contains("COMPANY_QUALITY"));
         assertTrue(userPrompt.get().contains("必查问题=[增长由收入、毛利率还是费用变化驱动？"));
@@ -223,6 +223,23 @@ class ResearchPlanningAgentTest {
         assertTrue(userPrompt.get().contains("完成条件=[覆盖利润、现金流和资产质量"));
         assertTrue(userPrompt.get().contains("必需意图=[PRIMARY, SUPPORT, COUNTER, ASSESS]"));
         assertFalse(userPrompt.get().contains("MAGIC_STOCK_PICKING"));
+    }
+
+    @Test
+    void excludesInapplicableMethodContractsFromThemeResearchPrompt() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        AtomicReference<String> userPrompt = new AtomicReference<String>();
+        when(llm.complete(anyString(), anyString(), eq(30000), eq(2000))).thenAnswer(invocation -> {
+            userPrompt.set(invocation.getArgument(1));
+            return validJson();
+        });
+
+        ResearchPlanningResult result = agent.plan(input());
+
+        assertEquals("LLM_VALIDATED", result.getPlanningMode());
+        assertTrue(userPrompt.get().contains("可用投研方法：无（当前研究对象没有适配的注册方法）"));
+        assertFalse(userPrompt.get().contains("COMPANY_QUALITY"));
+        assertFalse(userPrompt.get().contains("FINANCIAL_STATEMENT_QUALITY"));
     }
 
     private ResearchPlanningInput input() {

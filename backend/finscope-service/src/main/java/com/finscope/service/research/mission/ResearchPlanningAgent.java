@@ -116,7 +116,8 @@ public class ResearchPlanningAgent {
         return "你是 FinScope 的受控研究规划器。只负责把研究命题拆成有限任务图，不执行工具。"
                 + "只能使用用户消息中列出的工具编码，不得输出HTTP地址、SQL、Shell、文件路径或额外字段。"
                 + "必须返回单个JSON对象，不要Markdown。任务不超过8个，公开搜索不超过4个，依赖必须无环。"
-                + "methodCodes只能使用可用投研方法中的编码；不得创造方法。"
+                + "methodCodes只能使用当前研究对象适配的可用投研方法中的编码；不得创造方法。"
+                + "若可用投研方法为空，methodCodes必须输出[]。"
                 + "必须输出researchType、methodCodes、requiredEvidence、requiredCalculations、counterChecks、completionCriteria；"
                 + "除methodCodes外的方法蓝图字段由服务端按注册表重新生成，模型不得降低要求。"
                 + "必须包含BASELINE、SUPPORT、COUNTER、ASSESS、SYNTHESIS意图。"
@@ -155,8 +156,13 @@ public class ResearchPlanningAgent {
                     .append(tool.getName()).append("；").append(tool.getDescription())
                     .append("；预算=").append(tool.getBudgetType()).append('\n');
         }
-        value.append("可用投研方法：\n");
-        for (ResearchMethodDefinition method : methodRegistry.list()) {
+        List<ResearchMethodDefinition> methods = methodRegistry.recommend(input);
+        if (methods.isEmpty()) {
+            value.append("可用投研方法：无（当前研究对象没有适配的注册方法）\n");
+        } else {
+            value.append("可用投研方法：\n");
+        }
+        for (ResearchMethodDefinition method : methods) {
             value.append("- ").append(method.getCode()).append("：").append(method.getName())
                     .append("；").append(method.getDescription())
                     .append("；必查问题=").append(method.getRequiredQuestions())
