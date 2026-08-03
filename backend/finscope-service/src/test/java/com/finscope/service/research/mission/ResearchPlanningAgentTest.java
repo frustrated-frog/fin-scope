@@ -85,6 +85,12 @@ class ResearchPlanningAgentTest {
         assertTrue(systemPrompt.get().contains("source_scan只能搭配COLLECT和BASELINE"));
         assertTrue(systemPrompt.get().contains("evidence_assess只能搭配ASSESS和ASSESS"));
         assertTrue(systemPrompt.get().contains("report_synthesis只能搭配SYNTHESIS和SYNTHESIS"));
+        assertTrue(systemPrompt.get().contains("以下五个必需任务不得删除、改名或替换工具与意图"));
+        assertTrue(systemPrompt.get().contains("baseline_scan|COLLECT|source_scan|BASELINE|[]"));
+        assertTrue(systemPrompt.get().contains("search_support|SEARCH|public_news_search|SUPPORT|[baseline_scan]"));
+        assertTrue(systemPrompt.get().contains("search_counter|SEARCH|public_news_search|COUNTER|[baseline_scan]"));
+        assertTrue(systemPrompt.get().contains("assess_evidence|ASSESS|evidence_assess|ASSESS|[search_support,search_counter]"));
+        assertTrue(systemPrompt.get().contains("synthesize_report|SYNTHESIS|report_synthesis|SYNTHESIS|[assess_evidence]"));
     }
 
     @Test
