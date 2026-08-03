@@ -2,6 +2,7 @@ package com.finscope.service.research.report;
 
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ public class ResearchReportNarrativeAgent {
     private final DeterministicReportNarrativeBuilder baselineBuilder;
     private final ResearchReportSectionParser sectionParser;
 
+    @Autowired
     public ResearchReportNarrativeAgent(LlmChatClient llm) {
         this(llm, new DeterministicReportNarrativeBuilder(), new ResearchReportSectionParser());
     }

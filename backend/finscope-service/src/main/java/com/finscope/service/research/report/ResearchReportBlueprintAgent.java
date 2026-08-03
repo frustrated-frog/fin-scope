@@ -2,6 +2,7 @@ package com.finscope.service.research.report;
 
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.rpc.llm.LlmChatClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public class ResearchReportBlueprintAgent {
     private final DeterministicReportBlueprintBuilder baselineBuilder;
     private final ResearchReportSectionParser sectionParser;
 
+    @Autowired
     public ResearchReportBlueprintAgent(LlmChatClient llm, ResearchReportBlueprintValidator validator) {
         this(llm, validator, new DeterministicReportBlueprintBuilder(), new ResearchReportSectionParser());
     }
