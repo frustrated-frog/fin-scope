@@ -43,9 +43,10 @@ const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
 const PENDING_REVIEW_CATEGORY: NewsCategory = { code: 'PENDING_REVIEW', name: '待确认' };
 const REFRESH_INTERVAL_MS = 45_000;
 
-export function LiveNewsPanel({ setMessage, addToast }: {
+export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onOpenMajorEvents?: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<NewsFeedSnapshot>();
   const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY]);
@@ -55,6 +56,7 @@ export function LiveNewsPanel({ setMessage, addToast }: {
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('ALL');
   const [loading, setLoading] = useState(true);
+  const [savedItems, setSavedItems] = useState<Set<string>>(new Set());
   const mounted = useRef(true);
   const snapshotRef = useRef<NewsFeedSnapshot>();
   const selectedCategoryRef = useRef('ALL');
@@ -135,6 +137,7 @@ export function LiveNewsPanel({ setMessage, addToast }: {
   async function saveMajorEvent(item: NewsFeedItem) {
     try {
       await api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'NEWS_ITEM', originKey: item.id, title: item.title, summary: item.content, sourceName: item.sourceName, sourceUrl: item.url, categoryCode: item.categoryCode, occurredDate: item.publishedAt ? item.publishedAt.slice(0, 10) : new Date().toISOString().slice(0, 10) }) });
+      setSavedItems((current) => new Set(current).add(item.id));
       addToast('已记入大事记', 'success');
     } catch (error) { addToast(error instanceof Error ? error.message : '记入大事记失败', 'error'); }
   }
@@ -186,6 +189,7 @@ export function LiveNewsPanel({ setMessage, addToast }: {
           <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void load(true)} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
           </button>
+          <button type="button" className="major-events-link" onClick={onOpenMajorEvents}>查看大事记 <span aria-hidden="true">→</span></button>
         </div>
       </header>
 
@@ -219,7 +223,7 @@ export function LiveNewsPanel({ setMessage, addToast }: {
           {loading && !snapshot ? <NewsSkeleton /> : flashes.length ? (
             <div className="news-timeline" role="feed" aria-label="实时快讯时间线">
               {flashes.map((item, index) => <FlashItem key={item.id} item={item} latest={index === 0}
-                categories={businessCategories} onReview={reviewClassification} onSave={saveMajorEvent} />)}
+                categories={businessCategories} onReview={reviewClassification} onSave={saveMajorEvent} saved={savedItems.has(item.id)} />)}
             </div>
           ) : <EmptyState label="没有匹配的实时快讯" />}
         </section>
@@ -227,32 +231,34 @@ export function LiveNewsPanel({ setMessage, addToast }: {
         <aside className="news-depth-panel" role="region" aria-label="深度资讯">
           <div className="news-section-heading"><div><span>02 · READ DEEPER</span><h2>要闻精华</h2></div><strong>{articles.length} 篇</strong></div>
           <div className="news-depth-list">{articles.length ? articles.map((item) => <ArticleCard key={item.id} item={item}
-            categories={businessCategories} onReview={reviewClassification} onSave={saveMajorEvent} />) : <EmptyState label="暂无匹配的深度资讯" />}</div>
+            categories={businessCategories} onReview={reviewClassification} onSave={saveMajorEvent} saved={savedItems.has(item.id)} />) : <EmptyState label="暂无匹配的深度资讯" />}</div>
         </aside>
       </div>
     </section>
   );
 }
 
-function FlashItem({ item, latest, categories, onReview, onSave }: {
+function FlashItem({ item, latest, categories, onReview, onSave, saved }: {
   item: NewsFeedItem;
   latest: boolean;
   categories: NewsCategory[];
   onReview: (itemId: string, categoryCode: string, reason: string) => Promise<void>;
   onSave: (item: NewsFeedItem) => void;
+  saved: boolean;
 }) {
   const content = <><div className="news-flash-meta"><span>{item.sourceName}</span><small>{item.sourceTier}</small>{latest ? <em>NEW</em> : null}</div><h3>{item.title}</h3><p>{item.content}</p></>;
-  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" /><div className="news-flash-content">{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-item-link">{content}</a> : content}<button type="button" onClick={() => onSave(item)} aria-label={`记入大事记：${item.title}`}>记入大事记</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></div></article>;
+  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" /><div className="news-flash-content">{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-item-link">{content}</a> : content}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></div></article>;
 }
 
-function ArticleCard({ item, categories, onReview, onSave }: {
+function ArticleCard({ item, categories, onReview, onSave, saved }: {
   item: NewsFeedItem;
   categories: NewsCategory[];
   onReview: (itemId: string, categoryCode: string, reason: string) => Promise<void>;
   onSave: (item: NewsFeedItem) => void;
+  saved: boolean;
 }) {
   const body = <><div className="news-card-meta"><span>{item.sourceName}</span><time dateTime={item.publishedAt}>{formatDateTime(item.publishedAt)}</time></div><h3>{item.title}</h3><p>{item.content}</p><span className="news-card-action">阅读原文 <b aria-hidden="true">↗</b></span></>;
-  return <article className="news-depth-card">{item.url ? <a className="news-item-link" href={item.url} target="_blank" rel="noreferrer">{body}</a> : body}<button type="button" onClick={() => onSave(item)} aria-label={`记入大事记：${item.title}`}>记入大事记</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></article>;
+  return <article className="news-depth-card">{item.url ? <a className="news-item-link" href={item.url} target="_blank" rel="noreferrer">{body}</a> : body}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></article>;
 }
 
 function ClassificationReview({ item, categories, onReview }: {

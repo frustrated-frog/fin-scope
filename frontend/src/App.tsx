@@ -564,6 +564,7 @@ export default function App() {
             setView('research');
             setMessage('研究问题已预填，请补充研究对象后再创建命题');
           }}
+          onOpenMajorEvents={() => setView('majorEvents')}
         />
       )}
       {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenNews={() => setView('news')} />}
