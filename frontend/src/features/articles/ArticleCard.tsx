@@ -1,4 +1,5 @@
 import { Article } from '../../shared/types';
+import { api } from '../../shared/api/client';
 import { InsightCardPreview } from './InsightCardPreview';
 
 type SourceTag = {
@@ -116,6 +117,7 @@ export function ArticleCard({
           )}
 
           <div className="article-card-actions">
+            <button type="button" onClick={(event) => { event.stopPropagation(); void api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'ARTICLE', originKey: String(article.id), occurredDate: article.publishedAt?.slice(0, 10) }) }).then(() => window.alert('已记入大事记')).catch((error) => window.alert(error instanceof Error ? error.message : '记入大事记失败')); }} aria-label={`记入大事记：${article.title}`}>记入大事记</button>
             {article.url && (
               <a href={article.url} target="_blank" rel="noopener noreferrer" className="link-button">
                 查看原文
