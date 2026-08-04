@@ -23,7 +23,8 @@ const navGroups: Array<{
     label: '知识与判断',
     items: [
       { id: 'knowledge', label: 'Facts & Knowledge', hint: '事实与知识', code: 'KN' },
-      { id: 'contentStudio', label: 'Studio', hint: '内容输出', code: 'ST' }
+      { id: 'contentStudio', label: 'Studio', hint: '内容输出', code: 'ST' },
+      { id: 'majorEvents', label: 'Timeline', hint: '大事记', code: 'TL' }
     ]
   },
   {

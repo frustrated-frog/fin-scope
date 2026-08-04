@@ -11,6 +11,7 @@ import { EvidenceView } from './features/evidence/EvidenceView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
+import { MajorEventView } from './features/major-events/MajorEventView';
 import { NewsView } from './features/news/NewsView';
 import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
@@ -264,6 +265,8 @@ export default function App() {
         return 'Financials · 公司财报';
       case 'strategy':
         return 'Strategy Workbench';
+      case 'majorEvents':
+        return 'Major Event Timeline · 大事记';
       default:
         return 'Dashboard';
     }
@@ -582,6 +585,7 @@ export default function App() {
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
+      {view === 'majorEvents' && <MajorEventView addToast={addToast} />}
     </AppShell>
   );
 }

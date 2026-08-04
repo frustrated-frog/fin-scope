@@ -15,7 +15,8 @@ export type View =
   | 'watchlist'
   | 'marketIntel'
   | 'financials'
-  | 'strategy';
+  | 'strategy'
+  | 'majorEvents';
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; note?: string; revision: number; updatedAt?: string };
 export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };
@@ -178,6 +179,12 @@ export type Article = {
   publishedAt?: string;
   fetchedAt?: string;
   insightCard?: InsightCard;
+};
+
+export type MajorEvent = {
+  id: number; originType: 'NEWS_ITEM' | 'ARTICLE' | 'RADAR_EVENT'; originKey: string;
+  title: string; summary?: string; sourceName?: string; sourceUrl?: string;
+  categoryCode?: string; occurredDate: string; note?: string; createdAt: string; updatedAt: string;
 };
 
 export type AsyncTask = {
