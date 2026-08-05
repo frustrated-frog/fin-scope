@@ -118,6 +118,20 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void findsAndBackfillsEventsMissingDashboardClassification() {
+        RadarEvent event = event("event:unclassified");
+        event.setDashboardCategory("UNCLASSIFIED");
+        RadarEvent saved = repository.saveEvent(event);
+
+        assertEquals(1, repository.findEventsMissingDashboardCategory(500).size());
+
+        repository.updateDashboardCategory(saved.getId(), "TECHNOLOGY");
+
+        assertTrue(repository.findEventsMissingDashboardCategory(500).isEmpty());
+        assertEquals("TECHNOLOGY", repository.findEvent(saved.getId()).get().getDashboardCategory());
+    }
+
+    @Test
     void oldSignalsAreExpiredAndExcludedFromActiveWindow() {
         repository.capture(signal("OLD:1", "GLOBAL"), now.minusDays(15));
         repository.expireSignals(now.minusDays(14), now);
@@ -213,7 +227,7 @@ class RadarRepositoryTest {
                 + "content_hash TEXT NOT NULL,status TEXT NOT NULL,source_rank INTEGER,previous_source_rank INTEGER,"
                 + "source_weight REAL NOT NULL DEFAULT 0)");
         jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,"
-                + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'FINANCE',status TEXT NOT NULL,"
+                + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'UNCLASSIFIED',status TEXT NOT NULL,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"
                 + "signal_count INTEGER NOT NULL DEFAULT 0,hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,"

@@ -198,7 +198,7 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_refresh_step_run ON radar_refresh_step(run_id,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,canonical_title TEXT NOT NULL,summary TEXT,"
-                + "category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'FINANCE',status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
+                + "category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'UNCLASSIFIED',status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
                 + "source_count INTEGER NOT NULL DEFAULT 0,signal_count INTEGER NOT NULL DEFAULT 0,"
                 + "hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,"
@@ -206,7 +206,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("radar_event", "hotspot_score", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "hotspot_explanation", "TEXT");
         ensureColumn("radar_event", "hotspot_lifecycle_state", "TEXT");
-        ensureColumn("radar_event", "dashboard_category", "TEXT NOT NULL DEFAULT 'FINANCE'");
+        ensureColumn("radar_event", "dashboard_category", "TEXT NOT NULL DEFAULT 'UNCLASSIFIED'");
         ensureColumn("radar_event", "evidence_status", "TEXT");
         ensureColumn("radar_event", "evidence_summary", "TEXT");
         ensureColumn("radar_event", "evidence_warning", "TEXT");

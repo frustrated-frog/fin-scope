@@ -8,7 +8,7 @@ public class RadarEvent {
     private String canonicalTitle;
     private String summary;
     private String categoryCode;
-    private String dashboardCategory = "FINANCE";
+    private String dashboardCategory = "UNCLASSIFIED";
     private String status;
     private LocalDateTime firstSeenAt;
     private LocalDateTime lastSeenAt;

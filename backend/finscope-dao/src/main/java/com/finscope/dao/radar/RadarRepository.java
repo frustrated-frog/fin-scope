@@ -169,6 +169,17 @@ public class RadarRepository {
                 eventMapper(), dashboardCategory, Math.max(1, Math.min(limit, 20)));
     }
 
+    public List<RadarEvent> findEventsMissingDashboardCategory(int limit) {
+        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') "
+                        + "AND (dashboard_category IS NULL OR dashboard_category='' OR dashboard_category='UNCLASSIFIED') "
+                        + "ORDER BY last_seen_at DESC,id DESC LIMIT ?",
+                eventMapper(), Math.max(1, Math.min(limit, 1000)));
+    }
+
+    public void updateDashboardCategory(Long eventId, String dashboardCategory) {
+        jdbc.update("UPDATE radar_event SET dashboard_category=? WHERE id=?", dashboardCategory, eventId);
+    }
+
     public void expireSignals(LocalDateTime before, LocalDateTime now) {
         jdbc.update("UPDATE radar_signal SET status='EXPIRED',last_seen_at=last_seen_at WHERE last_seen_at<? AND status='ACTIVE'",
                 TimeUtil.text(before));

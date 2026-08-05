@@ -2,6 +2,7 @@ package com.finscope.service.dashboard;
 
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.service.radar.RadarDashboardCategoryService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -22,7 +23,8 @@ class DashboardHotspotRankingServiceTest {
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
+                repository, new RadarDashboardCategoryService());
         List<DashboardHotspotRankingService.Ranking> rankings = service.rankings();
 
         assertEquals(3, rankings.size());
@@ -37,6 +39,23 @@ class DashboardHotspotRankingServiceTest {
         verify(repository).findTopByDashboardCategory("FINANCE", 5);
         verify(repository).findTopByDashboardCategory("TECHNOLOGY", 5);
         verify(repository).findTopByDashboardCategory("POLITICS", 5);
+    }
+
+    @Test
+    void classifiesEventsCreatedBeforeTheDashboardCategoryMigration() {
+        RadarRepository repository = mock(RadarRepository.class);
+        RadarEvent unclassified = event(12L, "OpenAI 发布新一代模型", "Agent 推理能力明显提升", 86);
+        unclassified.setDashboardCategory("UNCLASSIFIED");
+        when(repository.findEventsMissingDashboardCategory(500)).thenReturn(Collections.singletonList(unclassified));
+        when(repository.findTopByDashboardCategory("FINANCE", 5)).thenReturn(Collections.emptyList());
+        when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
+        when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
+
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
+                repository, new RadarDashboardCategoryService());
+        service.rankings();
+
+        verify(repository).updateDashboardCategory(12L, "TECHNOLOGY");
     }
 
     private RadarEvent event(Long id, String title, String summary, int score) {
