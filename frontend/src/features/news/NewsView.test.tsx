@@ -312,7 +312,7 @@ test('supports watchlist-only filtering and degraded snapshots', async () => {
 
   fireEvent.click(screen.getByRole('button', { name: '与我相关' }));
 
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=true&limit=20&state=ALL'));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=true&limit=20&state=ALL&refresh=false'));
   expect(screen.getByText('实时来源暂不可用，当前展示最近一次雷达结果')).toBeInTheDocument();
 });
 
@@ -346,6 +346,7 @@ test('polling applies newly ranked radar events without waiting for confirmation
   await act(async () => { vi.advanceTimersByTime(45_000); await Promise.resolve(); });
 
   expect(screen.getAllByText('新的雷达事件').length).toBeGreaterThan(0);
+  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL&refresh=false');
   expect(screen.queryByRole('button', { name: /发现 .* 条新资讯/ })).not.toBeInTheDocument();
 });
 

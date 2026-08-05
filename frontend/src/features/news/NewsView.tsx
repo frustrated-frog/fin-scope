@@ -74,7 +74,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   function switchCategory(code: string) {
     if (code === selectedCategoryRef.current) return;
     selectedCategoryRef.current = code; setSelectedCategory(code); setQuery('');
-    setSelectedEvent(undefined); setLoading(true); void load(false, code);
+    setSelectedEvent(undefined); setLoading(true); void load(false, code, false);
   }
   function switchState(value:RadarStateFilter){stateFilterRef.current=value;setStateFilter(value);setSelectedEvent(undefined);setLoading(true);void load(false,selectedCategoryRef.current,false);}
 
@@ -92,7 +92,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       if (mounted.current) setCategories([ALL_CATEGORY, RELATED_CATEGORY, ...values.filter((value) => value.code !== 'ALL')]);
     }).catch(() => undefined);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(false, selectedCategoryRef.current);
+      if (document.visibilityState === 'visible') void load(false, selectedCategoryRef.current, false);
     }, REFRESH_INTERVAL_MS);
     return () => { mounted.current = false; window.clearInterval(timer); };
   }, []);
