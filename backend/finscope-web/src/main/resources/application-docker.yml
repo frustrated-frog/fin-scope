@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:/data/finance.db?foreign_keys=on
+  redis:
+    host: redis
+    port: 6379
+    timeout: 1000ms
+
+finscope:
+  data-root: /data
+  cors-origin: http://localhost:5173
+  python-market-data:
+    base-url: http://market-data:8000

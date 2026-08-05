@@ -24,6 +24,11 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} traceId=%X{traceId} - %msg%n"
 
+management:
+  health:
+    redis:
+      enabled: false
+
 finscope:
   data-root: ../data
   cors-origin: http://localhost:*

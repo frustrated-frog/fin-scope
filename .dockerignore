@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.DS_Store
+.worktrees
+data
+docs
+frontend
+market-data-service
+**/target
+**/node_modules
+**/dist
+**/.pytest_cache
+**/__pycache__
+*.iml

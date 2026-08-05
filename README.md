@@ -52,13 +52,14 @@ FinScope 是一个本地优先的个人投资研究工作台。它把公开信�
 
 - 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS。
 - 前端：React 18、TypeScript、Vite 5、Vitest。
+- 缓存：Redis 7，用于研究资料和热点查询的可失效加速缓存，SQLite 仍是主数据源。
 - 行情侧车：Python 3.11+、FastAPI、AkShare、pytdx、httpx，推荐通过 Docker 运行。
 - AI：OpenAI 兼容 Chat Completions 客户端、多个领域 Agent、统一运行留痕。
 - 持久化：SQLite 主库、Markdown Vault、抓取原文与上传文档。
 
 当前继续使用 SQLite，不引入 MySQL。FinScope 是单用户、本机运行的应用，SQLite 的单文件迁移、低运维成本和本地优先特性更适合当前阶段；项目已经启用 WAL、外键、连接池限制和 busy timeout。只有未来出现多用户并发写入、远程共享数据库或独立服务扩容需求时，才有必要评估 PostgreSQL/MySQL。
 
-Docker 当前只用于隔离 Python 行情数据服务及其依赖，Java 主应用仍直接读取本机 SQLite。这样既保留数据目录的可见性和可迁移性，也避免为了单机数据库额外维护容器网络与卷。
+Docker Compose 可以一次启动 Redis、Java 后端、React/Nginx 前端和 Python 行情侧车。SQLite 与 Markdown 数据通过 `./data` 挂载到后端容器，Redis 使用独立卷；Redis 重启或暂时不可用时，应用会回退到原有实时抓取链路。
 
 ## 系统结构
 
@@ -69,10 +70,14 @@ Browser :5173
 Spring Boot :8080
     ├── SQLite: $FINSCOPE_DATA_ROOT/finance.db
     ├── Markdown/files: $FINSCOPE_DATA_ROOT/vault|raw|financials|exports
+    ├── Redis :6379 (研究资料加速缓存)
     ├── RSS / Web / X / search / model providers
     └── Python market-data :8000
             ├── Tencent / Sina / Eastmoney / AkShare / pytdx
             └── provider snapshot SQLite in Docker volume
+
+Docker Compose
+    └── Nginx :5173 -> Spring Boot :8080 -> Redis / Python market-data
 ```
 
 后端是模块化单体，依赖方向为 `web -> service -> dao/rpc -> domain/common`。Controller 不直接调用 Repository，外部访问统一放在 `finscope-rpc` 或独立行情服务中。
@@ -158,6 +163,7 @@ Observation 驱动决策内核见 [决策内核 PRD](docs/产品需求-研究智
 - Maven 3.8+。
 - Node.js 20+，推荐 Node.js 22；使用仓库内 `package-lock.json` 安装依赖。
 - Docker Desktop，用于 Python 行情服务。
+- Docker Compose v2，用于一键启动完整本地栈。
 - 可选：Python 3.11-3.13 与 `uv`，仅在不使用 Docker 运行行情服务时需要。
 
 以下命令均假设终端当前位于仓库根目录 `fin-scope/`。
@@ -172,6 +178,25 @@ mvn -version
 ```
 
 项目显式声明了 `javax.annotation` 兼容 API，避免依赖某个 JDK 发行版的隐式类路径；仍建议统一使用 JDK 8，以便本地运行行为与 CI 编译目标一致。
+
+### Docker Compose 一键启动（推荐）
+
+Compose 使用仓库内的 `data/finance.db` 作为主库。首次启动前，请确认这个文件已经从现有本地数据目录复制到 `fin-scope/data/finance.db`；应用会拒绝在错误路径静默创建空库。
+
+```bash
+test -f data/finance.db
+docker compose up --build
+```
+
+启动后访问 `http://localhost:5173`。后端、Redis 和行情侧车分别可通过 `http://localhost:8080`、`127.0.0.1:6379` 和 `http://localhost:8000/ready` 检查。后台运行可使用：
+
+```bash
+docker compose up --build -d
+docker compose logs -f backend
+docker compose down
+```
+
+`docker compose down` 不会删除 Redis 和行情侧车卷；如需清理缓存卷，再执行 `docker compose down -v`。
 
 ### 1. 准备本地数据目录
 
