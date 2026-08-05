@@ -109,25 +109,47 @@ export function DashboardView({
       view: 'research' as View
     }
   ];
+  const priorityPulseItem = pulseItems.find((item) => item.value > 0);
+  const pulseStatus = priorityPulseItem
+    ? `${priorityPulseItem.label} ${priorityPulseItem.value} 项待处理`
+    : '研究队列已就绪';
+  const pulseFocus = priorityPulseItem
+    ? priorityPulseItem.detail
+    : '暂时没有待处理研究队列';
 
   return (
     <section className="content-grid dashboard-command">
       <section className="dashboard-pulse" aria-labelledby="dashboard-pulse-heading">
         <div className="dashboard-pulse-intro">
           <span className="dashboard-section-kicker">TODAY / RESEARCH FLOW</span>
-          <h3 id="dashboard-pulse-heading">今天的研究脉冲</h3>
+          <div className="dashboard-pulse-heading-row">
+            <h3 id="dashboard-pulse-heading">今天的研究脉冲</h3>
+          </div>
           <p>从新信息到可验证结论，先处理会改变判断的队列。</p>
+          <div className="dashboard-pulse-focus">
+            <span>当前焦点</span>
+            <strong>{pulseFocus}</strong>
+            <span className="dashboard-pulse-status" role="status">
+              <i aria-hidden="true"></i>
+              {pulseStatus}
+            </span>
+          </div>
         </div>
-        <div className="dashboard-pulse-items">
+        <div className="dashboard-pulse-items" aria-label="研究队列总览">
           {pulseItems.map((item) => (
             <button
               key={item.label}
               className={`dashboard-pulse-item is-${item.tone}`}
               type="button"
+              aria-label={`${item.label} ${item.value}，${item.detail}。打开${pulseWorkspaceName(item.view)}`}
               onClick={() => onChangeView(item.view)}
             >
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
+              <span className="dashboard-pulse-item-label"><i aria-hidden="true"></i>{item.label}</span>
+              <span className="dashboard-pulse-value">
+                <strong>{item.value}</strong>
+                <small aria-hidden="true">ITEMS</small>
+              </span>
+              <span className="dashboard-pulse-meter" aria-hidden="true"><i></i></span>
               <small>{item.detail}</small>
             </button>
           ))}
@@ -270,6 +292,16 @@ const HOTSPOT_BOARD_META: Array<Pick<DashboardHotspotRanking, 'categoryCode' | '
   { categoryCode: 'TECHNOLOGY', label: '科技' },
   { categoryCode: 'POLITICS', label: '政治' }
 ];
+
+function pulseWorkspaceName(view: View) {
+  const labels: Partial<Record<View, string>> = {
+    article: '文章工作区',
+    intake: '候选队列',
+    knowledge: '知识工作台',
+    research: '研究工作区'
+  };
+  return labels[view] || '对应工作区';
+}
 
 function normalizeHotspotRankings(rankings?: DashboardHotspotRanking[]) {
   return HOTSPOT_BOARD_META.map((meta) => {

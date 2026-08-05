@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -52,6 +52,16 @@ test('opens the selected radar event from a ranking item', async () => {
   await userEvent.click(screen.getByRole('button', { name: /央行宣布下调存款准备金率/ }));
 
   expect(onOpenRadarEvent).toHaveBeenCalledWith(11);
+});
+
+test('frames the research pulse as a ready command surface while retaining metric navigation', () => {
+  renderDashboard();
+
+  const focus = screen.getByText('当前焦点').parentElement;
+  expect(focus).not.toBeNull();
+  expect(within(focus as HTMLElement).getByRole('status')).toHaveTextContent('研究队列已就绪');
+  expect(screen.getByRole('button', { name: /新信息.*打开文章工作区/ })).toHaveClass('dashboard-pulse-item');
+  expect(screen.getByRole('button', { name: /运行中.*打开研究工作区/ })).toHaveClass('dashboard-pulse-item');
 });
 
 function renderDashboard(onOpenRadarEvent = vi.fn()) {
