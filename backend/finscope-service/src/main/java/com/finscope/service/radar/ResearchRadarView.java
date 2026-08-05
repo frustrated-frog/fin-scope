@@ -120,6 +120,7 @@ public final class ResearchRadarView {
         private final String categoryCode;
         private final int hotspotScore;
         private final String hotspotExplanation;
+        private final String hotspotLifecycleState;
         private final int priorityScore;
         private final String recommendation;
         private final List<String> reasons;
@@ -158,6 +159,7 @@ public final class ResearchRadarView {
         public EventCard(RadarEvent event, RadarEventInterpretation interpretation, RadarEventWorkspace.Summary workspace) {
             this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
             this.categoryCode=event.getCategoryCode(); this.hotspotScore=event.getHotspotScore(); this.hotspotExplanation=event.getHotspotExplanation();
+            this.hotspotLifecycleState=event.getHotspotLifecycleState();
             this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
             this.watchlistRelated=event.getWatchlistRelevance()>0; this.watchlistExplanation=event.getWatchlistExplanation();
@@ -201,6 +203,7 @@ public final class ResearchRadarView {
         public String getCategoryCode() { return categoryCode; }
         public int getHotspotScore() { return hotspotScore; }
         public String getHotspotExplanation() { return hotspotExplanation; }
+        public String getHotspotLifecycleState() { return hotspotLifecycleState; }
         public int getPriorityScore() { return priorityScore; }
         public String getRecommendation() { return recommendation; }
         public List<String> getReasons() { return reasons; }

@@ -1,6 +1,7 @@
 package com.finscope.service.radar;
 
 import com.finscope.dao.instrument.WatchlistRepository;
+import com.finscope.dao.radar.RadarEventSnapshotRepository;
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
@@ -45,8 +46,9 @@ class RadarHotspotProductionPipelineTest {
         RadarEventEnhancementScheduler enhancement = mock(RadarEventEnhancementScheduler.class);
         RadarHotspotScoreService scores = new RadarHotspotScoreService();
         RadarHotspotPersistenceService persistence = new RadarHotspotPersistenceService(repository);
+        RadarEventSnapshotRepository snapshots = mock(RadarEventSnapshotRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline(news, repository, clustering,
-                priority, watchlist, runs, enhancement, scores, persistence);
+                priority, watchlist, runs, enhancement, scores, persistence, snapshots);
 
         NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", now.minusMinutes(20));
         NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", now.minusMinutes(25));
@@ -85,6 +87,7 @@ class RadarHotspotProductionPipelineTest {
         assertEquals(1, result.getEvents().size());
         assertTrue(result.getEvents().get(0).getHotspotScore() >= 75);
         verify(repository).replaceEventSignals(eq(11L), any());
+        verify(snapshots).save(any());
         verify(repository).expireEventsExcept(any(), eq(now.minusHours(48)), eq(now));
         org.mockito.InOrder order = inOrder(runs);
         order.verify(runs).startStep(7L, "FETCH", now);

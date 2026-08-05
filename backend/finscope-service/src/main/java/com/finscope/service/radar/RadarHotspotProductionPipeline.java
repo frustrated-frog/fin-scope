@@ -1,11 +1,13 @@
 package com.finscope.service.radar;
 
 import com.finscope.dao.instrument.WatchlistRepository;
+import com.finscope.dao.radar.RadarEventSnapshotRepository;
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
+import com.finscope.domain.radar.RadarEventSnapshot;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.news.NewsFeedItem;
@@ -41,17 +43,19 @@ public class RadarHotspotProductionPipeline {
     private final RadarEventEnhancementScheduler enhancement;
     private final RadarHotspotScoreService hotspotScores;
     private final RadarHotspotPersistenceService persistence;
+    private final RadarEventSnapshotRepository snapshots;
 
     public RadarHotspotProductionPipeline(NewsFeedService news, RadarRepository repository,
                                           RadarClusteringService clustering, RadarPriorityService priority,
                                           WatchlistRepository watchlist, RadarRefreshRunRepository runs,
                                           RadarEventEnhancementScheduler enhancement,
                                           RadarHotspotScoreService hotspotScores,
-                                          RadarHotspotPersistenceService persistence) {
+                                          RadarHotspotPersistenceService persistence,
+                                          RadarEventSnapshotRepository snapshots) {
         this.news = news; this.repository = repository; this.clustering = clustering;
         this.priority = priority; this.watchlist = watchlist; this.runs = runs;
         this.enhancement = enhancement; this.hotspotScores = hotspotScores;
-        this.persistence = persistence;
+        this.persistence = persistence; this.snapshots = snapshots;
     }
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
@@ -122,14 +126,16 @@ public class RadarHotspotProductionPipeline {
         List<RankedCluster> values = new ArrayList<RankedCluster>();
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
-            RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now);
+            RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
+                    previousSnapshot(event, now));
             event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());
+            event.setHotspotLifecycleState(hotspot.getLifecycleState());
             RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
             event.setPriorityScore(result.getTotalScore());
             event.setScoreExplanation(hotspot.getExplanation() + "；" + String.join("；", result.getReasons()));
             event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
             event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
-            values.add(new RankedCluster(cluster));
+            values.add(new RankedCluster(cluster, hotspot));
         }
         values.sort(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getPriorityScore()).reversed()
                 .thenComparing(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getHotspotScore()).reversed())
@@ -152,6 +158,10 @@ public class RadarHotspotProductionPipeline {
         for (int index = 0; index < saved.size(); index++) {
             RadarEvent value = saved.get(index);
             RadarClusteringService.ClusterResult cluster = ranked.get(index).cluster;
+            RadarHotspotScoreService.Score hotspot = ranked.get(index).hotspot;
+            if (snapshots != null) {
+                snapshots.save(hotspot.toSnapshot(value.getId(), value.getSignalCount(), value.getSourceCount(), now));
+            }
             boolean includeEvidence = evidenceSchedules < 2 && value.getPriorityScore() >= 75;
             if (enhancement != null && (cluster.getSignals().size() > 1 || includeEvidence)) {
                 enhancement.schedule(value, cluster.getSignals(), now, includeEvidence);
@@ -159,6 +169,13 @@ public class RadarHotspotProductionPipeline {
             }
         }
         return saved;
+    }
+
+    private RadarEventSnapshot previousSnapshot(RadarEvent event, LocalDateTime now) {
+        if (event == null || event.getEventKey() == null || snapshots == null) return null;
+        Optional<RadarEvent> stored = repository.findEventByKey(event.getEventKey());
+        if (!stored.isPresent() || stored.get().getId() == null) return null;
+        return snapshots.findLatestBefore(stored.get().getId(), now).orElse(null);
     }
 
     private RadarSignal toSignal(NewsFeedItem item, int rank) {
@@ -174,10 +191,7 @@ public class RadarHotspotProductionPipeline {
         ranks.put(provider, next); return next;
     }
     private double sourceWeight(String tier) {
-        String value = tier == null ? "" : tier.toUpperCase(Locale.ROOT);
-        if ("TIER_1".equals(value)) return 1.0D;
-        if ("TIER_2".equals(value)) return 0.75D;
-        return 0.5D;
+        return RadarSourceQuality.resolve(tier).getHotnessWeight();
     }
     private int providerCount(List<RadarSignal> signals) {
         Set<String> providers = new HashSet<String>();
@@ -196,7 +210,10 @@ public class RadarHotspotProductionPipeline {
 
     private static final class RankedCluster {
         private final RadarClusteringService.ClusterResult cluster;
-        private RankedCluster(RadarClusteringService.ClusterResult cluster) { this.cluster = cluster; }
+        private final RadarHotspotScoreService.Score hotspot;
+        private RankedCluster(RadarClusteringService.ClusterResult cluster, RadarHotspotScoreService.Score hotspot) {
+            this.cluster = cluster; this.hotspot = hotspot;
+        }
     }
 
     public static final class ProductionResult {

@@ -37,6 +37,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class ResearchRadarService {
+    private final RadarHotspotScoreService directHotspotScores = new RadarHotspotScoreService();
     private final NewsFeedService news;
     private final RadarRepository repository;
     private final RadarClusteringService clustering;
@@ -156,6 +157,9 @@ public class ResearchRadarService {
             int evidenceSchedules = 0;
             for (RadarClusteringService.ClusterResult cluster : clustering.cluster(active)) {
                 RadarEvent event = cluster.getEvent();
+                RadarHotspotScoreService.Score hotspot = directHotspotScores.score(cluster.getSignals(), now);
+                event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());
+                event.setHotspotLifecycleState(hotspot.getLifecycleState());
                 RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
                 event.setPriorityScore(result.getTotalScore()); event.setScoreExplanation(String.join("；", result.getReasons()));
                 event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());

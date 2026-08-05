@@ -121,8 +121,19 @@ class RadarClusteringServiceTest {
                 signal(2L, "B", "芯片股午后集体上涨", "MARKET_MOVE"),
                 signal(3L, "C", "芯片产业链价格出现变化", "MARKET_MOVE")));
 
-        assertEquals(1, clusters.size());
-        assertEquals(3, clusters.get(0).getSignals().size());
+        assertEquals(2, clusters.size());
+        assertEquals(2, clusters.get(0).getSignals().size());
+        assertEquals(1, clusters.get(1).getSignals().size());
+    }
+
+    @Test
+    void usesSecurityCodeAsCandidateRecallAndEventIdentity() {
+        RadarClusteringService.MatchDecision decision = service.decide(
+                signal(1L, "CLS", "300750 新电池发布", "COMPANY"),
+                signal(2L, "THS", "300750 电池量产计划落地", "COMPANY"));
+
+        assertEquals("SAME", decision.getReasonCode());
+        assertTrue(decision.getReason().contains("标的编码"));
     }
 
     @Test

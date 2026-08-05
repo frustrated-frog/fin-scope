@@ -1,6 +1,7 @@
 package com.finscope.service.radar;
 
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.domain.radar.RadarEventSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -33,6 +34,24 @@ class RadarHotspotScoreServiceTest {
                 Collections.singletonList(signal("CLS", 12, 0.55D, now.minusDays(2))), now);
 
         assertTrue(score.getTotalScore() >= 0 && score.getTotalScore() <= 100);
+    }
+
+    @Test
+    void scoresPrdHotnessWithVelocityAndKeepsLifecycleVisible() {
+        RadarSignal first = signal("CLS", 1, 0.95D, now.minusMinutes(5));
+        RadarSignal second = signal("THS", 1, 0.80D, now.minusMinutes(8));
+        RadarEventSnapshot previous = new RadarEventSnapshot();
+        previous.setSnapshotAt(now.minusMinutes(15));
+        previous.setSignalCount(1);
+        previous.setHotnessScore(42);
+
+        RadarHotspotScoreService.Score score = service.score(Arrays.asList(first, second), now, previous);
+
+        assertTrue(score.getTotalScore() >= 70);
+        assertTrue(score.getVelocityScore() > 0.5D);
+        assertEquals("RISING", score.getLifecycleState());
+        assertTrue(score.getExplanation().contains("传播速度"));
+        assertTrue(score.getExplanation().contains("市场反应/用户互动未接入"));
     }
 
     private RadarSignal signal(String provider, int rank, double weight, LocalDateTime publishedAt) {

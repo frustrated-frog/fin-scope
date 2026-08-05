@@ -182,7 +182,7 @@ class RadarRepositoryTest {
         jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,"
                 + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,status TEXT NOT NULL,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"
-                + "signal_count INTEGER NOT NULL DEFAULT 0,hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,"
+                + "signal_count INTEGER NOT NULL DEFAULT 0,hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,"
                 + "score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,watchlist_explanation TEXT,"
                 + "uncertainty TEXT,next_observation TEXT,evidence_status TEXT,evidence_summary TEXT,evidence_warning TEXT,"

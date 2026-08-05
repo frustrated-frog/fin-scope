@@ -14,12 +14,13 @@ export function RadarEventCard({ event, addToast, onResearch, onOpen, onStateCha
     <article className={`radar-event-card ${event.watchlistRelated ? 'is-related' : ''}`}>
       <div className="radar-event-score" aria-label={`研究优先级 ${event.priorityScore} 分`}>
         <strong>{event.priorityScore}</strong><span>研究优先级</span>
-        {event.hotspotScore != null ? <small title={event.hotspotExplanation || '来源质量、排名、时效和多源覆盖综合热度'}>热点 {event.hotspotScore}</small> : null}
+        {event.hotspotScore != null ? <small title={event.hotspotExplanation || '按来源广度、传播速度、来源权威、新意、跨源扩散和持续性计算'}>热点 {event.hotspotScore}</small> : null}
       </div>
       <div className="radar-event-body">
         <div className="radar-event-meta">
           <div className="radar-event-badges">
             <span className="radar-recommendation">{event.recommendation}</span>
+            {event.hotspotLifecycleState ? <span className="radar-hotspot-state">{hotspotLifecycleLabel(event.hotspotLifecycleState)}</span> : null}
             {event.interpretationStatus === 'SUCCESS' ? <span className="radar-interpretation-ready">已有解读</span> : null}
             {!event.read ? <span className="radar-event-unread">未读</span> : null}
             {event.followed ? <span className="radar-event-followed">关注中</span> : null}
@@ -53,4 +54,11 @@ function parseDate(value?: string) { return value ? new Date(value) : undefined;
 function formatTime(value?: string) {
   const date = parseDate(value);
   return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--';
+}
+function hotspotLifecycleLabel(value: string) {
+  if (value === 'RISING') return '热度上升';
+  if (value === 'COOLING') return '热度回落';
+  if (value === 'DISCOVERED') return '刚发现';
+  if (value === 'QUIET') return '趋于平稳';
+  return '持续观察';
 }

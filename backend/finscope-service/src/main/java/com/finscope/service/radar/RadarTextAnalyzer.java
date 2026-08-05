@@ -8,9 +8,12 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Set;
 
 public class RadarTextAnalyzer {
+    private static final Pattern SECURITY_CODE = Pattern.compile("(?<!\\d)\\d{6}(?!\\d)");
     private static final List<String> SUBJECTS = Arrays.asList(
             "宁德时代", "比亚迪", "小米", "阿里巴巴", "腾讯", "百度", "京东", "特斯拉",
             "英伟达", "微软", "苹果", "美联储", "中国央行", "人民银行", "证监会", "国务院");
@@ -28,13 +31,14 @@ public class RadarTextAnalyzer {
         String title = safe(signal.getTitle());
         String text = title + " " + safe(signal.getContent());
         return new SignalFeatures(normalize(title), normalizedCategory(signal.getCategoryCode()),
-                matches(text, SUBJECTS), matches(text, ACTIONS), matches(text, VARIABLES));
+                matches(text, SUBJECTS), matches(text, ACTIONS), matches(text, VARIABLES), identifiers(text));
     }
 
     public double similarity(SignalFeatures left, SignalFeatures right) {
         if (!left.category.equals(right.category) && Collections.disjoint(left.subjects, right.subjects)) return 0.0;
         double score = 0.55 * fingerprints.titleSimilarity(left.normalizedTitle, right.normalizedTitle);
         if (!left.subjects.isEmpty() && !Collections.disjoint(left.subjects, right.subjects)) score += 0.20;
+        if (!left.entities.isEmpty() && !Collections.disjoint(left.entities, right.entities)) score += 0.25;
         if (!left.actions.isEmpty() && !Collections.disjoint(left.actions, right.actions)) score += 0.10;
         if (!left.variables.isEmpty() && !Collections.disjoint(left.variables, right.variables)) score += 0.10;
         if (left.category.equals(right.category)) score += 0.05;
@@ -48,6 +52,7 @@ public class RadarTextAnalyzer {
 
     public String eventKey(SignalFeatures features) {
         String subject = first(features.subjects);
+        if (subject.isEmpty()) subject = first(features.entities);
         String action = first(features.actions);
         String variable = first(features.variables);
         String fallback = features.normalizedTitle.length() <= 32
@@ -65,6 +70,13 @@ public class RadarTextAnalyzer {
         return values;
     }
 
+    private Set<String> identifiers(String text) {
+        Set<String> values = new LinkedHashSet<String>();
+        Matcher matcher = SECURITY_CODE.matcher(safe(text));
+        while (matcher.find()) values.add(matcher.group());
+        return values;
+    }
+
     private String normalizedCategory(String value) {
         return value == null || value.trim().isEmpty() ? "UNCLASSIFIED" : value.trim().toUpperCase(Locale.ROOT);
     }
@@ -79,11 +91,12 @@ public class RadarTextAnalyzer {
         private final Set<String> subjects;
         private final Set<String> actions;
         private final Set<String> variables;
+        private final Set<String> entities;
 
         SignalFeatures(String normalizedTitle, String category, Set<String> subjects,
-                       Set<String> actions, Set<String> variables) {
+                       Set<String> actions, Set<String> variables, Set<String> entities) {
             this.normalizedTitle = normalizedTitle; this.category = category;
-            this.subjects = subjects; this.actions = actions; this.variables = variables;
+            this.subjects = subjects; this.actions = actions; this.variables = variables; this.entities = entities;
         }
 
         public String getNormalizedTitle() { return normalizedTitle; }
@@ -91,5 +104,6 @@ public class RadarTextAnalyzer {
         public Set<String> getSubjects() { return subjects; }
         public Set<String> getActions() { return actions; }
         public Set<String> getVariables() { return variables; }
+        public Set<String> getEntities() { return entities; }
     }
 }

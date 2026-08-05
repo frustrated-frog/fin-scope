@@ -53,13 +53,14 @@ public class RadarRepository {
     public RadarEvent saveEvent(RadarEvent event) {
         jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,status,first_seen_at,last_seen_at,"
                         + "source_count,signal_count,hotspot_score,hotspot_explanation,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
-                        + "uncertainty,next_observation,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
+                        + "uncertainty,next_observation,hotspot_lifecycle_state,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
                         + "evidence_count,evidence_source_count,evidence_updated_at,updated_at) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_key) DO UPDATE SET canonical_title=excluded.canonical_title,summary=excluded.summary,"
                         + "category_code=excluded.category_code,status=excluded.status,last_seen_at=excluded.last_seen_at,"
                         + "source_count=excluded.source_count,signal_count=excluded.signal_count,hotspot_score=excluded.hotspot_score,"
                         + "hotspot_explanation=excluded.hotspot_explanation,priority_score=excluded.priority_score,"
+                        + "hotspot_lifecycle_state=excluded.hotspot_lifecycle_state,"
                         + "score_explanation=excluded.score_explanation,watchlist_relevance=excluded.watchlist_relevance,"
                         + "watchlist_explanation=excluded.watchlist_explanation,uncertainty=excluded.uncertainty,"
                         + "next_observation=excluded.next_observation,"
@@ -74,7 +75,7 @@ public class RadarRepository {
                 event.getEventKey(), event.getCanonicalTitle(), event.getSummary(), event.getCategoryCode(), event.getStatus(),
                 TimeUtil.text(event.getFirstSeenAt()), TimeUtil.text(event.getLastSeenAt()), event.getSourceCount(),
                 event.getSignalCount(), event.getHotspotScore(), event.getHotspotExplanation(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
-                event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getEvidenceStatus(),
+                event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getHotspotLifecycleState(), event.getEvidenceStatus(),
                 event.getEvidenceSummary(), event.getEvidenceWarning(), event.getEvidenceFingerprint(), event.getEvidenceCount(),
                 event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()), TimeUtil.text(event.getUpdatedAt()));
         RadarEvent stored = jdbc.queryForObject("SELECT * FROM radar_event WHERE event_key=?", eventMapper(), event.getEventKey());
@@ -133,6 +134,11 @@ public class RadarRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public Optional<RadarEvent> findEventByKey(String eventKey) {
+        List<RadarEvent> values = jdbc.query("SELECT * FROM radar_event WHERE event_key=?", eventMapper(), eventKey);
+        return values.isEmpty() ? Optional.<RadarEvent>empty() : Optional.of(values.get(0));
+    }
+
     public List<RadarSignal> findSignalsByEventId(Long eventId) {
         return jdbc.query("SELECT s.* FROM radar_signal s JOIN radar_event_signal l ON l.signal_id=s.id "
                 + "WHERE l.event_id=? ORDER BY COALESCE(s.published_at,s.first_seen_at) DESC", signalMapper(), eventId);
@@ -182,7 +188,8 @@ public class RadarRepository {
             value.setStatus(rs.getString("status")); value.setFirstSeenAt(TimeUtil.localDateTime(rs,"first_seen_at"));
             value.setLastSeenAt(TimeUtil.localDateTime(rs,"last_seen_at")); value.setSourceCount(rs.getInt("source_count"));
             value.setSignalCount(rs.getInt("signal_count")); value.setHotspotScore(rs.getInt("hotspot_score"));
-            value.setHotspotExplanation(rs.getString("hotspot_explanation")); value.setPriorityScore(rs.getInt("priority_score"));
+            value.setHotspotExplanation(rs.getString("hotspot_explanation")); value.setHotspotLifecycleState(rs.getString("hotspot_lifecycle_state"));
+            value.setPriorityScore(rs.getInt("priority_score"));
             value.setScoreExplanation(rs.getString("score_explanation")); value.setWatchlistRelevance(rs.getInt("watchlist_relevance"));
             value.setWatchlistExplanation(rs.getString("watchlist_explanation")); value.setUncertainty(rs.getString("uncertainty"));
             value.setNextObservation(rs.getString("next_observation")); value.setEvidenceStatus(rs.getString("evidence_status"));

@@ -10,17 +10,14 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 
 @Service
@@ -28,6 +25,7 @@ public class RadarClusteringService {
     private static final double SAME_THRESHOLD = 0.78;
     private static final double DIFFERENT_THRESHOLD = 0.50;
     private static final int MAX_AGENT_PAIR_CALLS = 24;
+    private static final long CANDIDATE_TIME_WINDOW_HOURS = 36;
     private final RadarTextAnalyzer analyzer;
     private final RadarPairDecisionRepository decisions;
     private final RadarPairDecisionScheduler scheduler;
@@ -53,6 +51,12 @@ public class RadarClusteringService {
             return new MatchDecision("DIFFERENT_SUBJECT", 0.0, "主要主体不同");
         }
         double score = analyzer.similarity(a, b);
+        if (!a.getEntities().isEmpty() && !Collections.disjoint(a.getEntities(), b.getEntities())
+                && a.getCategory().equals(b.getCategory())
+                && (!a.getVariables().isEmpty() && !Collections.disjoint(a.getVariables(), b.getVariables())
+                || !a.getActions().isEmpty() && !Collections.disjoint(a.getActions(), b.getActions()))) {
+            return new MatchDecision("SAME", Math.max(0.83D, score), "标的编码与事实维度一致");
+        }
         if (score >= SAME_THRESHOLD) return new MatchDecision("SAME", score, "主体、动作和标题语义一致");
         if (a.getCategory().equals(b.getCategory())
                 && !a.getVariables().isEmpty()
@@ -64,51 +68,51 @@ public class RadarClusteringService {
     }
 
     public List<ClusterResult> cluster(List<RadarSignal> input) {
-        List<RadarSignal> ordered = new ArrayList<RadarSignal>(input);
+        List<RadarSignal> ordered = new ArrayList<RadarSignal>(input == null
+                ? Collections.<RadarSignal>emptyList() : input);
         ordered.sort(Comparator.comparing(RadarSignal::getPublishedAt,
                 Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(RadarSignal::getId));
-        Map<Integer, Set<Integer>> adjacency = new HashMap<Integer, Set<Integer>>();
-        Map<String, MatchDecision> accepted = new HashMap<String, MatchDecision>();
         int[] agentCalls = new int[] { 0 };
-        for (int index = 0; index < ordered.size(); index++) adjacency.put(index, new HashSet<Integer>());
-        for (int left = 0; left < ordered.size(); left++) {
-            for (int right = left + 1; right < ordered.size(); right++) {
-                MatchDecision decision = resolve(ordered.get(left), ordered.get(right), agentCalls);
-                if (decision.isSame()) {
-                    adjacency.get(left).add(right);
-                    adjacency.get(right).add(left);
-                    accepted.put(edgeKey(left, right), decision);
-                }
-            }
-        }
         List<ClusterResult> clusters = new ArrayList<ClusterResult>();
-        Set<Integer> visited = new HashSet<Integer>();
-        for (int start = 0; start < ordered.size(); start++) {
-            if (visited.contains(start)) continue;
-            List<Integer> component = new ArrayList<Integer>();
-            Queue<Integer> queue = new LinkedList<Integer>();
-            queue.add(start);
-            visited.add(start);
-            while (!queue.isEmpty()) {
-                int current = queue.remove();
-                component.add(current);
-                for (Integer neighbor : adjacency.get(current)) {
-                    if (visited.add(neighbor)) queue.add(neighbor);
+        for (RadarSignal signal : ordered) {
+            boolean added = false;
+            for (ClusterResult cluster : clusters) {
+                if (!isCandidate(cluster.representative, signal)) continue;
+                MatchDecision decision = resolve(cluster.representative, signal, agentCalls);
+                if (decision.isSame()) {
+                    cluster.add(signal, decision);
+                    added = true;
+                    break;
                 }
             }
-            component.sort(Integer::compareTo);
-            ClusterResult cluster = newCluster(ordered.get(component.get(0)));
-            for (int position = 1; position < component.size(); position++) {
-                int signalIndex = component.get(position);
-                MatchDecision link = firstAcceptedLink(signalIndex, component, accepted);
-                cluster.add(ordered.get(signalIndex), link);
-            }
-            clusters.add(cluster);
+            if (!added) clusters.add(newCluster(signal));
         }
         for (ClusterResult cluster : clusters) {
             cluster.finish(analyzer);
         }
         return clusters;
+    }
+
+    private boolean isCandidate(RadarSignal left, RadarSignal right) {
+        if (left == null || right == null) return false;
+        LocalDateTime leftTime = eventTime(left);
+        LocalDateTime rightTime = eventTime(right);
+        if (leftTime != null && rightTime != null
+                && Math.abs(Duration.between(leftTime, rightTime).toHours()) > CANDIDATE_TIME_WINDOW_HOURS) {
+            return false;
+        }
+        RadarTextAnalyzer.SignalFeatures a = analyzer.analyze(left);
+        RadarTextAnalyzer.SignalFeatures b = analyzer.analyze(right);
+        if (a.getNormalizedTitle().equals(b.getNormalizedTitle())) return true;
+        if (!Collections.disjoint(a.getEntities(), b.getEntities())) return true;
+        if (!Collections.disjoint(a.getSubjects(), b.getSubjects())) return true;
+        return a.getCategory().equals(b.getCategory())
+                && (!Collections.disjoint(a.getVariables(), b.getVariables())
+                || !Collections.disjoint(a.getActions(), b.getActions()));
+    }
+
+    private LocalDateTime eventTime(RadarSignal signal) {
+        return signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
     }
 
     private MatchDecision resolve(RadarSignal left, RadarSignal right, int[] agentCalls) {
@@ -135,16 +139,6 @@ public class RadarClusteringService {
         return new MatchDecision("AMBIGUOUS", rule.score, "灰区判断已转入后台，本轮保守拆分");
     }
 
-    private MatchDecision firstAcceptedLink(int signalIndex, List<Integer> component,
-                                            Map<String, MatchDecision> accepted) {
-        for (Integer candidate : component) {
-            if (candidate == signalIndex) continue;
-            MatchDecision decision = accepted.get(edgeKey(candidate, signalIndex));
-            if (decision != null) return decision;
-        }
-        return new MatchDecision("SAME_TRANSITIVE", 0.5D, "通过同事件关系图间接关联");
-    }
-
     private String semanticFingerprint(RadarSignal signal) {
         String value = analyzer.normalize(signal == null ? null : signal.getCategoryCode()) + "|"
                 + analyzer.normalize(signal == null ? null : signal.getTitle()) + "|"
@@ -157,10 +151,6 @@ public class RadarClusteringService {
         } catch (Exception error) {
             return Integer.toHexString(value.hashCode());
         }
-    }
-
-    private String edgeKey(int first, int second) {
-        return Math.min(first, second) + ":" + Math.max(first, second);
     }
 
     private ClusterResult newCluster(RadarSignal signal) {

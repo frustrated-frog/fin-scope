@@ -18,6 +18,7 @@ export type RadarEvent = {
   categoryCode?: string;
   hotspotScore?: number;
   hotspotExplanation?: string;
+  hotspotLifecycleState?: string;
   priorityScore: number;
   recommendation: string;
   reasons: string[];

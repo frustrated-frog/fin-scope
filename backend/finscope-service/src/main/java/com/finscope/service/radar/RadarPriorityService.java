@@ -78,10 +78,7 @@ public class RadarPriorityService {
     private int sourceQuality(List<RadarSignal> signals) {
         int best = 0;
         for (RadarSignal signal : safeSignals(signals)) {
-            String tier = safe(signal.getSourceTier()).toUpperCase(Locale.ROOT);
-            if ("TIER_1".equals(tier)) best = Math.max(best, 15);
-            else if ("TIER_2".equals(tier)) best = Math.max(best, 10);
-            else best = Math.max(best, 5);
+            best = Math.max(best, RadarSourceQuality.resolve(signal.getSourceTier()).getPriorityPoints());
         }
         return best;
     }
