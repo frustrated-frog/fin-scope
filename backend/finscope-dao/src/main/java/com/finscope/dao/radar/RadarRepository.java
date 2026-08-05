@@ -143,7 +143,7 @@ public class RadarRepository {
             sql.append(" AND category_code=?"); args.add(category.trim().toUpperCase());
         }
         if (watchlistOnly) sql.append(" AND watchlist_relevance>0");
-        sql.append(" ORDER BY hotspot_score DESC,priority_score DESC,last_seen_at DESC LIMIT ?"); args.add(Math.max(1, limit));
+        sql.append(" ORDER BY priority_score DESC,hotspot_score DESC,last_seen_at DESC LIMIT ?"); args.add(Math.max(1, limit));
         return jdbc.query(sql.toString(), eventMapper(), args.toArray());
     }
 

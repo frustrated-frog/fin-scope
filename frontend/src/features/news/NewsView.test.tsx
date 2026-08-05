@@ -270,6 +270,20 @@ test('research action only hands the suggested question to the parent', async ()
   expect(api).not.toHaveBeenCalledWith('/api/research/runs', expect.anything());
 });
 
+test('keeps research priority as the primary score and exposes hotspot score as context', async () => {
+  const rankedEvent = { ...event, hotspotScore: 95, hotspotExplanation: '多源确认且来源排名靠前' };
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    return Promise.resolve({ ...snapshot, events: [rankedEvent], latestChanges: [rankedEvent] });
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
+
+  expect(screen.getByLabelText('研究优先级 92 分')).toBeInTheDocument();
+  expect(screen.getByText('热点 95')).toBeInTheDocument();
+});
+
 test('supports watchlist-only filtering and degraded snapshots', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);

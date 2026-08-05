@@ -67,6 +67,24 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void rankedEventsFollowResearchPriorityBeforeHotspotTieBreak() {
+        RadarEvent highHotspot = event("event:hotspot-first");
+        highHotspot.setHotspotScore(95);
+        highHotspot.setPriorityScore(40);
+        RadarEvent highPriority = event("event:priority-first");
+        highPriority.setHotspotScore(80);
+        highPriority.setPriorityScore(90);
+
+        repository.saveEvent(highHotspot);
+        repository.saveEvent(highPriority);
+
+        List<RadarEvent> ranked = repository.findRanked("ALL", false, 20);
+
+        assertEquals(highPriority.getEventKey(), ranked.get(0).getEventKey());
+        assertEquals(highHotspot.getEventKey(), ranked.get(1).getEventKey());
+    }
+
+    @Test
     void oldSignalsAreExpiredAndExcludedFromActiveWindow() {
         repository.capture(signal("OLD:1", "GLOBAL"), now.minusDays(15));
         repository.expireSignals(now.minusDays(14), now);

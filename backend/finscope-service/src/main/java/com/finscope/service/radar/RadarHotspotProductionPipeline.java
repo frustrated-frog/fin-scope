@@ -126,8 +126,8 @@ public class RadarHotspotProductionPipeline {
             event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
             values.add(new RankedCluster(cluster));
         }
-        values.sort(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getHotspotScore()).reversed()
-                .thenComparing(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getPriorityScore()).reversed())
+        values.sort(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getPriorityScore()).reversed()
+                .thenComparing(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getHotspotScore()).reversed())
                 .thenComparing(value -> value.cluster.getEvent().getEventKey(), Comparator.nullsLast(Comparator.naturalOrder())));
         return values;
     }
