@@ -1,5 +1,7 @@
 package com.finscope.dao.knowledge;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.knowledge.KnowledgeProjectionJob;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -59,7 +61,7 @@ public class KnowledgeProjectionJobRepository {
 
     public List<KnowledgeProjectionJob> findRecoverable(int limit) {
         if (limit < 1 || limit > 200) {
-            throw new IllegalArgumentException("Invalid projection recovery batch size");
+            throw new BusinessException(BizErrorCode.PROJECTION_BATCH_SIZE_INVALID);
         }
         String leaseExpiredBefore = TimeUtil.text(LocalDateTime.now().minusMinutes(LEASE_MINUTES));
         return jdbcTemplate.query(

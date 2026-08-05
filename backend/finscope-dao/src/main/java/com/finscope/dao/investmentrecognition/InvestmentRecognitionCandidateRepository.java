@@ -2,6 +2,8 @@ package com.finscope.dao.investmentrecognition;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.investmentrecognition.InvestmentRecognitionCandidate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -147,7 +149,7 @@ public class InvestmentRecognitionCandidateRepository {
         try {
             return json.writeValueAsString(values == null ? new ArrayList<String>() : values);
         } catch (Exception error) {
-            throw new IllegalArgumentException("无法序列化投资认识数据", error);
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法序列化投资认识数据", error);
         }
     }
 
@@ -155,7 +157,7 @@ public class InvestmentRecognitionCandidateRepository {
         try {
             return value == null ? new ArrayList<String>() : json.readValue(value, STRING_LIST);
         } catch (Exception error) {
-            throw new IllegalArgumentException("无法读取投资认识数据", error);
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法读取投资认识数据", error);
         }
     }
 }

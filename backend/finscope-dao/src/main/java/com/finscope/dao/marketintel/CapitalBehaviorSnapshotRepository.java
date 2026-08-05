@@ -2,6 +2,8 @@ package com.finscope.dao.marketintel;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
@@ -47,7 +49,7 @@ public class CapitalBehaviorSnapshotRepository {
                     snapshot.getInstrumentId(), snapshot.getAsOf().toString(), snapshot.getFingerprint())
                     : keys.getKey().longValue();
             snapshot.setId(id); return snapshot;
-        } catch (Exception e) { throw new IllegalStateException("cannot persist capital snapshot", e); }
+        } catch (Exception e) { throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist capital snapshot", e); }
     }
 
     public Optional<CapitalBehaviorSnapshot> findLatest(Long instrumentId) {
@@ -72,7 +74,7 @@ public class CapitalBehaviorSnapshotRepository {
                 s.setSignals(mapper.readValue(rs.getString("signals_json"), new TypeReference<List<CapitalBehaviorSignal>>() {}));
                 s.setWarnings(mapper.readValue(rs.getString("warnings_json"), new TypeReference<List<String>>() {}));
                 s.setCreatedAt(LocalDateTime.parse(rs.getString("created_at"))); return s;
-            } catch (Exception e) { throw new IllegalStateException("cannot read capital snapshot id=" + rs.getLong("id"), e); }
+            } catch (Exception e) { throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read capital snapshot id=" + rs.getLong("id"), e); }
         };
     }
 
@@ -81,7 +83,7 @@ public class CapitalBehaviorSnapshotRepository {
             jdbc.update("UPDATE market_capital_behavior_snapshot SET quality_status=?,warnings_json=? WHERE id=?",
                     qualityStatus, mapper.writeValueAsString(warnings), snapshotId);
         } catch (Exception error) {
-            throw new IllegalStateException("cannot update capital snapshot warnings id=" + snapshotId, error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update capital snapshot warnings id=" + snapshotId, error);
         }
     }
 }

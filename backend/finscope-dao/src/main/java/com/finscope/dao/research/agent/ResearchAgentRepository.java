@@ -1,5 +1,7 @@
 package com.finscope.dao.research.agent;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
@@ -228,7 +230,7 @@ public class ResearchAgentRepository {
     private Long requiredKey(KeyHolder keys) {
         Number key = keys.getKey();
         if (key == null) {
-            throw new IllegalStateException("SQLite did not return a generated key");
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "SQLite did not return a generated key");
         }
         return key.longValue();
     }

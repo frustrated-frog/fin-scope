@@ -1,5 +1,8 @@
 package com.finscope.dao.marketdata;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataRefreshRun;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,7 +37,7 @@ public class MarketDataRefreshRunRepository {
             return statement;
         }, keys);
         if (keys.getKey() == null) {
-            throw new IllegalStateException("market data refresh run id was not generated");
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "market data refresh run id was not generated");
         }
         return keys.getKey().longValue();
     }
@@ -48,7 +51,8 @@ public class MarketDataRefreshRunRepository {
                 status, finishedAt.toString(), requestedCount, freshCount, staleCount, failedCount,
                 selectedSources, warningMessage, id);
         if (updated != 1) {
-            throw new IllegalArgumentException("market data refresh run does not exist: " + id);
+            throw new BusinessException(BizErrorCode.MARKET_DATA_REFRESH_RUN_NOT_FOUND,
+                    BizErrorCode.MARKET_DATA_REFRESH_RUN_NOT_FOUND.format(id), null);
         }
     }
 

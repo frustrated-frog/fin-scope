@@ -1,5 +1,7 @@
 package com.finscope.dao.research;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.knowledge.KnowledgeEnums;
 import com.finscope.domain.research.LearningTask;
@@ -59,7 +61,7 @@ public class LearningTaskRepository {
 
     public boolean insertSuggestionIfAbsent(LearningTask task) {
         if (task == null || task.getEventId() == null || isBlank(task.getTaskKey())) {
-            throw new IllegalArgumentException("Agent suggestion requires eventId and taskKey");
+            throw new BusinessException(BizErrorCode.AGENT_SUGGESTION_KEYS_REQUIRED);
         }
         task.setStatus(KnowledgeEnums.LearningStatus.SUGGESTED.name());
         task.setOrigin("AGENT");
@@ -75,7 +77,7 @@ public class LearningTaskRepository {
     public List<LearningTask> findPage(String status, Long topicId, String query,
                                        int page, int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 200) {
-            throw new IllegalArgumentException("Invalid learning task page request");
+            throw new BusinessException(BizErrorCode.PAGE_REQUEST_INVALID_LEARNING_TASK);
         }
         StringBuilder sql = new StringBuilder("SELECT * FROM learning_task WHERE 1=1");
         List<Object> arguments = new ArrayList<>();

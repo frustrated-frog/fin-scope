@@ -1,5 +1,7 @@
 package com.finscope.dao.knowledge;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.knowledge.KnowledgeActionCandidate;
 import com.finscope.domain.knowledge.KnowledgeEntry;
@@ -257,7 +259,7 @@ public class KnowledgeQueryRepository {
 
     private void validatePage(int page, int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
-            throw new IllegalArgumentException("Invalid knowledge page request");
+            throw new BusinessException(BizErrorCode.PAGE_REQUEST_INVALID_KNOWLEDGE);
         }
     }
 

@@ -1,5 +1,7 @@
 package com.finscope.dao.research;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.EvidenceItem;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -67,7 +69,7 @@ public class EvidenceItemRepository {
             return Collections.emptyList();
         }
         if (limit < 1 || limit > 200) {
-            throw new IllegalArgumentException("Invalid evidence context limit");
+            throw new BusinessException(BizErrorCode.CONTEXT_LIMIT_INVALID_EVIDENCE);
         }
         List<Object> arguments = new ArrayList<Object>(eventIds);
         arguments.add(limit);

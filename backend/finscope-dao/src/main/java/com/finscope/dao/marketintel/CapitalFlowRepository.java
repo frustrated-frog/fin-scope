@@ -1,5 +1,7 @@
 package com.finscope.dao.marketintel;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -74,7 +76,7 @@ public class CapitalFlowRepository {
         if (instrumentIds == null || instrumentIds.isEmpty()) return Collections.emptyList();
         List<Long> ids = new ArrayList<Long>(new LinkedHashSet<Long>(instrumentIds));
         if (ids.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("instrumentIds must not contain null");
+            throw new BusinessException(BizErrorCode.CAPITAL_FLOW_INSTRUMENT_IDS_NULL);
         }
         List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>();
         for (int start = 0; start < ids.size(); start += 500) {
@@ -88,10 +90,10 @@ public class CapitalFlowRepository {
 
     private void validatePointInTimeRequest(LocalDate from, LocalDate to, LocalDateTime asOfTime) {
         if (from == null || to == null || asOfTime == null) {
-            throw new IllegalArgumentException("from, to and asOfTime are required");
+            throw new BusinessException(BizErrorCode.CAPITAL_FLOW_RANGE_REQUIRED);
         }
         if (from.isAfter(to)) {
-            throw new IllegalArgumentException("from must not be after to");
+            throw new BusinessException(BizErrorCode.CAPITAL_FLOW_RANGE_INVALID);
         }
     }
 

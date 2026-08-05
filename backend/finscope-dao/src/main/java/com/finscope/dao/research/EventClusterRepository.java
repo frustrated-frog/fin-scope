@@ -1,5 +1,7 @@
 package com.finscope.dao.research;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
@@ -109,7 +111,7 @@ public class EventClusterRepository {
             return Collections.emptyList();
         }
         if (limit < 1 || limit > 100) {
-            throw new IllegalArgumentException("Invalid event context limit");
+            throw new BusinessException(BizErrorCode.CONTEXT_LIMIT_INVALID_EVENT);
         }
         List<Object> arguments = new ArrayList<Object>(ids);
         arguments.add(limit);

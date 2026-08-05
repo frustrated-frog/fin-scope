@@ -2,6 +2,8 @@ package com.finscope.dao.marketintel;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -70,7 +72,7 @@ public class CapitalBehaviorEvaluationRepository {
             value.setId(id);
             return value;
         } catch (Exception error) {
-            throw new IllegalStateException("cannot persist capital behavior evaluation", error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist capital behavior evaluation", error);
         }
     }
 
@@ -105,7 +107,7 @@ public class CapitalBehaviorEvaluationRepository {
                         value.setCreatedAt(LocalDateTime.parse(rs.getString("created_at")));
                         return value;
                     } catch (Exception error) {
-                        throw new IllegalStateException("cannot read capital behavior evaluation for snapshot="
+                        throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read capital behavior evaluation for snapshot="
                                 + snapshotId, error);
                     }
                 }, snapshotId);

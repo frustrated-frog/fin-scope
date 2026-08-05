@@ -87,17 +87,17 @@ public class RadarEventWorkspaceRepository {
     }
 
     public RadarEventWorkspace.Observation setObservationStatus(Long eventId, Long observationId, String status) {
-        if (!OBSERVATION_STATUSES.contains(status)) throw new IllegalArgumentException("观察项状态不合法");
+        if (!OBSERVATION_STATUSES.contains(status)) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_STATE_INVALID);
         LocalDateTime now = LocalDateTime.now();
         int updated = jdbc.update("UPDATE radar_event_observation SET status=?,completed_at=?,updated_at=? WHERE id=? AND event_id=?",
                 status, "DONE".equals(status) ? TimeUtil.text(now) : null, TimeUtil.text(now), observationId, eventId);
-        if (updated == 0) throw new IllegalArgumentException("观察项不存在");
+        if (updated == 0) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND);
         return findObservation(eventId, observationId);
     }
 
     public void deleteObservation(Long eventId, Long observationId) {
         RadarEventWorkspace.Observation value = findObservation(eventId, observationId);
-        if (!"USER".equals(value.getSource())) throw new IllegalArgumentException("系统观察项不能删除");
+        if (!"USER".equals(value.getSource())) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_SYSTEM_UNDELETABLE);
         jdbc.update("DELETE FROM radar_event_observation WHERE id=? AND event_id=?", observationId, eventId);
     }
 
@@ -195,7 +195,7 @@ public class RadarEventWorkspaceRepository {
     private RadarEventWorkspace.Observation findObservation(Long eventId, Long observationId) {
         List<RadarEventWorkspace.Observation> rows = jdbc.query(
                 "SELECT * FROM radar_event_observation WHERE event_id=? AND id=?", this::mapObservation, eventId, observationId);
-        if (rows.isEmpty()) throw new IllegalArgumentException("观察项不存在"); return rows.get(0);
+        if (rows.isEmpty()) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND); return rows.get(0);
     }
 
     private RadarEventWorkspace.State mapState(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
@@ -249,8 +249,8 @@ public class RadarEventWorkspaceRepository {
 
     private String validateObservation(String value) {
         String result = value == null ? "" : value.trim();
-        if (result.isEmpty()) throw new IllegalArgumentException("观察项不能为空");
-        if (result.length() > 300) throw new IllegalArgumentException("观察项不能超过300字"); return result;
+        if (result.isEmpty()) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_REQUIRED);
+        if (result.length() > 300) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_TOO_LONG); return result;
     }
 
     private String normalizeObservation(String value) {
@@ -258,6 +258,6 @@ public class RadarEventWorkspaceRepository {
     }
 
     private void requireEventId(Long eventId) {
-        if (eventId == null || eventId <= 0) throw new IllegalArgumentException("雷达事件不能为空");
+        if (eventId == null || eventId <= 0) throw new BusinessException(BizErrorCode.RADAR_EVENT_ID_REQUIRED);
     }
 }

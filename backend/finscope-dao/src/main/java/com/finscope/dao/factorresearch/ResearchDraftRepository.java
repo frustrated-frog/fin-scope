@@ -3,6 +3,8 @@ package com.finscope.dao.factorresearch;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.FactorIdentity;
 import com.finscope.domain.factorresearch.ResearchDraft;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -91,7 +93,7 @@ public class ResearchDraftRepository {
         try {
             return json.writeValueAsString(values);
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("research draft evidence is not serializable", ex);
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "research draft evidence is not serializable", ex);
         }
     }
 
@@ -99,7 +101,7 @@ public class ResearchDraftRepository {
         try {
             return value == null ? Collections.emptyList() : json.readValue(value, STRING_LIST);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("stored research draft evidence is invalid", ex);
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "stored research draft evidence is invalid", ex);
         }
     }
 }

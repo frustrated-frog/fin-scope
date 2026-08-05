@@ -1,5 +1,7 @@
 package com.finscope.dao.knowledge;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.knowledge.KnowledgeEntry;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -108,7 +110,7 @@ public class KnowledgeEntryRepository {
 
     public List<KnowledgeEntry> findFinalByTopicId(Long topicId, int limit, int offset) {
         if (limit < 1 || limit > 200 || offset < 0) {
-            throw new IllegalArgumentException("Invalid knowledge entry page request");
+            throw new BusinessException(BizErrorCode.PAGE_REQUEST_INVALID_KNOWLEDGE_ENTRY);
         }
         return jdbcTemplate.query(
                 "SELECT * FROM knowledge_entry WHERE topic_id=? AND entry_status='FINAL' " +

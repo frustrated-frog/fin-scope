@@ -2,6 +2,8 @@ package com.finscope.dao.financials;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.financials.FinancialInterpretation;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -53,7 +55,7 @@ public class FinancialInterpretationRepository {
             value.setId(keys.getKey().longValue());
             return value;
         } catch (Exception error) {
-            throw new IllegalStateException("cannot persist financial interpretation", error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist financial interpretation", error);
         }
     }
 
@@ -68,7 +70,7 @@ public class FinancialInterpretationRepository {
                     value.getFailureMessage(), value.getDurationMs(), text(value.getStartedAt()),
                     text(value.getCompletedAt()), value.getModelName(), value.getId());
         } catch (Exception error) {
-            throw new IllegalStateException("cannot update financial interpretation id=" + value.getId(), error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update financial interpretation id=" + value.getId(), error);
         }
     }
 
@@ -138,7 +140,7 @@ public class FinancialInterpretationRepository {
             value.setCompletedAt(time(rs.getString("completed_at")));
             return value;
         } catch (Exception error) {
-            throw new IllegalStateException("cannot read financial interpretation", error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read financial interpretation", error);
         }
     }
 

@@ -2,6 +2,8 @@ package com.finscope.dao.marketintel;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.marketintel.CapitalHypothesis;
 import com.finscope.domain.marketintel.CapitalInterpretation;
 import com.finscope.domain.marketintel.CapitalInterpretationObservation;
@@ -56,7 +58,7 @@ public class CapitalInterpretationRepository {
                 for (int i=0;i<args.length;i++) ps.setObject(i+1,args[i]); return ps;
             }, keys);
             value.setId(keys.getKey().longValue()); return value;
-        } catch (Exception e) { throw new IllegalStateException("cannot persist capital interpretation", e); }
+        } catch (Exception e) { throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist capital interpretation", e); }
     }
     public void update(CapitalInterpretation value) {
         try {
@@ -76,7 +78,7 @@ public class CapitalInterpretationRepository {
                     value.getConfidence(), value.getFactorVersion(), value.getSignalVersion(),
                     json.writeValueAsString(value.getEvidenceRefs()), value.getRejectedOutputCount(),
                     json.writeValueAsString(value.getRejectionReasons()), value.getId());
-        } catch (Exception e) { throw new IllegalStateException("cannot update capital interpretation id=" + value.getId(), e); }
+        } catch (Exception e) { throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update capital interpretation id=" + value.getId(), e); }
     }
     public Optional<CapitalInterpretation> findById(Long id) {
         List<CapitalInterpretation> rows = jdbc.query("SELECT * FROM market_capital_interpretation WHERE id=?", (rs,n)-> {
@@ -103,7 +105,7 @@ public class CapitalInterpretationRepository {
                 v.setRejectedOutputCount(rs.getInt("rejected_output_count"));
                 v.setRejectionReasons(json.readValue(rs.getString("rejection_reasons_json"), new TypeReference<List<String>>(){}));
                 v.setUpdatedAt(LocalDateTime.parse(rs.getString("updated_at"))); return v;
-            } catch(Exception e){ throw new IllegalStateException("cannot read capital interpretation id="+id,e); }
+            } catch(Exception e){ throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read capital interpretation id="+id,e); }
         },id); return rows.isEmpty()?Optional.empty():Optional.of(rows.get(0));
     }
     public Optional<CapitalInterpretation> findByAction(Long snapshotId,String type,String hash){

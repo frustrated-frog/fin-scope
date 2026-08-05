@@ -1,5 +1,8 @@
 package com.finscope.dao.quant;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.quant.data.QuantDataSyncRun;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -56,7 +59,7 @@ public class QuantDataSyncRunRepository {
             }
             throw error;
         }
-        if (keys.getKey() == null) throw new IllegalStateException("quant data sync run id was not generated");
+        if (keys.getKey() == null) throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "quant data sync run id was not generated");
         return find(keys.getKey().longValue()).orElseThrow(() ->
                 new IllegalStateException("created quant data sync run cannot be loaded"));
     }
@@ -69,7 +72,8 @@ public class QuantDataSyncRunRepository {
                         + "warning_summary=?,finished_at=? WHERE id=? AND status='RUNNING'",
                 status, succeeded, failed, insertedRows, degraded, sourceSummary,
                 warningSummary, finishedAt.toString(), id);
-        if (updated != 1) throw new IllegalArgumentException("active quant data sync run does not exist: " + id);
+        if (updated != 1) throw new BusinessException(BizErrorCode.QUANT_DATA_SYNC_RUN_NOT_FOUND,
+                BizErrorCode.QUANT_DATA_SYNC_RUN_NOT_FOUND.format(id), null);
         return find(id).orElseThrow(() -> new IllegalStateException("finished quant data sync run cannot be loaded"));
     }
 

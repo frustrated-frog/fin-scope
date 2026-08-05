@@ -69,7 +69,7 @@ public class ResearchMissionService {
 
     public ResearchPlanningResult plan(ResearchRun run, ResearchThesis thesis) {
         if (run == null || run.getId() == null || thesis == null) {
-            throw new IllegalArgumentException("研究运行和命题不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_RUN_AND_THESIS_REQUIRED);
         }
         int maxActions = repository.findMission(run.getId())
                 .map(ResearchMission::getMaxActions).orElse(12);

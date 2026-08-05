@@ -1,5 +1,7 @@
 package com.finscope.dao.quant;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
 import com.finscope.domain.quant.backtest.BacktestResult;
@@ -71,7 +73,8 @@ public class QuantExperimentRepository {
     public void complete(Long id, BacktestResult result) {
         if (jdbcTemplate.update("UPDATE quant_experiment SET status='SUCCEEDED',completed_at=? WHERE id=? AND status='RUNNING'",
                 TimeUtil.text(LocalDateTime.now()), id) != 1) {
-            throw new IllegalStateException("实验状态已变化，拒绝写入不一致结果：" + id);
+            throw new BusinessException(BizErrorCode.QUANT_EXPERIMENT_STATE_CHANGED,
+                    BizErrorCode.QUANT_EXPERIMENT_STATE_CHANGED.format(id), null);
         }
         BacktestMetrics m = result.getMetrics(); metric(id, "TOTAL_RETURN", m.getTotalReturn()); metric(id, "ANNUAL_RETURN", m.getAnnualizedReturn());
         metric(id, "VOLATILITY", m.getAnnualizedVolatility()); metric(id, "MAX_DRAWDOWN", m.getMaxDrawdown());

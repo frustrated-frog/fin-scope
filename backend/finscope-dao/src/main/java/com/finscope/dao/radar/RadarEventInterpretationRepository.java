@@ -1,6 +1,8 @@
 package com.finscope.dao.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,7 +42,7 @@ public class RadarEventInterpretationRepository {
                     value.getFailureCode(), value.getFailureMessage(), value.getDurationMs(),
                     TimeUtil.text(value.getStartedAt()), TimeUtil.text(value.getCompletedAt()), value.getId());
         } catch (Exception error) {
-            throw new IllegalStateException("cannot update radar event interpretation id=" + value.getId(), error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update radar event interpretation id=" + value.getId(), error);
         }
     }
 
@@ -93,7 +95,7 @@ public class RadarEventInterpretationRepository {
             value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
             return value;
         } catch (Exception error) {
-            throw new IllegalStateException("cannot read radar event interpretation", error);
+            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read radar event interpretation", error);
         }
     }
 }

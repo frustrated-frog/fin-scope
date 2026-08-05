@@ -1,5 +1,7 @@
 package com.finscope.dao.research.mission;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
@@ -151,7 +153,8 @@ public class ResearchMissionRepository {
                 planningMode, fallbackReason, fallbackDetail,
                 TimeUtil.text(now), runId);
         if (updated != 1) {
-            throw new IllegalStateException("Research mission not found: " + runId);
+            throw new BusinessException(BizErrorCode.RESEARCH_MISSION_NOT_FOUND,
+                    BizErrorCode.RESEARCH_MISSION_NOT_FOUND.format(runId), null);
         }
         return findMission(runId).get();
     }
