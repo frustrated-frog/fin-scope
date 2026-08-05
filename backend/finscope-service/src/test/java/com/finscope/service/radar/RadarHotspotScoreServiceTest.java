@@ -40,18 +40,36 @@ class RadarHotspotScoreServiceTest {
     void scoresPrdHotnessWithVelocityAndKeepsLifecycleVisible() {
         RadarSignal first = signal("CLS", 1, 0.95D, now.minusMinutes(5));
         RadarSignal second = signal("THS", 1, 0.80D, now.minusMinutes(8));
+        RadarSignal third = signal("SSE", 1, 0.90D, now.minusMinutes(3));
         RadarEventSnapshot previous = new RadarEventSnapshot();
         previous.setSnapshotAt(now.minusMinutes(15));
         previous.setSignalCount(1);
         previous.setHotnessScore(42);
 
-        RadarHotspotScoreService.Score score = service.score(Arrays.asList(first, second), now, previous);
+        RadarHotspotScoreService.Score score = service.score(Arrays.asList(first, second, third), now, previous);
 
         assertTrue(score.getTotalScore() >= 70);
         assertTrue(score.getVelocityScore() > 0.5D);
         assertEquals("RISING", score.getLifecycleState());
         assertTrue(score.getExplanation().contains("传播速度"));
         assertTrue(score.getExplanation().contains("市场反应/用户互动未接入"));
+    }
+
+    @Test
+    void velocityDoesNotOverreactToShortProductionIntervals() {
+        RadarSignal first = signal("CLS", 1, 0.95D, now.minusMinutes(5));
+        RadarSignal second = signal("THS", 1, 0.80D, now.minusMinutes(8));
+        RadarEventSnapshot previous = new RadarEventSnapshot();
+        previous.setSnapshotAt(now.minusMinutes(5));
+        previous.setSignalCount(1);
+        previous.setHotnessScore(42);
+
+        // 5 分钟间隔内仅新增 1 条信号：不应被放大成满分“爆发”，也不应进入 RISING。
+        RadarHotspotScoreService.Score score = service.score(Arrays.asList(first, second), now, previous);
+
+        assertTrue(score.getVelocityScore() <= 0.5D);
+        assertTrue(score.getVelocityScore() > 0D);
+        assertTrue(!"RISING".equals(score.getLifecycleState()));
     }
 
     private RadarSignal signal(String provider, int rank, double weight, LocalDateTime publishedAt) {

@@ -27,11 +27,13 @@ public class RadarHotspotScoreService {
 
         // PRD 的市场反应、用户互动在当前个人雷达中没有可靠数据源，暂不虚构，
         // 只对本地可观测的六个维度归一化后评分。
+        // 来源广度按信息通道（providerCode）计，跨源扩散按独立品牌（sourceName）计，
+        // 两者在本地数据上部分相关，跨源扩散要求更多独立品牌才算传播广，避免双重计分。
         double sourceBreadth = clamp(uniqueProviders(values) / 3.0D);
         double velocity = publishVelocity(values, previous, now);
         double authority = max(values, this::quality);
         double novelty = average(values, signal -> recency(signal, now));
-        double spread = clamp(uniqueSourceNames(values) / 3.0D);
+        double spread = clamp(uniqueSourceNames(values) / 4.0D);
         double persistence = persistence(values, previous);
         double weighted = sourceBreadth * 0.22D + velocity * 0.20D + authority * 0.15D
                 + novelty * 0.12D + spread * 0.10D + persistence * 0.08D;
@@ -99,7 +101,9 @@ public class RadarHotspotScoreService {
         }
         long minutes = Math.max(1, Duration.between(previous.getSnapshotAt(), now).toMinutes());
         int newSignals = Math.max(0, signals.size() - previous.getSignalCount());
-        return clamp(newSignals / Math.max(0.25D, minutes / 30.0D) / 2.0D);
+        // 以 30 分钟为归一化基准：短于 30 分钟的批次间隔不会把少量增量放大成“爆发”，
+        // 生产周期从 5 分钟调到 10 分钟时 velocity 也不应突变。
+        return clamp(newSignals / Math.max(1.0D, minutes / 30.0D) / 2.0D);
     }
 
     private double persistence(List<RadarSignal> signals, RadarEventSnapshot previous) {

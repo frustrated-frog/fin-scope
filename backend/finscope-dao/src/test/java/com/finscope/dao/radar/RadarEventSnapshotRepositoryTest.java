@@ -16,14 +16,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RadarEventSnapshotRepositoryTest {
     @TempDir Path tempDir;
     private RadarEventSnapshotRepository repository;
+    private JdbcTemplate jdbc;
     private final LocalDateTime now = LocalDateTime.of(2026, 8, 5, 10, 0);
 
     @BeforeEach
     void setUp() {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("radar.db") + "?foreign_keys=on");
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE)");
+        jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,status TEXT)");
         jdbc.execute("INSERT INTO radar_event(id,event_key) VALUES(7,'event:test')");
         jdbc.execute("CREATE TABLE radar_event_snapshot(id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,"
                 + "snapshot_at TEXT NOT NULL,signal_count INTEGER NOT NULL,independent_source_count INTEGER NOT NULL,"
@@ -48,7 +49,27 @@ class RadarEventSnapshotRepositoryTest {
     void doesNotReturnAnObservationAtOrAfterTheScoringMoment() {
         repository.save(snapshot(now, 5, 80));
 
-        assertTrue(repository.findLatestBefore(7L, now).isEmpty());
+        assertTrue(!repository.findLatestBefore(7L, now).isPresent());
+    }
+
+    @Test
+    void keepsRecentSnapshotsForActiveEvents() {
+        repository.save(snapshot(now.minusMinutes(30), 2, 44));
+
+        repository.deleteExpired(now.minusDays(7));
+
+        assertTrue(repository.findLatestBefore(7L, now.plusMinutes(1)).isPresent());
+    }
+
+    @Test
+    void deletesSnapshotsBeforeTheKeepWindowAndForExpiredEvents() {
+        repository.save(snapshot(now.minusDays(10), 2, 44));
+        repository.save(snapshot(now.minusMinutes(30), 2, 44));
+        jdbc.execute("UPDATE radar_event SET status='EXPIRED' WHERE id=7");
+
+        repository.deleteExpired(now.minusDays(7));
+
+        assertTrue(!repository.findLatestBefore(7L, now.plusMinutes(1)).isPresent());
     }
 
     private RadarEventSnapshot snapshot(LocalDateTime at, int signals, int score) {

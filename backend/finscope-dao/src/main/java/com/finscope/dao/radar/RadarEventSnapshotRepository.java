@@ -34,6 +34,17 @@ public class RadarEventSnapshotRepository {
         return values.isEmpty() ? Optional.<RadarEventSnapshot>empty() : Optional.of(values.get(0));
     }
 
+    /**
+     * 清理历史快照：事件已离开雷达（EXPIRED）的快照立即删除（其趋势历史不再有展示价值），
+     * 其余事件只保留 keepAfter 之后（默认最近 7 天）的快照，避免快照表随生产批次无限膨胀。
+     * 每次生产批次结束时调用一次即可。
+     */
+    public void deleteExpired(LocalDateTime keepAfter) {
+        jdbc.update("DELETE FROM radar_event_snapshot WHERE snapshot_at<? OR event_id IN ("
+                        + "SELECT id FROM radar_event WHERE status='EXPIRED')",
+                TimeUtil.text(keepAfter));
+    }
+
     private org.springframework.jdbc.core.RowMapper<RadarEventSnapshot> mapper() {
         return (rs, rowNum) -> {
             RadarEventSnapshot value = new RadarEventSnapshot();

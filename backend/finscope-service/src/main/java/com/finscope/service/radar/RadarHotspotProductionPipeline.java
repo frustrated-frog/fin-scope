@@ -39,6 +39,7 @@ public class RadarHotspotProductionPipeline {
     private final RadarPriorityService priority;
     private final WatchlistRepository watchlist;
     private static final int SIGNAL_WINDOW_HOURS = 48;
+    private static final int SNAPSHOT_KEEP_DAYS = 7;
     private final RadarRefreshRunRepository runs;
     private final RadarEventEnhancementScheduler enhancement;
     private final RadarHotspotScoreService hotspotScores;
@@ -93,6 +94,7 @@ public class RadarHotspotProductionPipeline {
             Set<String> activeEventKeys = new HashSet<String>();
             for (RadarEvent event : savedEvents) activeEventKeys.add(event.getEventKey());
             repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
+            if (snapshots != null) snapshots.deleteExpired(now.minusDays(SNAPSHOT_KEEP_DAYS));
             runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(),
                     "snapshot=latest-completed", now);
             String warning = joinWarnings(snapshot.getWarnings());
