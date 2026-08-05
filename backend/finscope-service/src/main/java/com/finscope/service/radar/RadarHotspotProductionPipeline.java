@@ -42,6 +42,7 @@ public class RadarHotspotProductionPipeline {
     private final RadarRefreshRunRepository runs;
     private final RadarEventEnhancementScheduler enhancement;
     private final RadarHotspotScoreService hotspotScores;
+    private final RadarDashboardCategoryService dashboardCategories;
     private final RadarHotspotPersistenceService persistence;
     private final RadarEventSnapshotRepository snapshots;
 
@@ -50,11 +51,13 @@ public class RadarHotspotProductionPipeline {
                                           WatchlistRepository watchlist, RadarRefreshRunRepository runs,
                                           RadarEventEnhancementScheduler enhancement,
                                           RadarHotspotScoreService hotspotScores,
+                                          RadarDashboardCategoryService dashboardCategories,
                                           RadarHotspotPersistenceService persistence,
                                           RadarEventSnapshotRepository snapshots) {
         this.news = news; this.repository = repository; this.clustering = clustering;
         this.priority = priority; this.watchlist = watchlist; this.runs = runs;
         this.enhancement = enhancement; this.hotspotScores = hotspotScores;
+        this.dashboardCategories = dashboardCategories;
         this.persistence = persistence; this.snapshots = snapshots;
     }
 
@@ -126,6 +129,7 @@ public class RadarHotspotProductionPipeline {
         List<RankedCluster> values = new ArrayList<RankedCluster>();
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
+            event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
                     previousSnapshot(event, now));
             event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());

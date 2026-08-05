@@ -7,21 +7,29 @@ import com.finscope.domain.fetch.FetchRun;
 import com.finscope.service.article.ArticleQueryService;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class DashboardService {
-    @Resource
-    private SourceRepository sourceRepository;
-    @Resource
-    private ArticleQueryService articleQueryService;
-    @Resource
-    private BriefRepository briefRepository;
-    @Resource
-    private FetchRunRepository fetchRunRepository;
+    private final SourceRepository sourceRepository;
+    private final ArticleQueryService articleQueryService;
+    private final BriefRepository briefRepository;
+    private final FetchRunRepository fetchRunRepository;
+    private final DashboardHotspotRankingService hotspotRankings;
+
+    public DashboardService(SourceRepository sourceRepository,
+                            ArticleQueryService articleQueryService,
+                            BriefRepository briefRepository,
+                            FetchRunRepository fetchRunRepository,
+                            DashboardHotspotRankingService hotspotRankings) {
+        this.sourceRepository = sourceRepository;
+        this.articleQueryService = articleQueryService;
+        this.briefRepository = briefRepository;
+        this.fetchRunRepository = fetchRunRepository;
+        this.hotspotRankings = hotspotRankings;
+    }
 
     public Map<String, Object> summary() {
         Map<String, Object> result = new HashMap<String, Object>();
@@ -30,6 +38,7 @@ public class DashboardService {
         result.put("briefCount", briefRepository.findAll().size());
         List<FetchRun> runs = fetchRunRepository.latest(5);
         result.put("latestFetchRuns", runs);
+        result.put("hotspotRankings", hotspotRankings.rankings());
         return result;
     }
 }

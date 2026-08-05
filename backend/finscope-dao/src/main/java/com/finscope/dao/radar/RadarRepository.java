@@ -51,13 +51,13 @@ public class RadarRepository {
     }
 
     public RadarEvent saveEvent(RadarEvent event) {
-        jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,status,first_seen_at,last_seen_at,"
+        jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,dashboard_category,status,first_seen_at,last_seen_at,"
                         + "source_count,signal_count,hotspot_score,hotspot_explanation,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
                         + "uncertainty,next_observation,hotspot_lifecycle_state,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
                         + "evidence_count,evidence_source_count,evidence_updated_at,updated_at) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_key) DO UPDATE SET canonical_title=excluded.canonical_title,summary=excluded.summary,"
-                        + "category_code=excluded.category_code,status=excluded.status,last_seen_at=excluded.last_seen_at,"
+                        + "category_code=excluded.category_code,dashboard_category=excluded.dashboard_category,status=excluded.status,last_seen_at=excluded.last_seen_at,"
                         + "source_count=excluded.source_count,signal_count=excluded.signal_count,hotspot_score=excluded.hotspot_score,"
                         + "hotspot_explanation=excluded.hotspot_explanation,priority_score=excluded.priority_score,"
                         + "hotspot_lifecycle_state=excluded.hotspot_lifecycle_state,"
@@ -72,7 +72,7 @@ public class RadarRepository {
                         + "evidence_source_count=CASE WHEN excluded.evidence_status IS NULL THEN evidence_source_count ELSE excluded.evidence_source_count END,"
                         + "evidence_updated_at=CASE WHEN excluded.evidence_status IS NULL THEN evidence_updated_at ELSE excluded.evidence_updated_at END,"
                         + "updated_at=excluded.updated_at",
-                event.getEventKey(), event.getCanonicalTitle(), event.getSummary(), event.getCategoryCode(), event.getStatus(),
+                event.getEventKey(), event.getCanonicalTitle(), event.getSummary(), event.getCategoryCode(), event.getDashboardCategory(), event.getStatus(),
                 TimeUtil.text(event.getFirstSeenAt()), TimeUtil.text(event.getLastSeenAt()), event.getSourceCount(),
                 event.getSignalCount(), event.getHotspotScore(), event.getHotspotExplanation(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
                 event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getHotspotLifecycleState(), event.getEvidenceStatus(),
@@ -163,6 +163,12 @@ public class RadarRepository {
         return jdbc.query(sql.toString(), eventMapper(), args.toArray());
     }
 
+    public List<RadarEvent> findTopByDashboardCategory(String dashboardCategory, int limit) {
+        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') AND dashboard_category=? "
+                        + "ORDER BY hotspot_score DESC,last_seen_at DESC,id DESC LIMIT ?",
+                eventMapper(), dashboardCategory, Math.max(1, Math.min(limit, 20)));
+    }
+
     public void expireSignals(LocalDateTime before, LocalDateTime now) {
         jdbc.update("UPDATE radar_signal SET status='EXPIRED',last_seen_at=last_seen_at WHERE last_seen_at<? AND status='ACTIVE'",
                 TimeUtil.text(before));
@@ -185,6 +191,7 @@ public class RadarRepository {
         return (rs, rowNum) -> { RadarEvent value = new RadarEvent(); value.setId(rs.getLong("id"));
             value.setEventKey(rs.getString("event_key")); value.setCanonicalTitle(rs.getString("canonical_title"));
             value.setSummary(rs.getString("summary")); value.setCategoryCode(rs.getString("category_code"));
+            value.setDashboardCategory(rs.getString("dashboard_category"));
             value.setStatus(rs.getString("status")); value.setFirstSeenAt(TimeUtil.localDateTime(rs,"first_seen_at"));
             value.setLastSeenAt(TimeUtil.localDateTime(rs,"last_seen_at")); value.setSourceCount(rs.getInt("source_count"));
             value.setSignalCount(rs.getInt("signal_count")); value.setHotspotScore(rs.getInt("hotspot_score"));

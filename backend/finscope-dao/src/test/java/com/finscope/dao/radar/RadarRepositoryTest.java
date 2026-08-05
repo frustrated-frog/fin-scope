@@ -85,6 +85,39 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void dashboardRankingReturnsOnlyTheFiveHottestEventsInItsCategory() {
+        for (int index = 1; index <= 6; index++) {
+            RadarEvent event = event("event:finance:" + index);
+            event.setDashboardCategory("FINANCE");
+            event.setHotspotScore(index * 10);
+            event.setHotspotLifecycleState(index == 6 ? "RISING" : "STABLE");
+            repository.saveEvent(event);
+        }
+        RadarEvent technology = event("event:technology");
+        technology.setDashboardCategory("TECHNOLOGY");
+        technology.setHotspotScore(100);
+        repository.saveEvent(technology);
+        RadarEvent quiet = event("event:finance:quiet");
+        quiet.setDashboardCategory("FINANCE");
+        quiet.setStatus("QUIET");
+        quiet.setHotspotScore(65);
+        repository.saveEvent(quiet);
+        RadarEvent expired = event("event:finance:expired");
+        expired.setDashboardCategory("FINANCE");
+        expired.setStatus("EXPIRED");
+        expired.setHotspotScore(100);
+        repository.saveEvent(expired);
+
+        List<RadarEvent> ranked = repository.findTopByDashboardCategory("FINANCE", 5);
+
+        assertEquals(5, ranked.size());
+        assertEquals("event:finance:quiet", ranked.get(0).getEventKey());
+        assertEquals("QUIET", ranked.get(0).getStatus());
+        assertEquals("FINANCE", ranked.get(0).getDashboardCategory());
+        assertEquals("event:finance:3", ranked.get(4).getEventKey());
+    }
+
+    @Test
     void oldSignalsAreExpiredAndExcludedFromActiveWindow() {
         repository.capture(signal("OLD:1", "GLOBAL"), now.minusDays(15));
         repository.expireSignals(now.minusDays(14), now);
@@ -180,7 +213,7 @@ class RadarRepositoryTest {
                 + "content_hash TEXT NOT NULL,status TEXT NOT NULL,source_rank INTEGER,previous_source_rank INTEGER,"
                 + "source_weight REAL NOT NULL DEFAULT 0)");
         jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,"
-                + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,status TEXT NOT NULL,"
+                + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'FINANCE',status TEXT NOT NULL,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"
                 + "signal_count INTEGER NOT NULL DEFAULT 0,hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,"

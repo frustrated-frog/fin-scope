@@ -198,7 +198,7 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_refresh_step_run ON radar_refresh_step(run_id,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,canonical_title TEXT NOT NULL,summary TEXT,"
-                + "category_code TEXT,status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
+                + "category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'FINANCE',status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
                 + "source_count INTEGER NOT NULL DEFAULT 0,signal_count INTEGER NOT NULL DEFAULT 0,"
                 + "hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,"
@@ -206,6 +206,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("radar_event", "hotspot_score", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "hotspot_explanation", "TEXT");
         ensureColumn("radar_event", "hotspot_lifecycle_state", "TEXT");
+        ensureColumn("radar_event", "dashboard_category", "TEXT NOT NULL DEFAULT 'FINANCE'");
         ensureColumn("radar_event", "evidence_status", "TEXT");
         ensureColumn("radar_event", "evidence_summary", "TEXT");
         ensureColumn("radar_event", "evidence_warning", "TEXT");
@@ -214,6 +215,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("radar_event", "evidence_source_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "evidence_updated_at", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_rank ON radar_event(status,category_code,hotspot_score DESC,priority_score DESC,last_seen_at DESC)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_dashboard_rank ON radar_event(status,dashboard_category,hotspot_score DESC,last_seen_at DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_snapshot ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,snapshot_at TEXT NOT NULL,"
                 + "signal_count INTEGER NOT NULL DEFAULT 0,independent_source_count INTEGER NOT NULL DEFAULT 0,"

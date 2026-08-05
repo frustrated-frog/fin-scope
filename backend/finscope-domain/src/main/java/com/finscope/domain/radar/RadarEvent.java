@@ -8,6 +8,7 @@ public class RadarEvent {
     private String canonicalTitle;
     private String summary;
     private String categoryCode;
+    private String dashboardCategory = "FINANCE";
     private String status;
     private LocalDateTime firstSeenAt;
     private LocalDateTime lastSeenAt;
@@ -41,6 +42,8 @@ public class RadarEvent {
     public void setSummary(String summary) { this.summary = summary; }
     public String getCategoryCode() { return categoryCode; }
     public void setCategoryCode(String categoryCode) { this.categoryCode = categoryCode; }
+    public String getDashboardCategory() { return dashboardCategory; }
+    public void setDashboardCategory(String dashboardCategory) { this.dashboardCategory = dashboardCategory; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public LocalDateTime getFirstSeenAt() { return firstSeenAt; }
