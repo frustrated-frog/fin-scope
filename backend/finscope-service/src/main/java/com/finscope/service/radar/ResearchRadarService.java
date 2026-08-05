@@ -50,6 +50,7 @@ public class ResearchRadarService {
     private final RadarEventWorkspaceService workspace;
     private final RadarEventTimelineService timeline;
     private final RadarEvidenceTrustService trust;
+    private final RadarHotspotRefreshService backgroundRefresh;
     private final ReentrantLock refreshLock = new ReentrantLock();
     private volatile NewsFeedSnapshot lastNewsSnapshot;
 
@@ -60,9 +61,9 @@ public class ResearchRadarService {
                                 RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                                 RadarEventInterpretationService interpretations,
                                 RadarEventWorkspaceService workspace, RadarEventTimelineService timeline,
-                                RadarEvidenceTrustService trust) {
+                                RadarEvidenceTrustService trust, RadarHotspotRefreshService backgroundRefresh) {
         this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository,
-                agentRuns, interpretations, workspace, timeline, trust, Clock.systemDefaultZone());
+                agentRuns, interpretations, workspace, timeline, trust, backgroundRefresh, Clock.systemDefaultZone());
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
@@ -100,12 +101,30 @@ public class ResearchRadarService {
                          RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                          RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
                          RadarEventTimelineService timeline, RadarEvidenceTrustService trust, Clock clock) {
+        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository, agentRuns,
+                interpretations, workspace, timeline, trust, null, clock);
+    }
+
+    ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarHotspotRefreshService backgroundRefresh, Clock clock) {
+        this(news, repository, clustering, priority, watchlist, null, null, null,
+                null, null, null, null, backgroundRefresh, clock);
+    }
+
+    private ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
+                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
+                         RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
+                         RadarEventTimelineService timeline, RadarEvidenceTrustService trust,
+                         RadarHotspotRefreshService backgroundRefresh, Clock clock) {
         this.news=news; this.repository=repository; this.clustering=clustering;
         this.priority=priority; this.watchlist=watchlist; this.clock=clock;
         this.enhancementScheduler=enhancementScheduler; this.evidenceRepository=evidenceRepository; this.agentRuns=agentRuns;
         this.interpretations=interpretations;
         this.workspace=workspace;
-        this.timeline=timeline; this.trust=trust;
+        this.timeline=timeline; this.trust=trust; this.backgroundRefresh=backgroundRefresh;
     }
 
     public ResearchRadarView load(String requestedCategory, boolean watchlistOnly, int requestedLimit) {
@@ -117,6 +136,13 @@ public class ResearchRadarService {
         String state = normalizeState(requestedState);
         int limit = Math.max(1, Math.min(requestedLimit, 50));
         LocalDateTime now = LocalDateTime.now(clock);
+        if (backgroundRefresh != null) {
+            boolean accepted = backgroundRefresh.requestRefresh();
+            ResearchRadarView stored = loadStored(category, watchlistOnly, limit, state);
+            if (accepted) return stored.withWarnings(Collections.singletonList("已请求后台生产，当前展示最近一次热点快照"));
+            if (backgroundRefresh.isRunning()) return stored.withWarnings(Collections.singletonList("雷达正在后台生产，当前展示最近一次热点快照"));
+            return stored;
+        }
         if (!refreshLock.tryLock()) return fallback(category, watchlistOnly, limit, state, now, "雷达正在刷新，已展示最近一次结果");
         try {
             NewsFeedSnapshot snapshot = news.load(category, 100);
@@ -170,8 +196,13 @@ public class ResearchRadarService {
         List<RadarEvent> latest=new ArrayList<RadarEvent>(ranked);latest.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));if(latest.size()>5)latest=new ArrayList<RadarEvent>(latest.subList(0,5));
         Map<Long,ResearchRadarView.EventCard> index=cardIndex(ranked,latest);NewsFeedSnapshot cached=lastNewsSnapshot;
+        LocalDateTime refreshedAt=cached==null?LocalDateTime.now(clock):cached.getRefreshedAt();
+        if (backgroundRefresh != null && backgroundRefresh.latestCompletedRun().isPresent()
+                && backgroundRefresh.latestCompletedRun().get().getCompletedAt() != null) {
+            refreshedAt=backgroundRefresh.latestCompletedRun().get().getCompletedAt();
+        }
         return new ResearchRadarView(filteredCards(ranked,index,state,limit),filteredCards(latest,index,state,5),Collections.<NewsFeedItem>emptyList(),
-                Collections.<String>emptyList(),cached==null?LocalDateTime.now(clock):cached.getRefreshedAt());
+                Collections.<String>emptyList(), refreshedAt);
     }
 
     public ResearchRadarView.EventDetail detail(Long id) {

@@ -237,6 +237,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "radarRefreshExecutor")
+    public Executor radarRefreshExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("radar-refresh-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "radarInterpretationExecutor")
     public Executor radarInterpretationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

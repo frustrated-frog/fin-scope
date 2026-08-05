@@ -50,6 +50,9 @@ public final class ResearchRadarView {
     public List<NewsFeedItem> getLiveItems() { return liveItems; }
     public List<String> getWarnings() { return warnings; }
     public LocalDateTime getRefreshedAt() { return refreshedAt; }
+    public ResearchRadarView withWarnings(List<String> values) {
+        return new ResearchRadarView(events, latestChanges, liveItems, values, refreshedAt);
+    }
 
     public static final class Overview {
         private final int eventCount;
