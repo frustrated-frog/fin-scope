@@ -156,7 +156,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
         </section>
         <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
           <div className="news-section-heading"><div><span>02 · RESEARCH FIRST</span><h2 id="radar-focus-heading">高优先级事件</h2></div><strong>{events.length} 件</strong></div>
-          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} onResearch={onResearch} onOpen={openEvent} onStateChange={(target,patch)=>void updateState(target,patch)} />)}</div> : <EmptyState label="当前筛选下没有事件" />}
+          {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} addToast={addToast} onResearch={onResearch} onOpen={openEvent} onStateChange={(target,patch)=>void updateState(target,patch)} />)}</div> : <EmptyState label="当前筛选下没有事件" />}
         </section>
       </div>
       {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)} onEventChange={replaceEvent} /> : null}

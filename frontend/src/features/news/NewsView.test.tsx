@@ -226,6 +226,22 @@ test('loads original signals only when the user opens the interpretation drawer'
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10');
 });
 
+test('records a radar event with an in-app toast instead of a native alert', async () => {
+  const addToast = vi.fn();
+  const nativeAlert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+  render(<NewsView setMessage={vi.fn()} addToast={addToast} onResearch={vi.fn()} />);
+  await openRadar();
+
+  await userEvent.click(screen.getByRole('button', { name: '记入大事记：宁德时代发布新一代电池' }));
+
+  try {
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('已记入大事记', 'success'));
+    expect(nativeAlert).not.toHaveBeenCalled();
+  } finally {
+    nativeAlert.mockRestore();
+  }
+});
+
 test('shows external evidence and a sanitized agent trace without prompts', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();

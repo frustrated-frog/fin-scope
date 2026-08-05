@@ -1,8 +1,9 @@
 import type { RadarEvent } from './researchRadarTypes';
 import { api } from '../../shared/api/client';
 
-export function RadarEventCard({ event, onResearch, onOpen, onStateChange }: {
+export function RadarEventCard({ event, addToast, onResearch, onOpen, onStateChange }: {
   event: RadarEvent;
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onResearch?: (eventId: number, question: string) => void;
   onOpen: (event: RadarEvent) => void;
   onStateChange?: (event: RadarEvent, patch: { followed?: boolean; disposition?: 'ACTIVE' | 'LATER' | 'IGNORED' }) => void;
@@ -34,7 +35,7 @@ export function RadarEventCard({ event, onResearch, onOpen, onStateChange }: {
           {reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
         </ul>
         <div className="radar-event-actions">
-          <button type="button" className="ghost-button" aria-label={`记入大事记：${event.title}`} onClick={() => void api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'RADAR_EVENT', originKey: String(event.id), occurredDate: event.lastSeenAt?.slice(0, 10) }) }).then(() => window.alert('已记入大事记')).catch((error) => window.alert(error instanceof Error ? error.message : '记入大事记失败'))}>记入大事记</button>
+          <button type="button" className="ghost-button" aria-label={`记入大事记：${event.title}`} onClick={() => void api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'RADAR_EVENT', originKey: String(event.id), occurredDate: event.lastSeenAt?.slice(0, 10) }) }).then(() => addToast('已记入大事记', 'success')).catch((error) => addToast(error instanceof Error ? error.message : '记入大事记失败', 'error'))}>记入大事记</button>
           <button type="button" className="ghost-button" onClick={() => onOpen(event)}>查看解读</button>
           <button type="button" className="secondary-button" onClick={() => onResearch?.(event.id, event.suggestedResearchQuestion)}>围绕此事研究</button>
         </div>
