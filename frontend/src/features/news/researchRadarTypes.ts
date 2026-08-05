@@ -16,6 +16,8 @@ export type RadarEvent = {
   title: string;
   summary: string;
   categoryCode?: string;
+  hotspotScore?: number;
+  hotspotExplanation?: string;
   priorityScore: number;
   recommendation: string;
   reasons: string[];
@@ -129,4 +131,13 @@ export type ResearchRadarSnapshot = {
   liveItems?: RadarNewsItem[];
   warnings: string[];
   refreshedAt: string;
+  productionStatus?: {
+    running: boolean;
+    status: string;
+    completedAt?: string;
+    sourceCount: number;
+    signalCount: number;
+    eventCount: number;
+    warning?: string;
+  };
 };

@@ -23,6 +23,7 @@ public final class ResearchRadarView {
     private final List<NewsFeedItem> liveItems;
     private final List<String> warnings;
     private final LocalDateTime refreshedAt;
+    private final ProductionStatus productionStatus;
 
     public ResearchRadarView(List<EventCard> events, List<NewsFeedItem> liveItems,
                              List<String> warnings, LocalDateTime refreshedAt) {
@@ -31,8 +32,14 @@ public final class ResearchRadarView {
 
     public ResearchRadarView(List<EventCard> events, List<EventCard> latestChanges, List<NewsFeedItem> liveItems,
                              List<String> warnings, LocalDateTime refreshedAt) {
+        this(events, latestChanges, liveItems, warnings, refreshedAt, ProductionStatus.idle(refreshedAt));
+    }
+
+    public ResearchRadarView(List<EventCard> events, List<EventCard> latestChanges, List<NewsFeedItem> liveItems,
+                             List<String> warnings, LocalDateTime refreshedAt, ProductionStatus productionStatus) {
         this.events = immutable(events); this.latestChanges = immutable(latestChanges); this.liveItems = immutable(liveItems);
         this.warnings = immutable(warnings); this.refreshedAt = refreshedAt;
+        this.productionStatus = productionStatus == null ? ProductionStatus.idle(refreshedAt) : productionStatus;
         this.overview = Overview.from(this.events);
     }
 
@@ -50,8 +57,40 @@ public final class ResearchRadarView {
     public List<NewsFeedItem> getLiveItems() { return liveItems; }
     public List<String> getWarnings() { return warnings; }
     public LocalDateTime getRefreshedAt() { return refreshedAt; }
+    public ProductionStatus getProductionStatus() { return productionStatus; }
     public ResearchRadarView withWarnings(List<String> values) {
-        return new ResearchRadarView(events, latestChanges, liveItems, values, refreshedAt);
+        return new ResearchRadarView(events, latestChanges, liveItems, values, refreshedAt, productionStatus);
+    }
+    public ResearchRadarView withProductionStatus(ProductionStatus value) {
+        return new ResearchRadarView(events, latestChanges, liveItems, warnings, refreshedAt, value);
+    }
+
+    public static final class ProductionStatus {
+        private final boolean running;
+        private final String status;
+        private final LocalDateTime completedAt;
+        private final int sourceCount;
+        private final int signalCount;
+        private final int eventCount;
+        private final String warning;
+
+        private ProductionStatus(boolean running, String status, LocalDateTime completedAt,
+                                 int sourceCount, int signalCount, int eventCount, String warning) {
+            this.running = running; this.status = status; this.completedAt = completedAt;
+            this.sourceCount = sourceCount; this.signalCount = signalCount; this.eventCount = eventCount; this.warning = warning;
+        }
+        static ProductionStatus idle(LocalDateTime completedAt) { return new ProductionStatus(false, "EMPTY", completedAt, 0, 0, 0, null); }
+        public static ProductionStatus of(boolean running, String status, LocalDateTime completedAt,
+                                          int sourceCount, int signalCount, int eventCount, String warning) {
+            return new ProductionStatus(running, status, completedAt, sourceCount, signalCount, eventCount, warning);
+        }
+        public boolean isRunning() { return running; }
+        public String getStatus() { return status; }
+        public LocalDateTime getCompletedAt() { return completedAt; }
+        public int getSourceCount() { return sourceCount; }
+        public int getSignalCount() { return signalCount; }
+        public int getEventCount() { return eventCount; }
+        public String getWarning() { return warning; }
     }
 
     public static final class Overview {
@@ -79,6 +118,8 @@ public final class ResearchRadarView {
         private final String title;
         private final String summary;
         private final String categoryCode;
+        private final int hotspotScore;
+        private final String hotspotExplanation;
         private final int priorityScore;
         private final String recommendation;
         private final List<String> reasons;
@@ -116,7 +157,8 @@ public final class ResearchRadarView {
 
         public EventCard(RadarEvent event, RadarEventInterpretation interpretation, RadarEventWorkspace.Summary workspace) {
             this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
-            this.categoryCode=event.getCategoryCode(); this.priorityScore=event.getPriorityScore();
+            this.categoryCode=event.getCategoryCode(); this.hotspotScore=event.getHotspotScore(); this.hotspotExplanation=event.getHotspotExplanation();
+            this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
             this.watchlistRelated=event.getWatchlistRelevance()>0; this.watchlistExplanation=event.getWatchlistExplanation();
             this.sourceCount=event.getSourceCount(); this.signalCount=event.getSignalCount();
@@ -157,6 +199,8 @@ public final class ResearchRadarView {
         public String getTitle() { return title; }
         public String getSummary() { return summary; }
         public String getCategoryCode() { return categoryCode; }
+        public int getHotspotScore() { return hotspotScore; }
+        public String getHotspotExplanation() { return hotspotExplanation; }
         public int getPriorityScore() { return priorityScore; }
         public String getRecommendation() { return recommendation; }
         public List<String> getReasons() { return reasons; }

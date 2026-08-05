@@ -104,7 +104,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
   const latestChanges = useMemo(() => (snapshot?.latestChanges ?? snapshot?.events ?? []).filter((event) =>
     !normalizedQuery || `${event.title} ${event.summary} ${event.changeSummary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
-  const radarRefreshing = snapshot?.warnings.some((warning) => warning.includes('雷达正在刷新')) ?? false;
+  const radarRefreshing = snapshot?.productionStatus?.running || snapshot?.warnings.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
 
   return (
     <section className="news-view radar-view" aria-label="研究雷达">
@@ -117,6 +117,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
         <div className="news-sync-state" aria-live="polite">
           <span>{snapshot ? `${snapshot.overview.eventCount} 件事 · ${snapshot.overview.sourceCount} 个来源` : '连接中'}</span>
           <strong>{snapshot ? `更新于 ${formatTime(snapshot.refreshedAt)}` : '等待首批资讯'}</strong>
+          {snapshot?.productionStatus?.running ? <small>后台生产中 · 页面读取最近快照</small> : null}
           <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void load(true)} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
           </button>
@@ -138,7 +139,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       </div>
       <div className="radar-work-rail"><RadarStateFilters value={stateFilter} events={snapshot?.events??[]} onChange={switchState}/><RadarNotificationPanel hint={(snapshot?.events??[]).reduce((sum,item)=>sum+(item.unreadNotificationCount??0),0)} onOpenEvent={openNotificationEvent}/></div>
 
-      {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台刷新，当前展示最近一次结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
+      {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
 
       <div className="news-board radar-board radar-board-single" data-testid="research-radar-board">
         <section className="radar-latest-panel" aria-labelledby="radar-latest-heading">

@@ -197,12 +197,20 @@ public class ResearchRadarService {
                 Comparator.nullsLast(Comparator.reverseOrder())));if(latest.size()>5)latest=new ArrayList<RadarEvent>(latest.subList(0,5));
         Map<Long,ResearchRadarView.EventCard> index=cardIndex(ranked,latest);NewsFeedSnapshot cached=lastNewsSnapshot;
         LocalDateTime refreshedAt=cached==null?LocalDateTime.now(clock):cached.getRefreshedAt();
-        if (backgroundRefresh != null && backgroundRefresh.latestCompletedRun().isPresent()
-                && backgroundRefresh.latestCompletedRun().get().getCompletedAt() != null) {
-            refreshedAt=backgroundRefresh.latestCompletedRun().get().getCompletedAt();
+        ResearchRadarView.ProductionStatus status = ResearchRadarView.ProductionStatus.of(false, "EMPTY", refreshedAt, 0, 0, 0, null);
+        if (backgroundRefresh != null) {
+            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestCompletedRun();
+            if (latestRun.isPresent()) {
+                com.finscope.domain.radar.RadarRefreshRun run = latestRun.get();
+                if (run.getCompletedAt() != null) refreshedAt=run.getCompletedAt();
+                status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), run.getStatus(), refreshedAt,
+                        run.getSourceCount(), run.getSignalCount(), run.getEventCount(), safeWarning(run.getWarning()));
+            } else {
+                status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), "EMPTY", refreshedAt, 0, 0, 0, null);
+            }
         }
         return new ResearchRadarView(filteredCards(ranked,index,state,limit),filteredCards(latest,index,state,5),Collections.<NewsFeedItem>emptyList(),
-                Collections.<String>emptyList(), refreshedAt);
+                Collections.<String>emptyList(), refreshedAt, status);
     }
 
     public ResearchRadarView.EventDetail detail(Long id) {
@@ -272,6 +280,7 @@ public class ResearchRadarService {
     private boolean matches(String category,RadarEvent event){return "ALL".equals(category)||category.equalsIgnoreCase(event.getCategoryCode());}
     private String normalizeCategory(String value){return value==null||value.trim().isEmpty()?"ALL":value.trim().toUpperCase(Locale.ROOT);}
     private String normalizeState(String value){String state=value==null?"ALL":value.trim().toUpperCase(Locale.ROOT);return Arrays.asList("ALL","UNREAD","FOLLOWED","LATER","IGNORED").contains(state)?state:"ALL";}
+    private String safeWarning(String value) { return value == null || value.trim().isEmpty() ? null : "本批次存在部分来源告警"; }
     private RadarSignal toSignal(NewsFeedItem item) {
         RadarSignal signal=new RadarSignal(); signal.setItemId(item.getId()); signal.setProviderCode(item.getProviderCode());
         signal.setSourceName(item.getSourceName()); signal.setSourceTier(item.getSourceTier()); signal.setCategoryCode(item.getCategoryCode());

@@ -423,3 +423,19 @@ News Wire 现有 `/api/news` 和分类接口暂时保留，避免一次性迁移
 - 用户仍然不需要配置策略、Prompt、模型或权重。
 
 第二版可以评估 Embedding Top-K 候选召回和 LLM 灰区判定，但它们只能优化系统内部判断，不能变成面向用户的策略配置能力。
+
+## 15. 生产式热点快照链路
+
+雷达在保持现有本地 Provider、`ResearchMaterialGateway` 和 SQLite 约束的前提下，采用后台生产快照模式：
+
+```text
+现有 Provider/Gateway
+  -> FETCH 批次
+  -> NORMALIZE（去重、来源排名、来源权重）
+  -> AGGREGATE（复用事件关系图与跨源聚合）
+  -> RANK（热点分数 + 研究优先级）
+  -> PERSIST（事件、信号、关系、批次步骤）
+  -> 后台增强
+```
+
+页面请求不会在 HTTP 线程内抓取外部资讯。`refresh=true` 只提交一个单飞后台刷新请求，然后返回最近一次已完成快照；定时器也复用同一刷新入口。批次记录保存在 `radar_refresh_run`/`radar_refresh_step`，当前项目只有一个最新生产快照，不区分临时榜单和正式榜单。

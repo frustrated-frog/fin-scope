@@ -16039,6 +16039,7 @@ input[type="checkbox"] {
 .radar-event-score { display: grid; align-content: start; justify-items: center; gap: 5px; padding: 12px 8px; border-radius: 13px; background: color-mix(in srgb, var(--news-pulse) 10%, var(--surface-2)); }
 .radar-event-score strong { color: var(--news-pulse); font: 850 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .radar-event-score span { color: var(--muted); font-size: 9px; font-weight: 750; }
+.radar-event-score small { color: var(--news-time); font: 700 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .radar-event-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .radar-event-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .radar-event-meta time { color: var(--muted); font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }

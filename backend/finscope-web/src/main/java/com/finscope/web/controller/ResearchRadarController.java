@@ -41,8 +41,8 @@ public class ResearchRadarController {
      * @param watchlistOnly 是否仅返回自选标的相关事件，默认 false。
      * @param limit 返回条数上限，默认 20。
      * @param state 事件状态过滤条件，默认 ALL。
-     * @param refresh 是否强制刷新雷达数据，默认 true。
-     * @return 研究雷达视图，包含事件流和统计信息。
+     * @param refresh 是否请求后台生产一批新的雷达快照，默认 true；请求本身只读取最近已完成快照。
+     * @return 研究雷达视图，包含事件流、统计信息和生产批次状态。
      */
     @GetMapping
     public ApiResponse<ResearchRadarView> radar(@RequestParam(defaultValue="ALL") String category,

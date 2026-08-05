@@ -12,7 +12,8 @@ export function RadarEventCard({ event, onResearch, onOpen, onStateChange }: {
   return (
     <article className={`radar-event-card ${event.watchlistRelated ? 'is-related' : ''}`}>
       <div className="radar-event-score" aria-label={`研究优先级 ${event.priorityScore} 分`}>
-        <strong>{event.priorityScore}</strong><span>优先级</span>
+        <strong>{event.priorityScore}</strong><span>研究优先级</span>
+        {event.hotspotScore != null ? <small title={event.hotspotExplanation || '来源质量、排名、时效和多源覆盖综合热度'}>热点 {event.hotspotScore}</small> : null}
       </div>
       <div className="radar-event-body">
         <div className="radar-event-meta">

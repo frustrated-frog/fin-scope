@@ -295,7 +295,7 @@ test('describes a busy radar refresh without blaming realtime sources', async ()
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  expect(screen.getByText('雷达正在后台刷新，当前展示最近一次结果')).toBeInTheDocument();
+  expect(screen.getByText('雷达正在后台生产，当前展示最近一次热点快照')).toBeInTheDocument();
   expect(screen.queryByText('实时来源暂不可用，当前展示最近一次雷达结果')).not.toBeInTheDocument();
 });
 
