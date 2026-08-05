@@ -1,7 +1,9 @@
 package com.finscope.service.research.material;
 
 import com.finscope.domain.research.material.ResearchMaterial;
+import com.finscope.domain.research.material.ResearchMaterialCacheEntry;
 import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.dao.cache.ResearchMaterialCacheRepository;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
@@ -14,6 +16,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,6 +57,74 @@ class ResearchMaterialGatewayTest {
 
         assertTrue(result.getMaterials().isEmpty());
         assertTrue(result.getWarnings().get(0).contains("熔断或暂停"));
+    }
+
+    @Test
+    void returnsCachedMaterialsWithoutCallingProviders() {
+        FakeCache cache = new FakeCache(new ResearchMaterialCacheEntry(
+                Collections.singletonList(material("cached", "缓存资讯")),
+                Collections.singletonList("cached-warning"), LocalDateTime.now()));
+        ResearchMaterialProvider provider = provider("NETWORK", 10, true);
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                Collections.singletonList(provider), new ProviderRoutePolicy(guard), guard, cache);
+
+        ResearchMaterialGatewayResult result = gateway.search(ResearchMaterialType.NEWS_FLASH,
+                new ResearchMaterialRequest("000001", "订单", 10));
+
+        assertEquals("cached", result.getMaterials().get(0).getExternalId());
+        assertEquals(1, cache.reads);
+        assertEquals(0, cache.writes);
+    }
+
+    @Test
+    void storesSuccessfulProviderResultsAfterCacheMiss() {
+        FakeCache cache = new FakeCache();
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                Collections.singletonList(provider("NETWORK", 10, false)),
+                new ProviderRoutePolicy(guard), guard, cache);
+
+        ResearchMaterialGatewayResult result = gateway.search(ResearchMaterialType.NEWS_FLASH,
+                new ResearchMaterialRequest("000001", "订单", 10));
+
+        assertEquals(1, result.getMaterials().size());
+        assertEquals(1, cache.writes);
+    }
+
+    private ResearchMaterial material(String id, String title) {
+        ResearchMaterial value = new ResearchMaterial();
+        value.setMaterialType(ResearchMaterialType.NEWS_FLASH);
+        value.setExternalId(id);
+        value.setTitle(title);
+        value.setContent(title);
+        value.setProviderCode("CACHE");
+        value.setProviderFamily("CACHE");
+        value.setSourceTier("T2");
+        value.setUrl("https://example.com/" + id);
+        return value;
+    }
+
+    private static final class FakeCache implements ResearchMaterialCacheRepository {
+        private ResearchMaterialCacheEntry entry;
+        private int reads;
+        private int writes;
+
+        private FakeCache() { }
+
+        private FakeCache(ResearchMaterialCacheEntry entry) { this.entry = entry; }
+
+        @Override
+        public Optional<ResearchMaterialCacheEntry> get(String key) {
+            reads++;
+            return Optional.ofNullable(entry);
+        }
+
+        @Override
+        public void put(String key, ResearchMaterialCacheEntry value, Duration ttl) {
+            writes++;
+            entry = value;
+        }
     }
 
     private ResearchMaterialProvider provider(String code, int priority, boolean fail) {
