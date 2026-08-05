@@ -52,13 +52,14 @@ public class RadarRepository {
 
     public RadarEvent saveEvent(RadarEvent event) {
         jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,status,first_seen_at,last_seen_at,"
-                        + "source_count,signal_count,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
+                        + "source_count,signal_count,hotspot_score,hotspot_explanation,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
                         + "uncertainty,next_observation,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
                         + "evidence_count,evidence_source_count,evidence_updated_at,updated_at) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_key) DO UPDATE SET canonical_title=excluded.canonical_title,summary=excluded.summary,"
                         + "category_code=excluded.category_code,status=excluded.status,last_seen_at=excluded.last_seen_at,"
-                        + "source_count=excluded.source_count,signal_count=excluded.signal_count,priority_score=excluded.priority_score,"
+                        + "source_count=excluded.source_count,signal_count=excluded.signal_count,hotspot_score=excluded.hotspot_score,"
+                        + "hotspot_explanation=excluded.hotspot_explanation,priority_score=excluded.priority_score,"
                         + "score_explanation=excluded.score_explanation,watchlist_relevance=excluded.watchlist_relevance,"
                         + "watchlist_explanation=excluded.watchlist_explanation,uncertainty=excluded.uncertainty,"
                         + "next_observation=excluded.next_observation,"
@@ -72,7 +73,7 @@ public class RadarRepository {
                         + "updated_at=excluded.updated_at",
                 event.getEventKey(), event.getCanonicalTitle(), event.getSummary(), event.getCategoryCode(), event.getStatus(),
                 TimeUtil.text(event.getFirstSeenAt()), TimeUtil.text(event.getLastSeenAt()), event.getSourceCount(),
-                event.getSignalCount(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
+                event.getSignalCount(), event.getHotspotScore(), event.getHotspotExplanation(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
                 event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getEvidenceStatus(),
                 event.getEvidenceSummary(), event.getEvidenceWarning(), event.getEvidenceFingerprint(), event.getEvidenceCount(),
                 event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()), TimeUtil.text(event.getUpdatedAt()));
@@ -142,7 +143,7 @@ public class RadarRepository {
             sql.append(" AND category_code=?"); args.add(category.trim().toUpperCase());
         }
         if (watchlistOnly) sql.append(" AND watchlist_relevance>0");
-        sql.append(" ORDER BY priority_score DESC,last_seen_at DESC LIMIT ?"); args.add(Math.max(1, limit));
+        sql.append(" ORDER BY hotspot_score DESC,priority_score DESC,last_seen_at DESC LIMIT ?"); args.add(Math.max(1, limit));
         return jdbc.query(sql.toString(), eventMapper(), args.toArray());
     }
 
@@ -170,7 +171,8 @@ public class RadarRepository {
             value.setSummary(rs.getString("summary")); value.setCategoryCode(rs.getString("category_code"));
             value.setStatus(rs.getString("status")); value.setFirstSeenAt(TimeUtil.localDateTime(rs,"first_seen_at"));
             value.setLastSeenAt(TimeUtil.localDateTime(rs,"last_seen_at")); value.setSourceCount(rs.getInt("source_count"));
-            value.setSignalCount(rs.getInt("signal_count")); value.setPriorityScore(rs.getInt("priority_score"));
+            value.setSignalCount(rs.getInt("signal_count")); value.setHotspotScore(rs.getInt("hotspot_score"));
+            value.setHotspotExplanation(rs.getString("hotspot_explanation")); value.setPriorityScore(rs.getInt("priority_score"));
             value.setScoreExplanation(rs.getString("score_explanation")); value.setWatchlistRelevance(rs.getInt("watchlist_relevance"));
             value.setWatchlistExplanation(rs.getString("watchlist_explanation")); value.setUncertainty(rs.getString("uncertainty"));
             value.setNextObservation(rs.getString("next_observation")); value.setEvidenceStatus(rs.getString("evidence_status"));

@@ -13,6 +13,8 @@ public class RadarEvent {
     private LocalDateTime lastSeenAt;
     private int sourceCount;
     private int signalCount;
+    private int hotspotScore;
+    private String hotspotExplanation;
     private int priorityScore;
     private String scoreExplanation;
     private int watchlistRelevance;
@@ -48,6 +50,10 @@ public class RadarEvent {
     public void setSourceCount(int sourceCount) { this.sourceCount = sourceCount; }
     public int getSignalCount() { return signalCount; }
     public void setSignalCount(int signalCount) { this.signalCount = signalCount; }
+    public int getHotspotScore() { return hotspotScore; }
+    public void setHotspotScore(int hotspotScore) { this.hotspotScore = hotspotScore; }
+    public String getHotspotExplanation() { return hotspotExplanation; }
+    public void setHotspotExplanation(String hotspotExplanation) { this.hotspotExplanation = hotspotExplanation; }
     public int getPriorityScore() { return priorityScore; }
     public void setPriorityScore(int priorityScore) { this.priorityScore = priorityScore; }
     public String getScoreExplanation() { return scoreExplanation; }

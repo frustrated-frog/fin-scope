@@ -200,8 +200,11 @@ public class DatabaseInitializer implements InitializingBean {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,canonical_title TEXT NOT NULL,summary TEXT,"
                 + "category_code TEXT,status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
                 + "source_count INTEGER NOT NULL DEFAULT 0,signal_count INTEGER NOT NULL DEFAULT 0,"
+                + "hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,"
                 + "watchlist_explanation TEXT,uncertainty TEXT,next_observation TEXT,updated_at TEXT NOT NULL)");
+        ensureColumn("radar_event", "hotspot_score", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("radar_event", "hotspot_explanation", "TEXT");
         ensureColumn("radar_event", "evidence_status", "TEXT");
         ensureColumn("radar_event", "evidence_summary", "TEXT");
         ensureColumn("radar_event", "evidence_warning", "TEXT");
@@ -209,7 +212,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("radar_event", "evidence_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "evidence_source_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "evidence_updated_at", "TEXT");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_rank ON radar_event(status,category_code,priority_score DESC,last_seen_at DESC)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_rank ON radar_event(status,category_code,hotspot_score DESC,priority_score DESC,last_seen_at DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_signal ("
                 + "event_id INTEGER NOT NULL,signal_id INTEGER NOT NULL,relation_type TEXT NOT NULL,match_score REAL NOT NULL,"
                 + "match_reason TEXT,PRIMARY KEY(event_id,signal_id),"
