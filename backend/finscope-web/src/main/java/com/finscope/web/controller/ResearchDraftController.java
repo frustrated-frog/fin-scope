@@ -26,6 +26,12 @@ public class ResearchDraftController {
         this.service = service;
     }
 
+    /**
+     * 基于资金信号创建研究草稿。
+     *
+     * @param request 资金研究草稿请求，包含资金信号来源等信息，可为空。
+     * @return 201 Created 响应，响应体为新创建的研究草稿。
+     */
     @PostMapping("/from-capital-signal")
     public ResponseEntity<ApiResponse<ResearchDraft>> createFromCapitalSignal(
             @RequestBody(required = false) CapitalResearchDraftRequest request) {
@@ -37,6 +43,12 @@ public class ResearchDraftController {
                 .body(ApiResponses.success(value));
     }
 
+    /**
+     * 查询研究草稿详情。
+     *
+     * @param id 研究草稿 ID。
+     * @return 指定研究草稿详情。
+     */
     @GetMapping("/{id}")
     public ApiResponse<ResearchDraft> get(@PathVariable Long id) {
         return ApiResponses.success(service.get(id));

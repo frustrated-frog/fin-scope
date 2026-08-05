@@ -1,5 +1,6 @@
 package com.finscope.service.research;
 
+import com.finscope.common.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,7 +17,7 @@ class ModelJsonExtractorTest {
 
     @Test
     void rejectsTruncatedObjectsWithoutGuessingMissingContent() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> ModelJsonExtractor.extractObject("{\"summary\":\"未结束", 1000));
     }
 

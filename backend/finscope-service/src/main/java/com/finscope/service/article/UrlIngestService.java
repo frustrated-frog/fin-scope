@@ -1,5 +1,6 @@
 package com.finscope.service.article;
 
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ExternalServiceException;
@@ -77,18 +78,19 @@ public class UrlIngestService {
 
     public void validateUrl(String url) {
         if (StringUtils.isBlank(url)) {
-            throw new IllegalArgumentException("URL 不能为空");
+            throw new BusinessException(BizErrorCode.URL_REQUIRED);
         }
         try {
             URI uri = new URI(url.trim());
             String scheme = uri.getScheme();
             if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                throw new IllegalArgumentException("仅支持 HTTP 或 HTTPS URL");
+                throw new BusinessException(BizErrorCode.URL_SCHEME_UNSUPPORTED);
             }
-        } catch (IllegalArgumentException ex) {
+        } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("URL 格式不正确：" + url, ex);
+            throw new BusinessException(BizErrorCode.URL_MALFORMED,
+                    BizErrorCode.URL_MALFORMED.format(url), ex);
         }
     }
 

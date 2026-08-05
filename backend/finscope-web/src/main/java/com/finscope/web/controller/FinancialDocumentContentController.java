@@ -24,6 +24,12 @@ public class FinancialDocumentContentController {
         this.documents = documents;
     }
 
+    /**
+     * 下载财务文档 PDF 原文。
+     *
+     * @param id 财务文档 ID。
+     * @return 以 inline 方式展示的财务文档 PDF 文件资源。
+     */
     @GetMapping("/{id}/content")
     @ResponseBody
     public ResponseEntity<Resource> content(@PathVariable Long id) {

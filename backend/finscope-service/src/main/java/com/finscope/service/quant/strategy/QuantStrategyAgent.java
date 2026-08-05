@@ -6,6 +6,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
 import com.finscope.service.factorresearch.FactorProviderRegistry;
@@ -53,7 +55,7 @@ public class QuantStrategyAgent {
 
     public QuantStrategyDraft generate(Long datasetId, String prompt, java.util.Set<String> availableFactors,
                                        java.time.LocalDate datasetStart, java.time.LocalDate datasetEnd) {
-        if (prompt == null || prompt.trim().isEmpty()) throw new IllegalArgumentException("策略描述不能为空");
+        if (prompt == null || prompt.trim().isEmpty()) throw new BusinessException(BizErrorCode.STRATEGY_PROMPT_REQUIRED);
         if (!llm.isConfigured()) return failedDraft(datasetId, prompt.trim(), null, "策略 Agent 尚未配置");
         String latestRaw = null;
         try {

@@ -3,6 +3,8 @@ package com.finscope.service.research;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 
 /** Extracts one complete JSON object from provider text without depending on Markdown conventions. */
 public final class ModelJsonExtractor {
@@ -14,10 +16,10 @@ public final class ModelJsonExtractor {
 
     public static String extractObject(String raw, int maxCharacters) {
         if (raw == null || raw.trim().isEmpty()) {
-            throw new IllegalArgumentException("模型返回空内容");
+            throw new BusinessException(BizErrorCode.MODEL_OUTPUT_EMPTY);
         }
         if (raw.length() > maxCharacters) {
-            throw new IllegalArgumentException("模型输出超过字符上限");
+            throw new BusinessException(BizErrorCode.MODEL_OUTPUT_TOO_LONG);
         }
         boolean foundOpeningBrace = false;
         boolean foundIncompleteObject = false;
@@ -37,9 +39,9 @@ public final class ModelJsonExtractor {
                 // Provider prose may contain example braces before the actual JSON object.
             }
         }
-        if (!foundOpeningBrace) throw new IllegalArgumentException("模型输出中没有 JSON 对象");
-        if (foundIncompleteObject) throw new IllegalArgumentException("模型输出中的 JSON 对象不完整");
-        throw new IllegalArgumentException("模型输出中没有可解析的 JSON 对象");
+        if (!foundOpeningBrace) throw new BusinessException(BizErrorCode.MODEL_OUTPUT_NO_JSON);
+        if (foundIncompleteObject) throw new BusinessException(BizErrorCode.MODEL_OUTPUT_JSON_INCOMPLETE);
+        throw new BusinessException(BizErrorCode.MODEL_OUTPUT_JSON_UNPARSEABLE);
     }
 
     private static int objectEnd(String raw, int start) {

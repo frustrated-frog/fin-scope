@@ -2,6 +2,8 @@ package com.finscope.service.research.mission;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.domain.research.ResearchRun;
@@ -51,7 +53,7 @@ public class ResearchMissionService {
 
     public ResearchMission initializePending(ResearchRun run, ResearchThesis thesis, int maxActions) {
         if (run == null || run.getId() == null) {
-            throw new IllegalArgumentException("研究运行不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_RUN_REQUIRED);
         }
         String goal = thesis == null || blank(thesis.getQuestion()) ? "形成可验证的阶段性研究结论"
                 : thesis.getQuestion().trim();

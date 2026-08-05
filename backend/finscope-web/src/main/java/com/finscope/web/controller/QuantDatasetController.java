@@ -90,11 +90,21 @@ public class QuantDatasetController {
     @PostMapping("/{id}/universe") public ApiResponse<QuantDataset> importUniverse(@PathVariable Long id, @RequestBody List<QuantUniverseMember> values) {
         return ApiResponses.success(service.importUniverse(id, values));
     }
-    /** Incrementally synchronizes QFQ daily bars for the dataset's PIT universe. */
+    /**
+     * 增量同步数据集 PIT 股票池的前复权日线行情。
+     *
+     * @param id 数据集 ID。
+     * @return 本次行情同步运行记录。
+     */
     @PostMapping("/{id}/market-data-sync") public ApiResponse<QuantDataSyncRun> syncMarketData(@PathVariable Long id) {
         return ApiResponses.success(marketDataSync.sync(id, "MANUAL"));
     }
-    /** Returns durable synchronization history, newest first. */
+    /**
+     * 查询数据集行情同步历史，按时间倒序返回。
+     *
+     * @param id 数据集 ID。
+     * @return 行情同步运行历史列表，最新的在前。
+     */
     @GetMapping("/{id}/market-data-sync-runs") public ApiResponse<List<QuantDataSyncRun>> marketDataSyncRuns(@PathVariable Long id) {
         return ApiResponses.success(marketDataSync.runs(id));
     }

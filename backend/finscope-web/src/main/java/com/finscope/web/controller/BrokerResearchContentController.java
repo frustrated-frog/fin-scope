@@ -24,6 +24,12 @@ public class BrokerResearchContentController {
         this.research = research;
     }
 
+    /**
+     * 下载券商研报 PDF 原文。
+     *
+     * @param id 券商研报 ID。
+     * @return 以 inline 方式展示的研报 PDF 文件资源。
+     */
     @GetMapping("/{id}/content")
     @ResponseBody
     public ResponseEntity<Resource> content(@PathVariable Long id) {

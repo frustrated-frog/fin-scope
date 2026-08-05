@@ -1,5 +1,7 @@
 package com.finscope.dao.radar;
 
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,7 +27,7 @@ public class RadarEventWorkspaceRepository {
                                                   Boolean followed, String fingerprint) {
         requireEventId(eventId);
         if (disposition != null && !DISPOSITIONS.contains(disposition)) {
-            throw new IllegalArgumentException("雷达事件处理状态不合法");
+            throw new BusinessException(BizErrorCode.RADAR_EVENT_STATE_INVALID);
         }
         LocalDateTime now = LocalDateTime.now();
         jdbc.update("INSERT INTO radar_event_user_state(event_id,followed,disposition,updated_at) "

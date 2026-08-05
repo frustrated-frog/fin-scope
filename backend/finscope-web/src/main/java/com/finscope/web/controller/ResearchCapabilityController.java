@@ -19,6 +19,11 @@ public class ResearchCapabilityController {
         this.toolRegistry = toolRegistry;
     }
 
+    /**
+     * 查询研究工具能力列表。
+     *
+     * @return 研究工具描述符列表，包含各研究工具的名称和能力说明。
+     */
     @GetMapping("/tools")
     public ApiResponse<List<ResearchToolDescriptor>> tools() {
         return ApiResponses.success(toolRegistry.list());

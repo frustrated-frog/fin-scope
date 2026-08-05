@@ -44,17 +44,34 @@ public class QuantController {
     @Resource
     private QuantStrategyCandidateDraftService quantStrategyCandidateDraftService;
 
+    /**
+     * 同步策略素材库。
+     *
+     * @return 策略素材库同步结果，包含新增和更新的候选数量。
+     */
     @PostMapping("/catalog/sync")
     public ApiResponse<QuantStrategyCatalogSyncResult> syncCatalog() {
         return ApiResponses.success(quantStrategyCatalogService.sync());
     }
 
+    /**
+     * 查询策略素材库来源信息。
+     *
+     * @return 策略素材库来源；若尚未同步则抛出资源不存在异常。
+     */
     @GetMapping("/catalog/source")
     public ApiResponse<QuantStrategyCatalogSource> catalogSource() {
         return ApiResponses.success(quantStrategyCatalogService.source().orElseThrow(() ->
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略素材库尚未同步")));
     }
 
+    /**
+     * 查询策略候选列表。
+     *
+     * @param compatibility 兼容状态过滤条件，取值 ADAPTABLE、NEEDS_FACTOR 或 UNSUPPORTED，可为空。
+     * @param query 关键词过滤条件，可为空。
+     * @return 符合条件的策略候选列表。
+     */
     @GetMapping("/catalog/candidates")
     public ApiResponse<List<QuantStrategyCandidate>> catalogCandidates(
             @RequestParam(required = false) String compatibility,
@@ -66,12 +83,25 @@ public class QuantController {
         return ApiResponses.success(quantStrategyCatalogService.list(compatibility, query));
     }
 
+    /**
+     * 查询策略候选详情。
+     *
+     * @param id 策略候选 ID。
+     * @return 指定策略候选详情；若不存在则抛出资源不存在异常。
+     */
     @GetMapping("/catalog/candidates/{id}")
     public ApiResponse<QuantStrategyCandidate> catalogCandidate(@PathVariable Long id) {
         return ApiResponses.success(quantStrategyCatalogService.find(id).orElseThrow(() ->
                 new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略候选不存在")));
     }
 
+    /**
+     * 基于策略候选生成策略草稿。
+     *
+     * @param id 策略候选 ID。
+     * @param request 草稿生成请求，包含数据集 ID。
+     * @return 生成的量化策略草稿。
+     */
     @PostMapping("/catalog/candidates/{id}/drafts")
     public ApiResponse<QuantStrategyDraft> generateCatalogDraft(@PathVariable Long id,
                                                                  @RequestBody CreateCatalogStrategyDraftRequest request) {

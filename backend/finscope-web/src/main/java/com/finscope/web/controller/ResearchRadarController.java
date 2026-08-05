@@ -34,6 +34,16 @@ public class ResearchRadarController {
         this.service=service; this.workspace=workspace; this.researchLinks=researchLinks;
     }
 
+    /**
+     * 查询研究雷达视图。
+     *
+     * @param category 事件分类过滤条件，默认 ALL。
+     * @param watchlistOnly 是否仅返回自选标的相关事件，默认 false。
+     * @param limit 返回条数上限，默认 20。
+     * @param state 事件状态过滤条件，默认 ALL。
+     * @param refresh 是否强制刷新雷达数据，默认 true。
+     * @return 研究雷达视图，包含事件流和统计信息。
+     */
     @GetMapping
     public ApiResponse<ResearchRadarView> radar(@RequestParam(defaultValue="ALL") String category,
                                                 @RequestParam(defaultValue="false") boolean watchlistOnly,
@@ -43,33 +53,73 @@ public class ResearchRadarController {
         return ApiResponses.success(refresh?service.load(category,watchlistOnly,limit,state):service.loadStored(category,watchlistOnly,limit,state));
     }
 
+    /**
+     * 查询雷达事件详情。
+     *
+     * @param id 雷达事件 ID。
+     * @return 雷达事件详情。
+     */
     @GetMapping("/events/{id}")
     public ApiResponse<ResearchRadarView.EventDetail> detail(@PathVariable Long id){
         return ApiResponses.success(service.detail(id));
     }
 
+    /**
+     * 请求生成雷达事件解读。
+     *
+     * @param id 雷达事件 ID。
+     * @return 雷达事件解读视图。
+     */
     @PostMapping("/events/{id}/interpretation")
     public ApiResponse<ResearchRadarView.InterpretationView> requestInterpretation(@PathVariable Long id){
         return ApiResponses.success(service.requestInterpretation(id));
     }
 
+    /**
+     * 更新雷达事件工作台状态。
+     *
+     * @param id 雷达事件 ID。
+     * @param request 状态更新请求，包含是否已读、是否关注和处置结论。
+     * @return 更新后的事件工作台状态。
+     */
     @PatchMapping("/events/{id}/state")
     public ApiResponse<RadarEventWorkspace.State> updateState(@PathVariable Long id,
                                                               @RequestBody UpdateRadarEventStateRequest request) {
         return ApiResponses.success(workspace.updateState(id, request.getRead(), request.getFollowed(), request.getDisposition()));
     }
 
+    /**
+     * 查询雷达事件的观察记录列表。
+     *
+     * @param id 雷达事件 ID。
+     * @return 该事件的观察记录列表。
+     */
     @GetMapping("/events/{id}/observations")
     public ApiResponse<List<RadarEventWorkspace.Observation>> observations(@PathVariable Long id) {
         return ApiResponses.success(workspace.observations(id));
     }
 
+    /**
+     * 新增雷达事件观察记录。
+     *
+     * @param id 雷达事件 ID。
+     * @param request 观察记录请求，包含观察内容。
+     * @return 新增的观察记录。
+     */
     @PostMapping("/events/{id}/observations")
     public ApiResponse<RadarEventWorkspace.Observation> addObservation(@PathVariable Long id,
                                                                        @RequestBody RadarObservationRequest request) {
         return ApiResponses.success(workspace.addObservation(id, request.getContent()));
     }
 
+    /**
+     * 更新雷达事件观察记录状态。
+     *
+     * @param id 雷达事件 ID。
+     * @param observationId 观察记录 ID。
+     * @param request 观察记录请求，包含目标状态。
+     * @return 更新后的观察记录。
+     */
     @PatchMapping("/events/{id}/observations/{observationId}")
     public ApiResponse<RadarEventWorkspace.Observation> updateObservation(@PathVariable Long id,
                                                                           @PathVariable Long observationId,
@@ -77,25 +127,57 @@ public class ResearchRadarController {
         return ApiResponses.success(workspace.updateObservation(id, observationId, request.getStatus()));
     }
 
+    /**
+     * 删除雷达事件观察记录。
+     *
+     * @param id 雷达事件 ID。
+     * @param observationId 观察记录 ID。
+     * @return 204 No Content 响应，表示删除成功且无响应体。
+     */
     @DeleteMapping("/events/{id}/observations/{observationId}")
     public ResponseEntity<Void> deleteObservation(@PathVariable Long id, @PathVariable Long observationId) {
         workspace.deleteObservation(id, observationId); return ResponseEntity.noContent().build();
     }
 
+    /**
+     * 将雷达事件关联到研究运行。
+     *
+     * @param id 雷达事件 ID。
+     * @param runId 研究运行 ID。
+     * @param request 关联请求，包含研究问题，可为空。
+     * @return 新建立的研究关联。
+     */
     @PostMapping("/events/{id}/research-links/{runId}")
     public ApiResponse<RadarEventWorkspace.ResearchLink> linkResearch(@PathVariable Long id,@PathVariable Long runId,
                                                                       @RequestBody(required=false) RadarResearchLinkRequest request){
         return ApiResponses.success(researchLinks.link(id,runId,request==null?null:request.getQuestion()));
     }
 
+    /**
+     * 查询雷达通知中心。
+     *
+     * @param limit 返回条数上限，默认 30。
+     * @return 通知中心视图，包含未读通知和汇总信息。
+     */
     @GetMapping("/notifications")
     public ApiResponse<RadarEventWorkspaceService.NotificationCenter> notifications(@RequestParam(defaultValue="30") int limit){
         return ApiResponses.success(workspace.notifications(limit));
     }
 
+    /**
+     * 标记单条雷达通知为已读。
+     *
+     * @param id 通知 ID。
+     * @return 204 No Content 响应，表示标记成功且无响应体。
+     */
     @PostMapping("/notifications/{id}/read")
     public ResponseEntity<Void> readNotification(@PathVariable Long id){workspace.readNotification(id);return ResponseEntity.noContent().build();}
 
+    /**
+     * 标记全部雷达通知为已读。
+     *
+     * @return 204 No Content 响应，表示标记成功且无响应体。
+     */
     @PostMapping("/notifications/read-all")
     public ResponseEntity<Void> readAllNotifications(){workspace.readAllNotifications();return ResponseEntity.noContent().build();}
 }

@@ -26,11 +26,24 @@ public class FactorResearchController {
     @Resource private ResearchFactorCatalog catalog;
     @Resource private CapitalFlowFreezeService freezeService;
 
+    /**
+     * 查询研究因子定义列表。
+     *
+     * @return 研究因子定义列表。
+     */
     @GetMapping("/factors")
     public ApiResponse<List<ResearchFactorDefinition>> factors() {
         return ApiResponses.success(catalog.list());
     }
 
+    /**
+     * 查询指定版本的研究因子定义。
+     *
+     * @param namespace 因子命名空间。
+     * @param code 因子编码。
+     * @param version 因子版本。
+     * @return 指定版本的研究因子定义。
+     */
     @GetMapping("/factors/{namespace}/{code}/versions/{version}")
     public ApiResponse<ResearchFactorDefinition> factor(@PathVariable String namespace,
                                            @PathVariable String code,
@@ -38,6 +51,13 @@ public class FactorResearchController {
         return ApiResponses.success(catalog.get(namespace, code, version));
     }
 
+    /**
+     * 冻结数据集的资金流数据快照。
+     *
+     * @param datasetId 数据集 ID。
+     * @param request 冻结请求，包含起止时间和快照时点，可为空。
+     * @return 冻结后的量化数据集。
+     */
     @PostMapping("/datasets/{datasetId}/capital-flow-freeze")
     public ResponseEntity<ApiResponse<QuantDataset>> freeze(@PathVariable Long datasetId,
                                                @RequestBody(required = false) FreezeCapitalFlowRequest request) {
