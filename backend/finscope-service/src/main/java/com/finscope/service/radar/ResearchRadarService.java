@@ -169,7 +169,7 @@ public class ResearchRadarService {
                 }
                 if (matches(category, saved) && (!watchlistOnly || saved.getWatchlistRelevance()>0)) savedEvents.add(saved);
             }
-            repository.expireEventsExcept(activeEventKeys, now);
+            repository.expireEventsExcept(activeEventKeys, now.minusHours(48), now);
             List<RadarEvent> latestEvents=new ArrayList<RadarEvent>(savedEvents);
             latestEvents.sort(Comparator.comparing(RadarEvent::getLastSeenAt,
                     Comparator.nullsLast(Comparator.reverseOrder())));
@@ -199,12 +199,12 @@ public class ResearchRadarService {
         LocalDateTime refreshedAt=cached==null?LocalDateTime.now(clock):cached.getRefreshedAt();
         ResearchRadarView.ProductionStatus status = ResearchRadarView.ProductionStatus.of(false, "EMPTY", refreshedAt, 0, 0, 0, null);
         if (backgroundRefresh != null) {
-            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestCompletedRun();
+            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestRun();
             if (latestRun.isPresent()) {
                 com.finscope.domain.radar.RadarRefreshRun run = latestRun.get();
                 if (run.getCompletedAt() != null) refreshedAt=run.getCompletedAt();
                 status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), run.getStatus(), refreshedAt,
-                        run.getSourceCount(), run.getSignalCount(), run.getEventCount(), safeWarning(run.getWarning()));
+                        run.getSourceCount(), run.getSignalCount(), run.getEventCount(), productionMessage(run));
             } else {
                 status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), "EMPTY", refreshedAt, 0, 0, 0, null);
             }
@@ -280,7 +280,19 @@ public class ResearchRadarService {
     private boolean matches(String category,RadarEvent event){return "ALL".equals(category)||category.equalsIgnoreCase(event.getCategoryCode());}
     private String normalizeCategory(String value){return value==null||value.trim().isEmpty()?"ALL":value.trim().toUpperCase(Locale.ROOT);}
     private String normalizeState(String value){String state=value==null?"ALL":value.trim().toUpperCase(Locale.ROOT);return Arrays.asList("ALL","UNREAD","FOLLOWED","LATER","IGNORED").contains(state)?state:"ALL";}
-    private String safeWarning(String value) { return value == null || value.trim().isEmpty() ? null : "本批次存在部分来源告警"; }
+    /** 生产批次的人类可读状态摘要：失败给出固定降级文案（细节留在服务端日志），成功时透出来源告警摘要。 */
+    private String productionMessage(com.finscope.domain.radar.RadarRefreshRun run) {
+        if ("FAILED".equals(run.getStatus())) {
+            return "本批次生产失败，详见服务端批次日志";
+        }
+        String warning = run.getWarning();
+        return (warning == null || warning.trim().isEmpty()) ? null : "部分来源告警：" + trim(warning, 200);
+    }
+
+    private String trim(String value, int max) {
+        if (value == null || value.length() <= max) return value;
+        return value.substring(0, max) + "…";
+    }
     private RadarSignal toSignal(NewsFeedItem item) {
         RadarSignal signal=new RadarSignal(); signal.setItemId(item.getId()); signal.setProviderCode(item.getProviderCode());
         signal.setSourceName(item.getSourceName()); signal.setSourceTier(item.getSourceTier()); signal.setCategoryCode(item.getCategoryCode());

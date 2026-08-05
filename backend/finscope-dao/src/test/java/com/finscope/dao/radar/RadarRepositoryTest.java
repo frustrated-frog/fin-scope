@@ -112,14 +112,28 @@ class RadarRepositoryTest {
     }
 
     @Test
-    void eventsMissingFromTheLatestGenerationAreExpired() {
+    void eventsMissingFromTheLatestGenerationAreExpiredOnceOutsideTheWindow() {
         RadarEvent retained = repository.saveEvent(event("event:retained"));
         RadarEvent obsolete = repository.saveEvent(event("event:obsolete"));
 
-        repository.expireEventsExcept(new HashSet<String>(Collections.singletonList("event:retained")), now.plusMinutes(1));
+        repository.expireEventsExcept(new HashSet<String>(Collections.singletonList("event:retained")),
+                now.plusMinutes(1), now.plusMinutes(2));
 
         assertEquals("ACTIVE", repository.findEvent(retained.getId()).get().getStatus());
         assertEquals("EXPIRED", repository.findEvent(obsolete.getId()).get().getStatus());
+    }
+
+    @Test
+    void eventsInsideWindowWithoutFreshSignalsBecomeQuietNotExpired() {
+        RadarEvent insideWindow = repository.saveEvent(event("event:inside-window"));
+        RadarEvent outsideWindow = repository.saveEvent(event("event:outside-window"));
+        outsideWindow.setLastSeenAt(now.minusDays(3));
+        repository.saveEvent(outsideWindow);
+
+        repository.expireEventsExcept(Collections.singleton("event:other"), now.minusHours(2), now.plusMinutes(1));
+
+        assertEquals("QUIET", repository.findEvent(insideWindow.getId()).get().getStatus());
+        assertEquals("EXPIRED", repository.findEvent(outsideWindow.getId()).get().getStatus());
     }
 
     private RadarSignal signal(String itemId, String category) {

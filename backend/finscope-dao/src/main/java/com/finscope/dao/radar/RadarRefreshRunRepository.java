@@ -56,6 +56,13 @@ public class RadarRefreshRunRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    /** 最近一次批次（任意状态），包括正在运行与失败的批次，供页面透出生产状态。 */
+    public Optional<RadarRefreshRun> findLatestRun() {
+        List<RadarRefreshRun> values = jdbc.query("SELECT * FROM radar_refresh_run "
+                        + "ORDER BY started_at DESC,id DESC LIMIT 1", runMapper());
+        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    }
+
     public List<RadarRefreshStep> findSteps(Long runId) {
         return jdbc.query("SELECT * FROM radar_refresh_step WHERE run_id=? ORDER BY id", stepMapper(), runId);
     }

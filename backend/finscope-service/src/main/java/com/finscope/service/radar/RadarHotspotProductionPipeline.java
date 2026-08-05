@@ -5,6 +5,7 @@ import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.news.NewsFeedItem;
@@ -35,18 +36,22 @@ public class RadarHotspotProductionPipeline {
     private final RadarClusteringService clustering;
     private final RadarPriorityService priority;
     private final WatchlistRepository watchlist;
+    private static final int SIGNAL_WINDOW_HOURS = 48;
     private final RadarRefreshRunRepository runs;
     private final RadarEventEnhancementScheduler enhancement;
     private final RadarHotspotScoreService hotspotScores;
+    private final RadarHotspotPersistenceService persistence;
 
     public RadarHotspotProductionPipeline(NewsFeedService news, RadarRepository repository,
                                           RadarClusteringService clustering, RadarPriorityService priority,
                                           WatchlistRepository watchlist, RadarRefreshRunRepository runs,
                                           RadarEventEnhancementScheduler enhancement,
-                                          RadarHotspotScoreService hotspotScores) {
+                                          RadarHotspotScoreService hotspotScores,
+                                          RadarHotspotPersistenceService persistence) {
         this.news = news; this.repository = repository; this.clustering = clustering;
         this.priority = priority; this.watchlist = watchlist; this.runs = runs;
         this.enhancement = enhancement; this.hotspotScores = hotspotScores;
+        this.persistence = persistence;
     }
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
@@ -60,8 +65,8 @@ public class RadarHotspotProductionPipeline {
 
             runs.startStep(run.getId(), "NORMALIZE", now);
             List<RadarSignal> captured = captureSignals(snapshot.getItems(), now);
-            repository.expireSignals(now.minusHours(48), now);
-            List<RadarSignal> active = repository.findActiveSignals(now.minusHours(48), 500);
+            repository.expireSignals(now.minusHours(SIGNAL_WINDOW_HOURS), now);
+            List<RadarSignal> active = repository.findActiveSignals(now.minusHours(SIGNAL_WINDOW_HOURS), 500);
             runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(),
                     "dedupe=provider+item", now);
 
@@ -80,7 +85,7 @@ public class RadarHotspotProductionPipeline {
             List<RadarEvent> savedEvents = persist(ranked, now);
             Set<String> activeEventKeys = new HashSet<String>();
             for (RadarEvent event : savedEvents) activeEventKeys.add(event.getEventKey());
-            repository.expireEventsExcept(activeEventKeys, now);
+            repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
             runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(),
                     "snapshot=latest-completed", now);
             String warning = joinWarnings(snapshot.getWarnings());
@@ -133,18 +138,25 @@ public class RadarHotspotProductionPipeline {
     }
 
     private List<RadarEvent> persist(List<RankedCluster> ranked, LocalDateTime now) {
-        List<RadarEvent> saved = new ArrayList<RadarEvent>();
-        int evidenceSchedules = 0;
+        if (ranked.isEmpty()) return new ArrayList<RadarEvent>();
+        List<RadarEvent> events = new ArrayList<RadarEvent>();
+        Map<String, List<RadarEventSignal>> linksByEventKey = new LinkedHashMap<String, List<RadarEventSignal>>();
         for (RankedCluster rankedCluster : ranked) {
             RadarClusteringService.ClusterResult cluster = rankedCluster.cluster;
-            RadarEvent value = repository.saveEvent(cluster.getEvent());
-            repository.replaceEventSignals(value.getId(), cluster.getLinks());
+            events.add(cluster.getEvent());
+            linksByEventKey.put(cluster.getEvent().getEventKey(), cluster.getLinks());
+        }
+        // 事件与信号关系在单个事务内写入，避免出现事件已写、关系未写的半状态。
+        List<RadarEvent> saved = persistence.persistEvents(events, linksByEventKey);
+        int evidenceSchedules = 0;
+        for (int index = 0; index < saved.size(); index++) {
+            RadarEvent value = saved.get(index);
+            RadarClusteringService.ClusterResult cluster = ranked.get(index).cluster;
             boolean includeEvidence = evidenceSchedules < 2 && value.getPriorityScore() >= 75;
             if (enhancement != null && (cluster.getSignals().size() > 1 || includeEvidence)) {
                 enhancement.schedule(value, cluster.getSignals(), now, includeEvidence);
                 if (includeEvidence) evidenceSchedules++;
             }
-            saved.add(value);
         }
         return saved;
     }

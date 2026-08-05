@@ -2,6 +2,8 @@ package com.finscope.service.radar;
 
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.domain.radar.RadarRefreshRun;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class RadarHotspotRefreshService {
+    private static final Logger log = LoggerFactory.getLogger(RadarHotspotRefreshService.class);
     private final RadarHotspotProductionPipeline pipeline;
     private final RadarRefreshRunRepository runs;
     private final Executor executor;
@@ -39,6 +42,9 @@ public class RadarHotspotRefreshService {
 
     public Optional<RadarRefreshRun> latestCompletedRun() { return runs.findLatestCompletedRun(); }
 
+    /** 最近一次批次（任意状态），供页面区分正在生产、成功与失败。 */
+    public Optional<RadarRefreshRun> latestRun() { return runs.findLatestRun(); }
+
     LocalDateTime now() { return LocalDateTime.now(clock); }
 
     private boolean request(String triggerType) {
@@ -46,11 +52,15 @@ public class RadarHotspotRefreshService {
         try {
             executor.execute(() -> {
                 try { pipeline.run("ALL", triggerType, now()); }
-                catch (RuntimeException ignored) { }
-                finally { running.set(false); }
+                catch (RuntimeException error) {
+                    log.error("雷达热点生产批次失败，trigger={}", triggerType, error);
+                } finally {
+                    running.set(false);
+                }
             });
             return true;
         } catch (RuntimeException error) {
+            log.error("雷达热点生产任务提交失败，trigger={}", triggerType, error);
             running.set(false);
             return false;
         }

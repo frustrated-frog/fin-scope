@@ -105,6 +105,9 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
     !normalizedQuery || `${event.title} ${event.summary} ${event.changeSummary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot]);
   const radarRefreshing = snapshot?.productionStatus?.running || snapshot?.warnings.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
+  const productionFailed = snapshot?.productionStatus?.status === 'FAILED';
+  const productionStatusWarning = snapshot?.productionStatus?.warning;
+  const degradedTitle = [snapshot?.warnings.join('\n'), productionStatusWarning].filter(Boolean).join('\n');
 
   return (
     <section className="news-view radar-view" aria-label="研究雷达">
@@ -139,7 +142,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch }: {
       </div>
       <div className="radar-work-rail"><RadarStateFilters value={stateFilter} events={snapshot?.events??[]} onChange={switchState}/><RadarNotificationPanel hint={(snapshot?.events??[]).reduce((sum,item)=>sum+(item.unreadNotificationCount??0),0)} onOpenEvent={openNotificationEvent}/></div>
 
-      {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>{radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
+      {(snapshot?.warnings.length || productionFailed || productionStatusWarning) ? <div className="news-degraded" role="status" title={degradedTitle}><span aria-hidden="true">!</span>{productionFailed ? '雷达最近一次生产失败，当前展示此前快照' : radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : productionStatusWarning ? '部分来源本次未更新，已展示最近结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
 
       <div className="news-board radar-board radar-board-single" data-testid="research-radar-board">
         <section className="radar-latest-panel" aria-labelledby="radar-latest-heading">

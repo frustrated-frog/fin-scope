@@ -52,6 +52,11 @@ class RadarRefreshRunRepositoryTest {
         assertEquals(1, runs.findLatestCompletedRun().get().getEventCount());
         assertEquals(completed.getId(), runs.findLatestCompletedRun().get().getId());
         assertTrue(runs.findSteps(run.getId()).stream().anyMatch(value -> "FETCH".equals(value.getStepCode())));
+
+        RadarRefreshRun failed = runs.startRun("run-20260805-1001", "MANUAL", now.plusMinutes(1));
+        runs.failRun(failed.getId(), "upstream timeout", now.plusMinutes(2));
+        assertEquals("FAILED", runs.findLatestRun().get().getStatus());
+        assertEquals(failed.getId(), runs.findLatestRun().get().getId());
     }
 
     @Test

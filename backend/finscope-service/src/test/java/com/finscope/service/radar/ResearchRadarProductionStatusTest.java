@@ -31,7 +31,7 @@ class ResearchRadarProductionStatusTest {
         latest.setSourceCount(3); latest.setSignalCount(42); latest.setEventCount(12);
         latest.setError("raw upstream stack trace must not be returned");
         when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.emptyList());
-        when(refresh.latestCompletedRun()).thenReturn(Optional.of(latest));
+        when(refresh.latestRun()).thenReturn(Optional.of(latest));
         when(refresh.isRunning()).thenReturn(true);
 
         ResearchRadarService service = new ResearchRadarService(news, repository,
@@ -47,5 +47,32 @@ class ResearchRadarProductionStatusTest {
         assertEquals(latest.getCompletedAt(), view.getRefreshedAt());
         assertTrue(view.getProductionStatus().getWarning() == null ||
                 !view.getProductionStatus().getWarning().contains("stack trace"));
+    }
+
+    @Test
+    void surfacesFailedBatchWithDegradedMessageWithoutRawFailureDetails() {
+        NewsFeedService news = mock(NewsFeedService.class);
+        RadarRepository repository = mock(RadarRepository.class);
+        WatchlistRepository watchlist = mock(WatchlistRepository.class);
+        RadarHotspotRefreshService refresh = mock(RadarHotspotRefreshService.class);
+        RadarRefreshRun failed = new RadarRefreshRun();
+        failed.setStatus("FAILED");
+        failed.setCompletedAt(LocalDateTime.of(2026, 8, 5, 10, 0));
+        failed.setError("raw stack trace must not leak");
+        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.emptyList());
+        when(refresh.latestRun()).thenReturn(Optional.of(failed));
+        when(refresh.isRunning()).thenReturn(false);
+
+        ResearchRadarService service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, refresh,
+                Clock.fixed(Instant.parse("2026-08-05T02:00:00Z"), ZoneId.of("Asia/Shanghai")));
+
+        ResearchRadarView view = service.loadStored("ALL", false, 20, "ALL");
+
+        assertEquals("FAILED", view.getProductionStatus().getStatus());
+        assertTrue(view.getProductionStatus().getWarning() != null
+                && view.getProductionStatus().getWarning().contains("生产失败"));
+        assertTrue(!view.getProductionStatus().getWarning().contains("stack trace"));
     }
 }

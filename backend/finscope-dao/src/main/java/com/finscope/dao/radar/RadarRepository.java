@@ -91,22 +91,32 @@ public class RadarRepository {
                 event.getId(), TimeUtil.text(event.getUpdatedAt()));
     }
 
-    public void expireEventsExcept(java.util.Set<String> activeEventKeys, LocalDateTime now) {
-        if (activeEventKeys == null || activeEventKeys.isEmpty()) {
-            jdbc.update("UPDATE radar_event SET status='EXPIRED',updated_at=? WHERE status IN ('ACTIVE','QUIET')",
-                    TimeUtil.text(now));
-            return;
-        }
+    public void expireEventsExcept(java.util.Set<String> activeEventKeys, LocalDateTime windowStart, LocalDateTime now) {
+        boolean filterKeys = activeEventKeys != null && !activeEventKeys.isEmpty();
         StringBuilder placeholders = new StringBuilder();
-        List<Object> args = new ArrayList<Object>();
-        args.add(TimeUtil.text(now));
-        for (String eventKey : activeEventKeys) {
-            if (placeholders.length() > 0) placeholders.append(',');
-            placeholders.append('?');
-            args.add(eventKey);
+        List<Object> keys = new ArrayList<Object>();
+        if (filterKeys) {
+            for (String eventKey : activeEventKeys) {
+                if (placeholders.length() > 0) placeholders.append(',');
+                placeholders.append('?');
+                keys.add(eventKey);
+            }
         }
+        String notIn = filterKeys ? " AND event_key NOT IN (" + placeholders + ")" : "";
+        // 仍在聚合窗口内但本轮没有新信号 → QUIET 保留，后续重新出现信号时回到 ACTIVE，离开窗口后才 EXPIRED。
+        List<Object> quietParams = new ArrayList<Object>();
+        quietParams.add(TimeUtil.text(now));
+        quietParams.addAll(keys);
+        quietParams.add(TimeUtil.text(windowStart));
+        jdbc.update("UPDATE radar_event SET status='QUIET',updated_at=? WHERE status IN ('ACTIVE','QUIET') "
+                + notIn + " AND COALESCE(last_seen_at,updated_at)>=?", quietParams.toArray());
+        // 离开聚合窗口 → EXPIRED，不再参与雷达展示。
+        List<Object> expiredParams = new ArrayList<Object>();
+        expiredParams.add(TimeUtil.text(now));
+        expiredParams.addAll(keys);
+        expiredParams.add(TimeUtil.text(windowStart));
         jdbc.update("UPDATE radar_event SET status='EXPIRED',updated_at=? WHERE status IN ('ACTIVE','QUIET') "
-                + "AND event_key NOT IN (" + placeholders + ")", args.toArray());
+                + notIn + " AND COALESCE(last_seen_at,updated_at)<?", expiredParams.toArray());
     }
 
     @Transactional
