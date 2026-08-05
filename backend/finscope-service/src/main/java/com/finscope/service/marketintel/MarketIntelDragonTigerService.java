@@ -1,5 +1,7 @@
 package com.finscope.service.marketintel;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.dao.marketintel.DragonTigerRepository;
 import com.finscope.dao.marketintel.MarketIntelRefreshRunRepository;
 import com.finscope.domain.instrument.Instrument;
@@ -37,7 +39,7 @@ public class MarketIntelDragonTigerService {
 
     public DragonTigerView view(Long instrumentId, int days) {
         if (!ALLOWED_DAYS.contains(days)) {
-            throw new IllegalArgumentException("龙虎榜查询天数仅支持 30、60、120");
+            throw new BusinessException(BizErrorCode.DRAGON_TIGER_DAYS_UNSUPPORTED);
         }
         Instrument instrument = capital.stock(instrumentId);
         LocalDate to = LocalDate.now();

@@ -19,6 +19,15 @@ public enum BizErrorCode {
     URL_REQUIRED(ErrorCode.REQUEST_PARAMETER_INVALID, "URL 不能为空"),
     URL_SCHEME_UNSUPPORTED(ErrorCode.REQUEST_PARAMETER_INVALID, "仅支持 HTTP 或 HTTPS URL"),
     URL_MALFORMED(ErrorCode.REQUEST_PARAMETER_INVALID, "URL 格式不正确：%s"),
+    URL_CONTENT_DYNAMIC_SHELL(ErrorCode.REQUEST_PARAMETER_INVALID,
+            "未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页，无法生成可靠情报卡片。URL: %s"),
+    URL_CONTENT_LINK_ONLY(ErrorCode.REQUEST_PARAMETER_INVALID,
+            "未能读取到可用正文：检测到正文仅包含 X Article 链接，缺少实际内容。URL: %s。该推文可能包含长文内容，建议稍后重试或直接访问原链接。"),
+    URL_CONTENT_TOO_SHORT(ErrorCode.REQUEST_PARAMETER_INVALID,
+            "未能读取到可用正文：页面正文过短，无法生成可靠情报卡片。URL: %s"),
+
+    // 市场情报
+    DRAGON_TIGER_DAYS_UNSUPPORTED(ErrorCode.REQUEST_PARAMETER_INVALID, "龙虎榜查询天数仅支持 30、60、120"),
 
     // 量化策略
     STRATEGY_PROMPT_REQUIRED(ErrorCode.REQUEST_PARAMETER_INVALID, "策略描述不能为空"),

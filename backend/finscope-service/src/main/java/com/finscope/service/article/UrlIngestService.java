@@ -106,16 +106,17 @@ public class UrlIngestService {
         String body = text(item.getBody());
         String combined = (title + " " + summary + " " + body).toLowerCase();
         if (isDynamicShell(title, combined)) {
-            throw new IllegalArgumentException("未能读取到可用正文：该页面更像是登录/JavaScript 渲染壳页，无法生成可靠情报卡片。URL: " + url);
+            throw new BusinessException(BizErrorCode.URL_CONTENT_DYNAMIC_SHELL,
+                    BizErrorCode.URL_CONTENT_DYNAMIC_SHELL.format(url), null);
         }
         if (isLinkOnlyContent(title, summary, body)) {
-            throw new IllegalArgumentException(
-                    "未能读取到可用正文：检测到正文仅包含 X Article 链接，缺少实际内容。URL: " + url
-                    + "。该推文可能包含长文内容，建议稍后重试或直接访问原链接。");
+            throw new BusinessException(BizErrorCode.URL_CONTENT_LINK_ONLY,
+                    BizErrorCode.URL_CONTENT_LINK_ONLY.format(url), null);
         }
         String evidence = (summary + " " + body).trim();
         if (evidence.length() < 40) {
-            throw new IllegalArgumentException("未能读取到可用正文：页面正文过短，无法生成可靠情报卡片。URL: " + url);
+            throw new BusinessException(BizErrorCode.URL_CONTENT_TOO_SHORT,
+                    BizErrorCode.URL_CONTENT_TOO_SHORT.format(url), null);
         }
     }
 
