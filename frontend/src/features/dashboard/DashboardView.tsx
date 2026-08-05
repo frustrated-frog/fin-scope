@@ -4,6 +4,8 @@ import {
   Article,
   ContentIdea,
   Dashboard,
+  DashboardHotspotItem,
+  DashboardHotspotRanking,
   EventCluster,
   IntakeCandidate,
   LearningTask,
@@ -25,6 +27,7 @@ type DashboardViewProps = {
   intakeCandidates: IntakeCandidate[];
   knowledgeOverview: KnowledgeOverview | null;
   onChangeView: (view: View) => void;
+  onOpenRadarEvent: (eventId: number) => void;
 };
 
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
@@ -41,7 +44,8 @@ export function DashboardView({
   agentRuns,
   intakeCandidates,
   knowledgeOverview,
-  onChangeView
+  onChangeView,
+  onOpenRadarEvent
 }: DashboardViewProps) {
   if (!dashboard) {
     return (
@@ -74,6 +78,7 @@ export function DashboardView({
   const totalNew = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.successCount, 0);
   const totalDuplicate = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.duplicateCount, 0);
   const completedFetchRuns = dashboard.latestFetchRuns.filter((run) => run.status === 'COMPLETED').length;
+  const hotspotRankings = normalizeHotspotRankings(dashboard.hotspotRankings);
   const pulseItems = [
     {
       label: '新信息',
@@ -125,6 +130,21 @@ export function DashboardView({
               <strong>{item.value}</strong>
               <small>{item.detail}</small>
             </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="dashboard-hotspots" aria-labelledby="dashboard-hotspots-heading">
+        <div className="dashboard-section-heading">
+          <div>
+            <span className="dashboard-section-kicker">TOP STORIES / HOTSPOT RANKING</span>
+            <h3 id="dashboard-hotspots-heading">今日热点</h3>
+          </div>
+          <p>按热点分排列金融、科技与政治事件；摘要保留事实内容，点击可进入事件详情。</p>
+        </div>
+        <div className="dashboard-hotspot-grid">
+          {hotspotRankings.map((ranking) => (
+            <HotspotBoard key={ranking.categoryCode} ranking={ranking} onOpen={onOpenRadarEvent} />
           ))}
         </div>
       </section>
@@ -243,6 +263,97 @@ export function DashboardView({
       </section>
     </section>
   );
+}
+
+const HOTSPOT_BOARD_META: Array<Pick<DashboardHotspotRanking, 'categoryCode' | 'label'>> = [
+  { categoryCode: 'FINANCE', label: '金融' },
+  { categoryCode: 'TECHNOLOGY', label: '科技' },
+  { categoryCode: 'POLITICS', label: '政治' }
+];
+
+function normalizeHotspotRankings(rankings?: DashboardHotspotRanking[]) {
+  return HOTSPOT_BOARD_META.map((meta) => {
+    const ranking = rankings?.find((item) => item.categoryCode === meta.categoryCode);
+    return { ...meta, items: (ranking?.items ?? []).slice(0, 5) };
+  });
+}
+
+function HotspotBoard({ ranking, onOpen }: {
+  ranking: DashboardHotspotRanking;
+  onOpen: (eventId: number) => void;
+}) {
+  return (
+    <article className={`dashboard-hotspot-board is-${ranking.categoryCode.toLowerCase()}`}>
+      <header>
+        <div>
+          <span>{ranking.categoryCode}</span>
+          <h4>{ranking.label}</h4>
+        </div>
+        <strong>{ranking.items.length.toString().padStart(2, '0')}</strong>
+      </header>
+      <div className="dashboard-hotspot-list">
+        {ranking.items.length ? ranking.items.map((item, index) => (
+          <HotspotItem key={item.id} item={item} rank={index + 1} onOpen={onOpen} />
+        )) : (
+          <div className="dashboard-hotspot-empty">
+            <span aria-hidden="true">∅</span>
+            <p>当前还没有可进入该榜单的活跃事件。</p>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function HotspotItem({ item, rank, onOpen }: {
+  item: DashboardHotspotItem;
+  rank: number;
+  onOpen: (eventId: number) => void;
+}) {
+  return (
+    <button
+      className={`dashboard-hotspot-item${rank === 1 ? ' is-lead' : ''}`}
+      type="button"
+      onClick={() => onOpen(item.id)}
+    >
+      <span className="dashboard-hotspot-rank">{rank.toString().padStart(2, '0')}</span>
+      <span className="dashboard-hotspot-copy">
+        <strong>{item.title}</strong>
+        <p>{item.summary}</p>
+        <span className="dashboard-hotspot-meta">
+          <b>热点 {item.hotspotScore}</b>
+          <span>{hotspotLifecycleLabel(item.lifecycleState)}</span>
+          <span>{item.sourceCount} 个独立来源</span>
+          <time dateTime={item.lastSeenAt}>{relativeTime(item.lastSeenAt)}</time>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function hotspotLifecycleLabel(value?: string) {
+  if (value === 'DISCOVERED') return '新发现';
+  if (value === 'EMERGING') return '开始增长';
+  if (value === 'RISING') return '正在升温';
+  if (value === 'PEAK') return '热度峰值';
+  if (value === 'STABLE') return '持续发酵';
+  if (value === 'COOLING') return '热度下降';
+  if (value === 'REACTIVATED') return '再次升温';
+  if (value === 'QUIET') return '趋于平静';
+  if (value === 'CLOSED') return '已结束';
+  return '状态待确认';
+}
+
+function relativeTime(value?: string) {
+  if (!value) return '更新时间未知';
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return '更新时间未知';
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  if (minutes < 1) return '刚刚更新';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
 }
 
 function PriorityLane({

@@ -88,6 +88,7 @@ export default function App() {
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
   const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
+  const [dashboardRadarEventId, setDashboardRadarEventId] = useState<number | null>(null);
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -492,6 +493,10 @@ export default function App() {
           intakeCandidates={intakeCandidates}
           knowledgeOverview={knowledgeOverview}
           onChangeView={setView}
+          onOpenRadarEvent={(eventId) => {
+            setDashboardRadarEventId(eventId);
+            setView('news');
+          }}
         />
       )}
       {view === 'sources' && (
@@ -557,6 +562,8 @@ export default function App() {
         <NewsView
           setMessage={setMessage}
           addToast={addToast}
+          initialRadarEventId={dashboardRadarEventId}
+          onInitialRadarEventOpened={() => setDashboardRadarEventId(null)}
           onResearch={(eventId, question) => {
             setPendingRadarEventId(eventId);
             setResearchQuestionDraft(question);

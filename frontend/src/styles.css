@@ -5206,9 +5206,177 @@ td {
 .dashboard-pulse-item.is-active { --pulse-tone: #de6b5a; }
 
 .dashboard-priority,
+.dashboard-hotspots,
 .dashboard-ledger {
   border-top: 1px solid var(--line);
   padding-top: 20px;
+}
+
+.dashboard-hotspot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-hotspot-board {
+  --hotspot-board-accent: var(--accent);
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.dashboard-hotspot-board.is-technology { --hotspot-board-accent: #31b7cf; }
+.dashboard-hotspot-board.is-politics { --hotspot-board-accent: #d7a843; }
+
+.dashboard-hotspot-board > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 3px solid var(--hotspot-board-accent);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 16px 12px;
+}
+
+.dashboard-hotspot-board > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.dashboard-hotspot-board > header span {
+  color: var(--hotspot-board-accent);
+  font: 720 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-hotspot-board > header h4 {
+  margin: 0;
+  color: var(--ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.dashboard-hotspot-board > header > strong {
+  color: color-mix(in srgb, var(--hotspot-board-accent) 78%, var(--muted));
+  font: 760 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-hotspot-list {
+  display: grid;
+  align-content: start;
+  min-height: 220px;
+}
+
+.dashboard-hotspot-item {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: transparent;
+  color: inherit;
+  padding: 13px 15px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.dashboard-hotspot-item:last-child { border-bottom: 0; }
+
+.dashboard-hotspot-item:hover,
+.dashboard-hotspot-item:focus-visible {
+  background: color-mix(in srgb, var(--hotspot-board-accent) 7%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--hotspot-board-accent);
+  outline: none;
+}
+
+.dashboard-hotspot-item.is-lead {
+  background: color-mix(in srgb, var(--hotspot-board-accent) 5%, var(--surface));
+  padding-top: 16px;
+  padding-bottom: 17px;
+}
+
+.dashboard-hotspot-rank {
+  padding-top: 2px;
+  color: color-mix(in srgb, var(--hotspot-board-accent) 76%, var(--muted));
+  font: 760 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-hotspot-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.dashboard-hotspot-copy > strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.48;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-hotspot-item.is-lead .dashboard-hotspot-copy > strong {
+  font-size: 14px;
+}
+
+.dashboard-hotspot-copy > p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.58;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-hotspot-item.is-lead .dashboard-hotspot-copy > p {
+  -webkit-line-clamp: 3;
+}
+
+.dashboard-hotspot-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  margin-top: 9px;
+  color: var(--faint);
+  font: 660 9px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-hotspot-meta b {
+  color: var(--hotspot-board-accent);
+  font-weight: 760;
+}
+
+.dashboard-hotspot-meta time { margin-left: auto; }
+
+.dashboard-hotspot-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 24px;
+  color: var(--faint);
+  text-align: center;
+}
+
+.dashboard-hotspot-empty > span {
+  color: var(--hotspot-board-accent);
+  font: 720 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-hotspot-empty > p {
+  max-width: 190px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .dashboard-section-heading,
@@ -5419,6 +5587,7 @@ td {
   .dashboard-command { gap: 22px; }
   .dashboard-loading-grid,
   .dashboard-pulse,
+  .dashboard-hotspot-grid,
   .dashboard-priority-grid,
   .dashboard-workspace-grid { grid-template-columns: 1fr; }
   .dashboard-pulse { padding: 18px 0; }
@@ -5431,7 +5600,8 @@ td {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-pulse-item { transition: none; }
+  .dashboard-pulse-item,
+  .dashboard-hotspot-item { transition: none; }
 }
 
 /* Source Workspace */

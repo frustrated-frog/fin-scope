@@ -8,12 +8,87 @@ import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleCard } from './features/articles/ArticleCard';
 import { mockApiResponse } from './test/apiEnvelope';
 
+const dashboardRadarEvent = {
+  id: 10,
+  title: '央行宣布下调存款准备金率',
+  summary: '本次调整预计释放长期流动性约一万亿元。',
+  hotspotScore: 91,
+  hotspotLifecycleState: 'RISING',
+  priorityScore: 88,
+  recommendation: '值得关注',
+  reasons: ['多源确认', '政策影响面广'],
+  watchlistRelated: false,
+  watchlistExplanation: '',
+  sourceCount: 3,
+  signalCount: 5,
+  uncertainty: '需要观察后续流动性传导效果。',
+  nextObservation: '观察资金利率与信贷投放。',
+  suggestedResearchQuestion: '降准如何影响流动性与风险资产？',
+  lastSeenAt: '2026-08-06T09:30:00'
+};
+
 const responses: Record<string, unknown> = {
   '/api/strategy/overview': { holdings: [], targetWeight: 0, currentWeight: 0 },
   '/api/strategy/playbooks': [],
   '/api/strategy/stock-theses': [],
   '/api/strategy/reviews': [],
-  '/api/dashboard': { sourceCount: 2, articleCount: 3, briefCount: 1, latestFetchRuns: [] },
+  '/api/dashboard': {
+    sourceCount: 2,
+    articleCount: 3,
+    briefCount: 1,
+    latestFetchRuns: [],
+    hotspotRankings: [
+      {
+        categoryCode: 'FINANCE',
+        label: '金融',
+        items: [{ ...dashboardRadarEvent, lifecycleState: dashboardRadarEvent.hotspotLifecycleState }]
+      },
+      { categoryCode: 'TECHNOLOGY', label: '科技', items: [] },
+      { categoryCode: 'POLITICS', label: '政治', items: [] }
+    ]
+  },
+  '/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL': {
+    overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 0, sourceCount: 3 },
+    events: [dashboardRadarEvent],
+    latestChanges: [dashboardRadarEvent],
+    warnings: [],
+    refreshedAt: '2026-08-06T09:30:00',
+    productionStatus: { running: false, status: 'SUCCESS', sourceCount: 3, signalCount: 5, eventCount: 1 }
+  },
+  '/api/news/categories': [],
+  '/api/research-radar/events/10': {
+    event: dashboardRadarEvent,
+    signals: [],
+    evidence: [],
+    agentTrace: [],
+    timeline: [],
+    observations: [],
+    researchLinks: [],
+    workspaceState: { eventId: 10, read: true, followed: false, disposition: 'ACTIVE' },
+    trust: {
+      independentSourceCount: 3,
+      sourceTierCounts: { OFFICIAL: 1, MEDIA: 2 },
+      citationCoveredCount: 0,
+      citationTotalCount: 0,
+      concentration: '来源分布均衡',
+      conflicts: [],
+      limitation: '仍需跟踪政策传导效果'
+    },
+    interpretation: {
+      eventId: 10,
+      status: 'SUCCESS',
+      stale: false,
+      result: {
+        factSummary: '央行宣布下调存款准备金率。',
+        newDevelopment: '释放中长期流动性。',
+        whyItMatters: '可能影响资金利率、信贷与风险偏好。',
+        impactChain: ['降准', '流动性释放', '资产定价变化'],
+        uncertainties: ['实体融资需求仍待验证'],
+        nextObservations: ['观察资金利率与新增信贷'],
+        evidenceRefs: []
+      }
+    }
+  },
   '/api/knowledge/overview': {
     actions: [],
     activeTopics: [],
@@ -665,6 +740,16 @@ test('dashboard directs the event priority item to the current market news works
   await userEvent.click(await screen.findByRole('button', { name: '查看研究流' }));
 
   expect(screen.getByText('News Wire · 市场资讯')).toBeInTheDocument();
+});
+
+test('dashboard hotspot opens the research radar workspace', async () => {
+  render(<App />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /央行宣布下调存款准备金率/ }));
+
+  expect(screen.getByText('News Wire · 市场资讯')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '研究雷达' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await screen.findByRole('dialog', { name: '央行宣布下调存款准备金率' })).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {

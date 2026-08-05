@@ -653,6 +653,7 @@ export type Dashboard = {
   sourceCount: number;
   articleCount: number;
   briefCount: number;
+  hotspotRankings?: DashboardHotspotRanking[];
   latestFetchRuns: Array<{
     id: number;
     sourceName: string;
@@ -660,6 +661,23 @@ export type Dashboard = {
     successCount: number;
     duplicateCount: number;
   }>;
+};
+
+export type DashboardHotspotRanking = {
+  categoryCode: 'FINANCE' | 'TECHNOLOGY' | 'POLITICS';
+  label: string;
+  items: DashboardHotspotItem[];
+};
+
+export type DashboardHotspotItem = {
+  id: number;
+  title: string;
+  summary: string;
+  hotspotScore: number;
+  lifecycleState?: string;
+  sourceCount: number;
+  signalCount: number;
+  lastSeenAt?: string;
 };
 
 export type PageResponse<T> = {
