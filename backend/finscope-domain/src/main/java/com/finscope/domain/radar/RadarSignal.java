@@ -17,6 +17,9 @@ public class RadarSignal {
     private LocalDateTime lastSeenAt;
     private String contentHash;
     private String status;
+    private Integer sourceRank;
+    private Integer previousSourceRank;
+    private double sourceWeight;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -46,4 +49,10 @@ public class RadarSignal {
     public void setContentHash(String contentHash) { this.contentHash = contentHash; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getSourceRank() { return sourceRank; }
+    public void setSourceRank(Integer sourceRank) { this.sourceRank = sourceRank; }
+    public Integer getPreviousSourceRank() { return previousSourceRank; }
+    public void setPreviousSourceRank(Integer previousSourceRank) { this.previousSourceRank = previousSourceRank; }
+    public double getSourceWeight() { return sourceWeight; }
+    public void setSourceWeight(double sourceWeight) { this.sourceWeight = sourceWeight; }
 }

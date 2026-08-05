@@ -145,7 +145,8 @@ class RadarRepositoryTest {
         jdbc.execute("CREATE TABLE radar_signal(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL UNIQUE,"
                 + "provider_code TEXT,source_name TEXT,source_tier TEXT,category_code TEXT,title TEXT NOT NULL,"
                 + "content TEXT,url TEXT,published_at TEXT,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"
-                + "content_hash TEXT NOT NULL,status TEXT NOT NULL)");
+                + "content_hash TEXT NOT NULL,status TEXT NOT NULL,source_rank INTEGER,previous_source_rank INTEGER,"
+                + "source_weight REAL NOT NULL DEFAULT 0)");
         jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,"
                 + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,status TEXT NOT NULL,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"

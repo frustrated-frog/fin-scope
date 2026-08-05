@@ -179,8 +179,23 @@ public class DatabaseInitializer implements InitializingBean {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL UNIQUE,provider_code TEXT,source_name TEXT,"
                 + "source_tier TEXT,category_code TEXT,title TEXT NOT NULL,content TEXT,url TEXT,published_at TEXT,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,content_hash TEXT NOT NULL,status TEXT NOT NULL)");
+        ensureColumn("radar_signal", "source_rank", "INTEGER");
+        ensureColumn("radar_signal", "previous_source_rank", "INTEGER");
+        ensureColumn("radar_signal", "source_weight", "REAL NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_signal_active ON radar_signal(status,last_seen_at)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_signal_category ON radar_signal(category_code,last_seen_at)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_refresh_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_key TEXT NOT NULL UNIQUE,trigger_type TEXT NOT NULL,"
+                + "status TEXT NOT NULL,started_at TEXT NOT NULL,completed_at TEXT,source_count INTEGER NOT NULL DEFAULT 0,"
+                + "signal_count INTEGER NOT NULL DEFAULT 0,event_count INTEGER NOT NULL DEFAULT 0,warning TEXT,error TEXT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_refresh_run_status "
+                + "ON radar_refresh_run(status,completed_at DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_refresh_step ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,step_code TEXT NOT NULL,"
+                + "status TEXT NOT NULL,started_at TEXT NOT NULL,completed_at TEXT,input_count INTEGER NOT NULL DEFAULT 0,"
+                + "output_count INTEGER NOT NULL DEFAULT 0,details TEXT,error TEXT,UNIQUE(run_id,step_code),"
+                + "FOREIGN KEY(run_id) REFERENCES radar_refresh_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_refresh_step_run ON radar_refresh_step(run_id,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,canonical_title TEXT NOT NULL,summary TEXT,"
                 + "category_code TEXT,status TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,"

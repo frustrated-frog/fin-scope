@@ -22,16 +22,20 @@ public class RadarRepository {
     public RadarSignal capture(RadarSignal signal, LocalDateTime now) {
         String timestamp = TimeUtil.text(now);
         jdbc.update("INSERT INTO radar_signal(item_id,provider_code,source_name,source_tier,category_code,title,content,url,"
-                        + "published_at,first_seen_at,last_seen_at,content_hash,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "published_at,first_seen_at,last_seen_at,content_hash,status,source_rank,previous_source_rank,source_weight) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(item_id) DO UPDATE SET provider_code=COALESCE(excluded.provider_code,provider_code),"
                         + "source_name=COALESCE(excluded.source_name,source_name),source_tier=COALESCE(excluded.source_tier,source_tier),"
                         + "category_code=COALESCE(excluded.category_code,category_code),title=excluded.title,"
                         + "content=COALESCE(excluded.content,content),url=COALESCE(excluded.url,url),"
                         + "published_at=COALESCE(excluded.published_at,published_at),last_seen_at=excluded.last_seen_at,"
-                        + "content_hash=excluded.content_hash,status='ACTIVE'",
+                        + "content_hash=excluded.content_hash,status='ACTIVE',"
+                        + "previous_source_rank=COALESCE(excluded.previous_source_rank,source_rank),"
+                        + "source_rank=COALESCE(excluded.source_rank,source_rank),"
+                        + "source_weight=CASE WHEN excluded.source_weight=0 THEN source_weight ELSE excluded.source_weight END",
                 signal.getItemId(), signal.getProviderCode(), signal.getSourceName(), signal.getSourceTier(),
                 signal.getCategoryCode(), signal.getTitle(), signal.getContent(), signal.getUrl(),
-                TimeUtil.text(signal.getPublishedAt()), timestamp, timestamp, signal.getContentHash(), "ACTIVE");
+                TimeUtil.text(signal.getPublishedAt()), timestamp, timestamp, signal.getContentHash(), "ACTIVE",
+                signal.getSourceRank(), signal.getPreviousSourceRank(), signal.getSourceWeight());
         return findSignalByItemId(signal.getItemId()).orElseThrow(IllegalStateException::new);
     }
 
@@ -155,7 +159,9 @@ public class RadarRepository {
             value.setContent(rs.getString("content")); value.setUrl(rs.getString("url"));
             value.setPublishedAt(TimeUtil.localDateTime(rs,"published_at")); value.setFirstSeenAt(TimeUtil.localDateTime(rs,"first_seen_at"));
             value.setLastSeenAt(TimeUtil.localDateTime(rs,"last_seen_at")); value.setContentHash(rs.getString("content_hash"));
-            value.setStatus(rs.getString("status")); return value; };
+            value.setStatus(rs.getString("status")); value.setSourceRank((Integer) rs.getObject("source_rank"));
+            value.setPreviousSourceRank((Integer) rs.getObject("previous_source_rank")); value.setSourceWeight(rs.getDouble("source_weight"));
+            return value; };
     }
 
     private org.springframework.jdbc.core.RowMapper<RadarEvent> eventMapper() {
