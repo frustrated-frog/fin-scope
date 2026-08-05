@@ -13,6 +13,10 @@ spring:
       maximum-pool-size: 4
       connection-timeout: 30000
       connection-init-sql: PRAGMA busy_timeout=30000
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    timeout: 1000ms
 
 logging:
   charset:
@@ -23,6 +27,10 @@ logging:
 finscope:
   data-root: ../data
   cors-origin: http://localhost:*
+  redis:
+    enabled: true
+    cache:
+      research-material-ttl-seconds: 240
   llm:
     enabled: true
     base-url: https://modelservice.jdcloud.com/v1
