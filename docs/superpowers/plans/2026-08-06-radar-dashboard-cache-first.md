@@ -343,4 +343,3 @@ Expected: no whitespace errors and no uncommitted implementation files.
 \`\`\`bash
 git push
 \`\`\`
-
