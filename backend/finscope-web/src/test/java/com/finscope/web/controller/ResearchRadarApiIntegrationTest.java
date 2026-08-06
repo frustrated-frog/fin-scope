@@ -14,13 +14,17 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -37,9 +41,9 @@ class ResearchRadarApiIntegrationTest {
 
     @Test
     void returnsUnifiedRadarEnvelope() throws Exception {
-        when(service.loadStored("ALL", false, 20, "ALL")).thenReturn(ResearchRadarView.empty(LocalDateTime.of(2026, 7, 31, 16, 0)));
-        when(snapshots.readOrLoad(any(), any(), any(), any())).thenAnswer(invocation ->
-                new ObjectMapper().findAndRegisterModules().valueToTree(((Supplier<?>) invocation.getArgument(3)).get()));
+        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL")))
+                .thenReturn(Optional.of(new ObjectMapper().findAndRegisterModules()
+                        .valueToTree(ResearchRadarView.empty(LocalDateTime.of(2026, 7, 31, 16, 0)))));
 
         mvc.perform(get("/api/research-radar"))
                 .andExpect(status().isOk())
@@ -47,7 +51,7 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.latestChanges").isArray())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
                 .andExpect(jsonPath("$.data.overview.eventCount").value(0));
-        verify(service).loadStored("ALL", false, 20, "ALL");
+        verify(service, never()).loadStored(any(), anyBoolean(), anyInt(), any());
     }
 
     @Test

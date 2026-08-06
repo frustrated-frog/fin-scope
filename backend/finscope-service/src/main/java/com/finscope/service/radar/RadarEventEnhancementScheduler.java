@@ -18,17 +18,25 @@ public class RadarEventEnhancementScheduler {
     private final RadarCanonicalTitleAgent titles;
     private final RadarEvidenceOrchestrator evidence;
     private final RadarRepository repository;
+    private final RadarSnapshotProjectionService snapshots;
     private final Executor executor;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public RadarEventEnhancementScheduler(RadarCanonicalTitleAgent titles,
                                           RadarEvidenceOrchestrator evidence,
                                           RadarRepository repository,
+                                          RadarSnapshotProjectionService snapshots,
                                           @Qualifier("radarAgentExecutor") Executor executor) {
         this.titles = titles;
         this.evidence = evidence;
         this.repository = repository;
+        this.snapshots = snapshots;
         this.executor = executor;
+    }
+
+    RadarEventEnhancementScheduler(RadarCanonicalTitleAgent titles, RadarEvidenceOrchestrator evidence,
+                                   RadarRepository repository, Executor executor) {
+        this(titles, evidence, repository, null, executor);
     }
 
     public void schedule(RadarEvent event, List<RadarSignal> signals, LocalDateTime now, boolean includeEvidence) {
@@ -69,6 +77,7 @@ public class RadarEventEnhancementScheduler {
                 }
             }
             repository.updateEvidenceEnhancement(event);
+            if (snapshots != null) snapshots.republish();
         } catch (RuntimeException ignored) {
             // 后台增强失败时保留规则结果，下一次刷新仍可重试。
         } finally {

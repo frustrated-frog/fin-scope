@@ -225,6 +225,26 @@ public class ResearchRadarService {
                 Collections.<String>emptyList(), refreshedAt, status);
     }
 
+    /** 列表快照缺失时仅返回生产状态，不允许为页面读取回查 SQLite。 */
+    public ResearchRadarView emptyStored() {
+        LocalDateTime refreshedAt = LocalDateTime.now(clock);
+        ResearchRadarView.ProductionStatus status = ResearchRadarView.ProductionStatus.of(false, "EMPTY", refreshedAt, 0, 0, 0, null);
+        if (backgroundRefresh != null) {
+            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestRun();
+            if (latestRun.isPresent()) {
+                com.finscope.domain.radar.RadarRefreshRun run = latestRun.get();
+                if (run.getCompletedAt() != null) refreshedAt = run.getCompletedAt();
+                status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), run.getStatus(), refreshedAt,
+                        run.getSourceCount(), run.getSignalCount(), run.getEventCount(), productionMessage(run));
+            } else {
+                status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), "EMPTY", refreshedAt, 0, 0, 0, null);
+            }
+        }
+        return new ResearchRadarView(Collections.<ResearchRadarView.EventCard>emptyList(),
+                Collections.<ResearchRadarView.EventCard>emptyList(), Collections.<NewsFeedItem>emptyList(),
+                Collections.<String>emptyList(), refreshedAt, status);
+    }
+
     public ResearchRadarView.EventDetail detail(Long id) {
         RadarEvent event=repository.findEvent(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,"雷达事件不存在"));
         List<RadarSignal> signals=repository.findSignalsByEventId(id);

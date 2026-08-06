@@ -12,6 +12,7 @@ import com.finscope.web.request.RadarResearchLinkRequest;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.service.cache.ViewSnapshotCacheService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +25,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
-import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/research-radar")
@@ -33,9 +33,10 @@ public class ResearchRadarController {
     private final RadarEventWorkspaceService workspace;
     private final RadarResearchLinkService researchLinks;
     private final ViewSnapshotCacheService snapshots;
+    private final ObjectMapper mapper;
     public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace,
-                                   RadarResearchLinkService researchLinks, ViewSnapshotCacheService snapshots){
-        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks; this.snapshots=snapshots;
+                                   RadarResearchLinkService researchLinks, ViewSnapshotCacheService snapshots, ObjectMapper mapper){
+        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks; this.snapshots=snapshots; this.mapper=mapper;
     }
 
     /**
@@ -59,8 +60,8 @@ public class ResearchRadarController {
         String normalizedState = state == null ? "ALL" : state.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
         String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly + "&limit=" + normalizedLimit + "&state=" + normalizedState;
-        JsonNode data = snapshots.readOrLoad("radar", variant, Duration.ofSeconds(20),
-                () -> service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState));
+        JsonNode data = snapshots.read("radar", variant)
+                .orElseGet(() -> mapper.valueToTree(service.emptyStored()));
         return ApiResponses.success(data);
     }
 

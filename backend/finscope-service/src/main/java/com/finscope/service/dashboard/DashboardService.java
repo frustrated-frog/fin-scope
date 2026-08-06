@@ -17,18 +17,15 @@ public class DashboardService {
     private final ArticleQueryService articleQueryService;
     private final BriefRepository briefRepository;
     private final FetchRunRepository fetchRunRepository;
-    private final DashboardHotspotRankingService hotspotRankings;
 
     public DashboardService(SourceRepository sourceRepository,
                             ArticleQueryService articleQueryService,
                             BriefRepository briefRepository,
-                            FetchRunRepository fetchRunRepository,
-                            DashboardHotspotRankingService hotspotRankings) {
+                            FetchRunRepository fetchRunRepository) {
         this.sourceRepository = sourceRepository;
         this.articleQueryService = articleQueryService;
         this.briefRepository = briefRepository;
         this.fetchRunRepository = fetchRunRepository;
-        this.hotspotRankings = hotspotRankings;
     }
 
     public Map<String, Object> summary() {
@@ -38,7 +35,6 @@ public class DashboardService {
         result.put("briefCount", briefRepository.findAll().size());
         List<FetchRun> runs = fetchRunRepository.latest(5);
         result.put("latestFetchRuns", runs);
-        result.put("hotspotRankings", hotspotRankings.rankings());
         return result;
     }
 }

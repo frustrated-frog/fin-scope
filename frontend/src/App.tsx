@@ -30,6 +30,7 @@ import {
   BriefResearchContext,
   ContentIdea,
   Dashboard,
+  DashboardHotspotRanking,
   EvidenceItem,
   EventCluster,
   FetchBatch,
@@ -61,6 +62,7 @@ export default function App() {
   ));
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [hotspotRankings, setHotspotRankings] = useState<DashboardHotspotRanking[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [fetchBatches, setFetchBatches] = useState<FetchBatch[]>([]);
@@ -106,6 +108,7 @@ export default function App() {
   const refresh = async () => {
     const results = await Promise.allSettled([
       api<Dashboard>('/api/dashboard'),
+      api<DashboardHotspotRanking[]>('/api/dashboard/hotspots'),
       api<Source[]>('/api/sources'),
       api<Article[]>('/api/articles'),
       api<Brief[]>('/api/briefs'),
@@ -124,22 +127,23 @@ export default function App() {
       return result.status === 'fulfilled' ? result.value as T : undefined;
     };
     const dashboardData = value<Dashboard>(0); if (dashboardData) setDashboard(dashboardData);
-    const sourceData = value<Source[]>(1); if (sourceData) setSources(sourceData);
-    const articleData = value<Article[]>(2); if (articleData) setArticles(articleData);
-    const briefData = value<Brief[]>(3); if (briefData) setBriefs(briefData);
-    const eventData = value<EventCluster[]>(4); if (eventData) setEvents(eventData);
-    const evidenceData = value<EvidenceItem[]>(5); if (evidenceData) setEvidenceItems(evidenceData);
-    const knowledgeOverviewData = value<KnowledgeOverview>(6);
+    const hotspotData = value<DashboardHotspotRanking[]>(1); if (hotspotData) setHotspotRankings(hotspotData);
+    const sourceData = value<Source[]>(2); if (sourceData) setSources(sourceData);
+    const articleData = value<Article[]>(3); if (articleData) setArticles(articleData);
+    const briefData = value<Brief[]>(4); if (briefData) setBriefs(briefData);
+    const eventData = value<EventCluster[]>(5); if (eventData) setEvents(eventData);
+    const evidenceData = value<EvidenceItem[]>(6); if (evidenceData) setEvidenceItems(evidenceData);
+    const knowledgeOverviewData = value<KnowledgeOverview>(7);
     if (knowledgeOverviewData) {
       setKnowledgeOverview(knowledgeOverviewData);
       setActiveTopicCount(knowledgeOverviewData.activeTopicCount ?? 0);
     }
-    const contentIdeaData = value<ContentIdea[]>(7); if (contentIdeaData) setContentIdeas(contentIdeaData);
-    const researchRunData = value<ResearchRun[]>(8); if (researchRunData) setResearchRuns(researchRunData);
-    const researchThesisData = value<ResearchThesis[]>(9); if (Array.isArray(researchThesisData)) setResearchTheses(researchThesisData);
-    const agentData = value<AgentRun[]>(10); if (agentData) setAgentRuns(agentData);
-    const fetchBatchData = value<FetchBatch[]>(11); if (fetchBatchData) setFetchBatches(fetchBatchData);
-    const intakeCandidateData = value<IntakeCandidate[]>(12); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
+    const contentIdeaData = value<ContentIdea[]>(8); if (contentIdeaData) setContentIdeas(contentIdeaData);
+    const researchRunData = value<ResearchRun[]>(9); if (researchRunData) setResearchRuns(researchRunData);
+    const researchThesisData = value<ResearchThesis[]>(10); if (Array.isArray(researchThesisData)) setResearchTheses(researchThesisData);
+    const agentData = value<AgentRun[]>(11); if (agentData) setAgentRuns(agentData);
+    const fetchBatchData = value<FetchBatch[]>(12); if (fetchBatchData) setFetchBatches(fetchBatchData);
+    const intakeCandidateData = value<IntakeCandidate[]>(13); if (intakeCandidateData) setIntakeCandidates(intakeCandidateData);
     const failureCount = results.filter((result) => result.status === 'rejected').length;
     if (failureCount) {
       setMessage(`部分工作区数据刷新失败（${failureCount} 项），已保留已加载内容`);
@@ -160,7 +164,9 @@ export default function App() {
   }, []);
 
   useViewRevision(['dashboard'], () => {
-    void api<Dashboard>('/api/dashboard').then(setDashboard).catch(() => undefined);
+    void Promise.all([api<Dashboard>('/api/dashboard'), api<DashboardHotspotRanking[]>('/api/dashboard/hotspots')])
+      .then(([summary, rankings]) => { setDashboard(summary); setHotspotRankings(rankings); })
+      .catch(() => undefined);
   });
 
   useEffect(() => {
@@ -488,6 +494,7 @@ export default function App() {
       {view === 'dashboard' && (
         <DashboardView
           dashboard={dashboard}
+          hotspotRankings={hotspotRankings}
           articles={articles}
           events={events}
           learningTasks={learningTasks}

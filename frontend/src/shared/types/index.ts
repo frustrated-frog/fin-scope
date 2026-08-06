@@ -625,7 +625,6 @@ export type Dashboard = {
   sourceCount: number;
   articleCount: number;
   briefCount: number;
-  hotspotRankings?: DashboardHotspotRanking[];
   latestFetchRuns: Array<{
     id: number;
     sourceName: string;

@@ -25,7 +25,6 @@ public class RadarResearchLinkService {
         String snapshot=question==null||question.trim().isEmpty()?null:question.trim();
         if(snapshot!=null&&snapshot.length()>500)throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,"研究问题不能超过500字");
         RadarEventWorkspace.ResearchLink linked = links.linkResearchRun(eventId,runId,snapshot);
-        if (viewRevisions != null) viewRevisions.invalidate("radar");
         return linked;
     }
 }

@@ -54,6 +54,22 @@ class RadarEventEnhancementSchedulerTest {
         verify(evidence,never()).enrich(any(RadarEvent.class),anyList());
     }
 
+    @Test
+    void republishesTheCachedRadarSnapshotAfterAgentEnhancementCompletes() {
+        RadarCanonicalTitleAgent titles=mock(RadarCanonicalTitleAgent.class);
+        RadarEvidenceOrchestrator evidence=mock(RadarEvidenceOrchestrator.class);
+        RadarSnapshotProjectionService snapshots=mock(RadarSnapshotProjectionService.class);
+        CapturingExecutor executor=new CapturingExecutor();
+        when(titles.generate(anyList(),any())).thenReturn(RadarCanonicalTitleAgent.Result.fallback("新标题","TEST"));
+        RadarEventEnhancementScheduler scheduler=new RadarEventEnhancementScheduler(titles,evidence,
+                mock(RadarRepository.class),snapshots,executor);
+
+        scheduler.schedule(event(),Arrays.asList(signal(1L),signal(2L)),LocalDateTime.of(2026,7,31,20,0),false);
+        executor.runPending();
+
+        verify(snapshots).republish();
+    }
+
     private RadarEvent event(){RadarEvent value=new RadarEvent();value.setId(8L);value.setEventKey("event:8");value.setCanonicalTitle("规则标题");value.setPriorityScore(82);return value;}
     private RadarSignal signal(Long id){RadarSignal value=new RadarSignal();value.setId(id);value.setTitle("信号"+id);return value;}
     private static final class CapturingExecutor implements Executor {private Runnable pending;public void execute(Runnable command){pending=command;}void runPending(){pending.run();pending=null;}}

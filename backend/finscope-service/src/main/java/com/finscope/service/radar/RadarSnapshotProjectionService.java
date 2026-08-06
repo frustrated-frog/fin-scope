@@ -24,6 +24,8 @@ public class RadarSnapshotProjectionService {
     private final ViewSnapshotCacheService snapshots;
     private final ViewRevisionService revisions;
     private final DashboardHotspotRankingService rankings;
+    private volatile List<RadarEvent> latestEvents = Collections.emptyList();
+    private volatile RadarRefreshRun latestRun;
 
     public RadarSnapshotProjectionService(ViewSnapshotCacheService snapshots, ViewRevisionService revisions,
                                           DashboardHotspotRankingService rankings) {
@@ -32,7 +34,7 @@ public class RadarSnapshotProjectionService {
         this.rankings = rankings;
     }
 
-    public boolean prewarm(List<RadarEvent> events, RadarRefreshRun run) {
+    public synchronized boolean prewarm(List<RadarEvent> events, RadarRefreshRun run) {
         if (run == null) return false;
         long radarRevision = snapshots.nextRevision("radar");
         long dashboardRevision = snapshots.nextRevision("dashboard");
@@ -46,7 +48,14 @@ public class RadarSnapshotProjectionService {
         LocalDateTime completedAt = run.getCompletedAt();
         revisions.publish("radar", radarRevision, completedAt);
         revisions.publish("dashboard", dashboardRevision, completedAt);
+        latestEvents = new ArrayList<RadarEvent>(values);
+        latestRun = run;
         return true;
+    }
+
+    /** Agent 增强修改了本轮内存事件后，重建完整快照并发布下一版本。 */
+    public synchronized boolean republish() {
+        return latestRun != null && prewarm(latestEvents, latestRun);
     }
 
     private ResearchRadarView radarView(List<RadarEvent> events, RadarRefreshRun run) {

@@ -3,14 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import { DashboardView } from './DashboardView';
-import type { Dashboard } from '../../shared/types';
+import type { Dashboard, DashboardHotspotRanking } from '../../shared/types';
 
 const dashboard: Dashboard = {
   sourceCount: 3,
   articleCount: 15,
   briefCount: 1,
-  latestFetchRuns: [],
-  hotspotRankings: [
+  latestFetchRuns: []
+};
+
+const hotspotRankings: DashboardHotspotRanking[] = [
     {
       categoryCode: 'FINANCE',
       label: '金融',
@@ -29,8 +31,7 @@ const dashboard: Dashboard = {
     },
     { categoryCode: 'TECHNOLOGY', label: '科技', items: [] },
     { categoryCode: 'POLITICS', label: '政治', items: [] }
-  ]
-};
+];
 
 test('renders three hotspot boards with readable summaries and ranking metadata', () => {
   renderDashboard();
@@ -68,6 +69,7 @@ function renderDashboard(onOpenRadarEvent = vi.fn()) {
   render(
     <DashboardView
       dashboard={dashboard}
+      hotspotRankings={hotspotRankings}
       articles={[]}
       events={[]}
       learningTasks={[]}

@@ -36,17 +36,17 @@ const responses: Record<string, unknown> = {
     sourceCount: 2,
     articleCount: 3,
     briefCount: 1,
-    latestFetchRuns: [],
-    hotspotRankings: [
-      {
-        categoryCode: 'FINANCE',
-        label: '金融',
-        items: [{ ...dashboardRadarEvent, lifecycleState: dashboardRadarEvent.hotspotLifecycleState }]
-      },
-      { categoryCode: 'TECHNOLOGY', label: '科技', items: [] },
-      { categoryCode: 'POLITICS', label: '政治', items: [] }
-    ]
+    latestFetchRuns: []
   },
+  '/api/dashboard/hotspots': [
+    {
+      categoryCode: 'FINANCE',
+      label: '金融',
+      items: [{ ...dashboardRadarEvent, lifecycleState: dashboardRadarEvent.hotspotLifecycleState }]
+    },
+    { categoryCode: 'TECHNOLOGY', label: '科技', items: [] },
+    { categoryCode: 'POLITICS', label: '政治', items: [] }
+  ],
   '/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL': {
     overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 0, sourceCount: 3 },
     events: [dashboardRadarEvent],

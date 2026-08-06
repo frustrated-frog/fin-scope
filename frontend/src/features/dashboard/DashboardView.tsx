@@ -17,6 +17,7 @@ import { KnowledgeOverview } from '../knowledge/knowledgeTypes';
 
 type DashboardViewProps = {
   dashboard: Dashboard | null;
+  hotspotRankings: DashboardHotspotRanking[];
   articles: Article[];
   events: EventCluster[];
   learningTasks: LearningTask[];
@@ -35,6 +36,7 @@ const ACTIVE_AGENT_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
 
 export function DashboardView({
   dashboard,
+  hotspotRankings,
   articles,
   events,
   learningTasks,
@@ -78,7 +80,7 @@ export function DashboardView({
   const totalNew = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.successCount, 0);
   const totalDuplicate = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.duplicateCount, 0);
   const completedFetchRuns = dashboard.latestFetchRuns.filter((run) => run.status === 'COMPLETED').length;
-  const hotspotRankings = normalizeHotspotRankings(dashboard.hotspotRankings);
+  const normalizedHotspotRankings = normalizeHotspotRankings(hotspotRankings);
   const pulseItems = [
     {
       label: '新信息',
@@ -165,7 +167,7 @@ export function DashboardView({
           <p>按热点分排列金融、科技与政治事件；摘要保留事实内容，点击可进入事件详情。</p>
         </div>
         <div className="dashboard-hotspot-grid">
-          {hotspotRankings.map((ranking) => (
+          {normalizedHotspotRankings.map((ranking) => (
             <HotspotBoard key={ranking.categoryCode} ranking={ranking} onOpen={onOpenRadarEvent} />
           ))}
         </div>
