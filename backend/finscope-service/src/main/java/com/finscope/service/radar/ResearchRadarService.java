@@ -167,6 +167,7 @@ public class ResearchRadarService {
                 event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
                 event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
                 RadarEvent saved = repository.saveEvent(event); repository.replaceEventSignals(saved.getId(), cluster.getLinks());
+                repository.expireDuplicateEventsByCanonicalTitle(saved.getCanonicalTitle(), saved.getId(), now);
                 activeEventKeys.add(saved.getEventKey());
                 boolean includeEvidence = evidenceSchedules < 2 && saved.getPriorityScore() >= 75;
                 if (enhancementScheduler != null && (cluster.getSignals().size() > 1 || includeEvidence)) {

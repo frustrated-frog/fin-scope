@@ -85,6 +85,25 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void rankedRadarHidesLegacyCategoryDuplicatesWithTheSameTitle() {
+        RadarEvent oldCategory = event("UNCLASSIFIED:港股人工智能股走弱兆易创新跌超5:事件:信息");
+        oldCategory.setCanonicalTitle("港股人工智能股走弱 兆易创新跌超5%");
+        oldCategory.setPriorityScore(78);
+        oldCategory.setHotspotScore(56);
+        RadarEvent newCategory = event("MARKET_MOVE:港股人工智能股走弱兆易创新跌超5:事件:信息");
+        newCategory.setCanonicalTitle("港股人工智能股走弱 兆易创新跌超5%");
+        newCategory.setPriorityScore(83);
+        newCategory.setHotspotScore(43);
+        repository.saveEvent(oldCategory);
+        RadarEvent savedNew = repository.saveEvent(newCategory);
+
+        List<RadarEvent> ranked = repository.findRanked("ALL", false, 20);
+
+        assertEquals(1, ranked.size());
+        assertEquals(savedNew.getId(), ranked.get(0).getId());
+    }
+
+    @Test
     void dashboardRankingReturnsOnlyTheFiveHottestEventsInItsCategory() {
         for (int index = 1; index <= 6; index++) {
             RadarEvent event = event("event:finance:" + index);

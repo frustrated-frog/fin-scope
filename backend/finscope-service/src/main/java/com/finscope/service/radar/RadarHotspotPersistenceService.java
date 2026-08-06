@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
 
 @Service
 public class RadarHotspotPersistenceService {
@@ -35,6 +36,8 @@ public class RadarHotspotPersistenceService {
             List<RadarEventSignal> links = linksByEventKey == null ? null : linksByEventKey.get(event.getEventKey());
             repository.replaceEventSignals(stored.getId(),
                     links == null ? Collections.<RadarEventSignal>emptyList() : links);
+            repository.expireDuplicateEventsByCanonicalTitle(stored.getCanonicalTitle(), stored.getId(),
+                    event.getUpdatedAt() == null ? LocalDateTime.now() : event.getUpdatedAt());
             saved.add(stored);
         }
         return saved;

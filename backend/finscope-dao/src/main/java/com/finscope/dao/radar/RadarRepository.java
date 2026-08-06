@@ -159,14 +159,16 @@ public class RadarRepository {
             sql.append(" AND category_code=?"); args.add(category.trim().toUpperCase());
         }
         if (watchlistOnly) sql.append(" AND watchlist_relevance>0");
-        sql.append(" ORDER BY priority_score DESC,hotspot_score DESC,last_seen_at DESC LIMIT ?"); args.add(Math.max(1, limit));
-        return jdbc.query(sql.toString(), eventMapper(), args.toArray());
+        sql.append(" ORDER BY priority_score DESC,hotspot_score DESC,last_seen_at DESC,id DESC LIMIT ?");
+        args.add(500);
+        return hideLegacyCategoryDuplicates(jdbc.query(sql.toString(), eventMapper(), args.toArray()), limit);
     }
 
     public List<RadarEvent> findTopByDashboardCategory(String dashboardCategory, int limit) {
-        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') AND dashboard_category=? "
-                        + "ORDER BY hotspot_score DESC,last_seen_at DESC,id DESC LIMIT ?",
-                eventMapper(), dashboardCategory, Math.max(1, Math.min(limit, 20)));
+        List<RadarEvent> values = jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') AND dashboard_category=? "
+                        + "ORDER BY hotspot_score DESC,last_seen_at DESC,id DESC LIMIT 500",
+                eventMapper(), dashboardCategory);
+        return hideLegacyCategoryDuplicates(values, limit);
     }
 
     public List<RadarEvent> findEventsMissingDashboardCategory(int limit) {
@@ -174,6 +176,52 @@ public class RadarRepository {
                         + "AND (dashboard_category IS NULL OR dashboard_category='' OR dashboard_category='UNCLASSIFIED') "
                         + "ORDER BY last_seen_at DESC,id DESC LIMIT ?",
                 eventMapper(), Math.max(1, Math.min(limit, 1000)));
+    }
+
+    public List<RadarEvent> findEventsForDashboardClassification(int limit) {
+        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') "
+                        + "ORDER BY last_seen_at DESC,id DESC LIMIT ?", eventMapper(),
+                Math.max(1, Math.min(limit, 1000)));
+    }
+
+    /**
+     * 分类码修复前生成的事件键包含分类前缀，同一标题可能因此留下两个可展示事件。
+     * 生产写入后将旧副本标记过期，保留事件历史和关联证据，但不再进入雷达榜单。
+     */
+    public void expireDuplicateEventsByCanonicalTitle(String canonicalTitle, Long keepEventId, LocalDateTime now) {
+        if (canonicalTitle == null || canonicalTitle.trim().isEmpty() || keepEventId == null) return;
+        jdbc.update("UPDATE radar_event SET status='EXPIRED',updated_at=? WHERE status IN ('ACTIVE','QUIET') "
+                        + "AND id<>? AND lower(trim(canonical_title))=lower(trim(?))",
+                TimeUtil.text(now), keepEventId, canonicalTitle);
+    }
+
+    private List<RadarEvent> hideLegacyCategoryDuplicates(List<RadarEvent> values, int limit) {
+        List<RadarEvent> result = new ArrayList<RadarEvent>();
+        java.util.Set<String> seenTitles = new java.util.HashSet<String>();
+        java.util.Set<String> legacyTitles = new java.util.HashSet<String>();
+        for (RadarEvent value : values) {
+            String title = value.getCanonicalTitle();
+            String normalizedTitle = title == null ? null : title.trim().toLowerCase(java.util.Locale.ROOT);
+            boolean legacy = isLegacyCategoryKey(value.getEventKey());
+            if (normalizedTitle != null && seenTitles.contains(normalizedTitle)
+                    && (legacy || legacyTitles.contains(normalizedTitle))) continue;
+            result.add(value);
+            if (normalizedTitle != null) {
+                seenTitles.add(normalizedTitle);
+                if (legacy) legacyTitles.add(normalizedTitle);
+            }
+            if (result.size() >= Math.max(1, Math.min(limit, 50))) break;
+        }
+        return result;
+    }
+
+    private boolean isLegacyCategoryKey(String eventKey) {
+        if (eventKey == null) return false;
+        int separator = eventKey.indexOf(':');
+        if (separator <= 0) return false;
+        String prefix = eventKey.substring(0, separator);
+        return "COMPANY".equals(prefix) || "INDUSTRY".equals(prefix) || "MARKET_MOVE".equals(prefix)
+                || "MACRO_POLICY".equals(prefix) || "GLOBAL".equals(prefix) || "UNCLASSIFIED".equals(prefix);
     }
 
     public void updateDashboardCategory(Long eventId, String dashboardCategory) {

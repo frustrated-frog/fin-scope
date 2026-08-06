@@ -57,8 +57,10 @@ public class RadarTextAnalyzer {
         String variable = first(features.variables);
         String fallback = features.normalizedTitle.length() <= 32
                 ? features.normalizedTitle : features.normalizedTitle.substring(0, 32);
-        return features.category + ":" + nonBlank(subject, fallback) + ":"
-                + nonBlank(action, "事件") + ":" + nonBlank(variable, "信息");
+        // 事件身份由事实标题、主体、动作和变量决定，不能随上游分类结果漂移。
+        // 同一条资讯在分类补全前后可能从 UNCLASSIFIED 变成 MARKET_MOVE，分类码不应制造第二个事件。
+        return nonBlank(subject, fallback) + ":" + nonBlank(action, "事件") + ":"
+                + nonBlank(variable, "信息");
     }
 
     public String normalize(String value) { return fingerprints.normalizeText(value); }

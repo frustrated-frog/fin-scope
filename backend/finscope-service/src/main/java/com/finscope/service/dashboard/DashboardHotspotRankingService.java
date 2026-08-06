@@ -32,8 +32,11 @@ public class DashboardHotspotRankingService {
     }
 
     private void classifyEventsCreatedBeforeDashboardRankings() {
-        for (RadarEvent event : repository.findEventsMissingDashboardCategory(500)) {
-            repository.updateDashboardCategory(event.getId(), categories.classify(event));
+        for (RadarEvent event : repository.findEventsForDashboardClassification(500)) {
+            String classified = categories.classify(event);
+            if (!classified.equals(event.getDashboardCategory())) {
+                repository.updateDashboardCategory(event.getId(), classified);
+            }
         }
     }
 

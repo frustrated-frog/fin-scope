@@ -46,7 +46,7 @@ class DashboardHotspotRankingServiceTest {
         RadarRepository repository = mock(RadarRepository.class);
         RadarEvent unclassified = event(12L, "OpenAI 发布新一代模型", "Agent 推理能力明显提升", 86);
         unclassified.setDashboardCategory("UNCLASSIFIED");
-        when(repository.findEventsMissingDashboardCategory(500)).thenReturn(Collections.singletonList(unclassified));
+        when(repository.findEventsForDashboardClassification(500)).thenReturn(Collections.singletonList(unclassified));
         when(repository.findTopByDashboardCategory("FINANCE", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
@@ -56,6 +56,24 @@ class DashboardHotspotRankingServiceTest {
         service.rankings();
 
         verify(repository).updateDashboardCategory(12L, "TECHNOLOGY");
+    }
+
+    @Test
+    void repairsPreviouslyMisclassifiedActiveEvents() {
+        RadarRepository repository = mock(RadarRepository.class);
+        RadarEvent marketMove = event(13L, "AI应用端反复走强 博彦科技2连板", "AI应用端反复走强，博彦科技涨停。", 86);
+        marketMove.setCategoryCode("MARKET_MOVE");
+        marketMove.setDashboardCategory("TECHNOLOGY");
+        when(repository.findEventsForDashboardClassification(500)).thenReturn(Collections.singletonList(marketMove));
+        when(repository.findTopByDashboardCategory("FINANCE", 5)).thenReturn(Collections.emptyList());
+        when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
+        when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
+
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
+                repository, new RadarDashboardCategoryService());
+        service.rankings();
+
+        verify(repository).updateDashboardCategory(13L, "FINANCE");
     }
 
     private RadarEvent event(Long id, String title, String summary, int score) {

@@ -15,7 +15,7 @@ public class RadarDashboardCategoryService {
     private static final String[] TECHNOLOGY_TERMS = {
             "人工智能", "大模型", "生成式AI", "AI模型", "AGENT", "OPENAI", "ANTHROPIC", "DEEPSEEK",
             "芯片", "半导体", "算力", "GPU", "CPU", "机器人", "云计算", "数据中心", "光通信", "电池",
-            "软件", "开源", "算法", "科技", "自动驾驶", "量子计算", "操作系统"
+            "软件", "开源", "算法", "自动驾驶", "量子计算", "操作系统"
     };
     private static final String[] POLITICS_TERMS = {
             "政治", "政府", "国务院", "白宫", "国会", "议会", "总统", "首相", "选举", "政党",
@@ -27,11 +27,22 @@ public class RadarDashboardCategoryService {
             "汇率", "央行", "降息", "加息", "财报", "业绩", "营收", "利润", "分红", "融资", "并购",
             "上市", "交易", "投资", "资金", "指数", "期货", "商品", "房地产"
     };
+    private static final String[] MARKET_MOVE_TERMS = {
+            "涨停", "跌停", "涨超", "跌超", "走强", "走弱", "拉升", "回升", "回落", "震荡",
+            "概念", "板块", "个股", "连板", "涨幅", "跌幅", "20CM", "开盘", "收盘", "股价",
+            "融资买入", "净买入", "净卖出", "基金持仓", "公募基金", "持仓", "跟涨", "跟跌",
+            "订单", "出货", "合同", "协议", "营业收入", "收入", "净利润", "业绩", "同比",
+            "IPO", "股权", "持有"
+    };
 
     public String classify(RadarEvent event) {
         if (event == null) return FINANCE;
         String category = normalize(event.getCategoryCode());
         String text = normalize(event.getCanonicalTitle()) + " " + normalize(event.getSummary());
+
+        // Dashboard 的科技榜只承载技术进展和产品/模型发布；市场行情即使提到 AI、芯片或科技公司，
+        // 仍应归入金融，避免“AI 应用走强”“芯片股涨停”这类行情资讯挤占科技榜。
+        if ("MARKET_MOVE".equals(category) || score(text, MARKET_MOVE_TERMS) > 0) return FINANCE;
 
         int technology = score(text, TECHNOLOGY_TERMS);
         int politics = score(text, POLITICS_TERMS);

@@ -80,6 +80,16 @@ class RadarClusteringServiceTest {
     }
 
     @Test
+    void eventIdentityDoesNotChangeWhenTheSameTitleGetsADifferentSourceCategory() {
+        RadarTextAnalyzer analyzer = new RadarTextAnalyzer(new FingerprintService());
+        RadarSignal unclassified = signal(1L, "CLS", "港股人工智能股走弱 兆易创新跌超5%", "UNCLASSIFIED");
+        RadarSignal marketMove = signal(2L, "CLS", "港股人工智能股走弱 兆易创新跌超5%", "MARKET_MOVE");
+
+        assertEquals(analyzer.eventKey(analyzer.analyze(unclassified)),
+                analyzer.eventKey(analyzer.analyze(marketMove)));
+    }
+
+    @Test
     void cachedPairDecisionAvoidsRepeatedAgentCall() {
         RadarPairDecisionRepository decisions = mock(RadarPairDecisionRepository.class);
         RadarPairDecisionScheduler scheduler = mock(RadarPairDecisionScheduler.class);
