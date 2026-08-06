@@ -48,7 +48,7 @@ class ResearchRadarApiIntegrationTest {
         mvc.perform(get("/api/research-radar"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.events").isArray())
-                .andExpect(jsonPath("$.data.latestChanges").isArray())
+                .andExpect(jsonPath("$.data.latestChanges").doesNotExist())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
                 .andExpect(jsonPath("$.data.overview.eventCount").value(0));
         verify(service, never()).loadStored(any(), anyBoolean(), anyInt(), any());

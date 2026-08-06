@@ -50,7 +50,6 @@ const responses: Record<string, unknown> = {
   '/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL': {
     overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 0, sourceCount: 3 },
     events: [dashboardRadarEvent],
-    latestChanges: [dashboardRadarEvent],
     warnings: [],
     refreshedAt: '2026-08-06T09:30:00',
     productionStatus: { running: false, status: 'SUCCESS', sourceCount: 3, signalCount: 5, eventCount: 1 }

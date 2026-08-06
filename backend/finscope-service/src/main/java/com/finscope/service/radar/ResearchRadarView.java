@@ -19,7 +19,6 @@ import java.util.Map;
 public final class ResearchRadarView {
     private final Overview overview;
     private final List<EventCard> events;
-    private final List<EventCard> latestChanges;
     private final List<NewsFeedItem> liveItems;
     private final List<String> warnings;
     private final LocalDateTime refreshedAt;
@@ -27,17 +26,12 @@ public final class ResearchRadarView {
 
     public ResearchRadarView(List<EventCard> events, List<NewsFeedItem> liveItems,
                              List<String> warnings, LocalDateTime refreshedAt) {
-        this(events, events, liveItems, warnings, refreshedAt);
+        this(events, liveItems, warnings, refreshedAt, ProductionStatus.idle(refreshedAt));
     }
 
-    public ResearchRadarView(List<EventCard> events, List<EventCard> latestChanges, List<NewsFeedItem> liveItems,
-                             List<String> warnings, LocalDateTime refreshedAt) {
-        this(events, latestChanges, liveItems, warnings, refreshedAt, ProductionStatus.idle(refreshedAt));
-    }
-
-    public ResearchRadarView(List<EventCard> events, List<EventCard> latestChanges, List<NewsFeedItem> liveItems,
+    public ResearchRadarView(List<EventCard> events, List<NewsFeedItem> liveItems,
                              List<String> warnings, LocalDateTime refreshedAt, ProductionStatus productionStatus) {
-        this.events = immutable(events); this.latestChanges = immutable(latestChanges); this.liveItems = immutable(liveItems);
+        this.events = immutable(events); this.liveItems = immutable(liveItems);
         this.warnings = immutable(warnings); this.refreshedAt = refreshedAt;
         this.productionStatus = productionStatus == null ? ProductionStatus.idle(refreshedAt) : productionStatus;
         this.overview = Overview.from(this.events);
@@ -53,16 +47,15 @@ public final class ResearchRadarView {
     }
     public Overview getOverview() { return overview; }
     public List<EventCard> getEvents() { return events; }
-    public List<EventCard> getLatestChanges() { return latestChanges; }
     public List<NewsFeedItem> getLiveItems() { return liveItems; }
     public List<String> getWarnings() { return warnings; }
     public LocalDateTime getRefreshedAt() { return refreshedAt; }
     public ProductionStatus getProductionStatus() { return productionStatus; }
     public ResearchRadarView withWarnings(List<String> values) {
-        return new ResearchRadarView(events, latestChanges, liveItems, values, refreshedAt, productionStatus);
+        return new ResearchRadarView(events, liveItems, values, refreshedAt, productionStatus);
     }
     public ResearchRadarView withProductionStatus(ProductionStatus value) {
-        return new ResearchRadarView(events, latestChanges, liveItems, warnings, refreshedAt, value);
+        return new ResearchRadarView(events, liveItems, warnings, refreshedAt, value);
     }
 
     public static final class ProductionStatus {

@@ -80,7 +80,6 @@ class ResearchRadarServiceTest {
         assertEquals(1, view.getEvents().size());
         assertEquals(2, view.getEvents().get(0).getSourceCount());
         assertEquals("未发现与当前自选标的的直接关系", view.getEvents().get(0).getWatchlistExplanation());
-        assertEquals(1, view.getLatestChanges().size());
         assertTrue(view.getLiveItems().isEmpty());
         assertEquals(1, view.getOverview().getEventCount());
     }

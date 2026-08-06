@@ -128,7 +128,6 @@ export type RadarStateFilter = 'ALL' | 'UNREAD' | 'FOLLOWED' | 'LATER' | 'IGNORE
 export type ResearchRadarSnapshot = {
   overview: { eventCount: number; highPriorityCount: number; watchlistRelatedCount: number; sourceCount: number };
   events: RadarEvent[];
-  latestChanges?: RadarEvent[];
   liveItems?: RadarNewsItem[];
   warnings: string[];
   refreshedAt: string;

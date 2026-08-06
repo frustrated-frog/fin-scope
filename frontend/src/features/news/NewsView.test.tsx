@@ -51,7 +51,6 @@ const liveItem = {
 const snapshot = {
   overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 1, sourceCount: 3 },
   events: [event],
-  latestChanges: [event],
   liveItems: [],
   warnings: [],
   refreshedAt: '2026-07-31T16:00:00'
@@ -199,17 +198,16 @@ test('keeps the news visible when classification review fails', async () => {
   expect(screen.getAllByText('宁德时代发布新一代电池').length).toBeGreaterThan(0);
 });
 
-test('renders latest changes and full-width priority cards without duplicating the live wire', async () => {
+test('shows high-priority cards without a duplicated latest-changes panel', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  const latest = await screen.findByRole('heading', { name: '最新变化' });
   const focus = screen.getByRole('heading', { name: '高优先级事件' });
   expect(screen.getByText('与自选「宁德时代」直接相关')).toBeInTheDocument();
   expect(screen.getByText('92')).toBeInTheDocument();
   const board = screen.getByTestId('research-radar-board');
-  expect(within(board).getAllByRole('heading')[0]).toBe(latest);
-  expect(within(board).getAllByRole('heading')).toContain(focus);
+  expect(within(board).getByRole('heading', { name: '高优先级事件' })).toBe(focus);
+  expect(screen.queryByRole('heading', { name: '最新变化' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '实时发生' })).not.toBeInTheDocument();
 });
 
@@ -292,7 +290,7 @@ test('keeps research priority as the primary score and exposes hotspot score as 
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
-    return Promise.resolve({ ...snapshot, events: [rankedEvent], latestChanges: [rankedEvent] });
+    return Promise.resolve({ ...snapshot, events: [rankedEvent] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
@@ -343,7 +341,7 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
   vi.stubGlobal('EventSource', FakeEventSource);
   let calls = 0;
   const updatedEvent = { ...event, id: 11, title: '新的雷达事件', lastSeenAt: '2026-07-31T16:01:00' };
-  const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events], latestChanges: [updatedEvent, event] };
+  const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events] };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);

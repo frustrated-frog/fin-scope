@@ -63,9 +63,7 @@ public class RadarSnapshotProjectionService {
         ranked.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
                 .thenComparing(RadarEvent::getHotspotScore, Comparator.reverseOrder())
                 .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
-        List<RadarEvent> latest = new ArrayList<RadarEvent>(ranked);
-        latest.sort(Comparator.comparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
-        return new ResearchRadarView(cards(ranked, 20), cards(latest, 5), Collections.emptyList(),
+        return new ResearchRadarView(cards(ranked, 20), Collections.emptyList(),
                 Collections.emptyList(), run.getCompletedAt(), ResearchRadarView.ProductionStatus.of(false,
                 run.getStatus(), run.getCompletedAt(), run.getSourceCount(), run.getSignalCount(),
                 run.getEventCount(), run.getWarning()));

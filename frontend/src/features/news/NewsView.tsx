@@ -84,7 +84,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
   }
   function switchState(value:RadarStateFilter){stateFilterRef.current=value;setStateFilter(value);setSelectedEvent(undefined);setLoading(true);void load(false,selectedCategoryRef.current,false);}
 
-  function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const updated={...current,events:current.events.map((item)=>item.id===next.id?next:item),latestChanges:current.latestChanges?.map((item)=>item.id===next.id?next:item)};snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
+  function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const updated={...current,events:current.events.map((item)=>item.id===next.id?next:item)};snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
   function openEvent(item:RadarEvent){const next={...item,read:true};replaceEvent(next);setSelectedEvent(next);}
   async function updateState(item:RadarEvent,patch:{followed?:boolean;disposition?:'ACTIVE'|'LATER'|'IGNORED'}){
     try{const state=await api<RadarWorkspaceState>(`/api/research-radar/events/${item.id}/state`,{method:'PATCH',body:JSON.stringify(patch)});replaceEvent({...item,read:state.read,followed:state.followed,disposition:state.disposition});addToast('事件处理状态已更新','success');}
@@ -110,8 +110,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
     void api<RadarEventDetail>(`/api/research-radar/events/${initialEventId}`)
       .then((detail) => { if (active) setSelectedEvent(detail.event); })
       .catch(() => {
-        const item = snapshotRef.current?.events.find((event) => event.id === initialEventId)
-          ?? snapshotRef.current?.latestChanges?.find((event) => event.id === initialEventId);
+        const item = snapshotRef.current?.events.find((event) => event.id === initialEventId);
         if (active && item) setSelectedEvent(item);
       })
       .finally(() => { if (active) onInitialEventOpened?.(); });
@@ -122,9 +121,6 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
   const events = useMemo(() => (snapshot?.events ?? []).filter((event) =>
     !normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery)
   ), [normalizedQuery, snapshot,stateFilter]);
-  const latestChanges = useMemo(() => (snapshot?.latestChanges ?? snapshot?.events ?? []).filter((event) =>
-    !normalizedQuery || `${event.title} ${event.summary} ${event.changeSummary ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
-  ), [normalizedQuery, snapshot]);
   const radarRefreshing = snapshot?.productionStatus?.running || snapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
   const productionFailed = snapshot?.productionStatus?.status === 'FAILED';
   const productionStatusWarning = snapshot?.productionStatus?.warning;
@@ -166,20 +162,8 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
       {(snapshot?.warnings?.length || productionFailed || productionStatusWarning) ? <div className="news-degraded" role="status" title={degradedTitle}><span aria-hidden="true">!</span>{productionFailed ? '雷达最近一次生产失败，当前展示此前快照' : radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : productionStatusWarning ? '部分来源本次未更新，已展示最近结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}</div> : null}
 
       <div className="news-board radar-board radar-board-single" data-testid="research-radar-board">
-        <section className="radar-latest-panel" aria-labelledby="radar-latest-heading">
-          <div className="news-section-heading"><div><span>01 · CHANGE TAPE</span><h2 id="radar-latest-heading">最新变化</h2></div><strong>{latestChanges.length} 件</strong></div>
-          {loading && !snapshot ? <NewsSkeleton /> : latestChanges.length ? (
-            <div className="radar-change-tape">{latestChanges.map((item) => (
-              <button type="button" className="radar-change-item" key={item.id} onClick={() => openEvent(item)}>
-                <div><span>{changeTypeLabel(item.changeType)}</span><time dateTime={item.lastSeenAt}>{formatTime(item.lastSeenAt)}</time></div>
-                <strong>{item.title}</strong>
-                <p>{item.changeSummary || item.summary}</p>
-              </button>
-            ))}</div>
-          ) : <EmptyState label="暂时没有新的事件变化" />}
-        </section>
         <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
-          <div className="news-section-heading"><div><span>02 · RESEARCH FIRST</span><h2 id="radar-focus-heading">高优先级事件</h2></div><strong>{events.length} 件</strong></div>
+          <div className="news-section-heading"><div><span>RESEARCH FIRST</span><h2 id="radar-focus-heading">高优先级事件</h2></div><strong>{events.length} 件</strong></div>
           {loading && !snapshot ? <NewsSkeleton /> : events.length ? <div className="radar-event-list">{events.map((item) => <RadarEventCard key={item.id} event={item} addToast={addToast} onResearch={onResearch} onOpen={openEvent} onStateChange={(target,patch)=>void updateState(target,patch)} />)}</div> : <EmptyState label="当前筛选下没有事件" />}
         </section>
       </div>
@@ -209,4 +193,3 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
 function NewsSkeleton() { return <div className="news-skeleton" aria-label="正在加载雷达"><span /><span /><span /></div>; }
 function EmptyState({ label }: { label: string }) { return <div className="news-empty"><span aria-hidden="true">∅</span><p>{label}</p></div>; }
 function formatTime(value?: string) { const date = value ? new Date(value) : undefined; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--'; }
-function changeTypeLabel(value?: string) { if (value === 'MULTI_SOURCE') return '多源确认'; if (value === 'EVIDENCE_ADDED') return '新增证据'; if (value === 'MATERIAL_UPDATE') return '实质进展'; if (value === 'NEW_EVENT') return '新事件'; return '事件更新'; }
