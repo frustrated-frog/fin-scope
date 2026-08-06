@@ -1,6 +1,7 @@
 package com.finscope.service.cache;
 
 import com.finscope.dao.cache.VersionedViewCacheRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -18,6 +19,7 @@ public class ViewRevisionService {
     private final ViewRevisionPublisher publisher;
     private final Clock clock;
 
+    @Autowired
     public ViewRevisionService(VersionedViewCacheRepository cache, ViewRevisionPublisher publisher) {
         this(cache, publisher, Clock.systemDefaultZone());
     }
