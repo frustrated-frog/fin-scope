@@ -137,6 +137,25 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void rankedQueryStillFillsTheRequestedLimitAfterLegacyDuplicates() {
+        for (int index = 0; index < 501; index++) {
+            RadarEvent duplicate = event("COMPANY:legacy:" + index);
+            duplicate.setCanonicalTitle("旧分类重复标题");
+            duplicate.setPriorityScore(1_000 - index);
+            repository.saveEvent(duplicate);
+        }
+        RadarEvent distinct = event("event:distinct");
+        distinct.setCanonicalTitle("应进入榜单的独立事件");
+        distinct.setPriorityScore(1);
+        repository.saveEvent(distinct);
+
+        List<RadarEvent> ranked = repository.findRanked("ALL", false, 2);
+
+        assertEquals(2, ranked.size());
+        assertEquals("event:distinct", ranked.get(1).getEventKey());
+    }
+
+    @Test
     void findsAndBackfillsEventsMissingDashboardClassification() {
         RadarEvent event = event("event:unclassified");
         event.setDashboardCategory("UNCLASSIFIED");

@@ -153,22 +153,21 @@ public class RadarRepository {
     }
 
     public List<RadarEvent> findRanked(String category, boolean watchlistOnly, int limit) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET')");
+        StringBuilder filters = new StringBuilder(" WHERE e.status IN ('ACTIVE','QUIET')");
         List<Object> args = new ArrayList<Object>();
         if (category != null && !category.trim().isEmpty() && !"ALL".equalsIgnoreCase(category)) {
-            sql.append(" AND category_code=?"); args.add(category.trim().toUpperCase());
+            filters.append(" AND e.category_code=?"); args.add(category.trim().toUpperCase());
         }
-        if (watchlistOnly) sql.append(" AND watchlist_relevance>0");
-        sql.append(" ORDER BY priority_score DESC,hotspot_score DESC,last_seen_at DESC,id DESC LIMIT ?");
-        args.add(500);
-        return hideLegacyCategoryDuplicates(jdbc.query(sql.toString(), eventMapper(), args.toArray()), limit);
+        if (watchlistOnly) filters.append(" AND e.watchlist_relevance>0");
+        args.add(normalizeLimit(limit));
+        return jdbc.query(deduplicatedEventsSql(filters.toString(), "e.priority_score DESC,e.hotspot_score DESC,e.last_seen_at DESC,e.id DESC"),
+                eventMapper(), args.toArray());
     }
 
     public List<RadarEvent> findTopByDashboardCategory(String dashboardCategory, int limit) {
-        List<RadarEvent> values = jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') AND dashboard_category=? "
-                        + "ORDER BY hotspot_score DESC,last_seen_at DESC,id DESC LIMIT 500",
-                eventMapper(), dashboardCategory);
-        return hideLegacyCategoryDuplicates(values, limit);
+        return jdbc.query(deduplicatedEventsSql(" WHERE e.status IN ('ACTIVE','QUIET') AND e.dashboard_category=?",
+                        "e.hotspot_score DESC,e.last_seen_at DESC,e.id DESC"),
+                eventMapper(), dashboardCategory, normalizeLimit(limit));
     }
 
     public List<RadarEvent> findEventsMissingDashboardCategory(int limit) {
@@ -195,33 +194,18 @@ public class RadarRepository {
                 TimeUtil.text(now), keepEventId, canonicalTitle);
     }
 
-    private List<RadarEvent> hideLegacyCategoryDuplicates(List<RadarEvent> values, int limit) {
-        List<RadarEvent> result = new ArrayList<RadarEvent>();
-        java.util.Set<String> seenTitles = new java.util.HashSet<String>();
-        java.util.Set<String> legacyTitles = new java.util.HashSet<String>();
-        for (RadarEvent value : values) {
-            String title = value.getCanonicalTitle();
-            String normalizedTitle = title == null ? null : title.trim().toLowerCase(java.util.Locale.ROOT);
-            boolean legacy = isLegacyCategoryKey(value.getEventKey());
-            if (normalizedTitle != null && seenTitles.contains(normalizedTitle)
-                    && (legacy || legacyTitles.contains(normalizedTitle))) continue;
-            result.add(value);
-            if (normalizedTitle != null) {
-                seenTitles.add(normalizedTitle);
-                if (legacy) legacyTitles.add(normalizedTitle);
-            }
-            if (result.size() >= Math.max(1, Math.min(limit, 50))) break;
-        }
-        return result;
+    private String deduplicatedEventsSql(String filters, String orderBy) {
+        String legacyCategoryPrefix = "CASE WHEN substr(e.event_key,1,instr(e.event_key,':')-1) "
+                + "IN ('COMPANY','INDUSTRY','MARKET_MOVE','MACRO_POLICY','GLOBAL','UNCLASSIFIED') THEN 1 ELSE 0 END";
+        String titleKey = "CASE WHEN " + legacyCategoryPrefix + "=1 THEN "
+                + "COALESCE(NULLIF(lower(trim(e.canonical_title)),''),'legacy:' || e.id) ELSE 'event:' || e.id END";
+        return "SELECT * FROM (SELECT e.*,ROW_NUMBER() OVER (PARTITION BY " + titleKey + " ORDER BY "
+                + legacyCategoryPrefix + " ASC," + orderBy + ") duplicate_rank FROM radar_event e" + filters
+                + ") WHERE duplicate_rank=1 ORDER BY " + orderBy.replace("e.", "") + " LIMIT ?";
     }
 
-    private boolean isLegacyCategoryKey(String eventKey) {
-        if (eventKey == null) return false;
-        int separator = eventKey.indexOf(':');
-        if (separator <= 0) return false;
-        String prefix = eventKey.substring(0, separator);
-        return "COMPANY".equals(prefix) || "INDUSTRY".equals(prefix) || "MARKET_MOVE".equals(prefix)
-                || "MACRO_POLICY".equals(prefix) || "GLOBAL".equals(prefix) || "UNCLASSIFIED".equals(prefix);
+    private int normalizeLimit(int limit) {
+        return Math.max(1, Math.min(limit, 50));
     }
 
     public void updateDashboardCategory(Long eventId, String dashboardCategory) {

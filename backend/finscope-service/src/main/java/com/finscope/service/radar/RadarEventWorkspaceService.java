@@ -72,11 +72,12 @@ public class RadarEventWorkspaceService {
     public void readAllNotifications(){workspace.markAllNotificationsRead();}
 
     public OpenedEvent open(RadarEvent event) {
+        RadarEventWorkspace.State previous = workspace.findState(event.getId());
         RadarEventWorkspace.State state = workspace.updateState(event.getId(), true, null, null, fingerprint(event));
         String observation = text(event.getNextObservation(), "关注事件是否出现新的独立来源、数据或正式公告");
         List<RadarEventWorkspace.Observation> observations = workspace.ensureDefaultObservation(event.getId(), observation);
         action(event.getId(), fingerprint(event), "READ", "已查看事件", "事件详情已读", "STATE", event.getId());
-        invalidateRadar();
+        if (previous == null || !previous.isRead()) invalidateRadar();
         return new OpenedEvent(state, observations, workspace.findResearchLinks(event.getId()));
     }
 

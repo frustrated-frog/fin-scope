@@ -28,7 +28,8 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
           if (!scope || !activeScopes.has(scope)) return;
           const previous = known.get(scope);
           known.set(scope, value.revision);
-          if (previous !== undefined && value.revision > previous) callback.current(scope);
+          // Redis 不可用或重启时服务端会返回 0 或较小版本；此时定时直读页面接口，确保 SQLite 主链路仍可刷新。
+          if (value.revision === 0 || (previous !== undefined && value.revision !== previous)) callback.current(scope);
         });
       } catch {
         // 对账失败不干扰当前快照；下一轮重试即可。
@@ -51,7 +52,13 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
           if (!scope || !activeScopes.has(scope)) return;
           const previous = known.get(scope);
           known.set(scope, value.revision);
-          if (previous === undefined || value.revision > previous) callback.current(scope);
+          if (previous === undefined || value.revision > previous) {
+            callback.current(scope);
+          } else if (value.revision === 0 || value.revision < previous) {
+            // Redis 重启/不可用时 SSE 仍可能存活但版本回退；切入定时直读的 SQLite 兜底。
+            callback.current(scope);
+            startFallback();
+          }
         } catch {
           // 无效事件不影响后续 SSE 推送。
         }

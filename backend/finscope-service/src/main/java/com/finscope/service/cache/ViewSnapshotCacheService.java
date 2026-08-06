@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.VersionedViewCacheRepository;
+import com.finscope.service.news.NewsFeedSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,10 +36,15 @@ public class ViewSnapshotCacheService {
         Object value = loader.get();
         try {
             String payload = mapper.writeValueAsString(value);
-            cache.put(scope, variant, payload, ttl);
+            if (shouldCache(scope, value)) cache.put(scope, variant, payload, ttl);
             return mapper.readTree(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("页面快照序列化失败", error);
         }
+    }
+
+    private boolean shouldCache(String scope, Object value) {
+        return !("news".equalsIgnoreCase(scope) && value instanceof NewsFeedSnapshot
+                && ((NewsFeedSnapshot) value).getItems().isEmpty());
     }
 }

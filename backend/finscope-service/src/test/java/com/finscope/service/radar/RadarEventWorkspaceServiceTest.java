@@ -4,6 +4,7 @@ import com.finscope.dao.radar.RadarEventWorkspaceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventWorkspace;
+import com.finscope.service.cache.ViewRevisionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +47,22 @@ class RadarEventWorkspaceServiceTest {
 
         assertEquals(10L, opened.getState().getEventId());
         verify(workspace).ensureDefaultObservation(10L, "跟踪订单、指引与后续公告变化");
+    }
+
+    @Test
+    void reopeningAnAlreadyReadEventDoesNotInvalidateTheRadarSnapshot() {
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
+        service = new RadarEventWorkspaceService(workspace, radar, null, revisions);
+        RadarEventWorkspace.State previous = new RadarEventWorkspace.State(); previous.setEventId(10L); previous.setRead(true);
+        RadarEventWorkspace.State updated = new RadarEventWorkspace.State(); updated.setEventId(10L); updated.setRead(true);
+        when(workspace.findState(10L)).thenReturn(previous);
+        when(workspace.updateState(eq(10L), eq(true), eq(null), eq(null), anyString())).thenReturn(updated);
+        when(workspace.ensureDefaultObservation(10L, "跟踪订单、指引与后续公告变化"))
+                .thenReturn(Collections.<RadarEventWorkspace.Observation>emptyList());
+
+        service.open(event());
+
+        verify(revisions, never()).invalidate("radar");
     }
 
     @Test

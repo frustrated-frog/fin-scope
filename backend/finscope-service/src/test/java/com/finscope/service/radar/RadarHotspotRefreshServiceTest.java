@@ -71,4 +71,18 @@ class RadarHotspotRefreshServiceTest {
         verify(revisions).invalidate("radar", run.getCompletedAt());
         verify(revisions).invalidate("dashboard", run.getCompletedAt());
     }
+
+    @Test
+    void invalidatesPageSnapshotsWhenProductionFailsAfterPersistingData() {
+        RadarHotspotProductionPipeline pipeline = mock(RadarHotspotProductionPipeline.class);
+        RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
+        when(pipeline.run(any(), any(), any())).thenThrow(new IllegalStateException("分类阶段失败"));
+        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, revisions, Runnable::run, Clock.systemDefaultZone());
+
+        assertTrue(service.requestScheduledRefresh());
+
+        verify(revisions).invalidate(eq("radar"), any());
+        verify(revisions).invalidate(eq("dashboard"), any());
+    }
 }

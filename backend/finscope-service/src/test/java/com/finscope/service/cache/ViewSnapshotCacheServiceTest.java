@@ -2,6 +2,7 @@ package com.finscope.service.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.VersionedViewCacheRepository;
+import com.finscope.service.news.NewsFeedSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -10,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,5 +37,17 @@ class ViewSnapshotCacheServiceTest {
         assertEquals(20, service.readOrLoad("dashboard", "summary", Duration.ofSeconds(30),
                 () -> Collections.singletonMap("articleCount", 20)).get("articleCount").asInt());
         verify(cache).put("dashboard", "summary", "{\"articleCount\":20}", Duration.ofSeconds(30));
+    }
+
+    @Test
+    void doesNotCacheAnEmptyNewsSnapshotBeforeTheSourceProducerHasCompleted() {
+        VersionedViewCacheRepository cache = mock(VersionedViewCacheRepository.class);
+        when(cache.get("news", "category=ALL&limit=100")).thenReturn(java.util.Optional.empty());
+        ViewSnapshotCacheService service = new ViewSnapshotCacheService(cache, new ObjectMapper());
+
+        assertEquals(0, service.readOrLoad("news", "category=ALL&limit=100", Duration.ofSeconds(30),
+                () -> new NewsFeedSnapshot(Collections.emptyList(), Collections.emptyList(), null, 0)).get("items").size());
+
+        verify(cache, never()).put("news", "category=ALL&limit=100", "{\"items\":[],\"warnings\":[],\"refreshedAt\":null,\"sourceCount\":0,\"categoryCounts\":{},\"unclassifiedCount\":0}", Duration.ofSeconds(30));
     }
 }

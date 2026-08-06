@@ -64,12 +64,13 @@ public class RadarHotspotRefreshService {
                     if (result != null && viewRevisions != null) {
                         LocalDateTime completedAt = result.getRun() == null || result.getRun().getCompletedAt() == null
                                 ? now() : result.getRun().getCompletedAt();
-                        viewRevisions.invalidate("radar", completedAt);
-                        viewRevisions.invalidate("dashboard", completedAt);
+                        invalidatePageSnapshots(completedAt);
                     }
                 }
                 catch (RuntimeException error) {
                     log.error("雷达热点生产批次失败，trigger={}", triggerType, error);
+                    // persistEvents 是独立事务；后续步骤失败时数据库仍可能已有本轮已提交事件。
+                    invalidatePageSnapshots(now());
                 } finally {
                     running.set(false);
                 }
@@ -80,5 +81,11 @@ public class RadarHotspotRefreshService {
             running.set(false);
             return false;
         }
+    }
+
+    private void invalidatePageSnapshots(LocalDateTime completedAt) {
+        if (viewRevisions == null) return;
+        viewRevisions.invalidate("radar", completedAt);
+        viewRevisions.invalidate("dashboard", completedAt);
     }
 }
