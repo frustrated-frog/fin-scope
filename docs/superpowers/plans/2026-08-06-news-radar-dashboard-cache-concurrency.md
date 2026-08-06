@@ -4,7 +4,7 @@
 
 **Goal:** 以 Redis 页面快照、单飞缓存击穿保护和受控多源并发抓取，降低实时资讯、研究雷达及首页今日热点的读取延迟，同时保持现有生产快照与 SQLite 写入安全。
 
-**Architecture:** `ResearchMaterialGateway` 继续作为来源聚合边界，在其内部为同一请求使用进程内 single-flight，并在不同 provider 间使用受限执行器并发抓取，仍由 `ProviderRequestGuard` 做端点/家族限频与熔断。三个只读页面使用版本化 Redis JSON 快照；业务写入只递增对应版本，TTL 自动回收旧键。雷达生产批次的写入与排序保持串行，成功完成后才让页面读新版本。
+**Architecture:** `NewsSourceRefreshService` 作为来源采集边界，在后台为同一刷新周期使用进程内 single-flight，并在不同 provider 间使用受限执行器并发抓取，仍由 `ProviderRequestGuard` 做端点/家族限频与熔断。三个只读页面只读取版本化 Redis JSON 快照与 SQLite 成品；业务写入只递增对应版本，TTL 自动回收旧键。雷达生产批次消费各源本地快照、保持串行写入与排序，成功完成后通过 SSE 仅通知 revision，前端再读取新快照。
 
 **Tech Stack:** Java 8、Spring Boot 2.7、Spring Data Redis `StringRedisTemplate`、Jackson、`CompletableFuture`、SQLite、JUnit 5/Mockito、React/Vite（接口保持不变）。
 
@@ -15,13 +15,215 @@
 - `backend/finscope-dao/.../cache/VersionedViewCacheRepository.java`：版本化 JSON 快照的 DAO 抽象。
 - `backend/finscope-dao/.../cache/RedisVersionedViewCacheRepository.java`：Redis `GET/SET/INCR` 实现及不可用回退。
 - `backend/finscope-service/.../news/NewsFeedService.java`：资讯视图缓存读取/回填；只负责视图缓存。
-- `backend/finscope-service/.../research/material/ResearchMaterialGateway.java`：来源级并发与同 key single-flight；仍负责原始资料缓存。
+- `backend/finscope-service/.../news/NewsSourceRefreshService.java`：来源级并发、每源成功快照及刷新 single-flight；页面不会调用外部 Provider。
+- `backend/finscope-service/.../news/NewsSourceRefreshScheduler.java`：30 秒定时采集与雷达生产请求。
+- `backend/finscope-service/.../research/material/ResearchMaterialGateway.java`：提供按来源刷新和只读汇总两个明确路径。
 - `backend/finscope-service/.../radar/ResearchRadarService.java`：雷达已完成快照的缓存读取/回填。
 - `backend/finscope-service/.../dashboard/DashboardService.java`：首页 summary 快照读取/回填。
 - `backend/finscope-service/.../radar/RadarHotspotProductionPipeline.java`：批次成功后失效雷达与首页快照；将 dashboard 历史分类修正移入生产后处理。
 - `backend/finscope-service/.../dashboard/DashboardHotspotRankingService.java`：移除读请求写入。
 - `backend/finscope-web/.../config/AppConfig.java`、`application.yml`：`newsFetchExecutor` 与 TTL/并发配置。
-- `backend/finscope-web/.../controller/*`：在分类/事件写操作后调用对应失效服务。
+- `backend/finscope-web/.../controller/*`：在分类/事件写操作后调用对应失效服务，并提供 revision/SSE 订阅。
+
+## Revision: data-hotspot-style scheduled production (takes precedence over Tasks 2–5 below)
+
+The original Tasks 2–5 described cache-aside fetching on a page cache miss. They are superseded by the tasks in this revision: a page request must never call an external news provider. Existing Task 1 remains unchanged.
+
+### Task 2R: Persist and consume per-provider source snapshots
+
+**Files:**
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/research/material/ResearchMaterialGateway.java`
+- Create: `backend/finscope-service/src/main/java/com/finscope/service/news/NewsSourceRefreshService.java`
+- Create: `backend/finscope-service/src/main/java/com/finscope/service/news/NewsSourceRefreshScheduler.java`
+- Modify: `backend/finscope-web/src/main/java/com/finscope/web/config/AppConfig.java`
+- Modify: `backend/finscope-web/src/main/resources/application.yml`
+- Create: `backend/finscope-service/src/test/java/com/finscope/service/news/NewsSourceRefreshServiceTest.java`
+- Modify: `backend/finscope-service/src/test/java/com/finscope/service/research/material/ResearchMaterialGatewayTest.java`
+
+- [ ] **Step 1: Write a failing test proving independent source snapshots survive a partial failure**
+
+```java
+@Test void refreshPublishesSuccessfulSourcesAndKeepsPreviousFailedSource() {
+    cache.put(sourceKey("CLS_NEWS_FLASH"), oldCls, Duration.ofMinutes(2));
+    when(cls.fetch(NEWS_FLASH, request)).thenThrow(new RuntimeException("down"));
+    when(ths.fetch(NEWS_FLASH, request)).thenReturn(result("new-ths"));
+    NewsFeedSnapshot snapshot = refreshService.refreshNow();
+    assertThat(snapshot.getItems()).extracting(NewsFeedItem::getId)
+        .contains("CLS_NEWS_FLASH:old-cls", "THS_NEWS_FLASH:new-ths");
+}
+
+@Test void concurrentRefreshRequestsRunOneProviderFanout() {
+    CompletableFuture.allOf(runAsync(refreshService::requestRefresh), runAsync(refreshService::requestRefresh)).join();
+    verify(cls, times(1)).fetch(NEWS_FLASH, request);
+}
+```
+
+- [ ] **Step 2: Run the test and verify it fails**
+
+Run: `cd backend && mvn -pl finscope-service -Dtest=NewsSourceRefreshServiceTest,ResearchMaterialGatewayTest test`
+
+Expected: FAIL because no source snapshot scheduler or per-provider refresh path exists.
+
+- [ ] **Step 3: Implement source-only refresh and read-only aggregation**
+
+Create these two explicit gateway methods:
+
+```java
+public ResearchMaterialGatewayResult refreshNewsFlashSources(ResearchMaterialRequest request);
+public ResearchMaterialGatewayResult readNewsFlashSources(ResearchMaterialRequest request);
+```
+
+`refreshNewsFlashSources` submits the ordered supported providers to `newsFetchExecutor` (maximum 3), calls `guard.execute` inside each future, and writes each successful response to `finscope:news-source:{providerCode}` using the existing JSON cache codec with a two-minute TTL. It leaves an existing per-provider value untouched on failure, records the provider warning, then combines source values in provider-route order with the existing material key de-duplication. `readNewsFlashSources` only reads those keys and returns an explicit `正在同步资讯来源` warning if none exists; it must not call `provider.fetch`.
+
+`NewsSourceRefreshService` owns `AtomicBoolean running`; `requestRefresh()` submits one job only. On success it asks `RadarHotspotRefreshService.requestScheduledRefresh()` and invalidates the `news` view revision. `NewsSourceRefreshScheduler` calls it every 30 seconds, starts one second after boot, and has no overlap. Configure:
+
+```yaml
+finscope:
+  news:
+    refresh-initial-delay-ms: 1000
+    refresh-interval-ms: 30000
+    source-snapshot-ttl-seconds: 120
+    fetch-concurrency: 3
+```
+
+`NewsFeedService.load` must use `readNewsFlashSources`, so HTTP reads cannot reach a provider.
+
+- [ ] **Step 4: Run focused tests and commit**
+
+Run: `cd backend && mvn -pl finscope-service -Dtest=NewsSourceRefreshServiceTest,ResearchMaterialGatewayTest,NewsFeedServiceTest test`
+
+Expected: PASS.
+
+Run: `git add backend/finscope-service/src/main/java/com/finscope/service/news backend/finscope-service/src/main/java/com/finscope/service/research/material/ResearchMaterialGateway.java backend/finscope-service/src/test/java/com/finscope/service/news backend/finscope-service/src/test/java/com/finscope/service/research/material/ResearchMaterialGatewayTest.java backend/finscope-web/src/main/java/com/finscope/web/config/AppConfig.java backend/finscope-web/src/main/resources/application.yml && git commit -m "perf: 定时并发生产资讯源快照"`
+
+### Task 3R: Versioned page snapshots and publish notifications
+
+**Files:**
+- Create: `backend/finscope-service/src/main/java/com/finscope/service/cache/ViewRevisionNotifier.java`
+- Create: `backend/finscope-web/src/main/java/com/finscope/web/controller/ViewRevisionStreamController.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/news/NewsSourceRefreshService.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/radar/RadarHotspotProductionPipeline.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/radar/RadarEventWorkspaceService.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/radar/RadarEventInterpretationService.java`
+- Create: `backend/finscope-web/src/test/java/com/finscope/web/controller/ViewRevisionStreamControllerTest.java`
+- Create: `backend/finscope-service/src/test/java/com/finscope/service/cache/ViewRevisionNotifierTest.java`
+
+- [ ] **Step 1: Write failing publish tests**
+
+```java
+@Test void radarCommitInvalidatesBothViewsAndPublishesOnlyMetadata() {
+    pipeline.run("ALL", "SCHEDULED", now);
+    verify(cache).invalidate("radar"); verify(cache).invalidate("dashboard");
+    verify(notifier).publish("radar", anyLong(), eq(now));
+    verify(notifier).publish("dashboard", anyLong(), eq(now));
+}
+```
+
+- [ ] **Step 2: Run the test and verify it fails**
+
+Run: `cd backend && mvn -pl finscope-service -Dtest=ViewRevisionNotifierTest,RadarHotspotProductionPipelineTest test`
+
+Expected: FAIL because no notifier exists.
+
+- [ ] **Step 3: Implement a bounded SSE revision stream**
+
+```java
+@GetMapping(value = "/api/view-revisions/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter stream() { return notifier.open(); }
+
+notifier.publish("radar", cache.invalidateAndGetRevision("radar"), completedAt);
+```
+
+Keep at most one emitter per browser session key and send a heartbeat every 20 seconds. Each `snapshot-ready` event contains only `{scope, revision, completedAt}`. Remove emitters on completion, timeout, error, and failed send. No snapshot payload or provider data travels over SSE. At this stage the in-memory emitter registry is sufficient because Docker runs a single backend instance.
+
+- [ ] **Step 4: Run focused tests and commit**
+
+Run: `cd backend && mvn -pl finscope-web -am -Dtest=ViewRevisionNotifierTest,ViewRevisionStreamControllerTest,RadarHotspotProductionPipelineTest test`
+
+Expected: PASS.
+
+Run: `git add backend/finscope-service/src/main/java/com/finscope/service/cache backend/finscope-service/src/main/java/com/finscope/service/radar backend/finscope-web/src/main/java/com/finscope/web/controller/ViewRevisionStreamController.java backend/finscope-web/src/test/java/com/finscope/web/controller/ViewRevisionStreamControllerTest.java && git commit -m "feat: 发布热点快照版本通知"`
+
+### Task 4R: Read-through views and front-end immediate reconciliation
+
+**Files:**
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/news/NewsFeedService.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/radar/ResearchRadarService.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/dashboard/DashboardService.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/dashboard/DashboardHotspotRankingService.java`
+- Create: `frontend/src/shared/api/viewRevisionStream.ts`
+- Modify: `frontend/src/features/news/LiveNewsPanel.tsx`
+- Modify: `frontend/src/features/news/NewsView.tsx`
+- Modify: `frontend/src/App.tsx`
+- Create: `frontend/src/shared/api/viewRevisionStream.test.ts`
+- Modify: `frontend/src/features/news/NewsView.test.tsx`
+- Modify: `frontend/src/App.test.tsx`
+
+- [ ] **Step 1: Write failing cache and SSE reconciliation tests**
+
+```tsx
+it('reloads the radar only after a radar snapshot-ready revision', async () => {
+  emitRevision({ scope: 'radar', revision: 12, completedAt: '2026-08-06T12:00:00' });
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringContaining('/api/research-radar?')));
+});
+
+it('does not reload the news page for a dashboard revision', () => {
+  emitRevision({ scope: 'dashboard', revision: 3, completedAt: '2026-08-06T12:00:00' });
+  expect(api).not.toHaveBeenCalledWith(expect.stringContaining('/api/news?'));
+});
+```
+
+- [ ] **Step 2: Run frontend tests and verify they fail**
+
+Run: `cd frontend && npm test -- --run src/features/news/NewsView.test.tsx src/shared/api/viewRevisionStream.test.ts`
+
+Expected: FAIL because the EventSource client does not exist.
+
+- [ ] **Step 3: Implement cache-aside views and EventSource fallback**
+
+Keep the 30/60 second versioned view caches from Tasks 1 and 3, but remove classification write-back from `DashboardHotspotRankingService.rankings()`. Add `viewRevisionStream.subscribe(listener)` that creates one `EventSource('/api/view-revisions/stream')`, dispatches `snapshot-ready`, reconnects with bounded backoff, and falls back after repeated failure to a five-second `GET /api/view-revisions?scopes=news,radar,dashboard` metadata poll. `LiveNewsPanel` reloads only on `news`; `ResearchRadarPanel` reloads only on `radar`; `App` reloads only the dashboard state on `dashboard`. Preserve the current pending-news notice rather than replacing visible items during an active user read.
+
+- [ ] **Step 4: Verify and commit**
+
+Run: `cd backend && mvn -pl finscope-web -am -Dtest=NewsFeedServiceTest,ResearchRadarSnapshotReadTest,DashboardServiceCacheTest test && cd ../frontend && npm test -- --run && npm run build`
+
+Expected: PASS.
+
+Run: `git add backend/finscope-service/src/main/java/com/finscope/service/news/NewsFeedService.java backend/finscope-service/src/main/java/com/finscope/service/radar/ResearchRadarService.java backend/finscope-service/src/main/java/com/finscope/service/dashboard frontend/src/shared/api frontend/src/features/news frontend/src/App.tsx frontend/src/**/*.test.ts* && git commit -m "perf: 实时同步资讯雷达与今日热点"`
+
+### Task 5R: End-to-end scheduled production verification
+
+**Files:**
+- Modify: `backend/finscope-web/src/test/java/com/finscope/web/controller/NewsFeedControllerTest.java`
+- Modify: `backend/finscope-web/src/test/java/com/finscope/web/controller/ResearchRadarApiIntegrationTest.java`
+- Create: `backend/finscope-web/src/test/java/com/finscope/web/controller/DashboardControllerTest.java` if absent
+- Modify: `docs/superpowers/specs/2026-08-06-news-radar-dashboard-cache-concurrency-design.md`
+
+- [ ] **Step 1: Add a no-external-call page-read integration test**
+
+```java
+@Test void newsEndpointReadsLatestSourceSnapshotWithoutCallingProvider() {
+    sourceCache.put("finscope:news-source:CLS_NEWS_FLASH", entry, Duration.ofMinutes(2));
+    mvc.perform(get("/api/news")).andExpect(status().isOk());
+    verify(provider, never()).fetch(any(), any());
+}
+```
+
+- [ ] **Step 2: Run full targeted verification**
+
+Run: `cd backend && mvn -pl finscope-web -am -Dtest=NewsFeedControllerTest,ResearchRadarApiIntegrationTest,DashboardControllerTest,NewsSourceRefreshServiceTest test && cd ../frontend && npm test -- --run && npm run build && cd .. && git diff --check && git status --short`
+
+Expected: targeted tests and front-end build pass. Preserve the two pre-existing untracked `RadarViewCacheRepository` files unless they are deliberately reconciled with Task 1.
+
+- [ ] **Step 3: Smoke test local scheduled updates**
+
+Run: `redis-cli -h 127.0.0.1 --scan --pattern 'finscope:news-source:*'`
+
+Expected: one short-lived key per successful provider appears after the scheduler runs; a completed radar run then advances `finscope:view:radar:version` and `finscope:view:dashboard:version`.
+
+- [ ] **Step 4: Commit and push**
+
+Run: `git add docs/superpowers/specs/2026-08-06-news-radar-dashboard-cache-concurrency-design.md docs/superpowers/plans/2026-08-06-news-radar-dashboard-cache-concurrency.md && git commit -m "docs: 更新定时热点生产方案" && git push origin HEAD`
 
 ### Task 1: 版本化 Redis 快照基础设施
 
