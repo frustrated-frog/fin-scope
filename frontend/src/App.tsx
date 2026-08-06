@@ -22,6 +22,7 @@ import { WatchlistView } from './features/watchlist/WatchlistView';
 import { StrategyView } from './features/strategy/StrategyView';
 import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
 import { api } from './shared/api/client';
+import { useViewRevision } from './shared/api/useViewRevision';
 import {
   AgentRun,
   Article,
@@ -157,6 +158,10 @@ export default function App() {
   useEffect(() => {
     refresh().catch((error) => setMessage(error instanceof Error ? error.message : '初始化失败'));
   }, []);
+
+  useViewRevision(['dashboard'], () => {
+    void api<Dashboard>('/api/dashboard').then(setDashboard).catch(() => undefined);
+  });
 
   useEffect(() => {
     if (view !== 'contentStudio') {

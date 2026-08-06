@@ -61,6 +61,19 @@ public class RedisVersionedViewCacheRepository implements VersionedViewCacheRepo
     }
 
     @Override
+    public long currentRevision(String namespace) {
+        if (!enabled || invalid(namespace)) {
+            return 0L;
+        }
+        try {
+            return revision(namespace);
+        } catch (RuntimeException error) {
+            log.warn("Redis 页面快照 revision 读取失败，将使用初始版本: namespace={}, error={}", namespace, error.getMessage());
+            return 0L;
+        }
+    }
+
+    @Override
     public long invalidateAndGetRevision(String namespace) {
         if (!enabled || invalid(namespace)) {
             return 0L;

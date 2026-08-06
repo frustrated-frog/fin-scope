@@ -14,30 +14,16 @@ import java.util.List;
 public class DashboardHotspotRankingService {
     private static final int BOARD_SIZE = 5;
     private final RadarRepository repository;
-    private final RadarDashboardCategoryService categories;
-
-    public DashboardHotspotRankingService(RadarRepository repository,
-                                          RadarDashboardCategoryService categories) {
+    public DashboardHotspotRankingService(RadarRepository repository) {
         this.repository = repository;
-        this.categories = categories;
     }
 
     public List<Ranking> rankings() {
-        classifyEventsCreatedBeforeDashboardRankings();
         List<Ranking> result = new ArrayList<Ranking>();
         result.add(ranking(RadarDashboardCategoryService.FINANCE, "金融"));
         result.add(ranking(RadarDashboardCategoryService.TECHNOLOGY, "科技"));
         result.add(ranking(RadarDashboardCategoryService.POLITICS, "政治"));
         return Collections.unmodifiableList(result);
-    }
-
-    private void classifyEventsCreatedBeforeDashboardRankings() {
-        for (RadarEvent event : repository.findEventsForDashboardClassification(500)) {
-            String classified = categories.classify(event);
-            if (!classified.equals(event.getDashboardCategory())) {
-                repository.updateDashboardCategory(event.getId(), classified);
-            }
-        }
     }
 
     private Ranking ranking(String categoryCode, String label) {

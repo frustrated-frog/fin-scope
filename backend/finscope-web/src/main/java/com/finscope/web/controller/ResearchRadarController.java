@@ -10,6 +10,8 @@ import com.finscope.web.request.RadarObservationRequest;
 import com.finscope.web.request.UpdateRadarEventStateRequest;
 import com.finscope.web.request.RadarResearchLinkRequest;
 import com.finscope.web.response.ApiResponses;
+import com.finscope.service.cache.ViewSnapshotCacheService;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/research-radar")
@@ -29,9 +32,10 @@ public class ResearchRadarController {
     private final ResearchRadarService service;
     private final RadarEventWorkspaceService workspace;
     private final RadarResearchLinkService researchLinks;
+    private final ViewSnapshotCacheService snapshots;
     public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace,
-                                   RadarResearchLinkService researchLinks){
-        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks;
+                                   RadarResearchLinkService researchLinks, ViewSnapshotCacheService snapshots){
+        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks; this.snapshots=snapshots;
     }
 
     /**
@@ -45,13 +49,24 @@ public class ResearchRadarController {
      * @return 研究雷达视图，包含事件流、统计信息和生产批次状态。
      */
     @GetMapping
-    public ApiResponse<ResearchRadarView> radar(@RequestParam(defaultValue="ALL") String category,
+    public ApiResponse<JsonNode> radar(@RequestParam(defaultValue="ALL") String category,
                                                 @RequestParam(defaultValue="false") boolean watchlistOnly,
                                                 @RequestParam(defaultValue="20") int limit,
                                                 @RequestParam(defaultValue="ALL") String state,
-                                                @RequestParam(defaultValue="true") boolean refresh){
-        return ApiResponses.success(refresh?service.load(category,watchlistOnly,limit,state):service.loadStored(category,watchlistOnly,limit,state));
+                                                @RequestParam(defaultValue="false") boolean refresh){
+        if (refresh) service.requestRefresh();
+        String normalizedCategory = category == null ? "ALL" : category.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalizedState = state == null ? "ALL" : state.trim().toUpperCase(java.util.Locale.ROOT);
+        int normalizedLimit = Math.max(1, Math.min(limit, 50));
+        String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly + "&limit=" + normalizedLimit + "&state=" + normalizedState;
+        JsonNode data = snapshots.readOrLoad("radar", variant, Duration.ofSeconds(20),
+                () -> service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState));
+        return ApiResponses.success(data);
     }
+
+    /** 手动请求一轮雷达生产；不会把页面请求变成同步抓源。 */
+    @PostMapping("/refresh")
+    public ApiResponse<Boolean> refresh() { return ApiResponses.success(service.requestRefresh()); }
 
     /**
      * 查询雷达事件详情。

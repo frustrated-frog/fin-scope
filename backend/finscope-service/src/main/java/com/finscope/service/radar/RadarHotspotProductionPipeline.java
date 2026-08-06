@@ -91,6 +91,7 @@ public class RadarHotspotProductionPipeline {
 
             runs.startStep(run.getId(), "PERSIST", now);
             List<RadarEvent> savedEvents = persist(ranked, now);
+            classifyDashboardEvents();
             Set<String> activeEventKeys = new HashSet<String>();
             for (RadarEvent event : savedEvents) activeEventKeys.add(event.getEventKey());
             repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
@@ -177,6 +178,16 @@ public class RadarHotspotProductionPipeline {
         return saved;
     }
 
+    /** 分类在生产事务之后收敛，首页读取阶段始终只读，避免 Dashboard 请求产生写入。 */
+    private void classifyDashboardEvents() {
+        for (RadarEvent event : repository.findEventsForDashboardClassification(500)) {
+            String classified = dashboardCategories.classify(event);
+            if (!classified.equals(event.getDashboardCategory())) {
+                repository.updateDashboardCategory(event.getId(), classified);
+            }
+        }
+    }
+
     private RadarEventSnapshot previousSnapshot(RadarEvent event, LocalDateTime now) {
         if (event == null || event.getEventKey() == null || snapshots == null) return null;
         Optional<RadarEvent> stored = repository.findEventByKey(event.getEventKey());
@@ -226,7 +237,7 @@ public class RadarHotspotProductionPipeline {
         private final RadarRefreshRun run;
         private final NewsFeedSnapshot snapshot;
         private final List<RadarEvent> events;
-        private ProductionResult(RadarRefreshRun run, NewsFeedSnapshot snapshot, List<RadarEvent> events) {
+        ProductionResult(RadarRefreshRun run, NewsFeedSnapshot snapshot, List<RadarEvent> events) {
             this.run = run; this.snapshot = snapshot; this.events = Collections.unmodifiableList(new ArrayList<RadarEvent>(events));
         }
         public RadarRefreshRun getRun() { return run; }

@@ -1,7 +1,7 @@
 package com.finscope.service.news;
 
-import com.finscope.dao.cache.VersionedViewCacheRepository;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
+import com.finscope.service.cache.ViewRevisionService;
 import com.finscope.service.radar.RadarHotspotRefreshService;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
@@ -19,18 +19,18 @@ public class NewsSourceRefreshService {
 
     private final ResearchMaterialGateway gateway;
     private final RadarHotspotRefreshService radarRefresh;
-    private final VersionedViewCacheRepository viewCache;
+    private final ViewRevisionService viewRevisions;
     private final Executor executor;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     @Autowired
     public NewsSourceRefreshService(ResearchMaterialGateway gateway,
                                     RadarHotspotRefreshService radarRefresh,
-                                    VersionedViewCacheRepository viewCache,
+                                    ViewRevisionService viewRevisions,
                                     @Qualifier("newsRefreshExecutor") Executor executor) {
         this.gateway = gateway;
         this.radarRefresh = radarRefresh;
-        this.viewCache = viewCache;
+        this.viewRevisions = viewRevisions;
         this.executor = executor;
     }
 
@@ -55,7 +55,7 @@ public class NewsSourceRefreshService {
 
     public ResearchMaterialGatewayResult refreshNow() {
         ResearchMaterialGatewayResult result = gateway.refreshNewsFlashSources(REQUEST);
-        viewCache.invalidateAndGetRevision("news");
+        viewRevisions.invalidate("news");
         radarRefresh.requestScheduledRefresh();
         return result;
     }

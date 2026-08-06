@@ -5,6 +5,9 @@ import com.finscope.service.news.NewsClassificationReviewService;
 import com.finscope.service.news.NewsClassificationView;
 import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
+import com.finscope.service.news.NewsSourceRefreshService;
+import com.finscope.service.cache.ViewRevisionService;
+import com.finscope.service.cache.ViewSnapshotCacheService;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,9 +18,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.function.Supplier;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -32,11 +39,16 @@ class NewsFeedControllerTest {
     private NewsFeedService newsFeedService;
     @MockBean
     private NewsClassificationReviewService reviewService;
+    @MockBean private NewsSourceRefreshService refreshService;
+    @MockBean private ViewSnapshotCacheService snapshots;
+    @MockBean private ViewRevisionService revisions;
 
     @Test
     void passesCategoryToFeedService() throws Exception {
         when(newsFeedService.load("COMPANY", 25)).thenReturn(new NewsFeedSnapshot(Collections.emptyList(),
                 Collections.emptyList(), LocalDateTime.of(2026, 7, 31, 10, 0), 0));
+        when(snapshots.readOrLoad(any(), any(), any(), any())).thenAnswer(invocation ->
+                new ObjectMapper().findAndRegisterModules().valueToTree(((Supplier<?>) invocation.getArgument(3)).get()));
 
         mockMvc.perform(get("/api/news").param("category", "COMPANY").param("limit", "25"))
                 .andExpect(status().isOk())

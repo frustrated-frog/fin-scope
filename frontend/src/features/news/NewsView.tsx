@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { useViewRevision } from '../../shared/api/useViewRevision';
 import { LiveNewsPanel } from './LiveNewsPanel';
 import { RadarEventCard } from './RadarEventCard';
 import { RadarEventDetailDrawer } from './RadarEventDetailDrawer';
@@ -11,7 +12,6 @@ import type { RadarEvent, RadarEventDetail, RadarStateFilter, RadarWorkspaceStat
 type NewsCategory = { code: string; name: string; enabled?: boolean; displayOrder?: number };
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
 const RELATED_CATEGORY: NewsCategory = { code: 'RELATED', name: '与我相关' };
-const REFRESH_INTERVAL_MS = 45_000;
 
 export function NewsView({ setMessage, addToast, onResearch, onOpenMajorEvents, initialRadarEventId, onInitialRadarEventOpened }: {
   setMessage: (message: string) => void;
@@ -92,15 +92,16 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
   }
   function openNotificationEvent(eventId:number){const item=snapshotRef.current?.events.find((value)=>value.id===eventId);if(item)openEvent(item);}
 
+  useViewRevision(['radar'], () => {
+    if (document.visibilityState === 'visible') void load(false, selectedCategoryRef.current, false);
+  });
+
   useEffect(() => {
     mounted.current = true; void load();
     void api<NewsCategory[]>('/api/news/categories').then((values) => {
       if (mounted.current) setCategories([ALL_CATEGORY, RELATED_CATEGORY, ...values.filter((value) => value.code !== 'ALL')]);
     }).catch(() => undefined);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(false, selectedCategoryRef.current, false);
-    }, REFRESH_INTERVAL_MS);
-    return () => { mounted.current = false; window.clearInterval(timer); };
+    return () => { mounted.current = false; };
   }, []);
 
   useEffect(() => {
@@ -141,7 +142,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
           <span>{snapshot ? `${snapshot.overview.eventCount} 件事 · ${snapshot.overview.sourceCount} 个来源` : '连接中'}</span>
           <strong>{snapshot ? `更新于 ${formatTime(snapshot.refreshedAt)}` : '等待首批资讯'}</strong>
           {snapshot?.productionStatus?.running ? <small>后台生产中 · 页面读取最近快照</small> : null}
-          <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void load(true)} disabled={loading}>
+          <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void refreshRadar()} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
           </button>
         </div>
@@ -185,6 +186,24 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
       {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)} onEventChange={replaceEvent} /> : null}
     </section>
   );
+
+  async function refreshRadar() {
+    try {
+      setLoading(true);
+      const accepted = await api<boolean>('/api/research-radar/refresh', { method: 'POST' });
+      if (accepted) {
+        setMessage('雷达正在后台生产…');
+        addToast('已提交雷达刷新', 'info');
+      } else {
+        setMessage('雷达正在后台生产，继续展示最近快照');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '雷达刷新提交失败';
+      setMessage(message); addToast(message, 'error');
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }
 }
 
 function NewsSkeleton() { return <div className="news-skeleton" aria-label="正在加载雷达"><span /><span /><span /></div>; }

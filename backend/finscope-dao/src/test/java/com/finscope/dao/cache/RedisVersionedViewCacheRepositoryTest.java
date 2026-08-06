@@ -60,6 +60,16 @@ class RedisVersionedViewCacheRepositoryTest {
     }
 
     @Test
+    void exposesCurrentRevisionWithoutChangingIt() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("finscope:view:dashboard:revision")).thenReturn("12");
+
+        RedisVersionedViewCacheRepository repository = new RedisVersionedViewCacheRepository(redisTemplate);
+
+        assertEquals(12L, repository.currentRevision("dashboard"));
+    }
+
+    @Test
     void redisFailureFallsBackToEmptyCache() {
         when(redisTemplate.opsForValue()).thenThrow(new IllegalStateException("redis unavailable"));
 

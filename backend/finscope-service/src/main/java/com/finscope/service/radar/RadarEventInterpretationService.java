@@ -9,6 +9,8 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.service.cache.ViewRevisionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -32,15 +34,26 @@ public class RadarEventInterpretationService {
     private final RadarEvidenceRepository evidence;
     private final RadarEventInterpretationAgent agent;
     private final Executor executor;
+    private final ViewRevisionService viewRevisions;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
+
+    @Autowired
+    public RadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
+                                           RadarRepository radar,
+                                           RadarEvidenceRepository evidence,
+                                           RadarEventInterpretationAgent agent,
+                                           @Qualifier("radarInterpretationExecutor") Executor executor,
+                                           ViewRevisionService viewRevisions) {
+        this.interpretations = interpretations; this.radar = radar; this.evidence = evidence;
+        this.agent = agent; this.executor = executor; this.viewRevisions = viewRevisions;
+    }
 
     public RadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
                                            RadarRepository radar,
                                            RadarEvidenceRepository evidence,
                                            RadarEventInterpretationAgent agent,
-                                           @Qualifier("radarInterpretationExecutor") Executor executor) {
-        this.interpretations = interpretations; this.radar = radar; this.evidence = evidence;
-        this.agent = agent; this.executor = executor;
+                                           Executor executor) {
+        this(interpretations, radar, evidence, agent, executor, null);
     }
 
     public RadarEventInterpretation request(Long eventId) {
@@ -130,7 +143,10 @@ public class RadarEventInterpretationService {
         } finally {
             queued.setDurationMs((System.nanoTime() - started) / 1_000_000L);
             queued.setCompletedAt(LocalDateTime.now());
-            try { interpretations.update(queued); } finally { inFlight.remove(key); }
+            try {
+                interpretations.update(queued);
+                if (viewRevisions != null) viewRevisions.invalidate("radar");
+            } finally { inFlight.remove(key); }
         }
     }
 

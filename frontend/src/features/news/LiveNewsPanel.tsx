@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { useViewRevision } from '../../shared/api/useViewRevision';
 
 type NewsFeedItem = {
   id: string;
@@ -41,7 +42,6 @@ type NewsCategory = {
 
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
 const PENDING_REVIEW_CATEGORY: NewsCategory = { code: 'PENDING_REVIEW', name: '待确认' };
-const REFRESH_INTERVAL_MS = 45_000;
 
 export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
   setMessage: (message: string) => void;
@@ -142,6 +142,10 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
     } catch (error) { addToast(error instanceof Error ? error.message : '记入大事记失败', 'error'); }
   }
 
+  useViewRevision(['news'], () => {
+    if (document.visibilityState === 'visible') void load(false, true, selectedCategoryRef.current);
+  });
+
   useEffect(() => {
     mounted.current = true;
     void load();
@@ -151,12 +155,8 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
           value.code !== 'ALL' && value.code !== 'PENDING_REVIEW'), PENDING_REVIEW_CATEGORY]);
       })
       .catch(() => undefined);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(false, true, selectedCategoryRef.current);
-    }, REFRESH_INTERVAL_MS);
     return () => {
       mounted.current = false;
-      window.clearInterval(timer);
     };
   }, []);
 
@@ -186,7 +186,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         <div className="news-sync-state" aria-live="polite">
           <span>{snapshot ? `${snapshot.sourceCount} 个独立来源` : '连接中'}</span>
           <strong>{snapshot ? `更新于 ${formatTime(snapshot.refreshedAt, true)}` : '等待首批资讯'}</strong>
-          <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void load(true)} disabled={loading}>
+          <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void refreshSources()} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
           </button>
           <button type="button" className="major-events-link" onClick={onOpenMajorEvents}>查看大事记 <span aria-hidden="true">→</span></button>
@@ -236,6 +236,24 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
       </div>
     </section>
   );
+
+  async function refreshSources() {
+    try {
+      setLoading(true);
+      const accepted = await api<boolean>('/api/news/refresh', { method: 'POST' });
+      if (accepted) {
+        setMessage('正在后台同步资讯来源…');
+        addToast('已提交资讯同步', 'info');
+      } else {
+        setMessage('资讯正在后台同步，继续展示最近快照');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '资讯同步提交失败';
+      setMessage(message); addToast(message, 'error');
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }
 }
 
 function FlashItem({ item, latest, categories, onReview, onSave, saved }: {

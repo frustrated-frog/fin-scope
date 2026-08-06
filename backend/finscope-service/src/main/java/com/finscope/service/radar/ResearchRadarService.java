@@ -197,6 +197,11 @@ public class ResearchRadarService {
         }
     }
 
+    /** 仅提交后台生产；页面读取使用 {@link #loadStored}，不会直接发起外部抓取。 */
+    public boolean requestRefresh() {
+        return backgroundRefresh != null && backgroundRefresh.requestRefresh();
+    }
+
     public ResearchRadarView loadStored(String requestedCategory, boolean watchlistOnly, int requestedLimit, String requestedState) {
         String category=normalizeCategory(requestedCategory);String state=normalizeState(requestedState);
         int limit=Math.max(1,Math.min(requestedLimit,50));List<RadarEvent> ranked=repository.findRanked(category,watchlistOnly,50);

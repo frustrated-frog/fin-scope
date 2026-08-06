@@ -1,6 +1,6 @@
 package com.finscope.service.news;
 
-import com.finscope.dao.cache.VersionedViewCacheRepository;
+import com.finscope.service.cache.ViewRevisionService;
 import com.finscope.service.radar.RadarHotspotRefreshService;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
@@ -19,16 +19,16 @@ class NewsSourceRefreshServiceTest {
     void refreshesSourcesThenInvalidatesNewsAndRequestsRadarProduction() {
         ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
         RadarHotspotRefreshService radar = mock(RadarHotspotRefreshService.class);
-        VersionedViewCacheRepository cache = mock(VersionedViewCacheRepository.class);
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
         when(gateway.refreshNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(
                 Collections.emptyList(), Collections.emptyList()));
 
-        NewsSourceRefreshService service = new NewsSourceRefreshService(gateway, radar, cache, Runnable::run);
+        NewsSourceRefreshService service = new NewsSourceRefreshService(gateway, radar, revisions, Runnable::run);
 
         assertTrue(service.requestRefresh());
 
         verify(gateway).refreshNewsFlashSources(any());
-        verify(cache).invalidateAndGetRevision("news");
+        verify(revisions).invalidate("news");
         verify(radar).requestScheduledRefresh();
     }
 }

@@ -14,6 +14,8 @@ public interface VersionedViewCacheRepository {
 
     void put(String namespace, String variant, String payload, Duration ttl);
 
+    long currentRevision(String namespace);
+
     long invalidateAndGetRevision(String namespace);
 
     static VersionedViewCacheRepository noop() {
@@ -26,6 +28,11 @@ public interface VersionedViewCacheRepository {
             @Override
             public void put(String namespace, String variant, String payload, Duration ttl) {
                 // Redis 未启用时保留既有读取路径。
+            }
+
+            @Override
+            public long currentRevision(String namespace) {
+                return 0L;
             }
 
             @Override

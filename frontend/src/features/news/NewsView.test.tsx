@@ -107,6 +107,7 @@ const newsSnapshot = {
 
 beforeEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
@@ -329,8 +330,17 @@ test('describes a busy radar refresh without blaming realtime sources', async ()
   expect(screen.queryByText('实时来源暂不可用，当前展示最近一次雷达结果')).not.toBeInTheDocument();
 });
 
-test('polling applies newly ranked radar events without waiting for confirmation', async () => {
-  vi.useFakeTimers();
+test('SSE applies newly ranked radar events without waiting for the fallback reconciliation', async () => {
+  class FakeEventSource {
+    static latest: FakeEventSource | undefined;
+    private listeners = new Map<string, (event: Event) => void>();
+    onerror: (() => void) | null = null;
+    constructor() { FakeEventSource.latest = this; }
+    addEventListener(name: string, listener: (event: Event) => void) { this.listeners.set(name, listener); }
+    close() { /* test emitter cleanup */ }
+    emit(name: string, data: unknown) { this.listeners.get(name)?.({ data: JSON.stringify(data) } as unknown as Event); }
+  }
+  vi.stubGlobal('EventSource', FakeEventSource);
   let calls = 0;
   const updatedEvent = { ...event, id: 11, title: '新的雷达事件', lastSeenAt: '2026-07-31T16:01:00' };
   const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events], latestChanges: [updatedEvent, event] };
@@ -343,7 +353,7 @@ test('polling applies newly ranked radar events without waiting for confirmation
   await openRadar();
   await act(async () => { await Promise.resolve(); });
 
-  await act(async () => { vi.advanceTimersByTime(45_000); await Promise.resolve(); });
+  await act(async () => { FakeEventSource.latest?.emit('snapshot-ready', { scope: 'radar', revision: 2 }); await Promise.resolve(); });
 
   expect(screen.getAllByText('新的雷达事件').length).toBeGreaterThan(0);
   expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL&refresh=false');

@@ -2,7 +2,6 @@ package com.finscope.service.dashboard;
 
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
-import com.finscope.service.radar.RadarDashboardCategoryService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -11,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,8 +23,7 @@ class DashboardHotspotRankingServiceTest {
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
-                repository, new RadarDashboardCategoryService());
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
         List<DashboardHotspotRankingService.Ranking> rankings = service.rankings();
 
         assertEquals(3, rankings.size());
@@ -42,38 +41,35 @@ class DashboardHotspotRankingServiceTest {
     }
 
     @Test
-    void classifiesEventsCreatedBeforeTheDashboardCategoryMigration() {
+    void readsPreclassifiedEventsWithoutWritingDuringDashboardRequest() {
         RadarRepository repository = mock(RadarRepository.class);
         RadarEvent unclassified = event(12L, "OpenAI 发布新一代模型", "Agent 推理能力明显提升", 86);
         unclassified.setDashboardCategory("UNCLASSIFIED");
-        when(repository.findEventsForDashboardClassification(500)).thenReturn(Collections.singletonList(unclassified));
         when(repository.findTopByDashboardCategory("FINANCE", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
-                repository, new RadarDashboardCategoryService());
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
         service.rankings();
 
-        verify(repository).updateDashboardCategory(12L, "TECHNOLOGY");
+        verify(repository, never()).findEventsForDashboardClassification(500);
+        verify(repository, never()).updateDashboardCategory(12L, "TECHNOLOGY");
     }
 
     @Test
-    void repairsPreviouslyMisclassifiedActiveEvents() {
+    void doesNotRepairMisclassifiedEventsDuringDashboardRead() {
         RadarRepository repository = mock(RadarRepository.class);
         RadarEvent marketMove = event(13L, "AI应用端反复走强 博彦科技2连板", "AI应用端反复走强，博彦科技涨停。", 86);
         marketMove.setCategoryCode("MARKET_MOVE");
         marketMove.setDashboardCategory("TECHNOLOGY");
-        when(repository.findEventsForDashboardClassification(500)).thenReturn(Collections.singletonList(marketMove));
         when(repository.findTopByDashboardCategory("FINANCE", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(
-                repository, new RadarDashboardCategoryService());
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
         service.rankings();
 
-        verify(repository).updateDashboardCategory(13L, "FINANCE");
+        verify(repository, never()).updateDashboardCategory(13L, "FINANCE");
     }
 
     private RadarEvent event(Long id, String title, String summary, int score) {

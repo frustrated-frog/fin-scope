@@ -6,6 +6,7 @@ import com.finscope.dao.radar.RadarEventWorkspaceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventWorkspace;
+import com.finscope.service.cache.ViewRevisionService;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -22,15 +23,16 @@ public class RadarEventWorkspaceService {
     private final RadarEventWorkspaceRepository workspace;
     private final RadarRepository radar;
     private final RadarEventTimelineService timeline;
+    private final ViewRevisionService viewRevisions;
 
     @Autowired
     public RadarEventWorkspaceService(RadarEventWorkspaceRepository workspace, RadarRepository radar,
-                                      RadarEventTimelineService timeline) {
-        this.workspace = workspace; this.radar = radar; this.timeline = timeline;
+                                      RadarEventTimelineService timeline, ViewRevisionService viewRevisions) {
+        this.workspace = workspace; this.radar = radar; this.timeline = timeline; this.viewRevisions = viewRevisions;
     }
 
     RadarEventWorkspaceService(RadarEventWorkspaceRepository workspace, RadarRepository radar) {
-        this(workspace, radar, null);
+        this(workspace, radar, null, null);
     }
 
     public Map<Long, RadarEventWorkspace.Summary> summaries(List<Long> eventIds) {
@@ -74,6 +76,7 @@ public class RadarEventWorkspaceService {
         String observation = text(event.getNextObservation(), "关注事件是否出现新的独立来源、数据或正式公告");
         List<RadarEventWorkspace.Observation> observations = workspace.ensureDefaultObservation(event.getId(), observation);
         action(event.getId(), fingerprint(event), "READ", "已查看事件", "事件详情已读", "STATE", event.getId());
+        invalidateRadar();
         return new OpenedEvent(state, observations, workspace.findResearchLinks(event.getId()));
     }
 
@@ -85,6 +88,7 @@ public class RadarEventWorkspaceService {
             if (followed != null) action(eventId, "followed:" + followed, "FOLLOW", followed ? "已关注事件" : "已取消关注", null, "STATE", eventId);
             if (normalize(disposition) != null) action(eventId, "disposition:" + normalize(disposition), "DISPOSITION", "处理状态已更新", normalize(disposition), "STATE", eventId);
             if (Boolean.TRUE.equals(read)) action(eventId, fingerprint(event), "READ", "已查看事件", "事件详情已读", "STATE", eventId);
+            invalidateRadar();
             return state;
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, ex.getMessage());
@@ -141,6 +145,8 @@ public class RadarEventWorkspaceService {
         if(timeline!=null)try { timeline.action(eventId,fingerprint,type,title,summary,referenceType,referenceId); }
         catch (RuntimeException ignored) { /* 辅助时间线失败不能阻断用户动作 */ }
     }
+
+    private void invalidateRadar() { if (viewRevisions != null) viewRevisions.invalidate("radar"); }
 
     public static final class OpenedEvent {
         private final RadarEventWorkspace.State state;
