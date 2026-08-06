@@ -3,6 +3,7 @@ package com.finscope.service.radar;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarSignal;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +23,7 @@ public class RadarEventEnhancementScheduler {
     private final Executor executor;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
+    @Autowired
     public RadarEventEnhancementScheduler(RadarCanonicalTitleAgent titles,
                                           RadarEvidenceOrchestrator evidence,
                                           RadarRepository repository,

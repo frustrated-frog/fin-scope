@@ -4,6 +4,7 @@ import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarSignal;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -15,8 +16,26 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class RadarEventEnhancementSchedulerTest {
+    @Test
+    void springCanCreateSchedulerUsingProductionConstructor() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(RadarCanonicalTitleAgent.class, () -> mock(RadarCanonicalTitleAgent.class));
+            context.registerBean(RadarEvidenceOrchestrator.class, () -> mock(RadarEvidenceOrchestrator.class));
+            context.registerBean(RadarRepository.class, () -> mock(RadarRepository.class));
+            context.registerBean(RadarSnapshotProjectionService.class,
+                    () -> mock(RadarSnapshotProjectionService.class));
+            context.registerBean("radarAgentExecutor", Executor.class, () -> Runnable::run);
+            context.register(RadarEventEnhancementScheduler.class);
+
+            context.refresh();
+
+            assertNotNull(context.getBean(RadarEventEnhancementScheduler.class));
+        }
+    }
+
     @Test
     void titleAndEvidenceAgentsNeverRunOnRequestThread() {
         RadarCanonicalTitleAgent titles=mock(RadarCanonicalTitleAgent.class);
