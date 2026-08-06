@@ -74,4 +74,29 @@ describe('WatchlistKlineDrawer', () => {
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
+
+  test('positions the desktop overlay inside the workspace below the topbar', () => {
+    vi.mocked(api).mockResolvedValue(bars as never);
+    const rect = (values: Partial<DOMRect>): DOMRect => ({
+      x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0,
+      toJSON: () => ({}), ...values
+    });
+    const bounds = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.classList.contains('workspace')) return rect({ left: 224, right: 1440, width: 1216 });
+      if (this.classList.contains('topbar')) return rect({ top: 0, bottom: 80, height: 80 });
+      return rect({});
+    });
+
+    render(
+      <main className="workspace">
+        <header className="topbar" />
+        <WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />
+      </main>
+    );
+
+    const backdrop = document.querySelector<HTMLElement>('.watchlist-kline-backdrop');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-left')).toBe('224px');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-top')).toBe('80px');
+    bounds.mockRestore();
+  });
 });
