@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from '../../shared/api/client';
 import { KlineChart } from './KlineChart';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
-import { clearWatchlistDailyBarCache } from './watchlistDailyBarCache';
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -48,7 +47,6 @@ describe('KlineChart', () => {
 
 describe('WatchlistKlineDrawer', () => {
   beforeEach(() => {
-    clearWatchlistDailyBarCache();
     vi.mocked(api).mockReset();
   });
 
@@ -77,13 +75,28 @@ describe('WatchlistKlineDrawer', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  test('allows an explicit upstream refresh', async () => {
+  test('positions the desktop overlay inside the workspace below the topbar', () => {
     vi.mocked(api).mockResolvedValue(bars as never);
-    render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
-    await screen.findByText('2026-07-31');
+    const rect = (values: Partial<DOMRect>): DOMRect => ({
+      x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0,
+      toJSON: () => ({}), ...values
+    });
+    const bounds = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.classList.contains('workspace')) return rect({ left: 224, right: 1440, width: 1216 });
+      if (this.classList.contains('topbar')) return rect({ top: 0, bottom: 80, height: 80 });
+      return rect({});
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: '刷新日线数据' }));
+    render(
+      <main className="workspace">
+        <header className="topbar" />
+        <WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />
+      </main>
+    );
 
-    expect(api).toHaveBeenLastCalledWith('/api/watchlist/600519/daily-bars?limit=120&refresh=true');
+    const backdrop = document.querySelector<HTMLElement>('.watchlist-kline-backdrop');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-left')).toBe('224px');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-top')).toBe('80px');
+    bounds.mockRestore();
   });
 });

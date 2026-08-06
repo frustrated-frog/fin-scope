@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { DailyBarPoint, KlineChart } from './KlineChart';
 import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
@@ -11,7 +11,33 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const [bars, setBars] = useState<DailyBarPoint[]>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const backdrop = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    const overlay = backdrop.current;
+    const workspace = overlay?.closest<HTMLElement>('.workspace');
+    const topbar = workspace?.querySelector<HTMLElement>('.topbar');
+    if (!overlay || !workspace || !topbar) return;
+
+    const updateBounds = () => {
+      const compact = window.innerWidth <= 980;
+      const workspaceBounds = workspace.getBoundingClientRect();
+      const topbarBounds = topbar.getBoundingClientRect();
+      overlay.style.setProperty('--watchlist-kline-left', `${compact ? 0 : Math.max(0, workspaceBounds.left)}px`);
+      overlay.style.setProperty('--watchlist-kline-top', `${compact ? 0 : Math.max(0, topbarBounds.bottom)}px`);
+    };
+
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(updateBounds);
+    observer?.observe(workspace);
+    observer?.observe(topbar);
+    return () => {
+      window.removeEventListener('resize', updateBounds);
+      observer?.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -42,7 +68,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   }
 
   return (
-    <div className="watchlist-kline-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={backdrop} className="watchlist-kline-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="watchlist-kline-modal" role="dialog" aria-modal="true" aria-labelledby="watchlist-kline-title">
         <header className="watchlist-kline-header">
           <div className="watchlist-kline-identity">
