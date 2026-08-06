@@ -173,12 +173,22 @@ public class ResearchDecisionAgent {
     }
 
     private double confidence(JsonNode node, double fallback) {
-        if (node == null || node.isNull()) return fallback;
-        if (node.isNumber()) return bounded(node.asDouble(), fallback);
+        if (node == null || node.isNull()) {
+            return fallback;
+        }
+        if (node.isNumber()) {
+            return bounded(node.asDouble(), fallback);
+        }
         String value = node.asText().trim();
-        if ("HIGH".equalsIgnoreCase(value)) return 0.85D;
-        if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) return 0.65D;
-        if ("LOW".equalsIgnoreCase(value)) return 0.35D;
+        if ("HIGH".equalsIgnoreCase(value)) {
+            return 0.85D;
+        }
+        if ("MEDIUM".equalsIgnoreCase(value) || "MID".equalsIgnoreCase(value)) {
+            return 0.65D;
+        }
+        if ("LOW".equalsIgnoreCase(value)) {
+            return 0.35D;
+        }
         try {
             return bounded(Double.parseDouble(value), fallback);
         } catch (NumberFormatException ignored) {
