@@ -20,10 +20,6 @@ export interface QuantDataSyncRun {
   warningSummary?: string; startedAt: string; finishedAt?: string;
 }
 
-export interface QuantFactor {
-  code: string; name: string; category: string; direction: 'HIGH' | 'LOW';
-  description: string; lookbackDays: number; pointInTime: boolean;
-}
 export interface QuantFactorAnalysis {
   datasetId: number; datasetFingerprint: string; factorCode: string; sampleCount: number;
   icMean: number; icStd: number; icIr: number; positiveIcRatio: number;

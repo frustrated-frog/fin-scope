@@ -123,22 +123,6 @@ export type IntakeCandidate = {
   duplicateOfArticleId?: number;
 };
 
-export type PromoteIntakeCandidateResponse = {
-  candidateId: number;
-  articleId: number;
-  /** Candidate human status after promote — e.g. "PROMOTED" */
-  status: 'PROMOTED' | 'PENDING' | 'SAVED_FOR_LATER' | 'SKIPPED' | 'REJECTED';
-  eventId?: number;
-  eventTitle?: string;
-  evidenceCount?: number;
-  learningTaskCount?: number;
-  contentIdeaCount?: number;
-  /** Workflow attach status — whether research package generation succeeded */
-  workflowStatus?: 'SUCCESS' | 'FAILED';
-  workflowSummary?: string;
-  workflowErrorMessage?: string;
-};
-
 export type InsightCard = {
   id?: number;
   oneSentenceSummary?: string;
@@ -233,18 +217,6 @@ export type EventCluster = {
   noveltyState?: string;
   evidenceCount?: number;
   articleCount?: number;
-};
-
-export type EventArticleLink = {
-  eventId: number;
-  articleId: number;
-  noveltyType?: string;
-  noveltyReason?: string;
-  relationType?: string;
-  matchScore?: number;
-  createdAt?: string;
-  articleTitle?: string;
-  articleUrl?: string;
 };
 
 export type EvidenceItem = {

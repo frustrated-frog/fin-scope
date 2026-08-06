@@ -2,13 +2,6 @@ import { ReactNode } from 'react';
 
 import { Brief } from '../types';
 
-export function splitLines(value?: string) {
-  if (!value) {
-    return [];
-  }
-  return value.split('\n').map((item) => item.trim()).filter(Boolean);
-}
-
 export function themeLabel(themeCode?: string) {
   switch (themeCode) {
     case 'china_macro':
