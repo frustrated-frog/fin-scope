@@ -127,6 +127,28 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "newsRefreshExecutor")
+    public Executor newsRefreshExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("news-refresh-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "newsFetchExecutor")
+    public Executor newsFetchExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("news-fetch-");
+        executor.setCorePoolSize(3);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(6);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "quoteTaskExecutor")
     public Executor quoteTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

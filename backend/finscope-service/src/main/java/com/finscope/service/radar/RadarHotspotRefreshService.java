@@ -36,7 +36,7 @@ public class RadarHotspotRefreshService {
 
     public boolean requestRefresh() { return request("MANUAL"); }
 
-    boolean requestScheduledRefresh() { return request("SCHEDULED"); }
+    public boolean requestScheduledRefresh() { return request("SCHEDULED"); }
 
     public boolean isRunning() { return running.get(); }
 

@@ -36,6 +36,10 @@ finscope:
     enabled: true
     cache:
       research-material-ttl-seconds: 240
+  news:
+    refresh-initial-delay-ms: 1000
+    refresh-interval-ms: 30000
+    source-snapshot-ttl-seconds: 120
   llm:
     enabled: true
     base-url: https://modelservice.jdcloud.com/v1

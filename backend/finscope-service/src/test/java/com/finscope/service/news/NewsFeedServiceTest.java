@@ -32,7 +32,7 @@ class NewsFeedServiceTest {
     @Test
     void reusesResearchMaterialGatewayAndSeparatesFlashFromDigest() {
         ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
-        when(gateway.search(eq(ResearchMaterialType.NEWS_FLASH), argThat(request ->
+        when(gateway.readNewsFlashSources(argThat(request ->
                 request.getStockCode().equals("000001") && request.getQuery().isEmpty() && request.getLimit() == 50)))
                 .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(
                         material("THS_NEWS_DIGEST", "THS", "专题要闻", "完整专题内容", 9, 30),
@@ -59,7 +59,7 @@ class NewsFeedServiceTest {
         older.setUrl("https://example.com/same");
         ResearchMaterial newer = material("CLS_NEWS_FLASH", "CLS", "相同消息", "较新内容", 9, 50);
         newer.setUrl("https://example.com/same");
-        when(gateway.search(eq(ResearchMaterialType.NEWS_FLASH), argThat(request -> true)))
+        when(gateway.readNewsFlashSources(argThat(request -> true)))
                 .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(older, newer), Collections.emptyList()));
 
         NewsFeedSnapshot result = new NewsFeedService(gateway, fixedClock()).load(20);
@@ -189,7 +189,7 @@ class NewsFeedServiceTest {
 
     private static ResearchMaterialGateway gatewayWithTwoItems() {
         ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
-        when(gateway.search(eq(ResearchMaterialType.NEWS_FLASH), argThat(request -> true)))
+        when(gateway.readNewsFlashSources(argThat(request -> true)))
                 .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(
                         material("THS_NEWS_DIGEST", "THS", "专题要闻", "完整专题内容", 9, 30),
                         material("CLS_NEWS_FLASH", "CLS", "盘中快讯", "完整快讯内容", 9, 45)

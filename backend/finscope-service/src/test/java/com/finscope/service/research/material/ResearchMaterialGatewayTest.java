@@ -16,7 +16,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,6 +98,65 @@ class ResearchMaterialGatewayTest {
         assertEquals(1, cache.writes);
     }
 
+    @Test
+    void keepsPreviousProviderSnapshotWhenAnotherProviderRefreshFails() {
+        FakeCache cache = new FakeCache();
+        cache.entries.put("finscope:news-source:FAILED", new ResearchMaterialCacheEntry(
+                Collections.singletonList(material("old-failed", "上次成功资讯")), Collections.emptyList(), LocalDateTime.now()));
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                Arrays.asList(provider("FAILED", 10, true), provider("HEALTHY", 20, false)),
+                new ProviderRoutePolicy(guard), guard, cache);
+
+        ResearchMaterialGatewayResult result = gateway.refreshNewsFlashSources(
+                new ResearchMaterialRequest("000001", "订单", 10));
+
+        assertEquals(2, result.getMaterials().size());
+        assertTrue(result.getWarnings().get(0).contains("FAILED"));
+        assertTrue(cache.entries.containsKey("finscope:news-source:HEALTHY"));
+    }
+
+    @Test
+    void readsSourceSnapshotsWithoutCallingProviders() {
+        FakeCache cache = new FakeCache();
+        cache.entries.put("finscope:news-source:NETWORK", new ResearchMaterialCacheEntry(
+                Collections.singletonList(material("cached-source", "源快照资讯")), Collections.emptyList(), LocalDateTime.now()));
+        ResearchMaterialProvider provider = provider("NETWORK", 10, true);
+        ProviderRequestGuard guard = new ProviderRequestGuard();
+        ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                Collections.singletonList(provider), new ProviderRoutePolicy(guard), guard, cache);
+
+        ResearchMaterialGatewayResult result = gateway.readNewsFlashSources(
+                new ResearchMaterialRequest("000001", "订单", 10));
+
+        assertEquals("cached-source", result.getMaterials().get(0).getExternalId());
+    }
+
+    @Test
+    void refreshesIndependentProvidersConcurrently() throws Exception {
+        CountDownLatch started = new CountDownLatch(2);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            ProviderRequestGuard guard = new ProviderRequestGuard();
+            ResearchMaterialGateway gateway = new ResearchMaterialGateway(
+                    Arrays.asList(blockingProvider("CLS", 10, started, release),
+                            blockingProvider("THS", 20, started, release)),
+                    new ProviderRoutePolicy(guard), guard, new FakeCache(), executor, 240L, 120L);
+
+            java.util.concurrent.Future<ResearchMaterialGatewayResult> future = caller.submit(
+                    () -> gateway.refreshNewsFlashSources(new ResearchMaterialRequest("000001", "", 10)));
+
+            assertTrue(started.await(1, TimeUnit.SECONDS));
+            release.countDown();
+            assertEquals(2, future.get(1, TimeUnit.SECONDS).getMaterials().size());
+        } finally {
+            caller.shutdownNow();
+            executor.shutdownNow();
+        }
+    }
+
     private ResearchMaterial material(String id, String title) {
         ResearchMaterial value = new ResearchMaterial();
         value.setMaterialType(ResearchMaterialType.NEWS_FLASH);
@@ -107,6 +172,7 @@ class ResearchMaterialGatewayTest {
 
     private static final class FakeCache implements ResearchMaterialCacheRepository {
         private ResearchMaterialCacheEntry entry;
+        private final Map<String, ResearchMaterialCacheEntry> entries = new LinkedHashMap<String, ResearchMaterialCacheEntry>();
         private int reads;
         private int writes;
 
@@ -117,12 +183,13 @@ class ResearchMaterialGatewayTest {
         @Override
         public Optional<ResearchMaterialCacheEntry> get(String key) {
             reads++;
-            return Optional.ofNullable(entry);
+            return Optional.ofNullable(entries.containsKey(key) ? entries.get(key) : entry);
         }
 
         @Override
         public void put(String key, ResearchMaterialCacheEntry value, Duration ttl) {
             writes++;
+            entries.put(key, value);
             entry = value;
         }
     }
@@ -146,6 +213,36 @@ class ResearchMaterialGatewayTest {
                 material.setContent("订单增长"); material.setProviderCode(code); material.setProviderFamily(code);
                 material.setSourceTier("T2"); material.setUrl("https://example.com/" + code);
                 return ProviderResult.of(Collections.singletonList(material), LocalDateTime.now(), "hash", Collections.emptyList());
+            }
+        };
+    }
+
+    private ResearchMaterialProvider blockingProvider(String code, int priority, CountDownLatch started,
+                                                      CountDownLatch release) {
+        return new ResearchMaterialProvider() {
+            public String providerCode() { return code; }
+            public String providerFamily() { return code; }
+            public int priority() { return priority; }
+            public int batchLimit() { return 10; }
+            public Duration minimumInterval() { return Duration.ZERO; }
+            public Duration timeout() { return Duration.ofSeconds(1); }
+            public java.util.Set<ResearchMaterialType> materialTypes() {
+                return Collections.singleton(ResearchMaterialType.NEWS_FLASH);
+            }
+            public ProviderResult<java.util.List<ResearchMaterial>> fetch(
+                    ResearchMaterialType type, ResearchMaterialRequest request) {
+                started.countDown();
+                try {
+                    release.await(1, TimeUnit.SECONDS);
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(error);
+                }
+                ResearchMaterial material = material(code + "-item", code + "资讯");
+                material.setProviderCode(code);
+                material.setProviderFamily(code);
+                return ProviderResult.of(Collections.singletonList(material), LocalDateTime.now(), "hash",
+                        Collections.emptyList());
             }
         };
     }

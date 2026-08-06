@@ -75,7 +75,7 @@ public class NewsFeedService {
         }
 
         int limit = Math.max(1, Math.min(requestedLimit, 100));
-        ResearchMaterialGatewayResult result = gateway.search(ResearchMaterialType.NEWS_FLASH,
+        ResearchMaterialGatewayResult result = gateway.readNewsFlashSources(
                 new ResearchMaterialRequest("000001", "", 50));
         List<ResearchMaterial> ordered = new ArrayList<ResearchMaterial>(result.getMaterials());
         ordered.sort(Comparator.comparing(ResearchMaterial::getPublishedAt,
