@@ -16501,3 +16501,297 @@ input[type="checkbox"] {
   .news-depth-card, .news-flash-content h3, .radar-change-item { transition: none; }
   .radar-detail-drawer, .radar-interpretation-pending > span { animation: none; }
 }
+
+/* ---------- 自选页日 K 线行情工作台 ---------- */
+.watchlist-kline-hint {
+  margin-left: 8px;
+  color: var(--muted);
+  font: 650 9px ui-monospace, monospace;
+  opacity: 0.75;
+}
+
+.watchlist-card:hover .watchlist-kline-hint {
+  color: var(--fs-mint);
+  opacity: 1;
+}
+
+.watchlist-kline-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: color-mix(in srgb, #06131b 58%, transparent);
+  backdrop-filter: blur(8px) saturate(72%);
+  -webkit-backdrop-filter: blur(8px) saturate(72%);
+  animation: watchlist-kline-backdrop-in 180ms ease-out;
+}
+
+.watchlist-kline-modal {
+  display: flex;
+  width: min(1080px, 100%);
+  max-height: min(760px, calc(100vh - 64px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--fs-mint) 26%, var(--line));
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 84% 0%, color-mix(in srgb, var(--fs-mint) 12%, transparent), transparent 31%),
+    linear-gradient(160deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-2) 94%, transparent));
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 12%);
+  animation: watchlist-kline-modal-in 280ms cubic-bezier(.16, 1, .3, 1);
+}
+
+.watchlist-kline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--fs-mint) 16%, var(--line));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--fs-mint) 6%, transparent), transparent 52%);
+}
+
+.watchlist-kline-identity > span {
+  color: var(--fs-mint);
+  font: 800 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em;
+}
+
+.watchlist-kline-identity h2 {
+  margin: 7px 0 4px;
+  color: var(--ink);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 730;
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+
+.watchlist-kline-identity h2 small {
+  margin-left: 9px;
+  color: var(--muted);
+  font: 680 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .04em;
+}
+
+.watchlist-kline-identity p {
+  margin: 0;
+  color: var(--muted);
+  font: 620 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .025em;
+}
+
+.watchlist-kline-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.watchlist-kline-quote {
+  display: flex;
+  min-width: 220px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px 12px;
+  color: var(--muted);
+  font: 650 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.watchlist-kline-quote strong {
+  color: var(--ink);
+  font-size: 21px;
+  letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-kline-quote em {
+  font-style: normal;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-kline-close {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--fs-mint) 22%, var(--line));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-2) 76%, transparent);
+  color: var(--muted);
+  font: 300 26px/1 system-ui, sans-serif;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.watchlist-kline-close:hover { border-color: var(--fs-mint); background: color-mix(in srgb, var(--fs-mint) 12%, var(--surface-2)); color: var(--ink); transform: rotate(90deg); }
+.watchlist-kline-close:focus-visible { outline: 2px solid var(--fs-mint); outline-offset: 3px; }
+
+.watchlist-kline-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 18px 28px 8px;
+}
+
+.watchlist-kline-chart-stage {
+  min-width: 0;
+}
+
+.watchlist-kline-chart-label {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 3px 8px;
+  color: var(--muted);
+  font: 750 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.watchlist-kline-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.watchlist-kline-svg .watchlist-kline-plot-bg {
+  fill: color-mix(in srgb, var(--surface-3) 74%, transparent);
+  stroke: color-mix(in srgb, var(--fs-mint) 16%, var(--line));
+}
+
+.watchlist-kline-svg .watchlist-kline-volume-bg {
+  fill: color-mix(in srgb, var(--surface-3) 50%, transparent);
+}
+
+.watchlist-kline-svg .watchlist-kline-gridline line {
+  stroke: color-mix(in srgb, var(--line) 72%, transparent);
+  stroke-dasharray: 3 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.watchlist-kline-svg .watchlist-kline-gridline text {
+  fill: var(--muted);
+  font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.watchlist-kline-svg .watchlist-kline-date {
+  fill: color-mix(in srgb, var(--muted) 84%, transparent);
+  font: 650 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.watchlist-kline-svg .watchlist-kline-candle rect {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.watchlist-kline-svg .watchlist-kline-candle line {
+  stroke: currentColor;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.watchlist-kline-svg .watchlist-kline-volume {
+  fill: currentColor;
+  opacity: .62;
+}
+
+.watchlist-kline-svg .watchlist-up { color: #eb4d43; }
+.watchlist-kline-svg .watchlist-down { color: #24b879; }
+
+.watchlist-kline-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 14px 28px 24px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--fs-mint) 17%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--fs-mint) 10%, var(--line));
+}
+
+.watchlist-kline-meta div {
+  min-width: 0;
+  padding: 12px 15px;
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+}
+
+.watchlist-kline-meta dt {
+  color: var(--muted);
+  font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .05em;
+}
+
+.watchlist-kline-meta dd {
+  margin: 7px 0 0;
+  color: var(--ink);
+  font: 760 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-kline-pending {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 200px;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.watchlist-kline-pending > span {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--fs-mint);
+  border-radius: 50%;
+  animation: news-spin 800ms linear infinite;
+}
+
+.watchlist-kline-pending.is-error {
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+  color: var(--danger);
+}
+
+.watchlist-kline-pending.is-error strong {
+  font-size: 13px;
+}
+
+.watchlist-kline-empty {
+  padding: 120px 0;
+  text-align: center;
+  font-size: 12px;
+}
+
+@keyframes watchlist-kline-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes watchlist-kline-modal-in { from { opacity: 0; transform: translateY(16px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (max-width: 700px) {
+  .watchlist-kline-backdrop { align-items: flex-end; padding: 12px; }
+  .watchlist-kline-modal { max-height: calc(100vh - 24px); border-radius: 18px; }
+  .watchlist-kline-header { align-items: flex-start; padding: 20px; }
+  .watchlist-kline-head-actions { gap: 8px; }
+  .watchlist-kline-quote { min-width: 0; max-width: 130px; justify-content: flex-end; }
+  .watchlist-kline-quote span { display: none; }
+  .watchlist-kline-content { padding: 14px 16px 4px; }
+  .watchlist-kline-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 12px 16px 16px; }
+  .watchlist-kline-identity h2 small { display: block; margin: 6px 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchlist-kline-backdrop, .watchlist-kline-modal { animation: none; }
+  .watchlist-kline-close { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .watchlist-kline-backdrop { background: rgb(6 19 27 / 88%); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .watchlist-kline-modal { background: var(--surface); }
+}
+
+@keyframes news-spin { to { transform: rotate(360deg); } }

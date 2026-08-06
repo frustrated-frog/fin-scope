@@ -7,6 +7,7 @@ import { DataQualityNotice } from './DataQualityNotice';
 import { SectorMarketPanel } from './SectorMarketPanel';
 import { useWatchlistDashboardData } from './useWatchlistDashboardData';
 import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
+import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
 
 type AttributionInstrument = {
   code: string;
@@ -103,6 +104,7 @@ export function WatchlistView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
+  const [klineItem, setKlineItem] = useState<WatchlistItem | null>(null);
 
   async function load() {
     const result = await dashboard.loadInvestments();
@@ -482,6 +484,12 @@ export function WatchlistView({
                         <article
                           className={`panel watchlist-card${isAbnormal(latestChangePct(item)) ? ' watchlist-card-abnormal' : ''}`}
                           key={item.id}
+                          onClick={(event) => {
+                            if (item.type !== 'STOCK') return;
+                            const target = event.target as HTMLElement;
+                            if (target.closest('button, select, a, input, label')) return;
+                            setKlineItem(item);
+                          }}
                         >
                           <button
                             className="watchlist-remove"
@@ -501,6 +509,7 @@ export function WatchlistView({
                             </strong>
                             <span className="watchlist-meta">
                               {item.code} · {typeLabels[item.type] || item.type}
+                              {item.type === 'STOCK' && <em className="watchlist-kline-hint">点击看K线</em>}
                             </span>
                           </div>
                           {item.quoteValid ? (
@@ -620,6 +629,12 @@ export function WatchlistView({
         </>
       )}
       </section>
+      {klineItem && (
+        <WatchlistKlineDrawer
+          item={{ code: klineItem.code, name: klineItem.name }}
+          onClose={() => setKlineItem(null)}
+        />
+      )}
     </div>
   );
 }

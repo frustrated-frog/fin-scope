@@ -65,6 +65,24 @@ test('renders market index cards above the watchlist controls', async () => {
   expect(screen.getByText('行情抓取失败')).toBeInTheDocument();
 });
 
+test('opens the stock chart in a modal while keeping the watchlist visible', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2
+    }] : path === '/api/watchlist/600519/daily-bars?limit=120' ? [{
+      code: '600519', tradeDate: '2026-08-05', open: 1500, high: 1520, low: 1490, close: 1510, volume: 50000
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByText('贵州茅台'));
+
+  expect(await screen.findByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '我的自选' })).toBeInTheDocument();
+});
+
 test('places market indices outside the watchlist panel and shows directional change badges', async () => {
   vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
     path === '/api/market-indices' ? indexQuotes : []
@@ -343,4 +361,24 @@ test('clearly marks stale quotes and explains that they are not real-time data',
   expect(alerts[0]).toHaveTextContent('27 分钟前');
   expect(alerts[0]).toHaveTextContent('请勿视为实时行情');
   expect(screen.getAllByText('旧数据').length).toBeGreaterThanOrEqual(3);
+});
+
+test('opens the daily kline drawer when clicking a stock card', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2
+    }] : path === '/api/market-indices' ? [] : path === '/api/watchlist/600519/daily-bars?limit=120' ? [{
+      tradeDate: '2026-07-31', open: 1510, high: 1530, low: 1505, close: 1528, volume: 60000
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('贵州茅台')).toBeInTheDocument();
+  await user.click(screen.getByText('贵州茅台'));
+
+  expect(await screen.findByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/watchlist/600519/daily-bars?limit=120');
+  expect(await screen.findByText('2026-07-31')).toBeInTheDocument();
 });
