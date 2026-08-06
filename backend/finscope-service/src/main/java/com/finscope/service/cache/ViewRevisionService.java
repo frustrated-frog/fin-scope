@@ -41,6 +41,15 @@ public class ViewRevisionService {
         return revision;
     }
 
+    /** 发布已经完整写入 Redis 的指定版本，避免读取端观察到半成品快照。 */
+    public ViewRevision publish(String scope, long revision, LocalDateTime completedAt) {
+        String normalized = normalize(scope);
+        cache.activateRevision(normalized, revision);
+        ViewRevision published = new ViewRevision(normalized, revision, completedAt);
+        publisher.publish(published);
+        return published;
+    }
+
     public List<ViewRevision> current(Collection<String> scopes) {
         if (scopes == null || scopes.isEmpty()) return Collections.emptyList();
         List<ViewRevision> values = new ArrayList<ViewRevision>();

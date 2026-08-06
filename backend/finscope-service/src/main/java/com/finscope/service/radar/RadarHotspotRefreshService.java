@@ -2,7 +2,6 @@ package com.finscope.service.radar;
 
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.domain.radar.RadarRefreshRun;
-import com.finscope.service.cache.ViewRevisionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,16 +19,16 @@ public class RadarHotspotRefreshService {
     private final RadarHotspotProductionPipeline pipeline;
     private final RadarRefreshRunRepository runs;
     private final Executor executor;
-    private final ViewRevisionService viewRevisions;
+    private final RadarSnapshotProjectionService snapshots;
     private final Clock clock;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     @Autowired
     public RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline,
                                       RadarRefreshRunRepository runs,
-                                      ViewRevisionService viewRevisions,
+                                      RadarSnapshotProjectionService snapshots,
                                       @org.springframework.beans.factory.annotation.Qualifier("radarRefreshExecutor") Executor executor) {
-        this(pipeline, runs, viewRevisions, executor, Clock.systemDefaultZone());
+        this(pipeline, runs, snapshots, executor, Clock.systemDefaultZone());
     }
 
     RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
@@ -38,8 +37,8 @@ public class RadarHotspotRefreshService {
     }
 
     RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
-                               ViewRevisionService viewRevisions, Executor executor, Clock clock) {
-        this.pipeline = pipeline; this.runs = runs; this.viewRevisions = viewRevisions; this.executor = executor; this.clock = clock;
+                               RadarSnapshotProjectionService snapshots, Executor executor, Clock clock) {
+        this.pipeline = pipeline; this.runs = runs; this.snapshots = snapshots; this.executor = executor; this.clock = clock;
     }
 
     public boolean requestRefresh() { return request("MANUAL"); }
@@ -61,16 +60,10 @@ public class RadarHotspotRefreshService {
             executor.execute(() -> {
                 try {
                     RadarHotspotProductionPipeline.ProductionResult result = pipeline.run("ALL", triggerType, now());
-                    if (result != null && viewRevisions != null) {
-                        LocalDateTime completedAt = result.getRun() == null || result.getRun().getCompletedAt() == null
-                                ? now() : result.getRun().getCompletedAt();
-                        invalidatePageSnapshots(completedAt);
-                    }
+                    if (result != null && snapshots != null) snapshots.prewarm(result.getEvents(), result.getRun());
                 }
                 catch (RuntimeException error) {
                     log.error("雷达热点生产批次失败，trigger={}", triggerType, error);
-                    // persistEvents 是独立事务；后续步骤失败时数据库仍可能已有本轮已提交事件。
-                    invalidatePageSnapshots(now());
                 } finally {
                     running.set(false);
                 }
@@ -83,9 +76,4 @@ public class RadarHotspotRefreshService {
         }
     }
 
-    private void invalidatePageSnapshots(LocalDateTime completedAt) {
-        if (viewRevisions == null) return;
-        viewRevisions.invalidate("radar", completedAt);
-        viewRevisions.invalidate("dashboard", completedAt);
-    }
 }

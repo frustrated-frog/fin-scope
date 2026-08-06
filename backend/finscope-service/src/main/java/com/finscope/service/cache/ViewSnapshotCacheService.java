@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /** 缓存页面 data JSON；API 外层的 traceId/timestamp 每次请求仍由 Controller 新建。 */
@@ -25,14 +26,8 @@ public class ViewSnapshotCacheService {
     }
 
     public JsonNode readOrLoad(String scope, String variant, Duration ttl, Supplier<?> loader) {
-        java.util.Optional<String> cached = cache.get(scope, variant);
-        if (cached.isPresent()) {
-            try {
-                return mapper.readTree(cached.get());
-            } catch (JsonProcessingException error) {
-                log.warn("页面快照缓存格式无效，将重新加载: scope={}", scope);
-            }
-        }
+        Optional<JsonNode> cached = read(scope, variant);
+        if (cached.isPresent()) return cached.get();
         Object value = loader.get();
         try {
             String payload = mapper.writeValueAsString(value);
@@ -40,6 +35,32 @@ public class ViewSnapshotCacheService {
             return mapper.readTree(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("页面快照序列化失败", error);
+        }
+    }
+
+    /** 只读预热快照；页面读取方不得在未命中时隐式访问主存储。 */
+    public Optional<JsonNode> read(String scope, String variant) {
+        Optional<String> cached = cache.get(scope, variant);
+        if (!cached.isPresent()) return Optional.empty();
+        try {
+            return Optional.of(mapper.readTree(cached.get()));
+        } catch (JsonProcessingException error) {
+            log.warn("页面快照缓存格式无效: scope={}", scope);
+            return Optional.empty();
+        }
+    }
+
+    public long nextRevision(String scope) {
+        return cache.nextRevision(scope);
+    }
+
+    /** 将 JSON 写入尚不可见的版本，调用方负责在全部写完后发布 revision。 */
+    public boolean write(String scope, long revision, String variant, Object value, Duration ttl) {
+        try {
+            return cache.put(scope, revision, variant, mapper.writeValueAsString(value), ttl);
+        } catch (JsonProcessingException error) {
+            log.warn("页面快照序列化失败: scope={}", scope, error);
+            return false;
         }
     }
 

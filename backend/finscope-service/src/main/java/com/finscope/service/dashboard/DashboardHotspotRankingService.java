@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.List;
 
@@ -26,12 +27,39 @@ public class DashboardHotspotRankingService {
         return Collections.unmodifiableList(result);
     }
 
+    /** 生产链路直接从本轮事件构建榜单，避免预热阶段回查 SQLite。 */
+    public List<Ranking> rankings(List<RadarEvent> events) {
+        List<RadarEvent> source = events == null ? Collections.<RadarEvent>emptyList() : events;
+        List<Ranking> result = new ArrayList<Ranking>();
+        result.add(ranking(source, RadarDashboardCategoryService.FINANCE, "金融"));
+        result.add(ranking(source, RadarDashboardCategoryService.TECHNOLOGY, "科技"));
+        result.add(ranking(source, RadarDashboardCategoryService.POLITICS, "政治"));
+        return Collections.unmodifiableList(result);
+    }
+
     private Ranking ranking(String categoryCode, String label) {
         List<Item> items = new ArrayList<Item>();
         for (RadarEvent event : repository.findTopByDashboardCategory(categoryCode, BOARD_SIZE)) {
             items.add(new Item(event));
         }
         return new Ranking(categoryCode, label, items);
+    }
+
+    private Ranking ranking(List<RadarEvent> events, String categoryCode, String label) {
+        List<RadarEvent> selected = new ArrayList<RadarEvent>();
+        for (RadarEvent event : events) {
+            if (event != null && active(event) && categoryCode.equals(event.getDashboardCategory())) selected.add(event);
+        }
+        selected.sort(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed()
+                .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(RadarEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
+        List<Item> items = new ArrayList<Item>();
+        for (RadarEvent event : selected.subList(0, Math.min(BOARD_SIZE, selected.size()))) items.add(new Item(event));
+        return new Ranking(categoryCode, label, items);
+    }
+
+    private boolean active(RadarEvent event) {
+        return "ACTIVE".equalsIgnoreCase(event.getStatus()) || "QUIET".equalsIgnoreCase(event.getStatus());
     }
 
     public static final class Ranking {
