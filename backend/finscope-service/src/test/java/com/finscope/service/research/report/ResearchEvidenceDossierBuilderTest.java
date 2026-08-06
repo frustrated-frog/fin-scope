@@ -85,6 +85,32 @@ class ResearchEvidenceDossierBuilderTest {
         assertTrue(excerpt.contains("长鑫科技上市次日市值回落"));
     }
 
+    @Test
+    void removesPageNavigationAndMarkdownBeforeBuildingAResearchFact() {
+        Article article = new Article();
+        article.setId(3L);
+        article.setSourceName("证券时报网");
+        article.setTitle("兆易创新回应股价异常波动");
+        article.setSummary("移动版 网页版) []() * 首页 * 快讯 * 新闻 * 要闻 * 财经 * 评论 * "
+                + "您当前的位置：证券时报 > 公司 > 正文 兆易创新：仅持长鑫科技1.8%股权");
+        article.setBody("移动版 网页版) []() * 首页 * 快讯 * 新闻 * 要闻 * 财经 * 评论 * "
+                + "您当前的位置：证券时报 > 公司 > 正文 兆易创新公告称生产经营秩序稳定，"
+                + "不存在应披露而未披露的重大信息。控股股东持股比例降至7%。");
+        article.setUrl("https://example.com/giga-device");
+
+        String excerpt = builder.build(java.util.Collections.singletonList(
+                new ResearchEvidenceCard(article, null, "COUNTER", 91, article.getSummary())))
+                .get(0).getFactExcerpt();
+
+        assertTrue(excerpt.startsWith("兆易创新：仅持长鑫科技1.8%股权"), excerpt);
+        assertTrue(excerpt.contains("生产经营秩序稳定"));
+        assertTrue(!excerpt.contains("首页"));
+        assertTrue(!excerpt.contains("当前位置"));
+        assertTrue(!excerpt.contains("*"));
+        assertTrue(!excerpt.contains("[]()"));
+        assertTrue(excerpt.length() <= 900);
+    }
+
     private String repeat(String value, int count) {
         StringBuilder result = new StringBuilder();
         for (int index = 0; index < count; index++) result.append(value);

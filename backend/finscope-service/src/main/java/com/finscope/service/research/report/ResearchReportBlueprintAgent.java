@@ -18,6 +18,7 @@ public class ResearchReportBlueprintAgent {
     private static final int TIMEOUT_MS = 90_000;
     private static final int OUTPUT_TOKENS = 3_000;
     private static final int MINIMUM_MODEL_SECTIONS = 3;
+    private static final int DIRECT_ANSWER_MAX_CHARACTERS = 420;
     private static final Pattern MODEL_REF = Pattern.compile("\\[(?:E|e)\\d+]", Pattern.CASE_INSENSITIVE);
 
     private final LlmChatClient llm;
@@ -142,7 +143,12 @@ public class ResearchReportBlueprintAgent {
     private String slot(Map<String, String> sections, String name, String fallback) {
         String value = sections.get(name);
         if (value == null || value.trim().isEmpty()) return fallback;
-        return MODEL_REF.matcher(value).replaceAll("").replaceAll("\\s+", " ").trim();
+        String clean = MODEL_REF.matcher(value).replaceAll("").replaceAll("\\s+", " ").trim();
+        return ResearchFactText.completeExcerpt(clean, slotLimit(name));
+    }
+
+    private int slotLimit(String name) {
+        return "DIRECT_ANSWER".equals(name) ? DIRECT_ANSWER_MAX_CHARACTERS : 700;
     }
 
     private String systemPrompt() {

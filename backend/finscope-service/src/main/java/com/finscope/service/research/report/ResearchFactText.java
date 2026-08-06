@@ -18,19 +18,25 @@ final class ResearchFactText {
             boundary = nextBoundary(clean, preferredMaximum,
                     Math.min(clean.length(), preferredMaximum + BOUNDARY_LOOKAHEAD));
         }
-        return boundary > 0 ? clean.substring(0, boundary).trim() : clean;
+        return boundary > 0 ? clean.substring(0, boundary).trim()
+                : clean.substring(0, Math.min(preferredMaximum, clean.length())).trim();
     }
 
     private static String clean(String value) {
         return (value == null ? "" : value)
                 .replaceAll("!\\[([^\\]]*)]\\([^)]*\\)", "$1")
                 .replaceAll("\\[([^\\]]+)]\\([^)]*\\)", "$1")
+                .replaceAll("(?is)(?:移动版|网页版).*?正文\\s*", "")
+                .replaceAll("(?is)您当前的位置\\s*[：:]?\\s*[^。！？!?]{0,300}?正文\\s*", "")
                 .replaceAll("(?i)\\[S\\d+\\]\\s*(?:-\\s*\\d+\\s*/)?\\s*\\[?", "")
+                .replaceAll("\\[\\s*]\\s*\\([^)]*\\)", "")
                 .replaceAll("https?://\\S+", "")
                 .replace("（已截断）", "")
                 .replace("…", "")
                 .replace("...", "")
                 .replaceFirst("^#+\\s*", "")
+                .replaceAll("[*_`~]+", "")
+                .replaceAll("(?:^|\\s)(?:移动版|网页版|首页|快讯|新闻|要闻|财经|评论)(?=\\s|[)\\]\\[(*]|$)", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
     }

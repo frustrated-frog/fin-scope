@@ -117,6 +117,24 @@ class ResearchReportBlueprintAgentTest {
         assertFalse(result.getDirectAnswer().contains("[E1]"));
     }
 
+    @Test
+    void keepsTheReaderFacingConclusionShortAndFreeOfMarkdownNoise() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        String navigation = "移动版 网页版 []() * 首页 * 快讯 * 新闻 * 要闻 * 财经 * 评论 * ";
+        when(llm.complete(anyString(), anyString(), eq(90000), eq(3000))).thenReturn(
+                slot("DIRECT_ANSWER", navigation + repeat("未分段网页文本", 90))
+                        + slot("KEY_INSIGHT_1_MEANING", "对象特定含义")
+                        + slot("SUBQUESTION_1_ANSWER", "对象特定回答"));
+
+        ResearchReportBlueprint result = new ResearchReportBlueprintAgent(
+                llm, new ResearchReportBlueprintValidator()).generate(thesis(), dossier());
+
+        assertTrue(result.getDirectAnswer().length() <= 420);
+        assertFalse(result.getDirectAnswer().contains("首页"));
+        assertFalse(result.getDirectAnswer().contains("*"));
+        assertFalse(result.getDirectAnswer().contains("[]()"));
+    }
+
     private void assertReferencesAreAllowed(ResearchReportBlueprint result, Set<String> allowed) {
         for (ResearchReportBlueprint.KeyInsight item : result.getKeyInsights()) {
             assertTrue(allowed.containsAll(item.getEvidenceRefs()));
@@ -157,5 +175,11 @@ class ResearchReportBlueprintAgentTest {
 
     private String slot(String name, String value) {
         return "<<<" + name + ">>>\n" + value + "\n<<<END>>>\n";
+    }
+
+    private String repeat(String value, int count) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < count; index++) result.append(value);
+        return result.toString();
     }
 }

@@ -74,7 +74,7 @@ public class ResearchEvidenceDossierBuilder {
                 .replaceAll("https?://\\S+", "")
                 .replace("摘要：", "")
                 .replaceAll("\\s+", " ").trim();
-        for (String fragment : clean.split("(?<=[；。！？.!?])\\s*")) {
+        for (String fragment : clean.split("(?<=[；。！？!?])\\s*")) {
             String candidate = fragment.trim();
             if (candidate.isEmpty() || overlapsExisting(out, candidate)) continue;
             if (out.length() > 0) out.append(' ');

@@ -17,9 +17,9 @@ class ResearchFactTextTest {
     }
 
     @Test
-    void keepsTheWholeFactWhenNoSafeBoundaryExists() {
+    void boundsAnUnpunctuatedFactInsteadOfPassingItThroughUnbounded() {
         String text = "一段没有句末标点但必须保持完整的事实材料";
 
-        assertEquals(text, ResearchFactText.completeExcerpt(text, 10));
+        assertEquals(text.substring(0, 10), ResearchFactText.completeExcerpt(text, 10));
     }
 }
