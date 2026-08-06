@@ -18,4 +18,8 @@ test('centers the kline overlay in the workspace without covering the topbar at 
   expect(styles).toMatch(
     /@media\s*\(max-width:\s*700px\)[\s\S]*?\.watchlist-kline-backdrop\s*{[^}]*align-items:\s*flex-end;[^}]*padding:\s*12px;/s
   );
+  const backdropRule = styles.match(/\.watchlist-kline-backdrop\s*{([^}]*)}/)?.[1] ?? '';
+  expect(backdropRule).not.toContain('backdrop-filter');
+  expect(styles).toMatch(/\.watchlist-kline-open\s*{[^}]*overflow:\s*hidden;/s);
+  expect(styles).toMatch(/\.watchlist-kline-content\s*{[^}]*overscroll-behavior:\s*contain;/s);
 });

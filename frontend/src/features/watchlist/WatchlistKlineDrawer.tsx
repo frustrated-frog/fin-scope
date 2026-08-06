@@ -14,6 +14,11 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const backdrop = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
+  useEffect(() => {
+    document.documentElement.classList.add('watchlist-kline-open');
+    return () => document.documentElement.classList.remove('watchlist-kline-open');
+  }, []);
+
   useLayoutEffect(() => {
     const overlay = backdrop.current;
     const workspace = overlay?.closest<HTMLElement>('.workspace');
@@ -47,11 +52,14 @@ export function WatchlistKlineDrawer({ item, onClose }: {
     void loadWatchlistDailyBars(item.code)
       .then((values) => { if (!stopped) { setBars(values); setLoading(false); } })
       .catch((loadError) => { if (!stopped) { setError(loadError instanceof Error ? loadError.message : '日线加载失败'); setLoading(false); } });
+    return () => { stopped = true; };
+  }, [item.code]);
 
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) { if (event.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKeyDown);
-    return () => { stopped = true; document.removeEventListener('keydown', onKeyDown); };
-  }, [item.code, onClose]);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
 
   const latest = bars && bars.length > 0 ? bars[bars.length - 1] : undefined;
   const previous = bars && bars.length > 1 ? bars[bars.length - 2] : undefined;

@@ -128,6 +128,34 @@ describe('WatchlistKlineDrawer', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  test('locks background scrolling only while the kline dialog is open', () => {
+    vi.mocked(api).mockResolvedValue(bars as never);
+
+    const { unmount } = render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
+
+    expect(document.documentElement).toHaveClass('watchlist-kline-open');
+    unmount();
+    expect(document.documentElement).not.toHaveClass('watchlist-kline-open');
+  });
+
+  test('does not restart loading or focus the header when the parent supplies a new close callback', async () => {
+    vi.mocked(api).mockResolvedValue(bars as never);
+    const focus = vi.spyOn(HTMLButtonElement.prototype, 'focus').mockImplementation(() => undefined);
+    const { rerender } = render(
+      <WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />
+    );
+
+    expect(await screen.findByText('2026-07-31')).toBeInTheDocument();
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    rerender(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
+
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('正在加载日线…')).not.toBeInTheDocument();
+    expect(api).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+  });
+
   test('positions the desktop overlay inside the workspace below the topbar', () => {
     vi.mocked(api).mockResolvedValue(bars as never);
     const rect = (values: Partial<DOMRect>): DOMRect => ({
