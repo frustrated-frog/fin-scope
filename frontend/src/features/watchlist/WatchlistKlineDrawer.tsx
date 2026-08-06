@@ -25,7 +25,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
       const workspaceBounds = workspace.getBoundingClientRect();
       const topbarBounds = topbar.getBoundingClientRect();
       overlay.style.setProperty('--watchlist-kline-left', `${compact ? 0 : Math.max(0, workspaceBounds.left)}px`);
-      overlay.style.setProperty('--watchlist-kline-top', `${compact ? 0 : Math.max(0, topbarBounds.bottom)}px`);
+      overlay.style.setProperty('--watchlist-kline-top', `${Math.max(0, topbarBounds.bottom)}px`);
     };
 
     updateBounds();
@@ -58,6 +58,11 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const changePct = latest?.changePct
     ?? (latest && previous && previous.close ? ((latest.close! - previous.close) / previous.close) * 100 : undefined);
   const name = item.name || item.code;
+  const periodHigh = bars?.reduce<number | undefined>((highest, bar) => bar.high == null ? highest : Math.max(highest ?? bar.high, bar.high), undefined);
+  const periodLow = bars?.reduce<number | undefined>((lowest, bar) => bar.low == null ? lowest : Math.min(lowest ?? bar.low, bar.low), undefined);
+  const return20 = bars && bars.length >= 21 && latest?.close != null && bars[bars.length - 21].close
+    ? ((latest.close - bars[bars.length - 21].close!) / bars[bars.length - 21].close!) * 100
+    : undefined;
 
   function refresh() {
     setLoading(true);
@@ -98,20 +103,26 @@ export function WatchlistKlineDrawer({ item, onClose }: {
             <div className="watchlist-kline-pending is-error" aria-live="polite"><strong>日线加载失败</strong><p>{error}</p></div>
           ) : (
             <section className="watchlist-kline-chart-stage" aria-label="日线图">
-              <div className="watchlist-kline-chart-label"><span>价格走势</span><span>成交量</span></div>
+              <div className="watchlist-kline-chart-label">
+                <span>日 K · 价格走势</span>
+                <span className="watchlist-kline-ma-legend"><i>MA5</i><i>MA20</i><i>MA60</i></span>
+              </div>
               <KlineChart bars={bars ?? []} />
             </section>
           )}
+          {!loading && bars && bars.length > 0 && latest && (
+            <dl className="watchlist-kline-meta" aria-label="最新行情与区间指标">
+              <div><dt>开盘</dt><dd>{fmt(latest.open)}</dd></div>
+              <div><dt>最高</dt><dd>{fmt(latest.high)}</dd></div>
+              <div><dt>最低</dt><dd>{fmt(latest.low)}</dd></div>
+              <div><dt>成交量</dt><dd>{formatVolume(latest.volume)}</dd></div>
+              <div><dt>成交额</dt><dd>{formatAmount(latest.amount)}</dd></div>
+              <div><dt>换手率</dt><dd>{formatPercent(latest.turnoverRate)}</dd></div>
+              <div><dt>20 日涨跌</dt><dd className={return20 != null && return20 >= 0 ? 'watchlist-up' : 'watchlist-down'}>{formatPercent(return20, true)}</dd></div>
+              <div><dt>区间高 / 低</dt><dd>{fmt(periodHigh)} / {fmt(periodLow)}</dd></div>
+            </dl>
+          )}
         </div>
-
-        {!loading && bars && bars.length > 0 && latest && (
-          <dl className="watchlist-kline-meta">
-            <div><dt>开盘</dt><dd>{fmt(latest.open)}</dd></div>
-            <div><dt>最高</dt><dd>{fmt(latest.high)}</dd></div>
-            <div><dt>最低</dt><dd>{fmt(latest.low)}</dd></div>
-            <div><dt>成交量</dt><dd>{formatVolume(latest.volume)}</dd></div>
-          </dl>
-        )}
       </section>
     </div>
   );
@@ -123,4 +134,14 @@ function fmt(value?: number) {
 
 function formatVolume(value?: number) {
   return value != null ? `${(value / 10_000).toFixed(0)} 万` : '--';
+}
+
+function formatAmount(value?: number) {
+  if (value == null) return '--';
+  if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(2)} 亿`;
+  return `${(value / 10_000).toFixed(0)} 万`;
+}
+
+function formatPercent(value?: number, signed = false) {
+  return value == null ? '--' : `${signed && value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }

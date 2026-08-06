@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from '../../shared/api/client';
 import { KlineChart } from './KlineChart';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
+import { clearWatchlistDailyBarCache } from './watchlistDailyBarCache';
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -39,6 +40,39 @@ describe('KlineChart', () => {
     expect(Number(container.querySelector('.watchlist-kline-candle rect')?.getAttribute('width'))).toBeLessThan(6);
   });
 
+  test('keeps the first and last candle bodies inside the price plot', () => {
+    const { container } = render(<KlineChart bars={bars} />);
+    const plot = container.querySelector<SVGRectElement>('.watchlist-kline-plot-bg')!;
+    const candles = [...container.querySelectorAll<SVGRectElement>('.watchlist-kline-candle rect')];
+    const plotLeft = Number(plot.getAttribute('x'));
+    const plotRight = plotLeft + Number(plot.getAttribute('width'));
+    const left = Number(candles[0].getAttribute('x'));
+    const right = Number(candles[candles.length - 1].getAttribute('x'))
+      + Number(candles[candles.length - 1].getAttribute('width'));
+
+    expect(left).toBeGreaterThanOrEqual(plotLeft);
+    expect(right).toBeLessThanOrEqual(plotRight);
+  });
+
+  test('labels the right axis as price and the lower panel as volume', () => {
+    render(<KlineChart bars={bars} />);
+
+    expect(screen.getByText('价格（元）')).toBeInTheDocument();
+    expect(screen.getByText('成交量（手）')).toBeInTheDocument();
+  });
+
+  test('draws cached MA5 MA20 and MA60 trend layers', () => {
+    const denseBars = Array.from({ length: 65 }, (_, index) => ({
+      code: '600519', tradeDate: `2026-07-${String((index % 28) + 1).padStart(2, '0')}`,
+      open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 10_000
+    }));
+    const { container } = render(<KlineChart bars={denseBars} />);
+
+    expect(container.querySelector('.watchlist-kline-ma-5')).toBeInTheDocument();
+    expect(container.querySelector('.watchlist-kline-ma-20')).toBeInTheDocument();
+    expect(container.querySelector('.watchlist-kline-ma-60')).toBeInTheDocument();
+  });
+
   test('shows empty state when no bars are given', () => {
     render(<KlineChart bars={[]} />);
     expect(screen.getByText('暂无日线数据')).toBeInTheDocument();
@@ -47,6 +81,7 @@ describe('KlineChart', () => {
 
 describe('WatchlistKlineDrawer', () => {
   beforeEach(() => {
+    clearWatchlistDailyBarCache();
     vi.mocked(api).mockReset();
   });
 
@@ -60,6 +95,24 @@ describe('WatchlistKlineDrawer', () => {
     expect(await screen.findByText('MARKET VIEW · DAILY')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
     expect(screen.getByText('2026-07-31')).toBeInTheDocument();
+  });
+
+  test('shows cached market activity and range statistics without another request', async () => {
+    const history = Array.from({ length: 25 }, (_, index) => ({
+      code: '600519', market: 'SH', tradeDate: `2026-07-${String(index + 1).padStart(2, '0')}`,
+      open: 100 + index, high: 103 + index, low: 98 + index, close: 101 + index,
+      volume: 50_000 + index, amount: 680_000_000, turnoverRate: 1.26
+    }));
+    vi.mocked(api).mockResolvedValue(history as never);
+
+    render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
+
+    expect(await screen.findByText('6.80 亿')).toBeInTheDocument();
+    expect(screen.getByText('1.26%')).toBeInTheDocument();
+    expect(screen.getByText('20 日涨跌')).toBeInTheDocument();
+    expect(screen.getByText('区间高 / 低')).toBeInTheDocument();
+    expect(document.querySelector('.watchlist-kline-content .watchlist-kline-meta')).toBeInTheDocument();
+    expect(api).toHaveBeenCalledTimes(1);
   });
 
   test('surfaces load errors and closes on Escape', async () => {
@@ -97,6 +150,34 @@ describe('WatchlistKlineDrawer', () => {
     const backdrop = document.querySelector<HTMLElement>('.watchlist-kline-backdrop');
     expect(backdrop?.style.getPropertyValue('--watchlist-kline-left')).toBe('224px');
     expect(backdrop?.style.getPropertyValue('--watchlist-kline-top')).toBe('80px');
+    bounds.mockRestore();
+  });
+
+  test('keeps a narrow overlay below the topbar while removing the sidebar offset', () => {
+    vi.mocked(api).mockResolvedValue(bars as never);
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 });
+    const rect = (values: Partial<DOMRect>): DOMRect => ({
+      x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0,
+      toJSON: () => ({}), ...values
+    });
+    const bounds = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.classList.contains('workspace')) return rect({ left: 224, right: 900, width: 676 });
+      if (this.classList.contains('topbar')) return rect({ top: 0, bottom: 80, height: 80 });
+      return rect({});
+    });
+
+    render(
+      <main className="workspace">
+        <header className="topbar" />
+        <WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />
+      </main>
+    );
+
+    const backdrop = document.querySelector<HTMLElement>('.watchlist-kline-backdrop');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-left')).toBe('0px');
+    expect(backdrop?.style.getPropertyValue('--watchlist-kline-top')).toBe('80px');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
     bounds.mockRestore();
   });
 });

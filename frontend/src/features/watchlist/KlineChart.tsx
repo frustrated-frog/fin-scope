@@ -24,6 +24,7 @@ const VOLUME_BOTTOM = 464;
 const PLOT_LEFT = 18;
 const PLOT_RIGHT = 950;
 const LABEL_X = 1_010;
+const DATA_GUTTER = 8;
 
 /**
  * 手写 SVG 日 K 图。以宽坐标系与自适应柱宽绘制，避免密集日线互相覆盖而显得模糊。
@@ -35,7 +36,7 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
     return <p className="muted watchlist-kline-empty">暂无日线数据</p>;
   }
 
-  const { candles, priceMin, priceMax, ticks, dateTicks } = geometry;
+  const { candles, priceMin, priceMax, ticks, dateTicks, movingAverages } = geometry;
 
   return (
     <svg
@@ -49,6 +50,8 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
       <title>{`最近 ${candles.length} 个交易日日 K 线`}</title>
       <rect className="watchlist-kline-plot-bg" x={PLOT_LEFT} y={PRICE_TOP} width={PLOT_RIGHT - PLOT_LEFT} height={PRICE_BOTTOM - PRICE_TOP} rx="12" />
       <rect className="watchlist-kline-volume-bg" x={PLOT_LEFT} y={VOLUME_TOP} width={PLOT_RIGHT - PLOT_LEFT} height={VOLUME_BOTTOM - VOLUME_TOP} rx="8" />
+      <text className="watchlist-kline-axis-title" x={PLOT_RIGHT} y="14" textAnchor="end">价格（元）</text>
+      <text className="watchlist-kline-axis-title" x={PLOT_LEFT} y={VOLUME_TOP - 8}>成交量（手）</text>
 
       {ticks.map((tick) => {
         const y = priceY(tick.value, priceMin, priceMax);
@@ -62,6 +65,10 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
 
       {dateTicks.map((tick) => (
         <text key={tick.index} className="watchlist-kline-date" x={tick.x} y="489" textAnchor={tick.anchor}>{tick.label}</text>
+      ))}
+
+      {movingAverages.map((average) => (
+        <path key={average.window} className={`watchlist-kline-ma watchlist-kline-ma-${average.window}`} d={average.path} />
       ))}
 
       {candles.map((c) => (
@@ -98,10 +105,12 @@ function layout(bars: DailyBarPoint[]) {
   const priceMin = Math.max(0, rawMin - padding);
   const volumeMax = Math.max(1, ...values.map((bar) => bar.volume ?? 0));
   const n = values.length;
-  const plotWidth = PLOT_RIGHT - PLOT_LEFT;
+  const dataLeft = PLOT_LEFT + DATA_GUTTER;
+  const dataRight = PLOT_RIGHT - DATA_GUTTER;
+  const plotWidth = dataRight - dataLeft;
   const step = n > 1 ? plotWidth / (n - 1) : plotWidth;
   const bodyWidth = Math.max(1.35, Math.min(10, step * 0.68));
-  const candleX = (index: number) => n === 1 ? PLOT_LEFT + plotWidth / 2 : PLOT_LEFT + index * step;
+  const candleX = (index: number) => n === 1 ? dataLeft + plotWidth / 2 : dataLeft + index * step;
 
   const candles = values.map((bar, index) => {
     const x = candleX(index);
@@ -136,7 +145,31 @@ function layout(bars: DailyBarPoint[]) {
     anchor: index === 0 ? 'start' : index === n - 1 ? 'end' : 'middle'
   }));
 
-  return { candles, priceMin, priceMax, ticks, dateTicks };
+  const movingAverages = [5, 20, 60]
+    .filter((window) => n >= window)
+    .map((window) => ({ window, path: movingAveragePath(values, window, candleX, priceMin, priceMax) }));
+
+  return { candles, priceMin, priceMax, ticks, dateTicks, movingAverages };
+}
+
+function movingAveragePath(
+  bars: DailyBarPoint[],
+  window: number,
+  candleX: (index: number) => number,
+  priceMin: number,
+  priceMax: number
+) {
+  let rolling = 0;
+  const points: string[] = [];
+  bars.forEach((bar, index) => {
+    rolling += bar.close as number;
+    if (index >= window) rolling -= bars[index - window].close as number;
+    if (index >= window - 1) {
+      const command = points.length === 0 ? 'M' : 'L';
+      points.push(`${command}${candleX(index).toFixed(2)},${priceY(rolling / window, priceMin, priceMax).toFixed(2)}`);
+    }
+  });
+  return points.join(' ');
 }
 
 function priceY(price: number, priceMin: number, priceMax: number) {
