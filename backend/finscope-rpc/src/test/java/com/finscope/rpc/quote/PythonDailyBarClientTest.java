@@ -74,6 +74,23 @@ class PythonDailyBarClientTest {
     }
 
     @Test
+    void forwardsExplicitRefreshToPythonService() throws Exception {
+        AtomicReference<URI> requested = new AtomicReference<URI>();
+        FinanceHttpClient http = (providerCode, uri, headers) -> {
+            requested.set(uri);
+            return new FinanceHttpResponse(200,
+                    "{\"quality_status\":\"COMPLETE\",\"data\":[{\"trade_date\":\"2026-08-03\","
+                            + "\"open\":1,\"high\":1,\"low\":1,\"close\":1,\"volume\":1}]}",
+                    Instant.now(), "hash");
+        };
+        PythonDailyBarClient client = new PythonDailyBarClient("http://localhost:8000", http);
+
+        client.fetchDailyBars("600519", 120, true);
+
+        assertEquals("limit=120&refresh=true", requested.get().getQuery());
+    }
+
+    @Test
     void unavailableUpstreamThrowsRetryableContractError() throws Exception {
         FinanceHttpClient http = (providerCode, uri, headers) -> new FinanceHttpResponse(200,
                 "{\"quality_status\":\"UNAVAILABLE\",\"data\":null}", Instant.now(), "hash");

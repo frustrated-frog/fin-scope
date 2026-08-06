@@ -30,11 +30,16 @@ public class WatchlistKlineService {
      * @return 按交易日升序排列的日线记录。
      */
     public List<DailyBarPoint> dailyBars(String code, int limit) {
+        return dailyBars(code, limit, false);
+    }
+
+    /** 获取日 K 线；refresh 为 true 时显式刷新 Python 侧持久快照。 */
+    public List<DailyBarPoint> dailyBars(String code, int limit, boolean refresh) {
         if (code == null || !code.trim().matches("\\d{6}")) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码格式不合法");
         }
         try {
-            return dailyBarClient.fetchDailyBars(code, limit);
+            return dailyBarClient.fetchDailyBars(code, limit, refresh);
         } catch (ProviderContractException error) {
             if (Boolean.TRUE.equals(error.isRetryable())) {
                 throw new BusinessException(ErrorCode.MARKET_DATA_UNAVAILABLE, "行情数据暂不可用，请稍后重试");

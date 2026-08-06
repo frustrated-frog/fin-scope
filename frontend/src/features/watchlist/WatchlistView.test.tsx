@@ -6,6 +6,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
 import { WatchlistView } from './WatchlistView';
+import { clearWatchlistDailyBarCache } from './watchlistDailyBarCache';
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -25,6 +26,7 @@ const industryOverview = {
 };
 
 beforeEach(() => {
+  clearWatchlistDailyBarCache();
   vi.mocked(api).mockReset();
 });
 

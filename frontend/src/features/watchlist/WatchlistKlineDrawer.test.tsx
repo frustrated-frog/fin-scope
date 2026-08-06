@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from '../../shared/api/client';
 import { KlineChart } from './KlineChart';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
+import { clearWatchlistDailyBarCache } from './watchlistDailyBarCache';
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -47,6 +48,7 @@ describe('KlineChart', () => {
 
 describe('WatchlistKlineDrawer', () => {
   beforeEach(() => {
+    clearWatchlistDailyBarCache();
     vi.mocked(api).mockReset();
   });
 
@@ -73,5 +75,15 @@ describe('WatchlistKlineDrawer', () => {
 
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  test('allows an explicit upstream refresh', async () => {
+    vi.mocked(api).mockResolvedValue(bars as never);
+    render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
+    await screen.findByText('2026-07-31');
+
+    await userEvent.click(screen.getByRole('button', { name: '刷新日线数据' }));
+
+    expect(api).toHaveBeenLastCalledWith('/api/watchlist/600519/daily-bars?limit=120&refresh=true');
   });
 });

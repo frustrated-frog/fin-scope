@@ -29,7 +29,8 @@ public class WatchlistKlineController {
      */
     @GetMapping("/{code}/daily-bars")
     public ApiResponse<List<DailyBarPoint>> dailyBars(@PathVariable String code,
-                                                      @RequestParam(defaultValue = "120") int limit) {
-        return ApiResponses.success(watchlistKlineService.dailyBars(code, limit));
+                                                      @RequestParam(defaultValue = "120") int limit,
+                                                      @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponses.success(watchlistKlineService.dailyBars(code, limit, refresh));
     }
 }

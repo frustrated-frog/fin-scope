@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 import asyncio
@@ -14,6 +14,7 @@ from finscope_market_data.models import (
     CapitalFlowPoint,
     DailyBar,
     DataCapability,
+    DataEnvelope,
     QualityStatus,
     StockProfile,
     StockQuote,
@@ -32,12 +33,14 @@ class FakeProvider:
         self.capabilities = {DataCapability.QUOTE}
         self.outcomes = deque(outcomes)
         self.calls = 0
+        self.requests: list[dict[str, Any]] = []
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
         return capability in self.capabilities
 
     async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> Any:
         self.calls += 1
+        self.requests.append(kwargs)
         outcome = self.outcomes.popleft()
         if isinstance(outcome, Exception):
             raise outcome
@@ -51,6 +54,27 @@ def quote(symbol: StockSymbol, price: float) -> StockQuote:
         price=price,
         observed_at=datetime(2026, 7, 16, 10, 30, tzinfo=UTC),
     )
+
+
+def daily_bars(
+    symbol: StockSymbol,
+    count: int,
+    close_offset: float = 0,
+    end: date | None = None,
+) -> list[DailyBar]:
+    first = (end - timedelta(days=count - 1)) if end else date(2025, 1, 1)
+    return [
+        DailyBar(
+            symbol=symbol,
+            trade_date=(first + timedelta(days=index)).isoformat(),
+            open=100 + index,
+            high=102 + index,
+            low=99 + index,
+            close=101 + index + close_offset,
+            volume=1000 + index,
+        )
+        for index in range(count)
+    ]
 
 
 def make_router(
@@ -416,3 +440,160 @@ async def test_daily_bar_fact_time_uses_last_trade_date_instead_of_retrieval_tim
 
     assert result.as_of is not None
     assert result.as_of.isoformat() == "2026-07-16T15:00:00+08:00"
+
+
+@pytest.mark.asyncio
+async def test_daily_bars_cache_canonical_250_and_slice_without_repeated_provider_calls(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    provider = FakeProvider("PRIMARY", "EASTMONEY", 10, [daily_bars(symbol, 250)])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = make_router(tmp_path, [provider])
+
+    first = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=120)
+    second = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=60)
+
+    assert provider.calls == 1
+    assert provider.requests == [{"limit": 250}]
+    assert len(first.data) == 120
+    assert len(second.data) == 60
+    stored = router.snapshots.load(DataCapability.DAILY_BARS, symbol)
+    assert stored is not None
+    assert len(stored.data) == 250
+
+
+@pytest.mark.asyncio
+async def test_daily_bars_force_refresh_replaces_the_cached_snapshot(tmp_path: Path) -> None:
+    symbol = StockSymbol(market="SZ", code="001309")
+    provider = FakeProvider(
+        "PRIMARY",
+        "EASTMONEY",
+        10,
+        [daily_bars(symbol, 250), daily_bars(symbol, 250, close_offset=10)],
+    )
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = make_router(tmp_path, [provider])
+
+    cached = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=120)
+    refreshed = await router.fetch(
+        DataCapability.DAILY_BARS,
+        symbol,
+        limit=120,
+        force_refresh=True,
+    )
+
+    assert provider.calls == 2
+    assert refreshed.data[-1].close == cached.data[-1].close + 10
+    stored = router.snapshots.load(DataCapability.DAILY_BARS, symbol)
+    assert stored is not None
+    assert stored.data[-1].close == refreshed.data[-1].close
+
+
+@pytest.mark.asyncio
+async def test_concurrent_daily_bar_cache_misses_share_one_provider_request(tmp_path: Path) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+
+    class SlowDailyProvider:
+        provider_code = "PRIMARY"
+        provider_family = "EASTMONEY"
+        priority = 10
+        capabilities = {DataCapability.DAILY_BARS}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def supports(self, capability: DataCapability, stock: StockSymbol) -> bool:
+            return capability in self.capabilities
+
+        async def fetch(self, capability: DataCapability, stock: StockSymbol, **kwargs: Any) -> Any:
+            self.calls += 1
+            await asyncio.sleep(0.02)
+            return daily_bars(stock, kwargs["limit"])
+
+    provider = SlowDailyProvider()
+    router = ProviderRouter(
+        providers=[provider],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+
+    first, second = await asyncio.gather(
+        router.fetch(DataCapability.DAILY_BARS, symbol, limit=120),
+        router.fetch(DataCapability.DAILY_BARS, symbol, limit=120),
+    )
+
+    assert provider.calls == 1
+    assert len(first.data) == 120
+    assert len(second.data) == 120
+
+
+@pytest.mark.asyncio
+async def test_daily_bar_snapshot_with_expected_trade_date_stays_fresh_without_ttl(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    now = datetime(2026, 8, 6, 2, 0, tzinfo=UTC)  # 上海时间周四 10:00
+    provider = FakeProvider("PRIMARY", "EASTMONEY", 10, [])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = ProviderRouter(
+        providers=[provider],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+        now_provider=lambda: now,
+    )
+    router.snapshots.save(DataEnvelope(
+        capability=DataCapability.DAILY_BARS,
+        symbol=symbol,
+        quality_status=QualityStatus.FRESH_PRIMARY,
+        source_code="PRIMARY",
+        source_family="EASTMONEY",
+        as_of=datetime(2026, 8, 5, 7, 0, tzinfo=UTC),
+        retrieved_at=now - timedelta(days=2),
+        data=daily_bars(symbol, 250, end=date(2026, 8, 5)),
+    ))
+
+    result = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=120)
+
+    assert provider.calls == 0
+    assert len(result.data) == 120
+    assert result.data[-1].trade_date == "2026-08-05"
+
+
+@pytest.mark.asyncio
+async def test_daily_bar_snapshot_refreshes_after_close_when_latest_trade_date_is_missing(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    now = datetime(2026, 8, 6, 8, 0, tzinfo=UTC)  # 上海时间周四 16:00
+    provider = FakeProvider(
+        "PRIMARY",
+        "EASTMONEY",
+        10,
+        [daily_bars(symbol, 250, end=date(2026, 8, 6))],
+    )
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = ProviderRouter(
+        providers=[provider],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+        now_provider=lambda: now,
+    )
+    router.snapshots.save(DataEnvelope(
+        capability=DataCapability.DAILY_BARS,
+        symbol=symbol,
+        quality_status=QualityStatus.FRESH_PRIMARY,
+        source_code="PRIMARY",
+        source_family="EASTMONEY",
+        as_of=datetime(2026, 8, 5, 7, 0, tzinfo=UTC),
+        retrieved_at=datetime(2026, 8, 6, 2, 0, tzinfo=UTC),  # 当日上午 10:00 获取
+        data=daily_bars(symbol, 250, end=date(2026, 8, 5)),
+    ))
+
+    result = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=120)
+
+    assert provider.calls == 1
+    assert result.data[-1].trade_date == "2026-08-06"

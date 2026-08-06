@@ -55,11 +55,18 @@ public class PythonDailyBarClient {
      * @return 按交易日升序排列的日线记录；上游不可用时抛出异常。
      */
     public List<DailyBarPoint> fetchDailyBars(String code, int limit) {
+        return fetchDailyBars(code, limit, false);
+    }
+
+    /**
+     * 获取日 K 线，并可显式要求 Python 服务刷新其持久快照。
+     */
+    public List<DailyBarPoint> fetchDailyBars(String code, int limit, boolean refresh) {
         String normalizedCode = normalizeCode(code);
         String market = market(normalizedCode);
         int normalizedLimit = Math.max(1, Math.min(limit, 250));
         URI uri = URI.create(baseUrl + "/v1/stocks/" + market + "/" + normalizedCode
-                + "/daily-bars?limit=" + normalizedLimit);
+                + "/daily-bars?limit=" + normalizedLimit + (refresh ? "&refresh=true" : ""));
         try {
             FinanceHttpResponse response = http.get(CLIENT_CODE, uri, Collections.<String, String>emptyMap());
             return parse(response, normalizedCode, market);

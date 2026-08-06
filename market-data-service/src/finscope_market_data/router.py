@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from finscope_market_data.health import ProviderHealthRegistry
@@ -30,13 +30,18 @@ class ProviderRouter:
         health: ProviderHealthRegistry,
         max_retries: int = 1,
         retry_delay_seconds: float = 0.15,
+        daily_bar_retry_cooldown_seconds: int = 21600,
+        now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.providers = providers
         self.snapshots = snapshots
         self.health = health
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
+        self.daily_bar_retry_cooldown_seconds = daily_bar_retry_cooldown_seconds
+        self._now_provider = now_provider or (lambda: datetime.now(UTC))
         self._family_locks: dict[str, asyncio.Lock] = {}
+        self._daily_bar_locks: dict[str, asyncio.Lock] = {}
 
     async def aclose(self) -> None:
         closed: set[int] = set()
@@ -48,6 +53,62 @@ class ProviderRouter:
             await client.aclose()
 
     async def fetch(
+        self,
+        capability: DataCapability,
+        symbol: StockSymbol,
+        *,
+        provider_mode: bool = False,
+        provider_family: str | None = None,
+        **kwargs: Any,
+    ) -> DataEnvelope[Any]:
+        if capability is DataCapability.DAILY_BARS and not provider_mode:
+            requested_limit = min(max(int(kwargs.pop("limit", 250)), 1), 1000)
+            force_refresh = bool(kwargs.pop("force_refresh", False))
+            return await self._fetch_daily_bars(
+                symbol,
+                requested_limit=requested_limit,
+                force_refresh=force_refresh,
+                provider_family=provider_family,
+                **kwargs,
+            )
+        return await self._fetch_online(
+            capability,
+            symbol,
+            provider_mode=provider_mode,
+            provider_family=provider_family,
+            **kwargs,
+        )
+
+    async def _fetch_daily_bars(
+        self,
+        symbol: StockSymbol,
+        *,
+        requested_limit: int,
+        force_refresh: bool,
+        provider_family: str | None,
+        **kwargs: Any,
+    ) -> DataEnvelope[Any]:
+        if not force_refresh:
+            cached = self._fresh_daily_bar_snapshot(symbol)
+            if cached is not None:
+                return self._slice_daily_bars(cached, requested_limit)
+
+        lock = self._daily_bar_locks.setdefault(symbol.cache_key, asyncio.Lock())
+        async with lock:
+            if not force_refresh:
+                cached = self._fresh_daily_bar_snapshot(symbol)
+                if cached is not None:
+                    return self._slice_daily_bars(cached, requested_limit)
+            result = await self._fetch_online(
+                DataCapability.DAILY_BARS,
+                symbol,
+                provider_family=provider_family,
+                limit=max(250, requested_limit),
+                **kwargs,
+            )
+            return self._slice_daily_bars(result, requested_limit)
+
+    async def _fetch_online(
         self,
         capability: DataCapability,
         symbol: StockSymbol,
@@ -110,7 +171,7 @@ class ProviderRouter:
                             retry_count=retry_count,
                         )
                     )
-                    now = datetime.now(UTC)
+                    now = self._now()
                     is_primary = provider.provider_code == primary_code
                     envelope = DataEnvelope[Any](
                         capability=capability,
@@ -152,7 +213,7 @@ class ProviderRouter:
                     break
 
         stored = None if provider_mode else self.snapshots.load(capability, symbol)
-        now = datetime.now(UTC)
+        now = self._now()
         if stored is not None and stored.data is not None:
             age = max(0, int((now - stored.retrieved_at).total_seconds()))
             reasons = "；".join(
@@ -187,6 +248,51 @@ class ProviderRouter:
             attempts=attempts,
             data=None,
         )
+
+    def _fresh_daily_bar_snapshot(self, symbol: StockSymbol) -> DataEnvelope[Any] | None:
+        stored = self.snapshots.load(DataCapability.DAILY_BARS, symbol)
+        if stored is None or not isinstance(stored.data, list) or not stored.data:
+            return None
+        now = self._now()
+        age_seconds = max(0, int((now - stored.retrieved_at).total_seconds()))
+        try:
+            latest_trade_date = max(date.fromisoformat(item.trade_date) for item in stored.data)
+        except (AttributeError, TypeError, ValueError):
+            return None
+        expected_trade_date = self._expected_daily_bar_date(now)
+        if latest_trade_date >= expected_trade_date:
+            return stored
+        refresh_boundary = datetime.combine(
+            expected_trade_date,
+            time(hour=15, minute=15),
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        )
+        if (
+            stored.retrieved_at >= refresh_boundary
+            and age_seconds <= self.daily_bar_retry_cooldown_seconds
+        ):
+            return stored
+        return None
+
+    @staticmethod
+    def _slice_daily_bars(envelope: DataEnvelope[Any], limit: int) -> DataEnvelope[Any]:
+        if not isinstance(envelope.data, list):
+            return envelope
+        return envelope.model_copy(update={"data": envelope.data[-limit:]})
+
+    def _now(self) -> datetime:
+        value = self._now_provider()
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _expected_daily_bar_date(now: datetime) -> date:
+        local = now.astimezone(ZoneInfo("Asia/Shanghai"))
+        expected = local.date()
+        if local.weekday() >= 5 or local.time() < time(hour=15, minute=15):
+            expected -= timedelta(days=1)
+        while expected.weekday() >= 5:
+            expected -= timedelta(days=1)
+        return expected
 
     @staticmethod
     def _priority(provider: MarketDataProvider, capability: DataCapability) -> int:

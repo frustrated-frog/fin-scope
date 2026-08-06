@@ -38,6 +38,7 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
         ),
         max_retries=config.max_retries,
         retry_delay_seconds=config.retry_delay_seconds,
+        daily_bar_retry_cooldown_seconds=config.daily_bar_retry_cooldown_seconds,
     )
 
 
@@ -107,9 +108,17 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         market: str,
         code: str,
         limit: int = Query(default=250, ge=1, le=1000),
+        refresh: bool = Query(default=False),
     ):
         return _response(
-            await _fetch(application, DataCapability.DAILY_BARS, market, code, limit=limit)
+            await _fetch(
+                application,
+                DataCapability.DAILY_BARS,
+                market,
+                code,
+                limit=limit,
+                force_refresh=refresh,
+            )
         )
 
     @application.get("/v1/stocks/{market}/{code}/capital-flow")

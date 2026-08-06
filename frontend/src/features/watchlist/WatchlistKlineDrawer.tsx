@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { api } from '../../shared/api/client';
 import { DailyBarPoint, KlineChart } from './KlineChart';
+import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
 export function WatchlistKlineDrawer({ item, onClose }: {
@@ -18,7 +18,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
     closeButton.current?.focus();
     setLoading(true);
     setError('');
-    void api<DailyBarPoint[]>(`/api/watchlist/${item.code}/daily-bars?limit=120`)
+    void loadWatchlistDailyBars(item.code)
       .then((values) => { if (!stopped) { setBars(values); setLoading(false); } })
       .catch((loadError) => { if (!stopped) { setError(loadError instanceof Error ? loadError.message : '日线加载失败'); setLoading(false); } });
 
@@ -32,6 +32,14 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const changePct = latest?.changePct
     ?? (latest && previous && previous.close ? ((latest.close! - previous.close) / previous.close) * 100 : undefined);
   const name = item.name || item.code;
+
+  function refresh() {
+    setLoading(true);
+    setError('');
+    void loadWatchlistDailyBars(item.code, { force: true })
+      .then((values) => { setBars(values); setLoading(false); })
+      .catch((loadError) => { setError(loadError instanceof Error ? loadError.message : '日线加载失败'); setLoading(false); });
+  }
 
   return (
     <div className="watchlist-kline-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -52,6 +60,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
                 </em>
               </div>
             )}
+            <button type="button" className="watchlist-kline-refresh" aria-label="刷新日线数据" onClick={refresh} disabled={loading}>↻</button>
             <button ref={closeButton} type="button" className="watchlist-kline-close" aria-label="关闭行情图表" onClick={onClose}>×</button>
           </div>
         </header>
