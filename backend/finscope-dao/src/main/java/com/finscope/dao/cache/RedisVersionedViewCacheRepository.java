@@ -48,15 +48,47 @@ public class RedisVersionedViewCacheRepository implements VersionedViewCacheRepo
 
     @Override
     public void put(String namespace, String variant, String payload, Duration ttl) {
+        put(namespace, currentRevision(namespace), variant, payload, ttl);
+    }
+
+    @Override
+    public long nextRevision(String namespace) {
+        if (!enabled || invalid(namespace)) {
+            return 0L;
+        }
+        try {
+            return currentRevision(namespace) + 1L;
+        } catch (RuntimeException error) {
+            log.warn("Redis 页面快照下一版本读取失败: namespace={}, error={}", namespace, error.getMessage());
+            return 0L;
+        }
+    }
+
+    @Override
+    public boolean put(String namespace, long revision, String variant, String payload, Duration ttl) {
         if (!enabled || invalid(namespace) || invalid(variant) || payload == null || payload.trim().isEmpty()
-                || ttl == null || ttl.isNegative() || ttl.isZero()) {
+                || revision < 0 || ttl == null || ttl.isNegative() || ttl.isZero()) {
+            return false;
+        }
+        try {
+            redisTemplate.opsForValue().set(snapshotKey(namespace, revision, variant), payload,
+                    ttl.toMillis(), TimeUnit.MILLISECONDS);
+            return true;
+        } catch (RuntimeException error) {
+            log.warn("Redis 页面快照缓存写入失败，不影响主链路: namespace={}, error={}", namespace, error.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public void activateRevision(String namespace, long revision) {
+        if (!enabled || invalid(namespace) || revision < 0) {
             return;
         }
         try {
-            redisTemplate.opsForValue().set(snapshotKey(namespace, variant), payload,
-                    ttl.toMillis(), TimeUnit.MILLISECONDS);
+            redisTemplate.opsForValue().set(revisionKey(namespace), String.valueOf(revision));
         } catch (RuntimeException error) {
-            log.warn("Redis 页面快照缓存写入失败，不影响主链路: namespace={}, error={}", namespace, error.getMessage());
+            log.warn("Redis 页面快照版本发布失败，保留上一版本: namespace={}, error={}", namespace, error.getMessage());
         }
     }
 
@@ -88,7 +120,11 @@ public class RedisVersionedViewCacheRepository implements VersionedViewCacheRepo
     }
 
     private String snapshotKey(String namespace, String variant) {
-        return PREFIX + normalize(namespace) + ':' + revision(namespace) + ':' + variant.trim();
+        return snapshotKey(namespace, revision(namespace), variant);
+    }
+
+    private String snapshotKey(String namespace, long revision, String variant) {
+        return PREFIX + normalize(namespace) + ':' + revision + ':' + variant.trim();
     }
 
     private long revision(String namespace) {

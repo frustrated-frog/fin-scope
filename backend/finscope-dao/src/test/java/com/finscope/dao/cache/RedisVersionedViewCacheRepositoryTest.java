@@ -70,6 +70,21 @@ class RedisVersionedViewCacheRepositoryTest {
     }
 
     @Test
+    void stagesTheNextRevisionBeforeMakingItVisible() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("finscope:view:radar:revision")).thenReturn("7");
+        RedisVersionedViewCacheRepository repository = new RedisVersionedViewCacheRepository(redisTemplate);
+
+        assertEquals(8L, repository.nextRevision("radar"));
+        assertTrue(repository.put("radar", 8L, "default", "{\"events\":[]}", Duration.ofSeconds(60)));
+        repository.activateRevision("radar", 8L);
+
+        verify(valueOperations).set(eq("finscope:view:radar:8:default"),
+                eq("{\"events\":[]}"), eq(60000L), eq(TimeUnit.MILLISECONDS));
+        verify(valueOperations).set("finscope:view:radar:revision", "8");
+    }
+
+    @Test
     void redisFailureFallsBackToEmptyCache() {
         when(redisTemplate.opsForValue()).thenThrow(new IllegalStateException("redis unavailable"));
 

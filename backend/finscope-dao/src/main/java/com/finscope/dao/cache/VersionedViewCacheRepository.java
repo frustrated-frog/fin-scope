@@ -14,6 +14,15 @@ public interface VersionedViewCacheRepository {
 
     void put(String namespace, String variant, String payload, Duration ttl);
 
+    /** 返回尚未对读取方可见的下一版本号，用于预写完整页面快照。 */
+    long nextRevision(String namespace);
+
+    /** 将快照写入指定版本；只有返回 true 的内容才可以随后激活。 */
+    boolean put(String namespace, long revision, String variant, String payload, Duration ttl);
+
+    /** 激活已完整写入的版本，后续读取才会切换到该版本。 */
+    void activateRevision(String namespace, long revision);
+
     long currentRevision(String namespace);
 
     long invalidateAndGetRevision(String namespace);
@@ -28,6 +37,21 @@ public interface VersionedViewCacheRepository {
             @Override
             public void put(String namespace, String variant, String payload, Duration ttl) {
                 // Redis 未启用时保留既有读取路径。
+            }
+
+            @Override
+            public long nextRevision(String namespace) {
+                return 0L;
+            }
+
+            @Override
+            public boolean put(String namespace, long revision, String variant, String payload, Duration ttl) {
+                return false;
+            }
+
+            @Override
+            public void activateRevision(String namespace, long revision) {
+                // Redis 未启用时不发布不可读取的版本。
             }
 
             @Override
