@@ -1,5 +1,7 @@
 package com.finscope.service.research.agent;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
@@ -22,7 +24,7 @@ public class ResearchAgentStateReducer {
                                                ResearchAgentDecision decision,
                                                ResearchToolObservation observation) {
         if (state == null || decision == null || observation == null) {
-            throw new IllegalArgumentException("状态、决策和 Observation 不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_STATE_INPUT_REQUIRED);
         }
         int expectedVersion = state.getStateVersion();
         state.setStatus("DECIDING");
@@ -48,7 +50,7 @@ public class ResearchAgentStateReducer {
         state.setEvidenceSummary(evidenceSummary(observation));
         state.setMemorySummary(memory(state.getMemorySummary(), decision, observation));
         if (!repository.updateState(state, expectedVersion)) {
-            throw new IllegalStateException("研究 Agent 状态发生并发更新，请从最新检查点恢复");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_STATE_CONFLICT);
         }
         return state;
     }
@@ -62,7 +64,7 @@ public class ResearchAgentStateReducer {
         state.setMemorySummary(limit(safe(state.getMemorySummary()) + " | Replan："
                 + safe(decision.getDecisionSummary()), MAX_MEMORY_CHARACTERS));
         if (!repository.updateState(state, expectedVersion)) {
-            throw new IllegalStateException("研究 Agent 重规划状态发生并发更新");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_REPLAN_CONFLICT);
         }
         return state;
     }
@@ -79,7 +81,7 @@ public class ResearchAgentStateReducer {
         state.setMemorySummary(limit(safe(state.getMemorySummary()) + " | Finish "
                 + verdict.getReasonCode() + "：" + verdict.getMissingConditions(), MAX_MEMORY_CHARACTERS));
         if (!repository.updateState(state, expectedVersion)) {
-            throw new IllegalStateException("研究 Agent 完成校验状态发生并发更新");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_VERIFY_CONFLICT);
         }
         return state;
     }
@@ -94,7 +96,7 @@ public class ResearchAgentStateReducer {
         state.setMemorySummary(limit(safe(state.getMemorySummary()) + " | Abort："
                 + safe(decision.getDecisionSummary()), MAX_MEMORY_CHARACTERS));
         if (!repository.updateState(state, expectedVersion)) {
-            throw new IllegalStateException("研究 Agent 终止状态发生并发更新");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_TERMINATE_CONFLICT);
         }
         return state;
     }

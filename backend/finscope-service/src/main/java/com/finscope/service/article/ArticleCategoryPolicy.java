@@ -1,5 +1,7 @@
 package com.finscope.service.article;
 
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.util.StringUtils;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +25,8 @@ public class ArticleCategoryPolicy {
     public String normalize(String category) {
         String normalized = StringUtils.firstNonBlank(category, CATEGORY_MARKET).trim();
         if (!SUPPORTED_CATEGORIES.contains(normalized)) {
-            throw new IllegalArgumentException("Unsupported article category: " + category);
+            throw new BusinessException(BizErrorCode.ARTICLE_CATEGORY_UNSUPPORTED,
+                    BizErrorCode.ARTICLE_CATEGORY_UNSUPPORTED.format(category), null);
         }
         return normalized;
     }

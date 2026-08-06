@@ -3,6 +3,8 @@ package com.finscope.service.research.agent;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMissionTask;
@@ -118,7 +120,7 @@ public class ResearchDecisionAgent {
         JsonNode root = objectMapper.readTree(ModelJsonExtractor.extractObject(raw, MAX_RAW_CHARACTERS));
         String taskKey = text(root.get("missionTaskKey"));
         if (!hasText(taskKey) || !containsTask(candidates, taskKey.trim())) {
-            throw new IllegalArgumentException("missionTaskKey 不属于服务端候选任务");
+            throw new BusinessException(BizErrorCode.RESEARCH_DECISION_TASK_KEY_INVALID);
         }
         ResearchAgentDecision decision = controlPolicy.decideTask(context, taskKey.trim(), "MODEL_ASSISTED");
         String summary = compact(text(root.get("decisionSummary")), 480);
