@@ -2,6 +2,8 @@ package com.finscope.service.research.agent.tool;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import org.springframework.stereotype.Component;
@@ -21,7 +23,7 @@ public class ResearchToolDispatcher {
     public ResearchToolObservation dispatch(ResearchAgentDecision decision,
                                             ResearchAgentToolContext context) {
         if (decision == null || !"TOOL_CALL".equals(decision.getDecisionType())) {
-            throw new IllegalArgumentException("只有 TOOL_CALL 决策可以进入工具调度器");
+            throw new BusinessException(BizErrorCode.RESEARCH_TOOL_ONLY_TOOL_CALL);
         }
         ResearchAgentTool tool = registry.required(decision.getToolCode());
         Map<String, Object> arguments = parseArguments(decision.getArgumentsJson());
@@ -40,7 +42,7 @@ public class ResearchToolDispatcher {
             observation.setStateHash("ERROR:" + decision.getToolCode());
         }
         if (observation == null) {
-            throw new IllegalStateException("研究工具没有返回 Observation：" + decision.getToolCode());
+            throw new BusinessException(BizErrorCode.RESEARCH_TOOL_NO_OBSERVATION);
         }
         observation.setResearchRunId(context.getResearchRunId());
         observation.setDecisionId(context.getDecisionId());

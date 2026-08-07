@@ -1,13 +1,8 @@
 package com.finscope.web.request;
 
+import lombok.Data;
+
+@Data
 public class UpdateContentIdeaStatusRequest {
     private String status;
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
 }

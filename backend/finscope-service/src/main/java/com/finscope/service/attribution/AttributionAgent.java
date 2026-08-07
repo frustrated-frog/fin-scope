@@ -2,6 +2,8 @@ package com.finscope.service.attribution;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
@@ -144,7 +146,7 @@ public class AttributionAgent {
                             q, SearchDepth.DEEP, 4, 4, chinese ? "cn" : "intl",
                             chinese ? "zh" : "en", remainingMs));
                     if (batch.isAllProvidersFailed()) {
-                        throw new IllegalStateException("所有搜索供应商均不可用");
+                        throw new BusinessException(BizErrorCode.SEARCH_PROVIDERS_ALL_UNAVAILABLE);
                     }
                     successfulQueries++;
                     trackResult.succeeded();

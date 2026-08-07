@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.research.ModelJsonExtractor;
 import com.finscope.service.research.ModelJsonShapeNormalizer;
@@ -103,7 +105,7 @@ public class ResearchPlanningAgent {
     private ResearchMissionDraft enrich(ResearchPlanningInput input, String raw) throws Exception {
         JsonNode parsed = objectMapper.readTree(ModelJsonExtractor.extractObject(raw, MAX_RAW_CHARACTERS));
         if (!(parsed instanceof ObjectNode)) {
-            throw new IllegalArgumentException("计划增强必须是 JSON 对象");
+            throw new BusinessException(BizErrorCode.RESEARCH_PLAN_ENRICH_NOT_OBJECT);
         }
         ObjectNode root = (ObjectNode) parsed;
         shapeNormalizer.normalizeStringArrayField(root, "successCriteria");
@@ -135,7 +137,7 @@ public class ResearchPlanningAgent {
             }
         }
         if (!applied) {
-            throw new IllegalArgumentException("模型未返回可应用的计划增强字段");
+            throw new BusinessException(BizErrorCode.RESEARCH_PLAN_ENRICH_EMPTY);
         }
         return validator.validate(draft, input);
     }

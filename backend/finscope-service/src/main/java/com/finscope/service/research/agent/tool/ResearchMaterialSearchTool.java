@@ -1,5 +1,7 @@
 package com.finscope.service.research.agent.tool;
 
+import com.finscope.common.exception.BizErrorCode;
+import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.agent.ResearchToolObservation;
@@ -73,15 +75,15 @@ public class ResearchMaterialSearchTool implements ResearchAgentTool {
     @Override
     public void validate(Map<String, Object> arguments) {
         if (arguments == null || !arguments.keySet().equals(ARGUMENTS)) {
-            throw new IllegalArgumentException("结构化资料检索参数必须且只能包含 stockCode、materialType 和 query");
+            throw new BusinessException(BizErrorCode.RESEARCH_TOOL_MATERIAL_ARGS_INVALID);
         }
         String stockCode = text(arguments.get("stockCode"));
         String query = text(arguments.get("query"));
         if (!stockCode.matches("\\d{6}")) {
-            throw new IllegalArgumentException("结构化资料检索仅支持六位 A 股代码");
+            throw new BusinessException(BizErrorCode.RESEARCH_TOOL_MATERIAL_CODE_INVALID);
         }
         if (query.length() > 100 || query.contains("://")) {
-            throw new IllegalArgumentException("结构化资料检索 query 未通过安全校验");
+            throw new BusinessException(BizErrorCode.RESEARCH_TOOL_MATERIAL_QUERY_INVALID);
         }
         parseType(arguments.get("materialType"));
     }

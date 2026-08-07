@@ -1,38 +1,17 @@
 package com.finscope.web.request;
 
 import com.finscope.domain.research.ResearchMode;
+import lombok.Data;
+
 import java.time.LocalDate;
 import java.util.List;
 
+@Data
 public class CreateResearchRunRequest {
     private Long thesisId;
     private LocalDate runDate;
     private List<String> themeCodes;
     private ResearchMode mode = ResearchMode.DEEP;
-
-    public Long getThesisId() {
-        return thesisId;
-    }
-
-    public void setThesisId(Long thesisId) {
-        this.thesisId = thesisId;
-    }
-
-    public LocalDate getRunDate() {
-        return runDate;
-    }
-
-    public void setRunDate(LocalDate runDate) {
-        this.runDate = runDate;
-    }
-
-    public List<String> getThemeCodes() {
-        return themeCodes;
-    }
-
-    public void setThemeCodes(List<String> themeCodes) {
-        this.themeCodes = themeCodes;
-    }
 
     public ResearchMode getMode() {
         return ResearchMode.defaultIfNull(mode);
