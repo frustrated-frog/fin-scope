@@ -29,11 +29,13 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/research-radar")
 public class ResearchRadarController {
+
     private final ResearchRadarService service;
     private final RadarEventWorkspaceService workspace;
     private final RadarResearchLinkService researchLinks;
     private final ViewSnapshotCacheService snapshots;
     private final ObjectMapper mapper;
+
     public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace,
                                    RadarResearchLinkService researchLinks, ViewSnapshotCacheService snapshots, ObjectMapper mapper){
         this.service=service; this.workspace=workspace; this.researchLinks=researchLinks; this.snapshots=snapshots; this.mapper=mapper;
@@ -55,7 +57,9 @@ public class ResearchRadarController {
                                                 @RequestParam(defaultValue="20") int limit,
                                                 @RequestParam(defaultValue="ALL") String state,
                                                 @RequestParam(defaultValue="false") boolean refresh){
-        if (refresh) service.requestRefresh();
+        if (refresh) {
+            service.requestRefresh();
+        }
         String normalizedCategory = category == null ? "ALL" : category.trim().toUpperCase(java.util.Locale.ROOT);
         String normalizedState = state == null ? "ALL" : state.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
@@ -67,7 +71,9 @@ public class ResearchRadarController {
 
     /** 手动请求一轮雷达生产；不会把页面请求变成同步抓源。 */
     @PostMapping("/refresh")
-    public ApiResponse<Boolean> refresh() { return ApiResponses.success(service.requestRefresh()); }
+    public ApiResponse<Boolean> refresh() {
+        return ApiResponses.success(service.requestRefresh());
+    }
 
     /** 直接查询持久化关注清单；不读取雷达排行快照。 */
     @GetMapping("/followed")
