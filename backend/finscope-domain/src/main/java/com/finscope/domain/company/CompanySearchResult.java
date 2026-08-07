@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data
 public class CompanySearchResult {
+    private Long localInstrumentId;
     private String providerCode;
     private String providerCompanyId;
     private String legalName;
