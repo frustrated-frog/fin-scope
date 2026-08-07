@@ -83,6 +83,37 @@ test('opens the latest report as a three-statement analysis workbench', async ()
   expect(screen.getByText('缺少上年同期营业收入，无法计算营收同比')).toBeInTheDocument();
 });
 
+test('opens a global company from name search without adding it to the watchlist', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/companies/search?q=Apple&limit=8') return [{
+      providerCode: 'SEC_EDGAR',
+      providerCompanyId: 'CIK0000320193',
+      legalName: 'Apple Inc.',
+      displayName: 'Apple Inc.',
+      countryCode: 'US',
+      capabilityLevel: 'L4',
+      securities: [{ symbol: 'AAPL', exchange: 'Nasdaq', market: 'US' }]
+    }];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'Apple');
+  await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
+
+  expect(screen.getByRole('heading', { name: 'Apple Inc. 财报工作台' })).toBeInTheDocument();
+  expect(screen.getByText('完整分析可用')).toBeInTheDocument();
+  expect(screen.getByText('AAPL · Nasdaq · US')).toBeInTheDocument();
+  expect(screen.queryByText('营业总收入')).not.toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith('/api/watchlist', expect.anything());
+});
+
 test('switches between all three concrete statements without losing the report context', async () => {
   const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);

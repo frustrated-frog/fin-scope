@@ -3,6 +3,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FinancialInterpretationPanel } from './FinancialInterpretationPanel';
 import { FinancialStatementTable } from './FinancialStatementTable';
+import { GlobalCompanySearch } from './GlobalCompanySearch';
 import { ResearchReportAnalysisPanel } from './ResearchReportAnalysisPanel';
 import {
   defaultReportPeriod,
@@ -15,6 +16,7 @@ import {
 } from './financialPresentation';
 import {
   FinancialDocument,
+  CompanySearchResult,
   FinancialInstrument,
   FinancialReport,
   FinancialReportType,
@@ -49,6 +51,7 @@ export function FinancialsView({
   const [reports, setReports] = useState<FinancialReport[]>([]);
   const [view, setView] = useState<FinancialReportView>();
   const [documents, setDocuments] = useState<FinancialDocument[]>([]);
+  const [externalCompany, setExternalCompany] = useState<CompanySearchResult>();
   const [activeTab, setActiveTab] = useState<Tab>('OVERVIEW');
   const [unit, setUnit] = useState<FinancialUnit>('YI');
   const [periodMode, setPeriodMode] = useState<'CUMULATIVE' | 'QUARTER'>('CUMULATIVE');
@@ -188,21 +191,48 @@ export function FinancialsView({
   const currentInstrument = instruments.find((item) => item.id === instrumentId);
   const currentReport = view?.report;
 
+  function selectCompany(company: CompanySearchResult) {
+    setError('');
+    setActiveTab('OVERVIEW');
+    if (company.localInstrumentId) {
+      setExternalCompany(undefined);
+      setInstrumentId(company.localInstrumentId);
+      return;
+    }
+    ++loadSequence.current;
+    setExternalCompany(company);
+    setInstrumentId(undefined);
+    setReports([]);
+    setView(undefined);
+    setDocuments([]);
+  }
+
   return (
     <div className="financials-page">
+      <section className="global-company-command" aria-label="全球公司入口">
+        <div>
+          <p className="financials-kicker">Global issuer directory</p>
+          <h3>从公司开始，而不是从自选开始</h3>
+          <p>搜索全球上市公司。打开财报不会自动加入自选，多个股票代码会归到同一公司主体。</p>
+        </div>
+        <GlobalCompanySearch onSelect={selectCompany} />
+      </section>
       <section className="financials-hero">
         <div className="financials-hero-copy">
           <p className="financials-kicker">Financial statement audit trail</p>
-          <h3>{currentInstrument ? `${currentInstrument.name}财报底稿` : '公司财报分析'}</h3>
+          <h3>{externalCompany ? `${externalCompany.displayName} 财报工作台` : currentInstrument ? `${currentInstrument.name}财报底稿` : '公司财报分析'}</h3>
           <p>把利润表、资产负债表和现金流量表放在同一条可核对链路中，先看经营事实，再看质量与风险。</p>
         </div>
-        <div className="financials-selector">
+        {!externalCompany && <div className="financials-selector">
           <label>
             <span>分析标的</span>
             <select
               aria-label="分析标的"
               value={instrumentId ?? ''}
-              onChange={(event) => setInstrumentId(Number(event.target.value))}
+              onChange={(event) => {
+                setExternalCompany(undefined);
+                setInstrumentId(Number(event.target.value));
+              }}
             >
               {instruments.map((item) => (
                 <option key={item.id} value={item.id}>{item.code} · {item.name}</option>
@@ -223,7 +253,8 @@ export function FinancialsView({
               ))}
             </select>
           </label>
-        </div>
+        </div>}
+        {externalCompany && <GlobalCompanyIdentity company={externalCompany} />}
         <div className="financials-assurance">
           <span className={`financials-assurance-status ${(currentReport?.qualityStatus ?? 'UNVERIFIED').toLowerCase()}`}>
             {qualityLabels[currentReport?.qualityStatus ?? 'UNVERIFIED']}
@@ -236,7 +267,7 @@ export function FinancialsView({
         </div>
       </section>
 
-      <section className="financials-fetch-strip" aria-label="财报抓取">
+      {!externalCompany && <section className="financials-fetch-strip" aria-label="财报抓取">
         <div>
           <strong>{reports.length ? '补充或重抓报告期' : '建立第一份财报底稿'}</strong>
           <span>当前一期支持 A 股非金融企业，数据抓取后保存在本地。</span>
@@ -272,11 +303,11 @@ export function FinancialsView({
         <button className="primary-button" type="button" disabled={busy || !instrumentId || !periodEnd} onClick={refreshReport}>
           {busy ? '处理中…' : '抓取并解析财报'}
         </button>
-      </section>
+      </section>}
 
       {error && <div className="financials-alert" role="alert">{error}</div>}
 
-      {view ? (
+      {externalCompany ? <GlobalCompanyWorkspace company={externalCompany} /> : view ? (
         <>
           <section className="financials-report-bar">
             <div>
@@ -368,6 +399,45 @@ export function FinancialsView({
         </section>
       )}
     </div>
+  );
+}
+
+function GlobalCompanyIdentity({ company }: { company: CompanySearchResult }) {
+  const security = company.securities[0];
+  return (
+    <div className="global-company-identity">
+      <span className={`global-company-capability ${company.capabilityLevel.toLowerCase()}`}>
+        {company.capabilityLevel === 'L4' ? '完整分析可用'
+          : company.capabilityLevel === 'L3' ? '三张表可用'
+            : company.capabilityLevel === 'L2' ? '原始披露可用' : '公司已识别'}
+      </span>
+      <strong>{security ? `${security.symbol} · ${security.exchange} · ${company.countryCode ?? security.market}` : company.countryCode}</strong>
+      {company.nativeName && company.nativeName !== company.displayName && <small>{company.nativeName}</small>}
+    </div>
+  );
+}
+
+function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
+  return (
+    <section className="global-company-workspace">
+      <div className="global-company-workspace-mark" aria-hidden="true">{company.countryCode ?? 'GL'}</div>
+      <div>
+        <p className="financials-section-kicker">Disclosure capability</p>
+        <h4>公司主体已经识别</h4>
+        <p>
+          {company.providerCode === 'SEC_EDGAR'
+            ? '已关联 SEC 公司主体和全部上市代码。下一步将从 EDGAR 披露目录载入最新年度或季度报告。'
+            : company.providerCode === 'KRX_KIND'
+              ? '已关联韩国交易所公司主体。当前可继续接入 DART 原始披露和 K-IFRS 三张表。'
+              : '该公司已经可以独立进入财报工作台，后续数据抓取不会依赖自选关系。'}
+        </p>
+        <dl>
+          <div><dt>主体标识</dt><dd>{company.providerCompanyId}</dd></div>
+          <div><dt>目录来源</dt><dd>{company.providerCode}</dd></div>
+          <div><dt>当前能力</dt><dd>{company.capabilityLevel}</dd></div>
+        </dl>
+      </div>
+    </section>
   );
 }
 

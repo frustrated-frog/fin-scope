@@ -11,6 +11,25 @@ export type FinancialInstrument = {
   market?: string;
 };
 
+export type CompanySecurity = {
+  symbol: string;
+  exchange: string;
+  market: string;
+};
+
+export type CompanySearchResult = {
+  localInstrumentId?: number;
+  providerCode: string;
+  providerCompanyId: string;
+  legalName: string;
+  displayName: string;
+  nativeName?: string;
+  countryCode?: string;
+  industry?: string;
+  capabilityLevel: 'L1' | 'L2' | 'L3' | 'L4';
+  securities: CompanySecurity[];
+};
+
 export type FinancialReport = {
   id: number;
   instrumentId: number;
