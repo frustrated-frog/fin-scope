@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class FactorResearchAgentService {
+
     public static final String SUBJECT_TYPE = "FACTOR_RESEARCH_RUN";
     private final FactorResearchAgentRunRepository runs;
     private final AgentRunRepository traces;
@@ -64,8 +65,9 @@ public class FactorResearchAgentService {
     }
 
     public FactorResearchAgentRun createPlan(Long datasetId, FactorIdentity factor, Long draftId, String question) {
-        if (datasetId == null || factor == null)
+        if (datasetId == null || factor == null) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和因子不能为空");
+        }
         QuantDataset dataset = datasets.get(datasetId);
         if (!"READY".equals(dataset.getStatus()) || dataset.getFingerprint() == null
                 || dataset.getFingerprint().trim().isEmpty()) {
@@ -228,7 +230,9 @@ public class FactorResearchAgentService {
 
     private void enforceBudget(FactorResearchAgentRun run, int requestedCalls, long startedNanos) {
         enforceTimeBudget(run, startedNanos);
-        if (requestedCalls > run.getMaxToolCalls()) throw new BudgetExceededException("TOOL_BUDGET_EXHAUSTED");
+        if (requestedCalls > run.getMaxToolCalls()) {
+            throw new BudgetExceededException("TOOL_BUDGET_EXHAUSTED");
+        }
     }
 
     private void enforceTimeBudget(FactorResearchAgentRun run, long startedNanos) {

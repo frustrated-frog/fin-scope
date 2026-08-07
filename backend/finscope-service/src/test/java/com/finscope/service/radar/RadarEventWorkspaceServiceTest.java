@@ -66,6 +66,19 @@ class RadarEventWorkspaceServiceTest {
     }
 
     @Test
+    void invalidatesTheRadarSnapshotAfterFollowingAnEvent() {
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
+        service = new RadarEventWorkspaceService(workspace, radar, null, revisions);
+        RadarEventWorkspace.State updated = new RadarEventWorkspace.State(); updated.setEventId(10L); updated.setFollowed(true);
+        when(radar.findEvent(10L)).thenReturn(Optional.of(event()));
+        when(workspace.updateState(eq(10L), eq(false), eq(null), eq(true), anyString())).thenReturn(updated);
+
+        service.updateState(10L, null, true, null);
+
+        verify(revisions).invalidate("radar");
+    }
+
+    @Test
     void rejectsUpdatesForMissingEvents() {
         when(radar.findEvent(99L)).thenReturn(Optional.empty());
         assertThrows(RuntimeException.class, () -> service.updateState(99L, true, true, "ACTIVE"));

@@ -128,14 +128,6 @@ public class WatchlistService {
         saved.setSectorCode(instrument.getSectorCode());
     }
 
-    /** 列表：带实时行情，按标的类型批量拉取。 */
-    public List<WatchlistItemView> listWithQuotes() {
-        return listInvestmentItemsWithQuotes(false);
-    }
-
-    public List<WatchlistItemView> listWithQuotes(boolean forceRefresh) {
-        return listInvestmentItemsWithQuotes(forceRefresh);
-    }
 
     public List<WatchlistItemView> listInvestmentItemsWithQuotes(boolean forceRefresh) {
         return listWithQuotes(watchlistRepository.findByTypes(Arrays.asList("STOCK", "FUND")), forceRefresh);

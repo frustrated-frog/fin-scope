@@ -5,6 +5,8 @@ import com.finscope.service.radar.ResearchRadarView;
 import com.finscope.service.radar.RadarEventWorkspaceService;
 import com.finscope.service.radar.RadarResearchLinkService;
 import com.finscope.service.cache.ViewSnapshotCacheService;
+import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,6 +55,26 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.liveItems").isArray())
                 .andExpect(jsonPath("$.data.overview.eventCount").value(0));
         verify(service, never()).loadStored(any(), anyBoolean(), anyInt(), any());
+    }
+
+    @Test
+    void rebuildsTheRadarFromStoredEventsWhenAWorkspaceChangeInvalidatesItsSnapshot() throws Exception {
+        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL")))
+                .thenReturn(Optional.empty());
+        RadarEvent event = new RadarEvent();
+        event.setId(10L); event.setCanonicalTitle("宁德时代发布新电池"); event.setStatus("ACTIVE");
+        RadarEventWorkspace.Summary state = new RadarEventWorkspace.Summary();
+        state.setEventId(10L); state.setFollowed(true);
+        ResearchRadarView view = new ResearchRadarView(Collections.singletonList(
+                new ResearchRadarView.EventCard(event, null, state)), Collections.emptyList(),
+                Collections.emptyList(), LocalDateTime.of(2026, 8, 7, 14, 0));
+        when(service.loadStored("ALL", false, 20, "ALL")).thenReturn(view);
+
+        mvc.perform(get("/api/research-radar"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events[0].followed").value(true));
+
+        verify(service).loadStored("ALL", false, 20, "ALL");
     }
 
     @Test

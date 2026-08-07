@@ -61,7 +61,7 @@ public class ResearchRadarController {
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
         String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly + "&limit=" + normalizedLimit + "&state=" + normalizedState;
         JsonNode data = snapshots.read("radar", variant)
-                .orElseGet(() -> mapper.valueToTree(service.emptyStored()));
+                .orElseGet(() -> mapper.valueToTree(service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState)));
         return ApiResponses.success(data);
     }
 

@@ -26,7 +26,9 @@ public class FactorResearchAgentController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<FactorResearchAgentRun>> create(@RequestBody(required = false) CreateFactorResearchAgentRunRequest request) {
-        if (request == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究 Agent 请求不能为空");
+        if (request == null) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究 Agent 请求不能为空");
+        }
         FactorResearchAgentRun value = service.createPlan(request.getDatasetId(), request.factor(), request.getResearchDraftId(), request.getQuestion());
         return ResponseEntity.created(URI.create("/api/factor-research/agent-runs/" + value.getId())).body(ApiResponses.success(value));
     }
@@ -38,7 +40,9 @@ public class FactorResearchAgentController {
      * @return 批准并执行后的研究 Agent 运行。
      */
     @PostMapping("/{id}/approve")
-    public ApiResponse<FactorResearchAgentRun> approve(@PathVariable Long id) { return ApiResponses.success(service.approveAndRun(id)); }
+    public ApiResponse<FactorResearchAgentRun> approve(@PathVariable Long id) {
+        return ApiResponses.success(service.approveAndRun(id));
+    }
 
     /**
      * 查询因子研究 Agent 运行详情。
@@ -47,5 +51,7 @@ public class FactorResearchAgentController {
      * @return 指定研究 Agent 运行详情。
      */
     @GetMapping("/{id}")
-    public ApiResponse<FactorResearchAgentRun> get(@PathVariable Long id) { return ApiResponses.success(service.get(id)); }
+    public ApiResponse<FactorResearchAgentRun> get(@PathVariable Long id) {
+        return ApiResponses.success(service.get(id));
+    }
 }

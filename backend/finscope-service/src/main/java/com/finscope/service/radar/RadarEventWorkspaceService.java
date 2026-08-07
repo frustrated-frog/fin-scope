@@ -147,8 +147,10 @@ public class RadarEventWorkspaceService {
         catch (RuntimeException ignored) { /* 辅助时间线失败不能阻断用户动作 */ }
     }
 
-    /** 雷达列表是完整 Redis 快照，工作台状态只在详情接口展示，不能让列表快照失效为空。 */
-    private void invalidateRadar() { }
+    /** 工作台状态属于用户持久化数据，更新后让列表从 SQLite 主链路重建快照。 */
+    private void invalidateRadar() {
+        if (viewRevisions != null) viewRevisions.invalidate("radar");
+    }
 
     public static final class OpenedEvent {
         private final RadarEventWorkspace.State state;
