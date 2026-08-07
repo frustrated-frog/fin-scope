@@ -75,6 +75,18 @@ public class RadarEventWorkspaceRepository {
         return result;
     }
 
+    /**
+     * 关注清单以用户状态表为入口，避免被雷达榜单的排序窗口截断。
+     * 过期事件仍保留历史状态，但不再作为当前关注卡片展示。
+     */
+    public List<Long> findFollowedEventIds(int limit) {
+        return jdbc.queryForList("SELECT s.event_id FROM radar_event_user_state s "
+                        + "JOIN radar_event e ON e.id=s.event_id "
+                        + "WHERE s.followed=1 AND s.disposition<>'IGNORED' AND e.status IN ('ACTIVE','QUIET') "
+                        + "ORDER BY s.updated_at DESC,s.event_id DESC LIMIT ?",
+                Long.class, Math.max(1, Math.min(limit, 50)));
+    }
+
     public List<RadarEventWorkspace.Observation> ensureDefaultObservation(Long eventId, String content) {
         insertObservation(eventId, content, "SYSTEM"); return findObservations(eventId);
     }

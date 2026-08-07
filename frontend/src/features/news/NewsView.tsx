@@ -60,9 +60,13 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
     const requestId = ++requestSequence.current;
     const watchlistOnly = selection === 'RELATED';
     const category = watchlistOnly ? 'ALL' : selection;
+    const requestedState = stateFilterRef.current;
     try {
       if (manual) setLoading(true);
-      const next = await api<ResearchRadarSnapshot>(`/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=${stateFilterRef.current}${refresh?'':'&refresh=false'}`);
+      const path = requestedState === 'FOLLOWED'
+        ? '/api/research-radar/followed?limit=20'
+        : `/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=${requestedState}${refresh?'':'&refresh=false'}`;
+      const next = normalizeRadarSnapshot(await api<ResearchRadarSnapshot>(path));
       if (!mounted.current || requestId !== requestSequence.current || selection !== selectedCategoryRef.current) return;
       snapshotRef.current = next;
       setSnapshot(next);
@@ -84,7 +88,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
   }
   function switchState(value:RadarStateFilter){stateFilterRef.current=value;setStateFilter(value);setSelectedEvent(undefined);setLoading(true);void load(false,selectedCategoryRef.current,false);}
 
-  function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const updated={...current,events:current.events.map((item)=>item.id===next.id?next:item)};snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
+  function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const removeFromFollowList=stateFilterRef.current==='FOLLOWED'&&(!next.followed||next.disposition==='IGNORED');const updated=normalizeRadarSnapshot({...current,events:removeFromFollowList?current.events.filter((item)=>item.id!==next.id):current.events.map((item)=>item.id===next.id?next:item)});snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
   function openEvent(item:RadarEvent){const next={...item,read:true};replaceEvent(next);setSelectedEvent(next);}
   async function updateState(item:RadarEvent,patch:{followed?:boolean;disposition?:'ACTIVE'|'LATER'|'IGNORED'}){
     try{const state=await api<RadarWorkspaceState>(`/api/research-radar/events/${item.id}/state`,{method:'PATCH',body:JSON.stringify(patch)});replaceEvent({...item,read:state.read,followed:state.followed,disposition:state.disposition});addToast('事件处理状态已更新','success');}
@@ -193,3 +197,18 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
 function NewsSkeleton() { return <div className="news-skeleton" aria-label="正在加载雷达"><span /><span /><span /></div>; }
 function EmptyState({ label }: { label: string }) { return <div className="news-empty"><span aria-hidden="true">∅</span><p>{label}</p></div>; }
 function formatTime(value?: string) { const date = value ? new Date(value) : undefined; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--'; }
+
+function normalizeRadarSnapshot(snapshot: ResearchRadarSnapshot): ResearchRadarSnapshot {
+  const events = [...new Map(snapshot.events.map((event) => [event.id, event])).values()];
+  if (events.length === snapshot.events.length) return snapshot;
+  return {
+    ...snapshot,
+    events,
+    overview: {
+      eventCount: events.length,
+      highPriorityCount: events.filter((event) => event.priorityScore >= 75).length,
+      watchlistRelatedCount: events.filter((event) => event.watchlistRelated).length,
+      sourceCount: events.reduce((total, event) => total + event.sourceCount, 0)
+    }
+  };
+}

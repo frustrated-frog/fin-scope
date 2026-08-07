@@ -34,9 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
@@ -121,6 +123,32 @@ class ResearchRadarServiceTest {
         assertTrue(view.getEvents().get(0).isFollowed());
         assertEquals(2, view.getEvents().get(0).getOpenObservationCount());
         verify(workspace, times(1)).summaries(Collections.singletonList(9L));
+    }
+
+    @Test
+    void loadsThePersistedFollowListWithoutDependingOnRadarRanking() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        RadarEvent first = new RadarEvent(); first.setId(10L); first.setCanonicalTitle("第一条关注事件");
+        RadarEvent second = new RadarEvent(); second.setId(20L); second.setCanonicalTitle("第二条关注事件");
+        when(workspace.followedEventIds(20)).thenReturn(Arrays.asList(20L, 10L, 20L));
+        when(repository.findEvent(20L)).thenReturn(java.util.Optional.of(second));
+        when(repository.findEvent(10L)).thenReturn(java.util.Optional.of(first));
+        RadarEventWorkspace.Summary firstState = new RadarEventWorkspace.Summary(); firstState.setEventId(10L); firstState.setFollowed(true);
+        RadarEventWorkspace.Summary secondState = new RadarEventWorkspace.Summary(); secondState.setEventId(20L); secondState.setFollowed(true);
+        Map<Long, RadarEventWorkspace.Summary> summaries = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();
+        summaries.put(10L, firstState); summaries.put(20L, secondState);
+        when(workspace.summaries(Arrays.asList(20L, 10L))).thenReturn(summaries);
+
+        ResearchRadarView view = service.loadFollowed(20);
+
+        assertEquals(2, view.getEvents().size());
+        assertEquals(20L, view.getEvents().get(0).getId());
+        assertEquals(10L, view.getEvents().get(1).getId());
+        verify(repository, never()).findRanked(any(), anyBoolean(), anyInt());
     }
 
     @Test

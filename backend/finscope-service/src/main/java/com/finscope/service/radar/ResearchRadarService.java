@@ -219,6 +219,21 @@ public class ResearchRadarService {
                 Collections.<String>emptyList(), refreshedAt, status);
     }
 
+    /** 直接读取持久化关注清单，不经过雷达榜单、分类过滤或快照缓存。 */
+    public ResearchRadarView loadFollowed(int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, 50));
+        if (workspace == null) return ResearchRadarView.empty(LocalDateTime.now(clock));
+        Set<Long> uniqueIds = new java.util.LinkedHashSet<Long>(workspace.followedEventIds(limit));
+        List<RadarEvent> followed = new ArrayList<RadarEvent>();
+        for (Long eventId : uniqueIds) {
+            if (followed.size() >= limit) break;
+            repository.findEvent(eventId).ifPresent(followed::add);
+        }
+        Map<Long,ResearchRadarView.EventCard> index = cardIndex(followed);
+        return new ResearchRadarView(cards(followed, index), Collections.<NewsFeedItem>emptyList(),
+                Collections.<String>emptyList(), LocalDateTime.now(clock));
+    }
+
     /** 列表快照缺失时仅返回生产状态，不允许为页面读取回查 SQLite。 */
     public ResearchRadarView emptyStored() {
         LocalDateTime refreshedAt = LocalDateTime.now(clock);

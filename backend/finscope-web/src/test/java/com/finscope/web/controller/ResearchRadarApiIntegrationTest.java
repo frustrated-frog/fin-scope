@@ -78,6 +78,27 @@ class ResearchRadarApiIntegrationTest {
     }
 
     @Test
+    void returnsThePersistedFollowListWithoutReadingTheRankedSnapshotCache() throws Exception {
+        RadarEvent event = new RadarEvent();
+        event.setId(10L); event.setCanonicalTitle("已关注事件"); event.setStatus("ACTIVE");
+        RadarEventWorkspace.Summary state = new RadarEventWorkspace.Summary();
+        state.setEventId(10L); state.setFollowed(true);
+        ResearchRadarView view = new ResearchRadarView(Collections.singletonList(
+                new ResearchRadarView.EventCard(event, null, state)), Collections.emptyList(),
+                Collections.emptyList(), LocalDateTime.of(2026, 8, 7, 14, 0));
+        when(service.loadFollowed(20)).thenReturn(view);
+
+        mvc.perform(get("/api/research-radar/followed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events.length()").value(1))
+                .andExpect(jsonPath("$.data.events[0].id").value(10))
+                .andExpect(jsonPath("$.data.events[0].followed").value(true));
+
+        verify(service).loadFollowed(20);
+        verify(snapshots, never()).read(any(), any());
+    }
+
+    @Test
     void submitsEventInterpretationWithoutWaitingForCompletion() throws Exception {
         ResearchRadarView.InterpretationView queued = ResearchRadarView.InterpretationView.queued(10L);
         when(service.requestInterpretation(10L)).thenReturn(queued);

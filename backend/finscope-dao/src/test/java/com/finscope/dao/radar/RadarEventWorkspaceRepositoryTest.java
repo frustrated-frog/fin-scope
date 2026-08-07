@@ -21,12 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RadarEventWorkspaceRepositoryTest {
     @TempDir Path tempDir;
     private RadarEventWorkspaceRepository repository;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("workspace.db"));
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("CREATE TABLE radar_event(id INTEGER PRIMARY KEY,status TEXT NOT NULL)");
         jdbc.execute("CREATE TABLE radar_event_user_state(event_id INTEGER PRIMARY KEY,read_at TEXT,followed INTEGER NOT NULL DEFAULT 0,disposition TEXT NOT NULL DEFAULT 'ACTIVE',last_viewed_fingerprint TEXT,updated_at TEXT NOT NULL)");
         jdbc.execute("CREATE TABLE radar_event_observation(id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,content TEXT NOT NULL,normalized_content TEXT NOT NULL,status TEXT NOT NULL,source TEXT NOT NULL,created_at TEXT NOT NULL,completed_at TEXT,updated_at TEXT NOT NULL,UNIQUE(event_id,normalized_content,source))");
         jdbc.execute("CREATE TABLE radar_event_research_link(id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,research_run_id INTEGER NOT NULL,question_snapshot TEXT,created_at TEXT NOT NULL,UNIQUE(event_id,research_run_id))");
@@ -54,6 +56,18 @@ class RadarEventWorkspaceRepositoryTest {
         assertTrue(state.isRead());
         assertTrue(state.isFollowed());
         assertEquals("LATER", state.getDisposition());
+    }
+
+    @Test
+    void returnsEachActiveFollowedEventOnceAndExcludesExpiredHistory() {
+        jdbc.update("INSERT INTO radar_event(id,status) VALUES(7,'ACTIVE'),(8,'QUIET'),(9,'EXPIRED')");
+        repository.updateState(7L, false, "ACTIVE", true, null);
+        repository.updateState(8L, false, "ACTIVE", true, null);
+        repository.updateState(9L, false, "ACTIVE", true, null);
+        repository.updateState(8L, false, null, true, null);
+
+        // The state table is the source of truth, while expired radar events no longer belong in the active follow list.
+        assertEquals(Arrays.asList(8L, 7L), repository.findFollowedEventIds(20));
     }
 
     @Test

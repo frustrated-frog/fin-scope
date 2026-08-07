@@ -40,6 +40,10 @@ public class RadarEventWorkspaceService {
                 ? Collections.<Long, RadarEventWorkspace.Summary>emptyMap() : workspace.findSummaries(eventIds);
     }
 
+    public List<Long> followedEventIds(int limit) {
+        return workspace.findFollowedEventIds(limit);
+    }
+
     public void reconcileRead(RadarEvent event, RadarEventWorkspace.Summary summary) {
         if (event == null || summary == null) return;
         summary.setRead(summary.getLastViewedFingerprint() != null

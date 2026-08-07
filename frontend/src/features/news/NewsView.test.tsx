@@ -213,11 +213,12 @@ test('shows high-priority cards without a duplicated latest-changes panel', asyn
 
 test('loads followed events that fall outside the default radar page', async () => {
   const followedEvent = { ...event, followed: true, read: true };
+  const anotherFollowedEvent = { ...followedEvent, id: 11, title: '北京亦庄发布词元经济政策' };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
-    if (path.includes('state=FOLLOWED')) {
-      return Promise.resolve({ ...snapshot, events: [followedEvent] });
+    if (path === '/api/research-radar/followed?limit=20') {
+      return Promise.resolve({ ...snapshot, events: [followedEvent, anotherFollowedEvent, followedEvent] });
     }
     return Promise.resolve({ ...snapshot, overview: { eventCount: 0, highPriorityCount: 0, watchlistRelatedCount: 0, sourceCount: 0 }, events: [] });
   });
@@ -227,7 +228,9 @@ test('loads followed events that fall outside the default radar page', async () 
   await userEvent.click(screen.getByRole('button', { name: '已关注 0' }));
 
   expect(await screen.findByRole('heading', { name: event.title })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=FOLLOWED&refresh=false');
+  expect(screen.getByRole('heading', { name: anotherFollowedEvent.title })).toBeInTheDocument();
+  expect(screen.getAllByRole('article').filter((item) => item.classList.contains('radar-event-card'))).toHaveLength(2);
+  expect(api).toHaveBeenCalledWith('/api/research-radar/followed?limit=20');
 });
 
 test('loads original signals only when the user opens the interpretation drawer', async () => {

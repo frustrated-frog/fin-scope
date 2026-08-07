@@ -69,6 +69,12 @@ public class ResearchRadarController {
     @PostMapping("/refresh")
     public ApiResponse<Boolean> refresh() { return ApiResponses.success(service.requestRefresh()); }
 
+    /** 直接查询持久化关注清单；不读取雷达排行快照。 */
+    @GetMapping("/followed")
+    public ApiResponse<ResearchRadarView> followed(@RequestParam(defaultValue="20") int limit) {
+        return ApiResponses.success(service.loadFollowed(limit));
+    }
+
     /**
      * 查询雷达事件详情。
      *
