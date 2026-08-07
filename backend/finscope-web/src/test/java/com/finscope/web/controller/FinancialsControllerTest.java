@@ -15,6 +15,7 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.service.financials.FinancialDocumentService;
 import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.financials.FinancialRefreshService;
+import com.finscope.service.financials.GlobalFinancialRefreshService;
 import com.finscope.service.financials.FinancialInterpretationFacade;
 import com.finscope.service.financials.BrokerResearchService;
 import com.finscope.service.financials.BrokerResearchSyncService;
@@ -61,6 +62,8 @@ class FinancialsControllerTest {
     @MockBean
     private FinancialRefreshService refresh;
     @MockBean
+    private GlobalFinancialRefreshService globalRefresh;
+    @MockBean
     private FinancialDocumentService documents;
     @MockBean
     private FinancialInterpretationFacade interpretations;
@@ -101,6 +104,31 @@ class FinancialsControllerTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.data.report.id").value(9))
                 .andExpect(jsonPath("$.data.report.reportType").value("HALF_YEAR"));
+    }
+
+    @Test
+    void refreshesASecCompanyWithoutRequiringAWatchlistInstrument() throws Exception {
+        FinancialReport report = new FinancialReport();
+        report.setId(19L);
+        report.setPeriodEnd(LocalDate.of(2025, 9, 27));
+        report.setReportType(FinancialReportType.ANNUAL);
+        FinancialReportView view = new FinancialReportView();
+        view.setReport(report);
+        when(globalRefresh.refresh(eq("SEC_EDGAR"), eq("CIK0000320193"),
+                eq("Apple Inc."), eq("AAPL"), eq("Nasdaq"),
+                eq(LocalDate.of(2025, 12, 31)), eq(FinancialReportType.ANNUAL)))
+                .thenReturn(view);
+
+        mockMvc.perform(post("/api/financials/global/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"providerCode\":\"SEC_EDGAR\","
+                                + "\"providerCompanyId\":\"CIK0000320193\","
+                                + "\"displayName\":\"Apple Inc.\",\"symbol\":\"AAPL\","
+                                + "\"exchange\":\"Nasdaq\",\"periodEnd\":\"2025-12-31\","
+                                + "\"reportType\":\"ANNUAL\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.report.id").value(19))
+                .andExpect(jsonPath("$.data.report.periodEnd").value("2025-09-27"));
     }
 
     @Test

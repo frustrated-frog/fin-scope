@@ -60,7 +60,8 @@ public class GlobalCompanySearchService {
             item.setDisplayName(instrument.getName());
             item.setNativeName(instrument.getName());
             item.setCountryCode(country(instrument.getMarket()));
-            item.setCapabilityLevel(isAshare(instrument.getMarket()) ? "L4" : "L1");
+            item.setCapabilityLevel(isAshare(instrument.getMarket())
+                    || hasSecIdentity(instrument) ? "L4" : "L1");
             CompanySecurity security = new CompanySecurity();
             security.setSymbol(instrument.getCode());
             security.setExchange(instrument.getMarket());
@@ -77,6 +78,12 @@ public class GlobalCompanySearchService {
 
     private boolean isAshare(String market) {
         return "SH".equals(market) || "SZ".equals(market) || "BJ".equals(market);
+    }
+
+    private boolean hasSecIdentity(Instrument instrument) {
+        return "US".equals(instrument.getMarket())
+                && instrument.getAliases() != null
+                && instrument.getAliases().toUpperCase(Locale.ROOT).contains("SEC_CIK:");
     }
 
     private String country(String market) {

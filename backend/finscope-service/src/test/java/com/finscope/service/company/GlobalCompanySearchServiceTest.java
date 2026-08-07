@@ -36,6 +36,21 @@ class GlobalCompanySearchServiceTest {
         assertEquals("L4", maotai.get(0).getCapabilityLevel());
     }
 
+    @Test
+    void keepsPreviouslyFetchedSecCompaniesAvailableForFullLocalAnalysis() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        Instrument apple = stock(71L, "AAPL", "Apple Inc.", "US");
+        apple.setAliases("SEC_CIK:0000320193");
+        when(instruments.findAll()).thenReturn(Collections.singletonList(apple));
+
+        List<CompanySearchResult> results = new GlobalCompanySearchService(
+                instruments, Collections.emptyList()).search("Apple", 8);
+
+        assertEquals(1, results.size());
+        assertEquals("L4", results.get(0).getCapabilityLevel());
+        assertEquals(Long.valueOf(71L), results.get(0).getLocalInstrumentId());
+    }
+
     private static CompanyDirectoryProvider provider(String code, CompanySearchResult result) {
         return new CompanyDirectoryProvider() {
             public String providerCode() { return code; }

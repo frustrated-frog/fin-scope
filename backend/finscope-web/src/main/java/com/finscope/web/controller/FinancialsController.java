@@ -13,12 +13,14 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.service.financials.FinancialDocumentService;
 import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.financials.FinancialRefreshService;
+import com.finscope.service.financials.GlobalFinancialRefreshService;
 import com.finscope.service.financials.FinancialInterpretationFacade;
 import com.finscope.service.financials.BrokerResearchService;
 import com.finscope.service.financials.BrokerResearchSyncService;
 import com.finscope.web.request.financials.BrokerResearchImportRequest;
 import com.finscope.web.request.financials.FinancialInterpretationRequest;
 import com.finscope.web.request.financials.FinancialRefreshRequest;
+import com.finscope.web.request.financials.GlobalFinancialRefreshRequest;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
@@ -50,6 +52,8 @@ public class FinancialsController {
     private FinancialQueryService query;
     @Resource
     private FinancialRefreshService refresh;
+    @Resource
+    private GlobalFinancialRefreshService globalRefresh;
     @Resource
     private FinancialDocumentService documents;
     @Resource
@@ -103,6 +107,16 @@ public class FinancialsController {
             @PathVariable Long id,
             @Valid @RequestBody FinancialRefreshRequest request) {
         FinancialReportView result = refresh.refresh(id, request.getPeriodEnd(), request.getReportType());
+        return ResponseEntity.accepted().body(ApiResponses.success(result));
+    }
+
+    @PostMapping("/global/refresh")
+    public ResponseEntity<ApiResponse<FinancialReportView>> refreshGlobal(
+            @Valid @RequestBody GlobalFinancialRefreshRequest request) {
+        FinancialReportView result = globalRefresh.refresh(
+                request.getProviderCode(), request.getProviderCompanyId(),
+                request.getDisplayName(), request.getSymbol(), request.getExchange(),
+                request.getPeriodEnd(), request.getReportType());
         return ResponseEntity.accepted().body(ApiResponses.success(result));
     }
 
