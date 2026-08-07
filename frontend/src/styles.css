@@ -14722,7 +14722,7 @@ input[type="checkbox"] {
 .global-company-search { position: relative; min-width: 0; }
 .global-company-search-field {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) max-content;
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
   min-height: 54px;
   border: 1px solid color-mix(in srgb, var(--fs-blue) 48%, var(--line));
@@ -14734,7 +14734,6 @@ input[type="checkbox"] {
 .global-company-search-field > span { color: var(--fs-mint); font: 700 24px/1 ui-monospace, monospace; transform: translateY(-1px); }
 .global-company-search-field input { box-sizing: border-box; width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 650 14px/1.4 inherit; }
 .global-company-search-field input::placeholder { color: var(--faint); font-weight: 500; }
-.global-company-search-field small { color: var(--faint); font: 650 9px/1 ui-monospace, monospace; letter-spacing: .04em; }
 .global-company-search-hint,
 .global-company-search-error { margin: 7px 4px 0; color: var(--muted); font-size: 10px; }
 .global-company-search-error { color: var(--fs-coral); }
@@ -15392,7 +15391,6 @@ input[type="checkbox"] {
   .financials-page { padding: 0 14px 32px; }
   .global-company-command { padding: 17px; }
   .global-company-search-field { grid-template-columns: 28px 1fr; }
-  .global-company-search-field small { display: none; }
   .global-company-workspace { grid-template-columns: 1fr; }
   .financials-fetch-strip { grid-template-columns: 1fr 1fr; }
   .financials-fetch-strip > div { grid-column: 1 / -1; }
