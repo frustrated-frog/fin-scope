@@ -42,6 +42,19 @@ public class PythonFinancialDataClient implements StructuredFinancialDataGateway
     }
 
     @Override
+    public boolean supports(Instrument instrument) {
+        return instrument != null && "STOCK".equals(instrument.getType())
+                && ("SH".equals(instrument.getMarket())
+                || "SZ".equals(instrument.getMarket())
+                || "BJ".equals(instrument.getMarket()));
+    }
+
+    @Override
+    public String providerCode() {
+        return "PYTHON_FINANCIALS";
+    }
+
+    @Override
     public ExternalFinancialStatements fetch(Instrument instrument, LocalDate periodEnd,
                                              FinancialReportType reportType) {
         requireSupported(instrument);
