@@ -119,6 +119,60 @@ test('opens a global company from name search without adding it to the watchlist
   expect(api).not.toHaveBeenCalledWith('/api/watchlist', expect.anything());
 });
 
+test('fetches a selected SEC company into the local three-statement workbench', async () => {
+  const user = userEvent.setup();
+  const appleCompany = {
+    providerCode: 'SEC_EDGAR',
+    providerCompanyId: 'CIK0000320193',
+    legalName: 'Apple Inc.',
+    displayName: 'Apple Inc.',
+    countryCode: 'US',
+    capabilityLevel: 'L2',
+    securities: [{ symbol: 'AAPL', exchange: 'Nasdaq', market: 'US' }]
+  };
+  const appleView = {
+    ...reportView,
+    instrument: { id: 71, code: 'AAPL', name: 'Apple Inc.', type: 'STOCK', market: 'US' },
+    report: { ...report, id: 19, instrumentId: 71, periodEnd: '2025-09-27', sourceCode: 'SEC_COMPANY_FACTS', currency: 'USD' }
+  };
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/companies/search?q=Apple&limit=8') return [appleCompany];
+    if (path === '/api/financials/global/refresh' && options?.method === 'POST') return appleView;
+    if (path === '/api/financials/instruments/71/reports') return [appleView.report];
+    if (path === '/api/financials/reports/19') return appleView;
+    if (path === '/api/financials/reports/19/documents') return [];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'Apple');
+  await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
+  await user.clear(screen.getByLabelText('报告年度'));
+  await user.type(screen.getByLabelText('报告年度'), '2025');
+  await user.click(screen.getByRole('button', { name: '抓取并解析 SEC 财报' }));
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/financials/global/refresh', {
+    method: 'POST',
+    body: JSON.stringify({
+      providerCode: 'SEC_EDGAR',
+      providerCompanyId: 'CIK0000320193',
+      displayName: 'Apple Inc.',
+      symbol: 'AAPL',
+      exchange: 'Nasdaq',
+      periodEnd: '2025-12-31',
+      reportType: 'ANNUAL'
+    })
+  }));
+  expect(await screen.findByRole('heading', { name: 'Apple Inc.财报底稿' })).toBeInTheDocument();
+  expect(screen.getByText('SEC_COMPANY_FACTS')).toBeInTheDocument();
+  expect(screen.getByText('营业总收入')).toBeInTheDocument();
+});
+
 test('switches between all three concrete statements without losing the report context', async () => {
   const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
