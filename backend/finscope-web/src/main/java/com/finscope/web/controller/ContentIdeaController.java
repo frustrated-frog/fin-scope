@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/content-ideas")
@@ -47,8 +48,7 @@ public class ContentIdeaController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "8") int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "页码不能小于 0，且每页数量必须在 1 到 100 之间");
+            throw new BusinessException(BizErrorCode.PAGE_PARAMETER_OUT_OF_RANGE);
         }
         return ApiResponses.success(contentIdeaService.listPaged(page, pageSize));
     }

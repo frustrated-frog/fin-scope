@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.Collections;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 @Slf4j
@@ -46,7 +47,7 @@ public class FetchService {
      */
     public FetchRun fetch(Source source) {
         if (source == null || source.getName() == null || source.getUrl() == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "临时信息源名称和 URL 不能为空");
+            throw new BusinessException(BizErrorCode.TEMP_SOURCE_NAME_URL_REQUIRED);
         }
         long start = System.currentTimeMillis();
         log.info("信息源抓取开始 sourceId={} sourceName={} type={}", source.getId(), source.getName(), source.getType());

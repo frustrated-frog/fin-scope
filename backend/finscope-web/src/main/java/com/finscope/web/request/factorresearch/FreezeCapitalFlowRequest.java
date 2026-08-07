@@ -5,6 +5,7 @@ import com.finscope.common.exception.ErrorCode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import com.finscope.common.exception.BizErrorCode;
 
 public class FreezeCapitalFlowRequest {
     private LocalDate from;
@@ -20,10 +21,10 @@ public class FreezeCapitalFlowRequest {
 
     public void validate() {
         if (from == null || to == null || asOfTime == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求必须提供 from、to 和 asOfTime");
+            throw new BusinessException(BizErrorCode.FREEZE_FIELDS_REQUIRED);
         }
         if (from.isAfter(to)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结开始日期不能晚于结束日期");
+            throw new BusinessException(BizErrorCode.FREEZE_DATE_RANGE_INVALID);
         }
     }
 }

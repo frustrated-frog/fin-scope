@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class StrategyHoldingService {
@@ -37,7 +38,7 @@ public class StrategyHoldingService {
         validateRole(type, role);
         Instrument instrument = instrumentResolver.resolve(code, type);
         if (holdingRepository.existsByInstrumentId(instrument.getId())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "该标的已在策略组合中");
+            throw new BusinessException(BizErrorCode.INSTRUMENT_ALREADY_IN_PORTFOLIO);
         }
         validateTotal(null, targetWeight);
 
@@ -54,41 +55,41 @@ public class StrategyHoldingService {
     public StrategyHolding update(Long id, String role, double targetWeight,
                                   double currentWeight, String note, long revision) {
         StrategyHolding current = holdingRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "组合条目不存在"));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.PORTFOLIO_ENTRY_NOT_FOUND));
         validateWeights(targetWeight, currentWeight);
         validateRole(current.getType(), role);
         validateTotal(id, targetWeight);
         if (!holdingRepository.update(id, role, targetWeight, currentWeight, note, revision)) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(BizErrorCode.RECORD_UPDATED_AGAIN);
         }
         return holdingRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "组合条目不存在"));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.PORTFOLIO_ENTRY_NOT_FOUND));
     }
 
     public void delete(Long id, long revision) {
         if (!holdingRepository.deleteByIdAndRevision(id, revision)) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(BizErrorCode.RECORD_UPDATED_AGAIN);
         }
     }
 
     private void validateTotal(Long id, double value) {
         if (holdingRepository.sumTargetWeightExcluding(id) + value > 100.000001d) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "目标权重合计不能超过 100%");
+            throw new BusinessException(BizErrorCode.WEIGHT_TOTAL_EXCEEDS_100);
         }
     }
 
     private void validateWeights(double targetWeight, double currentWeight) {
         if (targetWeight < 0 || targetWeight > 100 || currentWeight < 0 || currentWeight > 100) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "权重必须在 0 到 100 之间");
+            throw new BusinessException(BizErrorCode.WEIGHT_OUT_OF_RANGE);
         }
     }
 
     private void validateRole(String type, String role) {
         if ("FUND".equals(type) && !FUND_ROLES.contains(role)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "基金角色只能是核心、卫星、防守或观察");
+            throw new BusinessException(BizErrorCode.FUND_ROLE_INVALID);
         }
         if ("STOCK".equals(type) && !STOCK_ROLES.contains(role)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票角色只能是观察、模拟或真实验证");
+            throw new BusinessException(BizErrorCode.STOCK_ROLE_INVALID);
         }
     }
 }

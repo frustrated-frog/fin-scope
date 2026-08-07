@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class EvidenceService {
@@ -203,7 +204,7 @@ public class EvidenceService {
 
     private void validateMinConfidence(Integer minConfidence) {
         if (minConfidence != null && (minConfidence < 0 || minConfidence > 100)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "最低置信度必须在 0 到 100 之间");
+            throw new BusinessException(BizErrorCode.MIN_CONFIDENCE_OUT_OF_RANGE);
         }
     }
 

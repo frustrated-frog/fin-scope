@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/factor-research/agent-runs")
@@ -27,7 +28,7 @@ public class FactorResearchAgentController {
     @PostMapping
     public ResponseEntity<ApiResponse<FactorResearchAgentRun>> create(@RequestBody(required = false) CreateFactorResearchAgentRunRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究 Agent 请求不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_REQUEST_REQUIRED);
         }
         FactorResearchAgentRun value = service.createPlan(request.getDatasetId(), request.factor(), request.getResearchDraftId(), request.getQuestion());
         return ResponseEntity.created(URI.create("/api/factor-research/agent-runs/" + value.getId())).body(ApiResponses.success(value));

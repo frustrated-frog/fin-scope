@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
 import java.time.LocalDate;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class RadarEventWorkspaceService {
@@ -127,7 +128,7 @@ public class RadarEventWorkspaceService {
 
     private RadarEvent requireEvent(Long eventId) {
         return radar.findEvent(eventId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "雷达事件不存在"));
+                new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
     }
 
     private BusinessException invalid(IllegalArgumentException ex) {

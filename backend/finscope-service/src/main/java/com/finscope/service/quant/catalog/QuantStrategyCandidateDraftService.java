@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class QuantStrategyCandidateDraftService {
@@ -24,12 +25,12 @@ public class QuantStrategyCandidateDraftService {
 
     @Transactional
     public QuantStrategyDraft generate(Long candidateId, Long datasetId) {
-        if (datasetId == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集不能为空");
+        if (datasetId == null) throw new BusinessException(BizErrorCode.DATASET_REQUIRED);
         QuantStrategyCandidate candidate = repository.findById(candidateId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略候选不存在"));
-        if (candidate.isArchived()) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "策略候选已归档，请重新同步目录");
+                new BusinessException(BizErrorCode.STRATEGY_CANDIDATE_NOT_FOUND));
+        if (candidate.isArchived()) throw new BusinessException(BizErrorCode.STRATEGY_CANDIDATE_ARCHIVED);
         if ("UNSUPPORTED".equals(candidate.getCompatibilityStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "当前回测引擎暂不支持该策略候选");
+            throw new BusinessException(BizErrorCode.BACKTEST_ENGINE_UNSUPPORTED_CANDIDATE);
         }
         QuantStrategyDraft draft = strategies.generateDraft(datasetId, prompt(candidate));
         repository.saveOrigin(candidateId, draft.getId(), LocalDateTime.now());

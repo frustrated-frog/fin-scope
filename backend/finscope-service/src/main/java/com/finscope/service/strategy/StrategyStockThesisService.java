@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class StrategyStockThesisService {
@@ -29,7 +30,7 @@ public class StrategyStockThesisService {
         requireText(thesis, buyConditions, invalidationConditions, watchFocus);
         Instrument instrument = resolver.resolve(code, "STOCK");
         if (repository.existsByInstrumentId(instrument.getId())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "该股票已存在研究卡");
+            throw new BusinessException(BizErrorCode.STOCK_RESEARCH_CARD_EXISTS);
         }
         StrategyStockThesis value = new StrategyStockThesis();
         value.setInstrumentId(instrument.getId());
@@ -63,7 +64,7 @@ public class StrategyStockThesisService {
 
     private StrategyStockThesis get(Long id) {
         return repository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "股票研究卡不存在"));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.STOCK_RESEARCH_CARD_NOT_FOUND));
     }
 
     private void requireTransition(String from, String to) {
@@ -71,23 +72,22 @@ public class StrategyStockThesisService {
             int current = StockThesisStage.valueOf(from).ordinal();
             int next = StockThesisStage.valueOf(to).ordinal();
             if (Math.abs(current - next) > 1) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不能跳过研究阶段");
+                throw new BusinessException(BizErrorCode.RESEARCH_STAGE_SKIP_NOT_ALLOWED);
             }
         } catch (IllegalArgumentException error) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票研究阶段不合法");
+            throw new BusinessException(BizErrorCode.STOCK_RESEARCH_STAGE_INVALID);
         }
     }
 
     private void requireText(String... values) {
         for (String value : values) {
             if (value == null || value.trim().isEmpty()) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "投资逻辑、买入条件、失效条件和观察重点不能为空");
+                throw new BusinessException(BizErrorCode.THESIS_CRITERIA_REQUIRED);
             }
         }
     }
 
     private void conflict() {
-        throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
+        throw new BusinessException(BizErrorCode.RECORD_UPDATED_AGAIN);
     }
 }

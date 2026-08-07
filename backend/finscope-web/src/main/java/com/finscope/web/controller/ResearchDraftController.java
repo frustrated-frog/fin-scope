@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/factor-research/research-drafts")
@@ -36,7 +37,7 @@ public class ResearchDraftController {
     public ResponseEntity<ApiResponse<ResearchDraft>> createFromCapitalSignal(
             @RequestBody(required = false) CapitalResearchDraftRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_REQUEST_REQUIRED);
         }
         ResearchDraft value = service.createFromCapitalSignal(request.toCommand());
         return ResponseEntity.created(URI.create("/api/factor-research/research-drafts/" + value.getId()))

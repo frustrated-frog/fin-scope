@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class StrategyPlaybookService {
@@ -40,7 +41,7 @@ public class StrategyPlaybookService {
 
     public StrategyPlaybookView get(String code) {
         StrategyPlaybook stored = repository.findByCode(code)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略模板不存在"));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.STRATEGY_TEMPLATE_NOT_FOUND));
         return StrategyPlaybookView.of(stored, repository.findRules(stored.getId()));
     }
 
@@ -51,20 +52,20 @@ public class StrategyPlaybookService {
             StrategyPlaybook saved = repository.save(value, rules);
             return StrategyPlaybookView.of(saved, repository.findRules(saved.getId()));
         } catch (DuplicateKeyException exception) {
-            throw new BusinessException(ErrorCode.DUPLICATE_OPERATION, "策略编码已存在", exception);
+            throw new BusinessException(BizErrorCode.STRATEGY_CODE_EXISTS, exception);
         }
     }
 
     @Transactional
     public StrategyPlaybook update(String code, String status, String note, long revision) {
         if (!repository.findByCode(code).isPresent()) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略模板不存在");
+            throw new BusinessException(BizErrorCode.STRATEGY_TEMPLATE_NOT_FOUND);
         }
         if (!STATUSES.contains(status)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略状态不合法");
+            throw new BusinessException(BizErrorCode.STRATEGY_STATE_INVALID);
         }
         if (!repository.updateStatus(code, status, note, revision)) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "记录已被更新，请刷新后再试");
+            throw new BusinessException(BizErrorCode.RECORD_UPDATED_AGAIN);
         }
         return repository.findByCode(code).orElseThrow(IllegalStateException::new);
     }

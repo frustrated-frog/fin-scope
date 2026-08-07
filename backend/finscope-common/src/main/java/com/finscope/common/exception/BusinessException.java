@@ -43,6 +43,19 @@ public class BusinessException extends RuntimeException {
         this.errorCode = resolveErrorCode(bizErrorCode);
     }
 
+    /**
+     * 使用业务码及占位符实参构造异常，消息由 {@link BizErrorCode#format(Object...)} 渲染。
+     * 消息不含占位符时实参会被忽略，适合带变量的业务报错单行抛出。
+     *
+     * @param bizErrorCode 业务异常码。
+     * @param args 消息占位符实参。
+     */
+    public BusinessException(BizErrorCode bizErrorCode, Object... args) {
+        super(bizErrorCode == null ? ErrorCode.INTERNAL_ERROR.getDefaultMessage()
+                : bizErrorCode.format(args));
+        this.errorCode = resolveErrorCode(bizErrorCode);
+    }
+
     public ErrorCode getErrorCode() {
         return errorCode;
     }

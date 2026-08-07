@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import com.finscope.common.exception.BizErrorCode;
 
 /** 将耗时的信息源抓取放入已有的持久化任务与 SSE 通道，页面可随时恢复任务状态。 */
 @Service
@@ -26,7 +27,7 @@ public class IntakeFetchTaskService {
     @Resource(name = "ingestTaskExecutor") private Executor executor;
 
     public TaskView submit(Long sourceId) {
-        if (sourceId == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "信息源 ID 不能为空");
+        if (sourceId == null) throw new BusinessException(BizErrorCode.SOURCE_ID_REQUIRED);
         String taskId = UUID.randomUUID().toString();
         AsyncTask task = AsyncTask.queued(taskId, TASK_TYPE, "source:" + sourceId);
         task.setMessage("等待抓取信息源");

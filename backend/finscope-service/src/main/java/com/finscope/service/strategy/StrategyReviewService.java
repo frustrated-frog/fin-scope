@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class StrategyReviewService {
@@ -21,7 +22,7 @@ public class StrategyReviewService {
 
     public StrategyReview create(LocalDate date, String facts, String reasoning, String action) {
         if (date == null || blank(facts) || blank(reasoning) || blank(action)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "复盘日期、事实、推理和行动不能为空");
+            throw new BusinessException(BizErrorCode.REVIEW_FIELDS_REQUIRED);
         }
         StrategyReview value = new StrategyReview();
         value.setReviewDate(date);

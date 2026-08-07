@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class ContentIdeaService {
@@ -117,7 +118,7 @@ public class ContentIdeaService {
         ContentIdea existing = detail(id);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的内容选题状态：" + status);
+            throw new BusinessException(BizErrorCode.CONTENT_IDEA_STATE_UNSUPPORTED, status);
         }
         return contentIdeaRepository.updateStatus(existing.getId(), normalizedStatus);
     }

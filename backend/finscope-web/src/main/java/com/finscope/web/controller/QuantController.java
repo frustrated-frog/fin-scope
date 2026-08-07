@@ -26,6 +26,7 @@ import com.finscope.domain.quant.catalog.QuantStrategyCatalogSyncResult;
 import com.finscope.service.quant.catalog.QuantStrategyCandidateDraftService;
 import com.finscope.service.quant.catalog.QuantStrategyCatalogService;
 import com.finscope.web.request.quant.CreateCatalogStrategyDraftRequest;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/quant")
@@ -62,7 +63,7 @@ public class QuantController {
     @GetMapping("/catalog/source")
     public ApiResponse<QuantStrategyCatalogSource> catalogSource() {
         return ApiResponses.success(quantStrategyCatalogService.source().orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略素材库尚未同步")));
+                new BusinessException(BizErrorCode.STRATEGY_MATERIAL_LIBRARY_NOT_SYNCED)));
     }
 
     /**
@@ -78,7 +79,7 @@ public class QuantController {
             @RequestParam(required = false) String query) {
         if (compatibility != null && !compatibility.trim().isEmpty()
                 && !java.util.Arrays.asList("ADAPTABLE", "NEEDS_FACTOR", "UNSUPPORTED").contains(compatibility.trim())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知的兼容状态");
+            throw new BusinessException(BizErrorCode.UNKNOWN_COMPATIBILITY_STATE);
         }
         return ApiResponses.success(quantStrategyCatalogService.list(compatibility, query));
     }
@@ -92,7 +93,7 @@ public class QuantController {
     @GetMapping("/catalog/candidates/{id}")
     public ApiResponse<QuantStrategyCandidate> catalogCandidate(@PathVariable Long id) {
         return ApiResponses.success(quantStrategyCatalogService.find(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略候选不存在")));
+                new BusinessException(BizErrorCode.STRATEGY_CANDIDATE_NOT_FOUND)));
     }
 
     /**
@@ -106,7 +107,7 @@ public class QuantController {
     public ApiResponse<QuantStrategyDraft> generateCatalogDraft(@PathVariable Long id,
                                                                  @RequestBody CreateCatalogStrategyDraftRequest request) {
         if (request == null || request.getDatasetId() == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集不能为空");
+            throw new BusinessException(BizErrorCode.DATASET_REQUIRED);
         }
         return ApiResponses.success(quantStrategyCandidateDraftService.generate(id, request.getDatasetId()));
     }
@@ -120,7 +121,7 @@ public class QuantController {
     @PostMapping("/strategy-drafts")
     public ApiResponse<QuantStrategyDraft> generate(@RequestBody GenerateQuantStrategyDraftRequest request) {
         if (request == null || request.getDatasetId() == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty())
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和策略描述不能为空");
+            throw new BusinessException(BizErrorCode.DATASET_STRATEGY_REQUIRED);
         return ApiResponses.success(quantStrategyService.generateDraft(request.getDatasetId(), request.getPrompt()));
     }
 
@@ -208,7 +209,7 @@ public class QuantController {
     @PostMapping("/experiments")
     public ResponseEntity<ApiResponse<QuantExperiment>> create(@RequestBody CreateQuantExperimentRequest request) {
         if (request == null || request.getStrategyVersionId() == null)
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略版本不能为空");
+            throw new BusinessException(BizErrorCode.STRATEGY_VERSION_REQUIRED);
         return ResponseEntity.accepted().body(ApiResponses.success(quantExperimentService.create(request.getStrategyVersionId())));
     }
 

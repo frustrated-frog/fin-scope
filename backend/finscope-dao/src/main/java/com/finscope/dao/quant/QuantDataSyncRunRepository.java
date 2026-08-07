@@ -59,7 +59,7 @@ public class QuantDataSyncRunRepository {
             }
             throw error;
         }
-        if (keys.getKey() == null) throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "quant data sync run id was not generated");
+        if (keys.getKey() == null) throw new BusinessException(BizErrorCode.QUANT_SYNC_RUN_ID_MISSING);
         return find(keys.getKey().longValue()).orElseThrow(() ->
                 new IllegalStateException("created quant data sync run cannot be loaded"));
     }

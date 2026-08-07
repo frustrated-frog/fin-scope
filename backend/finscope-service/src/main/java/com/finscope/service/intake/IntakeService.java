@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 import com.finscope.domain.task.TaskPhase;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class IntakeService {
@@ -170,7 +171,7 @@ public class IntakeService {
         IntakeCandidate candidate = candidate(id);
         String target = status == null ? "" : status.trim().toUpperCase();
         if (!HUMAN_STATUSES.contains(target)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的候选状态：" + status);
+            throw new BusinessException(BizErrorCode.CANDIDATE_STATE_UNSUPPORTED_DETAILED, status);
         }
         if (IntakeEnums.HUMAN_PROMOTED.equals(candidate.getHumanStatus())) {
             throw new BusinessConflictException("已入库候选不能变更人工状态");

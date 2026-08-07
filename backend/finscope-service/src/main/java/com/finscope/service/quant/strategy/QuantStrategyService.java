@@ -21,6 +21,7 @@ import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class QuantStrategyService {
@@ -37,11 +38,11 @@ public class QuantStrategyService {
 
     @Transactional
     public QuantStrategyDraft generateDraft(Long datasetId, String prompt) {
-        if (datasetId == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集不能为空");
-        if (prompt == null || prompt.trim().isEmpty()) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略描述不能为空");
+        if (datasetId == null) throw new BusinessException(BizErrorCode.DATASET_REQUIRED);
+        if (prompt == null || prompt.trim().isEmpty()) throw new BusinessException(BizErrorCode.STRATEGY_PROMPT_REQUIRED);
         QuantDataset dataset = datasets.get(datasetId);
         if (!"READY".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集尚未通过质量门禁");
+            throw new BusinessException(BizErrorCode.DATASET_QUALITY_GATE_PENDING);
         }
         java.util.Set<String> availableFactors = datasets.availableFactorCodes(datasetId);
         QuantStrategyDraft draft = agent.generate(datasetId, prompt, availableFactors, dataset.getStartDate(), dataset.getEndDate());
@@ -54,7 +55,7 @@ public class QuantStrategyService {
                 draft.setStatus("FAILED"); draft.setValidationIssues(java.util.Collections.singletonList("回测日期必须位于数据集区间内"));
             }
             try { draft.setNormalizedSpec(mapper.writeValueAsString(draft.getSpec())); }
-            catch (Exception ex) { throw new BusinessException(ErrorCode.INTERNAL_ERROR, "策略日期锁定失败", ex); }
+            catch (Exception ex) { throw new BusinessException(BizErrorCode.STRATEGY_DATE_LOCK_FAILED, ex); }
         }
         if ("VALIDATED".equals(draft.getStatus()) && draft.getSpec().getFactors().stream()
                 .anyMatch(item -> !availableFactors.contains(item.getCode()))) {
@@ -67,24 +68,24 @@ public class QuantStrategyService {
     @Transactional
     public QuantStrategyVersion confirm(Long draftId) {
         QuantStrategyDraft draft = repository.findDraft(draftId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略草案不存在"));
+                new BusinessException(BizErrorCode.STRATEGY_DRAFT_NOT_FOUND));
         if (!"VALIDATED".equals(draft.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有通过校验的策略草案才能确认");
+            throw new BusinessException(BizErrorCode.STRATEGY_DRAFT_MUST_PASS_VALIDATION);
         }
         try {
             QuantStrategySpec spec = mapper.readValue(draft.getNormalizedSpec(), QuantStrategySpec.class);
             QuantDataset dataset = datasets.get(spec.getDatasetId());
-            if (!"READY".equals(dataset.getStatus())) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集已不再满足质量门禁");
-            if (!text(dataset.getFingerprint())) throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据集缺少可复现指纹");
+            if (!"READY".equals(dataset.getStatus())) throw new BusinessException(BizErrorCode.DATASET_QUALITY_GATE_FAILED);
+            if (!text(dataset.getFingerprint())) throw new BusinessException(BizErrorCode.DATASET_FINGERPRINT_MISSING);
             if (!dataset.getFingerprint().equals(draft.getValidatedDatasetFingerprint()))
-                throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集在草案生成后已变化，请重新生成策略草案");
+                throw new BusinessException(BizErrorCode.DATASET_CHANGED_AFTER_DRAFT);
             new QuantStrategySpecValidator(factors, factorProviders).validateOrThrow(spec);
             java.util.Set<String> available = datasets.availableFactorCodes(dataset.getId());
             if (spec.getFactors().stream().anyMatch(item -> !available.contains(item.getCode())))
-                throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "数据变化后策略因子覆盖率已不足，请重新生成草案");
+                throw new BusinessException(BizErrorCode.STRATEGY_COVERAGE_STALE);
             if (spec.getStartDate() == null || spec.getEndDate() == null || spec.getStartDate().isBefore(dataset.getStartDate())
                     || spec.getEndDate().isAfter(dataset.getEndDate()))
-                throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "策略回测日期已超出当前数据集范围");
+                throw new BusinessException(BizErrorCode.BACKTEST_DATE_OUT_OF_RANGE);
             QuantStrategyVersion value = new QuantStrategyVersion();
             value.setName(spec.getName()); value.setDatasetId(spec.getDatasetId());
             value.setVersion(repository.nextVersion(spec.getName())); value.setSpecJson(draft.getNormalizedSpec());
@@ -98,14 +99,14 @@ public class QuantStrategyService {
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "策略版本创建失败", ex);
+            throw new BusinessException(BizErrorCode.STRATEGY_VERSION_CREATE_FAILED, ex);
         }
     }
 
     public List<QuantStrategyVersion> listVersions() { return repository.findVersions(); }
     public QuantStrategyVersion getVersion(Long id) {
         return repository.findVersion(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略版本不存在"));
+                new BusinessException(BizErrorCode.STRATEGY_VERSION_NOT_FOUND));
     }
 
     private String sha256(String input) throws Exception {

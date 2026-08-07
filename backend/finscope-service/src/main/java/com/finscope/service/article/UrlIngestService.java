@@ -54,7 +54,7 @@ public class UrlIngestService {
             SourceAdapter adapter = adapterRegistry.get(source);
             List<RawItem> items = adapter.fetch(source);
             if (items.isEmpty()) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未读取到可用内容：" + url);
+                throw new BusinessException(BizErrorCode.CONTENT_UNREADABLE, url);
             }
             log.info("手动链接抓取完成 url={} itemCount={}", safeUrl(url), items.size());
             RawItem item = items.get(0);

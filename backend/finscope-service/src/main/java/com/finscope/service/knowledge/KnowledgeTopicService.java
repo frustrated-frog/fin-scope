@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 /** Builds a bounded topic projection without article bodies or N+1 lookups. */
 @Service
@@ -51,7 +52,7 @@ public class KnowledgeTopicService {
 
     public KnowledgeTopicWorkspace load(long topicId) {
         Topic topic = topics.findById(topicId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "主题不存在"));
+                new BusinessException(BizErrorCode.TOPIC_NOT_FOUND));
         List<Long> allEventIds = links.findEventIds(topicId);
         List<Long> eventIds = new ArrayList<Long>(allEventIds.subList(
                 0, Math.min(allEventIds.size(), EVENT_LIMIT)));
@@ -68,7 +69,7 @@ public class KnowledgeTopicService {
     @Transactional
     public Topic create(String name, String description) {
         if (name == null || name.trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "主题名称不能为空");
+            throw new BusinessException(BizErrorCode.TOPIC_NAME_REQUIRED);
         }
         Topic topic = new Topic();
         topic.setName(name.trim());

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/companies")
@@ -27,10 +28,10 @@ public class CompanyDirectoryController {
             @RequestParam("q") String query,
             @RequestParam(value = "limit", defaultValue = "8") int limit) {
         if (query == null || query.trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "请输入公司名称或股票代码");
+            throw new BusinessException(BizErrorCode.COMPANY_QUERY_REQUIRED);
         }
         if (limit < 1 || limit > 20) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "搜索结果数量必须在 1–20 之间");
+            throw new BusinessException(BizErrorCode.SEARCH_LIMIT_OUT_OF_RANGE);
         }
         return ApiResponses.success(search.search(query.trim(), limit));
     }

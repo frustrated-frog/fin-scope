@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunOutput;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class ResearchThesisService {
@@ -52,7 +53,7 @@ public class ResearchThesisService {
     public ThesisFinding addFinding(Long thesisId, ThesisFinding finding) {
         detail(thesisId);
         if (finding == null || isBlank(finding.getStance()) || isBlank(finding.getSummary())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究发现的立场和摘要不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_FINDING_STANCE_SUMMARY_REQUIRED);
         }
         finding.setThesisId(thesisId);
         return researchThesisRepository.saveFinding(finding);
@@ -75,12 +76,11 @@ public class ResearchThesisService {
     private void validate(ResearchThesis thesis) {
         if (thesis == null || isBlank(thesis.getQuestion()) || isBlank(thesis.getSubjectType())
                 || isBlank(thesis.getSubjectName())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究问题、主体类型和主体名称不能为空");
+            throw new BusinessException(BizErrorCode.RESEARCH_QUESTION_SUBJECT_REQUIRED);
         }
         if (!"COMPANY".equals(thesis.getSubjectType()) && !"INDUSTRY".equals(thesis.getSubjectType())
                 && !"WATCHLIST".equals(thesis.getSubjectType())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "不支持的研究主体类型：" + thesis.getSubjectType());
+            throw new BusinessException(BizErrorCode.RESEARCH_SUBJECT_TYPE_UNSUPPORTED, thesis.getSubjectType());
         }
     }
 

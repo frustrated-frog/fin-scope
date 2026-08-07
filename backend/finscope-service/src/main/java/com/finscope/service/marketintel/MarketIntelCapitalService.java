@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class MarketIntelCapitalService {
@@ -104,7 +105,7 @@ public class MarketIntelCapitalService {
         Instrument value = instruments.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("标的不存在：" + id));
         if (!"STOCK".equals(value.getType())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "市场情报当前仅支持股票标的");
+            throw new BusinessException(BizErrorCode.MARKET_INTEL_STOCK_ONLY);
         }
         return value;
     }

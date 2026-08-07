@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class ResearchAgentRepository {
@@ -230,7 +231,7 @@ public class ResearchAgentRepository {
     private Long requiredKey(KeyHolder keys) {
         Number key = keys.getKey();
         if (key == null) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "SQLite did not return a generated key");
+            throw new BusinessException(BizErrorCode.SQLITE_GENERATED_KEY_MISSING);
         }
         return key.longValue();
     }

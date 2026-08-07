@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.finscope.common.exception.BizErrorCode;
 
 /**
  * Versioned, human-readable research definitions. A catalog entry documents a
@@ -281,11 +282,11 @@ public class ResearchFactorCatalog {
         try {
             identity = new FactorIdentity(namespace, code, version);
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "因子命名空间、编码和版本不能为空");
+            throw new BusinessException(BizErrorCode.FACTOR_IDENTITY_REQUIRED);
         }
         ResearchFactorDefinition value = definitions.get(identity);
         if (value == null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究因子版本不存在：" + identity);
+            throw new BusinessException(BizErrorCode.RESEARCH_FACTOR_VERSION_NOT_FOUND, identity);
         }
         return value;
     }

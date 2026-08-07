@@ -8,6 +8,7 @@ import com.finscope.dao.research.ResearchRunRepository;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.service.cache.ViewRevisionService;
 import org.springframework.stereotype.Service;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class RadarResearchLinkService {
@@ -20,10 +21,10 @@ public class RadarResearchLinkService {
         this(links,radar,runs,null);
     }
     public RadarEventWorkspace.ResearchLink link(Long eventId,Long runId,String question){
-        radar.findEvent(eventId).orElseThrow(()->new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,"雷达事件不存在"));
-        runs.findById(runId).orElseThrow(()->new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,"研究运行不存在"));
+        radar.findEvent(eventId).orElseThrow(()->new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
+        runs.findById(runId).orElseThrow(()->new BusinessException(BizErrorCode.RESEARCH_RUN_NOT_FOUND));
         String snapshot=question==null||question.trim().isEmpty()?null:question.trim();
-        if(snapshot!=null&&snapshot.length()>500)throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,"研究问题不能超过500字");
+        if(snapshot!=null&&snapshot.length()>500)throw new BusinessException(BizErrorCode.RESEARCH_QUESTION_TOO_LONG);
         RadarEventWorkspace.ResearchLink linked = links.linkResearchRun(eventId,runId,snapshot);
         return linked;
     }

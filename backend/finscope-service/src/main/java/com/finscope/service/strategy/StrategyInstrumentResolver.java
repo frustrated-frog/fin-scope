@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import com.finscope.common.exception.BizErrorCode;
 
 @Component
 public class StrategyInstrumentResolver {
@@ -26,10 +27,10 @@ public class StrategyInstrumentResolver {
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
         String type = rawType == null ? "" : rawType.trim().toUpperCase(Locale.ROOT);
         if (!CODE.matcher(code).matches()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码必须是 6 位数字");
+            throw new BusinessException(BizErrorCode.INSTRUMENT_CODE_6_DIGITS);
         }
         if (!"FUND".equals(type) && !"STOCK".equals(type)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略组合只支持基金和股票");
+            throw new BusinessException(BizErrorCode.PORTFOLIO_SUPPORTS_FUND_STOCK_ONLY);
         }
         if ("STOCK".equals(type)) {
             return instrumentRepository.findByCodeTypeAndMarket(code, type, stockMarket(code))

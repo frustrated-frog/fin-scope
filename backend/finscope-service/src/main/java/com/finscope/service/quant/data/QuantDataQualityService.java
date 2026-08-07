@@ -9,14 +9,15 @@ import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 public class QuantDataQualityService {
     public void assertValidBars(List<QuantDailyBar> values) {
         if (values == null || values.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "日行情不能为空");
+            throw new BusinessException(BizErrorCode.DAILY_BARS_REQUIRED);
         }
         if (values.size() > 100_000) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "单次最多导入 100000 条日行情");
+            throw new BusinessException(BizErrorCode.DAILY_BARS_IMPORT_LIMIT);
         }
         Set<String> keys = new HashSet<String>();
         for (QuantDailyBar value : values) {
@@ -34,7 +35,7 @@ public class QuantDataQualityService {
 
     public void assertValidFundamentals(List<QuantFundamentalSnapshot> values) {
         if (values == null || values.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "基本面快照不能为空");
+            throw new BusinessException(BizErrorCode.FUNDAMENTAL_SNAPSHOT_REQUIRED);
         }
         for (QuantFundamentalSnapshot value : values) {
             require(value.getReportPeriod() != null && value.getDisclosedAt() != null,

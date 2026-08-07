@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import com.finscope.common.exception.BizErrorCode;
 
 /**
  * Read-only, explicitly approved agent that can only execute a fixed research plan.
@@ -66,16 +67,16 @@ public class FactorResearchAgentService {
 
     public FactorResearchAgentRun createPlan(Long datasetId, FactorIdentity factor, Long draftId, String question) {
         if (datasetId == null || factor == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集和因子不能为空");
+            throw new BusinessException(BizErrorCode.DATASET_FACTOR_REQUIRED);
         }
         QuantDataset dataset = datasets.get(datasetId);
         if (!"READY".equals(dataset.getStatus()) || dataset.getFingerprint() == null
                 || dataset.getFingerprint().trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有已冻结且具备指纹的数据集才能生成研究计划");
+            throw new BusinessException(BizErrorCode.RESEARCH_PLAN_REQUIRES_FROZEN_DATASET);
         }
         catalog.get(factor.getNamespace(), factor.getCode(), factor.getVersion());
         if (draftId != null && !factor.equals(drafts.get(draftId).getFactor())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究草稿与本次因子身份不一致");
+            throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_FACTOR_MISMATCH);
         }
         FactorResearchAgentRun run = new FactorResearchAgentRun();
         run.setDatasetId(datasetId);
@@ -108,10 +109,10 @@ public class FactorResearchAgentService {
     public FactorResearchAgentRun approveAndRun(Long id) {
         LocalDateTime now = LocalDateTime.now(clock);
         if (!runs.transition(id, "AWAITING_APPROVAL", "APPROVED", now)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究计划已批准、已运行或状态已变化");
+            throw new BusinessException(BizErrorCode.RESEARCH_PLAN_STATE_CHANGED);
         }
         if (!runs.transition(id, "APPROVED", "RUNNING", now)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "研究 Agent 无法进入运行状态");
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_CANNOT_RUN);
         }
         FactorResearchAgentRun run = require(id);
         int calls = 0;
@@ -123,7 +124,7 @@ public class FactorResearchAgentService {
                 calls++;
                 com.finscope.domain.factorresearch.ResearchDraft draft = drafts.get(run.getResearchDraftId());
                 if (!run.getFactor().equals(draft.getFactor())) {
-                    throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "研究草稿的因子定义已变化，请重新创建研究计划");
+                    throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_FACTOR_DEFINITION_CHANGED);
                 }
                 evidence.set("researchDraft", json.valueToTree(draft));
                 enforceTimeBudget(run, startedNanos);
@@ -134,7 +135,7 @@ public class FactorResearchAgentService {
             QuantDataset dataset = datasets.get(run.getDatasetId());
             if (!"READY".equals(dataset.getStatus())
                     || !java.util.Objects.equals(run.getDatasetFingerprint(), dataset.getFingerprint())) {
-                throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集指纹已变化，请重新创建研究计划");
+                throw new BusinessException(BizErrorCode.DATASET_FINGERPRINT_CHANGED);
             }
             enforceTimeBudget(run, startedNanos);
             ObjectNode datasetEvidence = json.createObjectNode();
@@ -187,7 +188,7 @@ public class FactorResearchAgentService {
         } catch (Exception ex) {
             runs.complete(id, "FAILED", calls, "{}", "", "{}", safe(ex.getMessage()), LocalDateTime.now(clock));
             if (ex instanceof BusinessException) throw (BusinessException) ex;
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "研究 Agent 运行失败", ex);
+            throw new BusinessException(BizErrorCode.RESEARCH_AGENT_RUN_FAILED, ex);
         }
         return get(id);
     }
@@ -199,7 +200,7 @@ public class FactorResearchAgentService {
     }
 
     private FactorResearchAgentRun require(Long id) {
-        return runs.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究 Agent 运行不存在"));
+        return runs.findById(id).orElseThrow(() -> new BusinessException(BizErrorCode.RESEARCH_AGENT_RUN_NOT_FOUND));
     }
 
     private List<FactorResearchAgentRun> completedHistory(FactorIdentity factor) {

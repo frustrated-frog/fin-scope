@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class InvestmentRecognitionCandidateRepository {
@@ -149,7 +150,7 @@ public class InvestmentRecognitionCandidateRepository {
         try {
             return json.writeValueAsString(values == null ? new ArrayList<String>() : values);
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法序列化投资认识数据", error);
+            throw new BusinessException(BizErrorCode.INVESTMENT_KNOWLEDGE_SERIALIZE_FAILED, error);
         }
     }
 
@@ -157,7 +158,7 @@ public class InvestmentRecognitionCandidateRepository {
         try {
             return value == null ? new ArrayList<String>() : json.readValue(value, STRING_LIST);
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法读取投资认识数据", error);
+            throw new BusinessException(BizErrorCode.INVESTMENT_KNOWLEDGE_READ_FAILED, error);
         }
     }
 }

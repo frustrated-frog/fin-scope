@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class RadarEventInterpretationRepository {
@@ -42,7 +43,7 @@ public class RadarEventInterpretationRepository {
                     value.getFailureCode(), value.getFailureMessage(), value.getDurationMs(),
                     TimeUtil.text(value.getStartedAt()), TimeUtil.text(value.getCompletedAt()), value.getId());
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update radar event interpretation id=" + value.getId(), error);
+            throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_UPDATE_FAILED, BizErrorCode.RADAR_INTERPRETATION_UPDATE_FAILED.format(value.getId()), error);
         }
     }
 
@@ -95,7 +96,7 @@ public class RadarEventInterpretationRepository {
             value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
             return value;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read radar event interpretation", error);
+            throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_READ_FAILED, error);
         }
     }
 }

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class NewsFeedService {
@@ -68,8 +69,7 @@ public class NewsFeedService {
         if (!"ALL".equals(category) && !"PENDING_REVIEW".equals(category)) {
             NewsCategory selected = categories == null ? null : categories.findEnabledByCode(category).orElse(null);
             if (selected == null) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "未知或已停用的资讯分类：" + category);
+                throw new BusinessException(BizErrorCode.NEWS_CATEGORY_UNKNOWN, category);
             }
             if (!containsCategory(enabledCategories, selected.getCode())) enabledCategories.add(selected);
         }

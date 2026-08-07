@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.Locale;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class GlobalFinancialRefreshService {
@@ -28,8 +29,7 @@ public class GlobalFinancialRefreshService {
         boolean sec = "SEC_EDGAR".equals(providerCode);
         boolean dart = "KRX_KIND".equals(providerCode);
         if (!sec && !dart) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "该公司目录暂未接入结构化财报抓取：" + providerCode);
+            throw new BusinessException(BizErrorCode.FINANCIALS_PROVIDER_UNSUPPORTED, providerCode);
         }
         String normalizedSymbol = required(symbol, "股票代码").toUpperCase(Locale.ROOT);
         String market = sec ? "US" : "KR";
@@ -71,12 +71,12 @@ public class GlobalFinancialRefreshService {
     private String normalizeCik(String value) {
         String digits = required(value, "SEC CIK").replaceAll("\\D", "");
         if (digits.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "SEC CIK 格式不正确");
+            throw new BusinessException(BizErrorCode.SEC_CIK_INVALID);
         }
         try {
             return String.format("%010d", Long.parseLong(digits));
         } catch (NumberFormatException error) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "SEC CIK 格式不正确");
+            throw new BusinessException(BizErrorCode.SEC_CIK_INVALID);
         }
     }
 
@@ -84,7 +84,7 @@ public class GlobalFinancialRefreshService {
         String digits = required(providerCompanyId, "KRX 公司代码").replaceAll("\\D", "");
         if (digits.length() != 6) digits = fallbackSymbol.replaceAll("\\D", "");
         if (digits.length() != 6) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "KRX 股票代码格式不正确");
+            throw new BusinessException(BizErrorCode.KRX_SYMBOL_INVALID);
         }
         return digits;
     }

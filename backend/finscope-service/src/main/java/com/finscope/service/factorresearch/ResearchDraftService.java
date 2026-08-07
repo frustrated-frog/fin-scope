@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class ResearchDraftService {
@@ -51,13 +52,13 @@ public class ResearchDraftService {
 
     @Transactional
     public ResearchDraft createFromCapitalSignal(CapitalResearchDraftCommand command) {
-        if (command == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研究草稿请求不能为空");
+        if (command == null) throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_REQUEST_REQUIRED);
         catalog.get(CAPITAL_FACTOR.getNamespace(), CAPITAL_FACTOR.getCode(), CAPITAL_FACTOR.getVersion());
         Long snapshotId = required(command.getSnapshotId(), "snapshotId");
         CapitalBehaviorSnapshot snapshot = snapshots.findById(snapshotId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "资金行为快照不存在：" + snapshotId));
+                new BusinessException(BizErrorCode.CAPITAL_SNAPSHOT_NOT_FOUND, snapshotId));
         Instrument instrument = instruments.findById(snapshot.getInstrumentId()).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "资金行为快照对应标的不存在：" + snapshot.getInstrumentId()));
+                new BusinessException(BizErrorCode.CAPITAL_SNAPSHOT_INSTRUMENT_NOT_FOUND, snapshot.getInstrumentId()));
         String authoritativeCode = InstrumentCodeCanonicalizer.canonical(instrument.getCode(), instrument.getMarket());
         requireMatch(authoritativeCode, required(command.getInstrumentCode(), "instrumentCode").toUpperCase(Locale.ROOT),
                 "INSTRUMENT_DOES_NOT_MATCH_SNAPSHOT");
@@ -95,12 +96,12 @@ public class ResearchDraftService {
 
     public ResearchDraft get(Long id) {
         return repository.findById(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "研究草稿不存在：" + id));
+                new BusinessException(BizErrorCode.RESEARCH_DRAFT_NOT_FOUND, id));
     }
 
     private static <T> T required(T value, String field) {
         if (value == null || value instanceof String && ((String) value).trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "必填字段不能为空：" + field);
+            throw new BusinessException(BizErrorCode.REQUIRED_FIELD_EMPTY, field);
         }
         return value;
     }
@@ -117,7 +118,7 @@ public class ResearchDraftService {
         for (CapitalBehaviorSignal signal : snapshot.getSignals()) {
             if (requiredSignal.equals(signal.getType())) return signal.getType();
         }
-        throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "所选信号不属于当前资金行为快照");
+        throw new BusinessException(BizErrorCode.CAPITAL_SIGNAL_NOT_IN_SNAPSHOT);
     }
 
     private static List<String> authoritativeEvidenceRefs(CapitalBehaviorSnapshot snapshot) {

@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import com.finscope.common.exception.BizErrorCode;
 
 @Component
 public class EastmoneyBrokerResearchSource implements BrokerResearchSource {
@@ -68,15 +69,14 @@ public class EastmoneyBrokerResearchSource implements BrokerResearchSource {
         } catch (BusinessException error) {
             throw error;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "公开研报目录暂时不可用", error);
+            throw new BusinessException(BizErrorCode.REPORT_DIRECTORY_UNAVAILABLE, error);
         }
     }
 
     @Override
     public byte[] download(BrokerResearchCandidate candidate) {
         if (candidate == null || !SOURCE_CODE.equals(candidate.getSourceCode())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报来源不匹配");
+            throw new BusinessException(BizErrorCode.REPORT_SOURCE_MISMATCH);
         }
         URI uri = requireAllowedUri(candidate.getSourceUrl(), PDF_HOST);
         try {
@@ -95,8 +95,7 @@ public class EastmoneyBrokerResearchSource implements BrokerResearchSource {
         } catch (BusinessException error) {
             throw error;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
-                    "公开研报原文下载失败", error);
+            throw new BusinessException(BizErrorCode.REPORT_DOWNLOAD_FAILED, error);
         }
     }
 
@@ -154,20 +153,18 @@ public class EastmoneyBrokerResearchSource implements BrokerResearchSource {
             }
             return uri;
         } catch (RuntimeException error) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "公开研报原文地址不在允许范围内");
+            throw new BusinessException(BizErrorCode.REPORT_URL_NOT_ALLOWED);
         }
     }
 
     private String normalizeStockCode(String value) {
         if (value == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票代码不能为空");
+            throw new BusinessException(BizErrorCode.STOCK_CODE_REQUIRED);
         }
         java.util.regex.Matcher matcher = java.util.regex.Pattern
                 .compile("(?<!\\d)(\\d{6})(?!\\d)").matcher(value);
         if (!matcher.find()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "自动研报仅支持六位 A 股代码");
+            throw new BusinessException(BizErrorCode.AUTO_REPORT_A_SHARE_ONLY);
         }
         return matcher.group(1);
     }

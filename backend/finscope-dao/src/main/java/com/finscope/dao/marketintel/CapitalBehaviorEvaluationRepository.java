@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class CapitalBehaviorEvaluationRepository {
@@ -72,7 +73,7 @@ public class CapitalBehaviorEvaluationRepository {
             value.setId(id);
             return value;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist capital behavior evaluation", error);
+            throw new BusinessException(BizErrorCode.CAPITAL_EVAL_PERSIST_FAILED, error);
         }
     }
 
@@ -107,8 +108,7 @@ public class CapitalBehaviorEvaluationRepository {
                         value.setCreatedAt(LocalDateTime.parse(rs.getString("created_at")));
                         return value;
                     } catch (Exception error) {
-                        throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read capital behavior evaluation for snapshot="
-                                + snapshotId, error);
+                        throw new BusinessException(BizErrorCode.CAPITAL_EVAL_READ_FAILED, BizErrorCode.CAPITAL_EVAL_READ_FAILED.format(snapshotId), error);
                     }
                 }, snapshotId);
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));

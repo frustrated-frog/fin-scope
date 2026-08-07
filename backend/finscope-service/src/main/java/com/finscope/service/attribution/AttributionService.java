@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import com.finscope.common.exception.BizErrorCode;
 
 /**
  * 归因服务：编排"手动深度归因"异步任务，串起 Agent 工作流 + 报告持久化 + SSE 进度。
@@ -48,7 +49,7 @@ public class AttributionService {
      */
     public AttributionStartResult startAttribution(String code, String type, String name, Double changePct, String quoteDate) {
         if (StringUtils.isBlank(code)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码不能为空");
+            throw new BusinessException(BizErrorCode.INSTRUMENT_CODE_REQUIRED);
         }
         String normalizedType = normalizeType(type);
         String normalizedCode = code.trim();
@@ -74,7 +75,7 @@ public class AttributionService {
             executor.execute(() -> runResearch(taskId, saved, instrument, changePct));
         } catch (RuntimeException ex) {
             reportSubmissionFailed(saved, ex);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "归因任务提交失败，请稍后重试");
+            throw new BusinessException(BizErrorCode.ATTRIBUTION_TASK_SUBMIT_FAILED);
         }
         log.info("归因任务已提交 taskId={} code={} reportId={}", taskId, code, saved.getId());
         return new AttributionStartResult(taskId, saved.getId());
@@ -120,14 +121,14 @@ public class AttributionService {
 
     public AttributionReport getReport(Long reportId) {
         AttributionReport report = attributionRepository.findById(reportId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "归因报告不存在: " + reportId));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.ATTRIBUTION_REPORT_NOT_FOUND, reportId));
         report.setEvidences(attributionRepository.findEvidenceByReportId(reportId));
         return report;
     }
 
     public AttributionResearchRunView getResearchRun(Long reportId) {
         AttributionResearchRun run = researchRunRepository.findByReportId(reportId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "归因研究运行不存在: " + reportId));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.ATTRIBUTION_RUN_NOT_FOUND, reportId));
         return new AttributionResearchRunView(run, researchRunRepository.findStepsByRunId(run.getId()));
     }
 
@@ -147,7 +148,7 @@ public class AttributionService {
         AttributionReport report = attributionRepository.findById(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("归因报告不存在: " + reportId));
         if ("GENERATING".equals(report.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "归因研究仍在运行，暂不能删除");
+            throw new BusinessException(BizErrorCode.ATTRIBUTION_RUN_IN_PROGRESS);
         }
         researchRunRepository.deleteByReportId(reportId);
         attributionRepository.deleteById(reportId);

@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.finscope.common.exception.BizErrorCode;
 
 /** Records a human review as an immutable knowledge entry plus a new schedule. */
 @Service
@@ -84,7 +85,7 @@ public class KnowledgeReviewService {
         }
         String parsedConfidence = parseConfidence(confidence);
         topics.findById(topicId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "主题不存在"));
+                new BusinessException(BizErrorCode.TOPIC_NOT_FOUND));
         TopicReviewState state = reviewStates.findByTopicId(topicId)
                 .orElseGet(() -> reviewStates.createIfAbsent(topicId));
         if (state.getRevision() != expectedRevision) {
@@ -113,7 +114,7 @@ public class KnowledgeReviewService {
             throw conflict();
         }
         KnowledgeEntry completed = entries.findById(draft.getId()).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "复习记录不存在"));
+                new BusinessException(BizErrorCode.REVIEW_RECORD_NOT_FOUND));
         KnowledgeProjectionJob job = projectionJobs.enqueue(topicId, completed.getId());
         events.publishEvent(new KnowledgeProjectionRequested(
                 job.getId(), topicId, completed.getId()));
@@ -155,6 +156,6 @@ public class KnowledgeReviewService {
     }
 
     private BusinessException conflict() {
-        return new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "复习记录已更新，请刷新后重试");
+        return new BusinessException(BizErrorCode.REVIEW_RECORD_UPDATED);
     }
 }

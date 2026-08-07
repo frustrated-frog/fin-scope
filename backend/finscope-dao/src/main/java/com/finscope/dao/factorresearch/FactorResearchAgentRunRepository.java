@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class FactorResearchAgentRunRepository {
@@ -94,7 +95,7 @@ public class FactorResearchAgentRunRepository {
                 status, toolCalls, evidenceJson, evidenceHash, findingJson, stopReason, completedAt.toString(), id);
     }
 
-    private String write(List<String> value) { try { return json.writeValueAsString(value); } catch (Exception ex) { throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法序列化研究 Agent 数据", ex); } }
-    private List<String> read(String value) { try { return value == null ? Collections.emptyList() : json.readValue(value, STRINGS); } catch (Exception ex) { throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "无法读取研究 Agent 数据", ex); } }
+    private String write(List<String> value) { try { return json.writeValueAsString(value); } catch (Exception ex) { throw new BusinessException(BizErrorCode.RESEARCH_AGENT_SERIALIZE_FAILED, ex); } }
+    private List<String> read(String value) { try { return value == null ? Collections.emptyList() : json.readValue(value, STRINGS); } catch (Exception ex) { throw new BusinessException(BizErrorCode.RESEARCH_AGENT_READ_FAILED, ex); } }
     private LocalDateTime time(String value) { return value == null || value.isEmpty() ? null : LocalDateTime.parse(value); }
 }

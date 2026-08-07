@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 
 import com.finscope.service.quant.factor.FactorRegistry;
 import com.finscope.domain.quant.factor.FactorDefinition;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class QuantDatasetService {
@@ -54,7 +55,7 @@ public class QuantDatasetService {
 
     public QuantDataset get(Long id) {
         return datasets.findById(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "量化数据集不存在"));
+                new BusinessException(BizErrorCode.QUANT_DATASET_NOT_FOUND));
     }
 
     public Set<String> availableFactorCodes(Long datasetId) {
@@ -115,10 +116,10 @@ public class QuantDatasetService {
 
     public QuantDataset create(String name, String dataKind) {
         if (name == null || name.trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集名称不能为空");
+            throw new BusinessException(BizErrorCode.DATASET_NAME_REQUIRED);
         }
         if (!"REAL".equals(dataKind) && !"LEARNING_SAMPLE".equals(dataKind)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据性质不受支持");
+            throw new BusinessException(BizErrorCode.DATA_KIND_UNSUPPORTED);
         }
         QuantDataset value = new QuantDataset();
         value.setName(name.trim());
@@ -155,7 +156,7 @@ public class QuantDatasetService {
         String summary = "{\"barCount\":" + bars.size() + ",\"instrumentCount\":30,"
                 + "\"fundamentalCount\":" + fundamentals.size() + ",\"blockingIssues\":0}";
         if (!datasets.updateSummary(dataset.getId(), start, end, "READY", digest, summary, dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "学习数据集创建期间发生并发更新");
+            throw new BusinessException(BizErrorCode.LEARNING_DATASET_CREATE_CONFLICT);
         }
         return get(dataset.getId());
     }
@@ -169,7 +170,7 @@ public class QuantDatasetService {
         try {
             marketData.insertBars(values);
         } catch (DataAccessException ex) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "日行情包含已存在的记录", ex);
+            throw new BusinessException(BizErrorCode.DAILY_BARS_DUPLICATE, ex);
         }
         List<QuantDailyBar> all = marketData.findBars(datasetId);
         LocalDate start = all.stream().map(QuantDailyBar::getTradeDate).min(LocalDate::compareTo).orElse(null);
@@ -180,7 +181,7 @@ public class QuantDatasetService {
         String status = researchStatus(dataset, all, universe);
         if (!datasets.updateSummary(datasetId, start, end, status, digest,
                 qualitySummary(all, fundamentals, universe, status), dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(BizErrorCode.DATASET_UPDATED);
         }
         return get(datasetId);
     }
@@ -194,7 +195,7 @@ public class QuantDatasetService {
         try {
             marketData.insertFundamentals(values);
         } catch (DataAccessException ex) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "财务快照包含已存在的记录", ex);
+            throw new BusinessException(BizErrorCode.FINANCIAL_SNAPSHOT_DUPLICATE, ex);
         }
         return refreshFingerprint(dataset);
     }
@@ -204,22 +205,22 @@ public class QuantDatasetService {
         QuantDataset dataset = get(datasetId);
         assertMutable(dataset);
         if (values == null || values.isEmpty() || values.size() > 100_000) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票池成员不能为空且单次不能超过 100000 条");
+            throw new BusinessException(BizErrorCode.STOCK_POOL_MEMBER_LIMIT);
         }
         for (QuantUniverseMember value : values) {
             if (value.getTradeDate() == null || value.getInstrumentCode() == null || value.getInstrumentCode().trim().isEmpty()) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票池成员缺少日期或标的代码");
+                throw new BusinessException(BizErrorCode.STOCK_POOL_MEMBER_INCOMPLETE);
             }
             value.setDatasetId(datasetId);
             if (value.getSourceKind() == null) value.setSourceKind("POINT_IN_TIME");
             if (!"POINT_IN_TIME".equals(value.getSourceKind()) && !"CURRENT_SNAPSHOT".equals(value.getSourceKind())) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "股票池来源只能是 POINT_IN_TIME 或 CURRENT_SNAPSHOT");
+                throw new BusinessException(BizErrorCode.STOCK_POOL_SOURCE_INVALID);
             }
         }
         try {
             marketData.insertUniverseMembers(values);
         } catch (DataAccessException ex) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "股票池包含已存在的记录", ex);
+            throw new BusinessException(BizErrorCode.STOCK_POOL_DUPLICATE, ex);
         }
         return refreshFingerprint(dataset);
     }
@@ -234,7 +235,7 @@ public class QuantDatasetService {
         LocalDate end = bars.stream().map(QuantDailyBar::getTradeDate).max(LocalDate::compareTo).orElse(null);
         if (!datasets.updateSummary(dataset.getId(), start, end, status,
                 digest, qualitySummary(bars, fundamentals, universe, status), dataset.getRevision())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "数据集已被更新，请刷新后重试");
+            throw new BusinessException(BizErrorCode.DATASET_UPDATED);
         }
         return get(dataset.getId());
     }
@@ -251,7 +252,7 @@ public class QuantDatasetService {
 
     private void assertMutable(QuantDataset dataset) {
         if ("READY".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "已就绪数据集不可原地修改，请创建新版本");
+            throw new BusinessException(BizErrorCode.READY_DATASET_IMMUTABLE);
         }
     }
 

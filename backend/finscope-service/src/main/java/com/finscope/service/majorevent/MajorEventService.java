@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class MajorEventService {
@@ -30,7 +31,7 @@ public class MajorEventService {
     public MajorEvent create(MajorEventCreateCommand command) {
         validateOrigin(command);
         if (events.findByOrigin(command.getOriginType(), command.getOriginKey()).isPresent()) {
-            throw new BusinessException(ErrorCode.DUPLICATE_OPERATION, "该事件已记入大事记");
+            throw new BusinessException(BizErrorCode.MAJOR_EVENT_ALREADY_RECORDED);
         }
         MajorEvent event = "ARTICLE".equals(command.getOriginType()) ? articleSnapshot(command)
                 : "RADAR_EVENT".equals(command.getOriginType()) ? radarSnapshot(command) : liveNewsSnapshot(command);
@@ -44,7 +45,7 @@ public class MajorEventService {
     }
 
     public MajorEvent update(Long id, LocalDate occurredDate, String note) {
-        if (occurredDate == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "事件日期不能为空");
+        if (occurredDate == null) throw new BusinessException(BizErrorCode.EVENT_DATE_REQUIRED);
         MajorEvent event = events.findById(id).orElseThrow(() -> new ResourceNotFoundException("大事记录不存在：" + id));
         event.setOccurredDate(occurredDate);
         event.setNote(trimToNull(note));
@@ -81,7 +82,7 @@ public class MajorEventService {
     }
 
     private MajorEvent liveNewsSnapshot(MajorEventCreateCommand command) {
-        if (trimToNull(command.getTitle()) == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "资讯标题不能为空");
+        if (trimToNull(command.getTitle()) == null) throw new BusinessException(BizErrorCode.NEWS_TITLE_REQUIRED);
         MajorEvent event = base(command);
         event.setTitle(command.getTitle().trim());
         event.setSummary(trimToNull(command.getSummary()));
@@ -101,11 +102,11 @@ public class MajorEventService {
 
     private void validateOrigin(MajorEventCreateCommand command) {
         if (command == null || trimToNull(command.getOriginType()) == null || trimToNull(command.getOriginKey()) == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "来源类型和来源标识不能为空");
+            throw new BusinessException(BizErrorCode.SOURCE_TYPE_REFERENCE_REQUIRED);
         }
         String originType = command.getOriginType().trim().toUpperCase();
         if (!"NEWS_ITEM".equals(originType) && !"ARTICLE".equals(originType) && !"RADAR_EVENT".equals(originType)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的大事来源类型");
+            throw new BusinessException(BizErrorCode.MAJOR_EVENT_SOURCE_TYPE_UNSUPPORTED);
         }
         command.setOriginType(originType);
         command.setOriginKey(command.getOriginKey().trim());

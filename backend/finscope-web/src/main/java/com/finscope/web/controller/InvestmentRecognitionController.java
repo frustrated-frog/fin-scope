@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/knowledge/investment-recognitions")
@@ -77,14 +78,14 @@ public class InvestmentRecognitionController {
     public ApiResponse<InvestmentRecognitionCandidate> updateStatus(
             @PathVariable long id, @RequestBody InvestmentRecognitionActionRequest request) {
         if (request == null || request.getStatus() == null || request.getStatus().trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_MISSING, "缺少 status");
+            throw new BusinessException(BizErrorCode.STATUS_MISSING);
         }
         return ApiResponses.success(recognitions.updateStatus(id, request.getStatus(), revision(request)));
     }
 
     private long revision(InvestmentRecognitionActionRequest request) {
         if (request == null || request.getExpectedRevision() == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_MISSING, "缺少 expectedRevision");
+            throw new BusinessException(BizErrorCode.EXPECTED_REVISION_MISSING);
         }
         return request.getExpectedRevision();
     }

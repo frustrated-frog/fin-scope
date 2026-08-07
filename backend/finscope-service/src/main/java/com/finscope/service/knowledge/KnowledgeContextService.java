@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 /**
  * Resolves bounded read context for a knowledge command.
@@ -30,8 +31,7 @@ public class KnowledgeContextService {
 
     public List<EvidenceItem> evidenceForTask(long taskId) {
         LearningTask task = tasks.findById(taskId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.RESOURCE_NOT_FOUND, "学习任务不存在"));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.LEARNING_TASK_NOT_FOUND));
         if (task.getEventId() == null) {
             return Collections.emptyList();
         }

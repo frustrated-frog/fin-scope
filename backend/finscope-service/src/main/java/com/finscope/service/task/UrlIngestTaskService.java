@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 @Slf4j
@@ -48,7 +49,7 @@ public class UrlIngestTaskService {
 
     public TaskView get(String taskId) {
         AsyncTask task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "异步任务不存在：" + taskId));
+                .orElseThrow(() -> new BusinessException(BizErrorCode.ASYNC_TASK_NOT_FOUND, taskId));
         ArticleCardView article = null;
         if (task.getArticleId() != null) {
             article = articleQueryService.detail(task.getArticleId());

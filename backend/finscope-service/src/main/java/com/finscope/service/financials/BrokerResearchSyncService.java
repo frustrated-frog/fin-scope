@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class BrokerResearchSyncService {
@@ -63,8 +64,7 @@ public class BrokerResearchSyncService {
                 source.sourceCode(), candidate.getSourceUrl());
         if (existing.isPresent()) {
             if (!instrumentId.equals(existing.get().getInstrumentId())) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "公开研报与所选公司不匹配");
+                throw new BusinessException(BizErrorCode.REPORT_COMPANY_MISMATCH);
             }
             return reports.get(existing.get().getId(), financialReportId);
         }
@@ -129,8 +129,7 @@ public class BrokerResearchSyncService {
         BrokerResearchSource source = sourceCode == null ? null
                 : sources.get(sourceCode.toUpperCase(Locale.ROOT));
         if (source == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "不支持的公开研报来源：" + sourceCode);
+            throw new BusinessException(BizErrorCode.REPORT_SOURCE_UNSUPPORTED, sourceCode);
         }
         return source;
     }

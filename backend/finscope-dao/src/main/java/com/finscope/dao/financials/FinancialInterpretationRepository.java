@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class FinancialInterpretationRepository {
@@ -55,7 +56,7 @@ public class FinancialInterpretationRepository {
             value.setId(keys.getKey().longValue());
             return value;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot persist financial interpretation", error);
+            throw new BusinessException(BizErrorCode.FINANCIAL_INTERPRETATION_PERSIST_FAILED, error);
         }
     }
 
@@ -70,7 +71,7 @@ public class FinancialInterpretationRepository {
                     value.getFailureMessage(), value.getDurationMs(), text(value.getStartedAt()),
                     text(value.getCompletedAt()), value.getModelName(), value.getId());
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot update financial interpretation id=" + value.getId(), error);
+            throw new BusinessException(BizErrorCode.FINANCIAL_INTERPRETATION_UPDATE_FAILED, BizErrorCode.FINANCIAL_INTERPRETATION_UPDATE_FAILED.format(value.getId()), error);
         }
     }
 
@@ -140,7 +141,7 @@ public class FinancialInterpretationRepository {
             value.setCompletedAt(time(rs.getString("completed_at")));
             return value;
         } catch (Exception error) {
-            throw new BusinessException(ErrorCode.DATABASE_ERROR, "cannot read financial interpretation", error);
+            throw new BusinessException(BizErrorCode.FINANCIAL_INTERPRETATION_READ_FAILED, error);
         }
     }
 

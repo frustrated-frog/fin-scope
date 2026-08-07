@@ -37,7 +37,7 @@ public class MarketDataRefreshRunRepository {
             return statement;
         }, keys);
         if (keys.getKey() == null) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "market data refresh run id was not generated");
+            throw new BusinessException(BizErrorCode.MARKET_DATA_RUN_ID_MISSING);
         }
         return keys.getKey().longValue();
     }

@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 /**
  * HTTP boundary for the knowledge workbench.
@@ -286,8 +287,7 @@ public class KnowledgeController {
 
     private void require(Object value, String field) {
         if (value == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "缺少必填字段: " + field);
+            throw new BusinessException(BizErrorCode.REQUIRED_FIELD_MISSING, field);
         }
     }
 }

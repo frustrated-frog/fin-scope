@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class ThemeProfileService {
@@ -47,14 +48,14 @@ public class ThemeProfileService {
     public ThemeProfile getRequired(String code) {
         ThemeProfile profile = registry.get(code);
         if (profile == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "未知研究主题编码：" + code);
+            throw new BusinessException(BizErrorCode.UNKNOWN_TOPIC_CODE, code);
         }
         return profile;
     }
 
     public List<ThemeProfile> getRequired(List<String> codes) {
         if (codes == null || codes.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "至少需要提供一个研究主题编码");
+            throw new BusinessException(BizErrorCode.RESEARCH_TOPIC_AT_LEAST_ONE);
         }
         List<ThemeProfile> profiles = new ArrayList<ThemeProfile>();
         for (String code : codes) {

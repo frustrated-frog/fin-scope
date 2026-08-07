@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/factor-research")
@@ -62,7 +63,7 @@ public class FactorResearchController {
     public ResponseEntity<ApiResponse<QuantDataset>> freeze(@PathVariable Long datasetId,
                                                @RequestBody(required = false) FreezeCapitalFlowRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "冻结请求不能为空");
+            throw new BusinessException(BizErrorCode.FREEZE_REQUEST_REQUIRED);
         }
         request.validate();
         QuantDataset dataset = freezeService.freeze(datasetId, request.getFrom(), request.getTo(),

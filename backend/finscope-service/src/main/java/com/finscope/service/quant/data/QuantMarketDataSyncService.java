@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class QuantMarketDataSyncService {
@@ -62,8 +63,7 @@ public class QuantMarketDataSyncService {
         try {
             running = runs.start(datasetId, normalizeTrigger(triggerType), instruments.size(), now());
         } catch (DataIntegrityViolationException error) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
-                    "该数据集已有同步任务在运行", error);
+            throw new BusinessException(BizErrorCode.DATASET_SYNC_RUN_IN_PROGRESS, error);
         }
 
         int succeeded = 0;
@@ -106,20 +106,16 @@ public class QuantMarketDataSyncService {
                                                     List<QuantUniverseMember> universe) {
         if (!"REAL".equals(dataset.getDataKind()) || !"RESEARCH".equals(dataset.getDatasetLevel())
                 || !"quant-dataset-v2".equals(dataset.getFingerprintVersion())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "只能为真实研究数据集同步市场数据");
+            throw new BusinessException(BizErrorCode.SYNC_REQUIRES_REAL_DATASET);
         }
         if (!"BUILDING".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
-                    "只能更新尚未冻结的 BUILDING 数据集");
+            throw new BusinessException(BizErrorCode.BUILDING_DATASET_FROZEN_IMMUTABLE);
         }
         if (universe == null || universe.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "请先导入 point-in-time 股票池");
+            throw new BusinessException(BizErrorCode.PIT_POOL_REQUIRED);
         }
         if (universe.stream().anyMatch(value -> !"POINT_IN_TIME".equals(value.getSourceKind()))) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "自动同步禁止使用当前成分回填历史");
+            throw new BusinessException(BizErrorCode.AUTO_SYNC_NO_HISTORY_BACKFILL);
         }
         TreeSet<String> values = new TreeSet<String>();
         universe.stream().filter(QuantUniverseMember::isMember)
@@ -127,8 +123,7 @@ public class QuantMarketDataSyncService {
                 .filter(value -> value != null && !value.trim().isEmpty())
                 .map(String::trim).forEach(values::add);
         if (values.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "point-in-time 股票池没有有效成分");
+            throw new BusinessException(BizErrorCode.PIT_POOL_NO_VALID_MEMBERS);
         }
         return new ArrayList<String>(values);
     }

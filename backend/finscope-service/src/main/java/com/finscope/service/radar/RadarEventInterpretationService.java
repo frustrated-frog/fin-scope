@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class RadarEventInterpretationService {
@@ -156,7 +157,7 @@ public class RadarEventInterpretationService {
 
     private RadarEvent findEvent(Long eventId) {
         return radar.findEvent(eventId).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "雷达事件不存在"));
+                new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
     }
 
     private String sha256(String value) {

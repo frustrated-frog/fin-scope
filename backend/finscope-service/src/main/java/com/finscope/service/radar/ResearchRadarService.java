@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class ResearchRadarService {
@@ -255,7 +256,7 @@ public class ResearchRadarService {
     }
 
     public ResearchRadarView.EventDetail detail(Long id) {
-        RadarEvent event = repository.findEvent(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "雷达事件不存在"));
+        RadarEvent event = repository.findEvent(id).orElseThrow(() -> new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
         List<RadarSignal> signals = repository.findSignalsByEventId(id);
         List<RadarEvidence> evidence = evidenceRepository == null ? Collections.emptyList() : evidenceRepository.findByEventId(id);
         RadarEventInterpretation interpretation = interpretations == null ? null : interpretations.current(event, signals, evidence).orElse(null);
@@ -281,7 +282,7 @@ public class ResearchRadarService {
     }
 
     public ResearchRadarView.InterpretationView requestInterpretation(Long id) {
-        if (interpretations == null) throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "雷达事件解读暂不可用");
+        if (interpretations == null) throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_UNAVAILABLE);
         return new ResearchRadarView.InterpretationView(interpretations.request(id));
     }
 

@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class NewsClassificationReviewService {
@@ -57,11 +58,11 @@ public class NewsClassificationReviewService {
         }
         String reason = trim(request.getReason());
         if (!repository.review(itemId, categoryCode, reason, LocalDateTime.now(clock))) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "分类结果已变化，请刷新后重试");
+            throw new BusinessException(BizErrorCode.CLASSIFICATION_CHANGED);
         }
         NewsItemClassification updated = find(itemId);
         if (updated == null) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "分类复核结果读取失败");
+            throw new BusinessException(BizErrorCode.CLASSIFICATION_REVIEW_READ_FAILED);
         }
         return view(updated);
     }

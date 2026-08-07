@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class EventClusterService {
@@ -62,7 +63,7 @@ public class EventClusterService {
     @Transactional
     public synchronized EventCluster attachArticle(Article article) {
         if (article == null || article.getId() == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "文章必须先保存，才能关联事件");
+            throw new BusinessException(BizErrorCode.ARTICLE_MUST_BE_SAVED);
         }
         java.util.Optional<EventArticleLink> existingLink = eventClusterRepository.findByArticleId(article.getId());
         if (existingLink.isPresent()) {
@@ -112,7 +113,7 @@ public class EventClusterService {
 
     public List<EventCluster> list(String themeCode, String status, String noveltyState, LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "开始日期不能晚于结束日期");
+            throw new BusinessException(BizErrorCode.DATE_RANGE_INVALID);
         }
         return eventClusterRepository.findAllFiltered(themeCode, status, noveltyState, dateFrom, dateTo);
     }
@@ -120,7 +121,7 @@ public class EventClusterService {
     public PageResponse<EventCluster> listPaged(String themeCode, String status, String noveltyState,
                                                  LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "开始日期不能晚于结束日期");
+            throw new BusinessException(BizErrorCode.DATE_RANGE_INVALID);
         }
         return PageResponse.of(eventClusterRepository.findFilteredPage(themeCode, status, noveltyState, dateFrom, dateTo, page, pageSize),
                 eventClusterRepository.countFiltered(themeCode, status, noveltyState, dateFrom, dateTo), page, pageSize);
@@ -140,7 +141,7 @@ public class EventClusterService {
         detail(eventId);
         String normalizedStatus = normalizeStatus(status);
         if (!VALID_EVENT_STATUSES.contains(normalizedStatus)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的事件状态：" + status);
+            throw new BusinessException(BizErrorCode.EVENT_STATE_UNSUPPORTED, status);
         }
         return eventClusterRepository.updateStatus(eventId, normalizedStatus);
     }
@@ -148,10 +149,10 @@ public class EventClusterService {
     @Transactional
     public EventCluster merge(Long sourceEventId, Long targetEventId) {
         if (sourceEventId == null || targetEventId == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "源事件 ID 和目标事件 ID 不能为空");
+            throw new BusinessException(BizErrorCode.EVENT_MERGE_IDS_REQUIRED);
         }
         if (sourceEventId.equals(targetEventId)) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "事件不能合并到自身");
+            throw new BusinessException(BizErrorCode.EVENT_MERGE_TO_SELF);
         }
         EventCluster source = detail(sourceEventId);
         EventCluster target = detail(targetEventId);
@@ -185,20 +186,19 @@ public class EventClusterService {
 
         boolean shouldCreateNewEvent = Boolean.TRUE.equals(createNewEvent);
         if (shouldCreateNewEvent == (targetEventId != null)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "目标事件 ID 与新建事件选项必须且只能提供一个");
+            throw new BusinessException(BizErrorCode.EVENT_MERGE_TARGET_OR_NEW_REQUIRED);
         }
 
         EventCluster target = shouldCreateNewEvent ? createEventFromGovernance(article) : detail(targetEventId);
         ensureGovernable(target, "目标事件");
         if (source.getId().equals(target.getId())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "文章不能移动到原事件");
+            throw new BusinessException(BizErrorCode.ARTICLE_MOVE_TO_SOURCE_EVENT);
         }
 
         int moved = eventClusterRepository.moveArticleLink(source.getId(), articleId, target.getId(),
                 governanceReason(link.getNoveltyReason()));
         if (moved == 0) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT,
-                    "文章关联已被更新，请刷新后重试：" + articleId);
+            throw new BusinessException(BizErrorCode.ARTICLE_LINK_UPDATED, articleId);
         }
         evidenceItemRepository.moveByEventIdAndArticleId(source.getId(), articleId, target.getId());
         eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
@@ -252,8 +252,7 @@ public class EventClusterService {
 
     private void ensureGovernable(EventCluster event, String role) {
         if (ResearchEnums.EVENT_ARCHIVED.equals(event.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT,
-                    "已归档事件不能执行治理操作：" + event.getId() + "（" + role + "）");
+            throw new BusinessException(BizErrorCode.ARCHIVED_EVENT_ACTION_FORBIDDEN, event.getId() + "（" + role + "）");
         }
     }
 

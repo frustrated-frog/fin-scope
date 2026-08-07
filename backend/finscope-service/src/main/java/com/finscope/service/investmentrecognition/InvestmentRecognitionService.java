@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class InvestmentRecognitionService {
@@ -42,19 +43,19 @@ public class InvestmentRecognitionService {
     public InvestmentRecognitionCandidate accept(long id, long expectedRevision) {
         InvestmentRecognitionCandidate candidate = require(id);
         if (!"CANDIDATE".equals(candidate.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有 Agent 候选可以沉淀为正式认识");
+            throw new BusinessException(BizErrorCode.KNOWLEDGE_ONLY_AGENT_CANDIDATE);
         }
         requireCompleteEvidence(candidate);
         Topic topic = topics.create(topicName(candidate), topicDescription(candidate));
         if (!topicRepository.updateKnowledgeState(topic.getId(), "ACTIVE", "REVIEWING", topic.getRevision())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "认识档案状态已变化");
+            throw new BusinessException(BizErrorCode.KNOWLEDGE_PROFILE_STATE_CHANGED);
         }
         KnowledgeEntry entry = entries.saveDraft(entry(candidate, topic.getId()));
         if (!entries.finalizeDraft(entry.getId(), entry.getRevision())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "认识结论已变化");
+            throw new BusinessException(BizErrorCode.KNOWLEDGE_CONCLUSION_CHANGED);
         }
         if (!candidates.updateStatus(id, "ACCEPTED", expectedRevision, topic.getId())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "Agent 候选已被更新");
+            throw new BusinessException(BizErrorCode.AGENT_CANDIDATE_UPDATED);
         }
         return require(id);
     }
@@ -62,14 +63,14 @@ public class InvestmentRecognitionService {
     public InvestmentRecognitionCandidate updateStatus(long id, String status, long expectedRevision) {
         String normalized = status == null ? "" : status.trim().toUpperCase();
         if (!MUTABLE_STATUSES.contains(normalized) || "CANDIDATE".equals(normalized)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "不支持的候选状态");
+            throw new BusinessException(BizErrorCode.CANDIDATE_STATE_UNSUPPORTED);
         }
         InvestmentRecognitionCandidate candidate = require(id);
         if ("ACCEPTED".equals(candidate.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "正式认识请在认识档案中复核或失效");
+            throw new BusinessException(BizErrorCode.FORMAL_KNOWLEDGE_REVIEW_REQUIRED);
         }
         if (!candidates.updateStatus(id, normalized, expectedRevision, candidate.getTopicId())) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT, "Agent 候选已被更新");
+            throw new BusinessException(BizErrorCode.AGENT_CANDIDATE_UPDATED);
         }
         return require(id);
     }
@@ -121,7 +122,7 @@ public class InvestmentRecognitionService {
                 || blank(value.getInvalidationConditions()) || blank(value.getHorizon())
                 || empty(value.getSupportingData()) || empty(value.getCounterData())
                 || empty(value.getValidationMetrics())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "候选证据结构不完整，请先补齐再沉淀");
+            throw new BusinessException(BizErrorCode.EVIDENCE_CANDIDATE_INCOMPLETE);
         }
     }
     private boolean empty(List<String> values) {
@@ -131,7 +132,7 @@ public class InvestmentRecognitionService {
     }
     private InvestmentRecognitionCandidate require(long id) {
         return candidates.findById(id).orElseThrow(() ->
-                new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Agent 候选不存在"));
+                new BusinessException(BizErrorCode.AGENT_CANDIDATE_NOT_FOUND));
     }
     private boolean blank(String value) { return value == null || value.trim().isEmpty(); }
 }

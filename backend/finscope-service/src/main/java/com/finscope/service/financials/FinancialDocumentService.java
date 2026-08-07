@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class FinancialDocumentService {
@@ -46,13 +47,12 @@ public class FinancialDocumentService {
     public FinancialDocument store(Long instrumentId, Long reportId, String originalFileName,
                                    InputStream input, long declaredSize) throws IOException {
         if (declaredSize <= 0 || declaredSize > MAX_FILE_SIZE) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "PDF 文件大小必须在 30MB 以内");
+            throw new BusinessException(BizErrorCode.PDF_SIZE_LIMIT);
         }
         byte[] content = readBounded(input);
         if (content.length < 5 || content[0] != '%' || content[1] != 'P'
                 || content[2] != 'D' || content[3] != 'F' || content[4] != '-') {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "上传文件不是有效 PDF");
+            throw new BusinessException(BizErrorCode.UPLOAD_NOT_PDF);
         }
         String hash = sha256(content);
         Optional<FinancialDocument> existing = repository.findByHash(hash);
@@ -62,7 +62,7 @@ public class FinancialDocumentService {
         String safeName = hash + ".pdf";
         Path directory = root.resolve(String.valueOf(instrumentId)).normalize();
         if (!directory.startsWith(root)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "文件路径不合法");
+            throw new BusinessException(BizErrorCode.FILE_PATH_INVALID);
         }
         Files.createDirectories(directory);
         Path target = directory.resolve(safeName);
@@ -93,7 +93,7 @@ public class FinancialDocumentService {
         FinancialDocument document = get(id);
         Path value = root.resolve(document.getRelativePath()).normalize();
         if (!value.startsWith(root)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "文件路径不合法");
+            throw new BusinessException(BizErrorCode.FILE_PATH_INVALID);
         }
         return value;
     }
@@ -143,8 +143,7 @@ public class FinancialDocumentService {
         while ((count = input.read(buffer)) >= 0) {
             total += count;
             if (total > MAX_FILE_SIZE) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "PDF 文件大小必须在 30MB 以内");
+                throw new BusinessException(BizErrorCode.PDF_SIZE_LIMIT);
             }
             output.write(buffer, 0, count);
         }

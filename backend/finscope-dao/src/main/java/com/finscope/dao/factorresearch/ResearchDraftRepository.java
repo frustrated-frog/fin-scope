@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Repository
 public class ResearchDraftRepository {
@@ -93,7 +94,7 @@ public class ResearchDraftRepository {
         try {
             return json.writeValueAsString(values);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "research draft evidence is not serializable", ex);
+            throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_EVIDENCE_NOT_SERIALIZABLE, ex);
         }
     }
 
@@ -101,7 +102,7 @@ public class ResearchDraftRepository {
         try {
             return value == null ? Collections.emptyList() : json.readValue(value, STRING_LIST);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR, "stored research draft evidence is invalid", ex);
+            throw new BusinessException(BizErrorCode.RESEARCH_DRAFT_EVIDENCE_INVALID, ex);
         }
     }
 }

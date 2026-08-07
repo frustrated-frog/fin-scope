@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.finscope.common.exception.BizErrorCode;
 
 /** 板块目录排行与搜索服务；刷新、路由、缓存和兜底统一委托给市场数据网关。 */
 @Service
@@ -63,7 +64,7 @@ public class SectorMarketService {
     public SectorMarketSearchResult search(String query, SectorCategory category, int limit) {
         String normalized = query == null ? "" : query.trim();
         if (normalized.isEmpty()) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块搜索词不能为空");
+            throw new BusinessException(BizErrorCode.SECTOR_SEARCH_TERM_REQUIRED);
         }
         validateLimit(limit, 20);
         List<SectorCategory> categories = category == null
@@ -117,12 +118,12 @@ public class SectorMarketService {
 
     private void validateLimit(int limit, int maximum) {
         if (limit < 1 || limit > maximum) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "limit 必须在 1 到 " + maximum + " 之间");
+            throw new BusinessException(BizErrorCode.LIMIT_OUT_OF_RANGE, maximum);
         }
     }
 
     private void requireCategory(SectorCategory category) {
-        if (category == null) throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块分类不能为空");
+        if (category == null) throw new BusinessException(BizErrorCode.SECTOR_CATEGORY_REQUIRED);
     }
 
     private String mergeWarnings(String primary, List<String> secondary) {

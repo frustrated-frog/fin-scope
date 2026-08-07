@@ -23,6 +23,7 @@ import javax.annotation.Resource;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
+import com.finscope.common.exception.BizErrorCode;
 
 @RestController
 @RequestMapping("/api/sector-market")
@@ -111,7 +112,7 @@ public class SectorMarketController {
             return SectorCategory.valueOf(normalized);
         } catch (IllegalArgumentException error) {
             String supported = allowAll ? "INDUSTRY、CONCEPT 或 ALL" : "INDUSTRY 或 CONCEPT";
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "板块分类必须是 " + supported);
+            throw new BusinessException(BizErrorCode.SECTOR_CATEGORY_UNSUPPORTED, supported);
         }
     }
 }

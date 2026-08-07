@@ -30,6 +30,7 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class BrokerResearchService {
@@ -112,8 +113,7 @@ public class BrokerResearchService {
         Optional<BrokerResearchReport> existing = repository.findByHash(hash);
         if (existing.isPresent()) {
             if (!instrumentId.equals(existing.get().getInstrumentId())) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "该 PDF 已归档到另一家公司，请核对所选股票");
+                throw new BusinessException(BizErrorCode.PDF_ARCHIVED_TO_ANOTHER_COMPANY);
             }
             if (sourceUrl != null && existing.get().getSourceUrl() == null) {
                 repository.attachSourceIdentity(existing.get().getId(), sourceType, sourceUrl);
@@ -128,8 +128,7 @@ public class BrokerResearchService {
         } catch (BrokerResearchDocumentParser.DocumentLimitException limit) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, limit.getMessage());
         } catch (IOException invalidPdf) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "PDF 文件已损坏或无法解析，请重新下载后上传");
+            throw new BusinessException(BizErrorCode.PDF_CORRUPT);
         }
         BrokerResearchAnalysisResult analyzed = analyzer.analyze(parsed.getText(), originalFileName);
         validateSourcePages(analyzed, parsed.getPageCount());
@@ -175,22 +174,20 @@ public class BrokerResearchService {
                                                  BrokerResearchCandidate candidate, byte[] content) {
         if (candidate == null || candidate.getSourceCode() == null
                 || candidate.getExternalId() == null || candidate.getSourceUrl() == null) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "公开研报身份不完整");
+            throw new BusinessException(BizErrorCode.PUBLIC_REPORT_IDENTITY_INCOMPLETE);
         }
         Instrument instrument = financials.instrument(instrumentId);
         String instrumentCode = stockCode(instrument.getCode());
         String candidateCode = stockCode(candidate.getStockCode());
         if (instrumentCode.isEmpty() || !instrumentCode.equals(candidateCode)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                    "公开研报与所选公司不匹配");
+            throw new BusinessException(BizErrorCode.REPORT_COMPANY_MISMATCH);
         }
         if (financialReportId != null) validateFinancialReport(instrumentId, financialReportId);
         Optional<BrokerResearchReport> sourced = repository.findBySourceUrl(
                 candidate.getSourceCode(), candidate.getSourceUrl());
         if (sourced.isPresent()) {
             if (!instrumentId.equals(sourced.get().getInstrumentId())) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
-                        "该公开研报已归档到另一家公司");
+                throw new BusinessException(BizErrorCode.REPORT_ARCHIVED_TO_ANOTHER_COMPANY);
             }
             return get(sourced.get().getId(), financialReportId);
         }
@@ -207,8 +204,7 @@ public class BrokerResearchService {
                         candidate.getSourceCode(), candidate.getSourceUrl());
             }
         } catch (IOException error) {
-            throw new BusinessException(ErrorCode.FILE_OPERATION_ERROR,
-                    "公开研报原文保存失败", error);
+            throw new BusinessException(BizErrorCode.REPORT_SAVE_FAILED, error);
         }
     }
 
@@ -250,7 +246,7 @@ public class BrokerResearchService {
     Path contentPath(Long id, BrokerResearchReport report) {
         Path path = root.resolve(report.getRelativePath()).normalize();
         if (!path.startsWith(root)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报文件路径不合法：" + id);
+            throw new BusinessException(BizErrorCode.REPORT_FILE_PATH_INVALID, id);
         }
         if (!Files.isRegularFile(path)) {
             throw new ResourceNotFoundException("研报原件不存在：" + id);
@@ -266,7 +262,7 @@ public class BrokerResearchService {
         if (financialReportId != null) {
             FinancialReportView financial = financials.view(financialReportId);
             if (!report.getInstrumentId().equals(financial.getReport().getInstrumentId())) {
-                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报与财报不属于同一家公司");
+                throw new BusinessException(BizErrorCode.REPORT_FINANCIALS_COMPANY_MISMATCH);
             }
             linker.link(financial, forecasts, claims);
         } else {
@@ -294,7 +290,7 @@ public class BrokerResearchService {
     private void validateFinancialReport(Long instrumentId, Long reportId) {
         FinancialReportView financial = financials.view(reportId);
         if (!instrumentId.equals(financial.getReport().getInstrumentId())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报与财报不属于同一家公司");
+            throw new BusinessException(BizErrorCode.REPORT_FINANCIALS_COMPANY_MISMATCH);
         }
     }
 
@@ -335,7 +331,7 @@ public class BrokerResearchService {
     private Path safeDirectory(Long instrumentId) {
         Path directory = root.resolve(String.valueOf(instrumentId)).normalize();
         if (!directory.startsWith(root)) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报存储路径不合法");
+            throw new BusinessException(BizErrorCode.REPORT_STORAGE_PATH_INVALID);
         }
         return directory;
     }
@@ -355,14 +351,14 @@ public class BrokerResearchService {
 
     private void validateSize(long size) {
         if (size <= 0 || size > MAX_FILE_SIZE) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "研报 PDF 大小必须在 30MB 以内");
+            throw new BusinessException(BizErrorCode.REPORT_PDF_SIZE_LIMIT);
         }
     }
 
     private void validatePdf(byte[] content) {
         if (content.length < 5 || content[0] != '%' || content[1] != 'P'
                 || content[2] != 'D' || content[3] != 'F' || content[4] != '-') {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "上传文件不是有效 PDF");
+            throw new BusinessException(BizErrorCode.UPLOAD_NOT_PDF);
         }
     }
 
