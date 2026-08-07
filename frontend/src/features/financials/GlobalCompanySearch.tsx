@@ -77,8 +77,9 @@ export function GlobalCompanySearch({ onSelect }: { onSelect: (company: CompanyS
             setQuery(event.target.value);
           }}
         />
-        <small>{busy ? '正在查询全球公司目录…' : 'A 股 · 美国 · 韩国'}</small>
+        {!normalizedQuery && <small>A 股 · 美国 · 韩国</small>}
       </div>
+      {busy && <p className="global-company-search-hint">正在查询全球公司目录…</p>}
       {normalizedQuery.length === 1 && <p className="global-company-search-hint">输入至少两个字符开始搜索</p>}
       {error && <p className="global-company-search-error" role="alert">{error}</p>}
       {normalizedQuery.length >= 2 && normalizedQuery !== selectedQuery.current && !busy && !error && results.length === 0 && (

@@ -284,13 +284,25 @@ export function FinancialsView({
     setError('');
     setActiveTab('OVERVIEW');
     if (company.localInstrumentId) {
+      const security = company.securities[0];
+      const selectedInstrument: FinancialInstrument = {
+        id: company.localInstrumentId,
+        code: security?.symbol ?? company.providerCompanyId,
+        name: company.displayName,
+        type: 'STOCK',
+        market: security?.exchange ?? security?.market ?? company.countryCode
+      };
       ++loadSequence.current;
       setBusy(false);
+      setInstruments((current) => [
+        selectedInstrument,
+        ...current.filter((item) => item.id !== selectedInstrument.id)
+      ]);
       setExternalCompany(undefined);
       setView(undefined);
       setDocuments([]);
-      setInstrumentId(company.localInstrumentId);
-      setReports(archiveReports[company.localInstrumentId] ?? []);
+      setInstrumentId(selectedInstrument.id);
+      setReports(archiveReports[selectedInstrument.id] ?? []);
       return;
     }
     ++loadSequence.current;

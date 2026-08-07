@@ -47,3 +47,13 @@ test('does not query providers until the user enters two characters', async () =
   expect(api).not.toHaveBeenCalled();
   expect(screen.getByText('输入至少两个字符开始搜索')).toBeInTheDocument();
 });
+
+test('removes the market hint from the input row once the user starts typing', async () => {
+  const user = userEvent.setup();
+  render(<GlobalCompanySearch onSelect={vi.fn()} />);
+
+  expect(screen.getByText('A 股 · 美国 · 韩国')).toBeInTheDocument();
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'A');
+
+  expect(screen.queryByText('A 股 · 美国 · 韩国')).not.toBeInTheDocument();
+});

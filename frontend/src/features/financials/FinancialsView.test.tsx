@@ -189,6 +189,28 @@ test('opens a global company from name search without adding it to the watchlist
   expect(api).not.toHaveBeenCalledWith('/api/watchlist', expect.anything());
 });
 
+test('shows capture controls for a searched local company missing from the initial instrument index', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/companies/search?q=Apple&limit=8') return [{
+      providerCode: 'LOCAL', providerCompanyId: 'INSTRUMENT:28', legalName: 'Apple Inc.',
+      displayName: 'Apple Inc.', countryCode: 'US', capabilityLevel: 'L4', localInstrumentId: 28,
+      securities: [{ symbol: 'AAPL', exchange: 'US', market: 'US' }]
+    }];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByRole('heading', { name: '已抓取财报' });
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'Apple');
+  await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
+
+  expect(screen.getByText('建立第一份财报底稿')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '抓取并解析财报' })).toBeEnabled();
+});
+
 test('fetches a selected SEC company into the local three-statement workbench', async () => {
   const user = userEvent.setup();
   const appleCompany = {
