@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
-import java.util.Map;
 import java.time.Duration;
 
 @RestController
@@ -20,9 +19,9 @@ public class DashboardController {
     @Resource
     private DashboardService dashboardService;
     @Resource
-    private ViewSnapshotCacheService snapshots;
+    private ViewSnapshotCacheService viewSnapshotCacheService;
     @Resource
-    private ObjectMapper mapper;
+    private ObjectMapper objectMapper;
 
     /**
      * 查询首页仪表盘汇总数据。
@@ -31,13 +30,13 @@ public class DashboardController {
      */
     @GetMapping
     public ApiResponse<JsonNode> summary() {
-        return ApiResponses.success(snapshots.readOrLoad("dashboard", "summary", Duration.ofSeconds(30),
+        return ApiResponses.success(viewSnapshotCacheService.readOrLoad("dashboard", "summary", Duration.ofSeconds(30),
                 () -> dashboardService.summary()));
     }
 
     /** 首页热点由雷达生产后预热，读取过程不会查询 SQLite。 */
     @GetMapping("/hotspots")
     public ApiResponse<JsonNode> hotspots() {
-        return ApiResponses.success(snapshots.read("dashboard", "hotspots").orElseGet(() -> mapper.createArrayNode()));
+        return ApiResponses.success(viewSnapshotCacheService.read("dashboard", "hotspots").orElseGet(() -> objectMapper.createArrayNode()));
     }
 }

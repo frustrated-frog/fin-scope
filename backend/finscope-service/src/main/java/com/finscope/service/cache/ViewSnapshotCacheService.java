@@ -31,7 +31,9 @@ public class ViewSnapshotCacheService {
         Object value = loader.get();
         try {
             String payload = mapper.writeValueAsString(value);
-            if (shouldCache(scope, value)) cache.put(scope, variant, payload, ttl);
+            if (shouldCache(scope, value)) {
+                cache.put(scope, variant, payload, ttl);
+            }
             return mapper.readTree(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("页面快照序列化失败", error);
@@ -41,7 +43,9 @@ public class ViewSnapshotCacheService {
     /** 只读预热快照；页面读取方不得在未命中时隐式访问主存储。 */
     public Optional<JsonNode> read(String scope, String variant) {
         Optional<String> cached = cache.get(scope, variant);
-        if (!cached.isPresent()) return Optional.empty();
+        if (!cached.isPresent()) {
+            return Optional.empty();
+        }
         try {
             return Optional.of(mapper.readTree(cached.get()));
         } catch (JsonProcessingException error) {

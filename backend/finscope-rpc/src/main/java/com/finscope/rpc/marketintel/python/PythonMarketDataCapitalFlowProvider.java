@@ -197,7 +197,9 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
         String source = text(root, "source_code");
         if (source != null) warnings.add("source:" + source);
         if (stale) warnings.add("PYTHON_STALE_FALLBACK");
-        if ("FRESH_FALLBACK".equals(quality)) warnings.add("PYTHON_SOURCE_FALLBACK");
+        if ("FRESH_FALLBACK".equals(quality)) {
+            warnings.add("PYTHON_SOURCE_FALLBACK");
+        }
         return new CapitalFlowData(
                 minutePoints,
                 dailyPoints,

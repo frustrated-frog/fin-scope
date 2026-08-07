@@ -1,6 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
+import com.finscope.domain.instrument.DailyBarPoint;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
@@ -79,5 +80,17 @@ public class WatchlistController {
         log.info("更新自选分组 id={} group={}", id, request.getGroupName());
         watchlistService.updateGroup(id, request.getGroupName());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 查询标的日 K 线。
+     *
+     * @param code  六位证券代码。
+     * @param limit 请求根数，默认 120，上限 250。
+     * @return 按交易日升序排列的日线记录。
+     */
+    @GetMapping("/{code}/daily-bars")
+    public ApiResponse<List<DailyBarPoint>> dailyBars(@PathVariable String code, @RequestParam(defaultValue = "120") int limit, @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponses.success(watchlistService.dailyBars(code, limit, refresh));
     }
 }

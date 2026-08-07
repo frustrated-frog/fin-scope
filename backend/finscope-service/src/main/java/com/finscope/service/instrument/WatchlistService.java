@@ -6,10 +6,14 @@ import com.finscope.common.util.StringUtils;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.dao.attribution.AttributionRepository;
+import com.finscope.domain.instrument.DailyBarPoint;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
 import com.finscope.domain.instrument.WatchlistItem;
+import com.finscope.rpc.marketintel.ProviderContractException;
+import com.finscope.rpc.quote.PythonDailyBarClient;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -31,8 +35,10 @@ import java.util.regex.Pattern;
 @Service
 @Slf4j
 public class WatchlistService {
+
     private static final Pattern SIX_DIGIT_CODE = Pattern.compile("\\d{6}");
     private static final Pattern SECTOR_CODE = Pattern.compile("BK\\d{4}", Pattern.CASE_INSENSITIVE);
+
     @Resource
     private InstrumentRepository instrumentRepository;
     @Resource
@@ -41,6 +47,8 @@ public class WatchlistService {
     private QuoteService quoteService;
     @Resource
     private AttributionRepository attributionRepository;
+    @Resource
+    private PythonDailyBarClient dailyBarClient;
 
     /**
      * 兼容旧调用方的普通自选入口。板块必须通过独立关注接口添加。
@@ -152,6 +160,28 @@ public class WatchlistService {
         validateCode(normalizedCode, "SECTOR");
         watchlistRepository.deleteByCodeAndType(normalizedCode, "SECTOR");
         log.info("板块取消关注 code={}", normalizedCode);
+    }
+
+    /**
+     * 获取标的最新的 {@code limit} 根日 K 线。
+     * 获取日 K 线；refresh 为 true 时显式刷新 Python 侧持久快照。
+     *
+     * @param code  六位证券代码。
+     * @param limit 请求根数。
+     * @return 按交易日升序排列的日线记录。
+     */
+    public List<DailyBarPoint> dailyBars(String code, int limit, boolean refresh) {
+        if (code == null || !code.trim().matches("\\d{6}")) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+        }
+        try {
+            return dailyBarClient.fetchDailyBars(code, limit, refresh);
+        } catch (ProviderContractException error) {
+            if (error.isRetryable()) {
+                throw new BusinessException(ErrorCode.MARKET_DATA_UNAVAILABLE, "行情数据暂不可用，请稍后重试");
+            }
+            throw new BusinessException(ErrorCode.EXTERNAL_RESPONSE_INVALID, "行情数据返回异常");
+        }
     }
 
     private List<WatchlistItemView> listWithQuotes(List<WatchlistItem> items, boolean forceRefresh) {
