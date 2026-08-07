@@ -1,5 +1,6 @@
 package com.finscope.dao.radar;
 
+import com.finscope.common.exception.BusinessException;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,7 +73,7 @@ class RadarEventWorkspaceRepositoryTest {
 
     @Test
     void validatesDisposition() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> repository.updateState(7L, false, "DELETED", false, null));
     }
 
@@ -97,7 +98,7 @@ class RadarEventWorkspaceRepositoryTest {
 
         assertEquals(1, repository.findObservations(7L).size());
         assertEquals(system.getId(), repository.findObservations(7L).get(0).getId());
-        assertThrows(IllegalArgumentException.class, () -> repository.deleteObservation(7L, system.getId()));
+        assertThrows(BusinessException.class, () -> repository.deleteObservation(7L, system.getId()));
     }
 
     @Test

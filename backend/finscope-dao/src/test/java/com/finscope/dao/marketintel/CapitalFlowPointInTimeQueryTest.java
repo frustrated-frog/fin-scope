@@ -1,5 +1,6 @@
 package com.finscope.dao.marketintel;
 
+import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.junit.jupiter.api.BeforeEach;
@@ -92,13 +93,13 @@ class CapitalFlowPointInTimeQueryTest {
     void rejectsMissingOrReversedArgumentsBeforeAccessingSql() {
         CapitalFlowRepository disconnected = new CapitalFlowRepository(new JdbcTemplate());
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> disconnected.findDailyPointInTime(null, TO, AS_OF));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> disconnected.findDailyPointInTime(FROM, null, AS_OF));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> disconnected.findDailyPointInTime(FROM, TO, null));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> disconnected.findDailyPointInTime(TO, FROM, AS_OF));
     }
 
