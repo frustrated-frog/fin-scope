@@ -327,6 +327,8 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pydantic-settings" },
     { name = "uvicorn" },
 ]
@@ -346,6 +348,7 @@ requires-dist = [
     { name = "akshare", marker = "extra == 'ecosystem'", specifier = ">=1.17" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "numpy", specifier = ">=2,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
     { name = "pytdx", marker = "extra == 'ecosystem'", specifier = ">=1.72" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<9" },
