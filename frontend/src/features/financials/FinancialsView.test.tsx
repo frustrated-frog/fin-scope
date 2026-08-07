@@ -68,10 +68,31 @@ beforeEach(() => {
   });
 });
 
-test('opens the latest report as a three-statement analysis workbench', async () => {
+async function openDefaultReport(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('heading', { name: '已抓取财报' });
+  await user.click(screen.getByRole('button', { name: /查看 2025 年报/ }));
+  await screen.findByText('营业总收入');
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+test('shows captured reports first and opens a report detail on demand', async () => {
+  const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('heading', { name: '贵州茅台财报底稿' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '已抓取财报' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '贵州茅台' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /查看 2025 年报/ })).toBeInTheDocument();
+  expect(screen.queryByText('营业总收入')).not.toBeInTheDocument();
+  expect(screen.queryByText('公司财报分析')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: /查看 2025 年报/ }));
+
+  expect(await screen.findByRole('button', { name: '返回财报列表' })).toBeInTheDocument();
   expect(await screen.findByText('营业总收入')).toBeInTheDocument();
   expect(screen.getAllByText('利润表').length).toBeGreaterThan(0);
   expect(screen.getAllByText('资产负债表').length).toBeGreaterThan(0);
@@ -81,6 +102,55 @@ test('opens the latest report as a three-statement analysis workbench', async ()
   expect(screen.getByText('91.20%')).toBeInTheDocument();
   expect(screen.getByText('利润与经营现金流背离')).toBeInTheDocument();
   expect(screen.getByText('缺少上年同期营业收入，无法计算营收同比')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: '返回财报列表' }));
+  expect(await screen.findByRole('heading', { name: '已抓取财报' })).toBeInTheDocument();
+  expect(screen.queryByText('营业总收入')).not.toBeInTheDocument();
+});
+
+test('keeps available company archives visible when another report index fails', async () => {
+  const secondInstrument = { id: 8, code: 'AAPL', name: 'Apple Inc.', type: 'STOCK', market: 'US' };
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments') return [instrument, secondInstrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/instruments/8/reports') throw new Error('index unavailable');
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('heading', { name: '贵州茅台' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /查看 2025 年报/ })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('部分公司的财报档案加载失败');
+});
+
+test('ignores a late report detail after selecting another local company', async () => {
+  const user = userEvent.setup();
+  const detailRequest = deferred<typeof reportView>();
+  const secondInstrument = { id: 8, code: '000001', name: '平安银行', type: 'STOCK', market: 'SZ' };
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/api/financials/instruments') return [instrument, secondInstrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/instruments/8/reports') return [];
+    if (path === '/api/financials/reports/9') return detailRequest.promise;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/companies/search?q=%E5%B9%B3%E5%AE%89&limit=8') return [{
+      providerCode: 'LOCAL', providerCompanyId: '8', legalName: '平安银行', displayName: '平安银行',
+      countryCode: 'CN', capabilityLevel: 'L4', localInstrumentId: 8,
+      securities: [{ symbol: '000001', exchange: 'SZ', market: 'CN' }]
+    }];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByRole('heading', { name: '已抓取财报' });
+  await user.click(screen.getByRole('button', { name: /查看 2025 年报/ }));
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), '平安');
+  await user.click(await screen.findByRole('option', { name: /平安银行/ }));
+  detailRequest.resolve(reportView);
+
+  await waitFor(() => expect(screen.getByText('建立第一份财报底稿')).toBeInTheDocument());
+  expect(screen.queryByRole('button', { name: '返回财报列表' })).not.toBeInTheDocument();
 });
 
 test('opens a global company from name search without adding it to the watchlist', async () => {
@@ -102,12 +172,12 @@ test('opens a global company from name search without adding it to the watchlist
     throw new Error(`unexpected api call: ${path}`);
   });
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await screen.findByRole('heading', { name: '已抓取财报' });
 
   await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'Apple');
   await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
 
-  expect(screen.getByRole('heading', { name: 'Apple Inc. 财报工作台' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Apple Inc. 披露抓取' })).toBeInTheDocument();
   expect(screen.getByText('原始披露可用')).toBeInTheDocument();
   expect(screen.getByText('AAPL · Nasdaq · US')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '查看官方披露' })).toHaveAttribute(
@@ -148,12 +218,13 @@ test('fetches a selected SEC company into the local three-statement workbench', 
     throw new Error(`unexpected api call: ${path}`);
   });
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await screen.findByRole('heading', { name: '已抓取财报' });
 
   await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), 'Apple');
   await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
   await user.clear(screen.getByLabelText('报告年度'));
   await user.type(screen.getByLabelText('报告年度'), '2025');
+  await user.selectOptions(screen.getByLabelText('报告类型'), 'ANNUAL');
   await user.click(screen.getByRole('button', { name: '抓取并解析 SEC 财报' }));
 
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/financials/global/refresh', {
@@ -168,9 +239,46 @@ test('fetches a selected SEC company into the local three-statement workbench', 
       reportType: 'ANNUAL'
     })
   }));
-  expect(await screen.findByRole('heading', { name: 'Apple Inc.财报底稿' })).toBeInTheDocument();
-  expect(screen.getByText('SEC_COMPANY_FACTS')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Apple Inc. · 2025 年报' })).toBeInTheDocument();
+  expect(screen.getByText(/SEC_COMPANY_FACTS/)).toBeInTheDocument();
   expect(screen.getByText('营业总收入')).toBeInTheDocument();
+});
+
+test('does not let a late global capture replace a newly selected company', async () => {
+  const user = userEvent.setup();
+  const captureRequest = deferred<typeof reportView>();
+  const appleCompany = {
+    providerCode: 'SEC_EDGAR', providerCompanyId: 'CIK0000320193', legalName: 'Apple Inc.',
+    displayName: 'Apple Inc.', countryCode: 'US', capabilityLevel: 'L2',
+    securities: [{ symbol: 'AAPL', exchange: 'Nasdaq', market: 'US' }]
+  };
+  const googleCompany = {
+    providerCode: 'SEC_EDGAR', providerCompanyId: 'CIK0001652044', legalName: 'Alphabet Inc.',
+    displayName: 'Alphabet Inc.', countryCode: 'US', capabilityLevel: 'L2',
+    securities: [{ symbol: 'GOOGL', exchange: 'Nasdaq', market: 'US' }]
+  };
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/companies/search?q=Apple&limit=8') return [appleCompany];
+    if (path === '/api/companies/search?q=Google&limit=8') return [googleCompany];
+    if (path === '/api/financials/global/refresh' && options?.method === 'POST') return captureRequest.promise;
+    throw new Error(`unexpected api call: ${path}`);
+  });
+
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByRole('heading', { name: '已抓取财报' });
+  const search = screen.getByRole('combobox', { name: '搜索全球上市公司' });
+  await user.type(search, 'Apple');
+  await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
+  await user.click(screen.getByRole('button', { name: '抓取并解析 SEC 财报' }));
+  await user.clear(search);
+  await user.type(search, 'Google');
+  await user.click(await screen.findByRole('option', { name: /Alphabet Inc/ }));
+  captureRequest.resolve(reportView);
+
+  expect(await screen.findByRole('heading', { name: 'Alphabet Inc. 披露抓取' })).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('button', { name: '返回财报列表' })).not.toBeInTheDocument());
 });
 
 test('fetches a selected Korean company through DART XBRL', async () => {
@@ -198,7 +306,7 @@ test('fetches a selected Korean company through DART XBRL', async () => {
     throw new Error(`unexpected api call: ${path}`);
   });
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await screen.findByRole('heading', { name: '已抓取财报' });
 
   await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), '海力士');
   await user.click(await screen.findByRole('option', { name: /SK hynix Inc/ }));
@@ -208,14 +316,14 @@ test('fetches a selected Korean company through DART XBRL', async () => {
 
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/financials/global/refresh',
     expect.objectContaining({ method: 'POST' })));
-  expect(await screen.findByRole('heading', { name: 'SK hynix Inc.财报底稿' })).toBeInTheDocument();
-  expect(screen.getByText('DART_XBRL')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'SK hynix Inc. · 2025 年报' })).toBeInTheDocument();
+  expect(screen.getByText(/DART_XBRL/)).toBeInTheDocument();
 });
 
 test('switches between all three concrete statements without losing the report context', async () => {
   const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await openDefaultReport(user);
 
   await user.click(screen.getByRole('tab', { name: '资产负债表' }));
   expect(screen.getByText('资产总计')).toBeInTheDocument();
@@ -223,13 +331,13 @@ test('switches between all three concrete statements without losing the report c
 
   await user.click(screen.getByRole('tab', { name: '现金流量表' }));
   expect(screen.getByText('经营活动产生的现金流量净额')).toBeInTheDocument();
-  expect(screen.getAllByText('2025 年报').length).toBeGreaterThan(0);
+  expect(screen.getByRole('heading', { name: '贵州茅台 · 2025 年报' })).toBeInTheDocument();
 });
 
 test('switches cumulative flow statements to explicitly derived single-quarter values', async () => {
   const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await openDefaultReport(user);
 
   await user.click(screen.getByRole('tab', { name: '利润表' }));
   expect(screen.getByText('1,234.57亿')).toBeInTheDocument();
@@ -247,6 +355,11 @@ test('derives the reporting period end from the selected year and report type', 
   vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
     if (path === '/api/financials/instruments') return [instrument];
     if (path === '/api/financials/instruments/7/reports') return [];
+    if (path === '/api/companies/search?q=%E8%8C%85%E5%8F%B0&limit=8') return [{
+      providerCode: 'LOCAL', providerCompanyId: '7', legalName: '贵州茅台', displayName: '贵州茅台',
+      countryCode: 'CN', capabilityLevel: 'L4', localInstrumentId: 7,
+      securities: [{ symbol: '600519', exchange: 'SH', market: 'CN' }]
+    }];
     if (path === '/api/financials/instruments/7/refresh' && options?.method === 'POST') {
       return {
         ...reportView,
@@ -258,6 +371,9 @@ test('derives the reporting period end from the selected year and report type', 
   });
 
   render(<FinancialsView addToast={addToast} setMessage={vi.fn()} />);
+  await screen.findByRole('heading', { name: '已抓取财报' });
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), '茅台');
+  await user.click(await screen.findByRole('option', { name: /贵州茅台/ }));
   await user.clear(await screen.findByLabelText('报告年度'));
   await user.type(screen.getByLabelText('报告年度'), '2026');
   await user.selectOptions(screen.getByLabelText('报告类型'), 'Q1');
@@ -285,7 +401,7 @@ test('uploads a PDF as report evidence using multipart form data', async () => {
     throw new Error(`unexpected api call: ${path}`);
   });
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByRole('heading', { name: '贵州茅台财报底稿' });
+  await openDefaultReport(user);
 
   await user.click(screen.getByRole('tab', { name: '原文凭证' }));
   const file = new File(['%PDF-1.4'], 'report.pdf', { type: 'application/pdf' });
@@ -310,7 +426,7 @@ test('opens research analysis for the selected company and financial period', as
     throw new Error(`unexpected api call: ${path}`);
   });
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await openDefaultReport(user);
 
   await user.click(screen.getByRole('tab', { name: '研报分析' }));
 
@@ -346,7 +462,7 @@ test('offers an evidence-constrained Agent interpretation for the selected repor
   });
 
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await openDefaultReport(user);
   await user.click(screen.getByRole('tab', { name: 'Agent 解读' }));
 
   expect(await screen.findByRole('button', { name: '生成 Agent 解读' })).toBeInTheDocument();
@@ -381,7 +497,7 @@ test('keeps the previous successful interpretation visible when regeneration fai
   });
 
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await screen.findByText('营业总收入');
+  await openDefaultReport(user);
   await user.click(screen.getByRole('tab', { name: 'Agent 解读' }));
   expect(await screen.findByText('经营状态改善，收入保持增长。')).toBeInTheDocument();
 

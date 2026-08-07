@@ -49,6 +49,8 @@ export function FinancialsView({
   const [instruments, setInstruments] = useState<FinancialInstrument[]>([]);
   const [instrumentId, setInstrumentId] = useState<number>();
   const [reports, setReports] = useState<FinancialReport[]>([]);
+  const [archiveReports, setArchiveReports] = useState<Record<number, FinancialReport[]>>({});
+  const [archiveLoading, setArchiveLoading] = useState(true);
   const [view, setView] = useState<FinancialReportView>();
   const [documents, setDocuments] = useState<FinancialDocument[]>([]);
   const [externalCompany, setExternalCompany] = useState<CompanySearchResult>();
@@ -71,39 +73,34 @@ export function FinancialsView({
   useEffect(() => {
     let active = true;
     api<FinancialInstrument[]>('/api/financials/instruments')
-      .then((items) => {
+      .then(async (items) => {
         if (!active) return;
-        setInstruments(items);
-        setInstrumentId(items[0]?.id);
-        if (!items.length) setError('还没有 A 股标的。请先在自选或标的库中添加股票。');
+        setInstruments((current) => [
+          ...current,
+          ...items.filter((item) => !current.some((existing) => existing.id === item.id))
+        ]);
+        const entries = await Promise.all(items.map(async (item) => {
+          try {
+            const itemReports = await api<FinancialReport[]>(`/api/financials/instruments/${item.id}/reports`);
+            return { instrumentId: item.id, reports: itemReports, failed: false };
+          } catch {
+            return { instrumentId: item.id, reports: [] as FinancialReport[], failed: true };
+          }
+        }));
+        if (!active) return;
+        setArchiveReports((current) => {
+          const next = { ...current };
+          entries.forEach((entry) => {
+            if (!entry.failed) next[entry.instrumentId] = mergeReports(entry.reports, current[entry.instrumentId] ?? []);
+          });
+          return next;
+        });
+        if (entries.some((entry) => entry.failed)) setError('部分公司的财报档案加载失败，已展示其余可用报告。');
       })
-      .catch((reason) => setError(messageOf(reason, '财报标的加载失败')));
+      .catch((reason) => setError(messageOf(reason, '财报档案加载失败')))
+      .finally(() => { if (active) setArchiveLoading(false); });
     return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    if (!instrumentId) return;
-    const sequence = ++loadSequence.current;
-    setBusy(true);
-    setError('');
-    api<FinancialReport[]>(`/api/financials/instruments/${instrumentId}/reports`)
-      .then(async (items) => {
-        if (sequence !== loadSequence.current) return;
-        setReports(items);
-        if (!items.length) {
-          setView(undefined);
-          setDocuments([]);
-          return;
-        }
-        await loadReport(items[0].id, sequence);
-      })
-      .catch((reason) => {
-        if (sequence === loadSequence.current) setError(messageOf(reason, '本地财报档案加载失败'));
-      })
-      .finally(() => {
-        if (sequence === loadSequence.current) setBusy(false);
-      });
-  }, [instrumentId]);
 
   async function loadReport(reportId: number, sequence = ++loadSequence.current) {
     setBusy(true);
@@ -129,6 +126,7 @@ export function FinancialsView({
 
   async function refreshReport() {
     if (!instrumentId || !periodEnd) return;
+    const sequence = ++loadSequence.current;
     setBusy(true);
     setError('');
     setMessage('正在抓取并解析财报');
@@ -140,24 +138,31 @@ export function FinancialsView({
           body: JSON.stringify({ periodEnd, reportType })
         }
       );
+      setArchiveReports((current) => ({
+        ...current,
+        [instrumentId]: mergeReports(current[instrumentId] ?? [], [detail.report])
+      }));
+      if (sequence !== loadSequence.current) return;
       setView(detail);
       setReports((current) => [
         detail.report,
         ...current.filter((item) => item.id !== detail.report.id)
       ]);
       setDocuments(await api<FinancialDocument[]>(`/api/financials/reports/${detail.report.id}/documents`));
+      if (sequence !== loadSequence.current) return;
       setActiveTab('OVERVIEW');
       setPeriodMode('CUMULATIVE');
       const label = reportLabel(detail.report.periodEnd, detail.report.reportType);
       setMessage(`${label}解析完成`);
       addToast(`${label}已抓取并完成分析`, 'success');
     } catch (reason) {
+      if (sequence !== loadSequence.current) return;
       const message = messageOf(reason, '财报抓取失败');
       setError(message);
       setMessage(message);
       addToast(message, 'error');
     } finally {
-      setBusy(false);
+      if (sequence === loadSequence.current) setBusy(false);
     }
   }
 
@@ -165,6 +170,7 @@ export function FinancialsView({
     if (!externalCompany || !periodEnd || !supportsGlobalFetch(externalCompany.providerCode)) return;
     const security = externalCompany.securities[0];
     if (!security) return;
+    const sequence = ++loadSequence.current;
     const sourceName = externalCompany.providerCode === 'SEC_EDGAR' ? 'SEC' : 'DART';
     setBusy(true);
     setError('');
@@ -186,6 +192,11 @@ export function FinancialsView({
         detail.instrument,
         ...current.filter((item) => item.id !== detail.instrument.id)
       ]);
+      setArchiveReports((current) => ({
+        ...current,
+        [detail.instrument.id]: mergeReports(current[detail.instrument.id] ?? [], [detail.report])
+      }));
+      if (sequence !== loadSequence.current) return;
       setReports([detail.report]);
       setView(detail);
       setDocuments([]);
@@ -199,12 +210,13 @@ export function FinancialsView({
       setMessage(`${externalCompany.displayName} ${label}解析完成`);
       addToast(`${externalCompany.displayName} ${label}已抓取并完成分析`, 'success');
     } catch (reason) {
+      if (sequence !== loadSequence.current) return;
       const message = messageOf(reason, `${sourceName} 财报抓取失败`);
       setError(message);
       setMessage(message);
       addToast(message, 'error');
     } finally {
-      setBusy(false);
+      if (sequence === loadSequence.current) setBusy(false);
     }
   }
 
@@ -236,17 +248,53 @@ export function FinancialsView({
   }
 
   const currentInstrument = instruments.find((item) => item.id === instrumentId);
-  const currentReport = view?.report;
+  const capturedReportCount = Object.values(archiveReports).reduce((count, items) => count + items.length, 0);
+
+  async function openReport(instrument: FinancialInstrument, reportToOpen: FinancialReport) {
+    const sequence = ++loadSequence.current;
+    setExternalCompany(undefined);
+    setInstrumentId(instrument.id);
+    setReports(archiveReports[instrument.id] ?? []);
+    await loadReport(reportToOpen.id, sequence);
+  }
+
+  function returnToArchive() {
+    ++loadSequence.current;
+    setBusy(false);
+    setView(undefined);
+    setDocuments([]);
+    setReports([]);
+    setInstrumentId(undefined);
+    setExternalCompany(undefined);
+    setError('');
+  }
+
+  function chooseCaptureTarget(instrument: FinancialInstrument) {
+    ++loadSequence.current;
+    setBusy(false);
+    setExternalCompany(undefined);
+    setView(undefined);
+    setDocuments([]);
+    setInstrumentId(instrument.id);
+    setReports(archiveReports[instrument.id] ?? []);
+    setError('');
+  }
 
   function selectCompany(company: CompanySearchResult) {
     setError('');
     setActiveTab('OVERVIEW');
     if (company.localInstrumentId) {
+      ++loadSequence.current;
+      setBusy(false);
       setExternalCompany(undefined);
+      setView(undefined);
+      setDocuments([]);
       setInstrumentId(company.localInstrumentId);
+      setReports(archiveReports[company.localInstrumentId] ?? []);
       return;
     }
     ++loadSequence.current;
+    setBusy(false);
     setExternalCompany(company);
     setInstrumentId(undefined);
     setReports([]);
@@ -256,65 +304,18 @@ export function FinancialsView({
 
   return (
     <div className="financials-page">
-      <section className="global-company-command" aria-label="全球公司入口">
+      {!view && <section className="global-company-command" aria-label="全球公司入口">
         <div>
           <p className="financials-kicker">Global issuer directory</p>
-          <h3>从公司开始，而不是从自选开始</h3>
-          <p>搜索全球上市公司。打开财报不会自动加入自选，多个股票代码会归到同一公司主体。</p>
+          <h3>查找任何上市公司</h3>
+          <p>按公司名称或股票代码搜索，抓取后的报告会自动归入下方财报档案。</p>
         </div>
         <GlobalCompanySearch onSelect={selectCompany} />
-      </section>
-      <section className="financials-hero">
-        <div className="financials-hero-copy">
-          <p className="financials-kicker">Financial statement audit trail</p>
-          <h3>{externalCompany ? `${externalCompany.displayName} 财报工作台` : currentInstrument ? `${currentInstrument.name}财报底稿` : '公司财报分析'}</h3>
-          <p>把利润表、资产负债表和现金流量表放在同一条可核对链路中，先看经营事实，再看质量与风险。</p>
-        </div>
-        {!externalCompany && <div className="financials-selector">
-          <label>
-            <span>分析标的</span>
-            <select
-              aria-label="分析标的"
-              value={instrumentId ?? ''}
-              onChange={(event) => {
-                setExternalCompany(undefined);
-                setInstrumentId(Number(event.target.value));
-              }}
-            >
-              {instruments.map((item) => (
-                <option key={item.id} value={item.id}>{item.code} · {item.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>本地报告</span>
-            <select
-              aria-label="本地报告"
-              value={currentReport?.id ?? ''}
-              disabled={!reports.length}
-              onChange={(event) => loadReport(Number(event.target.value))}
-            >
-              {!reports.length && <option value="">尚未抓取</option>}
-              {reports.map((item) => (
-                <option key={item.id} value={item.id}>{reportLabel(item.periodEnd, item.reportType)}</option>
-              ))}
-            </select>
-          </label>
-        </div>}
-        {externalCompany && <GlobalCompanyIdentity company={externalCompany} />}
-        <div className="financials-assurance">
-          <span className={`financials-assurance-status ${(currentReport?.qualityStatus ?? 'UNVERIFIED').toLowerCase()}`}>
-            {qualityLabels[currentReport?.qualityStatus ?? 'UNVERIFIED']}
-          </span>
-          <dl>
-            <div><dt>数据源</dt><dd>{currentReport?.sourceCode || '等待抓取'}</dd></div>
-            <div><dt>口径</dt><dd>{currentReport?.scope === 'CONSOLIDATED' ? '合并口径' : currentReport?.scope || '—'}</dd></div>
-            <div><dt>审计</dt><dd>{currentReport?.audited ? '已审计' : '未标记'}</dd></div>
-          </dl>
-        </div>
-      </section>
+      </section>}
 
-      <section className="financials-fetch-strip" aria-label="财报抓取">
+      {!view && (externalCompany || currentInstrument) && <>
+        {externalCompany && <GlobalCompanyIdentity company={externalCompany} />}
+        <section className="financials-fetch-strip" aria-label="财报抓取">
         <div>
           <strong>{externalCompany
             ? externalCompany.providerCode === 'SEC_EDGAR' ? '从 SEC 建立财报底稿'
@@ -369,17 +370,27 @@ export function FinancialsView({
             : externalCompany?.providerCode === 'KRX_KIND' ? '抓取并解析 DART 财报'
             : externalCompany ? '等待数据源接入' : '抓取并解析财报'}
         </button>
-      </section>
+        </section>
+      </>}
 
       {error && <div className="financials-alert" role="alert">{error}</div>}
 
       {externalCompany ? <GlobalCompanyWorkspace company={externalCompany} /> : view ? (
         <>
+          <button className="financials-detail-back" type="button" onClick={returnToArchive}>
+            <span aria-hidden="true">←</span> 返回财报列表
+          </button>
           <section className="financials-report-bar">
             <div>
-              <p>{view.instrument.code} · {view.instrument.market}</p>
-              <strong>{reportLabel(view.report.periodEnd, view.report.reportType)}</strong>
+              <p>{view.instrument.code} · {view.instrument.market} · {view.report.sourceCode}</p>
+              <h2>{view.instrument.name} · {reportLabel(view.report.periodEnd, view.report.reportType)}</h2>
               {view.report.warningMessage && <span>{view.report.warningMessage}</span>}
+            </div>
+            <div className="financials-report-assurance">
+              <span className={`financials-assurance-status ${view.report.qualityStatus.toLowerCase()}`}>
+                {qualityLabels[view.report.qualityStatus]}
+              </span>
+              <small>{view.report.scope === 'CONSOLIDATED' ? '合并口径' : view.report.scope} · {view.report.audited ? '已审计' : '未标记审计'}</small>
             </div>
             <div className="financials-view-controls">
               <div className="financials-period-switch" aria-label="报表期间口径">
@@ -455,16 +466,106 @@ export function FinancialsView({
             />
           )}
         </>
-      ) : (
-        <section className="financials-first-run">
-          <span aria-hidden="true">三表</span>
-          <div>
-            <h3>选择报告期，建立第一份可复算底稿</h3>
-            <p>系统会抓取结构化利润表、资产负债表和现金流量表，并计算现金含量、利润率、负债水平与异常增长关系。</p>
-          </div>
-        </section>
-      )}
+      ) : <FinancialReportArchive
+        instruments={instruments}
+        reportsByInstrument={archiveReports}
+        loading={archiveLoading}
+        reportCount={capturedReportCount}
+        captureInstrumentId={instrumentId}
+        onOpenReport={openReport}
+        onCapture={chooseCaptureTarget}
+      />}
     </div>
+  );
+}
+
+function FinancialReportArchive({
+  instruments,
+  reportsByInstrument,
+  loading,
+  reportCount,
+  captureInstrumentId,
+  onOpenReport,
+  onCapture
+}: {
+  instruments: FinancialInstrument[];
+  reportsByInstrument: Record<number, FinancialReport[]>;
+  loading: boolean;
+  reportCount: number;
+  captureInstrumentId?: number;
+  onOpenReport: (instrument: FinancialInstrument, report: FinancialReport) => void;
+  onCapture: (instrument: FinancialInstrument) => void;
+}) {
+  const archivedInstruments = instruments.filter((instrument) => (reportsByInstrument[instrument.id] ?? []).length > 0);
+  return (
+    <section className="financials-archive">
+      <header className="financials-archive-header">
+        <div>
+          <p className="financials-section-kicker">Local filing archive</p>
+          <h2>已抓取财报</h2>
+          <p>按公司归档本地报告。选择一份报告，进入三表、质量检查与 Agent 解读详情。</p>
+        </div>
+        <dl>
+          <div><dt>公司</dt><dd>{archivedInstruments.length}</dd></div>
+          <div><dt>报告</dt><dd>{reportCount}</dd></div>
+        </dl>
+      </header>
+
+      {loading ? <div className="financials-archive-empty">正在整理本地财报档案…</div> : archivedInstruments.length ? (
+        <div className="financials-company-list">
+          {archivedInstruments.map((instrument) => {
+            const companyReports = reportsByInstrument[instrument.id] ?? [];
+            return (
+              <article className="financials-company-group" key={instrument.id}>
+                <header className="financials-company-header">
+                  <div className="financials-company-identity">
+                    <span>{instrument.market}</span>
+                    <div>
+                      <h3>{instrument.name}</h3>
+                      <p>{instrument.code} · {companyReports.length} 份本地报告</p>
+                    </div>
+                  </div>
+                  <button
+                    className={captureInstrumentId === instrument.id ? 'active' : ''}
+                    type="button"
+                    aria-label={`抓取 ${instrument.name} 新报告`}
+                    onClick={() => onCapture(instrument)}
+                  >
+                    {captureInstrumentId === instrument.id ? '已选择抓取' : '抓取新报告'}
+                  </button>
+                </header>
+                {companyReports.length ? (
+                  <div className="financials-company-reports">
+                    {companyReports.map((item) => (
+                      <button
+                        className="financials-report-row"
+                        type="button"
+                        key={item.id}
+                        aria-label={`查看 ${reportLabel(item.periodEnd, item.reportType)} · ${instrument.name}`}
+                        onClick={() => onOpenReport(instrument, item)}
+                      >
+                        <time dateTime={item.periodEnd}>{item.periodEnd.slice(0, 4)}</time>
+                        <strong>{reportLabel(item.periodEnd, item.reportType)}</strong>
+                        <span>{item.sourceCode}</span>
+                        <span className={`financials-report-status ${item.qualityStatus.toLowerCase()}`}>
+                          {qualityLabels[item.qualityStatus]}
+                        </span>
+                        <small>{item.audited ? '已审计' : '未标记审计'} <b aria-hidden="true">→</b></small>
+                      </button>
+                    ))}
+                  </div>
+                ) : <div className="financials-company-empty">尚未抓取报告，可从这里建立第一份财报底稿。</div>}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="financials-archive-empty">
+          <strong>还没有已抓取财报</strong>
+          <span>在上方输入公司名称或股票代码，选择报告期后即可建立第一份本地档案。</span>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -490,7 +591,7 @@ function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
       <div className="global-company-workspace-mark" aria-hidden="true">{company.countryCode ?? 'GL'}</div>
       <div>
         <p className="financials-section-kicker">Disclosure capability</p>
-        <h4>公司主体已经识别</h4>
+        <h4>{company.displayName} 披露抓取</h4>
         <p>
           {company.providerCode === 'SEC_EDGAR'
             ? '已关联 SEC 公司主体和全部上市代码。选择财年与报告类型后，可直接抓取 Company Facts 并生成本地三表底稿。'
@@ -666,6 +767,12 @@ function DocumentsPanel({
       </div>
     </section>
   );
+}
+
+function mergeReports(current: FinancialReport[], incoming: FinancialReport[]) {
+  const reportsById = new Map(current.map((report) => [report.id, report]));
+  incoming.forEach((report) => reportsById.set(report.id, report));
+  return Array.from(reportsById.values()).sort((left, right) => right.periodEnd.localeCompare(left.periodEnd));
 }
 
 function messageOf(reason: unknown, fallback: string) {
