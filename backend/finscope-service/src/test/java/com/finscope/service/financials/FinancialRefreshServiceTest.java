@@ -10,6 +10,7 @@ import com.finscope.domain.financials.FinancialStatementType;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.financials.ExternalFinancialStatements;
 import com.finscope.rpc.financials.StructuredFinancialDataGateway;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +19,12 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -29,6 +33,33 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FinancialRefreshServiceTest {
+    @Test
+    void refreshAppliesATotalProviderDeadline() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        Instrument stock = stock();
+        when(instruments.findById(7L)).thenReturn(Optional.of(stock));
+        AtomicLong remainingMillis = new AtomicLong(Long.MAX_VALUE);
+        StructuredFinancialDataGateway gateway = new StructuredFinancialDataGateway() {
+            public boolean supports(Instrument instrument) { return true; }
+            public String providerCode() { return "DEADLINE_TEST"; }
+            public ExternalFinancialStatements fetch(Instrument instrument, LocalDate periodEnd,
+                                                     FinancialReportType reportType) {
+                remainingMillis.set(ProviderCallDeadline.remainingMillis());
+                throw new IllegalStateException("stop after observing deadline");
+            }
+        };
+        FinancialRefreshService service = new FinancialRefreshService(
+                instruments, mock(FinancialReportRepository.class), gateway,
+                new FinancialAnalysisEngine(), new QuarterDerivationEngine());
+
+        assertThrows(IllegalStateException.class, () -> service.refresh(
+                7L, LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL));
+
+        assertTrue(remainingMillis.get() > 0L);
+        assertTrue(remainingMillis.get() <= 60_000L);
+        assertEquals(Long.MAX_VALUE, ProviderCallDeadline.remainingMillis());
+    }
+
     @Test
     void refreshDoesNotHoldADatabaseTransactionAcrossRemoteFetches() throws Exception {
         assertNull(FinancialRefreshService.class

@@ -15,9 +15,11 @@ import com.finscope.domain.financials.FinancialValueOrigin;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.financials.ExternalFinancialStatements;
 import com.finscope.rpc.financials.StructuredFinancialDataGateway;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -28,6 +30,7 @@ import java.util.Optional;
 
 @Service
 public class FinancialRefreshService {
+    private static final Duration REFRESH_TIMEOUT = Duration.ofSeconds(60);
     private final InstrumentRepository instruments;
     private final FinancialReportRepository reports;
     private final StructuredFinancialDataGateway gateway;
@@ -50,7 +53,15 @@ public class FinancialRefreshService {
                                        FinancialReportType reportType) {
         Instrument instrument = instruments.findById(instrumentId)
                 .orElseThrow(() -> new ResourceNotFoundException("标的不存在：" + instrumentId));
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(REFRESH_TIMEOUT)) {
+            return refreshWithinDeadline(instrument, periodEnd, reportType);
+        }
+    }
+
+    private FinancialReportView refreshWithinDeadline(Instrument instrument, LocalDate periodEnd,
+                                                       FinancialReportType reportType) {
         ExternalFinancialStatements external = gateway.fetch(instrument, periodEnd, reportType);
+        Long instrumentId = instrument.getId();
         FinancialReport report = toReport(instrumentId, external);
         reports.saveReport(report);
         List<FinancialLineItem> lineItems = toLineItems(report.getId(), external);

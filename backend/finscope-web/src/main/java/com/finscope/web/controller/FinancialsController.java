@@ -100,14 +100,14 @@ public class FinancialsController {
      *
      * @param id 标的 ID。
      * @param request 财报刷新请求，包含报告期和报告类型。
-     * @return 202 Accepted 响应，响应体为刷新后的财报详情视图。
+     * @return 200 OK 响应，响应体为刷新后的财报详情视图。
      */
     @PostMapping("/instruments/{id}/refresh")
     public ResponseEntity<ApiResponse<FinancialReportView>> refresh(
             @PathVariable Long id,
             @Valid @RequestBody FinancialRefreshRequest request) {
         FinancialReportView result = refresh.refresh(id, request.getPeriodEnd(), request.getReportType());
-        return ResponseEntity.accepted().body(ApiResponses.success(result));
+        return ResponseEntity.ok(ApiResponses.success(result));
     }
 
     @PostMapping("/global/refresh")
@@ -117,7 +117,7 @@ public class FinancialsController {
                 request.getProviderCode(), request.getProviderCompanyId(),
                 request.getDisplayName(), request.getSymbol(), request.getExchange(),
                 request.getPeriodEnd(), request.getReportType());
-        return ResponseEntity.accepted().body(ApiResponses.success(result));
+        return ResponseEntity.ok(ApiResponses.success(result));
     }
 
     /**

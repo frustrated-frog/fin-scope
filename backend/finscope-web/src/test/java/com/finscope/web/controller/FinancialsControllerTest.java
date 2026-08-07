@@ -88,7 +88,7 @@ class FinancialsControllerTest {
     }
 
     @Test
-    void refreshesRequestedReportAndReturnsAcceptedEnvelope() throws Exception {
+    void refreshesRequestedReportAndReturnsOkEnvelope() throws Exception {
         FinancialReport report = new FinancialReport();
         report.setId(9L);
         report.setPeriodEnd(LocalDate.of(2026, 6, 30));
@@ -101,7 +101,7 @@ class FinancialsControllerTest {
         mockMvc.perform(post("/api/financials/instruments/7/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"periodEnd\":\"2026-06-30\",\"reportType\":\"HALF_YEAR\"}"))
-                .andExpect(status().isAccepted())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.report.id").value(9))
                 .andExpect(jsonPath("$.data.report.reportType").value("HALF_YEAR"));
     }
@@ -126,7 +126,7 @@ class FinancialsControllerTest {
                                 + "\"displayName\":\"Apple Inc.\",\"symbol\":\"AAPL\","
                                 + "\"exchange\":\"Nasdaq\",\"periodEnd\":\"2025-12-31\","
                                 + "\"reportType\":\"ANNUAL\"}"))
-                .andExpect(status().isAccepted())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.report.id").value(19))
                 .andExpect(jsonPath("$.data.report.periodEnd").value("2025-09-27"));
     }

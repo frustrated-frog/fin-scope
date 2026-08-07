@@ -2,12 +2,14 @@ package com.finscope.rpc.search;
 
 import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,6 +22,37 @@ class TavilyWebSearchClientTest {
     @AfterEach
     void stopServer() {
         if (server != null) server.stop(0);
+    }
+
+    @Test
+    void honorsTheSharedProviderDeadline() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/search", exchange -> {
+            try {
+                Thread.sleep(200L);
+                byte[] body = "{\"results\":[]}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                Thread.sleep(500L);
+                exchange.getResponseBody().write(body);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        TavilyWebSearchClient provider = new TavilyWebSearchClient(true, "test-key",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/search", 2000);
+
+        long startedAt = System.nanoTime();
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofMillis(300))) {
+            assertThrows(Exception.class, () -> provider.search(
+                    new WebSearchRequest("market", 3, "cn", "zh")));
+        }
+        long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - startedAt);
+        org.junit.jupiter.api.Assertions.assertTrue(elapsedMillis < 450L,
+                "deadline should stop both response phases, elapsed=" + elapsedMillis);
     }
 
     @Test

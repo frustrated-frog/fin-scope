@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -89,7 +90,9 @@ public class TavilyWebSearchClient implements WebSearchProvider {
         body.put("search_depth", "basic");
         body.put("topic", "news");
 
-        String response = post(endpoint, objectMapper.writeValueAsString(body));
+        String jsonBody = objectMapper.writeValueAsString(body);
+        String response = DeadlineBoundSearchCall.execute(
+                providerCode(), () -> post(endpoint, jsonBody));
         JsonNode root = objectMapper.readTree(response);
         JsonNode items = root.path("results");
         if (!items.isArray()) {
@@ -141,39 +144,66 @@ public class TavilyWebSearchClient implements WebSearchProvider {
     }
 
     private String post(String urlText, String jsonBody) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(timeoutMs);
-        connection.setReadTimeout(timeoutMs);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Accept", "application/json");
-        try (OutputStream os = connection.getOutputStream()) {
-            os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+        HttpURLConnection connection = null;
+        try {
+            int effectiveTimeoutMs = effectiveTimeoutMs();
+            connection = (HttpURLConnection) new URL(urlText).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(effectiveTimeoutMs);
+            connection.setReadTimeout(effectiveTimeoutMs);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            try (OutputStream os = connection.getOutputStream()) {
+                os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+            }
+            connection.setReadTimeout(effectiveTimeoutMs());
+            int code = connection.getResponseCode();
+            connection.setReadTimeout(effectiveTimeoutMs());
+            InputStream in = code >= 200 && code < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+            String responseText = readAll(in, connection);
+            if (code < 200 || code >= 300) {
+                throw new WebSearchProviderException(providerCode(), code,
+                        code == 429 || code >= 500,
+                        providerCode() + " request failed with HTTP " + code);
+            }
+            return responseText;
+        } finally {
+            if (connection != null) connection.disconnect();
         }
-        int code = connection.getResponseCode();
-        InputStream in = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
-        String responseText = readAll(in);
-        connection.disconnect();
-        if (code < 200 || code >= 300) {
-            throw new WebSearchProviderException(providerCode(), code,
-                    code == 429 || code >= 500,
-                    providerCode() + " request failed with HTTP " + code);
-        }
-        return responseText;
     }
 
-    private String readAll(InputStream in) throws Exception {
+    private String readAll(InputStream in, HttpURLConnection connection) throws Exception {
         if (in == null) {
             return "";
         }
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];
         int read;
-        while ((read = in.read(chunk)) != -1) {
+        while (true) {
+            connection.setReadTimeout(effectiveTimeoutMs());
+            read = in.read(chunk);
+            ensureDeadline();
+            if (read == -1) break;
             buffer.write(chunk, 0, read);
         }
         return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private int effectiveTimeoutMs() throws WebSearchProviderException {
+        long remaining = ProviderCallDeadline.remainingMillis();
+        if (remaining <= 0L) throw deadlineExceeded();
+        return (int) Math.max(1L, Math.min((long) timeoutMs, remaining));
+    }
+
+    private void ensureDeadline() throws WebSearchProviderException {
+        if (ProviderCallDeadline.remainingMillis() <= 0L) throw deadlineExceeded();
+    }
+
+    private WebSearchProviderException deadlineExceeded() {
+        return new WebSearchProviderException(providerCode(), 0, true,
+                providerCode() + " request exceeded provider deadline");
     }
 
     private String text(JsonNode node, String field) {

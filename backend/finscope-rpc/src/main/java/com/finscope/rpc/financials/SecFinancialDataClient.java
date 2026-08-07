@@ -25,6 +25,7 @@ import java.util.Map;
 @Component
 public class SecFinancialDataClient implements StructuredFinancialDataGateway {
     private static final String SOURCE = "SEC_COMPANY_FACTS";
+    private static final int MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
     private static final URI BASE_URI = URI.create("https://data.sec.gov/api/xbrl/companyfacts/");
     private static final List<Concept> CONCEPTS = concepts();
 
@@ -57,7 +58,7 @@ public class SecFinancialDataClient implements StructuredFinancialDataGateway {
         headers.put("Accept", "application/json");
         headers.put("User-Agent", "FinScope/0.1 support@finscope.local");
         try {
-            FinanceHttpResponse response = http.get(SOURCE, uri, headers, 8 * 1024 * 1024);
+            FinanceHttpResponse response = http.get(SOURCE, uri, headers, MAX_RESPONSE_BYTES);
             if (response.getStatus() < 200 || response.getStatus() >= 300) {
                 throw new ProviderContractException("SEC_COMPANY_FACTS_HTTP_ERROR",
                         "SEC Company Facts 请求失败：HTTP " + response.getStatus(), true);

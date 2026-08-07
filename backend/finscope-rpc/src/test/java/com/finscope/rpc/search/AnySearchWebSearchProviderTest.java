@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -28,6 +30,34 @@ class AnySearchWebSearchProviderTest {
     @AfterEach
     void stopServer() {
         if (server != null) server.stop(0);
+    }
+
+    @Test
+    void honorsTheSharedProviderDeadline() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/search", exchange -> {
+            try {
+                Thread.sleep(200L);
+                byte[] body = "{\"data\":[]}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                Thread.sleep(500L);
+                exchange.getResponseBody().write(body);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+
+        long startedAt = System.nanoTime();
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofMillis(300))) {
+            assertThrows(Exception.class, () -> provider("secret-key").search(
+                    new WebSearchRequest("market", 3, "cn", "zh")));
+        }
+        long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - startedAt);
+        assertTrue(elapsedMillis < 450L, "deadline should stop both response phases, elapsed=" + elapsedMillis);
     }
 
     @Test

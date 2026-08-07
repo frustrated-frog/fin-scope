@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -66,7 +67,9 @@ public class AnySearchWebSearchProvider implements WebSearchProvider {
         if (!request.getLanguage().isEmpty()) body.put("language", request.getLanguage());
         body.put("format", "json");
 
-        JsonNode root = objectMapper.readTree(post(objectMapper.writeValueAsString(body)));
+        String jsonBody = objectMapper.writeValueAsString(body);
+        JsonNode root = objectMapper.readTree(DeadlineBoundSearchCall.execute(
+                providerCode(), () -> post(jsonBody)));
         JsonNode items = root.path("data");
         if (items.isObject()) items = items.path("results");
         if (!items.isArray()) items = root.path("results");
@@ -91,36 +94,47 @@ public class AnySearchWebSearchProvider implements WebSearchProvider {
     }
 
     private String post(String jsonBody) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(timeoutMs);
-        connection.setReadTimeout(timeoutMs);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Accept", "application/json");
-        if (!apiKey.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-        try (OutputStream output = connection.getOutputStream()) {
-            output.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+        HttpURLConnection connection = null;
+        try {
+            int effectiveTimeoutMs = effectiveTimeoutMs();
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(effectiveTimeoutMs);
+            connection.setReadTimeout(effectiveTimeoutMs);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            if (!apiKey.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+            }
+            connection.setReadTimeout(effectiveTimeoutMs());
+            int status = connection.getResponseCode();
+            connection.setReadTimeout(effectiveTimeoutMs());
+            InputStream input = status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+            String response = readLimited(input, connection);
+            if (status < 200 || status >= 300) {
+                throw new WebSearchProviderException(providerCode(), status,
+                        status == 429 || status >= 500,
+                        providerCode() + " request failed with HTTP " + status);
+            }
+            return response;
+        } finally {
+            if (connection != null) connection.disconnect();
         }
-        int status = connection.getResponseCode();
-        InputStream input = status >= 200 && status < 300
-                ? connection.getInputStream() : connection.getErrorStream();
-        String response = readLimited(input);
-        connection.disconnect();
-        if (status < 200 || status >= 300) {
-            throw new WebSearchProviderException(providerCode(), status,
-                    status == 429 || status >= 500,
-                    providerCode() + " request failed with HTTP " + status);
-        }
-        return response;
     }
 
-    private String readLimited(InputStream input) throws Exception {
+    private String readLimited(InputStream input, HttpURLConnection connection) throws Exception {
         if (input == null) return "";
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];
         int read;
-        while ((read = input.read(chunk)) >= 0) {
+        while (true) {
+            connection.setReadTimeout(effectiveTimeoutMs());
+            read = input.read(chunk);
+            ensureDeadline();
+            if (read < 0) break;
             if (buffer.size() + read > maxResponseBytes) {
                 throw new WebSearchProviderException(providerCode(), 0, false,
                         providerCode() + " response exceeded size limit");
@@ -128,6 +142,21 @@ public class AnySearchWebSearchProvider implements WebSearchProvider {
             buffer.write(chunk, 0, read);
         }
         return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private int effectiveTimeoutMs() throws WebSearchProviderException {
+        long remaining = ProviderCallDeadline.remainingMillis();
+        if (remaining <= 0L) throw deadlineExceeded();
+        return (int) Math.max(1L, Math.min((long) timeoutMs, remaining));
+    }
+
+    private void ensureDeadline() throws WebSearchProviderException {
+        if (ProviderCallDeadline.remainingMillis() <= 0L) throw deadlineExceeded();
+    }
+
+    private WebSearchProviderException deadlineExceeded() {
+        return new WebSearchProviderException(providerCode(), 0, true,
+                providerCode() + " request exceeded provider deadline");
     }
 
     private String extractDomain(String url) {

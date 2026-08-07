@@ -8,6 +8,7 @@ import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.search.WebSearchProvider;
 import org.jsoup.Jsoup;
@@ -33,6 +34,7 @@ import java.util.regex.Pattern;
 @Component
 @Slf4j
 public class DartFinancialDataClient implements StructuredFinancialDataGateway {
+    private static final int MAX_CANDIDATES_PER_REFRESH = 5;
     private static final String BASE = "https://opendart.fss.or.kr";
     private static final String ENGLISH_DART = "https://englishdart.fss.or.kr";
     private static final Pattern RCP_NO = Pattern.compile("(?:rcpNo=|/)(\\d{14})(?:$|[^0-9])");
@@ -69,10 +71,13 @@ public class DartFinancialDataClient implements StructuredFinancialDataGateway {
             throw error("DART_INSTRUMENT_UNSUPPORTED", "缺少韩国股票代码，无法抓取 DART 财报");
         }
         ProviderContractException lastError = null;
+        int attempted = 0;
         for (String rcpNo : discoverFilings(instrument, periodEnd, reportType)) {
+            if (attempted++ >= MAX_CANDIDATES_PER_REFRESH) break;
             try {
                 return fetchCandidate(instrument, rcpNo, periodEnd, reportType);
             } catch (ProviderContractException error) {
+                propagateTimeout(error, "DART XBRL 抓取超时");
                 lastError = error;
                 log.warn("DART XBRL 候选不匹配 rcpNo={} message={}", rcpNo, error.getMessage());
             }
@@ -130,6 +135,7 @@ public class DartFinancialDataClient implements StructuredFinancialDataGateway {
     private List<String> discoverFilings(Instrument instrument, LocalDate periodEnd,
                                          FinancialReportType reportType) {
         List<String> official = discoverOfficialFilings(instrument, periodEnd, reportType);
+        ensureDeadline("DART 官方披露检索超时");
         if (!official.isEmpty()) return official;
 
         String symbol = alias(instrument, "KRX_SYMBOL:");
@@ -150,8 +156,10 @@ public class DartFinancialDataClient implements StructuredFinancialDataGateway {
                 if (!search.isConfigured()) continue;
                 try {
                     List<SearchResult> results = search.search(new WebSearchRequest(query, 8, "", "en"));
+                    ensureDeadline("DART 披露搜索超时");
                     for (SearchResult result : results) addRcpNo(candidates, result.getUrl());
                 } catch (Exception error) {
+                    propagateTimeout(error, "DART 披露搜索超时");
                     log.warn("DART 披露搜索失败 provider={} message={}",
                             search.providerCode(), error.getMessage());
                 }
@@ -211,10 +219,29 @@ public class DartFinancialDataClient implements StructuredFinancialDataGateway {
                 if (!candidates.contains(filing.group(1))) candidates.add(filing.group(1));
             }
         } catch (Exception error) {
+            propagateTimeout(error, "DART 官方披露检索超时");
             log.warn("DART 官方披露检索失败 company={} message={}",
                     instrument.getName(), error.getMessage());
         }
         return candidates;
+    }
+
+    private void propagateTimeout(Exception error, String message) {
+        if (error instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+            throw new ProviderContractException("TIMEOUT", message, true, error);
+        }
+        if (error instanceof ProviderContractException
+                && "TIMEOUT".equals(((ProviderContractException) error).getErrorType())) {
+            throw (ProviderContractException) error;
+        }
+        if (ProviderCallDeadline.remainingMillis() <= 0L)
+            throw new ProviderContractException("TIMEOUT", message, true, error);
+    }
+
+    private void ensureDeadline(String message) {
+        if (ProviderCallDeadline.remainingMillis() <= 0L)
+            throw new ProviderContractException("TIMEOUT", message, true);
     }
 
     private Element selectCorpCode(Document document, String symbol) {

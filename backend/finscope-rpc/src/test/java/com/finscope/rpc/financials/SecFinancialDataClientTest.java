@@ -12,12 +12,35 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecFinancialDataClientTest {
+    @Test
+    void allowsCompanyFactsResponsesUpToSixteenMebibytes() {
+        AtomicInteger responseLimit = new AtomicInteger();
+        FinanceHttpClient http = new FinanceHttpClient() {
+            public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers) {
+                throw new AssertionError("SEC client should provide an explicit response limit");
+            }
+
+            public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers,
+                                           int maxResponseBytes) {
+                responseLimit.set(maxResponseBytes);
+                return new FinanceHttpResponse(200, annualCompanyFacts(),
+                        Instant.parse("2026-08-08T00:00:00Z"), "facts-hash");
+            }
+        };
+
+        new SecFinancialDataClient(http).fetch(
+                apple(), LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL);
+
+        assertEquals(16 * 1024 * 1024, responseLimit.get());
+    }
+
     @Test
     void fetchesAnAnnualFilingByFiscalYearAndMapsAllThreeStatements() {
         AtomicReference<URI> requested = new AtomicReference<URI>();

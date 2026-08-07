@@ -7,20 +7,146 @@ import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
+import com.finscope.rpc.marketintel.ProviderCallDeadline;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.search.WebSearchProvider;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DartFinancialDataClientTest {
+    @Test
+    void propagatesInterruptedWebSearchAsRetryableTimeout() {
+        FinanceHttpClient http = new FinanceHttpClient() {
+            public FinanceHttpResponse get(String provider, java.net.URI uri,
+                                           java.util.Map<String, String> headers) {
+                throw new AssertionError("candidate fetch should not start after interruption");
+            }
+
+            public FinanceHttpResponse postForm(String provider, java.net.URI uri, String body,
+                                                java.util.Map<String, String> headers) {
+                return ok("<html></html>");
+            }
+        };
+        WebSearchProvider interrupted = new WebSearchProvider() {
+            public String providerCode() { return "INTERRUPTED"; }
+            public boolean isConfigured() { return true; }
+            public List<SearchResult> search(WebSearchRequest request) throws Exception {
+                throw new InterruptedException("cancelled");
+            }
+        };
+
+        try {
+            ProviderContractException error = assertThrows(ProviderContractException.class,
+                    () -> new DartFinancialDataClient(http,
+                            Collections.singletonList(interrupted)).fetch(
+                            skHynix(), LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL));
+
+            assertEquals("TIMEOUT", error.getErrorType());
+            assertTrue(error.isRetryable());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void propagatesOfficialDisclosureSearchTimeout() {
+        FinanceHttpClient http = new FinanceHttpClient() {
+            public FinanceHttpResponse get(String provider, java.net.URI uri,
+                                           java.util.Map<String, String> headers) {
+                throw new AssertionError("candidate fetch should not start after search timeout");
+            }
+
+            public FinanceHttpResponse postForm(String provider, java.net.URI uri, String body,
+                                                java.util.Map<String, String> headers) {
+                throw new ProviderContractException("TIMEOUT", "official search timed out", true);
+            }
+        };
+
+        ProviderContractException error = assertThrows(ProviderContractException.class,
+                () -> new DartFinancialDataClient(http, Collections.emptyList()).fetch(
+                        skHynix(), LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL));
+
+        assertEquals("TIMEOUT", error.getErrorType());
+        assertTrue(error.isRetryable());
+    }
+
+    @Test
+    void propagatesExhaustedDeadlineFromWebSearchFallback() {
+        FinanceHttpClient http = new FinanceHttpClient() {
+            public FinanceHttpResponse get(String provider, java.net.URI uri,
+                                           java.util.Map<String, String> headers) {
+                throw new AssertionError("candidate fetch should not start after search timeout");
+            }
+
+            public FinanceHttpResponse postForm(String provider, java.net.URI uri, String body,
+                                                java.util.Map<String, String> headers) {
+                return ok("<html></html>");
+            }
+        };
+        WebSearchProvider search = new WebSearchProvider() {
+            public String providerCode() { return "SLOW_SEARCH"; }
+            public boolean isConfigured() { return true; }
+            public List<SearchResult> search(WebSearchRequest request) throws Exception {
+                Thread.sleep(50L);
+                return Collections.emptyList();
+            }
+        };
+
+        ProviderContractException error;
+        try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(Duration.ofMillis(20))) {
+            error = assertThrows(ProviderContractException.class,
+                    () -> new DartFinancialDataClient(http, Collections.singletonList(search)).fetch(
+                            skHynix(), LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL));
+        }
+
+        assertEquals("TIMEOUT", error.getErrorType());
+        assertTrue(error.isRetryable());
+    }
+
+    @Test
+    void limitsOfficialDisclosureCandidatesPerRefresh() {
+        AtomicInteger candidateRequests = new AtomicInteger();
+        FinanceHttpClient http = new FinanceHttpClient() {
+            public FinanceHttpResponse get(String provider, java.net.URI uri,
+                                           java.util.Map<String, String> headers) {
+                candidateRequests.incrementAndGet();
+                return ok("<html><head><title>Other Corp/Annual Report</title></head></html>");
+            }
+
+            public FinanceHttpResponse postForm(String provider, java.net.URI uri, String body,
+                                                java.util.Map<String, String> headers) {
+                if (uri.getPath().endsWith("/searchCorp.ax")) {
+                    return ok("<input type='hidden' name='hiddenCikCD1' value='00164779'>");
+                }
+                StringBuilder filings = new StringBuilder();
+                for (int index = 1; index <= 8; index++) {
+                    filings.append("<a href='/dsbh001/main.do?rcpNo=202603170000")
+                            .append(String.format("%02d", index)).append("'>Annual Report</a>");
+                }
+                return ok(filings.toString());
+            }
+        };
+
+        assertThrows(RuntimeException.class, () -> new DartFinancialDataClient(
+                http, Collections.emptyList()).fetch(
+                skHynix(), LocalDate.of(2025, 12, 31), FinancialReportType.ANNUAL));
+
+        assertEquals(5, candidateRequests.get());
+    }
+
     @Test
     void usesTheOfficialDartDisclosureSearchBeforeWebSearch() {
         AtomicReference<String> form = new AtomicReference<String>();
