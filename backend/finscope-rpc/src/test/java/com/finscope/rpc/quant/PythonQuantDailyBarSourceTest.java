@@ -42,6 +42,21 @@ class PythonQuantDailyBarSourceTest {
     }
 
     @Test
+    void requestsUpToFiveThousandBarsForSingleStockResearch() {
+        AtomicReference<URI> requested = new AtomicReference<URI>();
+        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+                "http://127.0.0.1:8000",
+                (provider, uri, headers) -> {
+                    requested.set(uri);
+                    return response(payload("QFQ", "FRESH_PRIMARY"));
+                });
+
+        source.fetch("600519.SH", 5000);
+
+        assertEquals("limit=5000", requested.get().getQuery());
+    }
+
+    @Test
     void rejectsUnadjustedBarsInsteadOfSilentlyMixingPriceSemantics() {
         PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
                 "http://127.0.0.1:8000",

@@ -45,7 +45,7 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
         if (!matcher.matches()) {
             throw contract("INVALID_INSTRUMENT", "instrument code must use 600519.SH format", false);
         }
-        int normalizedLimit = Math.max(1, Math.min(limit, 1000));
+        int normalizedLimit = Math.max(1, Math.min(limit, 5000));
         URI uri = URI.create(baseUrl + "/v1/stocks/" + matcher.group(2) + "/"
                 + matcher.group(1) + "/daily-bars?limit=" + normalizedLimit);
         try {
