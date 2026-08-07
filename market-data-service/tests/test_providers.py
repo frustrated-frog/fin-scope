@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -309,6 +310,130 @@ def test_pytdx_mapping_provides_independent_daily_bar_fallback() -> None:
     assert bars[0].amount == 3_565_850_000
 
 
+@pytest.mark.asyncio
+async def test_pytdx_paginates_long_history_and_marks_every_bar_qfq() -> None:
+    latest = date(2026, 8, 7)
+    rows = [
+        {
+            "datetime": (latest - timedelta(days=offset)).isoformat() + " 15:00",
+            "open": 10.0,
+            "high": 10.2,
+            "low": 9.8,
+            "close": 10.1,
+            "vol": 100,
+            "amount": 1010,
+        }
+        for offset in reversed(range(805))
+    ]
+
+    class FakeApi:
+        def __init__(self) -> None:
+            self.bar_calls: list[tuple[int, int]] = []
+
+        def connect(self, host: str, port: int, time_out: int) -> bool:
+            return True
+
+        def get_security_bars(
+            self, category: int, market: int, code: str, start: int, count: int
+        ) -> list[dict[str, Any]]:
+            self.bar_calls.append((start, count))
+            if start == 0:
+                return rows[-800:]
+            if start == 800:
+                return rows[:5]
+            return []
+
+        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
+            return []
+
+        def disconnect(self) -> None:
+            pass
+
+    api = FakeApi()
+    provider = PytdxDailyProvider(
+        api_factory=lambda: api,
+        servers=(("working.example", 7709),),
+    )
+
+    bars = await provider.fetch(
+        capability=DataCapability.DAILY_BARS,
+        symbol=StockSymbol(market="SH", code="600519"),
+        limit=805,
+    )
+
+    assert len(bars) == 805
+    assert api.bar_calls == [(0, 800), (800, 5)]
+    assert bars[0].trade_date < bars[-1].trade_date
+    assert {bar.adjustment for bar in bars} == {"QFQ"}
+
+
+@pytest.mark.asyncio
+async def test_pytdx_applies_cash_bonus_and_rights_events_as_qfq() -> None:
+    class FakeApi:
+        def connect(self, host: str, port: int, time_out: int) -> bool:
+            return True
+
+        def get_security_bars(
+            self, category: int, market: int, code: str, start: int, count: int
+        ) -> list[dict[str, Any]]:
+            if start:
+                return []
+            return [
+                {
+                    "datetime": "2024-06-13 15:00",
+                    "open": 98.0,
+                    "high": 101.0,
+                    "low": 97.0,
+                    "close": 100.0,
+                    "vol": 100,
+                    "amount": 10000,
+                },
+                {
+                    "datetime": "2024-06-14 15:00",
+                    "open": 82.0,
+                    "high": 84.0,
+                    "low": 81.0,
+                    "close": 83.0,
+                    "vol": 120,
+                    "amount": 9960,
+                },
+            ]
+
+        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
+            return [
+                {
+                    "year": 2024,
+                    "month": 6,
+                    "day": 14,
+                    "category": 1,
+                    "fenhong": 10.0,
+                    "songzhuangu": 2.0,
+                    "peigu": 0.0,
+                    "peigujia": 0.0,
+                }
+            ]
+
+        def disconnect(self) -> None:
+            pass
+
+    provider = PytdxDailyProvider(
+        api_factory=FakeApi,
+        servers=(("working.example", 7709),),
+    )
+
+    bars = await provider.fetch(
+        capability=DataCapability.DAILY_BARS,
+        symbol=StockSymbol(market="SH", code="600519"),
+        limit=2,
+    )
+
+    assert bars[0].trade_date == "2024-06-13"
+    assert bars[0].close == pytest.approx(82.5)
+    assert bars[0].open == pytest.approx(80.85)
+    assert bars[1].close == 83.0
+    assert {bar.adjustment for bar in bars} == {"QFQ"}
+
+
 def test_pytdx_mapping_provides_independent_realtime_quote_fallback() -> None:
     symbol = StockSymbol(market="SH", code="600519")
     row = {
@@ -417,6 +542,9 @@ async def test_pytdx_uses_bounded_server_fallback_without_global_probe() -> None
                     "amount": 3565850000,
                 }
             ]
+
+        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
+            return []
 
         def disconnect(self) -> None:
             self.disconnect_calls += 1
