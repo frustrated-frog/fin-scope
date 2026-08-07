@@ -111,6 +111,7 @@ beforeEach(() => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/research-radar/followed?limit=20') return Promise.resolve({ ...snapshot, events: [] });
     if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
     if (path === '/api/research-radar/events/10/state') return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
     if (path === '/api/research-radar/notifications?limit=30') return Promise.resolve({ items: [], unreadCount: 0, todayCount: 0 });
@@ -211,25 +212,43 @@ test('shows high-priority cards without a duplicated latest-changes panel', asyn
   expect(screen.queryByRole('heading', { name: '实时发生' })).not.toBeInTheDocument();
 });
 
-test('loads followed events that fall outside the default radar page', async () => {
+test('keeps the twenty-item radar context stable while showing the independent follow list', async () => {
   const followedEvent = { ...event, followed: true, read: true };
   const anotherFollowedEvent = { ...followedEvent, id: 11, title: '北京亦庄发布词元经济政策' };
+  const mainEvents = Array.from({ length: 20 }, (_, index) => ({
+    ...event,
+    id: 100 + index,
+    title: `主雷达事件 ${index + 1}`,
+    read: index === 0
+  }));
+  const mainSnapshot = {
+    ...snapshot,
+    overview: { eventCount: 20, highPriorityCount: 3, watchlistRelatedCount: 5, sourceCount: 40 },
+    events: mainEvents
+  };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/followed?limit=20') {
       return Promise.resolve({ ...snapshot, events: [followedEvent, anotherFollowedEvent, followedEvent] });
     }
-    return Promise.resolve({ ...snapshot, overview: { eventCount: 0, highPriorityCount: 0, watchlistRelatedCount: 0, sourceCount: 0 }, events: [] });
+    return Promise.resolve(mainSnapshot);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  await userEvent.click(screen.getByRole('button', { name: '已关注 0' }));
+  expect(await screen.findByRole('button', { name: '进行中 20' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '未读 19' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '已关注 2' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '已关注 2' }));
 
   expect(await screen.findByRole('heading', { name: event.title })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: anotherFollowedEvent.title })).toBeInTheDocument();
   expect(screen.getAllByRole('article').filter((item) => item.classList.contains('radar-event-card'))).toHaveLength(2);
+  expect(within(screen.getByLabelText('雷达概览')).getByText('20')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '进行中 20' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '未读 19' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '已关注 2' })).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/followed?limit=20');
 });
 

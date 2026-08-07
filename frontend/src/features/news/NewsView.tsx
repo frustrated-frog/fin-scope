@@ -5,7 +5,7 @@ import {useViewRevision} from '../../shared/api/useViewRevision';
 import {LiveNewsPanel} from './LiveNewsPanel';
 import {RadarEventCard} from './RadarEventCard';
 import {RadarEventDetailDrawer} from './RadarEventDetailDrawer';
-import {RadarStateFilters} from './RadarStateFilters';
+import {matchesRadarState, RadarStateFilters} from './RadarStateFilters';
 import {RadarNotificationPanel} from './RadarNotificationPanel';
 import type {
     RadarEvent,
@@ -63,6 +63,8 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     onInitialEventOpened?: () => void;
 }) {
     const [snapshot, setSnapshot] = useState<ResearchRadarSnapshot>();
+    const [baseSnapshot, setBaseSnapshot] = useState<ResearchRadarSnapshot>();
+    const [followedCount, setFollowedCount] = useState(0);
     const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY, RELATED_CATEGORY]);
     const [selectedCategory, setSelectedCategory] = useState('ALL');
     const [selectedEvent, setSelectedEvent] = useState<RadarEvent>();
@@ -82,11 +84,17 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         const requestedState = stateFilterRef.current;
         try {
             if (manual) setLoading(true);
-            const path = requestedState === 'FOLLOWED'
-                ? '/api/research-radar/followed?limit=20'
+            const followedPath = '/api/research-radar/followed?limit=20';
+            const path = requestedState === 'FOLLOWED' ? followedPath
                 : `/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=${requestedState}${refresh ? '' : '&refresh=false'}`;
-            const next = normalizeRadarSnapshot(await api<ResearchRadarSnapshot>(path));
+            const [rawNext, rawFollowed] = requestedState === 'FOLLOWED'
+                ? [await api<ResearchRadarSnapshot>(followedPath), undefined]
+                : await Promise.all([api<ResearchRadarSnapshot>(path), api<ResearchRadarSnapshot>(followedPath)]);
+            const next = normalizeRadarSnapshot(rawNext);
+            const followed = rawFollowed ? normalizeRadarSnapshot(rawFollowed) : next;
             if (!mounted.current || requestId !== requestSequence.current || selection !== selectedCategoryRef.current) return;
+            setFollowedCount(followed.events.length);
+            if (requestedState === 'ALL') setBaseSnapshot(next);
             snapshotRef.current = next;
             setSnapshot(next);
             setMessage((next.warnings ?? []).length ? '雷达已更新，当前使用部分最近结果' : '研究雷达已同步');
@@ -120,6 +128,10 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     }
 
     function replaceEvent(next: RadarEvent) {
+        setBaseSnapshot((current) => current ? normalizeRadarSnapshot({
+            ...current,
+            events: current.events.map((item) => item.id === next.id ? next : item)
+        }) : current);
         setSnapshot((current) => {
             if (!current) return current;
             const removeFromFollowList = stateFilterRef.current === 'FOLLOWED' && (!next.followed || next.disposition === 'IGNORED');
@@ -149,6 +161,9 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                 body: JSON.stringify(patch)
             });
             replaceEvent({...item, read: state.read, followed: state.followed, disposition: state.disposition});
+            if (state.followed !== item.followed) {
+                setFollowedCount((current) => Math.max(0, current + (state.followed ? 1 : -1)));
+            }
             addToast('事件处理状态已更新', 'success');
         } catch (error) {
             addToast(error instanceof Error ? error.message : '事件状态更新失败', 'error');
@@ -198,10 +213,19 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     const events = useMemo(() => (snapshot?.events ?? []).filter((event) =>
         !normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery)
     ), [normalizedQuery, snapshot]);
-    const radarRefreshing = snapshot?.productionStatus?.running || snapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
-    const productionFailed = snapshot?.productionStatus?.status === 'FAILED';
-    const productionStatusWarning = snapshot?.productionStatus?.warning;
-    const degradedTitle = [snapshot?.warnings?.join('\n'), productionStatusWarning].filter(Boolean).join('\n');
+    const contextSnapshot = baseSnapshot ?? snapshot;
+    const contextEvents = baseSnapshot?.events ?? [];
+    const stateCounts: Record<RadarStateFilter, number> = {
+        ALL: contextEvents.filter((item) => matchesRadarState(item, 'ALL')).length,
+        UNREAD: contextEvents.filter((item) => matchesRadarState(item, 'UNREAD')).length,
+        FOLLOWED: followedCount,
+        LATER: contextEvents.filter((item) => matchesRadarState(item, 'LATER')).length,
+        IGNORED: contextEvents.filter((item) => matchesRadarState(item, 'IGNORED')).length
+    };
+    const radarRefreshing = contextSnapshot?.productionStatus?.running || contextSnapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
+    const productionFailed = contextSnapshot?.productionStatus?.status === 'FAILED';
+    const productionStatusWarning = contextSnapshot?.productionStatus?.warning;
+    const degradedTitle = [contextSnapshot?.warnings?.join('\n'), productionStatusWarning].filter(Boolean).join('\n');
 
     return (
         <section className="news-view radar-view" aria-label="研究雷达">
@@ -212,9 +236,9 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                     <p>系统自动合并重复资讯，并用固定规则解释为什么值得关注。你不需要配置策略。</p>
                 </div>
                 <div className="news-sync-state" aria-live="polite">
-                    <span>{snapshot ? `${snapshot.overview.eventCount} 件事 · ${snapshot.overview.sourceCount} 个来源` : '连接中'}</span>
-                    <strong>{snapshot ? `更新于 ${formatTime(snapshot.refreshedAt)}` : '等待首批资讯'}</strong>
-                    {snapshot?.productionStatus?.running ? <small>后台生产中 · 页面读取最近快照</small> : null}
+                    <span>{contextSnapshot ? `${contextSnapshot.overview.eventCount} 件事 · ${contextSnapshot.overview.sourceCount} 个来源` : '连接中'}</span>
+                    <strong>{contextSnapshot ? `更新于 ${formatTime(contextSnapshot.refreshedAt)}` : '等待首批资讯'}</strong>
+                    {contextSnapshot?.productionStatus?.running ? <small>后台生产中 · 页面读取最近快照</small> : null}
                     <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯"
                             onClick={() => void refreshRadar()} disabled={loading}>
                         {loading ? '同步中' : '立即刷新'}
@@ -232,19 +256,19 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
             </nav>
 
             <div className="radar-overview" aria-label="雷达概览">
-                <article><span>值得关注</span><strong>{snapshot?.overview.eventCount ?? 0}</strong></article>
-                <article><span>重点事件</span><strong>{snapshot?.overview.highPriorityCount ?? 0}</strong></article>
-                <article><span>与我相关</span><strong>{snapshot?.overview.watchlistRelatedCount ?? 0}</strong></article>
+                <article><span>值得关注</span><strong>{contextSnapshot?.overview.eventCount ?? 0}</strong></article>
+                <article><span>重点事件</span><strong>{contextSnapshot?.overview.highPriorityCount ?? 0}</strong></article>
+                <article><span>与我相关</span><strong>{contextSnapshot?.overview.watchlistRelatedCount ?? 0}</strong></article>
                 <label className="news-search"><span>检索</span><input type="search" aria-label="搜索资讯"
                                                                        placeholder="搜索公司、行业或事件" value={query}
                                                                        onChange={(e) => setQuery(e.target.value)}/></label>
             </div>
-            <div className="radar-work-rail"><RadarStateFilters value={stateFilter} events={snapshot?.events ?? []}
+            <div className="radar-work-rail"><RadarStateFilters value={stateFilter} counts={stateCounts}
                                                                 onChange={switchState}/><RadarNotificationPanel
-                hint={(snapshot?.events ?? []).reduce((sum, item) => sum + (item.unreadNotificationCount ?? 0), 0)}
+                hint={contextEvents.reduce((sum, item) => sum + (item.unreadNotificationCount ?? 0), 0)}
                 onOpenEvent={openNotificationEvent}/></div>
 
-            {(snapshot?.warnings?.length || productionFailed || productionStatusWarning) ?
+            {(contextSnapshot?.warnings?.length || productionFailed || productionStatusWarning) ?
                 <div className="news-degraded" role="status" title={degradedTitle}><span
                     aria-hidden="true">!</span>{productionFailed ? '雷达最近一次生产失败，当前展示此前快照' : radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : productionStatusWarning ? '部分来源本次未更新，已展示最近结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}
                 </div> : null}

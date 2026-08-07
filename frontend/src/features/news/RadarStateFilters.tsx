@@ -5,11 +5,10 @@ const FILTERS: { code: RadarStateFilter; label: string }[] = [
   { code: 'LATER', label: '稍后看' }, { code: 'IGNORED', label: '已忽略' }
 ];
 
-export function RadarStateFilters({ value, events, onChange }: { value: RadarStateFilter; events: RadarEvent[]; onChange: (value: RadarStateFilter) => void }) {
-  const count = (code: RadarStateFilter) => events.filter((event) => matchesRadarState(event, code)).length;
+export function RadarStateFilters({ value, counts, onChange }: { value: RadarStateFilter; counts: Record<RadarStateFilter, number>; onChange: (value: RadarStateFilter) => void }) {
   return <nav className="radar-state-filters" aria-label="事件处理状态">{FILTERS.map((filter) => (
     <button type="button" key={filter.code} className={value === filter.code ? 'active' : ''} aria-pressed={value === filter.code} onClick={() => onChange(filter.code)}>
-      {filter.label}<span>{count(filter.code)}</span>
+      {filter.label}<span>{counts[filter.code]}</span>
     </button>
   ))}</nav>;
 }

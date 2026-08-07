@@ -63,9 +63,7 @@ public class ResearchRadarController {
         String normalizedCategory = category == null ? "ALL" : category.trim().toUpperCase(java.util.Locale.ROOT);
         String normalizedState = state == null ? "ALL" : state.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
-        String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly + "&limit=" + normalizedLimit + "&state=" + normalizedState;
-        JsonNode data = snapshots.read("radar", variant)
-                .orElseGet(() -> mapper.valueToTree(service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState)));
+        JsonNode data = mapper.valueToTree(service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState));
         return ApiResponses.success(data);
     }
 

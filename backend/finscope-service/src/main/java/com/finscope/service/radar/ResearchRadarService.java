@@ -321,9 +321,10 @@ public class ResearchRadarService {
 
     private List<ResearchRadarView.EventCard> filteredCards(List<RadarEvent> events, Map<Long, ResearchRadarView.EventCard> index, String state, int limit) {
         List<ResearchRadarView.EventCard> result = new ArrayList<ResearchRadarView.EventCard>();
+        Set<Long> added = new HashSet<Long>();
         for (RadarEvent event : events) {
             ResearchRadarView.EventCard card = index.get(event.getId());
-            if (card != null && matchesState(card, state)) result.add(card);
+            if (card != null && added.add(card.getId()) && matchesState(card, state)) result.add(card);
             if (result.size() >= limit) break;
         }
         return result;

@@ -152,6 +152,25 @@ class ResearchRadarServiceTest {
     }
 
     @Test
+    void fillsTheRadarPageWithTwentyUniqueEventsWhenRankedInputContainsDuplicates() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        java.util.List<RadarEvent> ranked = new java.util.ArrayList<RadarEvent>();
+        RadarEvent first = rankedEvent(1L);
+        ranked.add(first); ranked.add(first);
+        for (long id = 2; id <= 20; id++) ranked.add(rankedEvent(id));
+        when(repository.findRanked("ALL", false, 50)).thenReturn(ranked);
+
+        ResearchRadarView view = service.loadStored("ALL", false, 20, "ALL");
+
+        assertEquals(20, view.getEvents().size());
+        assertEquals(20, view.getEvents().stream().map(ResearchRadarView.EventCard::getId).distinct().count());
+    }
+
+    @Test
     void busyRefreshKeepsRadarAvailableWithoutReturningTheDuplicateLiveWire() throws Exception {
         NewsFeedItem item = item("CLS:1", "CLS", "财联社", "已缓存的实时资讯", NOW.minusMinutes(5));
         NewsFeedSnapshot snapshot = new NewsFeedSnapshot(Collections.singletonList(item), Collections.emptyList(), NOW, 1);
@@ -228,5 +247,11 @@ class ResearchRadarServiceTest {
         signal.setCategoryCode(item.getCategoryCode()); signal.setPublishedAt(item.getPublishedAt());
         signal.setFirstSeenAt(item.getPublishedAt()); signal.setLastSeenAt(item.getPublishedAt()); signal.setStatus("ACTIVE");
         return signal;
+    }
+
+    private RadarEvent rankedEvent(Long id) {
+        RadarEvent value = new RadarEvent(); value.setId(id); value.setCanonicalTitle("事件 " + id);
+        value.setStatus("ACTIVE"); value.setPriorityScore(80); value.setLastSeenAt(NOW.minusMinutes(id));
+        return value;
     }
 }
