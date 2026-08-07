@@ -31,6 +31,10 @@ public class StrategyInstrumentResolver {
         if (!"FUND".equals(type) && !"STOCK".equals(type)) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略组合只支持基金和股票");
         }
+        if ("STOCK".equals(type)) {
+            return instrumentRepository.findByCodeTypeAndMarket(code, type, stockMarket(code))
+                    .orElseGet(() -> create(code, type));
+        }
         return instrumentRepository.findByCodeAndType(code, type).orElseGet(() -> create(code, type));
     }
 
@@ -41,9 +45,16 @@ public class StrategyInstrumentResolver {
         value.setName(resolveName(code, type));
         value.setAliases(code);
         if ("STOCK".equals(type)) {
-            value.setMarket(code.startsWith("6") ? "SH" : "SZ");
+            value.setMarket(stockMarket(code));
         }
         return instrumentRepository.save(value);
+    }
+
+    private String stockMarket(String code) {
+        if (code.startsWith("6")) return "SH";
+        if (code.startsWith("4") || code.startsWith("8") || code.startsWith("92")) return "BJ";
+        if (code.startsWith("9")) return "SH";
+        return "SZ";
     }
 
     private String resolveName(String code, String type) {

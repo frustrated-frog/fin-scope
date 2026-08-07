@@ -173,6 +173,45 @@ test('fetches a selected SEC company into the local three-statement workbench', 
   expect(screen.getByText('营业总收入')).toBeInTheDocument();
 });
 
+test('fetches a selected Korean company through DART XBRL', async () => {
+  const user = userEvent.setup();
+  const company = {
+    providerCode: 'KRX_KIND', providerCompanyId: 'KRX:000660',
+    legalName: 'SK하이닉스', displayName: 'SK hynix Inc.', countryCode: 'KR', capabilityLevel: 'L2',
+    securities: [{ symbol: '000660', exchange: 'KRX', market: 'KR' }]
+  };
+  const dartView = {
+    ...reportView,
+    instrument: { id: 73, code: '000660', name: 'SK hynix Inc.', type: 'STOCK', market: 'KR' },
+    report: { ...report, id: 23, instrumentId: 73, periodEnd: '2025-12-31', sourceCode: 'DART_XBRL', currency: 'KRW' }
+  };
+  vi.mocked(api).mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === '/api/financials/instruments') return [instrument];
+    if (path === '/api/financials/instruments/7/reports') return [report];
+    if (path === '/api/financials/reports/9') return reportView;
+    if (path === '/api/financials/reports/9/documents') return [];
+    if (path === '/api/companies/search?q=%E6%B5%B7%E5%8A%9B%E5%A3%AB&limit=8') return [company];
+    if (path === '/api/financials/global/refresh' && options?.method === 'POST') return dartView;
+    if (path === '/api/financials/instruments/73/reports') return [dartView.report];
+    if (path === '/api/financials/reports/23') return dartView;
+    if (path === '/api/financials/reports/23/documents') return [];
+    throw new Error(`unexpected api call: ${path}`);
+  });
+  render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByText('营业总收入');
+
+  await user.type(screen.getByRole('combobox', { name: '搜索全球上市公司' }), '海力士');
+  await user.click(await screen.findByRole('option', { name: /SK hynix Inc/ }));
+  await user.clear(screen.getByLabelText('报告年度'));
+  await user.type(screen.getByLabelText('报告年度'), '2025');
+  await user.click(screen.getByRole('button', { name: '抓取并解析 DART 财报' }));
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/financials/global/refresh',
+    expect.objectContaining({ method: 'POST' })));
+  expect(await screen.findByRole('heading', { name: 'SK hynix Inc.财报底稿' })).toBeInTheDocument();
+  expect(screen.getByText('DART_XBRL')).toBeInTheDocument();
+});
+
 test('switches between all three concrete statements without losing the report context', async () => {
   const user = userEvent.setup();
   render(<FinancialsView addToast={vi.fn()} setMessage={vi.fn()} />);

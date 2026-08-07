@@ -71,6 +71,25 @@ class JdkFinanceHttpClientTest {
     }
 
     @Test
+    void postsFormDataThroughTheSharedAcquisitionRuntime() throws Exception {
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(request ->
+                new com.finscope.rpc.acquisition.AcquisitionResponse(
+                        request.getUri(), request.getUri(), 200, Collections.emptyMap(),
+                        "ok".getBytes(StandardCharsets.UTF_8), "ok", "text/html",
+                        "UTF-8", "hash", 1, 1L, Instant.EPOCH));
+        JdkFinanceHttpClient client = new JdkFinanceHttpClient(runtime, 1000, 1000, 1024);
+
+        client.postForm("DART_XBRL", URI.create("https://englishdart.fss.or.kr/search"),
+                "textCrpCik=00164779", Collections.singletonMap("X-Requested-With", "XMLHttpRequest"));
+
+        assertEquals("POST", runtime.getRequests().get(0).getMethod());
+        assertEquals("textCrpCik=00164779",
+                new String(runtime.getRequests().get(0).getBodyBytes(), StandardCharsets.UTF_8));
+        assertEquals("application/x-www-form-urlencoded",
+                runtime.getRequests().get(0).getHeaders().get("Content-Type"));
+    }
+
+    @Test
     void doesNotRetryTransientHttpFailure() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);

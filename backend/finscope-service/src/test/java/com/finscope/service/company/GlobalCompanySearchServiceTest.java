@@ -51,6 +51,19 @@ class GlobalCompanySearchServiceTest {
         assertEquals(Long.valueOf(71L), results.get(0).getLocalInstrumentId());
     }
 
+    @Test
+    void keepsPreviouslyFetchedKoreanCompaniesAvailableForFullLocalAnalysis() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        Instrument hynix = stock(73L, "000660", "SK hynix Inc.", "KR");
+        hynix.setAliases("KRX_SYMBOL:000660");
+        when(instruments.findAll()).thenReturn(Collections.singletonList(hynix));
+
+        List<CompanySearchResult> results = new GlobalCompanySearchService(
+                instruments, Collections.emptyList()).search("hynix", 8);
+
+        assertEquals("L4", results.get(0).getCapabilityLevel());
+    }
+
     private static CompanyDirectoryProvider provider(String code, CompanySearchResult result) {
         return new CompanyDirectoryProvider() {
             public String providerCode() { return code; }

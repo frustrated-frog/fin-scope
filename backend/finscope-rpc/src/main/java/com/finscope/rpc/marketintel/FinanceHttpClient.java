@@ -6,6 +6,11 @@ import java.util.Map;
 public interface FinanceHttpClient {
     FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) throws Exception;
 
+    default FinanceHttpResponse postForm(String providerCode, URI uri, String body,
+                                         Map<String, String> headers) throws Exception {
+        throw new UnsupportedOperationException("当前 HTTP 客户端不支持表单提交");
+    }
+
     default FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers,
                                     int maxResponseBytes) throws Exception {
         return get(providerCode, uri, headers);

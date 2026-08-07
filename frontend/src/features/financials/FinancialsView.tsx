@@ -162,12 +162,13 @@ export function FinancialsView({
   }
 
   async function refreshGlobalReport() {
-    if (!externalCompany || !periodEnd || externalCompany.providerCode !== 'SEC_EDGAR') return;
+    if (!externalCompany || !periodEnd || !supportsGlobalFetch(externalCompany.providerCode)) return;
     const security = externalCompany.securities[0];
     if (!security) return;
+    const sourceName = externalCompany.providerCode === 'SEC_EDGAR' ? 'SEC' : 'DART';
     setBusy(true);
     setError('');
-    setMessage(`正在从 SEC 抓取 ${externalCompany.displayName} 财报`);
+    setMessage(`正在从 ${sourceName} 抓取 ${externalCompany.displayName} 财报`);
     try {
       const detail = await api<FinancialReportView>('/api/financials/global/refresh', {
         method: 'POST',
@@ -198,7 +199,7 @@ export function FinancialsView({
       setMessage(`${externalCompany.displayName} ${label}解析完成`);
       addToast(`${externalCompany.displayName} ${label}已抓取并完成分析`, 'success');
     } catch (reason) {
-      const message = messageOf(reason, 'SEC 财报抓取失败');
+      const message = messageOf(reason, `${sourceName} 财报抓取失败`);
       setError(message);
       setMessage(message);
       addToast(message, 'error');
@@ -316,11 +317,14 @@ export function FinancialsView({
       <section className="financials-fetch-strip" aria-label="财报抓取">
         <div>
           <strong>{externalCompany
-            ? externalCompany.providerCode === 'SEC_EDGAR' ? '从 SEC 建立财报底稿' : '该市场等待结构化财报接入'
+            ? externalCompany.providerCode === 'SEC_EDGAR' ? '从 SEC 建立财报底稿'
+              : externalCompany.providerCode === 'KRX_KIND' ? '从 DART 建立财报底稿' : '该市场等待结构化财报接入'
             : reports.length ? '补充或重抓报告期' : '建立第一份财报底稿'}</strong>
           <span>{externalCompany
-            ? externalCompany.providerCode === 'SEC_EDGAR'
-              ? '按财年匹配 10-K / 10-Q，实际期末日以公司披露为准，抓取后保存在本地。'
+            ? supportsGlobalFetch(externalCompany.providerCode)
+              ? externalCompany.providerCode === 'SEC_EDGAR'
+                ? '按财年匹配 10-K / 10-Q，实际期末日以公司披露为准，抓取后保存在本地。'
+                : '通过 DART 官方披露检索定位 XBRL 报告，解析 K-IFRS 连接三表并保存在本地。'
               : '当前已完成公司识别，但尚未接入该市场的结构化三张表。'
             : '当前支持 A 股非金融企业，数据抓取后保存在本地。'}</span>
         </div>
@@ -356,12 +360,13 @@ export function FinancialsView({
           className="primary-button"
           type="button"
           disabled={busy || !periodEnd || (externalCompany
-            ? externalCompany.providerCode !== 'SEC_EDGAR'
+            ? !supportsGlobalFetch(externalCompany.providerCode)
             : !instrumentId)}
           onClick={externalCompany ? refreshGlobalReport : refreshReport}
         >
           {busy ? '处理中…' : externalCompany?.providerCode === 'SEC_EDGAR'
             ? '抓取并解析 SEC 财报'
+            : externalCompany?.providerCode === 'KRX_KIND' ? '抓取并解析 DART 财报'
             : externalCompany ? '等待数据源接入' : '抓取并解析财报'}
         </button>
       </section>
@@ -490,7 +495,7 @@ function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
           {company.providerCode === 'SEC_EDGAR'
             ? '已关联 SEC 公司主体和全部上市代码。选择财年与报告类型后，可直接抓取 Company Facts 并生成本地三表底稿。'
             : company.providerCode === 'KRX_KIND'
-              ? '已关联韩国交易所公司主体。当前完成公司发现，DART 原始披露和 K-IFRS 三张表尚未接入本地工作台。'
+              ? '已关联韩国交易所公司主体。可通过全网搜索定位官方 DART XBRL 披露，并生成本地 K-IFRS 三表底稿。'
               : '该公司已经可以独立进入财报工作台，后续数据抓取不会依赖自选关系。'}
         </p>
         {disclosureUrl && (
@@ -506,6 +511,10 @@ function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
       </div>
     </section>
   );
+}
+
+function supportsGlobalFetch(providerCode: string) {
+  return providerCode === 'SEC_EDGAR' || providerCode === 'KRX_KIND';
 }
 
 function officialDisclosureUrl(company: CompanySearchResult) {

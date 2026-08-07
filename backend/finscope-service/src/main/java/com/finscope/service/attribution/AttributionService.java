@@ -51,7 +51,12 @@ public class AttributionService {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "标的代码不能为空");
         }
         String normalizedType = normalizeType(type);
-        Instrument instrument = instrumentRepository.findByCodeAndType(code.trim(), normalizedType)
+        String normalizedCode = code.trim();
+        java.util.Optional<Instrument> stored = "STOCK".equals(normalizedType)
+                ? instrumentRepository.findByCodeTypeAndMarket(
+                        normalizedCode, normalizedType, stockMarket(normalizedCode))
+                : instrumentRepository.findByCodeAndType(normalizedCode, normalizedType);
+        Instrument instrument = stored
                 .orElseGet(() -> transientInstrument(code.trim(), normalizedType, name));
 
         // 先建 GENERATING 报告
@@ -180,6 +185,13 @@ public class AttributionService {
         instrument.setName(StringUtils.isBlank(name) ? code : name.trim());
         instrument.setAliases(code + (StringUtils.isBlank(name) ? "" : "," + name.trim()));
         return instrument;
+    }
+
+    private String stockMarket(String code) {
+        if (code.startsWith("6")) return "SH";
+        if (code.startsWith("4") || code.startsWith("8") || code.startsWith("92")) return "BJ";
+        if (code.startsWith("9")) return "SH";
+        return "SZ";
     }
 
     private String normalizeType(String type) {

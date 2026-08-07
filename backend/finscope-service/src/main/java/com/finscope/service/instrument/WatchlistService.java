@@ -246,12 +246,18 @@ public class WatchlistService {
     }
 
     private Instrument findOrCreateInstrument(String code, String type) {
-        Optional<Instrument> existing = instrumentRepository.findByCodeAndType(code, type);
+        String market = guessMarket(code, type);
+        Optional<Instrument> existing = market == null
+                ? instrumentRepository.findByCodeAndType(code, type)
+                : instrumentRepository.findByCodeTypeAndMarket(code, type, market);
         if (existing.isPresent()) return existing.get();
         try {
             return createInstrument(code, type);
         } catch (DataIntegrityViolationException error) {
-            return instrumentRepository.findByCodeAndType(code, type).orElseThrow(() -> error);
+            return (market == null
+                    ? instrumentRepository.findByCodeAndType(code, type)
+                    : instrumentRepository.findByCodeTypeAndMarket(code, type, market))
+                    .orElseThrow(() -> error);
         }
     }
 
@@ -280,6 +286,10 @@ public class WatchlistService {
         if (code.startsWith("0") || code.startsWith("3")) {
             return "SZ";
         }
+        if (code.startsWith("4") || code.startsWith("8") || code.startsWith("92")) {
+            return "BJ";
+        }
+        if (code.startsWith("9")) return "SH";
         return null;
     }
 

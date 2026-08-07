@@ -73,6 +73,13 @@ public class InstrumentRepository {
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
+    public Optional<Instrument> findByCodeTypeAndMarket(String code, String type, String market) {
+        List<Instrument> list = jdbcTemplate.query(
+                "SELECT * FROM instrument WHERE code = ? AND type = ? AND market = ?",
+                mapper, code, type, market);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
     public List<Instrument> findAll() {
         return jdbcTemplate.query("SELECT * FROM instrument ORDER BY id DESC", mapper);
     }

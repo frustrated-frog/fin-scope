@@ -17,8 +17,9 @@ public class FinancialDataGatewayRouter implements StructuredFinancialDataGatewa
 
     @Autowired
     public FinancialDataGatewayRouter(PythonFinancialDataClient python,
-                                      SecFinancialDataClient sec) {
-        this(java.util.Arrays.<StructuredFinancialDataGateway>asList(python, sec));
+                                      SecFinancialDataClient sec,
+                                      DartFinancialDataClient dart) {
+        this(java.util.Arrays.<StructuredFinancialDataGateway>asList(python, sec, dart));
     }
 
     FinancialDataGatewayRouter(List<StructuredFinancialDataGateway> gateways) {

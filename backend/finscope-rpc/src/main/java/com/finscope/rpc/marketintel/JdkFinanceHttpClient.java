@@ -70,10 +70,21 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
     @Override
     public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers,
                                    int requestedMaxBytes) throws Exception {
+        return execute(provider, AcquisitionRequest.get(uri), headers, requestedMaxBytes);
+    }
+
+    @Override
+    public FinanceHttpResponse postForm(String provider, URI uri, String body,
+                                        Map<String, String> headers) throws Exception {
+        return execute(provider, AcquisitionRequest.post(uri, body,
+                "application/x-www-form-urlencoded"), headers, maxBytes);
+    }
+
+    private FinanceHttpResponse execute(String provider, AcquisitionRequest.Builder request,
+                                        Map<String, String> headers, int requestedMaxBytes) throws Exception {
         int responseLimit = Math.min(16 * 1024 * 1024, Math.max(maxBytes, requestedMaxBytes));
         try {
-            AcquisitionRequest.Builder request = AcquisitionRequest.get(uri)
-                    .purpose("MARKET_PROVIDER:" + provider)
+            request.purpose("MARKET_PROVIDER:" + provider)
                     .connectTimeoutMs(boundedTimeout(connectTimeoutMs, provider))
                     .readTimeoutMs(boundedTimeout(readTimeoutMs, provider))
                     .deadlineMs(deadlineMillis(provider))

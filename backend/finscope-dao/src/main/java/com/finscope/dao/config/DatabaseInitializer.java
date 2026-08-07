@@ -903,7 +903,9 @@ public class DatabaseInitializer implements InitializingBean {
                 + "chain_tags TEXT,"
                 + "created_at TEXT NOT NULL,"
                 + "updated_at TEXT NOT NULL)");
-        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_instrument_code_type ON instrument(code,type)");
+        jdbcTemplate.execute("DROP INDEX IF EXISTS idx_instrument_code_type");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_instrument_code_type_market "
+                + "ON instrument(code,type,market)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS watchlist_item ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "instrument_id INTEGER NOT NULL,"

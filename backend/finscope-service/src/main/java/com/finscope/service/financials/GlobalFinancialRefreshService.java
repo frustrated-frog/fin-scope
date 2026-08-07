@@ -25,37 +25,40 @@ public class GlobalFinancialRefreshService {
     public FinancialReportView refresh(String providerCode, String providerCompanyId,
                                        String displayName, String symbol, String exchange,
                                        LocalDate periodEnd, FinancialReportType reportType) {
-        if (!"SEC_EDGAR".equals(providerCode)) {
+        boolean sec = "SEC_EDGAR".equals(providerCode);
+        boolean dart = "KRX_KIND".equals(providerCode);
+        if (!sec && !dart) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                     "该公司目录暂未接入结构化财报抓取：" + providerCode);
         }
         String normalizedSymbol = required(symbol, "股票代码").toUpperCase(Locale.ROOT);
-        String cik = normalizeCik(providerCompanyId);
-        Instrument instrument = instruments.findByCodeAndType(normalizedSymbol, "STOCK")
-                .map(existing -> update(existing, displayName, cik))
-                .orElseGet(() -> create(normalizedSymbol, displayName, cik));
+        String market = sec ? "US" : "KR";
+        String alias = sec ? "SEC_CIK:" + normalizeCik(providerCompanyId)
+                : "KRX_SYMBOL:" + normalizeKrxSymbol(providerCompanyId, normalizedSymbol);
+        Instrument instrument = instruments.findByCodeTypeAndMarket(normalizedSymbol, "STOCK", market)
+                .map(existing -> update(existing, displayName, market, alias))
+                .orElseGet(() -> create(normalizedSymbol, displayName, market, alias));
         return refresh.refresh(instrument.getId(), periodEnd, reportType);
     }
 
-    private Instrument create(String symbol, String name, String cik) {
+    private Instrument create(String symbol, String name, String market, String alias) {
         Instrument value = new Instrument();
         value.setCode(symbol);
         value.setType("STOCK");
         value.setName(required(name, "公司名称"));
-        value.setMarket("US");
-        value.setAliases("SEC_CIK:" + cik);
+        value.setMarket(market);
+        value.setAliases(alias);
         return instruments.save(value);
     }
 
-    private Instrument update(Instrument value, String name, String cik) {
+    private Instrument update(Instrument value, String name, String market, String alias) {
         boolean changed = false;
-        String alias = "SEC_CIK:" + cik;
         if (!alias.equals(value.getAliases())) {
             value.setAliases(alias);
             changed = true;
         }
-        if (!"US".equals(value.getMarket())) {
-            value.setMarket("US");
+        if (!market.equals(value.getMarket())) {
+            value.setMarket(market);
             changed = true;
         }
         if (name != null && !name.trim().isEmpty() && !name.trim().equals(value.getName())) {
@@ -75,6 +78,15 @@ public class GlobalFinancialRefreshService {
         } catch (NumberFormatException error) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "SEC CIK 格式不正确");
         }
+    }
+
+    private String normalizeKrxSymbol(String providerCompanyId, String fallbackSymbol) {
+        String digits = required(providerCompanyId, "KRX 公司代码").replaceAll("\\D", "");
+        if (digits.length() != 6) digits = fallbackSymbol.replaceAll("\\D", "");
+        if (digits.length() != 6) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "KRX 股票代码格式不正确");
+        }
+        return digits;
     }
 
     private String required(String value, String label) {
