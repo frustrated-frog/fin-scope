@@ -30,9 +30,6 @@ public class FinancialQueryService {
     public List<Instrument> listInstruments() {
         return instruments.findAll().stream()
                 .filter(value -> "STOCK".equals(value.getType()))
-                .filter(value -> "SH".equals(value.getMarket())
-                        || "SZ".equals(value.getMarket())
-                        || "BJ".equals(value.getMarket()))
                 .collect(Collectors.toList());
     }
 
