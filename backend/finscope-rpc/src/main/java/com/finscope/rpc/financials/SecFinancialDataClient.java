@@ -57,7 +57,7 @@ public class SecFinancialDataClient implements StructuredFinancialDataGateway {
         headers.put("Accept", "application/json");
         headers.put("User-Agent", "FinScope/0.1 support@finscope.local");
         try {
-            FinanceHttpResponse response = http.get(SOURCE, uri, headers);
+            FinanceHttpResponse response = http.get(SOURCE, uri, headers, 8 * 1024 * 1024);
             if (response.getStatus() < 200 || response.getStatus() >= 300) {
                 throw new ProviderContractException("SEC_COMPANY_FACTS_HTTP_ERROR",
                         "SEC Company Facts 请求失败：HTTP " + response.getStatus(), true);
@@ -149,6 +149,9 @@ public class SecFinancialDataClient implements StructuredFinancialDataGateway {
     }
 
     private boolean betterTarget(Fact candidate, Fact current) {
+        if (candidate.end != null && current.end != null && !candidate.end.equals(current.end)) {
+            return candidate.end.isAfter(current.end);
+        }
         int candidateDays = durationDays(candidate);
         int currentDays = durationDays(current);
         if (candidateDays != currentDays) return candidateDays > currentDays;

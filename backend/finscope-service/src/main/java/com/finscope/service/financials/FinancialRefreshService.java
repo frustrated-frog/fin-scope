@@ -16,7 +16,6 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.financials.ExternalFinancialStatements;
 import com.finscope.rpc.financials.StructuredFinancialDataGateway;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -47,7 +46,6 @@ public class FinancialRefreshService {
         this.quarterDerivation = quarterDerivation;
     }
 
-    @Transactional
     public FinancialReportView refresh(Long instrumentId, LocalDate periodEnd,
                                        FinancialReportType reportType) {
         Instrument instrument = instruments.findById(instrumentId)

@@ -56,6 +56,21 @@ class JdkFinanceHttpClientTest {
     }
 
     @Test
+    void allowsALargerBoundedResponseOnlyWhenTheProviderRequestsIt() throws Exception {
+        RecordingAcquisitionRuntime runtime = new RecordingAcquisitionRuntime(request ->
+                new com.finscope.rpc.acquisition.AcquisitionResponse(
+                        request.getUri(), request.getUri(), 200, Collections.emptyMap(),
+                        "{}".getBytes(StandardCharsets.UTF_8), "{}", "application/json",
+                        "UTF-8", "hash", 1, 1L, Instant.EPOCH));
+        JdkFinanceHttpClient client = new JdkFinanceHttpClient(runtime, 1000, 1000, 1024);
+
+        client.get("SEC_COMPANY_FACTS", URI.create("https://data.sec.gov/facts.json"),
+                Collections.emptyMap(), 8 * 1024 * 1024);
+
+        assertEquals(8 * 1024 * 1024, runtime.getRequests().get(0).getMaxResponseBytes());
+    }
+
+    @Test
     void doesNotRetryTransientHttpFailure() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);

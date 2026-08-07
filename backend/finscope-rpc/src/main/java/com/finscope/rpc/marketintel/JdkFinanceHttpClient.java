@@ -64,13 +64,20 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
 
     @Override
     public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers) throws Exception {
+        return get(provider, uri, headers, maxBytes);
+    }
+
+    @Override
+    public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers,
+                                   int requestedMaxBytes) throws Exception {
+        int responseLimit = Math.min(16 * 1024 * 1024, Math.max(maxBytes, requestedMaxBytes));
         try {
             AcquisitionRequest.Builder request = AcquisitionRequest.get(uri)
                     .purpose("MARKET_PROVIDER:" + provider)
                     .connectTimeoutMs(boundedTimeout(connectTimeoutMs, provider))
                     .readTimeoutMs(boundedTimeout(readTimeoutMs, provider))
                     .deadlineMs(deadlineMillis(provider))
-                    .maxResponseBytes(maxBytes)
+                    .maxResponseBytes(responseLimit)
                     .maxRetries(0)
                     .header("User-Agent", BROWSER_USER_AGENT);
             for (Map.Entry<String, String> header : safeHeaders(headers).entrySet()) {

@@ -11,6 +11,7 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.financials.ExternalFinancialStatements;
 import com.finscope.rpc.financials.StructuredFinancialDataGateway;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,6 +20,7 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -27,6 +29,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FinancialRefreshServiceTest {
+    @Test
+    void refreshDoesNotHoldADatabaseTransactionAcrossRemoteFetches() throws Exception {
+        assertNull(FinancialRefreshService.class
+                .getMethod("refresh", Long.class, LocalDate.class, FinancialReportType.class)
+                .getAnnotation(Transactional.class));
+        assertNull(GlobalFinancialRefreshService.class
+                .getMethod("refresh", String.class, String.class, String.class, String.class,
+                        String.class, LocalDate.class, FinancialReportType.class)
+                .getAnnotation(Transactional.class));
+    }
+
     @Test
     void refreshPersistsThreeStatementsAndReturnsAnalyzedView() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);

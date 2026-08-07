@@ -7,7 +7,6 @@ import com.finscope.domain.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.instrument.Instrument;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.Locale;
@@ -23,7 +22,6 @@ public class GlobalFinancialRefreshService {
         this.refresh = refresh;
     }
 
-    @Transactional
     public FinancialReportView refresh(String providerCode, String providerCompanyId,
                                        String displayName, String symbol, String exchange,
                                        LocalDate periodEnd, FinancialReportType reportType) {

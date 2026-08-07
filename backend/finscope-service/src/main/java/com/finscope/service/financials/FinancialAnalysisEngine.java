@@ -23,6 +23,7 @@ public class FinancialAnalysisEngine {
         Map<String, BigDecimal> now = values(current);
         Map<String, BigDecimal> prior = values(priorYear);
         FinancialAnalysisResult result = new FinancialAnalysisResult();
+        String currency = currency(current);
 
         BigDecimal revenue = now.get("REVENUE");
         BigDecimal priorRevenue = prior.get("REVENUE");
@@ -113,16 +114,16 @@ public class FinancialAnalysisEngine {
                 "CURRENT_PORTION_LONG_DEBT", "LONG_TERM_BORROWINGS", "BONDS_PAYABLE");
         if (interestBearingDebt != null) {
             result.getMetrics().add(metric("INTEREST_BEARING_DEBT", "有息负债",
-                    interestBearingDebt, "CNY"));
+                    interestBearingDebt, currency));
         }
 
         BigDecimal capitalExpenditure = now.get("CAPITAL_EXPENDITURE");
         if (capitalExpenditure != null) {
             result.getMetrics().add(metric("CAPITAL_EXPENDITURE", "资本开支",
-                    capitalExpenditure, "CNY"));
+                    capitalExpenditure, currency));
             if (operatingCash != null) {
                 result.getMetrics().add(metric("FREE_CASH_FLOW", "自由现金流",
-                        operatingCash.subtract(capitalExpenditure), "CNY"));
+                        operatingCash.subtract(capitalExpenditure), currency));
             }
         } else if (operatingCash != null) {
             result.getDataGaps().add("缺少资本开支，无法计算自由现金流");
@@ -139,7 +140,7 @@ public class FinancialAnalysisEngine {
         BigDecimal balanceGap = subtract(assets, sum(now, "TOTAL_LIABILITIES", "TOTAL_EQUITY"));
         if (balanceGap != null) {
             result.getMetrics().add(metric("BALANCE_SHEET_IDENTITY_GAP", "资产负债表恒等式差额",
-                    balanceGap, "CNY"));
+                    balanceGap, currency));
         }
 
         BigDecimal receivableYoy = percentageChange(
@@ -189,6 +190,17 @@ public class FinancialAnalysisEngine {
             }
         }
         return result;
+    }
+
+    private String currency(List<FinancialLineItem> items) {
+        if (items != null) {
+            for (FinancialLineItem item : items) {
+                if (item.getCurrency() != null && !item.getCurrency().trim().isEmpty()) {
+                    return item.getCurrency();
+                }
+            }
+        }
+        return "CNY";
     }
 
     private FinancialMetric metric(String code, String label, BigDecimal value, String unit) {

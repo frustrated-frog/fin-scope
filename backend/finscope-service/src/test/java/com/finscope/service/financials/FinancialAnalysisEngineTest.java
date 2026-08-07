@@ -125,6 +125,24 @@ class FinancialAnalysisEngineTest {
     }
 
     @Test
+    void keepsTheReportCurrencyForMonetaryMetrics() {
+        FinancialLineItem operatingCash = line(
+                "OPERATING_CASH_FLOW", "100", FinancialStatementType.CASH_FLOW);
+        operatingCash.setCurrency("USD");
+        FinancialLineItem capitalExpenditure = line(
+                "CAPITAL_EXPENDITURE", "40", FinancialStatementType.CASH_FLOW);
+        capitalExpenditure.setCurrency("USD");
+
+        FinancialAnalysisResult result = engine.analyze(
+                Arrays.asList(operatingCash, capitalExpenditure),
+                new ArrayList<FinancialLineItem>());
+
+        assertEquals("USD", result.getMetrics().stream()
+                .filter(value -> "FREE_CASH_FLOW".equals(value.getMetricCode()))
+                .findFirst().orElseThrow(AssertionError::new).getUnit());
+    }
+
+    @Test
     void acceptsLegacyProviderConceptAliasesWhenRecalculatingStoredReports() {
         FinancialAnalysisResult result = engine.analyze(
                 Arrays.asList(
