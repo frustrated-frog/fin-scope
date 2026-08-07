@@ -62,7 +62,7 @@ class ProviderRouter:
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         if capability is DataCapability.DAILY_BARS and not provider_mode:
-            requested_limit = min(max(int(kwargs.pop("limit", 250)), 1), 1000)
+            requested_limit = min(max(int(kwargs.pop("limit", 250)), 1), 5000)
             force_refresh = bool(kwargs.pop("force_refresh", False))
             return await self._fetch_daily_bars(
                 symbol,
@@ -89,14 +89,14 @@ class ProviderRouter:
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         if not force_refresh:
-            cached = self._fresh_daily_bar_snapshot(symbol)
+            cached = self._fresh_daily_bar_snapshot(symbol, requested_limit)
             if cached is not None:
                 return self._slice_daily_bars(cached, requested_limit)
 
         lock = self._daily_bar_locks.setdefault(symbol.cache_key, asyncio.Lock())
         async with lock:
             if not force_refresh:
-                cached = self._fresh_daily_bar_snapshot(symbol)
+                cached = self._fresh_daily_bar_snapshot(symbol, requested_limit)
                 if cached is not None:
                     return self._slice_daily_bars(cached, requested_limit)
             result = await self._fetch_online(
@@ -185,6 +185,11 @@ class ProviderRouter:
                         retrieved_at=now,
                         warnings=([] if is_primary else ["首选数据源不可用，已自动使用备用数据源"]),
                         attempts=attempts,
+                        coverage_limit=(
+                            int(kwargs["limit"])
+                            if capability is DataCapability.DAILY_BARS and "limit" in kwargs
+                            else None
+                        ),
                         data=data,
                     )
                     if not provider_mode:
@@ -249,9 +254,15 @@ class ProviderRouter:
             data=None,
         )
 
-    def _fresh_daily_bar_snapshot(self, symbol: StockSymbol) -> DataEnvelope[Any] | None:
+    def _fresh_daily_bar_snapshot(
+        self,
+        symbol: StockSymbol,
+        requested_limit: int,
+    ) -> DataEnvelope[Any] | None:
         stored = self.snapshots.load(DataCapability.DAILY_BARS, symbol)
         if stored is None or not isinstance(stored.data, list) or not stored.data:
+            return None
+        if len(stored.data) < requested_limit and (stored.coverage_limit or 0) < requested_limit:
             return None
         now = self._now()
         age_seconds = max(0, int((now - stored.retrieved_at).total_seconds()))

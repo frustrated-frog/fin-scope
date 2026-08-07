@@ -202,6 +202,7 @@ class DataEnvelope(BaseModel, Generic[PayloadT]):
     stale_age_seconds: int | None = Field(default=None, ge=0)
     warnings: list[str] = Field(default_factory=list)
     attempts: list[ProviderAttempt] = Field(default_factory=list)
+    coverage_limit: int | None = Field(default=None, ge=1)
     data: PayloadT | None = None
 
 

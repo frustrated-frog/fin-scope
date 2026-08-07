@@ -464,6 +464,45 @@ async def test_daily_bars_cache_canonical_250_and_slice_without_repeated_provide
 
 
 @pytest.mark.asyncio
+async def test_daily_bars_refetch_when_fresh_cache_does_not_cover_longer_request(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SH", code="600519")
+    provider = FakeProvider(
+        "PRIMARY",
+        "EASTMONEY",
+        10,
+        [daily_bars(symbol, 250), daily_bars(symbol, 2500)],
+    )
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = make_router(tmp_path, [provider])
+
+    short = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=120)
+    long = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=2500)
+
+    assert len(short.data) == 120
+    assert len(long.data) == 2500
+    assert provider.requests == [{"limit": 250}, {"limit": 2500}]
+
+
+@pytest.mark.asyncio
+async def test_daily_bars_remember_provider_was_asked_for_all_available_history(
+    tmp_path: Path,
+) -> None:
+    symbol = StockSymbol(market="SZ", code="001309")
+    provider = FakeProvider("PRIMARY", "EASTMONEY", 10, [daily_bars(symbol, 120)])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = make_router(tmp_path, [provider])
+
+    first = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=5000)
+    second = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=5000)
+
+    assert len(first.data) == 120
+    assert len(second.data) == 120
+    assert provider.requests == [{"limit": 5000}]
+
+
+@pytest.mark.asyncio
 async def test_daily_bars_force_refresh_replaces_the_cached_snapshot(tmp_path: Path) -> None:
     symbol = StockSymbol(market="SZ", code="001309")
     provider = FakeProvider(

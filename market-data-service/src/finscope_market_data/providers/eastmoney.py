@@ -162,7 +162,7 @@ class EastmoneyProvider:
                 "ut": self._ut,
                 "klt": 101,
                 "fqt": 1,
-                "lmt": min(max(int(limit), 1), 1000),
+                "lmt": min(max(int(limit), 1), 5000),
                 "end": 20500101,
                 "fields1": "f1,f2,f3,f4,f5,f6",
                 "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",

@@ -132,7 +132,7 @@ class AkshareProvider:
             if capability is DataCapability.DAILY_BARS:
                 start_date = kwargs.get("start_date", "19900101")
                 end_date = kwargs.get("end_date", "20500101")
-                limit = min(max(int(kwargs.get("limit", 250)), 1), 1000)
+                limit = min(max(int(kwargs.get("limit", 250)), 1), 5000)
                 frame = await asyncio.to_thread(
                     ak.stock_zh_a_hist,
                     symbol=symbol.code,

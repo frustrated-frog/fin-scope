@@ -107,7 +107,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def daily_bars(
         market: str,
         code: str,
-        limit: int = Query(default=250, ge=1, le=1000),
+        limit: int = Query(default=250, ge=1, le=5000),
         refresh: bool = Query(default=False),
     ):
         return _response(
@@ -167,7 +167,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def overview(
         market: str,
         code: str,
-        daily_limit: int = Query(default=120, ge=1, le=1000),
+        daily_limit: int = Query(default=120, ge=1, le=5000),
     ):
         symbol = StockSymbol(market=market, code=code)
         current = _router(application)

@@ -144,6 +144,14 @@ def test_stock_data_endpoints_expose_normalized_rich_data(tmp_path: Path) -> Non
     assert profile.json()["data"]["industry"] == "白酒"
 
 
+def test_daily_bar_endpoint_accepts_single_stock_research_history_limit(tmp_path: Path) -> None:
+    api = client(tmp_path, [MultiCapabilityProvider()])
+
+    response = api.get("/v1/stocks/SH/600519/daily-bars?limit=5000")
+
+    assert response.status_code == 200
+
+
 def test_financial_statement_endpoint_exposes_three_normalized_statements(tmp_path: Path) -> None:
     api = client(tmp_path, [MultiCapabilityProvider()])
 
