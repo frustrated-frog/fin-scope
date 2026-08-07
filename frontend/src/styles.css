@@ -16944,3 +16944,36 @@ input[type="checkbox"] {
 }
 
 @keyframes news-spin { to { transform: rotate(360deg); } }
+
+.global-company-disclosure-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 4px 0 18px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--fs-mint) 42%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--fs-mint) 10%, transparent);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.global-company-disclosure-link::after {
+  content: '↗';
+  margin-left: 7px;
+  color: var(--fs-mint);
+}
+
+.global-company-disclosure-link:hover {
+  border-color: var(--fs-mint);
+  background: color-mix(in srgb, var(--fs-mint) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.global-company-disclosure-link:focus-visible {
+  outline: 2px solid var(--fs-mint);
+  outline-offset: 3px;
+}

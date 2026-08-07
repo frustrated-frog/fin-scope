@@ -78,8 +78,10 @@ public class SecCompanyDirectoryProvider implements CompanyDirectoryProvider {
 
     private List<CompanySearchResult> load() {
         try {
-            FinanceHttpResponse response = http.get(providerCode(), DIRECTORY_URI,
-                    Collections.singletonMap("Accept", "application/json"));
+            Map<String, String> headers = new LinkedHashMap<String, String>();
+            headers.put("Accept", "application/json");
+            headers.put("User-Agent", "FinScope/0.1 support@finscope.local");
+            FinanceHttpResponse response = http.get(providerCode(), DIRECTORY_URI, headers);
             if (response.getStatus() < 200 || response.getStatus() >= 300) {
                 throw new ProviderContractException("SEC_DIRECTORY_HTTP_ERROR", "SEC 公司目录请求失败", true);
             }
@@ -113,7 +115,7 @@ public class SecCompanyDirectoryProvider implements CompanyDirectoryProvider {
         company.setLegalName(name);
         company.setDisplayName(name);
         company.setCountryCode("US");
-        company.setCapabilityLevel("L4");
+        company.setCapabilityLevel("L2");
         return company;
     }
 }

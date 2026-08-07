@@ -418,6 +418,7 @@ function GlobalCompanyIdentity({ company }: { company: CompanySearchResult }) {
 }
 
 function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
+  const disclosureUrl = officialDisclosureUrl(company);
   return (
     <section className="global-company-workspace">
       <div className="global-company-workspace-mark" aria-hidden="true">{company.countryCode ?? 'GL'}</div>
@@ -426,11 +427,16 @@ function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
         <h4>公司主体已经识别</h4>
         <p>
           {company.providerCode === 'SEC_EDGAR'
-            ? '已关联 SEC 公司主体和全部上市代码。下一步将从 EDGAR 披露目录载入最新年度或季度报告。'
+            ? '已关联 SEC 公司主体和全部上市代码，可从官方披露入口核对原始申报。结构化三张表尚未接入本地工作台。'
             : company.providerCode === 'KRX_KIND'
-              ? '已关联韩国交易所公司主体。当前可继续接入 DART 原始披露和 K-IFRS 三张表。'
+              ? '已关联韩国交易所公司主体。当前完成公司发现，DART 原始披露和 K-IFRS 三张表尚未接入本地工作台。'
               : '该公司已经可以独立进入财报工作台，后续数据抓取不会依赖自选关系。'}
         </p>
+        {disclosureUrl && (
+          <a className="global-company-disclosure-link" href={disclosureUrl} target="_blank" rel="noreferrer">
+            查看官方披露
+          </a>
+        )}
         <dl>
           <div><dt>主体标识</dt><dd>{company.providerCompanyId}</dd></div>
           <div><dt>目录来源</dt><dd>{company.providerCode}</dd></div>
@@ -439,6 +445,12 @@ function GlobalCompanyWorkspace({ company }: { company: CompanySearchResult }) {
       </div>
     </section>
   );
+}
+
+function officialDisclosureUrl(company: CompanySearchResult) {
+  if (company.providerCode !== 'SEC_EDGAR') return undefined;
+  const cik = company.providerCompanyId.replace(/^CIK/i, '');
+  return cik ? `https://www.sec.gov/edgar/browse/?CIK=${cik}&owner=exclude` : undefined;
 }
 
 function Overview({ reportView, unit }: { reportView: FinancialReportView; unit: FinancialUnit }) {

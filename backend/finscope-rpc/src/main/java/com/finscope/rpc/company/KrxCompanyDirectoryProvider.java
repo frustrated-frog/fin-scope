@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -44,9 +45,20 @@ public class KrxCompanyDirectoryProvider implements CompanyDirectoryProvider {
                     || normalize(company.getSecurities().get(0).getSymbol()).contains(needle)) {
                 matches.add(company);
             }
-            if (matches.size() >= limit) break;
         }
-        return matches;
+        matches.sort(Comparator
+                .comparingInt((CompanySearchResult company) -> relevance(company, needle))
+                .thenComparingInt(company -> normalize(company.getNativeName()).length()));
+        return matches.size() <= limit ? matches : new ArrayList<CompanySearchResult>(matches.subList(0, limit));
+    }
+
+    private int relevance(CompanySearchResult company, String needle) {
+        String nativeName = normalize(company.getNativeName());
+        String displayName = normalize(company.getDisplayName());
+        if (nativeName.equals(needle) || displayName.equals(needle)) return 0;
+        if ("sk".equals(needle) && "sk하이닉스".equals(nativeName)) return 1;
+        if (nativeName.startsWith(needle) || displayName.startsWith(needle)) return 2;
+        return 3;
     }
 
     private String normalizeAlias(String value) {

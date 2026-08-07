@@ -96,7 +96,7 @@ test('opens a global company from name search without adding it to the watchlist
       legalName: 'Apple Inc.',
       displayName: 'Apple Inc.',
       countryCode: 'US',
-      capabilityLevel: 'L4',
+      capabilityLevel: 'L2',
       securities: [{ symbol: 'AAPL', exchange: 'Nasdaq', market: 'US' }]
     }];
     throw new Error(`unexpected api call: ${path}`);
@@ -108,9 +108,14 @@ test('opens a global company from name search without adding it to the watchlist
   await user.click(await screen.findByRole('option', { name: /Apple Inc/ }));
 
   expect(screen.getByRole('heading', { name: 'Apple Inc. 财报工作台' })).toBeInTheDocument();
-  expect(screen.getByText('完整分析可用')).toBeInTheDocument();
+  expect(screen.getByText('原始披露可用')).toBeInTheDocument();
   expect(screen.getByText('AAPL · Nasdaq · US')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '查看官方披露' })).toHaveAttribute(
+    'href',
+    'https://www.sec.gov/edgar/browse/?CIK=0000320193&owner=exclude'
+  );
   expect(screen.queryByText('营业总收入')).not.toBeInTheDocument();
+  expect(screen.queryByText('未找到匹配公司，可尝试英文名或股票代码。')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/watchlist', expect.anything());
 });
 

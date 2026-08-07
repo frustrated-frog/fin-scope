@@ -16,9 +16,16 @@ export function GlobalCompanySearch({ onSelect }: { onSelect: (company: CompanyS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const sequence = useRef(0);
+  const selectedQuery = useRef('');
   const normalizedQuery = query.trim();
 
   useEffect(() => {
+    if (normalizedQuery === selectedQuery.current) {
+      setResults([]);
+      setBusy(false);
+      setError('');
+      return;
+    }
     if (normalizedQuery.length < 2) {
       setResults([]);
       setBusy(false);
@@ -47,6 +54,7 @@ export function GlobalCompanySearch({ onSelect }: { onSelect: (company: CompanyS
   }, [normalizedQuery]);
 
   function select(company: CompanySearchResult) {
+    selectedQuery.current = company.displayName;
     setQuery(company.displayName);
     setResults([]);
     onSelect(company);
@@ -64,13 +72,16 @@ export function GlobalCompanySearch({ onSelect }: { onSelect: (company: CompanyS
           autoComplete="off"
           placeholder="搜索公司名称、当地名称或股票代码"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            selectedQuery.current = '';
+            setQuery(event.target.value);
+          }}
         />
         <small>{busy ? '正在查询全球公司目录…' : 'A 股 · 美国 · 韩国'}</small>
       </div>
       {normalizedQuery.length === 1 && <p className="global-company-search-hint">输入至少两个字符开始搜索</p>}
       {error && <p className="global-company-search-error" role="alert">{error}</p>}
-      {normalizedQuery.length >= 2 && !busy && !error && results.length === 0 && (
+      {normalizedQuery.length >= 2 && normalizedQuery !== selectedQuery.current && !busy && !error && results.length === 0 && (
         <p className="global-company-search-hint">未找到匹配公司，可尝试英文名或股票代码。</p>
       )}
       {results.length > 0 && (
