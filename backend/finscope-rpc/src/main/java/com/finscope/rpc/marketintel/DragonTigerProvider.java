@@ -9,6 +9,5 @@ import java.time.LocalDate;
 public interface DragonTigerProvider extends MarketDataProvider {
     boolean supports(Instrument instrument);
 
-    ProviderResult<DragonTigerData> fetch(
-            Instrument instrument, LocalDate startDate, LocalDate endDate);
+    ProviderResult<DragonTigerData> fetch(Instrument instrument, LocalDate startDate, LocalDate endDate);
 }
