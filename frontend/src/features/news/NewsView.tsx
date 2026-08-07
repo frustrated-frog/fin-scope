@@ -5,7 +5,7 @@ import { useViewRevision } from '../../shared/api/useViewRevision';
 import { LiveNewsPanel } from './LiveNewsPanel';
 import { RadarEventCard } from './RadarEventCard';
 import { RadarEventDetailDrawer } from './RadarEventDetailDrawer';
-import { matchesRadarState, RadarStateFilters } from './RadarStateFilters';
+import { RadarStateFilters } from './RadarStateFilters';
 import { RadarNotificationPanel } from './RadarNotificationPanel';
 import type { RadarEvent, RadarEventDetail, RadarStateFilter, RadarWorkspaceState, ResearchRadarSnapshot } from './researchRadarTypes';
 
@@ -53,6 +53,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
   const mounted = useRef(true);
   const snapshotRef = useRef<ResearchRadarSnapshot>();
   const selectedCategoryRef = useRef('ALL');
+  const stateFilterRef = useRef<RadarStateFilter>('ALL');
   const requestSequence = useRef(0);
 
   async function load(manual = false, selection = selectedCategoryRef.current, refresh = true) {
@@ -61,7 +62,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
     const category = watchlistOnly ? 'ALL' : selection;
     try {
       if (manual) setLoading(true);
-      const next = await api<ResearchRadarSnapshot>(`/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=ALL${refresh?'':'&refresh=false'}`);
+      const next = await api<ResearchRadarSnapshot>(`/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=${stateFilterRef.current}${refresh?'':'&refresh=false'}`);
       if (!mounted.current || requestId !== requestSequence.current || selection !== selectedCategoryRef.current) return;
       snapshotRef.current = next;
       setSnapshot(next);
@@ -81,7 +82,7 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
     selectedCategoryRef.current = code; setSelectedCategory(code); setQuery('');
     setSelectedEvent(undefined); setLoading(true); void load(false, code, false);
   }
-  function switchState(value:RadarStateFilter){setStateFilter(value);setSelectedEvent(undefined);}
+  function switchState(value:RadarStateFilter){stateFilterRef.current=value;setStateFilter(value);setSelectedEvent(undefined);setLoading(true);void load(false,selectedCategoryRef.current,false);}
 
   function replaceEvent(next:RadarEvent){setSnapshot((current)=>{if(!current)return current;const updated={...current,events:current.events.map((item)=>item.id===next.id?next:item)};snapshotRef.current=updated;return updated;});setSelectedEvent((current)=>current?.id===next.id?next:current);}
   function openEvent(item:RadarEvent){const next={...item,read:true};replaceEvent(next);setSelectedEvent(next);}
@@ -118,8 +119,8 @@ function ResearchRadarPanel({ setMessage, addToast, onResearch, initialEventId, 
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const events = useMemo(() => (snapshot?.events ?? []).filter((event) =>
-    matchesRadarState(event, stateFilter) && (!normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery))
-  ), [normalizedQuery, snapshot, stateFilter]);
+    !normalizedQuery || `${event.title} ${event.summary} ${event.watchlistExplanation}`.toLocaleLowerCase().includes(normalizedQuery)
+  ), [normalizedQuery, snapshot]);
   const radarRefreshing = snapshot?.productionStatus?.running || snapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
   const productionFailed = snapshot?.productionStatus?.status === 'FAILED';
   const productionStatusWarning = snapshot?.productionStatus?.warning;

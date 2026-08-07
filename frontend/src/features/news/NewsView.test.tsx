@@ -211,26 +211,23 @@ test('shows high-priority cards without a duplicated latest-changes panel', asyn
   expect(screen.queryByRole('heading', { name: '实时发生' })).not.toBeInTheDocument();
 });
 
-test('keeps a newly followed event visible when switching to the followed filter', async () => {
+test('loads followed events that fall outside the default radar page', async () => {
+  const followedEvent = { ...event, followed: true, read: true };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
-    if (path === '/api/research-radar/events/10/state') {
-      return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
-    }
     if (path.includes('state=FOLLOWED')) {
-      return Promise.resolve({ ...snapshot, overview: { eventCount: 0, highPriorityCount: 0, watchlistRelatedCount: 0, sourceCount: 0 }, events: [] });
+      return Promise.resolve({ ...snapshot, events: [followedEvent] });
     }
-    return Promise.resolve(snapshot);
+    return Promise.resolve({ ...snapshot, overview: { eventCount: 0, highPriorityCount: 0, watchlistRelatedCount: 0, sourceCount: 0 }, events: [] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  await userEvent.click(screen.getByRole('button', { name: '关注变化' }));
-  await userEvent.click(screen.getByRole('button', { name: '已关注 1' }));
+  await userEvent.click(screen.getByRole('button', { name: '已关注 0' }));
 
   expect(await screen.findByRole('heading', { name: event.title })).toBeInTheDocument();
-  expect(api).not.toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=FOLLOWED&refresh=false');
+  expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=FOLLOWED&refresh=false');
 });
 
 test('loads original signals only when the user opens the interpretation drawer', async () => {
