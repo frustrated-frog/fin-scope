@@ -12,6 +12,10 @@ class ForecastModel(BaseModel):
     model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
 
 
+class SingleStockForecastRequest(ForecastModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
 class ForecastValidation(ForecastModel):
     out_of_sample_count: int
     independent_sample_count: int

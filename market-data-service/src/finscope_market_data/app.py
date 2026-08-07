@@ -4,10 +4,12 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+from finscope_market_data.forecast.schemas import SingleStockForecastRequest
+from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
@@ -84,6 +86,30 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
     async def provider_health() -> list[dict[str, Any]]:
         current = _router(application)
         return [item.model_dump(mode="json") for item in current.health.list(current.providers)]
+
+    @application.post("/v1/quant/single-stock-forecasts")
+    async def single_stock_forecast(request: SingleStockForecastRequest) -> JSONResponse:
+        market = _market_for_code(request.code)
+        symbol = StockSymbol(market=market, code=request.code)
+        envelope = await _router(application).fetch(
+            DataCapability.DAILY_BARS,
+            symbol,
+            limit=5000,
+        )
+        if envelope.data is None:
+            raise HTTPException(status_code=503, detail="前复权历史行情当前不可用")
+        result = build_forecast(
+            envelope.data,
+            instrument_code=f"{request.code}.{market}",
+            source_code=envelope.source_code or "UNKNOWN",
+            source_family=envelope.source_family or "UNKNOWN",
+            quality_status=envelope.quality_status.value,
+            warnings=list(envelope.warnings),
+        )
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
+        )
 
     @application.get("/v1/stocks/{market}/{code}/quote")
     async def quote(
@@ -244,6 +270,14 @@ def _overview_quality(results: list[DataEnvelope[Any]]) -> QualityStatus:
             return QualityStatus.STALE_FALLBACK
         return QualityStatus.PARTIAL_FRESH
     return results[0].quality_status
+
+
+def _market_for_code(code: str) -> str:
+    if code.startswith(("6", "5", "9")):
+        return "SH"
+    if code.startswith(("4", "8")):
+        return "BJ"
+    return "SZ"
 
 
 app = create_app()

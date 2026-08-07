@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +96,38 @@ class MultiCapabilityProvider:
         return StockProfile(symbol=symbol, name="贵州茅台", industry="白酒")
 
 
+class ForecastDailyBarProvider:
+    provider_code = "FORECAST_FIXTURE"
+    provider_family = "FIXTURE"
+    priority = 10
+    capabilities = {DataCapability.DAILY_BARS}
+
+    def __init__(self, count: int = 400) -> None:
+        self.count = count
+        self.requests: list[tuple[StockSymbol, int]] = []
+
+    def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
+        return capability is DataCapability.DAILY_BARS
+
+    async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> Any:
+        self.requests.append((symbol, int(kwargs["limit"])))
+        first = date(2020, 1, 1)
+        return [
+            DailyBar(
+                symbol=symbol,
+                trade_date=(first + timedelta(days=index)).isoformat(),
+                open=100 + index * 0.02,
+                high=101 + index * 0.02,
+                low=99 + index * 0.02,
+                close=100.5 + index * 0.02,
+                volume=100_000 + index,
+                amount=(100_000 + index) * (100.5 + index * 0.02),
+                adjustment="QFQ",
+            )
+            for index in range(self.count)
+        ]
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -150,6 +182,29 @@ def test_daily_bar_endpoint_accepts_single_stock_research_history_limit(tmp_path
     response = api.get("/v1/stocks/SH/600519/daily-bars?limit=5000")
 
     assert response.status_code == 200
+
+
+def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) -> None:
+    provider = ForecastDailyBarProvider()
+    api = client(tmp_path, [provider])
+
+    response = api.post("/v1/quant/single-stock-forecasts", json={"code": "600519"})
+
+    assert response.status_code == 200
+    assert provider.requests == [(StockSymbol(market="SH", code="600519"), 5000)]
+    body = response.json()
+    assert body["instrumentCode"] == "600519.SH"
+    assert body["status"] == "INSUFFICIENT_DATA"
+    assert body["barCount"] == 400
+    assert body["upProbability"] is None
+
+
+def test_single_stock_forecast_endpoint_validates_six_digit_code(tmp_path: Path) -> None:
+    api = client(tmp_path, [ForecastDailyBarProvider()])
+
+    response = api.post("/v1/quant/single-stock-forecasts", json={"code": "NVDA"})
+
+    assert response.status_code == 422
 
 
 def test_financial_statement_endpoint_exposes_three_normalized_statements(tmp_path: Path) -> None:
