@@ -80,6 +80,13 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
                 "application/x-www-form-urlencoded"), headers, maxBytes);
     }
 
+    @Override
+    public FinanceHttpResponse postJson(String provider, URI uri, String body,
+                                        Map<String, String> headers) throws Exception {
+        return execute(provider, AcquisitionRequest.post(uri, body,
+                "application/json"), headers, maxBytes);
+    }
+
     private FinanceHttpResponse execute(String provider, AcquisitionRequest.Builder request,
                                         Map<String, String> headers, int requestedMaxBytes) throws Exception {
         int responseLimit = Math.min(16 * 1024 * 1024, Math.max(maxBytes, requestedMaxBytes));

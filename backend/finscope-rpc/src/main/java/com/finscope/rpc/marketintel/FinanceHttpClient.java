@@ -11,6 +11,11 @@ public interface FinanceHttpClient {
         throw new UnsupportedOperationException("当前 HTTP 客户端不支持表单提交");
     }
 
+    default FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                         Map<String, String> headers) throws Exception {
+        throw new UnsupportedOperationException("当前 HTTP 客户端不支持 JSON 提交");
+    }
+
     default FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers,
                                     int maxResponseBytes) throws Exception {
         return get(providerCode, uri, headers);
