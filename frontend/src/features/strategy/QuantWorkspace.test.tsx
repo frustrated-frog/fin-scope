@@ -28,6 +28,8 @@ test('keeps dataset, agent confirmation and experiment actions explicit', async 
 
   const user = userEvent.setup();
   render(<QuantWorkspace addToast={vi.fn()} setMessage={vi.fn()} />);
+  expect(screen.getByRole('button', { name: /单股预测/ })).toHaveAttribute('aria-current', 'page');
+  await user.click(screen.getByRole('button', { name: /策略实验室/ }));
   expect(await screen.findByText('先建立一份学习样本')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: /新建学习样本/ }));
   expect(await screen.findByText(/虚拟学习数据/)).toBeInTheDocument();

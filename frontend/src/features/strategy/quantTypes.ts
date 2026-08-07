@@ -180,3 +180,23 @@ export interface QuantExperiment {
     warnings: string[] };
   interpretation?: string;
 }
+
+export type SingleStockForecastStatus =
+  | 'INSUFFICIENT_DATA' | 'LOW_CONFIDENCE' | 'NO_OBSERVED_EDGE'
+  | 'CONDITIONAL_EDGE' | 'EVIDENCE_SUPPORTED' | 'MODEL_UNAVAILABLE';
+
+export interface SingleStockForecast {
+  instrumentCode: string; asOfDate: string; horizonDays: number;
+  status: SingleStockForecastStatus; conclusion: string;
+  barCount: number; labeledSampleCount?: number;
+  upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
+  dataFingerprint: string; sourceCode: string; sourceFamily: string; qualityStatus: string;
+  validation?: {
+    outOfSampleCount: number; independentSampleCount: number; accuracy: number;
+    brierScore: number; baselineBrierScore: number; observedUpRate: number;
+  };
+  recentObservations: Array<{
+    signalDate: string; probability: number; actualNetReturn: number; correct: boolean;
+  }>;
+  warnings: string[];
+}
