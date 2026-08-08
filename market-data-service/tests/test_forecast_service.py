@@ -109,3 +109,13 @@ def test_forecast_produces_auditable_twenty_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
+    assert result.report_schema_version == "single-stock-research-v2"
+    assert result.model_version == "logistic-walk-forward-v2"
+    assert result.performance is not None
+    assert result.performance.benchmark_label == "同股买入并持有"
+    assert result.performance.trade_count >= 0
+    assert len(result.factor_explanations) == 7
+    assert result.in_sample is not None
+    assert result.out_of_sample is not None
+    assert len(result.parameter_stability.scenarios) == 5
+    assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
