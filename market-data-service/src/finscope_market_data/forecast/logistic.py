@@ -41,9 +41,19 @@ class RegularizedLogisticModel:
     def predict(self, features: Sequence[float]) -> float:
         if len(features) != len(self.means):
             raise ValueError("预测特征维度不一致")
-        normalized = (np.asarray(features, dtype=np.float64) - self.means) / self.scales
+        normalized = np.asarray(self.normalized(features), dtype=np.float64)
         probability = float(self._sigmoid(self.weights[0] + normalized @ self.weights[1:]))
         return min(0.99, max(0.01, probability))
+
+    def normalized(self, features: Sequence[float]) -> tuple[float, ...]:
+        if len(features) != len(self.means):
+            raise ValueError("预测特征维度不一致")
+        values = (np.asarray(features, dtype=np.float64) - self.means) / self.scales
+        return tuple(float(value) for value in values)
+
+    def contributions(self, features: Sequence[float]) -> tuple[float, ...]:
+        normalized = np.asarray(self.normalized(features), dtype=np.float64)
+        return tuple(float(value) for value in normalized * self.weights[1:])
 
     @staticmethod
     def _sigmoid(value: NDArray[np.float64] | np.float64) -> NDArray[np.float64] | np.float64:

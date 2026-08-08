@@ -5,7 +5,12 @@ from datetime import date, timedelta
 
 import pytest
 
-from finscope_market_data.forecast.features import build_samples, current_features
+from finscope_market_data.forecast.factor_catalog import FACTORS
+from finscope_market_data.forecast.features import (
+    FEATURE_CODES,
+    build_samples,
+    current_features,
+)
 from finscope_market_data.models import DailyBar, StockSymbol
 
 
@@ -62,3 +67,15 @@ def test_feature_builder_requires_warmup_and_future_horizon() -> None:
     assert build_samples(bars(80), transaction_cost_rate=0.002) == []
     assert len(build_samples(bars(81), transaction_cost_rate=0.002)) == 1
     assert len(current_features(bars(81))) == 7
+
+
+def test_feature_builder_supports_fixed_neighbor_horizons() -> None:
+    history = bars(100)
+
+    sample = build_samples(
+        history, transaction_cost_rate=0.002, horizon_days=15
+    )[0]
+
+    assert sample.entry_date == history[61].trade_date
+    assert sample.exit_date == history[75].trade_date
+    assert tuple(item.code for item in FACTORS) == FEATURE_CODES

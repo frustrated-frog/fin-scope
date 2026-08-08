@@ -7,6 +7,17 @@ from typing import Sequence
 from finscope_market_data.models import DailyBar
 
 
+FEATURE_CODES = (
+    "MOMENTUM_5",
+    "MOMENTUM_20",
+    "MOMENTUM_60",
+    "PRICE_VS_MA20",
+    "PRICE_VS_MA60",
+    "VOLATILITY_20",
+    "AMOUNT_RATIO_20_60",
+)
+
+
 @dataclass(frozen=True)
 class ForecastSample:
     signal_date: str
@@ -21,13 +32,17 @@ class ForecastSample:
 
 
 def build_samples(
-    bars: Sequence[DailyBar], transaction_cost_rate: float
+    bars: Sequence[DailyBar],
+    transaction_cost_rate: float,
+    horizon_days: int = 20,
 ) -> list[ForecastSample]:
+    if horizon_days < 1:
+        raise ValueError("预测周期必须为正整数")
     ordered = _validated_bars(bars)
     samples: list[ForecastSample] = []
-    for signal in range(60, len(ordered) - 20):
+    for signal in range(60, len(ordered) - horizon_days):
         entry = ordered[signal + 1]
-        exit_bar = ordered[signal + 20]
+        exit_bar = ordered[signal + horizon_days]
         samples.append(
             ForecastSample(
                 signal_date=ordered[signal].trade_date,

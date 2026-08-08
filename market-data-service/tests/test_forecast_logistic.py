@@ -30,3 +30,9 @@ def test_logistic_model_is_deterministic_and_orders_probabilities() -> None:
 
     assert 0 <= negative < positive <= 1
     assert second_model.predict((3, 0, 0, 0, 0, 0, 0)) == pytest.approx(positive)
+
+    normalized = first_model.normalized((3, 0, 0, 0, 0, 0, 0))
+    contributions = first_model.contributions((3, 0, 0, 0, 0, 0, 0))
+    assert len(normalized) == 7
+    assert len(contributions) == 7
+    assert contributions[0] == pytest.approx(normalized[0] * first_model.weights[1])
