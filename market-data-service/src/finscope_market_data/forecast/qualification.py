@@ -144,14 +144,24 @@ def qualify_model(samples: Sequence[ForecastSample]) -> ModelQualification:
         and min(locked_positive, len(locked_anchors) - locked_positive) >= 5
     )
     reason = None if enough else "校准区或锁定测试区的独立锚点/正负标签不足"
+    status = assess_qualification_status(
+        enough_samples=enough,
+        calibration_status=calibration.status,
+        raw_metrics=raw_metrics,
+        calibrated_metrics=calibrated_metrics,
+    )
+    if status == "FAILED":
+        reason = "锁定测试的校准概率质量未优于原始模型和朴素基准"
+    elif status == "CONDITIONAL":
+        reason = calibration.reason or "锁定概率指标只形成部分优势"
     audit = SplitAudit(
         development=_slice(split.development, purged_count=len(split.development) - len(training)),
         calibration=_slice(split.calibration),
         locked_test=_slice(split.locked_test),
     )
     return ModelQualification(
-        status="QUALIFIED" if enough and calibration.status == "FITTED" else "INSUFFICIENT_DATA" if not enough else "CONDITIONAL",
-        reason=reason or calibration.reason,
+        status=status,
+        reason=reason,
         split_audit=audit,
         calibration=calibration,
         locked_test=LockedTestResult(
@@ -218,6 +228,26 @@ def evaluate_probability_metrics(
             for item in bins
         ),
     )
+
+
+def assess_qualification_status(
+    *,
+    enough_samples: bool,
+    calibration_status: str,
+    raw_metrics: ProbabilityMetrics,
+    calibrated_metrics: ProbabilityMetrics,
+) -> str:
+    if not enough_samples:
+        return "INSUFFICIENT_DATA"
+    if calibration_status != "FITTED":
+        return "CONDITIONAL"
+    skill_edge = calibrated_metrics.brier_skill_score > 0
+    calibration_edge = calibrated_metrics.log_loss <= raw_metrics.log_loss
+    if skill_edge and calibration_edge:
+        return "QUALIFIED"
+    if skill_edge or calibration_edge:
+        return "CONDITIONAL"
+    return "FAILED"
 
 
 def reliability_bins(

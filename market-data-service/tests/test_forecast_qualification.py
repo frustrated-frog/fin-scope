@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.qualification import (
+    assess_qualification_status,
     evaluate_probability_metrics,
     mature_training_samples,
     reliability_bins,
@@ -85,3 +86,18 @@ def test_reliability_bins_keep_empty_fixed_ranges_explicit() -> None:
     assert bins[1].mean_probability is None
     assert bins[1].observed_up_rate is None
     assert bins[-1].upper_bound == 1.0
+
+
+def test_qualification_fails_when_locked_probability_quality_is_worse() -> None:
+    labels = [False, True] * 8
+    raw = evaluate_probability_metrics([0.45, 0.55] * 8, labels, 0.5)
+    degraded = evaluate_probability_metrics([0.9, 0.1] * 8, labels, 0.5)
+
+    status = assess_qualification_status(
+        enough_samples=True,
+        calibration_status="FITTED",
+        raw_metrics=raw,
+        calibrated_metrics=degraded,
+    )
+
+    assert status == "FAILED"
