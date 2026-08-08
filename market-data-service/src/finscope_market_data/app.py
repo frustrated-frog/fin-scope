@@ -96,6 +96,15 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
             symbol,
             limit=5000,
         )
+        if envelope.data is not None and any(
+            bar.adjustment != "QFQ" for bar in envelope.data
+        ):
+            envelope = await _router(application).fetch(
+                DataCapability.DAILY_BARS,
+                symbol,
+                limit=5000,
+                force_refresh=True,
+            )
         if envelope.data is None:
             raise HTTPException(status_code=503, detail="前复权历史行情当前不可用")
         result = build_forecast(

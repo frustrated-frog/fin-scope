@@ -128,6 +128,16 @@ class ForecastDailyBarProvider:
         ]
 
 
+class LegacyThenAdjustedForecastProvider(ForecastDailyBarProvider):
+    async def fetch(
+        self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any
+    ) -> Any:
+        bars = await super().fetch(capability, symbol, **kwargs)
+        if len(self.requests) == 1:
+            return [bar.model_copy(update={"adjustment": "NONE"}) for bar in bars]
+        return bars
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -197,6 +207,22 @@ def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) ->
     assert body["status"] == "INSUFFICIENT_DATA"
     assert body["barCount"] == 400
     assert body["upProbability"] is None
+
+
+def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(
+    tmp_path: Path,
+) -> None:
+    provider = LegacyThenAdjustedForecastProvider()
+    api = client(tmp_path, [provider])
+
+    response = api.post("/v1/quant/single-stock-forecasts", json={"code": "603618"})
+
+    assert response.status_code == 200
+    assert provider.requests == [
+        (StockSymbol(market="SH", code="603618"), 5000),
+        (StockSymbol(market="SH", code="603618"), 5000),
+    ]
+    assert response.json()["barCount"] == 400
 
 
 def test_single_stock_forecast_endpoint_validates_six_digit_code(tmp_path: Path) -> None:
