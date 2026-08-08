@@ -18,6 +18,8 @@ public class SingleStockForecast {
     private Integer barCount;
     private Integer labeledSampleCount;
     private Double upProbability;
+    private Double rawProbability;
+    private ConfidenceInterval probabilityInterval;
     private Double expectedNetReturn;
     private Double lowerNetReturn;
     private Double upperNetReturn;
@@ -37,6 +39,7 @@ public class SingleStockForecast {
     private EvaluationSlice outOfSample;
     private ParameterStability parameterStability;
     private List<Observation> recentObservations = new ArrayList<Observation>();
+    private ModelQualification qualification;
     private List<String> warnings = new ArrayList<String>();
 
     @Data
@@ -185,5 +188,111 @@ public class SingleStockForecast {
         private double positiveExcessRatio;
         private double worstExcessReturn;
         private double worstSharpeRatio;
+    }
+
+    @Data
+    public static class ConfidenceInterval {
+        private String status;
+        private Double lower;
+        private Double upper;
+        private double confidenceLevel;
+        private String method;
+        private int validIterations;
+        private String reason;
+        private String limitation;
+    }
+
+    @Data
+    public static class SplitSliceAudit {
+        private LocalDate startDate;
+        private LocalDate endDate;
+        private int sampleCount;
+        private int independentSampleCount;
+        private int positiveCount;
+        private int purgedCount;
+    }
+
+    @Data
+    public static class QualificationSplitAudit {
+        private SplitSliceAudit development;
+        private SplitSliceAudit calibration;
+        private SplitSliceAudit lockedTest;
+        private int labelHorizonDays;
+        private int independentStrideDays;
+        private String rule;
+    }
+
+    @Data
+    public static class ProbabilityMetricSet {
+        private int sampleCount;
+        private double accuracy;
+        private double brierScore;
+        private double baselineBrierScore;
+        private double brierSkillScore;
+        private double logLoss;
+        private double expectedCalibrationError;
+    }
+
+    @Data
+    public static class ReliabilityBin {
+        private double lowerBound;
+        private double upperBound;
+        private int count;
+        private Double meanProbability;
+        private Double observedUpRate;
+        private Double calibrationError;
+    }
+
+    @Data
+    public static class CalibrationReport {
+        private String status;
+        private String method;
+        private int sampleCount;
+        private int positiveCount;
+        private double slope;
+        private double intercept;
+        private double rawLogLoss;
+        private double calibratedLogLoss;
+        private String reason;
+    }
+
+    @Data
+    public static class LockedTestReport {
+        private double baselineProbability;
+        private ProbabilityMetricSet rawMetrics;
+        private ProbabilityMetricSet calibratedMetrics;
+        private ProbabilityMetricSet baselineMetrics;
+        private List<ReliabilityBin> reliabilityBins = new ArrayList<ReliabilityBin>();
+    }
+
+    @Data
+    public static class QualificationIntervals {
+        private ConfidenceInterval brierSkillScore;
+        private ConfidenceInterval accuracy;
+        private ConfidenceInterval excessReturn;
+        private ConfidenceInterval sharpeRatio;
+    }
+
+    @Data
+    public static class TrialIdentity {
+        private String trialId;
+        private String featureVersion;
+        private String labelVersion;
+        private String splitVersion;
+        private String calibrationVersion;
+        private String bootstrapVersion;
+        private long randomSeed;
+        private String modelVersion;
+    }
+
+    @Data
+    public static class ModelQualification {
+        private String status;
+        private String reason;
+        private TrialIdentity trial;
+        private QualificationSplitAudit splitAudit;
+        private CalibrationReport calibration;
+        private LockedTestReport lockedTest;
+        private QualificationIntervals confidenceIntervals;
     }
 }

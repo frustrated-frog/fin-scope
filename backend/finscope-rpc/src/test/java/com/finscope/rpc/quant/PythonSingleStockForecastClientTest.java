@@ -69,8 +69,106 @@ class PythonSingleStockForecastClientTest {
                 () -> client.forecast("600519")).getErrorType());
     }
 
+    @Test
+    void mapsAndValidatesVersionThreeQualification() {
+        PythonSingleStockForecastClient client = clientReturning(v3Payload(0.45, 0.75, repeat('a', 64), 15));
+
+        SingleStockForecast result = client.forecast("600519");
+
+        assertEquals("QUALIFIED", result.getQualification().getStatus());
+        assertEquals(0.08d,
+                result.getQualification().getLockedTest().getCalibratedMetrics().getBrierSkillScore(),
+                0.000001d);
+    }
+
+    @Test
+    void rejectsReversedVersionThreeInterval() {
+        PythonSingleStockForecastClient client = clientReturning(v3Payload(0.75, 0.45, repeat('a', 64), 15));
+
+        assertEquals("SCHEMA_DRIFT", assertThrows(
+                ProviderContractException.class,
+                () -> client.forecast("600519")).getErrorType());
+    }
+
+    @Test
+    void rejectsInvalidTrialIdentityAndReliabilityCount() {
+        PythonSingleStockForecastClient invalidTrial = clientReturning(v3Payload(0.45, 0.75, "short", 15));
+        PythonSingleStockForecastClient invalidBins = clientReturning(v3Payload(0.45, 0.75, repeat('b', 64), 14));
+
+        assertThrows(ProviderContractException.class, () -> invalidTrial.forecast("600519"));
+        assertThrows(ProviderContractException.class, () -> invalidBins.forecast("600519"));
+    }
+
     private static FinanceHttpResponse response(String body) {
         return new FinanceHttpResponse(200, body, Instant.parse("2026-08-07T07:00:00Z"), "hash");
+    }
+
+    private static PythonSingleStockForecastClient clientReturning(final String payload) {
+        return new PythonSingleStockForecastClient("http://127.0.0.1:8000", new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                                Map<String, String> headers) {
+                return response(payload);
+            }
+        });
+    }
+
+    private static String v3Payload(double lower, double upper, String trialId, int binCount) {
+        String metric = "{\"sampleCount\":15,\"accuracy\":0.6,\"brierScore\":0.22," +
+                "\"baselineBrierScore\":0.24,\"brierSkillScore\":0.08,\"logLoss\":0.64," +
+                "\"expectedCalibrationError\":0.08}";
+        String interval = "{\"status\":\"AVAILABLE\",\"lower\":" + lower + ",\"upper\":" + upper +
+                ",\"confidenceLevel\":0.95,\"method\":\"MOVING_BLOCK_BOOTSTRAP\",\"validIterations\":1000}";
+        String development = slice("2015-01-01", "2020-01-01");
+        String calibration = slice("2020-01-02", "2023-01-01");
+        String locked = slice("2023-01-02", "2026-08-01");
+        return "{\"instrumentCode\":\"600519.SH\",\"asOfDate\":\"2026-08-07\"," +
+                "\"reportSchemaVersion\":\"single-stock-research-v3\",\"modelVersion\":\"logistic-platt-qualified-v3\"," +
+                "\"horizonDays\":20,\"status\":\"ROBUST\",\"conclusion\":\"锁定测试存在增量\"," +
+                "\"barCount\":1600,\"upProbability\":0.61,\"rawProbability\":0.68," +
+                "\"probabilityInterval\":" + interval + ",\"dataFingerprint\":\"abcdef\"," +
+                "\"sourceCode\":\"PYTDX\",\"sourceFamily\":\"TDX\",\"qualityStatus\":\"FRESH_FALLBACK\"," +
+                "\"lastClose\":1505.0,\"strategyPolicy\":{\"signalThreshold\":0.6,\"holdingDays\":20," +
+                "\"entryRule\":\"T+1\",\"exitRule\":\"T+20\",\"overlapPolicy\":\"不重叠\"," +
+                "\"roundTripCostRate\":0.0015,\"benchmark\":\"同股买入并持有\"}," +
+                "\"qualification\":{\"status\":\"QUALIFIED\",\"trial\":{\"trialId\":\"" + trialId + "\"," +
+                "\"featureVersion\":\"f1\",\"labelVersion\":\"l1\",\"splitVersion\":\"s1\"," +
+                "\"calibrationVersion\":\"c1\",\"bootstrapVersion\":\"b1\",\"randomSeed\":7," +
+                "\"modelVersion\":\"logistic-platt-qualified-v3\"},\"splitAudit\":{\"development\":" + development +
+                ",\"calibration\":" + calibration + ",\"lockedTest\":" + locked + ",\"labelHorizonDays\":20," +
+                "\"independentStrideDays\":20,\"rule\":\"strict forward\"}," +
+                "\"calibration\":{\"status\":\"FITTED\",\"method\":\"PLATT\",\"sampleCount\":15," +
+                "\"positiveCount\":8,\"slope\":0.7,\"intercept\":0.1,\"rawLogLoss\":0.68," +
+                "\"calibratedLogLoss\":0.64},\"lockedTest\":{\"baselineProbability\":0.53," +
+                "\"rawMetrics\":" + metric + ",\"calibratedMetrics\":" + metric + ",\"baselineMetrics\":" + metric +
+                ",\"reliabilityBins\":" + bins(binCount) + "}," +
+                "\"confidenceIntervals\":{\"brierSkillScore\":" + interval + ",\"accuracy\":" + interval +
+                ",\"excessReturn\":" + interval + ",\"sharpeRatio\":" + interval + "}},\"warnings\":[]}";
+    }
+
+    private static String slice(String startDate, String endDate) {
+        return "{\"startDate\":\"" + startDate + "\",\"endDate\":\"" + endDate + "\"," +
+                "\"sampleCount\":300,\"independentSampleCount\":15,\"positiveCount\":8,\"purgedCount\":0}";
+    }
+
+    private static String bins(int firstCount) {
+        return "[{\"lowerBound\":0,\"upperBound\":0.2,\"count\":" + firstCount +
+                ",\"meanProbability\":0.1,\"observedUpRate\":0.13,\"calibrationError\":0.03}," +
+                "{\"lowerBound\":0.2,\"upperBound\":0.4,\"count\":0}," +
+                "{\"lowerBound\":0.4,\"upperBound\":0.6,\"count\":0}," +
+                "{\"lowerBound\":0.6,\"upperBound\":0.8,\"count\":0}," +
+                "{\"lowerBound\":0.8,\"upperBound\":1.0,\"count\":0}]";
+    }
+
+    private static String repeat(char value, int count) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < count; index++) result.append(value);
+        return result.toString();
     }
 
     private static String payload(double probability) {

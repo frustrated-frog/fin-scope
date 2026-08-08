@@ -22,6 +22,12 @@ public class PythonSingleStockForecastClient {
     private static final String CLIENT_CODE = "PYTHON_SINGLE_STOCK_FORECAST";
     private static final Set<String> STATUSES = new HashSet<String>(Arrays.asList(
             "INSUFFICIENT_DATA", "ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"));
+    private static final Set<String> QUALIFICATION_STATUSES = new HashSet<String>(Arrays.asList(
+            "QUALIFIED", "CONDITIONAL", "FAILED", "INSUFFICIENT_DATA"));
+    private static final Set<String> CALIBRATION_STATUSES = new HashSet<String>(Arrays.asList(
+            "FITTED", "NOT_FITTED"));
+    private static final Set<String> INTERVAL_STATUSES = new HashSet<String>(Arrays.asList(
+            "AVAILABLE", "UNAVAILABLE"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -80,12 +86,155 @@ public class PythonSingleStockForecastClient {
                 probability(observation.getProbability());
             }
         }
+        if ("single-stock-research-v3".equals(result.getReportSchemaVersion())) {
+            validateVersionThree(result);
+        }
+    }
+
+    private void validateVersionThree(SingleStockForecast result) {
+        probability(result.getRawProbability());
+        if ("INSUFFICIENT_DATA".equals(result.getStatus()) && result.getQualification() == null) return;
+        if (!"INSUFFICIENT_DATA".equals(result.getStatus())
+                && (result.getUpProbability() == null || result.getRawProbability() == null)) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测缺少生产概率", false);
+        }
+        validateInterval(result.getProbabilityInterval());
+        SingleStockForecast.ModelQualification qualification = result.getQualification();
+        if (qualification == null || !QUALIFICATION_STATUSES.contains(qualification.getStatus())
+                || qualification.getTrial() == null || qualification.getSplitAudit() == null
+                || qualification.getCalibration() == null || qualification.getLockedTest() == null
+                || qualification.getConfidenceIntervals() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测缺少资格检验证据", false);
+        }
+        validateTrial(qualification.getTrial(), result.getModelVersion());
+        validateSplit(qualification.getSplitAudit());
+        validateCalibration(qualification.getCalibration());
+        validateLockedTest(qualification.getLockedTest());
+        validateInterval(qualification.getConfidenceIntervals().getBrierSkillScore());
+        validateInterval(qualification.getConfidenceIntervals().getAccuracy());
+        validateInterval(qualification.getConfidenceIntervals().getExcessReturn());
+        validateInterval(qualification.getConfidenceIntervals().getSharpeRatio());
+    }
+
+    private void validateTrial(SingleStockForecast.TrialIdentity trial, String modelVersion) {
+        if (trial.getTrialId() == null || !trial.getTrialId().matches("[0-9a-f]{64}")
+                || trial.getFeatureVersion() == null || trial.getLabelVersion() == null
+                || trial.getSplitVersion() == null || trial.getCalibrationVersion() == null
+                || trial.getBootstrapVersion() == null || !modelVersion.equals(trial.getModelVersion())) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测试验身份无效", false);
+        }
+    }
+
+    private void validateSplit(SingleStockForecast.QualificationSplitAudit audit) {
+        validateSlice(audit.getDevelopment());
+        validateSlice(audit.getCalibration());
+        validateSlice(audit.getLockedTest());
+        if (audit.getDevelopment().getEndDate().compareTo(audit.getCalibration().getStartDate()) >= 0
+                || audit.getCalibration().getEndDate().compareTo(audit.getLockedTest().getStartDate()) >= 0
+                || audit.getLabelHorizonDays() != 20 || audit.getIndependentStrideDays() != 20
+                || audit.getRule() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测时间切分无效", false);
+        }
+    }
+
+    private void validateSlice(SingleStockForecast.SplitSliceAudit slice) {
+        if (slice == null || slice.getStartDate() == null || slice.getEndDate() == null
+                || slice.getStartDate().isAfter(slice.getEndDate()) || slice.getSampleCount() < 1
+                || slice.getIndependentSampleCount() < 1 || slice.getPositiveCount() < 0
+                || slice.getPositiveCount() > slice.getIndependentSampleCount() || slice.getPurgedCount() < 0) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测切分审计无效", false);
+        }
+    }
+
+    private void validateCalibration(SingleStockForecast.CalibrationReport calibration) {
+        if (!CALIBRATION_STATUSES.contains(calibration.getStatus()) || calibration.getMethod() == null
+                || calibration.getSampleCount() < 0 || calibration.getPositiveCount() < 0
+                || calibration.getPositiveCount() > calibration.getSampleCount()
+                || !finite(calibration.getSlope()) || !finite(calibration.getIntercept())
+                || !finiteNonNegative(calibration.getRawLogLoss())
+                || !finiteNonNegative(calibration.getCalibratedLogLoss())) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测校准证据无效", false);
+        }
+    }
+
+    private void validateLockedTest(SingleStockForecast.LockedTestReport locked) {
+        probability(locked.getBaselineProbability());
+        validateMetrics(locked.getRawMetrics());
+        validateMetrics(locked.getCalibratedMetrics());
+        validateMetrics(locked.getBaselineMetrics());
+        if (locked.getReliabilityBins() == null || locked.getReliabilityBins().size() != 5) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测可靠性分箱数量无效", false);
+        }
+        int total = 0;
+        double expectedLower = 0d;
+        for (SingleStockForecast.ReliabilityBin bin : locked.getReliabilityBins()) {
+            if (bin == null || Math.abs(bin.getLowerBound() - expectedLower) > 0.0000001d
+                    || bin.getUpperBound() <= bin.getLowerBound() || bin.getUpperBound() > 1d
+                    || bin.getCount() < 0) {
+                throw contract("SCHEMA_DRIFT", "Python v3 单股预测可靠性分箱边界无效", false);
+            }
+            if (bin.getCount() == 0) {
+                if (bin.getMeanProbability() != null || bin.getObservedUpRate() != null) {
+                    throw contract("SCHEMA_DRIFT", "Python v3 空可靠性分箱包含观测值", false);
+                }
+            } else {
+                probability(bin.getMeanProbability());
+                probability(bin.getObservedUpRate());
+                probability(bin.getCalibrationError());
+            }
+            total += bin.getCount();
+            expectedLower = bin.getUpperBound();
+        }
+        if (Math.abs(expectedLower - 1d) > 0.0000001d
+                || total != locked.getCalibratedMetrics().getSampleCount()) {
+            throw contract("SCHEMA_DRIFT", "Python v3 可靠性分箱样本合计无效", false);
+        }
+    }
+
+    private void validateMetrics(SingleStockForecast.ProbabilityMetricSet metrics) {
+        if (metrics == null || metrics.getSampleCount() < 1 || !finite(metrics.getBrierSkillScore())
+                || !finiteNonNegative(metrics.getLogLoss())) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测概率指标无效", false);
+        }
+        probability(metrics.getAccuracy());
+        probability(metrics.getBrierScore());
+        probability(metrics.getBaselineBrierScore());
+        probability(metrics.getExpectedCalibrationError());
+    }
+
+    private void validateInterval(SingleStockForecast.ConfidenceInterval interval) {
+        if (interval == null || !INTERVAL_STATUSES.contains(interval.getStatus())
+                || !finite(interval.getConfidenceLevel()) || interval.getConfidenceLevel() <= 0d
+                || interval.getConfidenceLevel() >= 1d || interval.getMethod() == null
+                || interval.getValidIterations() < 0) {
+            throw contract("SCHEMA_DRIFT", "Python v3 单股预测置信区间无效", false);
+        }
+        if ("AVAILABLE".equals(interval.getStatus())) {
+            if (!finite(interval.getLower()) || !finite(interval.getUpper())
+                    || interval.getLower() > interval.getUpper() || interval.getValidIterations() < 1) {
+                throw contract("SCHEMA_DRIFT", "Python v3 单股预测置信区间上下界无效", false);
+            }
+        } else if (interval.getLower() != null || interval.getUpper() != null) {
+            throw contract("SCHEMA_DRIFT", "Python v3 不可用区间不应包含上下界", false);
+        }
     }
 
     private void probability(Double value) {
         if (value != null && (value.isNaN() || value.isInfinite() || value < 0d || value > 1d)) {
             throw contract("SCHEMA_DRIFT", "Python 单股预测概率超出范围", false);
         }
+    }
+
+    private boolean finite(Double value) {
+        return value != null && !value.isNaN() && !value.isInfinite();
+    }
+
+    private boolean finite(double value) {
+        return !Double.isNaN(value) && !Double.isInfinite(value);
+    }
+
+    private boolean finiteNonNegative(double value) {
+        return finite(value) && value >= 0d;
     }
 
     private String market(String code) {
