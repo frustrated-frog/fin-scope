@@ -6,14 +6,17 @@ import { SingleStockForecastPanel } from './SingleStockForecastPanel';
 
 const summary = { id: 7, instrumentCode: '600519.SH', asOfDate: '2026-08-06',
   status: 'NO_CLEAR_EDGE', upProbability: 0.53, dataFingerprint: 'abcdef',
-  modelVersion: 'logistic-walk-forward-v2', reportSchemaVersion: 'single-stock-research-v2',
+  modelVersion: 'logistic-platt-qualified-v3', reportSchemaVersion: 'single-stock-research-v3',
   sameDataAsPrevious: false, createdAt: '2026-08-08T14:00:00' };
 
 const report = {
-  reportSchemaVersion: 'single-stock-research-v2', modelVersion: 'logistic-walk-forward-v2',
+  reportSchemaVersion: 'single-stock-research-v3', modelVersion: 'logistic-platt-qualified-v3',
   instrumentCode: '600519.SH', asOfDate: '2026-08-06', horizonDays: 20,
   status: 'NO_CLEAR_EDGE', conclusion: '样本外没有稳定优于同股买入并持有。',
-  barCount: 2400, labeledSampleCount: 2320, upProbability: 0.53,
+  barCount: 2400, labeledSampleCount: 2320, upProbability: 0.53, rawProbability: 0.59,
+  probabilityInterval: { status: 'AVAILABLE', lower: .47, upper: .61, confidenceLevel: .95,
+    method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 500,
+    limitation: '仅覆盖校准映射的抽样误差，不覆盖模型、突发事件与市场结构变化' },
   expectedNetReturn: 0.018, lowerNetReturn: -0.072, upperNetReturn: 0.096,
   dataFingerprint: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
   sourceCode: 'PYTDX', sourceFamily: 'TDX', qualityStatus: 'FRESH_FALLBACK', lastClose: 1505,
@@ -54,6 +57,43 @@ const report = {
       { holdingDays: 20, threshold: .6, primary: true, annualizedReturn: .08,
         excessReturn: -.08, sharpeRatio: .38, maxDrawdown: .24, tradeCount: 18 }
     ] },
+  qualification: { status: 'CONDITIONAL', reason: '区间仍跨越无优势边界',
+    trial: { trialId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      featureVersion: 'price-volume-7-v1', labelVersion: 'net-return-positive-20d-v1',
+      splitVersion: 'forward-60-20-20-purged-v1', calibrationVersion: 'platt-v1',
+      bootstrapVersion: 'moving-block-v1', randomSeed: 7,
+      modelVersion: 'logistic-platt-qualified-v3' },
+    splitAudit: {
+      development: { startDate: '2015-01-01', endDate: '2021-01-01', sampleCount: 1392,
+        independentSampleCount: 70, positiveCount: 38, purgedCount: 20 },
+      calibration: { startDate: '2021-01-02', endDate: '2023-08-01', sampleCount: 464,
+        independentSampleCount: 24, positiveCount: 13, purgedCount: 0 },
+      lockedTest: { startDate: '2023-08-02', endDate: '2026-08-01', sampleCount: 464,
+        independentSampleCount: 24, positiveCount: 13, purgedCount: 0 },
+      labelHorizonDays: 20, independentStrideDays: 20,
+      rule: '严格前向 60/20/20；训练标签退出日必须早于待预测日' },
+    calibration: { status: 'FITTED', method: 'PLATT', sampleCount: 24, positiveCount: 13,
+      slope: .72, intercept: .03, rawLogLoss: .69, calibratedLogLoss: .66 },
+    lockedTest: { baselineProbability: .54,
+      rawMetrics: { sampleCount: 24, accuracy: .54, brierScore: .249, baselineBrierScore: .248,
+        brierSkillScore: -.004, logLoss: .69, expectedCalibrationError: .12 },
+      calibratedMetrics: { sampleCount: 24, accuracy: .58, brierScore: .238, baselineBrierScore: .248,
+        brierSkillScore: .04, logLoss: .66, expectedCalibrationError: .08 },
+      baselineMetrics: { sampleCount: 24, accuracy: .54, brierScore: .248, baselineBrierScore: .248,
+        brierSkillScore: 0, logLoss: .69, expectedCalibrationError: 0 },
+      reliabilityBins: [
+        { lowerBound: 0, upperBound: .2, count: 2, meanProbability: .15, observedUpRate: 0, calibrationError: .15 },
+        { lowerBound: .2, upperBound: .4, count: 4, meanProbability: .32, observedUpRate: .25, calibrationError: .07 },
+        { lowerBound: .4, upperBound: .6, count: 8, meanProbability: .51, observedUpRate: .5, calibrationError: .01 },
+        { lowerBound: .6, upperBound: .8, count: 7, meanProbability: .68, observedUpRate: .71, calibrationError: .03 },
+        { lowerBound: .8, upperBound: 1, count: 3, meanProbability: .86, observedUpRate: 1, calibrationError: .14 }
+      ] },
+    confidenceIntervals: {
+      brierSkillScore: { status: 'AVAILABLE', lower: -.08, upper: .14, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 },
+      accuracy: { status: 'AVAILABLE', lower: .42, upper: .72, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 },
+      excessReturn: { status: 'AVAILABLE', lower: -.18, upper: .07, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 },
+      sharpeRatio: { status: 'AVAILABLE', lower: -.22, upper: .91, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 }
+    } },
   recentObservations: [{ signalDate: '2026-05-08', probability: .61,
     actualNetReturn: .034, correct: true }], warnings: ['收益基于前复权日线模拟']
 };
@@ -85,6 +125,50 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('分年度表现')).toBeInTheDocument();
   expect(screen.getByText('标的自身趋势阶段')).toBeInTheDocument();
   expect(screen.getByText('我的持仓快照')).toBeInTheDocument();
+  expect(screen.getByText('校准后上涨概率')).toBeInTheDocument();
+  expect(screen.getByText('47.0% — 61.0%')).toBeInTheDocument();
+  expect(screen.getByText('原始模型 59.0%')).toBeInTheDocument();
+  expect(screen.getByText('预测可信度与概率校准')).toBeInTheDocument();
+  expect(screen.getByText('Brier Skill')).toBeInTheDocument();
+  expect(screen.getAllByText('Log Loss').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('ECE').length).toBeGreaterThan(0);
+  expect(screen.getByRole('table', { name: '锁定测试概率质量对照' })).toBeInTheDocument();
+  expect(screen.getByText('朴素基准')).toBeInTheDocument();
+  expect(screen.getAllByText('锁定测试').length).toBeGreaterThan(0);
+  expect(screen.getByText(/仅覆盖校准映射的抽样误差/)).toBeInTheDocument();
+});
+
+test('explains that legacy v2 history has no qualification evidence', async () => {
+  const legacy = { ...run, report: { ...report, reportSchemaVersion: 'single-stock-research-v2',
+    modelVersion: 'logistic-walk-forward-v2', rawProbability: undefined,
+    probabilityInterval: undefined, qualification: undefined } };
+  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    apiResponse(init?.method === 'POST' ? legacy : [])));
+  const user = userEvent.setup();
+
+  render(<SingleStockForecastPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.type(screen.getByLabelText('股票代码'), '600519');
+  await user.click(screen.getByRole('button', { name: '运行完整研究' }));
+
+  expect(await screen.findByText('该记录生成时尚未启用锁定资格检验')).toBeInTheDocument();
+});
+
+test('defensively rejects a historical qualified status contradicted by locked metrics', async () => {
+  const inconsistent = { ...run, report: { ...report, qualification: { ...report.qualification!,
+    status: 'QUALIFIED' as const, lockedTest: { ...report.qualification!.lockedTest,
+      calibratedMetrics: { ...report.qualification!.lockedTest.calibratedMetrics,
+        brierSkillScore: -.34, logLoss: 1.327 },
+      rawMetrics: { ...report.qualification!.lockedTest.rawMetrics, logLoss: 1.077 } } } } };
+  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    apiResponse(init?.method === 'POST' ? inconsistent : [])));
+  const user = userEvent.setup();
+
+  render(<SingleStockForecastPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.type(screen.getByLabelText('股票代码'), '603618');
+  await user.click(screen.getByRole('button', { name: '运行完整研究' }));
+
+  expect(await screen.findByText('未通过资格检验')).toBeInTheDocument();
+  expect(screen.getByText('锁定测试的概率质量未达到当前资格门槛')).toBeInTheDocument();
 });
 
 test('opens an immutable historical report without posting a new run', async () => {

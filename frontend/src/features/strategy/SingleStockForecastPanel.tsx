@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { SingleStockForecast, SingleStockForecastRun } from './quantTypes';
+import { ForecastConfidenceInterval, ForecastQualification, SingleStockForecast, SingleStockForecastRun } from './quantTypes';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -15,6 +15,9 @@ const percent = (value?: number, digits = 1) => value == null ? '—' : `${(valu
 const signedPercent = (value?: number) => value == null ? '—' : `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
 const number = (value?: number, digits = 2) => value == null ? '—' : value.toFixed(digits);
 const money = (value?: number) => value == null ? '—' : `¥${value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
+const interval = (value?: ForecastConfidenceInterval, format: (item?: number) => string = number) =>
+  value?.status === 'AVAILABLE' && value.lower != null && value.upper != null
+    ? `${format(value.lower)} — ${format(value.upper)}` : '区间不可用';
 
 function curvePoints(values: number[], width = 720, height = 190) {
   if (!values.length) return '';
@@ -42,6 +45,63 @@ function EquityChart({ report }: { report: SingleStockForecast }) {
 
 function SectionHead({ eyebrow, title, aside }: { eyebrow: string; title: string; aside?: string }) {
   return <header className="forecast-section-head"><div><span>{eyebrow}</span><h4>{title}</h4></div>{aside && <small>{aside}</small>}</header>;
+}
+
+const qualificationCopy: Record<ForecastQualification['status'], string> = {
+  QUALIFIED: '已通过资格检验', CONDITIONAL: '条件有效', FAILED: '未通过资格检验',
+  INSUFFICIENT_DATA: '资格样本不足'
+};
+
+function CalibrationChart({ qualification }: { qualification: ForecastQualification }) {
+  const bins = qualification.lockedTest.reliabilityBins;
+  return <div className="forecast-calibration-figure">
+    <div className="forecast-calibration-chart">
+      <svg viewBox="0 0 240 240" role="img" aria-label="锁定测试概率可靠性图：横轴为预测概率，纵轴为实际上涨频率">
+        <path className="calibration-grid" d="M28 28H222M28 76.5H222M28 125H222M28 173.5H222M28 222H222M28 28V222M76.5 28V222M125 28V222M173.5 28V222M222 28V222" />
+        <path className="calibration-ideal" d="M28 222L222 28" />
+        {bins.filter(item => item.count > 0 && item.meanProbability != null && item.observedUpRate != null).map(item =>
+          <g key={`${item.lowerBound}-${item.upperBound}`}>
+            <circle cx={28 + item.meanProbability! * 194} cy={222 - item.observedUpRate! * 194} r={5 + Math.min(6, item.count / 4)} />
+            <title>{`${percent(item.meanProbability)} 预测，${percent(item.observedUpRate)} 实际，${item.count} 个样本`}</title>
+          </g>)}
+        <text x="125" y="238">预测概率</text><text x="5" y="125" transform="rotate(-90 5 125)">实际上涨率</text>
+      </svg>
+      <div><span><i />校准后观察点</span><span><i />理想校准线</span></div>
+    </div>
+    <div className="forecast-calibration-bins"><table aria-label="概率可靠性分箱"><thead><tr><th>概率区间</th><th>样本</th><th>平均预测</th><th>实际上涨</th><th>偏差</th></tr></thead><tbody>{bins.map(item => <tr key={`${item.lowerBound}-${item.upperBound}`}><td>{`${Math.round(item.lowerBound * 100)}–${Math.round(item.upperBound * 100)}%`}</td><td>{item.count}</td><td>{percent(item.meanProbability)}</td><td>{percent(item.observedUpRate)}</td><td>{percent(item.calibrationError)}</td></tr>)}</tbody></table></div>
+  </div>;
+}
+
+function QualificationSection({ qualification, probabilityInterval }: { qualification: ForecastQualification; probabilityInterval?: ForecastConfidenceInterval }) {
+  const locked = qualification.lockedTest;
+  const calibrated = locked.calibratedMetrics;
+  const intervals = qualification.confidenceIntervals;
+  const contradictsQualification = qualification.status === 'QUALIFIED'
+    && (calibrated.brierSkillScore <= 0 || calibrated.logLoss > locked.rawMetrics.logLoss);
+  const displayedStatus: ForecastQualification['status'] = contradictsQualification ? 'FAILED' : qualification.status;
+  const displayedReason = contradictsQualification
+    ? '锁定测试的概率质量未达到当前资格门槛'
+    : qualification.reason || '模型、校准器与锁定测试严格隔离';
+  const slices = [
+    ['开发训练', qualification.splitAudit.development],
+    ['独立校准', qualification.splitAudit.calibration],
+    ['锁定测试', qualification.splitAudit.lockedTest]
+  ] as const;
+  return <section className="forecast-paper-section forecast-qualification">
+    <SectionHead eyebrow="MODEL QUALIFICATION / LOCKED" title="预测可信度与概率校准" aside={`${locked.calibratedMetrics.sampleCount} 个锁定独立锚点`} />
+    <div className="forecast-qualification-stamp" data-status={displayedStatus}><div><span>QUALIFICATION</span><strong>{qualificationCopy[displayedStatus]}</strong><small>{displayedReason}</small></div><p>锁定测试</p><dl><div><dt>Brier Skill</dt><dd>{signedPercent(calibrated.brierSkillScore)}</dd><small>95% {interval(intervals.brierSkillScore, signedPercent)}</small></div><div><dt>Log Loss</dt><dd>{number(calibrated.logLoss, 3)}</dd><small>原始 {number(locked.rawMetrics.logLoss, 3)}</small></div><div><dt>ECE</dt><dd>{percent(calibrated.expectedCalibrationError)}</dd><small>原始 {percent(locked.rawMetrics.expectedCalibrationError)}</small></div><div><dt>方向命中率</dt><dd>{percent(calibrated.accuracy)}</dd><small>95% {interval(intervals.accuracy, percent)}</small></div></dl></div>
+    <div className="forecast-qualification-body">
+      <CalibrationChart qualification={qualification} />
+      <aside className="forecast-method-ledger">
+        <h5>证据链</h5>
+        <div className="forecast-split-timeline">{slices.map(([label, item]) => <article key={label}><span>{label}</span><strong>{item.independentSampleCount} 个锚点</strong><small>{item.startDate} → {item.endDate}</small><p>{item.sampleCount} 个逐日样本 · {item.positiveCount} 个上涨标签{item.purgedCount > 0 ? ` · purge ${item.purgedCount}` : ''}</p></article>)}</div>
+        <div className="forecast-method-note"><strong>{qualification.calibration.status === 'FITTED' ? 'Platt 校准已生效' : '校准未拟合，使用原始概率'}</strong><p>校准区 Log Loss：{number(qualification.calibration.rawLogLoss, 3)} → {number(qualification.calibration.calibratedLogLoss, 3)}。{qualification.splitAudit.rule}</p></div>
+        <div className="forecast-quality-comparison"><table aria-label="锁定测试概率质量对照"><thead><tr><th>概率口径</th><th>Brier</th><th>Skill</th><th>Log Loss</th><th>ECE</th></tr></thead><tbody><tr><th>原始模型</th><td>{number(locked.rawMetrics.brierScore, 3)}</td><td>{signedPercent(locked.rawMetrics.brierSkillScore)}</td><td>{number(locked.rawMetrics.logLoss, 3)}</td><td>{percent(locked.rawMetrics.expectedCalibrationError)}</td></tr><tr><th>校准模型</th><td>{number(calibrated.brierScore, 3)}</td><td>{signedPercent(calibrated.brierSkillScore)}</td><td>{number(calibrated.logLoss, 3)}</td><td>{percent(calibrated.expectedCalibrationError)}</td></tr><tr><th>朴素基准</th><td>{number(locked.baselineMetrics.brierScore, 3)}</td><td>0.0%</td><td>{number(locked.baselineMetrics.logLoss, 3)}</td><td>{percent(locked.baselineMetrics.expectedCalibrationError)}</td></tr></tbody></table></div>
+      </aside>
+    </div>
+    <div className="forecast-uncertainty-strip"><article><span>策略超额收益 95% 区间</span><strong>{interval(intervals.excessReturn, signedPercent)}</strong></article><article><span>策略 Sharpe 95% 区间</span><strong>{interval(intervals.sharpeRatio, item => number(item, 2))}</strong></article><article><span>朴素基准概率</span><strong>{percent(locked.baselineProbability)}</strong></article></div>
+    <footer className="forecast-qualification-foot"><span>TRIAL {qualification.trial.trialId.slice(0, 16)}</span><p>{qualification.trial.featureVersion} · {qualification.trial.splitVersion} · seed {qualification.trial.randomSeed}</p><small>{probabilityInterval?.limitation || '概率区间不覆盖突发事件与市场结构变化'}</small></footer>
+  </section>;
 }
 
 export function SingleStockForecastPanel({ addToast, setMessage }: {
@@ -119,10 +179,14 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
         {report && report.status !== 'INSUFFICIENT_DATA' && report.upProbability != null && <>
           <section className="single-forecast-board" data-tone={status.tone}>
             <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>
-            <div className="single-forecast-thesis"><div className="single-forecast-probability"><span>未来 20 日净收益为正的概率</span><strong>{percent(report.upProbability)}</strong><small>概率不是买卖指令</small></div><div className="single-forecast-verdict"><span>FINAL VERDICT</span><p>{report.conclusion}</p>{selected?.sameDataAsPrevious && <small>与上一条记录使用相同数据指纹</small>}</div></div>
+            <div className="single-forecast-thesis"><div className="single-forecast-probability"><span>{report.qualification ? '校准后上涨概率' : '未来 20 日净收益为正的概率'}</span><strong>{percent(report.upProbability)}</strong>{report.qualification && <><small className="forecast-probability-range">{interval(report.probabilityInterval, percent)}</small><small>原始模型 {percent(report.rawProbability)}</small></>}<small>未来 20 个交易日 · 概率不是买卖指令</small></div><div className="single-forecast-verdict"><span>FINAL VERDICT</span><p>{report.conclusion}</p>{selected?.sameDataAsPrevious && <small>与上一条记录使用相同数据指纹</small>}</div></div>
             <div className="forecast-probability-tape"><div className="forecast-tape-labels"><span>下行证据</span><b>50% 中线</b><span>上行证据</span></div><div className="forecast-tape-track"><i /><i /><i /><b style={{ left: `${probabilityPosition}%` }} /></div><small style={{ left: `${probabilityPosition}%` }}>{percent(report.upProbability)}</small></div>
             <div className="forecast-return-band"><div><span>相近信号 P20</span><strong>{signedPercent(report.lowerNetReturn)}</strong></div><div><span>相近信号平均</span><strong>{signedPercent(report.expectedNetReturn)}</strong></div><div><span>相近信号 P80</span><strong>{signedPercent(report.upperNetReturn)}</strong></div></div>
           </section>
+
+          {report.qualification
+            ? <QualificationSection qualification={report.qualification} probabilityInterval={report.probabilityInterval} />
+            : <section className="forecast-paper-section forecast-qualification-legacy"><SectionHead eyebrow="MODEL QUALIFICATION" title="预测可信度" /><p>该记录生成时尚未启用锁定资格检验</p><small>仍可查看当时的滚动样本外、同股基准和因子证据，但不能补写未来版本的校准结论。</small></section>}
 
           {report.performance && <section className="forecast-paper-section forecast-performance">
             <SectionHead eyebrow="PERFORMANCE / SAME STOCK" title="策略与同股买入并持有" aside={`入场阈值 ${percent(report.strategyPolicy.signalThreshold)} · 持有 ${report.strategyPolicy.holdingDays} 日`} />

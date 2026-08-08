@@ -202,12 +202,48 @@ export interface SingleStockForecastPerformance {
     probability: number; netReturn: number; cost: number; holdingDays: number }>;
 }
 
+export interface ForecastConfidenceInterval {
+  status: 'AVAILABLE' | 'UNAVAILABLE'; lower?: number; upper?: number;
+  confidenceLevel: number; method: string; validIterations: number;
+  reason?: string; limitation?: string;
+}
+
+export interface ForecastProbabilityMetrics {
+  sampleCount: number; accuracy: number; brierScore: number; baselineBrierScore: number;
+  brierSkillScore: number; logLoss: number; expectedCalibrationError: number;
+}
+
+export interface ForecastSplitSlice {
+  startDate: string; endDate: string; sampleCount: number;
+  independentSampleCount: number; positiveCount: number; purgedCount: number;
+}
+
+export interface ForecastQualification {
+  status: 'QUALIFIED' | 'CONDITIONAL' | 'FAILED' | 'INSUFFICIENT_DATA';
+  reason?: string;
+  trial: { trialId: string; featureVersion: string; labelVersion: string; splitVersion: string;
+    calibrationVersion: string; bootstrapVersion: string; randomSeed: number; modelVersion: string };
+  splitAudit: { development: ForecastSplitSlice; calibration: ForecastSplitSlice;
+    lockedTest: ForecastSplitSlice; labelHorizonDays: number; independentStrideDays: number; rule: string };
+  calibration: { status: 'FITTED' | 'NOT_FITTED'; method: string; sampleCount: number;
+    positiveCount: number; slope: number; intercept: number; rawLogLoss: number;
+    calibratedLogLoss: number; reason?: string };
+  lockedTest: { baselineProbability: number; rawMetrics: ForecastProbabilityMetrics;
+    calibratedMetrics: ForecastProbabilityMetrics; baselineMetrics: ForecastProbabilityMetrics;
+    reliabilityBins: Array<{ lowerBound: number; upperBound: number; count: number;
+      meanProbability?: number; observedUpRate?: number; calibrationError?: number }> };
+  confidenceIntervals: { brierSkillScore: ForecastConfidenceInterval;
+    accuracy: ForecastConfidenceInterval; excessReturn: ForecastConfidenceInterval;
+    sharpeRatio: ForecastConfidenceInterval };
+}
+
 export interface SingleStockForecast {
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
   status: SingleStockForecastStatus; conclusion: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
+  rawProbability?: number; probabilityInterval?: ForecastConfidenceInterval;
   dataFingerprint: string; sourceCode: string; sourceFamily: string; qualityStatus: string;
   lastClose: number;
   strategyPolicy: { signalThreshold: number; holdingDays: number; entryRule: string;
@@ -239,6 +275,7 @@ export interface SingleStockForecast {
     worstSharpeRatio: number; scenarios: Array<{ holdingDays: number; threshold: number;
       primary: boolean; annualizedReturn: number; excessReturn: number; sharpeRatio: number;
       maxDrawdown: number; tradeCount: number }> };
+  qualification?: ForecastQualification;
   warnings: string[];
 }
 
