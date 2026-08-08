@@ -18,7 +18,7 @@ export type View =
   | 'strategy'
   | 'majorEvents';
 
-export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; note?: string; revision: number; updatedAt?: string };
+export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };
 export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };
 export type StrategyPlaybookRule = {
   id?: number;

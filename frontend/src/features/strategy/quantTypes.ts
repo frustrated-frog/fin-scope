@@ -182,15 +182,36 @@ export interface QuantExperiment {
 }
 
 export type SingleStockForecastStatus =
-  | 'INSUFFICIENT_DATA' | 'LOW_CONFIDENCE' | 'NO_OBSERVED_EDGE'
-  | 'CONDITIONAL_EDGE' | 'EVIDENCE_SUPPORTED' | 'MODEL_UNAVAILABLE';
+  | 'INSUFFICIENT_DATA' | 'ROBUST' | 'CONDITIONAL' | 'NO_CLEAR_EDGE';
+
+export interface ForecastPerformanceSummary {
+  totalReturn: number; annualizedReturn: number; annualizedVolatility: number;
+  sharpeRatio: number; dailyWinRate: number; maxDrawdown: number;
+  maxDrawdownStartDate: string; maxDrawdownTroughDate: string;
+  maxDrawdownRecoveryDate?: string; maxDrawdownDurationDays: number;
+}
+
+export interface SingleStockForecastPerformance {
+  benchmarkLabel: string;
+  strategy: ForecastPerformanceSummary;
+  benchmark: ForecastPerformanceSummary;
+  excessReturn: number; tradeCount: number; profitableTradeRate: number;
+  turnover: number; totalCost: number; holdingTimeRatio: number;
+  averageHoldingDays: number;
+  trades: Array<{ signalDate: string; entryDate: string; exitDate: string;
+    probability: number; netReturn: number; cost: number; holdingDays: number }>;
+}
 
 export interface SingleStockForecast {
+  reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
   status: SingleStockForecastStatus; conclusion: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
   dataFingerprint: string; sourceCode: string; sourceFamily: string; qualityStatus: string;
+  lastClose: number;
+  strategyPolicy: { signalThreshold: number; holdingDays: number; entryRule: string;
+    exitRule: string; overlapPolicy: string; roundTripCostRate: number; benchmark: string };
   validation?: {
     outOfSampleCount: number; independentSampleCount: number; accuracy: number;
     brierScore: number; baselineBrierScore: number; observedUpRate: number;
@@ -198,5 +219,36 @@ export interface SingleStockForecast {
   recentObservations: Array<{
     signalDate: string; probability: number; actualNetReturn: number; correct: boolean;
   }>;
+  factorExplanations: Array<{ code: string; name: string; category: string; formula: string;
+    window: string; currentValue: number; historicalPercentile: number;
+    standardizedValue: number; coefficient: number; contribution: number; direction: string;
+    economicMeaning: string; boundary: string }>;
+  performance?: SingleStockForecastPerformance;
+  equityCurve: Array<{ tradeDate: string; strategyNav: number; benchmarkNav: number;
+    drawdown: number; invested: boolean }>;
+  annualPerformance: Array<{ year: number; strategyReturn: number; benchmarkReturn: number;
+    excessReturn: number; maxDrawdown: number; tradeCount: number }>;
+  regimePerformance: Array<{ regime: string; label: string; sampleDays: number;
+    strategyReturn: number; benchmarkReturn: number; excessReturn: number;
+    sharpeRatio: number; maxDrawdown: number; tradeCount: number; holdingTimeRatio: number }>;
+  inSample?: { sampleCount: number; accuracy: number; brierScore: number;
+    baselineBrierScore?: number; evidenceRole: string };
+  outOfSample?: { sampleCount: number; accuracy: number; brierScore: number;
+    baselineBrierScore?: number; evidenceRole: string };
+  parameterStability?: { positiveExcessRatio: number; worstExcessReturn: number;
+    worstSharpeRatio: number; scenarios: Array<{ holdingDays: number; threshold: number;
+      primary: boolean; annualizedReturn: number; excessReturn: number; sharpeRatio: number;
+      maxDrawdown: number; tradeCount: number }> };
   warnings: string[];
+}
+
+export interface SingleStockForecastRun {
+  id: number; instrumentCode: string; asOfDate: string; status: SingleStockForecastStatus;
+  upProbability?: number; dataFingerprint: string; modelVersion: string;
+  reportSchemaVersion: string; sameDataAsPrevious: boolean; createdAt: string;
+  report?: SingleStockForecast;
+  holdingSnapshot?: { held: boolean; instrumentCode: string; instrumentName?: string; role?: string;
+    targetWeight?: number; currentWeight?: number; quantity?: number; averageCost?: number;
+    lastClose?: number; estimatedMarketValue?: number; unrealizedReturn?: number;
+    note?: string; interpretation: string };
 }
