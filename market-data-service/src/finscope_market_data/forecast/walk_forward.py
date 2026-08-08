@@ -28,6 +28,10 @@ class WalkForwardObservation:
 @dataclass(frozen=True)
 class WalkForwardResult:
     observations: tuple[WalkForwardObservation, ...]
+    initial_training_size: int
+    in_sample_count: int
+    in_sample_accuracy: float
+    in_sample_brier_score: float
     independent_sample_count: int
     accuracy: float
     brier_score: float
@@ -37,6 +41,10 @@ class WalkForwardResult:
 def validate_walk_forward(samples: Sequence[ForecastSample]) -> WalkForwardResult:
     ordered = sorted(samples, key=lambda item: item.signal_date)
     initial_training_size = max(120, math.floor(len(ordered) * 0.60))
+    initial_training_size = min(initial_training_size, len(ordered))
+    in_sample_accuracy, in_sample_brier = _in_sample_metrics(
+        ordered[:initial_training_size]
+    )
     observations: list[WalkForwardObservation] = []
     model: RegularizedLogisticModel | None = None
     matured_count = 0
@@ -61,13 +69,33 @@ def validate_walk_forward(samples: Sequence[ForecastSample]) -> WalkForwardResul
                 actual_return=candidate.net_return,
             )
         )
-    return _metrics(observations)
+    return _metrics(
+        observations,
+        initial_training_size,
+        in_sample_accuracy,
+        in_sample_brier,
+    )
 
 
-def _metrics(observations: list[WalkForwardObservation]) -> WalkForwardResult:
+def _metrics(
+    observations: list[WalkForwardObservation],
+    initial_training_size: int,
+    in_sample_accuracy: float,
+    in_sample_brier: float,
+) -> WalkForwardResult:
     independent = observations[::20]
     if not independent:
-        return WalkForwardResult((), 0, 0.0, 0.0, 0.0)
+        return WalkForwardResult(
+            (),
+            initial_training_size,
+            initial_training_size,
+            in_sample_accuracy,
+            in_sample_brier,
+            0,
+            0.0,
+            0.0,
+            0.0,
+        )
     correct = sum(item.correct for item in independent)
     brier = sum(
         (item.probability - float(item.actual_positive)) ** 2 for item in independent
@@ -79,8 +107,28 @@ def _metrics(observations: list[WalkForwardObservation]) -> WalkForwardResult:
     count = len(independent)
     return WalkForwardResult(
         observations=tuple(observations),
+        initial_training_size=initial_training_size,
+        in_sample_count=initial_training_size,
+        in_sample_accuracy=in_sample_accuracy,
+        in_sample_brier_score=in_sample_brier,
         independent_sample_count=count,
         accuracy=correct / count,
         brier_score=brier / count,
         baseline_brier_score=baseline_brier / count,
     )
+
+
+def _in_sample_metrics(samples: Sequence[ForecastSample]) -> tuple[float, float]:
+    if not samples:
+        return 0.0, 0.0
+    model = RegularizedLogisticModel.fit(samples)
+    probabilities = [model.predict(item.features) for item in samples]
+    accuracy = sum(
+        (probability >= 0.5) == sample.positive
+        for probability, sample in zip(probabilities, samples)
+    ) / len(samples)
+    brier = sum(
+        (probability - float(sample.positive)) ** 2
+        for probability, sample in zip(probabilities, samples)
+    ) / len(samples)
+    return accuracy, brier

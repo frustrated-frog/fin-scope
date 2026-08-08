@@ -58,6 +58,9 @@ def test_walk_forward_uses_only_labels_matured_before_each_signal() -> None:
     assert all(item.training_through < item.signal_date for item in result.observations)
     assert all(0 <= item.probability <= 1 for item in result.observations)
     assert result.independent_sample_count > 5
+    assert result.initial_training_size == 300
+    assert result.in_sample_count == 300
+    assert result.in_sample_brier_score >= 0
     assert result.brier_score >= 0
     assert result.baseline_brier_score >= 0
 
