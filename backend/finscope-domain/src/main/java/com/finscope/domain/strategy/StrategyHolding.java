@@ -23,6 +23,10 @@ public class StrategyHolding {
      * 当前权重。
      */
     private double currentWeight;
+    /** 股票持仓数量；基金或未记录时为空。 */
+    private Double quantity;
+    /** 股票持仓平均成本；未记录时为空。 */
+    private Double averageCost;
     /**
      * 备注信息。
      */
@@ -67,6 +71,10 @@ public class StrategyHolding {
     public void setTargetWeight(double targetWeight) { this.targetWeight = targetWeight; }
     public double getCurrentWeight() { return currentWeight; }
     public void setCurrentWeight(double currentWeight) { this.currentWeight = currentWeight; }
+    public Double getQuantity() { return quantity; }
+    public void setQuantity(Double quantity) { this.quantity = quantity; }
+    public Double getAverageCost() { return averageCost; }
+    public void setAverageCost(Double averageCost) { this.averageCost = averageCost; }
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
     public int getSortOrder() { return sortOrder; }

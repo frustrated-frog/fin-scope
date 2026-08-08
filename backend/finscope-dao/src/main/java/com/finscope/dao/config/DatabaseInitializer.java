@@ -1004,6 +1004,8 @@ public class DatabaseInitializer implements InitializingBean {
                 + "updated_at TEXT NOT NULL,"
                 + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_holding_instrument ON strategy_holding(instrument_id)");
+        ensureColumn("strategy_holding", "quantity", "REAL");
+        ensureColumn("strategy_holding", "average_cost", "REAL");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_playbook ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "code TEXT NOT NULL UNIQUE,"
@@ -1290,6 +1292,13 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_interpretation ("
                 + "experiment_id INTEGER PRIMARY KEY,content_json TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS single_stock_forecast_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_code TEXT NOT NULL,as_of_date TEXT NOT NULL,"
+                + "status TEXT NOT NULL,up_probability REAL,data_fingerprint TEXT NOT NULL,model_version TEXT NOT NULL,"
+                + "report_schema_version TEXT NOT NULL,same_data_as_previous INTEGER NOT NULL DEFAULT 0,"
+                + "report_json TEXT NOT NULL,holding_snapshot_json TEXT,created_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_code_created "
+                + "ON single_stock_forecast_run(instrument_code,created_at DESC,id DESC)");
     }
 
     private void ensureColumn(String table, String column, String type) {

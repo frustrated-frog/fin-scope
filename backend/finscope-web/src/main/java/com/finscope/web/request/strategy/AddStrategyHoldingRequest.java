@@ -9,5 +9,7 @@ public class AddStrategyHoldingRequest {
     private String role;
     private double targetWeight;
     private double currentWeight;
+    private Double quantity;
+    private Double averageCost;
     private String note;
 }

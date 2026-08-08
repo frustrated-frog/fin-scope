@@ -34,7 +34,14 @@ public class StrategyHoldingService {
     @Transactional
     public StrategyHolding add(String code, String type, String role, double targetWeight,
                                double currentWeight, String note) {
+        return add(code, type, role, targetWeight, currentWeight, null, null, note);
+    }
+
+    @Transactional
+    public StrategyHolding add(String code, String type, String role, double targetWeight,
+                               double currentWeight, Double quantity, Double averageCost, String note) {
         validateWeights(targetWeight, currentWeight);
+        validatePosition(quantity, averageCost);
         validateRole(type, role);
         Instrument instrument = instrumentResolver.resolve(code, type);
         if (holdingRepository.existsByInstrumentId(instrument.getId())) {
@@ -47,6 +54,8 @@ public class StrategyHoldingService {
         value.setRole(role);
         value.setTargetWeight(targetWeight);
         value.setCurrentWeight(currentWeight);
+        value.setQuantity(quantity);
+        value.setAverageCost(averageCost);
         value.setNote(note);
         return holdingRepository.save(value);
     }
@@ -56,10 +65,22 @@ public class StrategyHoldingService {
                                   double currentWeight, String note, long revision) {
         StrategyHolding current = holdingRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(BizErrorCode.PORTFOLIO_ENTRY_NOT_FOUND));
+        return update(id, role, targetWeight, currentWeight, current.getQuantity(),
+                current.getAverageCost(), note, revision);
+    }
+
+    @Transactional
+    public StrategyHolding update(Long id, String role, double targetWeight,
+                                  double currentWeight, Double quantity, Double averageCost,
+                                  String note, long revision) {
+        StrategyHolding current = holdingRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(BizErrorCode.PORTFOLIO_ENTRY_NOT_FOUND));
         validateWeights(targetWeight, currentWeight);
+        validatePosition(quantity, averageCost);
         validateRole(current.getType(), role);
         validateTotal(id, targetWeight);
-        if (!holdingRepository.update(id, role, targetWeight, currentWeight, note, revision)) {
+        if (!holdingRepository.update(id, role, targetWeight, currentWeight,
+                quantity, averageCost, note, revision)) {
             throw new BusinessException(BizErrorCode.RECORD_UPDATED_AGAIN);
         }
         return holdingRepository.findById(id)
@@ -81,6 +102,13 @@ public class StrategyHoldingService {
     private void validateWeights(double targetWeight, double currentWeight) {
         if (targetWeight < 0 || targetWeight > 100 || currentWeight < 0 || currentWeight > 100) {
             throw new BusinessException(BizErrorCode.WEIGHT_OUT_OF_RANGE);
+        }
+    }
+
+    private void validatePosition(Double quantity, Double averageCost) {
+        if ((quantity == null) != (averageCost == null)
+                || quantity != null && (quantity < 0 || averageCost < 0)) {
+            throw new IllegalArgumentException("持仓数量与平均成本必须同时填写且不能为负数");
         }
     }
 

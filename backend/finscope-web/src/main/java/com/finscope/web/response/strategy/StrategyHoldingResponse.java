@@ -15,6 +15,8 @@ public class StrategyHoldingResponse {
     private String role;
     private double targetWeight;
     private double currentWeight;
+    private Double quantity;
+    private Double averageCost;
     private String note;
     private long revision;
     private LocalDateTime updatedAt;
@@ -29,6 +31,8 @@ public class StrategyHoldingResponse {
         response.role = value.getRole();
         response.targetWeight = value.getTargetWeight();
         response.currentWeight = value.getCurrentWeight();
+        response.quantity = value.getQuantity();
+        response.averageCost = value.getAverageCost();
         response.note = value.getNote();
         response.revision = value.getRevision();
         response.updatedAt = value.getUpdatedAt();

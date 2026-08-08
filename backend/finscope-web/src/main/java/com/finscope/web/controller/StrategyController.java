@@ -65,7 +65,8 @@ public class StrategyController {
     @PostMapping("/holdings")
     public ApiResponse<StrategyHoldingResponse> add(@RequestBody AddStrategyHoldingRequest request) {
         return ApiResponses.success(StrategyHoldingResponse.of(strategyHoldingService.add(request.getCode(), request.getType(),
-                request.getRole(), request.getTargetWeight(), request.getCurrentWeight(), request.getNote())));
+                request.getRole(), request.getTargetWeight(), request.getCurrentWeight(), request.getQuantity(),
+                request.getAverageCost(), request.getNote())));
     }
 
     /**
@@ -78,7 +79,7 @@ public class StrategyController {
     @PatchMapping("/holdings/{id}")
     public ApiResponse<StrategyHoldingResponse> update(@PathVariable Long id, @RequestBody UpdateStrategyHoldingRequest request) {
         return ApiResponses.success(StrategyHoldingResponse.of(strategyHoldingService.update(id, request.getRole(),
-                request.getTargetWeight(), request.getCurrentWeight(), request.getNote(),
+                request.getTargetWeight(), request.getCurrentWeight(), request.getQuantity(), request.getAverageCost(), request.getNote(),
                 request.getRevision())));
     }
 

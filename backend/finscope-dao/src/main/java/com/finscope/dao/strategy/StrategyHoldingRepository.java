@@ -30,6 +30,10 @@ public class StrategyHoldingRepository {
         holding.setRole(rs.getString("role"));
         holding.setTargetWeight(rs.getDouble("target_weight"));
         holding.setCurrentWeight(rs.getDouble("current_weight"));
+        double quantity = rs.getDouble("quantity");
+        holding.setQuantity(rs.wasNull() ? null : quantity);
+        double averageCost = rs.getDouble("average_cost");
+        holding.setAverageCost(rs.wasNull() ? null : averageCost);
         holding.setNote(rs.getString("note"));
         holding.setSortOrder(rs.getInt("sort_order"));
         holding.setRevision(rs.getLong("revision"));
@@ -49,17 +53,19 @@ public class StrategyHoldingRepository {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("INSERT INTO strategy_holding("
-                    + "instrument_id,role,target_weight,current_weight,note,sort_order,revision,created_at,updated_at) "
-                    + "VALUES(?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                    + "instrument_id,role,target_weight,current_weight,quantity,average_cost,note,sort_order,revision,created_at,updated_at) "
+                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, holding.getInstrumentId());
             ps.setString(2, holding.getRole());
             ps.setDouble(3, holding.getTargetWeight());
             ps.setDouble(4, holding.getCurrentWeight());
-            ps.setString(5, holding.getNote());
-            ps.setInt(6, holding.getSortOrder());
-            ps.setLong(7, holding.getRevision());
-            ps.setString(8, TimeUtil.text(now));
-            ps.setString(9, TimeUtil.text(now));
+            if (holding.getQuantity() == null) ps.setNull(5, java.sql.Types.REAL); else ps.setDouble(5, holding.getQuantity());
+            if (holding.getAverageCost() == null) ps.setNull(6, java.sql.Types.REAL); else ps.setDouble(6, holding.getAverageCost());
+            ps.setString(7, holding.getNote());
+            ps.setInt(8, holding.getSortOrder());
+            ps.setLong(9, holding.getRevision());
+            ps.setString(10, TimeUtil.text(now));
+            ps.setString(11, TimeUtil.text(now));
             return ps;
         }, keys);
         if (keys.getKey() != null) {
@@ -77,6 +83,12 @@ public class StrategyHoldingRepository {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    public Optional<StrategyHolding> findStockByCode(String code) {
+        List<StrategyHolding> results = jdbcTemplate.query(
+                SELECT + "WHERE i.type='STOCK' AND i.code=? ORDER BY h.id DESC LIMIT 1", mapper, code);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
     public boolean existsByInstrumentId(Long instrumentId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM strategy_holding WHERE instrument_id=?", Integer.class, instrumentId);
@@ -91,9 +103,15 @@ public class StrategyHoldingRepository {
     }
 
     public boolean update(Long id, String role, double targetWeight, double currentWeight, String note, long revision) {
-        return jdbcTemplate.update("UPDATE strategy_holding SET role=?,target_weight=?,current_weight=?,note=?,"
+        return update(id, role, targetWeight, currentWeight, null, null, note, revision);
+    }
+
+    public boolean update(Long id, String role, double targetWeight, double currentWeight,
+                          Double quantity, Double averageCost, String note, long revision) {
+        return jdbcTemplate.update("UPDATE strategy_holding SET role=?,target_weight=?,current_weight=?,quantity=?,average_cost=?,note=?,"
                         + "revision=revision+1,updated_at=? WHERE id=? AND revision=?",
-                role, targetWeight, currentWeight, note, TimeUtil.text(LocalDateTime.now()), id, revision) == 1;
+                role, targetWeight, currentWeight, quantity, averageCost, note,
+                TimeUtil.text(LocalDateTime.now()), id, revision) == 1;
     }
 
     public boolean deleteByIdAndRevision(Long id, long revision) {

@@ -21,8 +21,7 @@ import java.util.Set;
 public class PythonSingleStockForecastClient {
     private static final String CLIENT_CODE = "PYTHON_SINGLE_STOCK_FORECAST";
     private static final Set<String> STATUSES = new HashSet<String>(Arrays.asList(
-            "INSUFFICIENT_DATA", "LOW_CONFIDENCE", "NO_OBSERVED_EDGE",
-            "CONDITIONAL_EDGE", "EVIDENCE_SUPPORTED", "MODEL_UNAVAILABLE"));
+            "INSUFFICIENT_DATA", "ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -61,7 +60,9 @@ public class PythonSingleStockForecastClient {
                 || result.getAsOfDate() == null || result.getHorizonDays() != 20
                 || !STATUSES.contains(result.getStatus()) || result.getConclusion() == null
                 || result.getBarCount() == null || result.getBarCount() < 0
-                || result.getDataFingerprint() == null || result.getDataFingerprint().trim().isEmpty()) {
+                || result.getDataFingerprint() == null || result.getDataFingerprint().trim().isEmpty()
+                || result.getReportSchemaVersion() == null || result.getModelVersion() == null
+                || result.getStrategyPolicy() == null || result.getLastClose() == null) {
             throw contract("SCHEMA_DRIFT", "Python 单股预测缺少必需字段", false);
         }
         probability(result.getUpProbability());
