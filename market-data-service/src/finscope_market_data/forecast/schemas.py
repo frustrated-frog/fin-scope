@@ -151,9 +151,105 @@ class ForecastObservation(ForecastModel):
     correct: bool
 
 
+class ConfidenceInterval(ForecastModel):
+    status: str
+    lower: float | None = None
+    upper: float | None = None
+    confidence_level: float = 0.95
+    method: str
+    valid_iterations: int
+    reason: str | None = None
+    limitation: str | None = None
+
+
+class SplitSliceAudit(ForecastModel):
+    start_date: str
+    end_date: str
+    sample_count: int
+    independent_sample_count: int
+    positive_count: int
+    purged_count: int
+
+
+class QualificationSplitAudit(ForecastModel):
+    development: SplitSliceAudit
+    calibration: SplitSliceAudit
+    locked_test: SplitSliceAudit
+    label_horizon_days: int = 20
+    independent_stride_days: int = 20
+    rule: str
+
+
+class ProbabilityMetricSet(ForecastModel):
+    sample_count: int
+    accuracy: float
+    brier_score: float
+    baseline_brier_score: float
+    brier_skill_score: float
+    log_loss: float
+    expected_calibration_error: float
+
+
+class ReliabilityBin(ForecastModel):
+    lower_bound: float
+    upper_bound: float
+    count: int
+    mean_probability: float | None = None
+    observed_up_rate: float | None = None
+    calibration_error: float | None = None
+
+
+class CalibrationReport(ForecastModel):
+    status: str
+    method: str = "PLATT"
+    sample_count: int
+    positive_count: int
+    slope: float
+    intercept: float
+    raw_log_loss: float
+    calibrated_log_loss: float
+    reason: str | None = None
+
+
+class LockedTestReport(ForecastModel):
+    baseline_probability: float
+    raw_metrics: ProbabilityMetricSet
+    calibrated_metrics: ProbabilityMetricSet
+    baseline_metrics: ProbabilityMetricSet
+    reliability_bins: list[ReliabilityBin]
+
+
+class QualificationIntervals(ForecastModel):
+    brier_skill_score: ConfidenceInterval
+    accuracy: ConfidenceInterval
+    excess_return: ConfidenceInterval
+    sharpe_ratio: ConfidenceInterval
+
+
+class TrialIdentity(ForecastModel):
+    trial_id: str
+    feature_version: str
+    label_version: str
+    split_version: str
+    calibration_version: str
+    bootstrap_version: str
+    random_seed: int
+    model_version: str
+
+
+class ModelQualification(ForecastModel):
+    status: str
+    reason: str | None = None
+    trial: TrialIdentity
+    split_audit: QualificationSplitAudit
+    calibration: CalibrationReport
+    locked_test: LockedTestReport
+    confidence_intervals: QualificationIntervals
+
+
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v2"
-    model_version: str = "logistic-walk-forward-v2"
+    report_schema_version: str = "single-stock-research-v3"
+    model_version: str = "logistic-platt-qualified-v3"
     instrument_code: str
     as_of_date: str
     horizon_days: int = 20
@@ -162,6 +258,8 @@ class SingleStockForecastResult(ForecastModel):
     bar_count: int
     labeled_sample_count: int | None = None
     up_probability: float | None = Field(default=None, ge=0, le=1)
+    raw_probability: float | None = Field(default=None, ge=0, le=1)
+    probability_interval: ConfidenceInterval | None = None
     expected_net_return: float | None = None
     lower_net_return: float | None = None
     upper_net_return: float | None = None
@@ -181,4 +279,5 @@ class SingleStockForecastResult(ForecastModel):
     out_of_sample: EvaluationSlice | None = None
     parameter_stability: ParameterStability | None = None
     recent_observations: list[ForecastObservation] = Field(default_factory=list)
+    qualification: ModelQualification | None = None
     warnings: list[str] = Field(default_factory=list)

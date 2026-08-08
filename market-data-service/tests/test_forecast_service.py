@@ -90,6 +90,22 @@ def test_forecast_returns_structured_insufficient_state() -> None:
     assert "不足" in result.conclusion
 
 
+def test_forecast_refuses_probability_when_locked_qualification_is_too_small() -> None:
+    result = build_forecast(
+        bars(800),
+        instrument_code="600519.SH",
+        source_code="PYTDX",
+        source_family="TDX",
+        quality_status="FRESH_FALLBACK",
+        warnings=[],
+    )
+
+    assert result.status == "INSUFFICIENT_DATA"
+    assert result.up_probability is None
+    assert result.qualification is not None
+    assert result.qualification.status == "INSUFFICIENT_DATA"
+
+
 def test_forecast_produces_auditable_twenty_day_probability() -> None:
     result = build_forecast(
         bars(1600),
@@ -109,8 +125,18 @@ def test_forecast_produces_auditable_twenty_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v2"
-    assert result.model_version == "logistic-walk-forward-v2"
+    assert result.report_schema_version == "single-stock-research-v3"
+    assert result.model_version == "logistic-platt-qualified-v3"
+    assert result.raw_probability is not None
+    assert result.qualification is not None
+    assert len(result.qualification.trial.trial_id) == 64
+    assert result.qualification.split_audit.development.end_date < result.qualification.split_audit.calibration.start_date
+    assert result.qualification.split_audit.calibration.end_date < result.qualification.split_audit.locked_test.start_date
+    assert result.qualification.locked_test.calibrated_metrics.sample_count > 0
+    assert result.qualification.locked_test.baseline_metrics.brier_skill_score == 0
+    assert sum(item.count for item in result.qualification.locked_test.reliability_bins) == result.qualification.locked_test.calibrated_metrics.sample_count
+    assert result.qualification.confidence_intervals.brier_skill_score.status in {"AVAILABLE", "UNAVAILABLE"}
+    assert result.probability_interval is not None
     assert result.performance is not None
     assert result.performance.benchmark_label == "同股买入并持有"
     assert result.performance.trade_count >= 0

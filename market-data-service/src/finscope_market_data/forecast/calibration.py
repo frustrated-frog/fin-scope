@@ -59,13 +59,21 @@ class PlattCalibrator:
         parameters = np.asarray([1.0, 0.0], dtype=np.float64)
         ridge = np.asarray([0.01, 0.002], dtype=np.float64)
         try:
-            for iteration in range(3000):
+            for _ in range(80):
                 fitted = np.asarray(_sigmoid_array(design @ parameters))
+                weights = np.clip(fitted * (1.0 - fitted), 1e-6, None)
                 gradient = design.T @ (fitted - targets) / sample_count + ridge * parameters
-                rate = 0.08 / math.sqrt(1.0 + iteration / 100.0)
-                update = rate * gradient
-                parameters -= update
-                if float(np.max(np.abs(update))) < 1e-9:
+                hessian = (design.T * weights) @ design / sample_count + np.diag(ridge)
+                update = np.linalg.solve(hessian, gradient)
+                current_objective = _objective(design, targets, parameters, ridge)
+                step = 1.0
+                while step >= 1e-6:
+                    candidate = parameters - step * update
+                    if _objective(design, targets, candidate, ridge) <= current_objective:
+                        parameters = candidate
+                        break
+                    step *= 0.5
+                if step < 1e-6 or float(np.max(np.abs(step * update))) < 1e-9:
                     break
         except (FloatingPointError, np.linalg.LinAlgError):
             return _fallback(sample_count, positive_count, raw_loss, "概率校准数值求解失败")
@@ -135,3 +143,14 @@ def _sigmoid(value: float) -> float:
 
 def _sigmoid_array(values: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(values, -30.0, 30.0)))
+
+
+def _objective(
+    design: np.ndarray,
+    targets: np.ndarray,
+    parameters: np.ndarray,
+    ridge: np.ndarray,
+) -> float:
+    probabilities = np.clip(_sigmoid_array(design @ parameters), PROBABILITY_EPSILON, 1.0 - PROBABILITY_EPSILON)
+    loss = -np.mean(targets * np.log(probabilities) + (1.0 - targets) * np.log(1.0 - probabilities))
+    return float(loss + 0.5 * np.sum(ridge * parameters * parameters))
