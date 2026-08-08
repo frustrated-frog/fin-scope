@@ -115,6 +115,14 @@ test('rejects malformed code locally and does not post a forecast', async () => 
   expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
 });
 
+test('treats a malformed history payload as an empty archive', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({})));
+
+  render(<SingleStockForecastPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('运行第一份研究后，它会永久留在这里。')).toBeInTheDocument();
+});
+
 test('saves and shows an insufficient-data run without fabricating probability', async () => {
   const insufficient = { ...run, status: 'INSUFFICIENT_DATA', upProbability: undefined,
     report: { ...report, status: 'INSUFFICIENT_DATA', upProbability: undefined,

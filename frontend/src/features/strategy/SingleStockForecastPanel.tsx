@@ -56,7 +56,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
   useEffect(() => {
     let active = true;
     api<SingleStockForecastRun[]>('/api/quant/single-stock-forecasts?limit=50')
-      .then(value => { if (active) setRuns(value); })
+      .then(value => { if (active) setRuns(Array.isArray(value) ? value : []); })
       .catch(error => { if (active) addToast(error instanceof Error ? error.message : '预测历史加载失败', 'error'); })
       .finally(() => { if (active) setHistoryBusy(false); });
     return () => { active = false; };
