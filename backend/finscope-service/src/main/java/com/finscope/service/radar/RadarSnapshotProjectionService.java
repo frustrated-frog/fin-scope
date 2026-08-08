@@ -1,5 +1,6 @@
 package com.finscope.service.radar;
 
+import com.finscope.domain.radar.RadarEventStatus;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.service.cache.ViewRevisionService;
@@ -79,7 +80,8 @@ public class RadarSnapshotProjectionService {
         List<RadarEvent> values = new ArrayList<RadarEvent>();
         if (events == null) return values;
         for (RadarEvent event : events) {
-            if (event != null && ("ACTIVE".equalsIgnoreCase(event.getStatus()) || "QUIET".equalsIgnoreCase(event.getStatus()))) values.add(event);
+            RadarEventStatus status = RadarEventStatus.from(event == null ? null : event.getStatus());
+            if (status == RadarEventStatus.ACTIVE || status == RadarEventStatus.QUIET) values.add(event);
         }
         return values;
     }

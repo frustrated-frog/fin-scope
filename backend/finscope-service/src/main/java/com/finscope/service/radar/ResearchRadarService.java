@@ -6,6 +6,7 @@ import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
+import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
@@ -380,7 +381,7 @@ public class ResearchRadarService {
         signal.setUrl(item.getUrl());
         signal.setPublishedAt(item.getPublishedAt());
         signal.setContentHash(hash(item.getTitle() + "\n" + item.getContent() + "\n" + item.getUrl()));
-        signal.setStatus("ACTIVE");
+        signal.setStatus(RadarSignalStatus.ACTIVE.code());
         return signal;
     }
 

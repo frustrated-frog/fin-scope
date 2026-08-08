@@ -1,6 +1,7 @@
 package com.finscope.dao.radar;
 
 import com.finscope.common.util.TimeUtil;
+import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarSignal;
@@ -34,8 +35,9 @@ public class RadarRepository {
                         + "source_weight=CASE WHEN excluded.source_weight=0 THEN source_weight ELSE excluded.source_weight END",
                 signal.getItemId(), signal.getProviderCode(), signal.getSourceName(), signal.getSourceTier(),
                 signal.getCategoryCode(), signal.getTitle(), signal.getContent(), signal.getUrl(),
-                TimeUtil.text(signal.getPublishedAt()), timestamp, timestamp, signal.getContentHash(), "ACTIVE",
-                signal.getSourceRank(), signal.getPreviousSourceRank(), signal.getSourceWeight());
+                TimeUtil.text(signal.getPublishedAt()), timestamp, timestamp, signal.getContentHash(),
+                RadarSignalStatus.ACTIVE.code(), signal.getSourceRank(), signal.getPreviousSourceRank(),
+                signal.getSourceWeight());
         return findSignalByItemId(signal.getItemId()).orElseThrow(IllegalStateException::new);
     }
 

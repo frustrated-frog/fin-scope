@@ -4,6 +4,7 @@ import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.dao.radar.RadarEventSnapshotRepository;
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
+import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
@@ -200,7 +201,7 @@ public class RadarHotspotProductionPipeline {
         signal.setSourceName(item.getSourceName()); signal.setSourceTier(item.getSourceTier()); signal.setCategoryCode(item.getCategoryCode());
         signal.setTitle(item.getTitle()); signal.setContent(item.getContent()); signal.setUrl(item.getUrl()); signal.setPublishedAt(item.getPublishedAt());
         signal.setSourceRank(rank); signal.setSourceWeight(sourceWeight(item.getSourceTier())); signal.setContentHash(hash(item.getTitle()+"\n"+item.getContent()+"\n"+item.getUrl()));
-        signal.setStatus("ACTIVE"); return signal;
+        signal.setStatus(RadarSignalStatus.ACTIVE.code()); return signal;
     }
 
     private int nextRank(Map<String, Integer> ranks, String provider) {

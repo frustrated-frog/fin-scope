@@ -1,6 +1,7 @@
 package com.finscope.service.radar;
 
 import com.finscope.dao.radar.RadarPairDecisionRepository;
+import com.finscope.domain.radar.RadarEventStatus;
 import com.finscope.domain.radar.RadarPairDecision;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
@@ -187,7 +188,7 @@ public class RadarClusteringService {
             RadarTextAnalyzer.SignalFeatures features = analyzer.analyze(representative);
             event.setEventKey(analyzer.eventKey(features)); event.setCanonicalTitle(representative.getTitle());
             event.setSummary(firstNonBlank(representative.getContent(), representative.getTitle()));
-            event.setCategoryCode(features.getCategory()); event.setStatus("ACTIVE");
+            event.setCategoryCode(features.getCategory()); event.setStatus(RadarEventStatus.ACTIVE.code());
             LocalDateTime first = null, last = null; Set<String> providers = new HashSet<String>();
             for (RadarSignal signal : signals) { LocalDateTime time = signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
                 if (time != null && (first == null || time.isBefore(first))) first=time; if (time != null && (last == null || time.isAfter(last))) last=time;
