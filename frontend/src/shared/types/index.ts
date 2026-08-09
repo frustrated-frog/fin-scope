@@ -53,6 +53,10 @@ export type StrategyPlaybook = {
 };
 export type StrategyStockThesis = { id: number; code: string; name: string; stage: string; thesis: string; buyConditions: string; invalidationConditions: string; watchFocus: string; note?: string; revision: number };
 export type StrategyReview = { id: number; reviewDate: string; facts: string; reasoning: string; nextAction: string; createdAt: string };
+export type StockLearningCardClaim = { dimensionCode: string; judgment: string; rationale: string; counterargument: string; unknowns: string; confidence: string; sortOrder: number };
+export type StockLearningCardWatchItem = { metric: string; baseline?: string; frequency: string; upgradeCondition?: string; downgradeCondition?: string; nextReviewAt?: string; sortOrder: number };
+export type StockLearningCardRun = { id?: number; status: 'RUNNING' | 'READY' | 'DEGRADED'; conclusionStatus?: string; summary?: string; evidenceCompleteness?: string; warningMessage?: string; generationMode?: string; claims: StockLearningCardClaim[]; watchItems: StockLearningCardWatchItem[] };
+export type StockLearningCardView = { card: { code: string; name: string }; latestRun: StockLearningCardRun | null };
 
 export type Source = {
   id?: number;
