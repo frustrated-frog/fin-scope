@@ -64,7 +64,9 @@ public class StockLearningCardRepository {
             ps.setLong(1, run.getCardId()); if (run.getResearchRunId() == null) ps.setNull(2, java.sql.Types.INTEGER); else ps.setLong(2, run.getResearchRunId());
             ps.setString(3, run.getFrameworkCode()); ps.setString(4, run.getStatus()); ps.setString(5, run.getConclusionStatus()); ps.setString(6, run.getSummary());
             ps.setString(7, run.getEvidenceCompleteness()); ps.setString(8, run.getWarningMessage()); ps.setString(9, run.getSourceFingerprint()); ps.setString(10, run.getGenerationMode());
-            ps.setString(11, TimeUtil.text(now)); ps.setString(12, TimeUtil.text(now)); return ps; }, keys);
+            ps.setString(11, TimeUtil.text(now));
+            if ("RUNNING".equals(run.getStatus())) ps.setNull(12, java.sql.Types.VARCHAR); else ps.setString(12, TimeUtil.text(now));
+            return ps; }, keys);
         run.setId(keys.getKey().longValue());
         for (StockLearningCardClaim claim : claims == null ? Collections.<StockLearningCardClaim>emptyList() : claims) saveClaim(run.getId(), claim);
         for (StockLearningCardWatchItem watch : watches == null ? Collections.<StockLearningCardWatchItem>emptyList() : watches) saveWatch(run.getId(), watch);

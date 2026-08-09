@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class StockLearningCardRepositoryTest {
@@ -69,6 +70,18 @@ class StockLearningCardRepositoryTest {
         assertEquals("高端白酒需求", restored.getWatchItems().get(0).getMetric());
         assertEquals(saved.getId(), repository.latest(card.getId()).orElseThrow(AssertionError::new).getId());
         assertThrows(Exception.class, () -> repository.appendRun(run, Arrays.asList(claim("SPACE", "重复", 1), claim("SPACE", "重复", 2)), Arrays.asList()));
+    }
+
+    @Test
+    void keepsTheCompletionTimeEmptyWhileResearchIsRunning() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun run = new StockLearningCardRun();
+        run.setCardId(card.getId()); run.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        run.setStatus("RUNNING"); run.setEvidenceCompleteness("PENDING"); run.setGenerationMode("CONTROLLED");
+
+        StockLearningCardRun saved = repository.appendRun(run, Arrays.<StockLearningCardClaim>asList(), Arrays.<StockLearningCardWatchItem>asList());
+
+        assertNull(saved.getCompletedAt());
     }
 
     private StockLearningCardClaim claim(String dimension, String judgment, int order) {
