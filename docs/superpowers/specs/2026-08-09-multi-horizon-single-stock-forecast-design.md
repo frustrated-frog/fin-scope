@@ -42,4 +42,3 @@ Web request 增加 `horizonDays`，Bean Validation 限定取值。RPC client 把
 - Python：标签时点、非法周期、分周期锚点、选择性指标、v4 报告、区间有限性。
 - Java：请求校验、RPC 请求/响应周期、DAO 迁移与按周期去重、Service 保存。
 - 前端：默认 5 日、切换周期、POST 参数、方向/弃权、历史周期状态、生产构建。
-
