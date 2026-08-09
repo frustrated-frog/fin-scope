@@ -29,13 +29,15 @@ class StockLearningCardControllerTest {
     @Test
     void startsAControlledStockLearningRun() throws Exception {
         StockLearningCardRun run = new StockLearningCardRun();
-        run.setId(8L); run.setStatus("RUNNING");
+        run.setId(8L); run.setStatus("RUNNING"); run.setStage("QUEUED");
         when(learningCardService.start(eq("600519"))).thenReturn(run);
 
         mockMvc.perform(post("/api/stock-learning-cards/{code}/runs", "600519"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(8))
-                .andExpect(jsonPath("$.data.status").value("RUNNING"));
+                .andExpect(jsonPath("$.data.status").value("RUNNING"))
+                .andExpect(jsonPath("$.data.stage").value("QUEUED"))
+                .andExpect(jsonPath("$.data.researchRunId").doesNotExist());
     }
 
     @Test
