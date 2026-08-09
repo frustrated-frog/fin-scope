@@ -4,10 +4,44 @@ import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { StockLearningCardPanel } from './StockLearningCardPanel';
 
+test('restores persisted stock cards and opens the latest six-dimension detail', async () => {
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input); requests.push(path);
+    if (path === '/api/stock-learning-cards') return apiResponse([{
+      code: '603618', name: '杭电股份', status: 'DEGRADED', stage: 'COMPLETED',
+      summary: '已生成5个维度，1个维度需要重试', completedDimensions: 5, totalDimensions: 6,
+      completedAt: '2026-08-09T20:51:59'
+    }]);
+    if (path === '/api/stock-learning-cards/603618') return apiResponse({
+      card: { code: '603618', name: '杭电股份' },
+      latestRun: {
+        id: 3, status: 'DEGRADED', stage: 'COMPLETED', summary: '已生成5个维度，1个维度需要重试',
+        claims: [{ dimensionCode: 'SPACE', status: 'READY', judgment: '空间判断', rationale: '公开资料', counterargument: '反方', unknowns: '未知', confidence: 'MEDIUM', sortOrder: 1 }],
+        evidence: [], watchItems: []
+      }
+    });
+    return apiResponse({});
+  }));
+  const user = userEvent.setup();
+
+  render(<StockLearningCardPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const card = await screen.findByRole('button', { name: '查看杭电股份 603618 学习卡' });
+  expect(screen.queryByText('空间判断')).not.toBeInTheDocument();
+  await user.click(card);
+  expect(await screen.findByText('空间判断')).toBeInTheDocument();
+  expect(requests).toContain('/api/stock-learning-cards/603618');
+  await user.click(screen.getByRole('button', { name: '返回全部股票' }));
+  expect(await screen.findByRole('button', { name: '查看杭电股份 603618 学习卡' })).toBeInTheDocument();
+  expect(screen.queryByText('空间判断')).not.toBeInTheDocument();
+});
+
 test('lets the learner select a stock and starts the agent without requiring a thesis', async () => {
   const requests: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input); requests.push(`${init?.method ?? 'GET'} ${path}`);
+    if (path === '/api/stock-learning-cards' && !init?.method) return apiResponse([]);
     if (path === '/api/stock-learning-cards/600519' && !init?.method) {
       return apiResponse({ card: { code: '600519', name: '贵州茅台' }, latestRun: null });
     }
@@ -28,7 +62,8 @@ test('lets the learner select a stock and starts the agent without requiring a t
 });
 
 test('shows a failed dimension beside successful cards and explains that it can be retried', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === '/api/stock-learning-cards' && !init?.method) return apiResponse([]);
     if (init?.method === 'POST') return apiResponse({
       id: 6,
       status: 'DEGRADED',

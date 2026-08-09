@@ -58,6 +58,7 @@ export type StockLearningCardEvidence = { dimensionCode: string; evidenceCode: s
 export type StockLearningCardWatchItem = { metric: string; baseline?: string; frequency: string; upgradeCondition?: string; downgradeCondition?: string; nextReviewAt?: string; sortOrder: number };
 export type StockLearningCardRun = { id?: number; status: 'RUNNING' | 'READY' | 'DEGRADED' | 'FAILED'; stage?: 'QUEUED' | 'COLLECTING_EVIDENCE' | 'SYNTHESIZING_CARDS' | 'COMPLETED'; failedStage?: string; errorCode?: string; userMessage?: string; retryable?: boolean; conclusionStatus?: string; summary?: string; evidenceCompleteness?: string; warningMessage?: string; sourceFingerprint?: string; generationMode?: string; claims: StockLearningCardClaim[]; evidence?: StockLearningCardEvidence[]; watchItems: StockLearningCardWatchItem[] };
 export type StockLearningCardView = { card: { code: string; name: string }; latestRun: StockLearningCardRun | null };
+export type StockLearningCardSummary = { code: string; name: string; status: StockLearningCardRun['status']; stage?: StockLearningCardRun['stage']; summary?: string; completedDimensions: number; totalDimensions: number; updatedAt?: string; completedAt?: string };
 
 export type Source = {
   id?: number;
