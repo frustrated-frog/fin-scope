@@ -241,6 +241,7 @@ export interface SingleStockForecast {
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
   status: SingleStockForecastStatus; conclusion: string;
+  decision?: 'UP' | 'DOWN' | 'ABSTAIN'; decisionReason?: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
   rawProbability?: number; probabilityInterval?: ForecastConfidenceInterval;
@@ -276,11 +277,15 @@ export interface SingleStockForecast {
       primary: boolean; annualizedReturn: number; excessReturn: number; sharpeRatio: number;
       maxDrawdown: number; tradeCount: number }> };
   qualification?: ForecastQualification;
+  selectiveValidation?: { lowerThreshold: number; upperThreshold: number;
+    sampleCount: number; coveredCount: number; coverage: number;
+    coveredAccuracy: number; abstainRate: number };
   warnings: string[];
 }
 
 export interface SingleStockForecastRun {
   id: number; instrumentCode: string; asOfDate: string; status: SingleStockForecastStatus;
+  horizonDays?: number; maturityStatus?: 'PENDING' | 'MATURED' | 'UNAVAILABLE';
   upProbability?: number; dataFingerprint: string; modelVersion: string;
   reportSchemaVersion: string; sameDataAsPrevious: boolean; createdAt: string;
   report?: SingleStockForecast;

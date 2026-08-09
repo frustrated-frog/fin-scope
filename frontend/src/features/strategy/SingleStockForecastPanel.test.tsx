@@ -6,13 +6,15 @@ import { SingleStockForecastPanel } from './SingleStockForecastPanel';
 
 const summary = { id: 7, instrumentCode: '600519.SH', asOfDate: '2026-08-06',
   status: 'NO_CLEAR_EDGE', upProbability: 0.53, dataFingerprint: 'abcdef',
-  modelVersion: 'logistic-platt-qualified-v3', reportSchemaVersion: 'single-stock-research-v3',
+  modelVersion: 'logistic-platt-selective-v4', reportSchemaVersion: 'single-stock-research-v4',
+  horizonDays: 5, maturityStatus: 'PENDING',
   sameDataAsPrevious: false, createdAt: '2026-08-08T14:00:00' };
 
 const report = {
-  reportSchemaVersion: 'single-stock-research-v3', modelVersion: 'logistic-platt-qualified-v3',
-  instrumentCode: '600519.SH', asOfDate: '2026-08-06', horizonDays: 20,
+  reportSchemaVersion: 'single-stock-research-v4', modelVersion: 'logistic-platt-selective-v4',
+  instrumentCode: '600519.SH', asOfDate: '2026-08-06', horizonDays: 5,
   status: 'NO_CLEAR_EDGE', conclusion: '样本外没有稳定优于同股买入并持有。',
+  decision: 'ABSTAIN', decisionReason: '概率位于拒绝区间，当前信息不足以形成方向优势。',
   barCount: 2400, labeledSampleCount: 2320, upProbability: 0.53, rawProbability: 0.59,
   probabilityInterval: { status: 'AVAILABLE', lower: .47, upper: .61, confidenceLevel: .95,
     method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 500,
@@ -20,8 +22,8 @@ const report = {
   expectedNetReturn: 0.018, lowerNetReturn: -0.072, upperNetReturn: 0.096,
   dataFingerprint: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
   sourceCode: 'PYTDX', sourceFamily: 'TDX', qualityStatus: 'FRESH_FALLBACK', lastClose: 1505,
-  strategyPolicy: { signalThreshold: .6, holdingDays: 20, entryRule: 'T+1 开盘买入',
-    exitRule: 'T+20 收盘卖出', overlapPolicy: '持仓不重叠', roundTripCostRate: .0015,
+  strategyPolicy: { signalThreshold: .6, holdingDays: 5, entryRule: 'T+1 开盘买入',
+    exitRule: 'T+6 开盘卖出', overlapPolicy: '持仓不重叠', roundTripCostRate: .0015,
     benchmark: '同股买入并持有' },
   validation: { outOfSampleCount: 850, independentSampleCount: 43, accuracy: .535,
     brierScore: .248, baselineBrierScore: .246, observedUpRate: .56 },
@@ -94,6 +96,8 @@ const report = {
       excessReturn: { status: 'AVAILABLE', lower: -.18, upper: .07, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 },
       sharpeRatio: { status: 'AVAILABLE', lower: -.22, upper: .91, confidenceLevel: .95, method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 1000 }
     } },
+  selectiveValidation: { lowerThreshold: .4, upperThreshold: .6, sampleCount: 24,
+    coveredCount: 14, coverage: .5833, coveredAccuracy: .714, abstainRate: .4167 },
   recentObservations: [{ signalDate: '2026-05-08', probability: .61,
     actualNetReturn: .034, correct: true }], warnings: ['收益基于前复权日线模拟']
 };
@@ -136,6 +140,28 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('朴素基准')).toBeInTheDocument();
   expect(screen.getAllByText('锁定测试').length).toBeGreaterThan(0);
   expect(screen.getByText(/仅覆盖校准映射的抽样误差/)).toBeInTheDocument();
+  expect(screen.getByText('暂不判断')).toBeInTheDocument();
+  expect(screen.getByText('覆盖后命中率')).toBeInTheDocument();
+  expect(screen.getByText('信号覆盖率')).toBeInTheDocument();
+  const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST');
+  expect(JSON.parse(String(post?.[1]?.body))).toEqual({ code: '600519', horizonDays: 5 });
+});
+
+test('switches to one day as an independent registered horizon', async () => {
+  const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    apiResponse(init?.method === 'POST' ? { ...run, horizonDays: 1,
+      report: { ...report, horizonDays: 1 } } : []));
+  vi.stubGlobal('fetch', fetch);
+  const user = userEvent.setup();
+
+  render(<SingleStockForecastPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.click(screen.getByRole('button', { name: /1 日/ }));
+  await user.type(screen.getByLabelText('股票代码'), '600519');
+  await user.click(screen.getByRole('button', { name: '运行完整研究' }));
+
+  const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST');
+  expect(JSON.parse(String(post?.[1]?.body))).toEqual({ code: '600519', horizonDays: 1 });
+  expect(await screen.findByText('1D')).toBeInTheDocument();
 });
 
 test('explains that legacy v2 history has no qualification evidence', async () => {
