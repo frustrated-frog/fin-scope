@@ -84,6 +84,57 @@ class StockLearningCardRepositoryTest {
         assertNull(saved.getCompletedAt());
     }
 
+    @Test
+    void persistsIndependentAgentProgressAndDimensionFailure() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun run = new StockLearningCardRun();
+        run.setCardId(card.getId());
+        run.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        run.setStatus("DEGRADED");
+        run.setStage("COMPLETED");
+        run.setFailedStage("SYNTHESIZING_CARDS");
+        run.setErrorCode("DIMENSION_PARTIAL_FAILURE");
+        run.setUserMessage("竞争格局生成失败，其他学习卡已保留");
+        run.setRetryable(true);
+        run.setEvidenceCompleteness("PARTIAL");
+        run.setGenerationMode("MODEL_ASSISTED");
+        StockLearningCardClaim failed = claim("COMPETITION", "暂未形成判断", 3);
+        failed.setStatus("FAILED");
+        failed.setFailureMessage("该维度生成失败，可以重新生成学习卡");
+
+        StockLearningCardRun saved = repository.appendRun(run, Arrays.asList(failed), Arrays.asList());
+        StockLearningCardRun restored = repository.findRun(saved.getId()).orElseThrow(AssertionError::new);
+
+        assertEquals("COMPLETED", restored.getStage());
+        assertEquals("SYNTHESIZING_CARDS", restored.getFailedStage());
+        assertEquals("DIMENSION_PARTIAL_FAILURE", restored.getErrorCode());
+        assertEquals("竞争格局生成失败，其他学习卡已保留", restored.getUserMessage());
+        assertEquals(true, restored.isRetryable());
+        assertEquals("FAILED", restored.getClaims().get(0).getStatus());
+        assertEquals("该维度生成失败，可以重新生成学习卡", restored.getClaims().get(0).getFailureMessage());
+    }
+
+    @Test
+    void updatesAnAsynchronousRunWithoutCreatingAnotherVersion() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun queued = new StockLearningCardRun();
+        queued.setCardId(card.getId()); queued.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        queued.setStatus("RUNNING"); queued.setStage("QUEUED"); queued.setEvidenceCompleteness("PENDING");
+        queued.setGenerationMode("CONTROLLED");
+        StockLearningCardRun saved = repository.appendRun(queued, Arrays.asList(), Arrays.asList());
+        saved.setStatus("READY"); saved.setStage("COMPLETED"); saved.setEvidenceCompleteness("COMPLETE");
+        saved.setGenerationMode("MODEL_ASSISTED");
+
+        repository.updateRun(saved, Arrays.asList(claim("SPACE", "空间判断", 1)),
+                Arrays.<StockLearningCardWatchItem>asList());
+
+        StockLearningCardRun restored = repository.latest(card.getId()).orElseThrow(AssertionError::new);
+        assertEquals(saved.getId(), restored.getId());
+        assertEquals("READY", restored.getStatus());
+        assertEquals("COMPLETED", restored.getStage());
+        assertEquals(1, restored.getClaims().size());
+    }
+
     private StockLearningCardClaim claim(String dimension, String judgment, int order) {
         StockLearningCardClaim value = new StockLearningCardClaim();
         value.setDimensionCode(dimension);

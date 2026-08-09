@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
@@ -37,6 +38,9 @@ public class StockLearningCardRepository {
         value.setId(rs.getLong("id")); value.setCardId(rs.getLong("card_id"));
         long research = rs.getLong("research_run_id"); value.setResearchRunId(rs.wasNull() ? null : research);
         value.setFrameworkCode(rs.getString("framework_code")); value.setStatus(rs.getString("status"));
+        value.setStage(rs.getString("stage")); value.setFailedStage(rs.getString("failed_stage"));
+        value.setErrorCode(rs.getString("error_code")); value.setUserMessage(rs.getString("user_message"));
+        value.setRetryable(rs.getInt("retryable") == 1);
         value.setConclusionStatus(rs.getString("conclusion_status")); value.setSummary(rs.getString("summary"));
         value.setEvidenceCompleteness(rs.getString("evidence_completeness")); value.setWarningMessage(rs.getString("warning_message"));
         value.setSourceFingerprint(rs.getString("source_fingerprint")); value.setGenerationMode(rs.getString("generation_mode"));
@@ -60,12 +64,14 @@ public class StockLearningCardRepository {
     public StockLearningCardRun appendRun(StockLearningCardRun run, List<StockLearningCardClaim> claims, List<StockLearningCardWatchItem> watches) {
         LocalDateTime now = LocalDateTime.now(); GeneratedKeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> { PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO stock_learning_card_run(card_id,research_run_id,framework_code,status,conclusion_status,summary,evidence_completeness,warning_message,source_fingerprint,generation_mode,created_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                "INSERT INTO stock_learning_card_run(card_id,research_run_id,framework_code,status,stage,failed_stage,error_code,user_message,retryable,conclusion_status,summary,evidence_completeness,warning_message,source_fingerprint,generation_mode,created_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, run.getCardId()); if (run.getResearchRunId() == null) ps.setNull(2, java.sql.Types.INTEGER); else ps.setLong(2, run.getResearchRunId());
-            ps.setString(3, run.getFrameworkCode()); ps.setString(4, run.getStatus()); ps.setString(5, run.getConclusionStatus()); ps.setString(6, run.getSummary());
-            ps.setString(7, run.getEvidenceCompleteness()); ps.setString(8, run.getWarningMessage()); ps.setString(9, run.getSourceFingerprint()); ps.setString(10, run.getGenerationMode());
-            ps.setString(11, TimeUtil.text(now));
-            if ("RUNNING".equals(run.getStatus())) ps.setNull(12, java.sql.Types.VARCHAR); else ps.setString(12, TimeUtil.text(now));
+            ps.setString(3, run.getFrameworkCode()); ps.setString(4, run.getStatus()); ps.setString(5, run.getStage());
+            ps.setString(6, run.getFailedStage()); ps.setString(7, run.getErrorCode()); ps.setString(8, run.getUserMessage()); ps.setInt(9, run.isRetryable() ? 1 : 0);
+            ps.setString(10, run.getConclusionStatus()); ps.setString(11, run.getSummary()); ps.setString(12, run.getEvidenceCompleteness());
+            ps.setString(13, run.getWarningMessage()); ps.setString(14, run.getSourceFingerprint()); ps.setString(15, run.getGenerationMode());
+            ps.setString(16, TimeUtil.text(now));
+            if ("RUNNING".equals(run.getStatus())) ps.setNull(17, java.sql.Types.VARCHAR); else ps.setString(17, TimeUtil.text(now));
             return ps; }, keys);
         run.setId(keys.getKey().longValue());
         for (StockLearningCardClaim claim : claims == null ? Collections.<StockLearningCardClaim>emptyList() : claims) saveClaim(run.getId(), claim);
@@ -73,9 +79,28 @@ public class StockLearningCardRepository {
         jdbcTemplate.update("UPDATE stock_learning_card SET latest_run_id=?,status=?,revision=revision+1,updated_at=? WHERE id=?", run.getId(), run.getStatus(), TimeUtil.text(now), run.getCardId());
         return findRun(run.getId()).orElseThrow(() -> new IllegalStateException("学习卡运行保存失败"));
     }
+    @Transactional
+    public StockLearningCardRun updateRun(StockLearningCardRun run, List<StockLearningCardClaim> claims,
+                                          List<StockLearningCardWatchItem> watches) {
+        if (run == null || run.getId() == null) throw new IllegalArgumentException("学习卡运行不能为空");
+        LocalDateTime now = LocalDateTime.now();
+        int changed = jdbcTemplate.update("UPDATE stock_learning_card_run SET status=?,stage=?,failed_stage=?,error_code=?,user_message=?,retryable=?,"
+                        + "conclusion_status=?,summary=?,evidence_completeness=?,warning_message=?,source_fingerprint=?,generation_mode=?,completed_at=? WHERE id=?",
+                run.getStatus(), run.getStage(), run.getFailedStage(), run.getErrorCode(), run.getUserMessage(), run.isRetryable() ? 1 : 0,
+                run.getConclusionStatus(), run.getSummary(), run.getEvidenceCompleteness(), run.getWarningMessage(), run.getSourceFingerprint(),
+                run.getGenerationMode(), "RUNNING".equals(run.getStatus()) ? null : TimeUtil.text(now), run.getId());
+        if (changed != 1) throw new IllegalStateException("学习卡运行不存在：" + run.getId());
+        jdbcTemplate.update("DELETE FROM stock_learning_card_claim WHERE run_id=?", run.getId());
+        jdbcTemplate.update("DELETE FROM stock_learning_card_watch_item WHERE run_id=?", run.getId());
+        for (StockLearningCardClaim claim : claims == null ? Collections.<StockLearningCardClaim>emptyList() : claims) saveClaim(run.getId(), claim);
+        for (StockLearningCardWatchItem watch : watches == null ? Collections.<StockLearningCardWatchItem>emptyList() : watches) saveWatch(run.getId(), watch);
+        jdbcTemplate.update("UPDATE stock_learning_card SET status=?,revision=revision+1,updated_at=? WHERE id=?",
+                run.getStatus(), TimeUtil.text(now), run.getCardId());
+        return findRun(run.getId()).orElseThrow(() -> new IllegalStateException("学习卡运行更新失败"));
+    }
     private void saveClaim(Long runId, StockLearningCardClaim claim) {
-        jdbcTemplate.update("INSERT INTO stock_learning_card_claim(run_id,dimension_code,judgment,rationale,counterargument,unknowns,confidence,sort_order) VALUES(?,?,?,?,?,?,?,?)",
-                runId, claim.getDimensionCode(), claim.getJudgment(), claim.getRationale(), claim.getCounterargument(), claim.getUnknowns(), claim.getConfidence(), claim.getSortOrder());
+        jdbcTemplate.update("INSERT INTO stock_learning_card_claim(run_id,dimension_code,status,failure_message,judgment,rationale,counterargument,unknowns,confidence,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                runId, claim.getDimensionCode(), claim.getStatus(), claim.getFailureMessage(), claim.getJudgment(), claim.getRationale(), claim.getCounterargument(), claim.getUnknowns(), claim.getConfidence(), claim.getSortOrder());
     }
     private void saveWatch(Long runId, StockLearningCardWatchItem watch) {
         jdbcTemplate.update("INSERT INTO stock_learning_card_watch_item(run_id,metric,baseline,frequency,upgrade_condition,downgrade_condition,next_review_at,sort_order) VALUES(?,?,?,?,?,?,?,?)",
@@ -89,6 +114,6 @@ public class StockLearningCardRepository {
         List<Long> ids = jdbcTemplate.query("SELECT id FROM stock_learning_card_run WHERE card_id=? ORDER BY id DESC LIMIT 1", (rs,row)->rs.getLong(1), cardId);
         return ids.isEmpty() ? Optional.empty() : findRun(ids.get(0));
     }
-    private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
+    private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setStatus(rs.getString("status")); value.setFailureMessage(rs.getString("failure_message")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
     private List<StockLearningCardWatchItem> watches(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_watch_item WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardWatchItem value=new StockLearningCardWatchItem(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setMetric(rs.getString("metric")); value.setBaseline(rs.getString("baseline")); value.setFrequency(rs.getString("frequency")); value.setUpgradeCondition(rs.getString("upgrade_condition")); value.setDowngradeCondition(rs.getString("downgrade_condition")); value.setNextReviewAt(TimeUtil.localDateTime(rs,"next_review_at")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
 }

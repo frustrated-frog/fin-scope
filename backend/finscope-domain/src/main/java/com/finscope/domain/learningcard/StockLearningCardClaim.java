@@ -4,6 +4,8 @@ public class StockLearningCardClaim {
     private Long id;
     private Long runId;
     private String dimensionCode;
+    private String status;
+    private String failureMessage;
     private String judgment;
     private String rationale;
     private String counterargument;
@@ -17,6 +19,10 @@ public class StockLearningCardClaim {
     public void setRunId(Long runId) { this.runId = runId; }
     public String getDimensionCode() { return dimensionCode; }
     public void setDimensionCode(String dimensionCode) { this.dimensionCode = dimensionCode; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getFailureMessage() { return failureMessage; }
+    public void setFailureMessage(String failureMessage) { this.failureMessage = failureMessage; }
     public String getJudgment() { return judgment; }
     public void setJudgment(String judgment) { this.judgment = judgment; }
     public String getRationale() { return rationale; }

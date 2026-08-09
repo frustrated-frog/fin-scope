@@ -10,6 +10,11 @@ public class StockLearningCardRun {
     private Long researchRunId;
     private String frameworkCode;
     private String status;
+    private String stage;
+    private String failedStage;
+    private String errorCode;
+    private String userMessage;
+    private boolean retryable;
     private String conclusionStatus;
     private String summary;
     private String evidenceCompleteness;
@@ -31,6 +36,16 @@ public class StockLearningCardRun {
     public void setFrameworkCode(String frameworkCode) { this.frameworkCode = frameworkCode; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getStage() { return stage; }
+    public void setStage(String stage) { this.stage = stage; }
+    public String getFailedStage() { return failedStage; }
+    public void setFailedStage(String failedStage) { this.failedStage = failedStage; }
+    public String getErrorCode() { return errorCode; }
+    public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+    public String getUserMessage() { return userMessage; }
+    public void setUserMessage(String userMessage) { this.userMessage = userMessage; }
+    public boolean isRetryable() { return retryable; }
+    public void setRetryable(boolean retryable) { this.retryable = retryable; }
     public String getConclusionStatus() { return conclusionStatus; }
     public void setConclusionStatus(String conclusionStatus) { this.conclusionStatus = conclusionStatus; }
     public String getSummary() { return summary; }
