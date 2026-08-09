@@ -2,6 +2,7 @@ package com.finscope.service.learningcard;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 

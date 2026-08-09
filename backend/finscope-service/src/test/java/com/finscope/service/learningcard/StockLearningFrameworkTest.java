@@ -11,5 +11,7 @@ class StockLearningFrameworkTest {
         assertEquals("COUNTER_CASE", StockLearningFramework.dimensions().get(5));
         assertFalse(StockLearningFramework.isAllowedText("建议买入并目标价100元"));
         assertFalse(StockLearningFramework.isAllowedText("可以考虑建仓"));
+        assertFalse(StockLearningFramework.isAllowedText("建议持有，预计年化收益30%"));
+        assertFalse(StockLearningFramework.isAllowedText("上方目标位仍有空间，可以做多"));
     }
 }

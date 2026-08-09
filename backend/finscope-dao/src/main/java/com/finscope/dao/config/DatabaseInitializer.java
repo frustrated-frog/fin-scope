@@ -1314,12 +1314,26 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("stock_learning_card_run", "user_message", "TEXT");
         ensureColumn("stock_learning_card_run", "retryable", "INTEGER NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_learning_card_run_card ON stock_learning_card_run(card_id,id DESC)");
+        jdbcTemplate.update("UPDATE stock_learning_card_run SET status='FAILED',stage='COMPLETED',"
+                + "failed_stage=COALESCE(failed_stage,'QUEUED'),error_code=COALESCE(error_code,'STALE_DUPLICATE_RUN'),"
+                + "user_message=COALESCE(user_message,'检测到重复的历史运行，可以重新生成'),retryable=1,"
+                + "completed_at=COALESCE(completed_at,created_at) WHERE status='RUNNING' AND id NOT IN "
+                + "(SELECT MAX(id) FROM stock_learning_card_run WHERE status='RUNNING' GROUP BY card_id)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_learning_card_run_active "
+                + "ON stock_learning_card_run(card_id) WHERE status='RUNNING'");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_claim ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,dimension_code TEXT NOT NULL,judgment TEXT NOT NULL,rationale TEXT NOT NULL,"
                 + "status TEXT,failure_message TEXT,counterargument TEXT NOT NULL,unknowns TEXT NOT NULL,confidence TEXT NOT NULL,sort_order INTEGER NOT NULL,"
                 + "UNIQUE(run_id,dimension_code),FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
         ensureColumn("stock_learning_card_claim", "status", "TEXT");
         ensureColumn("stock_learning_card_claim", "failure_message", "TEXT");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_evidence ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,dimension_code TEXT NOT NULL,"
+                + "evidence_code TEXT NOT NULL,title TEXT NOT NULL,url TEXT,source TEXT,published_at TEXT,content TEXT NOT NULL,"
+                + "content_origin TEXT,sort_order INTEGER NOT NULL,UNIQUE(run_id,dimension_code,evidence_code),"
+                + "FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_learning_card_evidence_run "
+                + "ON stock_learning_card_evidence(run_id,dimension_code,sort_order)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_watch_item ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,metric TEXT NOT NULL,baseline TEXT NOT NULL,frequency TEXT NOT NULL,"
                 + "upgrade_condition TEXT NOT NULL,downgrade_condition TEXT NOT NULL,next_review_at TEXT,sort_order INTEGER NOT NULL,"

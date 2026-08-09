@@ -3,6 +3,7 @@ package com.finscope.service.learningcard;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
@@ -64,7 +65,7 @@ public class StockLearningCardSynthesisAgent {
         for (StockLearningCardEvidence item : evidence) {
             Map<String, String> row = new LinkedHashMap<String, String>();
             row.put("id", item.getId()); row.put("title", item.getTitle()); row.put("source", item.getSource());
-            row.put("publishedAt", item.getPublishedAt()); row.put("content", compact(item.getContent(), 1800)); rows.add(row);
+            row.put("publishedAt", item.getPublishedAt()); row.put("content", compact(item.content(), 1800)); rows.add(row);
         }
         payload.put("evidence", rows); return payload;
     }

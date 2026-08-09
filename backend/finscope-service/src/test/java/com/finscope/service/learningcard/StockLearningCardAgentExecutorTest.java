@@ -3,6 +3,7 @@ package com.finscope.service.learningcard;
 import com.finscope.dao.learningcard.StockLearningCardRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.search.evidence.SearchEvidence;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
 
 class StockLearningCardAgentExecutorTest {
     @Test
@@ -71,6 +73,12 @@ class StockLearningCardAgentExecutorTest {
         assertEquals(6, completedClaims.size());
         assertEquals(1, completedClaims.stream().filter(value -> "FAILED".equals(value.getStatus())).count());
         assertTrue(completed.isRetryable());
+        assertEquals(64, completed.getSourceFingerprint().length());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<StockLearningCardEvidence>> evidence = ArgumentCaptor.forClass(List.class);
+        verify(cards).replaceEvidence(eq(9L), evidence.capture());
+        assertEquals(6, evidence.getValue().size());
+        assertEquals("SPACE", evidence.getValue().get(0).getDimensionCode());
         verify(search, org.mockito.Mockito.times(6)).search(any());
     }
 

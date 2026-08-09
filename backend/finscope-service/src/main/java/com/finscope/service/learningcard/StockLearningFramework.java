@@ -10,7 +10,10 @@ public final class StockLearningFramework {
     public static final String CODE = "LIUJIE_BUYSIDE_RESEARCH_V1";
     private static final List<String> DIMENSIONS = Collections.unmodifiableList(Arrays.asList(
             "SPACE", "PROFIT_MODEL", "COMPETITION", "GOVERNANCE", "VALUATION", "COUNTER_CASE"));
-    private static final List<String> FORBIDDEN = Arrays.asList("建议买入", "建议卖出", "买入", "卖出", "建仓", "清仓", "加仓", "减仓", "仓位", "目标价", "目标价格", "止盈", "止损", "强烈买入");
+    private static final List<String> FORBIDDEN = Arrays.asList(
+            "建议买入", "建议卖出", "建议持有", "买入", "卖出", "建仓", "清仓", "加仓", "减仓", "仓位",
+            "目标价", "目标价格", "目标位", "止盈", "止损", "强烈买入", "做多", "做空", "可以买", "可以卖",
+            "年化收益", "保证收益", "收益承诺", "操作建议");
     private static final Map<String, String> QUERIES = queries();
     private StockLearningFramework() { }
     public static List<String> dimensions() { return DIMENSIONS; }

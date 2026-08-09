@@ -1,6 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.learningcard.StockLearningCard;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.service.learningcard.StockLearningCardService;
 import com.finscope.web.config.CorsConfig;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import java.util.Collections;
 
 @WebMvcTest(StockLearningCardController.class)
 @Import({ApiExceptionHandler.class, FinScopeProperties.class, CorsConfig.class})
@@ -46,11 +48,18 @@ class StockLearningCardControllerTest {
         card.setCode("600519"); card.setName("贵州茅台");
         StockLearningCardRun run = new StockLearningCardRun();
         run.setStatus("READY"); run.setSummary("仅供学习，不构成投资建议");
+        StockLearningCardEvidence evidence = new StockLearningCardEvidence("E1", "公司年度报告",
+                "https://example.com/report", "example.com", "2026-03-31", "不应返回给前端的完整正文");
+        evidence.setDimensionCode("SPACE"); evidence.setSortOrder(1);
+        run.setEvidence(Collections.singletonList(evidence));
         when(learningCardService.get(eq("600519"))).thenReturn(new StockLearningCardService.StockLearningCardView(card, run));
 
         mockMvc.perform(get("/api/stock-learning-cards/{code}", "600519"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.card.name").value("贵州茅台"))
-                .andExpect(jsonPath("$.data.latestRun.status").value("READY"));
+                .andExpect(jsonPath("$.data.latestRun.status").value("READY"))
+                .andExpect(jsonPath("$.data.latestRun.evidence[0].evidenceCode").value("E1"))
+                .andExpect(jsonPath("$.data.latestRun.evidence[0].url").value("https://example.com/report"))
+                .andExpect(jsonPath("$.data.latestRun.evidence[0].content").doesNotExist());
     }
 }

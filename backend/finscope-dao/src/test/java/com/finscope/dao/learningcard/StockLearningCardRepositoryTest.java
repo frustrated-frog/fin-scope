@@ -3,6 +3,7 @@ package com.finscope.dao.learningcard;
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.junit.jupiter.api.BeforeEach;
@@ -133,6 +134,40 @@ class StockLearningCardRepositoryTest {
         assertEquals("READY", restored.getStatus());
         assertEquals("COMPLETED", restored.getStage());
         assertEquals(1, restored.getClaims().size());
+    }
+
+    @Test
+    void allowsOnlyOneRunningVersionPerStockCard() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun first = new StockLearningCardRun();
+        first.setCardId(card.getId()); first.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        first.setStatus("RUNNING"); first.setStage("QUEUED"); first.setGenerationMode("CONTROLLED");
+        repository.appendRun(first, Arrays.asList(), Arrays.asList());
+        StockLearningCardRun second = new StockLearningCardRun();
+        second.setCardId(card.getId()); second.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        second.setStatus("RUNNING"); second.setStage("QUEUED"); second.setGenerationMode("CONTROLLED");
+
+        assertThrows(Exception.class, () -> repository.appendRun(second, Arrays.asList(), Arrays.asList()));
+    }
+
+    @Test
+    void persistsTraceableEvidenceForEachLearningDimension() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun run = new StockLearningCardRun();
+        run.setCardId(card.getId()); run.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        run.setStatus("READY"); run.setGenerationMode("MODEL_ASSISTED");
+        StockLearningCardRun saved = repository.appendRun(run, Arrays.asList(), Arrays.asList());
+        StockLearningCardEvidence evidence = new StockLearningCardEvidence("E1", "年度报告", "https://example.com/report",
+                "example.com", "2026-03-31", "公开资料正文");
+        evidence.setDimensionCode("SPACE"); evidence.setContentOrigin("FULL_TEXT"); evidence.setSortOrder(1);
+
+        repository.replaceEvidence(saved.getId(), Arrays.asList(evidence));
+
+        StockLearningCardEvidence restored = repository.findRun(saved.getId()).orElseThrow(AssertionError::new).getEvidence().get(0);
+        assertEquals("SPACE", restored.getDimensionCode());
+        assertEquals("E1", restored.getEvidenceCode());
+        assertEquals("https://example.com/report", restored.getUrl());
+        assertEquals("FULL_TEXT", restored.getContentOrigin());
     }
 
     private StockLearningCardClaim claim(String dimension, String judgment, int order) {

@@ -3,6 +3,7 @@ package com.finscope.dao.learningcard;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -52,7 +53,7 @@ public class StockLearningCardRepository {
         if (existing.isPresent()) return existing.get();
         LocalDateTime now = LocalDateTime.now(); GeneratedKeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> { PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO stock_learning_card(instrument_id,framework_code,status,revision,created_at,updated_at) VALUES(?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                "INSERT OR IGNORE INTO stock_learning_card(instrument_id,framework_code,status,revision,created_at,updated_at) VALUES(?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, instrumentId); ps.setString(2, frameworkCode); ps.setString(3, "IDLE"); ps.setLong(4, 0);
             ps.setString(5, TimeUtil.text(now)); ps.setString(6, TimeUtil.text(now)); return ps; }, keys);
         return findByInstrumentId(instrumentId).orElseThrow(() -> new IllegalStateException("学习卡保存失败"));
@@ -106,14 +107,24 @@ public class StockLearningCardRepository {
         jdbcTemplate.update("INSERT INTO stock_learning_card_watch_item(run_id,metric,baseline,frequency,upgrade_condition,downgrade_condition,next_review_at,sort_order) VALUES(?,?,?,?,?,?,?,?)",
                 runId, watch.getMetric(), watch.getBaseline(), watch.getFrequency(), watch.getUpgradeCondition(), watch.getDowngradeCondition(), TimeUtil.text(watch.getNextReviewAt()), watch.getSortOrder());
     }
+    @Transactional
+    public void replaceEvidence(Long runId, List<StockLearningCardEvidence> evidence) {
+        jdbcTemplate.update("DELETE FROM stock_learning_card_evidence WHERE run_id=?", runId);
+        for (StockLearningCardEvidence item : evidence == null ? Collections.<StockLearningCardEvidence>emptyList() : evidence) {
+            jdbcTemplate.update("INSERT INTO stock_learning_card_evidence(run_id,dimension_code,evidence_code,title,url,source,published_at,content,content_origin,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    runId, item.getDimensionCode(), item.getEvidenceCode(), item.getTitle(), item.getUrl(), item.getSource(),
+                    item.getPublishedAt(), item.content(), item.getContentOrigin(), item.getSortOrder());
+        }
+    }
     public Optional<StockLearningCardRun> findRun(Long id) {
         List<StockLearningCardRun> values = jdbcTemplate.query("SELECT * FROM stock_learning_card_run WHERE id=?", runMapper, id);
-        if (values.isEmpty()) return Optional.empty(); StockLearningCardRun value = values.get(0); value.setClaims(claims(id)); value.setWatchItems(watches(id)); return Optional.of(value);
+        if (values.isEmpty()) return Optional.empty(); StockLearningCardRun value = values.get(0); value.setClaims(claims(id)); value.setEvidence(evidence(id)); value.setWatchItems(watches(id)); return Optional.of(value);
     }
     public Optional<StockLearningCardRun> latest(Long cardId) {
         List<Long> ids = jdbcTemplate.query("SELECT id FROM stock_learning_card_run WHERE card_id=? ORDER BY id DESC LIMIT 1", (rs,row)->rs.getLong(1), cardId);
         return ids.isEmpty() ? Optional.empty() : findRun(ids.get(0));
     }
     private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setStatus(rs.getString("status")); value.setFailureMessage(rs.getString("failure_message")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
+    private List<StockLearningCardEvidence> evidence(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_evidence WHERE run_id=? ORDER BY dimension_code,sort_order,id", (rs,row)-> { StockLearningCardEvidence value=new StockLearningCardEvidence(); value.setDatabaseId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setEvidenceCode(rs.getString("evidence_code")); value.setTitle(rs.getString("title")); value.setUrl(rs.getString("url")); value.setSource(rs.getString("source")); value.setPublishedAt(rs.getString("published_at")); value.content(rs.getString("content")); value.setContentOrigin(rs.getString("content_origin")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
     private List<StockLearningCardWatchItem> watches(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_watch_item WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardWatchItem value=new StockLearningCardWatchItem(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setMetric(rs.getString("metric")); value.setBaseline(rs.getString("baseline")); value.setFrequency(rs.getString("frequency")); value.setUpgradeCondition(rs.getString("upgrade_condition")); value.setDowngradeCondition(rs.getString("downgrade_condition")); value.setNextReviewAt(TimeUtil.localDateTime(rs,"next_review_at")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
 }

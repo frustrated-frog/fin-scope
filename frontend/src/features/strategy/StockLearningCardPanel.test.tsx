@@ -40,6 +40,9 @@ test('shows a failed dimension beside successful cards and explains that it can 
         { dimensionCode: 'SPACE', status: 'READY', judgment: '空间判断', rationale: '公开资料', counterargument: '反方', unknowns: '未知', confidence: 'MEDIUM', sortOrder: 1 },
         { dimensionCode: 'COMPETITION', status: 'FAILED', failureMessage: '该维度生成失败，可以重新生成学习卡', judgment: '暂未形成判断', rationale: '维度隔离', counterargument: '待补充', unknowns: '保持未知', confidence: 'LOW', sortOrder: 3 }
       ],
+      evidence: [
+        { dimensionCode: 'SPACE', evidenceCode: 'E1', title: '公司年度报告', url: 'https://example.com/report', source: 'example.com', sortOrder: 1 }
+      ],
       watchItems: []
     });
     return apiResponse({ card: { code: '603618', name: '杭电股份' }, latestRun: null });
@@ -53,5 +56,6 @@ test('shows a failed dimension beside successful cards and explains that it can 
   expect(await screen.findByText('部分学习维度未能生成，其他结果已保留，可以重新生成补全')).toBeInTheDocument();
   expect(screen.getByText('该维度生成失败，可以重新生成学习卡')).toBeInTheDocument();
   expect(screen.getByText('空间判断')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '[E1] 公司年度报告' })).toHaveAttribute('href', 'https://example.com/report');
   expect(screen.queryByText('研究主题')).not.toBeInTheDocument();
 });

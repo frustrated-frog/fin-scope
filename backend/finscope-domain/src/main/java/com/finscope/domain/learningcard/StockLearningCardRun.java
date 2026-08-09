@@ -24,6 +24,7 @@ public class StockLearningCardRun {
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
     private List<StockLearningCardClaim> claims = new ArrayList<StockLearningCardClaim>();
+    private List<StockLearningCardEvidence> evidence = new ArrayList<StockLearningCardEvidence>();
     private List<StockLearningCardWatchItem> watchItems = new ArrayList<StockLearningCardWatchItem>();
 
     public Long getId() { return id; }
@@ -64,6 +65,8 @@ public class StockLearningCardRun {
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
     public List<StockLearningCardClaim> getClaims() { return claims; }
     public void setClaims(List<StockLearningCardClaim> claims) { this.claims = claims == null ? new ArrayList<StockLearningCardClaim>() : claims; }
+    public List<StockLearningCardEvidence> getEvidence() { return evidence; }
+    public void setEvidence(List<StockLearningCardEvidence> evidence) { this.evidence = evidence == null ? new ArrayList<StockLearningCardEvidence>() : evidence; }
     public List<StockLearningCardWatchItem> getWatchItems() { return watchItems; }
     public void setWatchItems(List<StockLearningCardWatchItem> watchItems) { this.watchItems = watchItems == null ? new ArrayList<StockLearningCardWatchItem>() : watchItems; }
 }

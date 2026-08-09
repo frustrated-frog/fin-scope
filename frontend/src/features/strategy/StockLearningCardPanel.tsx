@@ -52,6 +52,7 @@ export function StockLearningCardPanel({ addToast, setMessage }: { addToast: (me
   }
 
   const run = view?.latestRun;
+  const evidenceFor = (dimension: string) => (run?.evidence ?? []).filter(item => item.dimensionCode === dimension);
   return <section className="stock-learning-card-panel">
     <header className="stock-learning-card-hero">
       <div><p>LIUJIE FRAMEWORK · 仅供学习</p><h3>股票研究学习卡</h3><span>选择一只 A 股，Agent 按空间、盈利模式、竞争、治理、定价与反方验证整理公开证据。</span></div>
@@ -65,7 +66,7 @@ export function StockLearningCardPanel({ addToast, setMessage }: { addToast: (me
       <p className="stock-learning-card-summary">{run.summary}</p>
       {run.userMessage ? <p className="stock-learning-card-warning" role="status">{run.userMessage}</p> : null}
       {run.warningMessage ? <p className="stock-learning-card-warning">{run.warningMessage}</p> : null}
-      <div className="stock-learning-card-claims">{run.claims.map(claim => <section key={claim.dimensionCode} data-status={claim.status}><header><span>{dimensionLabels[claim.dimensionCode] ?? claim.dimensionCode}</span><small>{claim.status === 'FAILED' ? '生成失败' : claim.status === 'INSUFFICIENT_EVIDENCE' ? '证据不足' : claim.confidence === 'LOW' ? '低置信度' : claim.confidence}</small></header>{claim.failureMessage ? <p className="stock-learning-card-claim-error">{claim.failureMessage}</p> : null}<p>{claim.judgment}</p><dl><div><dt>为什么</dt><dd>{claim.rationale}</dd></div><div><dt>反方</dt><dd>{claim.counterargument}</dd></div><div><dt>未知</dt><dd>{claim.unknowns}</dd></div></dl></section>)}</div>
+      <div className="stock-learning-card-claims">{run.claims.map(claim => <section key={claim.dimensionCode} data-status={claim.status}><header><span>{dimensionLabels[claim.dimensionCode] ?? claim.dimensionCode}</span><small>{claim.status === 'FAILED' ? '生成失败' : claim.status === 'INSUFFICIENT_EVIDENCE' ? '证据不足' : claim.confidence === 'LOW' ? '低置信度' : claim.confidence}</small></header>{claim.failureMessage ? <p className="stock-learning-card-claim-error">{claim.failureMessage}</p> : null}<p>{claim.judgment}</p><dl><div><dt>为什么</dt><dd>{claim.rationale}</dd></div><div><dt>反方</dt><dd>{claim.counterargument}</dd></div><div><dt>未知</dt><dd>{claim.unknowns}</dd></div></dl>{evidenceFor(claim.dimensionCode).length ? <div className="stock-learning-card-sources"><b>公开来源</b>{evidenceFor(claim.dimensionCode).map(item => item.url?.startsWith('http') ? <a key={item.evidenceCode} href={item.url} target="_blank" rel="noreferrer">[{item.evidenceCode}] {item.title || item.source}</a> : <span key={item.evidenceCode}>[{item.evidenceCode}] {item.title || item.source}</span>)}</div> : null}</section>)}</div>
       {run.watchItems.length ? <footer className="stock-learning-card-watch"><b>后续观察</b>{run.watchItems.map(item => <span key={item.metric}>{item.metric} · {item.frequency}</span>)}</footer> : null}
     </article> : null}
   </section>;

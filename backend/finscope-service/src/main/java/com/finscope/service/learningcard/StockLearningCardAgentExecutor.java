@@ -3,6 +3,7 @@ package com.finscope.service.learningcard;
 import com.finscope.dao.learningcard.StockLearningCardRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
+import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
@@ -15,7 +16,11 @@ import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,6 +31,7 @@ import java.util.concurrent.Executor;
 
 @Service
 public class StockLearningCardAgentExecutor {
+    private static final Logger log = LoggerFactory.getLogger(StockLearningCardAgentExecutor.class);
     private final StockLearningCardRepository cards;
     private final SearchEvidenceGateway search;
     private final SearchEvidenceContentService content;
@@ -51,14 +57,25 @@ public class StockLearningCardAgentExecutor {
             progress(run, "COLLECTING_EVIDENCE", "正在按六个学习维度收集公开资料");
             Map<String, List<StockLearningCardEvidence>> evidenceByDimension =
                     new LinkedHashMap<String, List<StockLearningCardEvidence>>();
+            List<StockLearningCardEvidence> allEvidence = new ArrayList<StockLearningCardEvidence>();
+            int collectionFailures = 0;
             for (String dimension : StockLearningFramework.dimensions()) {
                 try {
                     String query = StockLearningFramework.queryFor(dimension, instrument.getName(), instrument.getCode());
-                    evidenceByDimension.put(dimension, collect(query, instrument.getName()));
+                    List<StockLearningCardEvidence> dimensionEvidence = collect(query, instrument.getName());
+                    int order = 1;
+                    for (StockLearningCardEvidence item : dimensionEvidence) {
+                        item.setDimensionCode(dimension); item.setSortOrder(order++);
+                    }
+                    evidenceByDimension.put(dimension, dimensionEvidence); allEvidence.addAll(dimensionEvidence);
                 } catch (Exception error) {
-                    evidenceByDimension.put(dimension, null);
+                    collectionFailures++; evidenceByDimension.put(dimension, null);
+                    log.warn("Stock learning evidence collection failed: runId={}, dimension={}, errorType={}",
+                            run.getId(), dimension, error.getClass().getSimpleName());
                 }
             }
+            cards.replaceEvidence(run.getId(), allEvidence);
+            run.setSourceFingerprint(fingerprint(allEvidence));
             progress(run, "SYNTHESIZING_CARDS", "公开资料收集完成，正在生成六维学习卡");
             int order = 1;
             for (String dimension : StockLearningFramework.dimensions()) {
@@ -68,12 +85,16 @@ public class StockLearningCardAgentExecutor {
                     if (evidence == null) throw new IllegalStateException("该维度资料收集失败");
                     claim = synthesis.synthesize(instrument.getName(), instrument.getCode(), dimension, evidence);
                 } catch (Exception error) {
+                    log.warn("Stock learning synthesis failed: runId={}, dimension={}, errorType={}",
+                            run.getId(), dimension, error.getClass().getSimpleName());
                     claim = failed(dimension);
                 }
                 claim.setSortOrder(order++); claims.add(claim);
             }
-            finish(run, claims);
+            finish(run, claims, collectionFailures);
         } catch (Exception error) {
+            log.error("Stock learning agent interrupted: runId={}, stage={}, errorType={}",
+                    run.getId(), run.getStage(), error.getClass().getSimpleName());
             String failedStage = value(run.getStage(), "COLLECTING_EVIDENCE");
             run.setStatus("FAILED"); run.setStage("COMPLETED"); run.setFailedStage(failedStage);
             run.setErrorCode("AGENT_EXECUTION_FAILED"); run.setUserMessage("学习卡生成中断，已保留运行记录，可以重新生成");
@@ -91,8 +112,9 @@ public class StockLearningCardAgentExecutor {
         int index = 1;
         for (SearchEvidence item : batch.getEvidence()) {
             ResearchEvidenceAcquisitionResult acquired = content.acquire(item, query, subject, index <= 2);
-            result.add(new StockLearningCardEvidence("E" + index, text(item.getTitle()), text(item.getUrl()),
-                    text(item.getSourceDomain()), text(item.getPublishedAt()), text(acquired.getContent())));
+            StockLearningCardEvidence evidence = new StockLearningCardEvidence("E" + index, text(item.getTitle()), text(item.getUrl()),
+                    text(item.getSourceDomain()), text(item.getPublishedAt()), text(acquired.getContent()));
+            evidence.setContentOrigin(text(acquired.getContentOrigin())); result.add(evidence);
             index++;
         }
         return result;
@@ -104,7 +126,7 @@ public class StockLearningCardAgentExecutor {
         cards.updateRun(run, Collections.<StockLearningCardClaim>emptyList(), Collections.<StockLearningCardWatchItem>emptyList());
     }
 
-    private void finish(StockLearningCardRun run, List<StockLearningCardClaim> claims) {
+    private void finish(StockLearningCardRun run, List<StockLearningCardClaim> claims, int collectionFailures) {
         int ready = 0, failed = 0, insufficient = 0;
         for (StockLearningCardClaim claim : claims) {
             if ("READY".equals(claim.getStatus())) ready++;
@@ -117,11 +139,11 @@ public class StockLearningCardAgentExecutor {
         if (ready == claims.size()) {
             run.setStatus("READY"); run.setSummary("六个学习维度均已生成"); run.setRetryable(false);
         } else if (ready > 0) {
-            run.setStatus("DEGRADED"); run.setFailedStage("SYNTHESIZING_CARDS"); run.setErrorCode("DIMENSION_PARTIAL_FAILURE");
+            run.setStatus("DEGRADED"); run.setFailedStage(collectionFailures > 0 ? "COLLECTING_EVIDENCE" : "SYNTHESIZING_CARDS"); run.setErrorCode("DIMENSION_PARTIAL_FAILURE");
             run.setUserMessage("部分学习维度未能生成，其他结果已保留，可以重新生成补全"); run.setRetryable(true);
             run.setSummary("已生成" + ready + "个维度，" + (claims.size() - ready) + "个维度需要重试");
         } else if (failed > 0) {
-            run.setStatus("FAILED"); run.setFailedStage(failed > 0 ? "SYNTHESIZING_CARDS" : "COLLECTING_EVIDENCE");
+            run.setStatus("FAILED"); run.setFailedStage(collectionFailures == claims.size() ? "COLLECTING_EVIDENCE" : "SYNTHESIZING_CARDS");
             run.setErrorCode("NO_DIMENSION_COMPLETED"); run.setUserMessage("暂未生成可用学习卡，请稍后重新生成"); run.setRetryable(true);
             run.setSummary("六个学习维度均未形成可用判断");
         } else {
@@ -150,4 +172,19 @@ public class StockLearningCardAgentExecutor {
 
     private String text(String value) { return value == null ? "" : value.trim(); }
     private String value(String value, String fallback) { return value == null || value.trim().isEmpty() ? fallback : value; }
+    private String fingerprint(List<StockLearningCardEvidence> evidence) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (StockLearningCardEvidence item : evidence) {
+                String row = value(item.getDimensionCode(), "") + "\n" + value(item.getEvidenceCode(), "") + "\n"
+                        + value(item.getUrl(), "") + "\n" + value(item.getTitle(), "") + "\n";
+                digest.update(row.getBytes(StandardCharsets.UTF_8));
+            }
+            StringBuilder hex = new StringBuilder();
+            for (byte value : digest.digest()) hex.append(String.format("%02x", value & 0xff));
+            return hex.toString();
+        } catch (Exception error) {
+            throw new IllegalStateException("无法生成学习卡资料指纹", error);
+        }
+    }
 }
