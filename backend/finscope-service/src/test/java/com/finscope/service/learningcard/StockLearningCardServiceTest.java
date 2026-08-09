@@ -4,11 +4,13 @@ import com.finscope.dao.learningcard.StockLearningCardRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.service.strategy.StrategyInstrumentResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
+import java.util.Collections;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,6 +23,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class StockLearningCardServiceTest {
+    @Test
+    void listsPersistedStockLearningCardsWithoutResolvingAnInstrument() {
+        StockLearningCardService service = new StockLearningCardService();
+        StockLearningCardRepository cards = mock(StockLearningCardRepository.class);
+        ReflectionTestUtils.setField(service, "cards", cards);
+        StockLearningCardSummary summary = new StockLearningCardSummary();
+        summary.setCode("603618"); summary.setName("杭电股份"); summary.setStatus("DEGRADED");
+        summary.setCompletedDimensions(5); summary.setTotalDimensions(6);
+        when(cards.summaries()).thenReturn(Collections.singletonList(summary));
+
+        java.util.List<StockLearningCardSummary> result = service.list();
+
+        assertEquals(1, result.size());
+        assertEquals("603618", result.get(0).getCode());
+        verify(cards).summaries();
+    }
+
     @Test
     void startsAnIndependentAgentRunWithoutResearchThemesOrTheses() {
         StockLearningCardService service = new StockLearningCardService();

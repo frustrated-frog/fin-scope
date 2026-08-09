@@ -5,6 +5,7 @@ import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,13 +23,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class StockLearningCardRepositoryTest {
     private StockLearningCardRepository repository;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() throws Exception {
         Path root = Files.createTempDirectory("finscope-learning-card-test");
         SQLiteDataSource source = new SQLiteDataSource();
         source.setUrl("jdbc:sqlite:" + root.resolve("finance.db"));
-        JdbcTemplate jdbc = new JdbcTemplate(source);
+        jdbc = new JdbcTemplate(source);
         DatabaseInitializer initializer = new DatabaseInitializer();
         ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(initializer, "dataRoot", root.toString());
@@ -186,6 +188,36 @@ class StockLearningCardRepositoryTest {
 
         assertEquals(savedActive.getId(), restored.getId());
         assertEquals("RUNNING", restored.getStatus());
+    }
+
+    @Test
+    void listsOneLatestSummaryPerStockWithCompletedDimensionCount() {
+        StockLearningCard first = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun firstRun = new StockLearningCardRun();
+        firstRun.setCardId(first.getId()); firstRun.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        firstRun.setStatus("DEGRADED"); firstRun.setStage("COMPLETED"); firstRun.setSummary("已生成两个维度");
+        firstRun.setGenerationMode("MODEL_ASSISTED");
+        StockLearningCardClaim ready = claim("SPACE", "空间判断", 1); ready.setStatus("READY");
+        StockLearningCardClaim secondReady = claim("PROFIT_MODEL", "盈利判断", 2); secondReady.setStatus("READY");
+        StockLearningCardClaim failed = claim("COMPETITION", "暂未形成判断", 3); failed.setStatus("FAILED");
+        repository.appendRun(firstRun, Arrays.asList(ready, secondReady, failed), Arrays.asList());
+        jdbc.update("INSERT INTO instrument(code,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
+                "000001", "STOCK", "平安银行", "2026-08-09T00:00:00", "2026-08-09T00:00:00");
+        StockLearningCard second = repository.findOrCreate(2L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun secondRun = new StockLearningCardRun();
+        secondRun.setCardId(second.getId()); secondRun.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        secondRun.setStatus("RUNNING"); secondRun.setStage("COLLECTING_EVIDENCE");
+        secondRun.setSummary("正在收集公开资料"); secondRun.setGenerationMode("CONTROLLED");
+        repository.appendRun(secondRun, Arrays.asList(), Arrays.asList());
+
+        java.util.List<StockLearningCardSummary> summaries = repository.summaries();
+
+        assertEquals(2, summaries.size());
+        assertEquals("000001", summaries.get(0).getCode());
+        assertEquals("RUNNING", summaries.get(0).getStatus());
+        assertEquals("600519", summaries.get(1).getCode());
+        assertEquals(2, summaries.get(1).getCompletedDimensions());
+        assertEquals(6, summaries.get(1).getTotalDimensions());
     }
 
     private StockLearningCardClaim claim(String dimension, String judgment, int order) {

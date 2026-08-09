@@ -5,6 +5,7 @@ import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -128,6 +129,20 @@ public class StockLearningCardRepository {
         List<Long> ids = jdbcTemplate.query("SELECT id FROM stock_learning_card_run WHERE card_id=? AND status='RUNNING' ORDER BY id DESC LIMIT 1",
                 (rs, row) -> rs.getLong(1), cardId);
         return ids.isEmpty() ? Optional.empty() : findRun(ids.get(0));
+    }
+    public List<StockLearningCardSummary> summaries() {
+        return jdbcTemplate.query("SELECT i.code,i.name,r.status,r.stage,r.summary,c.updated_at,r.completed_at,"
+                        + "(SELECT COUNT(*) FROM stock_learning_card_claim cl WHERE cl.run_id=r.id AND cl.status='READY') completed_dimensions "
+                        + "FROM stock_learning_card c JOIN instrument i ON i.id=c.instrument_id "
+                        + "JOIN stock_learning_card_run r ON r.id=c.latest_run_id ORDER BY c.updated_at DESC,c.id DESC",
+                (rs, row) -> {
+                    StockLearningCardSummary value = new StockLearningCardSummary();
+                    value.setCode(rs.getString("code")); value.setName(rs.getString("name"));
+                    value.setStatus(rs.getString("status")); value.setStage(rs.getString("stage"));
+                    value.setSummary(rs.getString("summary")); value.setCompletedDimensions(rs.getInt("completed_dimensions"));
+                    value.setTotalDimensions(6); value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
+                    value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at")); return value;
+                });
     }
     private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setStatus(rs.getString("status")); value.setFailureMessage(rs.getString("failure_message")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
     private List<StockLearningCardEvidence> evidence(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_evidence WHERE run_id=? ORDER BY dimension_code,sort_order,id", (rs,row)-> { StockLearningCardEvidence value=new StockLearningCardEvidence(); value.setDatabaseId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setEvidenceCode(rs.getString("evidence_code")); value.setTitle(rs.getString("title")); value.setUrl(rs.getString("url")); value.setSource(rs.getString("source")); value.setPublishedAt(rs.getString("published_at")); value.content(rs.getString("content")); value.setContentOrigin(rs.getString("content_origin")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }

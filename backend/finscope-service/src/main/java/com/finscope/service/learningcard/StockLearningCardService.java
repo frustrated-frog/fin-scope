@@ -5,6 +5,7 @@ import com.finscope.dao.learningcard.StockLearningCardRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.service.strategy.StrategyInstrumentResolver;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.List;
 
 @Service
 public class StockLearningCardService {
@@ -20,6 +22,10 @@ public class StockLearningCardService {
     @Resource private StrategyInstrumentResolver instrumentResolver;
     @Resource private StockLearningCardRepository cards;
     @Resource private StockLearningCardAgentExecutor agentExecutor;
+
+    public List<StockLearningCardSummary> list() {
+        return cards.summaries();
+    }
 
     public StockLearningCardRun start(String code) {
         Instrument instrument = instrumentResolver.resolve(code, "STOCK");

@@ -3,6 +3,7 @@ package com.finscope.web.controller;
 import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.service.learningcard.StockLearningCardService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -27,6 +28,22 @@ import java.util.Collections;
 class StockLearningCardControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private StockLearningCardService learningCardService;
+
+    @Test
+    void listsPersistedStockLearningCards() throws Exception {
+        StockLearningCardSummary summary = new StockLearningCardSummary();
+        summary.setCode("603618"); summary.setName("杭电股份"); summary.setStatus("DEGRADED");
+        summary.setStage("COMPLETED"); summary.setSummary("已生成5个维度");
+        summary.setCompletedDimensions(5); summary.setTotalDimensions(6);
+        when(learningCardService.list()).thenReturn(Collections.singletonList(summary));
+
+        mockMvc.perform(get("/api/stock-learning-cards"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].code").value("603618"))
+                .andExpect(jsonPath("$.data[0].name").value("杭电股份"))
+                .andExpect(jsonPath("$.data[0].completedDimensions").value(5))
+                .andExpect(jsonPath("$.data[0].totalDimensions").value(6));
+    }
 
     @Test
     void startsAControlledStockLearningRun() throws Exception {
