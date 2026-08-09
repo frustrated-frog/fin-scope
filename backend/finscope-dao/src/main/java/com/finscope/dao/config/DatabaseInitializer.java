@@ -1294,9 +1294,13 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS single_stock_forecast_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_code TEXT NOT NULL,as_of_date TEXT NOT NULL,"
-                + "status TEXT NOT NULL,up_probability REAL,data_fingerprint TEXT NOT NULL,model_version TEXT NOT NULL,"
+                + "horizon_days INTEGER NOT NULL DEFAULT 20,status TEXT NOT NULL,up_probability REAL,"
+                + "data_fingerprint TEXT NOT NULL,model_version TEXT NOT NULL,"
                 + "report_schema_version TEXT NOT NULL,same_data_as_previous INTEGER NOT NULL DEFAULT 0,"
-                + "report_json TEXT NOT NULL,holding_snapshot_json TEXT,created_at TEXT NOT NULL)");
+                + "maturity_status TEXT NOT NULL DEFAULT 'PENDING',report_json TEXT NOT NULL,"
+                + "holding_snapshot_json TEXT,created_at TEXT NOT NULL)");
+        ensureColumn("single_stock_forecast_run", "horizon_days", "INTEGER NOT NULL DEFAULT 20");
+        ensureColumn("single_stock_forecast_run", "maturity_status", "TEXT NOT NULL DEFAULT 'PENDING'");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_code_created "
                 + "ON single_stock_forecast_run(instrument_code,created_at DESC,id DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("

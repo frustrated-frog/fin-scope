@@ -33,14 +33,16 @@ public class SingleStockForecastController {
     @PostMapping
     public ApiResponse<SingleStockForecastRunResponse> forecast(
             @Valid @RequestBody RunSingleStockForecastRequest request) {
-        return ApiResponses.success(SingleStockForecastRunResponse.of(service.forecast(request.getCode())));
+        return ApiResponses.success(SingleStockForecastRunResponse.of(
+                service.forecast(request.getCode(), request.getHorizonDays())));
     }
 
     @GetMapping
     public ApiResponse<List<SingleStockForecastRunResponse>> history(
             @RequestParam(required = false) String code,
+            @RequestParam(required = false) Integer horizonDays,
             @RequestParam(defaultValue = "50") @Min(1) @Max(200) int limit) {
-        return ApiResponses.success(service.history(code, limit).stream()
+        return ApiResponses.success(service.history(code, limit, horizonDays).stream()
                 .map(SingleStockForecastRunResponse::of)
                 .collect(Collectors.toList()));
     }

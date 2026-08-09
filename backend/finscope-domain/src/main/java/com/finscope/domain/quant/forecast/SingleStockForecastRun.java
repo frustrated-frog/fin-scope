@@ -10,17 +10,25 @@ public class SingleStockForecastRun {
     private Long id;
     private String instrumentCode;
     private LocalDate asOfDate;
+    private int horizonDays;
     private String status;
     private Double upProbability;
     private String dataFingerprint;
     private String modelVersion;
     private String reportSchemaVersion;
     private boolean sameDataAsPrevious;
+    private MaturityStatus maturityStatus = MaturityStatus.PENDING;
     private String reportJson;
     private String holdingSnapshotJson;
     private LocalDateTime createdAt;
     private SingleStockForecast report;
     private HoldingSnapshot holdingSnapshot;
+
+    public enum MaturityStatus {
+        PENDING,
+        MATURED,
+        UNAVAILABLE
+    }
 
     @Data
     public static class HoldingSnapshot {

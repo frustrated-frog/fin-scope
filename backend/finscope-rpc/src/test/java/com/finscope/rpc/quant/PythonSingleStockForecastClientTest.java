@@ -35,10 +35,10 @@ class PythonSingleStockForecastClientTest {
         };
 
         SingleStockForecast result = new PythonSingleStockForecastClient(
-                "http://127.0.0.1:8000/", http).forecast("600519");
+                "http://127.0.0.1:8000/", http).forecast("600519", 20);
 
         assertEquals("/v1/quant/single-stock-forecasts", uri.get().getPath());
-        assertEquals("{\"code\":\"600519\"}", body.get());
+        assertEquals("{\"code\":\"600519\",\"horizonDays\":20}", body.get());
         assertEquals("600519.SH", result.getInstrumentCode());
         assertEquals(LocalDate.of(2026, 8, 7), result.getAsOfDate());
         assertEquals(0.63d, result.getUpProbability(), 0.000000001d);
@@ -66,14 +66,14 @@ class PythonSingleStockForecastClientTest {
 
         assertEquals("SCHEMA_DRIFT", assertThrows(
                 ProviderContractException.class,
-                () -> client.forecast("600519")).getErrorType());
+                () -> client.forecast("600519", 20)).getErrorType());
     }
 
     @Test
     void mapsAndValidatesVersionThreeQualification() {
         PythonSingleStockForecastClient client = clientReturning(v3Payload(0.45, 0.75, repeat('a', 64), 15));
 
-        SingleStockForecast result = client.forecast("600519");
+        SingleStockForecast result = client.forecast("600519", 20);
 
         assertEquals("QUALIFIED", result.getQualification().getStatus());
         assertEquals(0.08d,
@@ -87,7 +87,7 @@ class PythonSingleStockForecastClientTest {
 
         assertEquals("SCHEMA_DRIFT", assertThrows(
                 ProviderContractException.class,
-                () -> client.forecast("600519")).getErrorType());
+                () -> client.forecast("600519", 20)).getErrorType());
     }
 
     @Test
@@ -95,8 +95,19 @@ class PythonSingleStockForecastClientTest {
         PythonSingleStockForecastClient invalidTrial = clientReturning(v3Payload(0.45, 0.75, "short", 15));
         PythonSingleStockForecastClient invalidBins = clientReturning(v3Payload(0.45, 0.75, repeat('b', 64), 14));
 
-        assertThrows(ProviderContractException.class, () -> invalidTrial.forecast("600519"));
-        assertThrows(ProviderContractException.class, () -> invalidBins.forecast("600519"));
+        assertThrows(ProviderContractException.class, () -> invalidTrial.forecast("600519", 20));
+        assertThrows(ProviderContractException.class, () -> invalidBins.forecast("600519", 20));
+    }
+
+    @Test
+    void mapsVersionFourSelectiveDecisionForRequestedHorizon() {
+        PythonSingleStockForecastClient client = clientReturning(v4Payload());
+
+        SingleStockForecast result = client.forecast("600519", 5);
+
+        assertEquals("ABSTAIN", result.getDecision());
+        assertEquals(0.6d, result.getSelectiveValidation().getCoverage(), 0.000001d);
+        assertEquals(5, result.getQualification().getSplitAudit().getLabelHorizonDays());
     }
 
     private static FinanceHttpResponse response(String body) {
@@ -149,6 +160,24 @@ class PythonSingleStockForecastClientTest {
                 ",\"reliabilityBins\":" + bins(binCount) + "}," +
                 "\"confidenceIntervals\":{\"brierSkillScore\":" + interval + ",\"accuracy\":" + interval +
                 ",\"excessReturn\":" + interval + ",\"sharpeRatio\":" + interval + "}},\"warnings\":[]}";
+    }
+
+    private static String v4Payload() {
+        return v3Payload(0.45, 0.75, repeat('c', 64), 15)
+                .replace("single-stock-research-v3", "single-stock-research-v4")
+                .replace("logistic-platt-qualified-v3", "logistic-platt-selective-v4")
+                .replace("\"horizonDays\":20", "\"horizonDays\":5")
+                .replace("\"conclusion\":\"锁定测试存在增量\",",
+                        "\"conclusion\":\"锁定测试存在增量\",\"decision\":\"ABSTAIN\","
+                                + "\"decisionReason\":\"概率位于拒绝区间\",")
+                .replace("\"labelHorizonDays\":20,\"independentStrideDays\":20",
+                        "\"labelHorizonDays\":5,\"independentStrideDays\":5")
+                .replace("\"warnings\":[]}",
+                        "\"selectiveValidation\":{\"lowerThreshold\":0.4,"
+                                + "\"upperThreshold\":0.6,\"sampleCount\":15,"
+                                + "\"coveredCount\":9,\"coverage\":0.6,"
+                                + "\"coveredAccuracy\":0.67,\"abstainRate\":0.4},"
+                                + "\"warnings\":[]}");
     }
 
     private static String slice(String startDate, String endDate) {

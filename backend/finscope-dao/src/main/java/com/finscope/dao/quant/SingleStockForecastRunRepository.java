@@ -26,6 +26,7 @@ public class SingleStockForecastRunRepository {
         value.setId(rs.getLong("id"));
         value.setInstrumentCode(rs.getString("instrument_code"));
         value.setAsOfDate(LocalDate.parse(rs.getString("as_of_date")));
+        value.setHorizonDays(rs.getInt("horizon_days"));
         value.setStatus(rs.getString("status"));
         double probability = rs.getDouble("up_probability");
         value.setUpProbability(rs.wasNull() ? null : probability);
@@ -33,6 +34,8 @@ public class SingleStockForecastRunRepository {
         value.setModelVersion(rs.getString("model_version"));
         value.setReportSchemaVersion(rs.getString("report_schema_version"));
         value.setSameDataAsPrevious(rs.getInt("same_data_as_previous") == 1);
+        value.setMaturityStatus(SingleStockForecastRun.MaturityStatus.valueOf(
+                rs.getString("maturity_status")));
         value.setReportJson(rs.getString("report_json"));
         value.setHoldingSnapshotJson(rs.getString("holding_snapshot_json"));
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
@@ -41,30 +44,37 @@ public class SingleStockForecastRunRepository {
 
     public SingleStockForecastRun save(SingleStockForecastRun value) {
         List<String> previous = jdbcTemplate.query(
-                "SELECT data_fingerprint FROM single_stock_forecast_run WHERE instrument_code=? ORDER BY id DESC LIMIT 1",
-                (rs, rowNum) -> rs.getString(1), value.getInstrumentCode());
+                "SELECT data_fingerprint FROM single_stock_forecast_run "
+                        + "WHERE instrument_code=? AND horizon_days=? ORDER BY id DESC LIMIT 1",
+                (rs, rowNum) -> rs.getString(1), value.getInstrumentCode(), value.getHorizonDays());
         value.setSameDataAsPrevious(!previous.isEmpty()
                 && value.getDataFingerprint().equals(previous.get(0)));
         LocalDateTime now = LocalDateTime.now();
         KeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO single_stock_forecast_run(instrument_code,as_of_date,status,up_probability,"
+                    "INSERT INTO single_stock_forecast_run(instrument_code,as_of_date,horizon_days,status,up_probability,"
                             + "data_fingerprint,model_version,report_schema_version,same_data_as_previous,"
-                            + "report_json,holding_snapshot_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                            + "maturity_status,report_json,holding_snapshot_json,created_at) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             statement.setString(1, value.getInstrumentCode());
             statement.setString(2, value.getAsOfDate().toString());
-            statement.setString(3, value.getStatus());
-            if (value.getUpProbability() == null) statement.setNull(4, java.sql.Types.REAL);
-            else statement.setDouble(4, value.getUpProbability());
-            statement.setString(5, value.getDataFingerprint());
-            statement.setString(6, value.getModelVersion());
-            statement.setString(7, value.getReportSchemaVersion());
-            statement.setInt(8, value.isSameDataAsPrevious() ? 1 : 0);
-            statement.setString(9, value.getReportJson());
-            statement.setString(10, value.getHoldingSnapshotJson());
-            statement.setString(11, TimeUtil.text(now));
+            statement.setInt(3, value.getHorizonDays());
+            statement.setString(4, value.getStatus());
+            if (value.getUpProbability() == null) {
+                statement.setNull(5, java.sql.Types.REAL);
+            } else {
+                statement.setDouble(5, value.getUpProbability());
+            }
+            statement.setString(6, value.getDataFingerprint());
+            statement.setString(7, value.getModelVersion());
+            statement.setString(8, value.getReportSchemaVersion());
+            statement.setInt(9, value.isSameDataAsPrevious() ? 1 : 0);
+            statement.setString(10, value.getMaturityStatus().name());
+            statement.setString(11, value.getReportJson());
+            statement.setString(12, value.getHoldingSnapshotJson());
+            statement.setString(13, TimeUtil.text(now));
             return statement;
         }, keys);
         value.setId(keys.getKey().longValue());
@@ -78,10 +88,26 @@ public class SingleStockForecastRunRepository {
     }
 
     public List<SingleStockForecastRun> findAll(String instrumentCode, int limit) {
+        return findAll(instrumentCode, limit, null);
+    }
+
+    public List<SingleStockForecastRun> findAll(String instrumentCode, int limit, Integer horizonDays) {
         int bounded = Math.max(1, Math.min(limit, 200));
-        if (instrumentCode == null || instrumentCode.trim().isEmpty()) {
+        boolean withoutCode = instrumentCode == null || instrumentCode.trim().isEmpty();
+        if (withoutCode && horizonDays == null) {
             return jdbcTemplate.query(
                     "SELECT * FROM single_stock_forecast_run ORDER BY id DESC LIMIT ?", mapper, bounded);
+        }
+        if (withoutCode) {
+            return jdbcTemplate.query(
+                    "SELECT * FROM single_stock_forecast_run WHERE horizon_days=? ORDER BY id DESC LIMIT ?",
+                    mapper, horizonDays, bounded);
+        }
+        if (horizonDays != null) {
+            return jdbcTemplate.query(
+                    "SELECT * FROM single_stock_forecast_run WHERE instrument_code=? AND horizon_days=? "
+                            + "ORDER BY id DESC LIMIT ?",
+                    mapper, instrumentCode, horizonDays, bounded);
         }
         return jdbcTemplate.query(
                 "SELECT * FROM single_stock_forecast_run WHERE instrument_code=? ORDER BY id DESC LIMIT ?",
