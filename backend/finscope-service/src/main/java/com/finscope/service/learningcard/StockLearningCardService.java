@@ -24,18 +24,18 @@ public class StockLearningCardService {
     public StockLearningCardRun start(String code) {
         Instrument instrument = instrumentResolver.resolve(code, "STOCK");
         StockLearningCard card = cards.findOrCreate(instrument.getId(), StockLearningFramework.CODE);
-        StockLearningCardRun latest = cards.latest(card.getId()).orElse(null);
-        if (latest != null && "RUNNING".equals(latest.getStatus())) {
-            if (!isStale(latest)) throw new BusinessConflictException("该股票学习卡仍在生成中");
-            expire(latest);
+        StockLearningCardRun active = cards.active(card.getId()).orElse(null);
+        if (active != null) {
+            if (!isStale(active)) throw new BusinessConflictException("该股票学习卡仍在生成中");
+            expire(active);
         }
         StockLearningCardRun running = run(card, "RUNNING", null, "学习卡已进入生成队列", "PENDING", "CONTROLLED");
         running.setStage("QUEUED");
         try {
             running = cards.appendRun(running, Collections.emptyList(), Collections.emptyList());
         } catch (DataAccessException error) {
-            StockLearningCardRun concurrent = cards.latest(card.getId()).orElse(null);
-            if (concurrent != null && "RUNNING".equals(concurrent.getStatus())) {
+            StockLearningCardRun concurrent = cards.active(card.getId()).orElse(null);
+            if (concurrent != null) {
                 throw new BusinessConflictException("该股票学习卡仍在生成中");
             }
             throw error;

@@ -109,9 +109,12 @@ class StockLearningCardServiceTest {
         StockLearningCard card = new StockLearningCard(); card.setId(2L); card.setInstrumentId(1L);
         StockLearningCardRun stale = new StockLearningCardRun(); stale.setId(7L); stale.setCardId(2L);
         stale.setStatus("RUNNING"); stale.setCreatedAt(LocalDateTime.now().minusHours(1));
+        StockLearningCardRun latest = new StockLearningCardRun(); latest.setId(9L); latest.setCardId(2L);
+        latest.setStatus("DEGRADED"); latest.setCreatedAt(LocalDateTime.now().minusMinutes(30));
         when(instruments.resolve("603618", "STOCK")).thenReturn(instrument);
         when(cards.findOrCreate(1L, StockLearningFramework.CODE)).thenReturn(card);
-        when(cards.latest(2L)).thenReturn(Optional.of(stale));
+        when(cards.latest(2L)).thenReturn(Optional.of(latest));
+        when(cards.active(2L)).thenReturn(Optional.of(stale));
         when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         when(cards.appendRun(any(), anyList(), anyList())).thenAnswer(invocation -> {
             StockLearningCardRun run = invocation.getArgument(0); run.setId(8L); return run;

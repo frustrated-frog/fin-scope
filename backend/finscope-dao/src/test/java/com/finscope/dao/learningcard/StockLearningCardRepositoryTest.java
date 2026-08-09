@@ -170,6 +170,24 @@ class StockLearningCardRepositoryTest {
         assertEquals("FULL_TEXT", restored.getContentOrigin());
     }
 
+    @Test
+    void findsAnOlderActiveRunEvenWhenANewerTerminalRunExists() {
+        StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        StockLearningCardRun active = new StockLearningCardRun();
+        active.setCardId(card.getId()); active.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        active.setStatus("RUNNING"); active.setStage("COLLECTING_EVIDENCE"); active.setGenerationMode("CONTROLLED");
+        StockLearningCardRun savedActive = repository.appendRun(active, Arrays.asList(), Arrays.asList());
+        StockLearningCardRun terminal = new StockLearningCardRun();
+        terminal.setCardId(card.getId()); terminal.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        terminal.setStatus("DEGRADED"); terminal.setStage("COMPLETED"); terminal.setGenerationMode("CONTROLLED");
+        repository.appendRun(terminal, Arrays.asList(), Arrays.asList());
+
+        StockLearningCardRun restored = repository.active(card.getId()).orElseThrow(AssertionError::new);
+
+        assertEquals(savedActive.getId(), restored.getId());
+        assertEquals("RUNNING", restored.getStatus());
+    }
+
     private StockLearningCardClaim claim(String dimension, String judgment, int order) {
         StockLearningCardClaim value = new StockLearningCardClaim();
         value.setDimensionCode(dimension);
