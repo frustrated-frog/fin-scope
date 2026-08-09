@@ -114,6 +114,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
             source_family=envelope.source_family or "UNKNOWN",
             quality_status=envelope.quality_status.value,
             warnings=list(envelope.warnings),
+            horizon_days=request.horizon_days,
         )
         return JSONResponse(
             status_code=200,

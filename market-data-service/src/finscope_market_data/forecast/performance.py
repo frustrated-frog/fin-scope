@@ -148,7 +148,7 @@ def simulate_strategy(
             held_during_day = True
 
         if units > 0 and exit_index == index:
-            gross_proceeds = units * bar.close
+            gross_proceeds = units * bar.open
             sell_cost = gross_proceeds * half_cost
             cash = gross_proceeds - sell_cost
             total_cost += sell_cost

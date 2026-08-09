@@ -56,6 +56,17 @@ class ProbabilityMetrics:
 
 
 @dataclass(frozen=True)
+class SelectiveMetrics:
+    lower_threshold: float
+    upper_threshold: float
+    sample_count: int
+    covered_count: int
+    coverage: float
+    covered_accuracy: float
+    abstain_rate: float
+
+
+@dataclass(frozen=True)
 class LockedTestResult:
     baseline_probability: float
     raw_probabilities: tuple[float, ...]
@@ -81,7 +92,11 @@ class ModelQualification:
 
 def split_qualification_samples(
     samples: Sequence[ForecastSample],
+    *,
+    independent_stride_days: int = 20,
 ) -> QualificationSplit:
+    if independent_stride_days < 1:
+        raise ValueError("独立锚点步长必须为正整数")
     ordered = sorted(samples, key=lambda item: item.signal_date)
     dates = [item.signal_date for item in ordered]
     if len(dates) != len(set(dates)):
@@ -99,21 +114,28 @@ def split_qualification_samples(
         calibration=calibration,
         locked_test=locked_test,
         audit=SplitAudit(
-            development=_slice(development),
-            calibration=_slice(calibration),
-            locked_test=_slice(locked_test),
+            development=_slice(development, independent_stride_days=independent_stride_days),
+            calibration=_slice(calibration, independent_stride_days=independent_stride_days),
+            locked_test=_slice(locked_test, independent_stride_days=independent_stride_days),
         ),
     )
 
 
-def qualify_model(samples: Sequence[ForecastSample]) -> ModelQualification:
-    split = split_qualification_samples(samples)
+def qualify_model(
+    samples: Sequence[ForecastSample],
+    *,
+    independent_stride_days: int = 20,
+) -> ModelQualification:
+    split = split_qualification_samples(
+        samples,
+        independent_stride_days=independent_stride_days,
+    )
     training = mature_training_samples(
         split.development,
         split.calibration[0].signal_date,
     )
-    calibration_anchors = split.calibration[::20]
-    locked_anchors = split.locked_test[::20]
+    calibration_anchors = split.calibration[::independent_stride_days]
+    locked_anchors = split.locked_test[::independent_stride_days]
     if not training or not calibration_anchors or not locked_anchors:
         raise ValueError("资格检验切分无法形成有效训练和测试样本")
     model = RegularizedLogisticModel.fit(training)
@@ -155,9 +177,13 @@ def qualify_model(samples: Sequence[ForecastSample]) -> ModelQualification:
     elif status == "CONDITIONAL":
         reason = calibration.reason or "锁定概率指标只形成部分优势"
     audit = SplitAudit(
-        development=_slice(split.development, purged_count=len(split.development) - len(training)),
-        calibration=_slice(split.calibration),
-        locked_test=_slice(split.locked_test),
+        development=_slice(
+            split.development,
+            independent_stride_days=independent_stride_days,
+            purged_count=len(split.development) - len(training),
+        ),
+        calibration=_slice(split.calibration, independent_stride_days=independent_stride_days),
+        locked_test=_slice(split.locked_test, independent_stride_days=independent_stride_days),
     )
     return ModelQualification(
         status=status,
@@ -230,6 +256,40 @@ def evaluate_probability_metrics(
     )
 
 
+def selective_metrics(
+    probabilities: Sequence[float],
+    labels: Sequence[bool],
+    *,
+    lower_threshold: float,
+    upper_threshold: float,
+) -> SelectiveMetrics:
+    if len(probabilities) != len(labels) or not probabilities:
+        raise ValueError("选择性预测概率与标签必须等长且非空")
+    if not 0 < lower_threshold < 0.5 < upper_threshold < 1:
+        raise ValueError("选择性预测阈值必须位于 0.5 两侧")
+    covered = [
+        (probability, label)
+        for probability, label in zip(probabilities, labels)
+        if probability <= lower_threshold or probability >= upper_threshold
+    ]
+    correct = sum(
+        (probability >= upper_threshold) == label
+        for probability, label in covered
+    )
+    sample_count = len(probabilities)
+    covered_count = len(covered)
+    coverage = covered_count / sample_count
+    return SelectiveMetrics(
+        lower_threshold=lower_threshold,
+        upper_threshold=upper_threshold,
+        sample_count=sample_count,
+        covered_count=covered_count,
+        coverage=coverage,
+        covered_accuracy=correct / covered_count if covered_count else 0.0,
+        abstain_rate=1.0 - coverage,
+    )
+
+
 def assess_qualification_status(
     *,
     enough_samples: bool,
@@ -282,15 +342,20 @@ def reliability_bins(
     return tuple(result)
 
 
-def _slice(samples: Sequence[ForecastSample], *, purged_count: int = 0) -> SplitSlice:
+def _slice(
+    samples: Sequence[ForecastSample],
+    *,
+    independent_stride_days: int = 20,
+    purged_count: int = 0,
+) -> SplitSlice:
     if not samples:
         raise ValueError("资格检验切分不得为空")
     return SplitSlice(
         start_date=samples[0].signal_date,
         end_date=samples[-1].signal_date,
         sample_count=len(samples),
-        independent_sample_count=len(samples[::20]),
-        positive_count=sum(item.positive for item in samples[::20]),
+        independent_sample_count=len(samples[::independent_stride_days]),
+        positive_count=sum(item.positive for item in samples[::independent_stride_days]),
         purged_count=purged_count,
     )
 

@@ -98,6 +98,7 @@ def test_forecast_refuses_probability_when_locked_qualification_is_too_small() -
         source_family="TDX",
         quality_status="FRESH_FALLBACK",
         warnings=[],
+        horizon_days=20,
     )
 
     assert result.status == "INSUFFICIENT_DATA"
@@ -106,7 +107,7 @@ def test_forecast_refuses_probability_when_locked_qualification_is_too_small() -
     assert result.qualification.status == "INSUFFICIENT_DATA"
 
 
-def test_forecast_produces_auditable_twenty_day_probability() -> None:
+def test_forecast_produces_auditable_default_five_day_probability() -> None:
     result = build_forecast(
         bars(1600),
         instrument_code="600519.SH",
@@ -117,7 +118,7 @@ def test_forecast_produces_auditable_twenty_day_probability() -> None:
     )
 
     assert result.instrument_code == "600519.SH"
-    assert result.horizon_days == 20
+    assert result.horizon_days == 5
     assert result.up_probability is not None and 0 <= result.up_probability <= 1
     assert result.expected_net_return is not None
     assert result.lower_net_return <= result.upper_net_return
@@ -125,8 +126,8 @@ def test_forecast_produces_auditable_twenty_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v3"
-    assert result.model_version == "logistic-platt-qualified-v3"
+    assert result.report_schema_version == "single-stock-research-v4"
+    assert result.model_version == "logistic-platt-selective-v4"
     assert result.raw_probability is not None
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
@@ -145,3 +146,27 @@ def test_forecast_produces_auditable_twenty_day_probability() -> None:
     assert result.out_of_sample is not None
     assert len(result.parameter_stability.scenarios) == 5
     assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
+    assert result.decision in {"UP", "DOWN", "ABSTAIN"}
+    assert result.selective_validation is not None
+    assert 0 <= result.selective_validation.coverage <= 1
+    assert result.qualification.split_audit.label_horizon_days == 5
+    assert result.qualification.split_audit.independent_stride_days == 5
+
+
+def test_forecast_keeps_each_horizon_trial_identity_independent() -> None:
+    history = bars(1600)
+
+    one_day = build_forecast(
+        history, instrument_code="600519.SH", source_code="PYTDX",
+        source_family="TDX", quality_status="FRESH", warnings=[], horizon_days=1,
+    )
+    twenty_day = build_forecast(
+        history, instrument_code="600519.SH", source_code="PYTDX",
+        source_family="TDX", quality_status="FRESH", warnings=[], horizon_days=20,
+    )
+
+    assert one_day.horizon_days == 1
+    assert twenty_day.horizon_days == 20
+    assert one_day.qualification is not None
+    assert twenty_day.qualification is not None
+    assert one_day.qualification.trial.trial_id != twenty_day.qualification.trial.trial_id

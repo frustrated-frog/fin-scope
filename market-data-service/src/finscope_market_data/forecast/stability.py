@@ -16,13 +16,22 @@ class NeighborScenario:
     primary: bool = False
 
 
-NEIGHBOR_SCENARIOS: tuple[NeighborScenario, ...] = (
-    NeighborScenario(20, 0.60, True),
-    NeighborScenario(20, 0.55),
-    NeighborScenario(20, 0.65),
-    NeighborScenario(15, 0.60),
-    NeighborScenario(25, 0.60),
-)
+def neighbor_scenarios(horizon_days: int) -> tuple[NeighborScenario, ...]:
+    neighbors = {
+        1: (2, 3),
+        5: (3, 10),
+        20: (15, 25),
+    }
+    if horizon_days not in neighbors:
+        raise ValueError("稳健性分析只支持 1、5、20 日周期")
+    lower, upper = neighbors[horizon_days]
+    return (
+        NeighborScenario(horizon_days, 0.60, True),
+        NeighborScenario(horizon_days, 0.55),
+        NeighborScenario(horizon_days, 0.65),
+        NeighborScenario(lower, 0.60),
+        NeighborScenario(upper, 0.60),
+    )
 
 
 @dataclass(frozen=True)
@@ -46,16 +55,19 @@ class StabilityReport:
 
 
 def analyze_stability(
-    bars: Sequence[DailyBar], transaction_cost_rate: float
+    bars: Sequence[DailyBar], transaction_cost_rate: float, *, horizon_days: int = 20
 ) -> StabilityReport:
     results: list[StabilityScenarioResult] = []
-    for scenario in NEIGHBOR_SCENARIOS:
+    for scenario in neighbor_scenarios(horizon_days):
         samples = build_samples(
             bars,
             transaction_cost_rate=transaction_cost_rate,
             horizon_days=scenario.holding_days,
         )
-        validation = validate_walk_forward(samples)
+        validation = validate_walk_forward(
+            samples,
+            independent_stride_days=scenario.holding_days,
+        )
         if not validation.observations:
             results.append(
                 StabilityScenarioResult(

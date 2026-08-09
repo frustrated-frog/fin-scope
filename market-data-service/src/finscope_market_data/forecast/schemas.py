@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -14,6 +16,7 @@ class ForecastModel(BaseModel):
 
 class SingleStockForecastRequest(ForecastModel):
     code: str = Field(pattern=r"^\d{6}$")
+    horizon_days: Literal[1, 5, 20] = 5
 
 
 class ForecastValidation(ForecastModel):
@@ -219,6 +222,16 @@ class LockedTestReport(ForecastModel):
     reliability_bins: list[ReliabilityBin]
 
 
+class SelectiveValidation(ForecastModel):
+    lower_threshold: float
+    upper_threshold: float
+    sample_count: int
+    covered_count: int
+    coverage: float
+    covered_accuracy: float
+    abstain_rate: float
+
+
 class QualificationIntervals(ForecastModel):
     brier_skill_score: ConfidenceInterval
     accuracy: ConfidenceInterval
@@ -248,13 +261,15 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v3"
-    model_version: str = "logistic-platt-qualified-v3"
+    report_schema_version: str = "single-stock-research-v4"
+    model_version: str = "logistic-platt-selective-v4"
     instrument_code: str
     as_of_date: str
-    horizon_days: int = 20
+    horizon_days: int = 5
     status: str
     conclusion: str
+    decision: Literal["UP", "DOWN", "ABSTAIN"] = "ABSTAIN"
+    decision_reason: str
     bar_count: int
     labeled_sample_count: int | None = None
     up_probability: float | None = Field(default=None, ge=0, le=1)
@@ -280,4 +295,5 @@ class SingleStockForecastResult(ForecastModel):
     parameter_stability: ParameterStability | None = None
     recent_observations: list[ForecastObservation] = Field(default_factory=list)
     qualification: ModelQualification | None = None
+    selective_validation: SelectiveValidation | None = None
     warnings: list[str] = Field(default_factory=list)
