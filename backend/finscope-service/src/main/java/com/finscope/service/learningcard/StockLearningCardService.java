@@ -15,7 +15,6 @@ import com.finscope.service.research.ResearchThesisService;
 import com.finscope.service.research.report.ResearchReportService;
 import com.finscope.service.strategy.StrategyInstrumentResolver;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
@@ -32,7 +31,6 @@ public class StockLearningCardService {
     @Resource private ResearchService researchService;
     @Resource private ResearchReportService reportService;
 
-    @Transactional
     public StockLearningCardRun start(String code) {
         Instrument instrument = instrumentResolver.resolve(code, "STOCK");
         StockLearningCard card = cards.findOrCreate(instrument.getId(), StockLearningFramework.CODE);
@@ -47,7 +45,6 @@ public class StockLearningCardService {
         return cards.appendRun(running, Collections.<StockLearningCardClaim>emptyList(), Collections.<StockLearningCardWatchItem>emptyList());
     }
 
-    @Transactional
     public StockLearningCardView get(String code) {
         Instrument instrument = instrumentResolver.resolve(code, "STOCK");
         StockLearningCard card = cards.findOrCreate(instrument.getId(), StockLearningFramework.CODE);
