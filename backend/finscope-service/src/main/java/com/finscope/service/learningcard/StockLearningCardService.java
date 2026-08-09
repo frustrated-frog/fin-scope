@@ -7,6 +7,7 @@ import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
+import com.finscope.domain.research.ResearchEnums;
 import com.finscope.domain.research.ResearchMode;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
@@ -40,7 +41,8 @@ public class StockLearningCardService {
         thesis.setQuestion("请按空间、盈利模式、竞争格局、治理结构、定价观察和反方验证研究" + instrument.getName());
         thesis.setSubjectType("COMPANY"); thesis.setSubjectName(instrument.getName()); thesis.setSubjectCode(instrument.getCode());
         thesis = thesisService.create(thesis);
-        ResearchRun research = researchService.createRun(thesis.getId(), LocalDate.now(), Collections.<String>emptyList(), ResearchMode.DEEP).getRun();
+        ResearchRun research = researchService.createRun(thesis.getId(), LocalDate.now(),
+                Collections.singletonList(ResearchEnums.THEME_COMPANY_IPO), ResearchMode.DEEP).getRun();
         StockLearningCardRun running = run(card, research.getId(), "RUNNING", null, "生成中", "PENDING", "CONTROLLED");
         return cards.appendRun(running, Collections.<StockLearningCardClaim>emptyList(), Collections.<StockLearningCardWatchItem>emptyList());
     }
