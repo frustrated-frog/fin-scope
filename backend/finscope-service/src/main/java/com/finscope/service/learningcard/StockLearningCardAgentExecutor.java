@@ -105,9 +105,11 @@ public class StockLearningCardAgentExecutor {
     }
 
     private void finish(StockLearningCardRun run, List<StockLearningCardClaim> claims) {
-        int ready = 0, failed = 0;
+        int ready = 0, failed = 0, insufficient = 0;
         for (StockLearningCardClaim claim : claims) {
-            if ("READY".equals(claim.getStatus())) ready++; else if ("FAILED".equals(claim.getStatus())) failed++;
+            if ("READY".equals(claim.getStatus())) ready++;
+            else if ("FAILED".equals(claim.getStatus())) failed++;
+            else if ("INSUFFICIENT_EVIDENCE".equals(claim.getStatus())) insufficient++;
         }
         run.setStage("COMPLETED"); run.setGenerationMode(ready > 0 ? "MODEL_ASSISTED" : "CONTROLLED");
         run.setEvidenceCompleteness(ready == claims.size() ? "COMPLETE" : ready > 0 ? "PARTIAL" : "MISSING");
@@ -118,10 +120,14 @@ public class StockLearningCardAgentExecutor {
             run.setStatus("DEGRADED"); run.setFailedStage("SYNTHESIZING_CARDS"); run.setErrorCode("DIMENSION_PARTIAL_FAILURE");
             run.setUserMessage("部分学习维度未能生成，其他结果已保留，可以重新生成补全"); run.setRetryable(true);
             run.setSummary("已生成" + ready + "个维度，" + (claims.size() - ready) + "个维度需要重试");
-        } else {
+        } else if (failed > 0) {
             run.setStatus("FAILED"); run.setFailedStage(failed > 0 ? "SYNTHESIZING_CARDS" : "COLLECTING_EVIDENCE");
             run.setErrorCode("NO_DIMENSION_COMPLETED"); run.setUserMessage("暂未生成可用学习卡，请稍后重新生成"); run.setRetryable(true);
             run.setSummary("六个学习维度均未形成可用判断");
+        } else {
+            run.setStatus("DEGRADED"); run.setFailedStage(null); run.setErrorCode("INSUFFICIENT_EVIDENCE");
+            run.setUserMessage("当前公开资料不足，六个维度暂不形成判断，可以稍后重新生成"); run.setRetryable(true);
+            run.setSummary("已完成资料检索，但公开证据仍不足");
         }
         cards.updateRun(run, claims, Collections.singletonList(watch()));
     }

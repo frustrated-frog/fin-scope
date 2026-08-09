@@ -73,4 +73,31 @@ class StockLearningCardAgentExecutorTest {
         assertTrue(completed.isRetryable());
         verify(search, org.mockito.Mockito.times(6)).search(any());
     }
+
+    @Test
+    void treatsEvidenceInsufficiencyAsADegradedLearningResultInsteadOfATechnicalFailure() throws Exception {
+        StockLearningCardRepository cards = mock(StockLearningCardRepository.class);
+        SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
+        SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
+        StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
+        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor(cards, search, content,
+                synthesis, Runnable::run);
+        when(search.search(any())).thenReturn(new SearchEvidenceBatch(Collections.emptyList(), Collections.emptyList(), false));
+        when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList())).thenAnswer(invocation -> {
+            StockLearningCardClaim claim = new StockLearningCardClaim();
+            claim.setDimensionCode(invocation.getArgument(2)); claim.setStatus("INSUFFICIENT_EVIDENCE");
+            claim.setJudgment("证据不足，暂不形成判断"); claim.setRationale("没有足够公开资料");
+            claim.setCounterargument("待补充"); claim.setUnknowns("保持未知"); claim.setConfidence("LOW");
+            return claim;
+        });
+        when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        Instrument instrument = new Instrument(); instrument.setCode("603618"); instrument.setName("杭电股份");
+        StockLearningCardRun run = new StockLearningCardRun(); run.setId(9L); run.setCardId(2L);
+
+        executor.execute(instrument, run);
+
+        assertEquals("DEGRADED", run.getStatus());
+        assertEquals("INSUFFICIENT_EVIDENCE", run.getErrorCode());
+        assertEquals("COMPLETED", run.getStage());
+    }
 }

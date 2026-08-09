@@ -25,7 +25,15 @@ public class StockLearningCardService {
         StockLearningCardRun running = run(card, "RUNNING", null, "学习卡已进入生成队列", "PENDING", "CONTROLLED");
         running.setStage("QUEUED");
         running = cards.appendRun(running, Collections.emptyList(), Collections.emptyList());
-        agentExecutor.schedule(instrument, running);
+        try {
+            agentExecutor.schedule(instrument, running);
+        } catch (RuntimeException error) {
+            running.setStatus("FAILED"); running.setStage("COMPLETED"); running.setFailedStage("QUEUED");
+            running.setErrorCode("QUEUE_REJECTED");
+            running.setUserMessage("学习卡生成队列暂时繁忙，请稍后重新生成");
+            running.setRetryable(true); running.setSummary("学习卡未能进入生成队列");
+            running = cards.updateRun(running, Collections.emptyList(), Collections.emptyList());
+        }
         return running;
     }
 
