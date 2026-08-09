@@ -71,6 +71,26 @@ class SingleStockForecastServiceTest {
         verify(client, never()).forecast(any());
     }
 
+    @Test
+    void marksAnInsufficientForecastUnavailableForMaturityValidation() {
+        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
+        SingleStockForecast forecast = forecast();
+        forecast.setStatus("INSUFFICIENT_DATA");
+        forecast.setUpProbability(null);
+        when(client.forecast("600519", 5)).thenReturn(forecast);
+        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
+        when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(
+                invocation -> invocation.getArgument(0));
+        SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
+
+        SingleStockForecastRun result = service.forecast("600519", 5);
+
+        assertEquals(SingleStockForecastRun.MaturityStatus.UNAVAILABLE,
+                result.getMaturityStatus());
+    }
+
     private SingleStockForecast forecast() {
         SingleStockForecast value = new SingleStockForecast();
         value.setReportSchemaVersion("single-stock-research-v2");

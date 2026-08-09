@@ -168,6 +168,7 @@ def simulate_strategy(
                 )
             )
             units, exit_index, active = 0.0, None, None
+            held_during_day = False
 
         nav = cash if units == 0 else units * bar.close
         daily_navs.append(nav)
@@ -216,7 +217,7 @@ def simulate_strategy(
     for trade in trades:
         entry = index_by_date[trade.entry_date]
         exit_at = index_by_date[trade.exit_date]
-        invested_dates.update(ordered[index].trade_date for index in range(entry, exit_at + 1))
+        invested_dates.update(ordered[index].trade_date for index in range(entry, exit_at))
     points = [
         EquityPoint(
             item.trade_date,

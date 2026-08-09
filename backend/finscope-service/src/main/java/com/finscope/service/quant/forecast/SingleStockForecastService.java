@@ -50,7 +50,9 @@ public class SingleStockForecastService {
         value.setDataFingerprint(report.getDataFingerprint());
         value.setModelVersion(report.getModelVersion());
         value.setReportSchemaVersion(report.getReportSchemaVersion());
-        value.setMaturityStatus(SingleStockForecastRun.MaturityStatus.PENDING);
+        value.setMaturityStatus("INSUFFICIENT_DATA".equals(report.getStatus())
+                ? SingleStockForecastRun.MaturityStatus.UNAVAILABLE
+                : SingleStockForecastRun.MaturityStatus.PENDING);
         try {
             value.setReportJson(json.writeValueAsString(report));
             value.setHoldingSnapshotJson(json.writeValueAsString(holding));

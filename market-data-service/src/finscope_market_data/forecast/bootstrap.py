@@ -77,19 +77,28 @@ def bootstrap_interval(
     )
 
 
-def paired_compound_excess(
+def paired_annualized_excess(
     strategy_returns: Sequence[float],
     benchmark_returns: Sequence[float],
     indices: Sequence[int],
+    *,
+    periods_per_year: float = 242.0,
 ) -> float:
     if len(strategy_returns) != len(benchmark_returns):
         raise ValueError("策略与基准收益序列数量不一致")
-    strategy_nav = 1.0
-    benchmark_nav = 1.0
+    if not indices or periods_per_year <= 0:
+        raise ValueError("年化超额收益样本或周期参数无效")
+    strategy_log_return = 0.0
+    benchmark_log_return = 0.0
     for index in indices:
-        strategy_nav *= 1.0 + strategy_returns[index]
-        benchmark_nav *= 1.0 + benchmark_returns[index]
-    return strategy_nav - benchmark_nav
+        if strategy_returns[index] <= -1.0 or benchmark_returns[index] <= -1.0:
+            raise ValueError("收益率不得小于等于 -100%")
+        strategy_log_return += math.log1p(strategy_returns[index])
+        benchmark_log_return += math.log1p(benchmark_returns[index])
+    scale = periods_per_year / len(indices)
+    return math.expm1(strategy_log_return * scale) - math.expm1(
+        benchmark_log_return * scale
+    )
 
 
 def _unavailable(confidence_level: float, reason: str) -> ConfidenceInterval:

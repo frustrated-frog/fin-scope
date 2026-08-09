@@ -9,7 +9,7 @@ import statistics
 from finscope_market_data.forecast.bootstrap import (
     ConfidenceInterval as BootstrapConfidenceInterval,
     bootstrap_interval,
-    paired_compound_excess,
+    paired_annualized_excess,
 )
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.factor_catalog import FACTORS
@@ -202,7 +202,12 @@ def build_forecast(
         ),
         parameter_stability=ParameterStability.model_validate(asdict(stability)),
         recent_observations=_recent(validation.observations),
-        qualification=_qualification_report(qualification, trial, intervals),
+        qualification=_qualification_report(
+            qualification,
+            trial,
+            intervals,
+            horizon_days,
+        ),
         selective_validation=SelectiveValidation.model_validate(asdict(selective)),
         warnings=[
             *warnings,
@@ -293,7 +298,11 @@ def _qualification_intervals(
     strategy_returns, benchmark_returns = _daily_returns(performance)
     excess = bootstrap_interval(
         len(strategy_returns),
-        lambda indices: paired_compound_excess(strategy_returns, benchmark_returns, indices),
+        lambda indices: paired_annualized_excess(
+            strategy_returns,
+            benchmark_returns,
+            indices,
+        ),
         block_length=20,
         iterations=1000,
         seed=seed + 2,
@@ -354,6 +363,7 @@ def _qualification_report(
     qualification: ModelQualification,
     trial: TrialIdentity,
     intervals: QualificationIntervals,
+    horizon_days: int,
 ) -> ModelQualificationSchema:
     calibration = qualification.calibration
     locked = qualification.locked_test
@@ -365,8 +375,8 @@ def _qualification_report(
             development=SplitSliceAudit.model_validate(asdict(qualification.split_audit.development)),
             calibration=SplitSliceAudit.model_validate(asdict(qualification.split_audit.calibration)),
             locked_test=SplitSliceAudit.model_validate(asdict(qualification.split_audit.locked_test)),
-            label_horizon_days=int(trial.label_version.split("-")[-2].removesuffix("d")),
-            independent_stride_days=int(trial.label_version.split("-")[-2].removesuffix("d")),
+            label_horizon_days=horizon_days,
+            independent_stride_days=horizon_days,
             rule="严格前向 60/20/20；训练标签退出日必须早于待预测日",
         ),
         calibration=CalibrationReport(

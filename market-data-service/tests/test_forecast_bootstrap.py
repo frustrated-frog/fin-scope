@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from finscope_market_data.forecast.bootstrap import (
     bootstrap_interval,
     moving_block_indices,
+    paired_annualized_excess,
 )
 
 
@@ -51,3 +54,17 @@ def test_bootstrap_interval_returns_unavailable_for_invalid_input() -> None:
     assert result.status == "UNAVAILABLE"
     assert result.lower is None
     assert result.upper is None
+
+
+def test_annualized_excess_is_comparable_across_sample_lengths() -> None:
+    strategy = [0.001] * 242
+    benchmark = [0.0004] * 242
+    once = paired_annualized_excess(strategy, benchmark, tuple(range(242)))
+    twice = paired_annualized_excess(
+        strategy * 2,
+        benchmark * 2,
+        tuple(range(484)),
+    )
+
+    assert once == pytest.approx(twice)
+    assert 0 < once < 1
