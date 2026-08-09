@@ -1299,6 +1299,23 @@ public class DatabaseInitializer implements InitializingBean {
                 + "report_json TEXT NOT NULL,holding_snapshot_json TEXT,created_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_code_created "
                 + "ON single_stock_forecast_run(instrument_code,created_at DESC,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,framework_code TEXT NOT NULL,"
+                + "latest_run_id INTEGER,status TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,card_id INTEGER NOT NULL,research_run_id INTEGER,framework_code TEXT NOT NULL,status TEXT NOT NULL,"
+                + "conclusion_status TEXT,summary TEXT,evidence_completeness TEXT,warning_message TEXT,source_fingerprint TEXT,generation_mode TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL,completed_at TEXT,FOREIGN KEY(card_id) REFERENCES stock_learning_card(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_learning_card_run_card ON stock_learning_card_run(card_id,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_claim ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,dimension_code TEXT NOT NULL,judgment TEXT NOT NULL,rationale TEXT NOT NULL,"
+                + "counterargument TEXT NOT NULL,unknowns TEXT NOT NULL,confidence TEXT NOT NULL,sort_order INTEGER NOT NULL,"
+                + "UNIQUE(run_id,dimension_code),FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_watch_item ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,metric TEXT NOT NULL,baseline TEXT NOT NULL,frequency TEXT NOT NULL,"
+                + "upgrade_condition TEXT NOT NULL,downgrade_condition TEXT NOT NULL,next_review_at TEXT,sort_order INTEGER NOT NULL,"
+                + "FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
     }
 
     private void ensureColumn(String table, String column, String type) {
