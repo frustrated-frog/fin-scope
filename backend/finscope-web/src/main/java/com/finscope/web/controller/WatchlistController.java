@@ -6,9 +6,11 @@ import com.finscope.web.response.ApiResponses;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.service.instrument.WatchlistItemView;
 import com.finscope.service.instrument.WatchlistService;
+import com.finscope.service.instrument.FundHoldingDetailService;
 import com.finscope.web.request.AddWatchlistItemRequest;
 import com.finscope.web.request.UpdateWatchlistGroupRequest;
 import com.finscope.web.response.WatchlistItemResponse;
+import com.finscope.web.response.FundHoldingDetailResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +33,8 @@ import java.util.stream.Collectors;
 public class WatchlistController {
     @Resource
     private WatchlistService watchlistService;
+    @Resource
+    private FundHoldingDetailService fundHoldingDetailService;
 
     /**
      * 查询自选列表。
@@ -92,5 +96,20 @@ public class WatchlistController {
     @GetMapping("/{code}/daily-bars")
     public ApiResponse<List<DailyBarPoint>> dailyBars(@PathVariable String code, @RequestParam(defaultValue = "120") int limit, @RequestParam(defaultValue = "false") boolean refresh) {
         return ApiResponses.success(watchlistService.dailyBars(code, limit, refresh));
+    }
+
+    /**
+     * 查询基金最近披露的前十大直接股票持仓及盘中估算贡献。
+     *
+     * @param code 六位基金代码。
+     * @param refresh 是否强制刷新成分股行情。
+     * @return 基金披露持仓、股票行情质量与估算贡献。
+     */
+    @GetMapping("/{code}/fund-holdings")
+    public ApiResponse<FundHoldingDetailResponse> fundHoldings(
+            @PathVariable String code,
+            @RequestParam(defaultValue = "true") boolean refresh) {
+        return ApiResponses.success(FundHoldingDetailResponse.of(
+                fundHoldingDetailService.load(code, refresh)));
     }
 }
