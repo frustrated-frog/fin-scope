@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,20 +16,33 @@ import java.util.concurrent.Executor;
 
 @Service
 public class RadarEventEnhancementScheduler {
-
-    @Resource
-    private RadarCanonicalTitleAgent radarCanonicalTitleAgent;
-    @Resource
-    private RadarEvidenceOrchestrator evidence;
-    @Resource
-    private RadarRepository repository;
-    @Resource
-    private RadarSnapshotProjectionService snapshots;
-    @Resource
-    private Executor executor;
+    private final RadarCanonicalTitleAgent radarCanonicalTitleAgent;
+    private final RadarEvidenceOrchestrator evidence;
+    private final RadarRepository repository;
+    private final RadarSnapshotProjectionService snapshots;
+    private final Executor executor;
 
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
+    @Autowired
+    public RadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
+                                          RadarEvidenceOrchestrator evidence,
+                                          RadarRepository repository,
+                                          RadarSnapshotProjectionService snapshots,
+                                          @Qualifier("radarAgentExecutor") Executor executor) {
+        this.radarCanonicalTitleAgent = radarCanonicalTitleAgent;
+        this.evidence = evidence;
+        this.repository = repository;
+        this.snapshots = snapshots;
+        this.executor = executor;
+    }
+
+    RadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
+                                   RadarEvidenceOrchestrator evidence,
+                                   RadarRepository repository,
+                                   Executor executor) {
+        this(radarCanonicalTitleAgent, evidence, repository, null, executor);
+    }
 
     public void schedule(RadarEvent event, List<RadarSignal> signals, LocalDateTime now, boolean includeEvidence) {
         if (event == null || event.getId() == null) {

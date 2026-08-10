@@ -43,7 +43,9 @@ public class RadarCanonicalTitleAgent {
             String raw = llm.complete(systemPrompt(), userPrompt(signals), TIMEOUT_MS, MAX_OUTPUT_TOKENS);
             Draft draft = json.readValue(extractJson(raw), Draft.class);
             String title = draft == null ? "" : compact(draft.title, TITLE_LIMIT + 1);
-            if (!valid(title)) throw new IllegalArgumentException("规范标题不符合约束");
+            if (!valid(title)) {
+                throw new IllegalArgumentException("规范标题不符合约束");
+            }
             Result result = new Result(title, true, null);
             trace(signals, result, started, null);
             return result;
