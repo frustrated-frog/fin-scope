@@ -24,22 +24,23 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
+import javax.annotation.Resource;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/research-radar")
 public class ResearchRadarController {
 
-    private final ResearchRadarService service;
-    private final RadarEventWorkspaceService workspace;
-    private final RadarResearchLinkService researchLinks;
-    private final ViewSnapshotCacheService snapshots;
-    private final ObjectMapper mapper;
+    @Resource
+    private ResearchRadarService service;
+    @Resource
+    private RadarEventWorkspaceService workspace;
+    @Resource
+    private RadarResearchLinkService researchLinks;
+    @Resource
+    private ObjectMapper mapper;
 
-    public ResearchRadarController(ResearchRadarService service, RadarEventWorkspaceService workspace,
-                                   RadarResearchLinkService researchLinks, ViewSnapshotCacheService snapshots, ObjectMapper mapper){
-        this.service=service; this.workspace=workspace; this.researchLinks=researchLinks; this.snapshots=snapshots; this.mapper=mapper;
-    }
+    private final String ALL = "ALL";
 
     /**
      * 查询研究雷达视图。
@@ -60,8 +61,8 @@ public class ResearchRadarController {
         if (refresh) {
             service.requestRefresh();
         }
-        String normalizedCategory = category == null ? "ALL" : category.trim().toUpperCase(java.util.Locale.ROOT);
-        String normalizedState = state == null ? "ALL" : state.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalizedCategory = category == null ? ALL : category.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalizedState = state == null ? ALL : state.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
         JsonNode data = mapper.valueToTree(service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState));
         return ApiResponses.success(data);
