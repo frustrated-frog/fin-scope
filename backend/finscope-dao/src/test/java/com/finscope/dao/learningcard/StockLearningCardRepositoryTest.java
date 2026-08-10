@@ -61,7 +61,7 @@ class StockLearningCardRepositoryTest {
         space.setRatingLabel("成长空间");
         space.setRatingValue("MEDIUM_HIGH");
         StockLearningCardSection driver = new StockLearningCardSection();
-        driver.setSectionKey("growth_drivers");
+        driver.setKey("growth_drivers");
         driver.setTitle("增量引擎");
         driver.setContent("高端产品是主要增量来源 [E1]");
         driver.setEvidenceRefs(Arrays.asList("E1"));
@@ -88,7 +88,7 @@ class StockLearningCardRepositoryTest {
         assertEquals("成长空间", restored.getClaims().get(0).getRatingLabel());
         assertEquals("MEDIUM_HIGH", restored.getClaims().get(0).getRatingValue());
         assertEquals(1, restored.getClaims().get(0).getSections().size());
-        assertEquals("growth_drivers", restored.getClaims().get(0).getSections().get(0).getSectionKey());
+        assertEquals("growth_drivers", restored.getClaims().get(0).getSections().get(0).getKey());
         assertEquals(Arrays.asList("E1"), restored.getClaims().get(0).getSections().get(0).getEvidenceRefs());
         assertEquals("SUPPORTED", restored.getClaims().get(0).getSections().get(0).getVerificationStatus());
         assertEquals("高端白酒需求", restored.getWatchItems().get(0).getMetric());

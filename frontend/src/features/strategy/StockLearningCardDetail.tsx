@@ -1,8 +1,8 @@
-import { StockLearningCardView } from '../../shared/types';
+import { StockLearningCardEvidence, StockLearningCardView } from '../../shared/types';
 
 const dimensionLabels: Record<string, string> = {
   SPACE: '空间', PROFIT_MODEL: '盈利模式', COMPETITION: '竞争格局',
-  GOVERNANCE: '治理结构', VALUATION: '定价观察', COUNTER_CASE: '反方验证'
+  GOVERNANCE: '治理结构', VALUATION: '市场在定价什么', COUNTER_CASE: '反方验证'
 };
 
 const stageLabels: Record<string, string> = {
@@ -13,6 +13,14 @@ const stageLabels: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
   READY: '已生成', DEGRADED: '部分完成', FAILED: '生成失败', RUNNING: '生成中'
+};
+
+const ratingLabels: Record<string, string> = {
+  HIGH: '高', MEDIUM_HIGH: '中高', MEDIUM: '中等', MEDIUM_LOW: '中低', LOW: '低', UNKNOWN: '待确认'
+};
+
+const verificationLabels: Record<string, string> = {
+  SUPPORTED: '已证实', PARTIALLY_SUPPORTED: '部分证实', UNVERIFIED: '待证实', CONTRADICTED: '存在反证'
 };
 
 export function StockLearningCardDetail({ view, busy, onBack, onRegenerate }: {
@@ -36,8 +44,26 @@ export function StockLearningCardDetail({ view, busy, onBack, onRegenerate }: {
       <p className="stock-learning-card-summary">{run.summary}</p>
       {run.userMessage ? <p className="stock-learning-card-warning" role="status">{run.userMessage}</p> : null}
       {run.warningMessage ? <p className="stock-learning-card-warning">{run.warningMessage}</p> : null}
-      <div className="stock-learning-card-claims">{run.claims.map(claim => <section key={claim.dimensionCode} data-status={claim.status}><header><span>{dimensionLabels[claim.dimensionCode] ?? claim.dimensionCode}</span><small>{claim.status === 'FAILED' ? '生成失败' : claim.status === 'INSUFFICIENT_EVIDENCE' ? '证据不足' : claim.confidence === 'LOW' ? '低置信度' : claim.confidence}</small></header>{claim.failureMessage ? <p className="stock-learning-card-claim-error">{claim.failureMessage}</p> : null}<p>{claim.judgment}</p><dl><div><dt>为什么</dt><dd>{claim.rationale}</dd></div><div><dt>反方</dt><dd>{claim.counterargument}</dd></div><div><dt>未知</dt><dd>{claim.unknowns}</dd></div></dl>{evidenceFor(claim.dimensionCode).length ? <div className="stock-learning-card-sources"><b>公开来源</b>{evidenceFor(claim.dimensionCode).map(item => item.url?.startsWith('http') ? <a key={item.evidenceCode} href={item.url} target="_blank" rel="noreferrer">[{item.evidenceCode}] {item.title || item.source}</a> : <span key={item.evidenceCode}>[{item.evidenceCode}] {item.title || item.source}</span>)}</div> : null}</section>)}</div>
+      <div className="stock-learning-card-claims">{run.claims.map(claim => <section key={claim.dimensionCode} data-status={claim.status}>
+        <header><span>{dimensionLabels[claim.dimensionCode] ?? claim.dimensionCode}</span><small>{claim.status === 'FAILED' ? '生成失败' : claim.status === 'INSUFFICIENT_EVIDENCE' ? '证据不足' : claim.confidence === 'LOW' ? '低置信度' : claim.confidence}</small></header>
+        {claim.failureMessage ? <p className="stock-learning-card-claim-error">{claim.failureMessage}</p> : null}
+        <div className="stock-learning-card-claim-rating"><span>{claim.ratingLabel} · {ratingLabels[claim.ratingValue] ?? claim.ratingValue}</span></div>
+        <p className="stock-learning-card-headline">{claim.headline}</p>
+        <div className="stock-learning-card-sections">{claim.sections.map(section => <article key={section.key}>
+          <header><h5>{section.title}</h5><span data-verification={section.verificationStatus}>{verificationLabels[section.verificationStatus] ?? section.verificationStatus}</span></header>
+          <p>{section.content}</p>
+          <SectionEvidenceLinks refs={section.evidenceRefs} evidence={evidenceFor(claim.dimensionCode)} />
+        </article>)}</div>
+      </section>)}</div>
       {run.watchItems.length ? <footer className="stock-learning-card-watch"><b>后续观察</b>{run.watchItems.map(item => <span key={item.metric}>{item.metric} · {item.frequency}</span>)}</footer> : null}
     </article> : null}
   </section>;
+}
+
+function SectionEvidenceLinks({ refs, evidence }: { refs: string[]; evidence: StockLearningCardEvidence[] }) {
+  const matched = refs.map(ref => evidence.find(item => item.evidenceCode === ref)).filter((item): item is StockLearningCardEvidence => Boolean(item));
+  if (!matched.length) return null;
+  return <div className="stock-learning-card-section-evidence">{matched.map(item => item.url?.startsWith('http')
+    ? <a key={item.evidenceCode} href={item.url} target="_blank" rel="noreferrer">[{item.evidenceCode}] {item.title || item.source}</a>
+    : <span key={item.evidenceCode}>[{item.evidenceCode}] {item.title || item.source}</span>)}</div>;
 }

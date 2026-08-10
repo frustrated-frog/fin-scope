@@ -198,7 +198,7 @@ public class StockLearningCardAgentExecutor {
         List<StockLearningCardSection> sections = new ArrayList<StockLearningCardSection>();
         for (StockLearningDimensionSchema.SectionDefinition definition : schema.getRequiredSections()) {
             StockLearningCardSection section = new StockLearningCardSection();
-            section.setSectionKey(definition.getKey());
+            section.setKey(definition.getKey());
             section.setTitle(definition.getTitle());
             section.setContent("该维度处理过程中发生异常，当前保持未知");
             section.setEvidenceRefs(Collections.<String>emptyList());

@@ -27,7 +27,7 @@ class StockLearningCardSynthesisAgentTest {
         assertEquals("成长空间", claim.getRatingLabel());
         assertEquals("MEDIUM_HIGH", claim.getRatingValue());
         assertEquals(5, claim.getSections().size());
-        assertEquals("growth_drivers", claim.getSections().get(1).getSectionKey());
+        assertEquals("growth_drivers", claim.getSections().get(1).getKey());
         assertEquals(Collections.singletonList("E1"), claim.getSections().get(1).getEvidenceRefs());
         assertEquals("SUPPORTED", claim.getSections().get(1).getVerificationStatus());
     }

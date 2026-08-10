@@ -95,7 +95,7 @@ public class StockLearningCardSynthesisAgent {
                 throw new IllegalArgumentException("栏目标题不符合当前维度契约：" + key);
             }
             StockLearningCardSection section = new StockLearningCardSection();
-            section.setSectionKey(key);
+            section.setKey(key);
             section.setTitle(title);
             section.setContent(required(value, "content", 900));
             section.setEvidenceRefs(evidenceRefs(value.get("evidenceRefs"), availableEvidence));
@@ -140,7 +140,7 @@ public class StockLearningCardSynthesisAgent {
         List<StockLearningCardSection> sections = new ArrayList<StockLearningCardSection>();
         for (StockLearningDimensionSchema.SectionDefinition definition : schema.getRequiredSections()) {
             StockLearningCardSection section = new StockLearningCardSection();
-            section.setSectionKey(definition.getKey());
+            section.setKey(definition.getKey());
             section.setTitle(definition.getTitle());
             section.setContent(reason);
             section.setEvidenceRefs(Collections.<String>emptyList());

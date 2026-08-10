@@ -17,7 +17,13 @@ test('restores persisted stock cards and opens the latest six-dimension detail',
       card: { code: '603618', name: '杭电股份' },
       latestRun: {
         id: 3, status: 'DEGRADED', stage: 'COMPLETED', summary: '已生成5个维度，1个维度需要重试',
-        claims: [{ dimensionCode: 'SPACE', status: 'READY', judgment: '空间判断', rationale: '公开资料', counterargument: '反方', unknowns: '未知', confidence: 'MEDIUM', sortOrder: 1 }],
+        claims: [{
+          dimensionCode: 'SPACE', status: 'READY', headline: '空间判断', ratingLabel: '成长空间', ratingValue: 'MEDIUM_HIGH', confidence: 'MEDIUM', sortOrder: 1,
+          sections: [
+            { key: 'growth_drivers', title: '增量引擎', content: '高端产品提供新增量', evidenceRefs: ['E1'], verificationStatus: 'SUPPORTED', sortOrder: 1 },
+            { key: 'milestones', title: '兑现路径', content: '等待客户认证与产能释放', evidenceRefs: [], verificationStatus: 'UNVERIFIED', sortOrder: 2 }
+          ]
+        }],
         evidence: [], watchItems: []
       }
     });
@@ -31,6 +37,13 @@ test('restores persisted stock cards and opens the latest six-dimension detail',
   expect(screen.queryByText('空间判断')).not.toBeInTheDocument();
   await user.click(card);
   expect(await screen.findByText('空间判断')).toBeInTheDocument();
+  expect(screen.getByText('成长空间 · 中高')).toBeInTheDocument();
+  expect(screen.getByText('增量引擎')).toBeInTheDocument();
+  expect(screen.getByText('已证实')).toBeInTheDocument();
+  expect(screen.getByText('兑现路径')).toBeInTheDocument();
+  expect(screen.queryByText('为什么')).not.toBeInTheDocument();
+  expect(screen.queryByText('反方')).not.toBeInTheDocument();
+  expect(screen.queryByText('未知')).not.toBeInTheDocument();
   expect(requests).toContain('/api/stock-learning-cards/603618');
   await user.click(screen.getByRole('button', { name: '返回全部股票' }));
   expect(await screen.findByRole('button', { name: '查看杭电股份 603618 学习卡' })).toBeInTheDocument();
@@ -72,8 +85,8 @@ test('shows a failed dimension beside successful cards and explains that it can 
       retryable: true,
       summary: '已生成5个维度，1个维度需要重试',
       claims: [
-        { dimensionCode: 'SPACE', status: 'READY', judgment: '空间判断', rationale: '公开资料', counterargument: '反方', unknowns: '未知', confidence: 'MEDIUM', sortOrder: 1 },
-        { dimensionCode: 'COMPETITION', status: 'FAILED', failureMessage: '该维度生成失败，可以重新生成学习卡', judgment: '暂未形成判断', rationale: '维度隔离', counterargument: '待补充', unknowns: '保持未知', confidence: 'LOW', sortOrder: 3 }
+        { dimensionCode: 'SPACE', status: 'READY', headline: '空间判断', ratingLabel: '成长空间', ratingValue: 'MEDIUM_HIGH', sections: [{ key: 'growth_drivers', title: '增量引擎', content: '公开资料显示存在新增量', evidenceRefs: ['E1'], verificationStatus: 'SUPPORTED', sortOrder: 1 }], confidence: 'MEDIUM', sortOrder: 1 },
+        { dimensionCode: 'COMPETITION', status: 'FAILED', failureMessage: '该维度生成失败，可以重新生成学习卡', headline: '暂未形成判断', ratingLabel: '竞争位置', ratingValue: 'UNKNOWN', sections: [{ key: 'industry_structure', title: '行业格局', content: '该维度当前保持未知', evidenceRefs: [], verificationStatus: 'UNVERIFIED', sortOrder: 1 }], confidence: 'LOW', sortOrder: 3 }
       ],
       evidence: [
         { dimensionCode: 'SPACE', evidenceCode: 'E1', title: '公司年度报告', url: 'https://example.com/report', source: 'example.com', sortOrder: 1 }
