@@ -1,11 +1,18 @@
 package com.finscope.domain.learningcard;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class StockLearningCardClaim {
     private Long id;
     private Long runId;
     private String dimensionCode;
     private String status;
     private String failureMessage;
+    private String headline;
+    private String ratingLabel;
+    private String ratingValue;
+    private List<StockLearningCardSection> sections = new ArrayList<StockLearningCardSection>();
     private String judgment;
     private String rationale;
     private String counterargument;
@@ -23,6 +30,16 @@ public class StockLearningCardClaim {
     public void setStatus(String status) { this.status = status; }
     public String getFailureMessage() { return failureMessage; }
     public void setFailureMessage(String failureMessage) { this.failureMessage = failureMessage; }
+    public String getHeadline() { return headline; }
+    public void setHeadline(String headline) { this.headline = headline; }
+    public String getRatingLabel() { return ratingLabel; }
+    public void setRatingLabel(String ratingLabel) { this.ratingLabel = ratingLabel; }
+    public String getRatingValue() { return ratingValue; }
+    public void setRatingValue(String ratingValue) { this.ratingValue = ratingValue; }
+    public List<StockLearningCardSection> getSections() { return sections; }
+    public void setSections(List<StockLearningCardSection> sections) {
+        this.sections = sections == null ? new ArrayList<StockLearningCardSection>() : sections;
+    }
     public String getJudgment() { return judgment; }
     public void setJudgment(String judgment) { this.judgment = judgment; }
     public String getRationale() { return rationale; }

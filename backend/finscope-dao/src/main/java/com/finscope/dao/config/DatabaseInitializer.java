@@ -1331,6 +1331,15 @@ public class DatabaseInitializer implements InitializingBean {
                 + "UNIQUE(run_id,dimension_code),FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
         ensureColumn("stock_learning_card_claim", "status", "TEXT");
         ensureColumn("stock_learning_card_claim", "failure_message", "TEXT");
+        ensureColumn("stock_learning_card_claim", "headline", "TEXT");
+        ensureColumn("stock_learning_card_claim", "rating_label", "TEXT");
+        ensureColumn("stock_learning_card_claim", "rating_value", "TEXT");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_section ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,claim_id INTEGER NOT NULL,section_key TEXT NOT NULL,title TEXT NOT NULL,"
+                + "content TEXT NOT NULL,evidence_refs_json TEXT NOT NULL,verification_status TEXT NOT NULL,sort_order INTEGER NOT NULL,"
+                + "UNIQUE(claim_id,section_key),FOREIGN KEY(claim_id) REFERENCES stock_learning_card_claim(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_learning_card_section_claim "
+                + "ON stock_learning_card_section(claim_id,sort_order)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card_evidence ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,dimension_code TEXT NOT NULL,"
                 + "evidence_code TEXT NOT NULL,title TEXT NOT NULL,url TEXT,source TEXT,published_at TEXT,content TEXT NOT NULL,"

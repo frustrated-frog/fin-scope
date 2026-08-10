@@ -5,6 +5,7 @@ import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSection;
 import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -12,6 +13,9 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.annotation.Resource;
 import java.sql.PreparedStatement;
@@ -25,6 +29,7 @@ import java.util.Optional;
 public class StockLearningCardRepository {
     private static final String CARD_SELECT = "SELECT c.*,i.code,i.name FROM stock_learning_card c JOIN instrument i ON i.id=c.instrument_id ";
     @Resource private JdbcTemplate jdbcTemplate;
+    @Resource private ObjectMapper objectMapper;
 
     private final RowMapper<StockLearningCard> cardMapper = (rs, row) -> {
         StockLearningCard value = new StockLearningCard();
@@ -63,6 +68,7 @@ public class StockLearningCardRepository {
         List<StockLearningCard> values = jdbcTemplate.query(CARD_SELECT + "WHERE c.instrument_id=?", cardMapper, instrumentId);
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
+    @Transactional
     public StockLearningCardRun appendRun(StockLearningCardRun run, List<StockLearningCardClaim> claims, List<StockLearningCardWatchItem> watches) {
         LocalDateTime now = LocalDateTime.now(); GeneratedKeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> { PreparedStatement ps = connection.prepareStatement(
@@ -92,6 +98,7 @@ public class StockLearningCardRepository {
                 run.getConclusionStatus(), run.getSummary(), run.getEvidenceCompleteness(), run.getWarningMessage(), run.getSourceFingerprint(),
                 run.getGenerationMode(), "RUNNING".equals(run.getStatus()) ? null : TimeUtil.text(now), run.getId());
         if (changed != 1) throw new IllegalStateException("学习卡运行不存在：" + run.getId());
+        jdbcTemplate.update("DELETE FROM stock_learning_card_section WHERE claim_id IN (SELECT id FROM stock_learning_card_claim WHERE run_id=?)", run.getId());
         jdbcTemplate.update("DELETE FROM stock_learning_card_claim WHERE run_id=?", run.getId());
         jdbcTemplate.update("DELETE FROM stock_learning_card_watch_item WHERE run_id=?", run.getId());
         for (StockLearningCardClaim claim : claims == null ? Collections.<StockLearningCardClaim>emptyList() : claims) saveClaim(run.getId(), claim);
@@ -101,8 +108,41 @@ public class StockLearningCardRepository {
         return findRun(run.getId()).orElseThrow(() -> new IllegalStateException("学习卡运行更新失败"));
     }
     private void saveClaim(Long runId, StockLearningCardClaim claim) {
-        jdbcTemplate.update("INSERT INTO stock_learning_card_claim(run_id,dimension_code,status,failure_message,judgment,rationale,counterargument,unknowns,confidence,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                runId, claim.getDimensionCode(), claim.getStatus(), claim.getFailureMessage(), claim.getJudgment(), claim.getRationale(), claim.getCounterargument(), claim.getUnknowns(), claim.getConfidence(), claim.getSortOrder());
+        GeneratedKeyHolder keys = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO stock_learning_card_claim(run_id,dimension_code,status,failure_message,headline,rating_label,rating_value,judgment,rationale,counterargument,unknowns,confidence,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    Statement.RETURN_GENERATED_KEYS);
+            statement.setLong(1, runId);
+            statement.setString(2, claim.getDimensionCode());
+            statement.setString(3, claim.getStatus());
+            statement.setString(4, claim.getFailureMessage());
+            statement.setString(5, claim.getHeadline());
+            statement.setString(6, claim.getRatingLabel());
+            statement.setString(7, claim.getRatingValue());
+            statement.setString(8, text(claim.getJudgment()));
+            statement.setString(9, text(claim.getRationale()));
+            statement.setString(10, text(claim.getCounterargument()));
+            statement.setString(11, text(claim.getUnknowns()));
+            statement.setString(12, claim.getConfidence());
+            statement.setInt(13, claim.getSortOrder());
+            return statement;
+        }, keys);
+        Long claimId = keys.getKey().longValue();
+        claim.setId(claimId);
+        claim.setRunId(runId);
+        for (StockLearningCardSection section : claim.getSections()) {
+            saveSection(claimId, section);
+        }
+    }
+    private void saveSection(Long claimId, StockLearningCardSection section) {
+        try {
+            jdbcTemplate.update("INSERT INTO stock_learning_card_section(claim_id,section_key,title,content,evidence_refs_json,verification_status,sort_order) VALUES(?,?,?,?,?,?,?)",
+                    claimId, section.getSectionKey(), section.getTitle(), section.getContent(),
+                    objectMapper.writeValueAsString(section.getEvidenceRefs()), section.getVerificationStatus(), section.getSortOrder());
+        } catch (Exception error) {
+            throw new IllegalStateException("学习卡栏目保存失败", error);
+        }
     }
     private void saveWatch(Long runId, StockLearningCardWatchItem watch) {
         jdbcTemplate.update("INSERT INTO stock_learning_card_watch_item(run_id,metric,baseline,frequency,upgrade_condition,downgrade_condition,next_review_at,sort_order) VALUES(?,?,?,?,?,?,?,?)",
@@ -144,7 +184,10 @@ public class StockLearningCardRepository {
                     value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at")); return value;
                 });
     }
-    private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setStatus(rs.getString("status")); value.setFailureMessage(rs.getString("failure_message")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
+    private List<StockLearningCardClaim> claims(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_claim WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardClaim value=new StockLearningCardClaim(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setStatus(rs.getString("status")); value.setFailureMessage(rs.getString("failure_message")); value.setHeadline(rs.getString("headline")); value.setRatingLabel(rs.getString("rating_label")); value.setRatingValue(rs.getString("rating_value")); value.setJudgment(rs.getString("judgment")); value.setRationale(rs.getString("rationale")); value.setCounterargument(rs.getString("counterargument")); value.setUnknowns(rs.getString("unknowns")); value.setConfidence(rs.getString("confidence")); value.setSortOrder(rs.getInt("sort_order")); value.setSections(sections(value.getId())); return value; }, runId); }
+    private List<StockLearningCardSection> sections(Long claimId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_section WHERE claim_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardSection value=new StockLearningCardSection(); value.setId(rs.getLong("id")); value.setClaimId(rs.getLong("claim_id")); value.setSectionKey(rs.getString("section_key")); value.setTitle(rs.getString("title")); value.setContent(rs.getString("content")); value.setEvidenceRefs(readEvidenceRefs(rs.getString("evidence_refs_json"))); value.setVerificationStatus(rs.getString("verification_status")); value.setSortOrder(rs.getInt("sort_order")); return value; }, claimId); }
+    private List<String> readEvidenceRefs(String value) { try { return objectMapper.readValue(value, new TypeReference<List<String>>() { }); } catch (Exception error) { throw new IllegalStateException("学习卡栏目证据解析失败", error); } }
+    private String text(String value) { return value == null ? "" : value; }
     private List<StockLearningCardEvidence> evidence(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_evidence WHERE run_id=? ORDER BY dimension_code,sort_order,id", (rs,row)-> { StockLearningCardEvidence value=new StockLearningCardEvidence(); value.setDatabaseId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setDimensionCode(rs.getString("dimension_code")); value.setEvidenceCode(rs.getString("evidence_code")); value.setTitle(rs.getString("title")); value.setUrl(rs.getString("url")); value.setSource(rs.getString("source")); value.setPublishedAt(rs.getString("published_at")); value.content(rs.getString("content")); value.setContentOrigin(rs.getString("content_origin")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
     private List<StockLearningCardWatchItem> watches(Long runId) { return jdbcTemplate.query("SELECT * FROM stock_learning_card_watch_item WHERE run_id=? ORDER BY sort_order,id", (rs,row)-> { StockLearningCardWatchItem value=new StockLearningCardWatchItem(); value.setId(rs.getLong("id")); value.setRunId(rs.getLong("run_id")); value.setMetric(rs.getString("metric")); value.setBaseline(rs.getString("baseline")); value.setFrequency(rs.getString("frequency")); value.setUpgradeCondition(rs.getString("upgrade_condition")); value.setDowngradeCondition(rs.getString("downgrade_condition")); value.setNextReviewAt(TimeUtil.localDateTime(rs,"next_review_at")); value.setSortOrder(rs.getInt("sort_order")); return value; }, runId); }
 }

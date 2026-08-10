@@ -5,6 +5,7 @@ import com.finscope.domain.learningcard.StockLearningCard;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSection;
 import com.finscope.domain.learningcard.StockLearningCardSummary;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.sqlite.SQLiteDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,6 +41,7 @@ class StockLearningCardRepositoryTest {
                 "600519", "STOCK", "贵州茅台", "2026-08-09T00:00:00", "2026-08-09T00:00:00");
         repository = new StockLearningCardRepository();
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper());
     }
 
     @Test
@@ -54,6 +57,17 @@ class StockLearningCardRepositoryTest {
         run.setEvidenceCompleteness("PARTIAL");
         run.setGenerationMode("CONTROLLED");
         StockLearningCardClaim space = claim("SPACE", "行业空间仍待量化", 1);
+        space.setHeadline("增长依赖高端产品放量");
+        space.setRatingLabel("成长空间");
+        space.setRatingValue("MEDIUM_HIGH");
+        StockLearningCardSection driver = new StockLearningCardSection();
+        driver.setSectionKey("growth_drivers");
+        driver.setTitle("增量引擎");
+        driver.setContent("高端产品是主要增量来源 [E1]");
+        driver.setEvidenceRefs(Arrays.asList("E1"));
+        driver.setVerificationStatus("SUPPORTED");
+        driver.setSortOrder(1);
+        space.setSections(Arrays.asList(driver));
         StockLearningCardWatchItem watch = new StockLearningCardWatchItem();
         watch.setMetric("高端白酒需求");
         watch.setBaseline("当前公开证据未覆盖");
@@ -70,6 +84,13 @@ class StockLearningCardRepositoryTest {
         StockLearningCardRun restored = repository.findRun(saved.getId()).orElseThrow(AssertionError::new);
         assertEquals(6, restored.getClaims().size());
         assertEquals("SPACE", restored.getClaims().get(0).getDimensionCode());
+        assertEquals("增长依赖高端产品放量", restored.getClaims().get(0).getHeadline());
+        assertEquals("成长空间", restored.getClaims().get(0).getRatingLabel());
+        assertEquals("MEDIUM_HIGH", restored.getClaims().get(0).getRatingValue());
+        assertEquals(1, restored.getClaims().get(0).getSections().size());
+        assertEquals("growth_drivers", restored.getClaims().get(0).getSections().get(0).getSectionKey());
+        assertEquals(Arrays.asList("E1"), restored.getClaims().get(0).getSections().get(0).getEvidenceRefs());
+        assertEquals("SUPPORTED", restored.getClaims().get(0).getSections().get(0).getVerificationStatus());
         assertEquals("高端白酒需求", restored.getWatchItems().get(0).getMetric());
         assertEquals(saved.getId(), repository.latest(card.getId()).orElseThrow(AssertionError::new).getId());
         assertThrows(Exception.class, () -> repository.appendRun(run, Arrays.asList(claim("SPACE", "重复", 1), claim("SPACE", "重复", 2)), Arrays.asList()));
