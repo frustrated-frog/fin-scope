@@ -340,6 +340,13 @@ test('keeps research priority as the primary score and exposes hotspot score as 
   expect(screen.getByText('热点 95')).toBeInTheDocument();
 });
 
+test('shows the month and day with the radar event time', async () => {
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await openRadar();
+
+  expect(screen.getByText('7月31日 15:55')).toBeInTheDocument();
+});
+
 test('supports watchlist-only filtering and degraded snapshots', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);

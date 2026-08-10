@@ -53,7 +53,7 @@ export function RadarEventCard({ event, addToast, onResearch, onOpen, onStateCha
 function parseDate(value?: string) { return value ? new Date(value) : undefined; }
 function formatTime(value?: string) {
   const date = parseDate(value);
-  return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--';
+  return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(date) : '--:--';
 }
 function hotspotLifecycleLabel(value: string) {
   if (value === 'RISING') return '热度上升';
