@@ -1140,7 +1140,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(header().string("X-Request-Id", "test-trace-001"))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("FS-1002"))
-                .andExpect(jsonPath("$.message").value("请求参数不合法"))
+                .andExpect(jsonPath("$.message").value("仅支持 HTTP 或 HTTPS URL"))
                 .andExpect(jsonPath("$.traceId").value("test-trace-001"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }

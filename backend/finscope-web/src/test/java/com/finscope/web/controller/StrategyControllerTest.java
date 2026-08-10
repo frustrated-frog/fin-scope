@@ -54,7 +54,8 @@ class StrategyControllerTest {
     @Test
     void createsHoldingWithRevision() throws Exception {
         StrategyHolding value=new StrategyHolding();value.setId(1L);value.setCode("020608");value.setName("测试基金");value.setType("FUND");value.setRole("CORE");value.setTargetWeight(60);value.setRevision(0);
-        when(holdingService.add(anyString(),anyString(),anyString(),anyDouble(),anyDouble(),anyString())).thenReturn(value);
+        when(holdingService.add(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
+                any(), any(), anyString())).thenReturn(value);
         mockMvc.perform(post("/api/strategy/holdings").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"code\":\"020608\",\"type\":\"FUND\",\"role\":\"CORE\",\"targetWeight\":60,\"currentWeight\":0,\"note\":\"长期核心\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.code").value("020608"))
