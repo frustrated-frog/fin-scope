@@ -87,6 +87,28 @@ describe('WatchlistFundHoldingsDrawer', () => {
     expect(api).toHaveBeenLastCalledWith('/api/watchlist/021894/fund-holdings?refresh=true');
   });
 
+  test('opens a holding stock and preserves the loaded fund snapshot while suspended', async () => {
+    const onOpenStock = vi.fn();
+    vi.mocked(api).mockResolvedValue(detail as never);
+    const { rerender } = render(
+      <WatchlistFundHoldingsDrawer item={{ code: '021894' }} onClose={vi.fn()} onOpenStock={onOpenStock} />
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: '查看中微公司股票详情' }));
+    expect(onOpenStock).toHaveBeenCalledWith({ code: '688012', name: '中微公司' });
+
+    rerender(
+      <WatchlistFundHoldingsDrawer item={{ code: '021894' }} onClose={vi.fn()} onOpenStock={onOpenStock} suspended />
+    );
+    expect(screen.getByRole('dialog', { hidden: true })).toHaveAttribute('aria-hidden', 'true');
+
+    rerender(
+      <WatchlistFundHoldingsDrawer item={{ code: '021894' }} onClose={vi.fn()} onOpenStock={onOpenStock} />
+    );
+    expect(screen.getByText('中微公司')).toBeInTheDocument();
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
   test('shows an honest empty state when the fund has no published holdings yet', async () => {
     vi.mocked(api).mockResolvedValue({
       ...detail,

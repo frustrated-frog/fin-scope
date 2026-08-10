@@ -411,6 +411,34 @@ test('opens disclosed holdings instead of a kline when clicking a fund card', as
   expect(api).not.toHaveBeenCalledWith('/api/watchlist/021894/daily-bars?limit=120');
 });
 
+test('drills from a fund holding into the stock workspace and returns without reloading the fund', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 2, code: '021894', type: 'FUND', name: '半导体基金', quoteValid: true, confirmedNav: 2.62
+    }] : path === '/api/watchlist/021894/fund-holdings?refresh=true' ? {
+      fundCode: '021894', fundName: '半导体基金', disclosureDate: '2026-06-30', retrievedAt: '2026-08-10T14:30:00',
+      topHoldingsWeightPct: 8, estimatedContributionPct: 0.16, estimatedHoldingCount: 1, totalHoldingCount: 1,
+      lookThrough: false, note: '按最近披露持仓估算', holdings: [{
+        rank: 1, stockCode: '688012', stockName: '中微公司', weightPct: 8,
+        latestPrice: 468.5, changePct: 2, estimatedContributionPct: 0.16, quoteValid: true
+      }]
+    } : path === '/api/watchlist/688012/daily-bars?limit=120' ? [{
+      code: '688012', tradeDate: '2026-08-08', open: 460, high: 470, low: 458, close: 468.5, volume: 10000
+    }] : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.click(await screen.findByText('半导体基金'));
+  await user.click(await screen.findByRole('button', { name: '查看中微公司股票详情' }));
+
+  expect(await screen.findByRole('dialog', { name: '中微公司 行情图表' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '返回基金持仓' }));
+  expect(screen.getByRole('dialog', { name: '半导体基金 持仓透视' })).toBeInTheDocument();
+  expect(document.documentElement).toHaveClass('watchlist-kline-open');
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === '/api/watchlist/021894/fund-holdings?refresh=true')).toHaveLength(1);
+});
+
 test('opens fund holdings from the keyboard-accessible card', async () => {
   const user = userEvent.setup();
   vi.mocked(api).mockImplementation((path: string) => Promise.resolve(

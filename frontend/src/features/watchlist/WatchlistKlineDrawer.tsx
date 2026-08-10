@@ -3,11 +3,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DailyBarPoint, KlineChart } from './KlineChart';
 import { StockSupplyChainPanel } from './StockSupplyChainPanel';
 import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
+import { acquireWatchlistOverlayScrollLock } from './watchlistOverlayScrollLock';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
-export function WatchlistKlineDrawer({ item, onClose }: {
+export function WatchlistKlineDrawer({ item, onClose, returnLabel }: {
   item: { code: string; name?: string; market?: string };
   onClose: () => void;
+  returnLabel?: string;
 }) {
   const [bars, setBars] = useState<DailyBarPoint[]>();
   const [error, setError] = useState('');
@@ -17,8 +19,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    document.documentElement.classList.add('watchlist-kline-open');
-    return () => document.documentElement.classList.remove('watchlist-kline-open');
+    return acquireWatchlistOverlayScrollLock();
   }, []);
 
   useLayoutEffect(() => {
@@ -92,6 +93,11 @@ export function WatchlistKlineDrawer({ item, onClose }: {
             <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '最近 120 个交易日' : '上下游证据关系'}</p>
           </div>
           <div className="watchlist-kline-head-actions">
+            {returnLabel && (
+              <button type="button" className="watchlist-kline-return" aria-label={returnLabel} onClick={onClose}>
+                <span aria-hidden="true">←</span>{returnLabel}
+              </button>
+            )}
             {activeTab === 'chart' && latest && (
               <div className="watchlist-kline-quote" aria-label={`${latest.tradeDate} 收盘行情`}>
                 <span>{latest.tradeDate}</span>

@@ -3,11 +3,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { api } from '../../shared/api/client';
 import type { FundHoldingDetail, FundHoldingPosition } from '../../shared/types';
 import { changeClass } from './watchlistFormatters';
+import { acquireWatchlistOverlayScrollLock } from './watchlistOverlayScrollLock';
 
 /** 基金披露持仓工作台：持仓事实与盘中行情在同一刷新批次内展示。 */
-export function WatchlistFundHoldingsDrawer({ item, onClose }: {
+export function WatchlistFundHoldingsDrawer({ item, onClose, onOpenStock, suspended = false }: {
   item: { code: string; name?: string };
   onClose: () => void;
+  onOpenStock?: (stock: { code: string; name: string }) => void;
+  suspended?: boolean;
 }) {
   const [detail, setDetail] = useState<FundHoldingDetail>();
   const [error, setError] = useState('');
@@ -16,10 +19,12 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
   const closeButton = useRef<HTMLButtonElement>(null);
   const requestSequence = useRef(0);
   const onCloseRef = useRef(onClose);
+  const suspendedRef = useRef(suspended);
   const previousFocus = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null
   );
   onCloseRef.current = onClose;
+  suspendedRef.current = suspended;
 
   const load = useCallback(async () => {
     const sequence = ++requestSequence.current;
@@ -44,15 +49,18 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
   }, [item.code]);
 
   useEffect(() => {
-    document.documentElement.classList.add('watchlist-kline-open');
     closeButton.current?.focus();
     void load();
     return () => {
       requestSequence.current++;
-      document.documentElement.classList.remove('watchlist-kline-open');
       previousFocus.current?.focus();
     };
   }, [load]);
+
+  useEffect(() => {
+    if (suspended) return undefined;
+    return acquireWatchlistOverlayScrollLock();
+  }, [suspended]);
 
   useLayoutEffect(() => {
     const overlay = backdrop.current;
@@ -84,7 +92,7 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
+      if (event.key === 'Escape' && !suspendedRef.current) onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -95,7 +103,7 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
   return (
     <div
       ref={backdrop}
-      className="watchlist-kline-backdrop watchlist-fund-backdrop"
+      className={`watchlist-kline-backdrop watchlist-fund-backdrop${suspended ? ' is-suspended' : ''}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCloseRef.current();
       }}
@@ -104,6 +112,7 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
         className="watchlist-kline-modal watchlist-fund-modal"
         role="dialog"
         aria-modal="true"
+        aria-hidden={suspended}
         aria-labelledby="watchlist-fund-title"
       >
         <header className="watchlist-kline-header watchlist-fund-header">
@@ -197,7 +206,7 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
                     : '基金成立时间较短或尚未发布定期报告时，可能暂时没有股票持仓数据。'}</p>
                 </div>
               ) : (
-                <HoldingsTable holdings={detail.holdings} />
+                <HoldingsTable holdings={detail.holdings} onOpenStock={onOpenStock} />
               )}
             </>
           ) : null}
@@ -207,7 +216,10 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
   );
 }
 
-function HoldingsTable({ holdings }: { holdings: FundHoldingPosition[] }) {
+function HoldingsTable({ holdings, onOpenStock }: {
+  holdings: FundHoldingPosition[];
+  onOpenStock?: (stock: { code: string; name: string }) => void;
+}) {
   const maxWeight = Math.max(...holdings.map((holding) => holding.weightPct), 0.01);
   return (
     <div className="watchlist-fund-table-wrap">
@@ -227,7 +239,16 @@ function HoldingsTable({ holdings }: { holdings: FundHoldingPosition[] }) {
               <td data-label="股票">
                 <div className="watchlist-fund-stock">
                   <span>{String(holding.rank).padStart(2, '0')}</span>
-                  <strong>{holding.stockName}<small>{holding.stockCode}</small></strong>
+                  {onOpenStock ? (
+                    <button
+                      type="button"
+                      className="watchlist-fund-stock-link"
+                      aria-label={`查看${holding.stockName}股票详情`}
+                      onClick={() => onOpenStock({ code: holding.stockCode, name: holding.stockName })}
+                    >
+                      <strong>{holding.stockName}</strong><small>{holding.stockCode}</small><i aria-hidden="true">↗</i>
+                    </button>
+                  ) : <strong>{holding.stockName}<small>{holding.stockCode}</small></strong>}
                 </div>
               </td>
               <td data-label="披露权重">

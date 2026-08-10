@@ -105,7 +105,7 @@ export function WatchlistView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
-  const [klineItem, setKlineItem] = useState<WatchlistItem | null>(null);
+  const [klineItem, setKlineItem] = useState<{ code: string; name?: string } | null>(null);
   const [fundHoldingItem, setFundHoldingItem] = useState<WatchlistItem | null>(null);
 
   function openInstrumentDetail(item: WatchlistItem) {
@@ -649,16 +649,19 @@ export function WatchlistView({
         </>
       )}
       </section>
-      {klineItem && (
-        <WatchlistKlineDrawer
-          item={{ code: klineItem.code, name: klineItem.name }}
-          onClose={() => setKlineItem(null)}
-        />
-      )}
       {fundHoldingItem && (
         <WatchlistFundHoldingsDrawer
           item={{ code: fundHoldingItem.code, name: fundHoldingItem.name }}
           onClose={() => setFundHoldingItem(null)}
+          onOpenStock={(stock) => setKlineItem(stock)}
+          suspended={Boolean(klineItem)}
+        />
+      )}
+      {klineItem && (
+        <WatchlistKlineDrawer
+          item={{ code: klineItem.code, name: klineItem.name }}
+          onClose={() => setKlineItem(null)}
+          returnLabel={fundHoldingItem ? '返回基金持仓' : undefined}
         />
       )}
     </div>
