@@ -384,3 +384,53 @@ test('opens the daily kline drawer when clicking a stock card', async () => {
   expect(api).toHaveBeenCalledWith('/api/watchlist/600519/daily-bars?limit=120');
   expect(await screen.findByText('2026-07-31')).toBeInTheDocument();
 });
+
+test('opens disclosed holdings instead of a kline when clicking a fund card', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 2, code: '021894', type: 'FUND', name: '半导体基金', quoteValid: true,
+      confirmedNav: 2.62, confirmedNavDate: '2026-08-08', confirmedNavChangePct: 1.2
+    }] : path === '/api/watchlist/021894/fund-holdings?refresh=true' ? {
+      fundCode: '021894', fundName: '半导体基金', disclosureDate: '2026-06-30',
+      retrievedAt: '2026-08-10T14:30:00', topHoldingsWeightPct: 8,
+      estimatedContributionPct: 0.16, estimatedHoldingCount: 1, totalHoldingCount: 1,
+      lookThrough: false, note: '按最近披露持仓估算', holdings: [{
+        rank: 1, stockCode: '688012', stockName: '中微公司', weightPct: 8,
+        latestPrice: 468.5, changePct: 2, estimatedContributionPct: 0.16, quoteValid: true
+      }]
+    } : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await user.click(await screen.findByText('半导体基金'));
+
+  expect(await screen.findByRole('dialog', { name: '半导体基金 持仓透视' })).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/watchlist/021894/fund-holdings?refresh=true');
+  expect(api).not.toHaveBeenCalledWith('/api/watchlist/021894/daily-bars?limit=120');
+});
+
+test('opens fund holdings from the keyboard-accessible card', async () => {
+  const user = userEvent.setup();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? [{
+      id: 2, code: '021894', type: 'FUND', name: '半导体基金', quoteValid: true,
+      confirmedNav: 2.62
+    }] : path === '/api/watchlist/021894/fund-holdings?refresh=true' ? {
+      fundCode: '021894', fundName: '半导体基金', disclosureDate: '2026-06-30',
+      retrievedAt: '2026-08-10T14:30:00', topHoldingsWeightPct: 0,
+      estimatedHoldingCount: 0, totalHoldingCount: 0, lookThrough: false,
+      note: '按最近披露持仓估算', holdings: []
+    } : []
+  ) as never);
+
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  const card = (await screen.findByText('半导体基金')).closest('article');
+  expect(card).toHaveAttribute('tabindex', '0');
+  card?.focus();
+  await user.keyboard('{Enter}');
+
+  expect(await screen.findByRole('dialog', { name: '半导体基金 持仓透视' })).toBeInTheDocument();
+});

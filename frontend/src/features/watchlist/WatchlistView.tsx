@@ -8,6 +8,7 @@ import { SectorMarketPanel } from './SectorMarketPanel';
 import { useWatchlistDashboardData } from './useWatchlistDashboardData';
 import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
+import { WatchlistFundHoldingsDrawer } from './WatchlistFundHoldingsDrawer';
 
 type AttributionInstrument = {
   code: string;
@@ -105,6 +106,16 @@ export function WatchlistView({
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
   const [klineItem, setKlineItem] = useState<WatchlistItem | null>(null);
+  const [fundHoldingItem, setFundHoldingItem] = useState<WatchlistItem | null>(null);
+
+  function openInstrumentDetail(item: WatchlistItem) {
+    if (item.type === 'STOCK') {
+      setKlineItem(item);
+    }
+    if (item.type === 'FUND') {
+      setFundHoldingItem(item);
+    }
+  }
 
   async function load() {
     const result = await dashboard.loadInvestments();
@@ -484,11 +495,18 @@ export function WatchlistView({
                         <article
                           className={`panel watchlist-card${isAbnormal(latestChangePct(item)) ? ' watchlist-card-abnormal' : ''}`}
                           key={item.id}
+                          tabIndex={0}
+                          aria-label={`${item.name || item.code}，${item.type === 'FUND' ? '打开基金持仓' : '打开K线'}`}
                           onClick={(event) => {
-                            if (item.type !== 'STOCK') return;
                             const target = event.target as HTMLElement;
                             if (target.closest('button, select, a, input, label')) return;
-                            setKlineItem(item);
+                            openInstrumentDetail(item);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return;
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            openInstrumentDetail(item);
                           }}
                         >
                           <button
@@ -509,7 +527,9 @@ export function WatchlistView({
                             </strong>
                             <span className="watchlist-meta">
                               {item.code} · {typeLabels[item.type] || item.type}
-                              {item.type === 'STOCK' && <em className="watchlist-kline-hint">点击看K线</em>}
+                              <em className="watchlist-kline-hint">
+                                {item.type === 'FUND' ? '点击看持仓' : '点击看K线'}
+                              </em>
                             </span>
                           </div>
                           {item.quoteValid ? (
@@ -633,6 +653,12 @@ export function WatchlistView({
         <WatchlistKlineDrawer
           item={{ code: klineItem.code, name: klineItem.name }}
           onClose={() => setKlineItem(null)}
+        />
+      )}
+      {fundHoldingItem && (
+        <WatchlistFundHoldingsDrawer
+          item={{ code: fundHoldingItem.code, name: fundHoldingItem.name }}
+          onClose={() => setFundHoldingItem(null)}
         />
       )}
     </div>
