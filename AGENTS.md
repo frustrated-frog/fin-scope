@@ -14,7 +14,7 @@ FinScope 是一个本地优先的个人投资研究信息工作台。它用于�
 
 ## 架构
 
-**后端：** Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS
+**后端：** Java 21、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS
 **前端：** React、TypeScript、Vite
 **存储：** `data/finance.db`（SQLite）和 `data/vault/` 中的 Markdown 文件
 **AI 扩展：** 兼容 OpenAI 的 `LlmChatClient`、文章解读 Agent、`agent_run` 调用轨迹

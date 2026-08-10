@@ -51,7 +51,7 @@ FinScope 是一个本地优先的个人投资研究工作台。它把公开信�
 
 ## 技术栈与存储选择
 
-- 后端：Java 8、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS。
+- 后端：Java 21、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS。
 - 前端：React 18、TypeScript、Vite 5、Vitest。
 - 缓存：Redis 7，用于研究资料和热点查询的可失效加速缓存，SQLite 仍是主数据源。
 - 行情侧车：Python 3.11+、FastAPI、AkShare、pytdx、httpx，推荐通过 Docker 运行。
@@ -160,7 +160,7 @@ Observation 驱动决策内核见 [决策内核 PRD](docs/产品需求-研究智
 
 ### 环境要求
 
-- JDK 8。项目当前以 Java 8 为统一的编译和运行基线。
+- JDK 21。项目通过 Maven Enforcer 统一校验编译和运行基线。
 - Maven 3.8+。
 - Node.js 20+，推荐 Node.js 22；使用仓库内 `package-lock.json` 安装依赖。
 - Docker Desktop，用于 Python 行情服务。
@@ -169,16 +169,18 @@ Observation 驱动决策内核见 [决策内核 PRD](docs/产品需求-研究智
 
 以下命令均假设终端当前位于仓库根目录 `fin-scope/`。
 
-macOS 安装了多个 JDK 时，先让当前终端和 Maven 都使用 JDK 8，并用 `mvn -version` 确认实际运行时：
+macOS 使用 Homebrew 安装多个 JDK 时，先让当前终端和 Maven 都使用 JDK 21，并用 `mvn -version` 确认实际运行时：
 
 ```bash
-export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
+export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 java -version
 mvn -version
 ```
 
-项目显式声明了 `javax.annotation` 兼容 API，避免依赖某个 JDK 发行版的隐式类路径；仍建议统一使用 JDK 8，以便本地运行行为与 CI 编译目标一致。
+Spring Boot 2.7.18 官方兼容 JDK 21。项目显式声明了 `javax.annotation` 兼容 API，避免依赖 JDK 已移除的隐式类路径；Spring Boot 3 与 `jakarta.*` 迁移留作独立阶段。
+
+当前只在有明确任务预算的阻塞 I/O 型研究分支中使用具名虚拟线程。共享线程池仍必须遵守显式容量、队列、拒绝策略和线程命名规范；项目不启用 Java 预览特性，也不为展示语法而批量改写领域 DTO。
 
 ### Docker Compose 一键启动（推荐）
 
@@ -261,7 +263,7 @@ java -jar finscope-web/target/finscope-web-0.1.0-SNAPSHOT.jar
 
 在 IntelliJ IDEA 中运行时：
 
-- Project SDK 和 Maven Runner JRE 都选择 JDK 8。
+- Project SDK 和 Maven Runner JRE 都选择 JDK 21。
 - Main class 使用 `com.finscope.web.FinScopeApplication`。
 - Working directory 可以设为仓库根目录或 `backend/`。
 - 建议在 Run Configuration 中加入绝对路径 `FINSCOPE_DATA_ROOT`，避免不同启动配置指向不同数据目录。

@@ -13,7 +13,7 @@ FinScope is a local-first personal investment research information workbench. It
 
 ## Architecture
 
-**Backend:** Java 8, Spring Boot 2.7, Maven multi-module, SQLite, Jsoup, Rome RSS
+**Backend:** Java 21, Spring Boot 2.7, Maven multi-module, SQLite, Jsoup, Rome RSS
 **Frontend:** React 18, TypeScript (strict), Vite 5, Vitest
 **Market data sidecar:** Python 3.11+, FastAPI, AkShare, pytdx — `market-data-service/`
 **Cache:** Redis 7 — disposable acceleration cache for research material and hot-query reads; SQLite stays the source of truth, and the app falls back to the live fetch path when Redis is down
@@ -193,5 +193,5 @@ Error code ranges: `FS-1xxx` params/auth/permission/rate-limit, `FS-2xxx` missin
 - When working with source adapters, URL-aware adapters take precedence over typed adapters
 - Agent fallback is deterministic — the system never blocks the Intake flow if the LLM is unavailable
 - Model/search/market external failures surface as explicit failure, partial success, or snapshot-degraded states — never empty data disguised as success
-- Java 8 is the unified compile-and-run baseline; use JDK 8 (e.g. `/usr/libexec/java_home -v 1.8`) so local behavior matches the CI target. The frontend uses TypeScript strict mode with Vite
+- Java 21 is the unified compile-and-run baseline and Maven Enforcer rejects other JDK feature releases. Use named virtual threads only for explicitly bounded blocking-I/O work; shared executors still require explicit capacity, queue, rejection, and naming policies. Do not enable preview features. The frontend uses TypeScript strict mode with Vite
 - Detailed architecture notes live in `docs/` (start with `docs/架构说明.md`); the market data service contract is in `market-data-service/README.md`
