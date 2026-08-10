@@ -226,6 +226,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "stockSupplyChainExecutor")
+    public Executor stockSupplyChainExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("stock-supply-chain-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(10);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "quantExperimentExecutor")
     public Executor quantExperimentExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
