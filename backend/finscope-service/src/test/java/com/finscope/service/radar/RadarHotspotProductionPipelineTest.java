@@ -13,11 +13,15 @@ import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,8 +56,10 @@ class RadarHotspotProductionPipelineTest {
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline(news, repository, clustering,
                 priority, watchlist, runs, enhancement, scores, dashboardCategories, persistence, snapshots);
 
-        NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", now.minusMinutes(20));
-        NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", now.minusMinutes(25));
+        NewsFeedItem first = item("CLS:1", "CLS_NEWS_FLASH", "财联社",
+                "宁德时代发布新一代电池", now.minusMinutes(20));
+        NewsFeedItem second = item("EASTMONEY:2", "EASTMONEY_NEWS_FLASH", "东方财富",
+                "宁德时代新电池正式发布", now.minusMinutes(25));
         when(news.load("ALL", 100)).thenReturn(new NewsFeedSnapshot(Arrays.asList(first, second),
                 Collections.<String>emptyList(), now, 2));
         when(watchlist.findByTypes(Arrays.asList("STOCK", "FUND"))).thenReturn(Collections.emptyList());
@@ -86,8 +93,18 @@ class RadarHotspotProductionPipelineTest {
         RadarHotspotProductionPipeline.ProductionResult result = pipeline.run("ALL", "TEST", now);
 
         assertEquals(1, result.getEvents().size());
+        assertEquals(2, result.getEvents().get(0).getSourceCount());
+        assertEquals(2, result.getEvents().get(0).getSignalCount());
         assertTrue(result.getEvents().get(0).getHotspotScore() >= 75);
         assertEquals("TECHNOLOGY", result.getEvents().get(0).getDashboardCategory());
+        ArgumentCaptor<RadarSignal> capturedSignals = ArgumentCaptor.forClass(RadarSignal.class);
+        verify(repository, times(2)).capture(capturedSignals.capture(), eq(now));
+        Set<String> providers = new HashSet<String>();
+        List<RadarSignal> capturedValues = capturedSignals.getAllValues();
+        for (RadarSignal captured : capturedValues) {
+            providers.add(captured.getProviderCode());
+        }
+        assertEquals(new HashSet<String>(Arrays.asList("CLS_NEWS_FLASH", "EASTMONEY_NEWS_FLASH")), providers);
         verify(repository).replaceEventSignals(eq(11L), any());
         verify(snapshots).save(any());
         verify(repository).expireEventsExcept(any(), eq(now.minusHours(48)), eq(now));
