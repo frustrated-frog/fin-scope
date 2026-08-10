@@ -202,6 +202,9 @@ public class NewsFeedService {
     private String sourceName(String family) {
         if ("CLS".equals(family)) return "财联社";
         if ("THS".equals(family)) return "同花顺";
+        if ("EASTMONEY".equals(family)) {
+            return "东方财富";
+        }
         return blank(family) ? "公开资讯" : family;
     }
 

@@ -36,18 +36,20 @@ class NewsFeedServiceTest {
                 request.getStockCode().equals("000001") && request.getQuery().isEmpty() && request.getLimit() == 50)))
                 .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(
                         material("THS_NEWS_DIGEST", "THS", "专题要闻", "完整专题内容", 9, 30),
+                        material("EASTMONEY_NEWS_FLASH", "EASTMONEY", "东方财富快讯", "全市场快讯内容", 9, 40),
                         material("CLS_NEWS_FLASH", "CLS", "盘中快讯", "完整快讯内容", 9, 45)
                 ), Collections.singletonList("备源暂不可用")));
 
         NewsFeedSnapshot result = new NewsFeedService(gateway, fixedClock()).load(80);
 
-        assertEquals(2, result.getItems().size());
+        assertEquals(3, result.getItems().size());
         assertEquals("FLASH", result.getItems().get(0).getKind());
         assertEquals("财联社", result.getItems().get(0).getSourceName());
-        assertEquals("ARTICLE", result.getItems().get(1).getKind());
-        assertEquals("同花顺", result.getItems().get(1).getSourceName());
-        assertEquals("完整专题内容", result.getItems().get(1).getContent());
-        assertEquals(2, result.getSourceCount());
+        assertEquals("东方财富", result.getItems().get(1).getSourceName());
+        assertEquals("ARTICLE", result.getItems().get(2).getKind());
+        assertEquals("同花顺", result.getItems().get(2).getSourceName());
+        assertEquals("完整专题内容", result.getItems().get(2).getContent());
+        assertEquals(3, result.getSourceCount());
         assertEquals(Collections.singletonList("备源暂不可用"), result.getWarnings());
         assertEquals(LocalDateTime.of(2026, 7, 30, 10, 0), result.getRefreshedAt());
     }
