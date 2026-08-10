@@ -7,9 +7,12 @@ import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StockSupplyChainSynthesisAgentTest {
 
@@ -45,6 +48,43 @@ class StockSupplyChainSynthesisAgentTest {
         assertThrows(IllegalArgumentException.class, () -> agent(
                 validJson().replace("{\"summary\"", "{\"recommendation\":\"买入\",\"summary\""))
                 .synthesize("中微公司", "688012", Arrays.asList(evidence("E1"), evidence("E2"))));
+    }
+
+    @Test
+    void repairsOneInvalidContractWithACompactPromptAndARealisticTimeout() throws Exception {
+        List<Integer> timeouts = new ArrayList<Integer>();
+        List<Integer> promptLengths = new ArrayList<Integer>();
+        int[] calls = {0};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                throw new AssertionError("must use explicit synthesis timeout");
+            }
+            @Override public String complete(String systemPrompt, String userPrompt,
+                                             int timeoutMs, int maxOutputTokens) {
+                calls[0]++;
+                timeouts.add(timeoutMs);
+                promptLengths.add(userPrompt.length());
+                return calls[0] == 1
+                        ? validJson().replace("{\"summary\"", "{\"unexpected\":\"field\",\"summary\"")
+                        : validJson();
+            }
+        };
+        List<StockSupplyChainEvidence> evidence = new ArrayList<StockSupplyChainEvidence>();
+        for (int index = 1; index <= 8; index++) {
+            StockSupplyChainEvidence item = evidence("E" + index);
+            item.setExcerpt(repeat("公开证据内容", 1000));
+            evidence.add(item);
+        }
+
+        StockSupplyChainSnapshot result = new StockSupplyChainSynthesisAgent(
+                llm, new ObjectMapper()).synthesize("中微公司", "688012", evidence);
+
+        assertEquals(2, calls[0]);
+        assertEquals(Arrays.asList(60_000, 45_000), timeouts);
+        assertTrue(promptLengths.get(0) < 30_000);
+        assertEquals(3, result.getNodes().size());
     }
 
     private StockSupplyChainSynthesisAgent agent(String result) {
@@ -86,5 +126,13 @@ class StockSupplyChainSynthesisAgentTest {
                 + "\",\"relationType\":\"" + relationType
                 + "\",\"description\":\"公开资料支持的关系\",\"confidence\":\""
                 + confidence + "\",\"evidenceRefs\":" + refs + "}";
+    }
+
+    private String repeat(String value, int count) {
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < count; index++) {
+            result.append(value);
+        }
+        return result.toString();
     }
 }

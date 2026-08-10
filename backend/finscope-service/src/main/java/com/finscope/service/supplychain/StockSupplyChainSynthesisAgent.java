@@ -23,6 +23,10 @@ import java.util.Set;
 /** 将冻结的公开证据包归纳为严格、可追溯的三层产业链。 */
 @Service
 public class StockSupplyChainSynthesisAgent {
+    private static final int PRIMARY_TIMEOUT_MS = 60_000;
+    private static final int REPAIR_TIMEOUT_MS = 45_000;
+    private static final int MAX_OUTPUT_TOKENS = 1800;
+    private static final int MAX_EVIDENCE_EXCERPT = 2200;
     private static final Set<String> ROOT_FIELDS = set("summary", "position", "limitations", "nodes");
     private static final Set<String> NODE_FIELDS = set(
             "layer", "name", "relationType", "description", "confidence", "evidenceRefs");
@@ -47,8 +51,19 @@ public class StockSupplyChainSynthesisAgent {
         if (llm == null || !llm.isConfigured()) {
             throw new IllegalStateException("产业链归纳模型暂不可用");
         }
-        String raw = llm.complete(systemPrompt(), objectMapper.writeValueAsString(
-                payload(companyName, companyCode, evidence)), 20_000, 1800);
+        String input = objectMapper.writeValueAsString(payload(companyName, companyCode, evidence));
+        String raw = llm.complete(systemPrompt(), input, PRIMARY_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+        try {
+            return parseSnapshot(raw, companyName, companyCode, evidence);
+        } catch (Exception validationError) {
+            String repaired = llm.complete(repairPrompt(), repairInput(
+                    input, raw, validationError), REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+            return parseSnapshot(repaired, companyName, companyCode, evidence);
+        }
+    }
+
+    private StockSupplyChainSnapshot parseSnapshot(String raw, String companyName, String companyCode,
+                                                    List<StockSupplyChainEvidence> evidence) throws Exception {
         JsonNode root = objectMapper.readTree(extractJson(raw));
         validateFields(root, ROOT_FIELDS);
         StockSupplyChainSnapshot snapshot = new StockSupplyChainSnapshot();
@@ -115,8 +130,28 @@ public class StockSupplyChainSynthesisAgent {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("companyName", companyName);
         value.put("companyCode", companyCode);
-        value.put("evidence", evidence);
+        List<Map<String, String>> rows = new ArrayList<Map<String, String>>();
+        for (StockSupplyChainEvidence item : evidence) {
+            Map<String, String> row = new LinkedHashMap<String, String>();
+            row.put("evidenceCode", item.getEvidenceCode());
+            row.put("title", item.getTitle());
+            row.put("source", item.getSource());
+            row.put("sourceTier", item.getSourceTier());
+            row.put("publishedAt", item.getPublishedAt());
+            row.put("content", compact(item.getExcerpt(), MAX_EVIDENCE_EXCERPT));
+            rows.add(row);
+        }
+        value.put("evidence", rows);
         return value;
+    }
+
+    private String repairInput(String originalInput, String invalidOutput,
+                               Exception validationError) throws Exception {
+        Map<String, Object> value = new LinkedHashMap<String, Object>();
+        value.put("validationError", compact(validationError.getMessage(), 500));
+        value.put("invalidOutput", compact(invalidOutput, 8000));
+        value.put("originalInput", objectMapper.readTree(originalInput));
+        return objectMapper.writeValueAsString(value);
     }
 
     private String systemPrompt() {
@@ -126,6 +161,12 @@ public class StockSupplyChainSynthesisAgent {
                 + "DOWNSTREAM，三层都必须出现；confidence 只能为 HIGH、MEDIUM、LOW。每个节点至少引用一个"
                 + "输入中存在的 evidenceCode。匿名客户或供应商不得猜测具体公司，行业推断必须使用 LOW。"
                 + "禁止投资建议、目标价和虚构客户、供应商、合同。";
+    }
+
+    private String repairPrompt() {
+        return systemPrompt()
+                + "上一次输出未通过字段或证据契约。根据 validationError 修正 invalidOutput，"
+                + "事实仍只能来自 originalInput.evidence；不得删除三层中的任一层，只返回修正后的 JSON。";
     }
 
     private LocalDate evidenceAsOf(List<StockSupplyChainEvidence> evidence) {
@@ -199,6 +240,11 @@ public class StockSupplyChainSynthesisAgent {
             throw new IllegalArgumentException("产业链模型未返回 JSON 对象");
         }
         return value.substring(start, end + 1);
+    }
+
+    private String compact(String value, int maxLength) {
+        String text = value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").trim();
+        return text.length() <= maxLength ? text : text.substring(0, maxLength);
     }
 
     private static Set<String> set(String... values) {

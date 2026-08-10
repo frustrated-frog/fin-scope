@@ -64,7 +64,7 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
         setLoading(false);
         if (view.refreshRun?.status === 'RUNNING') {
           schedulePoll();
-        } else if (!view.snapshot) {
+        } else if (!view.snapshot && !view.refreshRun) {
           void refresh();
         }
       })
@@ -81,6 +81,7 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
   }, [code, refresh, schedulePoll]);
 
   const running = run?.status === 'RUNNING';
+  const failed = run?.status === 'FAILED';
 
   if (loading) {
     return <div className="stock-chain-pending" aria-live="polite"><span aria-hidden="true" /><strong>正在读取产业链快照…</strong></div>;
@@ -106,7 +107,13 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
       )}
       {error && <div className="stock-chain-status is-error" role="alert">{error}</div>}
 
-      {snapshot ? <SupplyChainSnapshotView snapshot={snapshot} /> : !running && (
+      {snapshot ? <SupplyChainSnapshotView snapshot={snapshot} /> : failed ? (
+        <div className="stock-chain-empty is-failed" role="alert">
+          <strong>产业链生成失败</strong>
+          <p>{run.message || '公开证据或模型服务暂时不可用，未生成不可靠的产业链结果。'}</p>
+          <button type="button" aria-label="重新生成产业链" onClick={() => void refresh()}>重新生成</button>
+        </div>
+      ) : !running && (
         <div className="stock-chain-empty">
           <strong>暂时没有可用的产业链快照</strong>
           <p>更新证据后，系统只会展示能被公开资料支持的上下游关系。</p>

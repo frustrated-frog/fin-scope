@@ -90,4 +90,20 @@ describe('StockSupplyChainPanel', () => {
     expect(screen.getByText('真空与射频零部件')).toBeInTheDocument();
     expect(screen.getByText(/正在更新公开证据/)).toBeInTheDocument();
   });
+
+  test('shows a concrete retry state when the first evidence build failed', async () => {
+    vi.mocked(api).mockResolvedValue({
+      code: '688012', name: '中微公司', snapshot: null,
+      refreshRun: {
+        id: 12, status: 'FAILED', stage: 'COMPLETED', errorCode: 'SYNTHESIS_FAILED',
+        message: '产业链证据刷新失败，可以稍后重试', retryable: true
+      }
+    } as never);
+
+    render(<StockSupplyChainPanel code="688012" name="中微公司" />);
+
+    expect(await screen.findByText('产业链生成失败')).toBeInTheDocument();
+    expect(screen.getByText('产业链证据刷新失败，可以稍后重试')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新生成产业链' })).toBeInTheDocument();
+  });
 });

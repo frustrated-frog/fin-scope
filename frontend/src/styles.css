@@ -16993,6 +16993,7 @@ input[type="checkbox"] {
 .stock-chain-pending > span { width: 14px; height: 14px; }
 .stock-chain-empty strong { color: var(--ink); font-size: 13px; }
 .stock-chain-empty p { max-width: 430px; margin: 0; font-size: 10px; line-height: 1.6; }
+.stock-chain-empty.is-failed strong { color: var(--danger); }
 
 .watchlist-kline-chart-stage {
   min-width: 0;

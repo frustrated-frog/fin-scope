@@ -97,6 +97,9 @@ export type StockSupplyChainRefreshRun = {
   id?: number;
   status: 'RUNNING' | 'READY' | 'FAILED';
   stage?: 'QUEUED' | 'COLLECTING_EVIDENCE' | 'SYNTHESIZING' | 'COMPLETED' | 'FAILED';
+  message?: string;
+  errorCode?: string;
+  retryable?: boolean;
   startedAt?: string;
   completedAt?: string;
 };
