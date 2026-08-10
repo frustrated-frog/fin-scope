@@ -6,6 +6,8 @@ import com.finscope.domain.supplychain.StockSupplyChainEvidence;
 import com.finscope.domain.supplychain.StockSupplyChainNode;
 import com.finscope.domain.supplychain.StockSupplyChainSnapshot;
 import com.finscope.rpc.llm.LlmChatClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -23,6 +25,7 @@ import java.util.Set;
 /** 将冻结的公开证据包归纳为严格、可追溯的三层产业链。 */
 @Service
 public class StockSupplyChainSynthesisAgent {
+    private static final Logger log = LoggerFactory.getLogger(StockSupplyChainSynthesisAgent.class);
     private static final int PRIMARY_TIMEOUT_MS = 60_000;
     private static final int REPAIR_TIMEOUT_MS = 45_000;
     private static final int MAX_OUTPUT_TOKENS = 1800;
@@ -56,9 +59,17 @@ public class StockSupplyChainSynthesisAgent {
         try {
             return parseSnapshot(raw, companyName, companyCode, evidence);
         } catch (Exception validationError) {
+            log.info("Stock supply-chain output rejected before repair: companyCode={}, reason={}",
+                    companyCode, compact(validationError.getMessage(), 200));
             String repaired = llm.complete(repairPrompt(), repairInput(
                     input, raw, validationError), REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            return parseSnapshot(repaired, companyName, companyCode, evidence);
+            try {
+                return parseSnapshot(repaired, companyName, companyCode, evidence);
+            } catch (Exception repairedError) {
+                log.warn("Stock supply-chain repaired output rejected: companyCode={}, reason={}",
+                        companyCode, compact(repairedError.getMessage(), 200));
+                throw repairedError;
+            }
         }
     }
 
@@ -71,7 +82,7 @@ public class StockSupplyChainSynthesisAgent {
         snapshot.setCompanyCode(companyCode);
         snapshot.setSummary(required(root, "summary", 360));
         snapshot.setPosition(required(root, "position", 120));
-        snapshot.setLimitations(required(root, "limitations", 500));
+        snapshot.setLimitations(required(root, "limitations", 1200));
         snapshot.setNodes(nodes(root.get("nodes"), evidence));
         snapshot.setEvidence(evidence);
         snapshot.setEvidenceAsOf(evidenceAsOf(evidence));
@@ -160,7 +171,9 @@ public class StockSupplyChainSynthesisAgent {
                 + "relationType、description、confidence、evidenceRefs。layer 只能为 UPSTREAM、COMPANY、"
                 + "DOWNSTREAM，三层都必须出现；confidence 只能为 HIGH、MEDIUM、LOW。每个节点至少引用一个"
                 + "输入中存在的 evidenceCode。匿名客户或供应商不得猜测具体公司，行业推断必须使用 LOW。"
-                + "禁止投资建议、目标价和虚构客户、供应商、合同。";
+                + "只有证据明确披露采购、供货或客户关系时才能把具体公司标为供应商或客户；"
+                + "兼容或支持某厂商产品不等于采购关系，不得据此把该厂商标为供应商。"
+                + "limitations 应精炼在 800 字以内。禁止投资建议、目标价和虚构客户、供应商、合同。";
     }
 
     private String repairPrompt() {

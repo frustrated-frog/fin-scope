@@ -87,6 +87,35 @@ class StockSupplyChainSynthesisAgentTest {
         assertEquals(3, result.getNodes().size());
     }
 
+    @Test
+    void acceptsDetailedEvidenceLimitationsForAComplexSupplyChain() throws Exception {
+        String detailed = repeat("部分客户及供应商未实名披露，", 40);
+
+        StockSupplyChainSnapshot result = agent(validJson().replace(
+                "部分客户未实名披露", detailed)).synthesize(
+                "德明利", "001309", Arrays.asList(evidence("E1"), evidence("E2")));
+
+        assertEquals(detailed, result.getLimitations());
+    }
+
+    @Test
+    void explicitlyForbidsTreatingProductCompatibilityAsAProcurementRelationship() throws Exception {
+        String[] capturedSystemPrompt = {""};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                capturedSystemPrompt[0] = systemPrompt;
+                return validJson();
+            }
+        };
+
+        new StockSupplyChainSynthesisAgent(llm, new ObjectMapper()).synthesize(
+                "德明利", "001309", Arrays.asList(evidence("E1"), evidence("E2")));
+
+        assertTrue(capturedSystemPrompt[0].contains("兼容或支持某厂商产品不等于采购关系"));
+    }
+
     private StockSupplyChainSynthesisAgent agent(String result) {
         LlmChatClient llm = new LlmChatClient() {
             @Override public boolean isConfigured() { return true; }
