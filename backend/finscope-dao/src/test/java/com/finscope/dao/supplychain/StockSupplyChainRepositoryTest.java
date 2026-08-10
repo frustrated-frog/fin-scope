@@ -69,7 +69,7 @@ class StockSupplyChainRepositoryTest {
         StockSupplyChainSnapshot afterFailure = repository.findSnapshot(1L).orElseThrow(AssertionError::new);
         assertEquals(first.getSummary(), afterFailure.getSummary());
         assertEquals("FAILED", repository.latestRun(1L).orElseThrow(AssertionError::new).getStatus());
-        assertTrue(repository.activeRun(1L).isEmpty());
+        assertTrue(!repository.activeRun(1L).isPresent());
     }
 
     private StockSupplyChainSnapshot snapshot(String summary) {
