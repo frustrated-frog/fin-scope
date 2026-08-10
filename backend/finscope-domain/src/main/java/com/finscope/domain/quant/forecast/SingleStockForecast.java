@@ -15,6 +15,8 @@ public class SingleStockForecast {
     private int horizonDays;
     private String status;
     private String conclusion;
+    private String decision;
+    private String decisionReason;
     private Integer barCount;
     private Integer labeledSampleCount;
     private Double upProbability;
@@ -40,6 +42,7 @@ public class SingleStockForecast {
     private ParameterStability parameterStability;
     private List<Observation> recentObservations = new ArrayList<Observation>();
     private ModelQualification qualification;
+    private SelectiveValidation selectiveValidation;
     private List<String> warnings = new ArrayList<String>();
 
     @Data
@@ -263,6 +266,17 @@ public class SingleStockForecast {
         private ProbabilityMetricSet calibratedMetrics;
         private ProbabilityMetricSet baselineMetrics;
         private List<ReliabilityBin> reliabilityBins = new ArrayList<ReliabilityBin>();
+    }
+
+    @Data
+    public static class SelectiveValidation {
+        private double lowerThreshold;
+        private double upperThreshold;
+        private int sampleCount;
+        private int coveredCount;
+        private double coverage;
+        private double coveredAccuracy;
+        private double abstainRate;
     }
 
     @Data

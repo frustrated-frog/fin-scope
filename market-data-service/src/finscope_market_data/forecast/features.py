@@ -40,16 +40,16 @@ def build_samples(
         raise ValueError("预测周期必须为正整数")
     ordered = _validated_bars(bars)
     samples: list[ForecastSample] = []
-    for signal in range(60, len(ordered) - horizon_days):
+    for signal in range(60, len(ordered) - horizon_days - 1):
         entry = ordered[signal + 1]
-        exit_bar = ordered[signal + horizon_days]
+        exit_bar = ordered[signal + horizon_days + 1]
         samples.append(
             ForecastSample(
                 signal_date=ordered[signal].trade_date,
                 entry_date=entry.trade_date,
                 exit_date=exit_bar.trade_date,
                 features=_features(ordered, signal),
-                net_return=exit_bar.close / entry.open - 1.0 - transaction_cost_rate,
+                net_return=exit_bar.open / entry.open - 1.0 - transaction_cost_rate,
             )
         )
     return samples

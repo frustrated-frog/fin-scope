@@ -33,7 +33,7 @@ class SingleStockForecastServiceTest {
         holding.setRole("LIVE_VALIDATION");
         holding.setQuantity(10d);
         holding.setAverageCost(1400d);
-        when(client.forecast("600519")).thenReturn(forecast);
+        when(client.forecast("600519", 5)).thenReturn(forecast);
         when(holdings.findStockByCode("600519")).thenReturn(Optional.of(holding));
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> {
             SingleStockForecastRun value = invocation.getArgument(0);
@@ -42,14 +42,14 @@ class SingleStockForecastServiceTest {
         });
         SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
 
-        SingleStockForecastRun result = service.forecast("600519.SH");
+        SingleStockForecastRun result = service.forecast("600519.SH", 5);
 
         assertEquals(7L, result.getId());
         assertSame(forecast, result.getReport());
         assertTrue(result.getHoldingSnapshot().isHeld());
         assertEquals(10d, result.getHoldingSnapshot().getQuantity());
         assertEquals(1505d / 1400d - 1d, result.getHoldingSnapshot().getUnrealizedReturn(), 0.000001);
-        verify(client).forecast("600519");
+        verify(client).forecast("600519", 5);
         verify(runs).save(any(SingleStockForecastRun.class));
     }
 
@@ -71,12 +71,33 @@ class SingleStockForecastServiceTest {
         verify(client, never()).forecast(any());
     }
 
+    @Test
+    void marksAnInsufficientForecastUnavailableForMaturityValidation() {
+        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
+        SingleStockForecast forecast = forecast();
+        forecast.setStatus("INSUFFICIENT_DATA");
+        forecast.setUpProbability(null);
+        when(client.forecast("600519", 5)).thenReturn(forecast);
+        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
+        when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(
+                invocation -> invocation.getArgument(0));
+        SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
+
+        SingleStockForecastRun result = service.forecast("600519", 5);
+
+        assertEquals(SingleStockForecastRun.MaturityStatus.UNAVAILABLE,
+                result.getMaturityStatus());
+    }
+
     private SingleStockForecast forecast() {
         SingleStockForecast value = new SingleStockForecast();
         value.setReportSchemaVersion("single-stock-research-v2");
         value.setModelVersion("logistic-walk-forward-v2");
         value.setInstrumentCode("600519.SH");
         value.setAsOfDate(LocalDate.of(2026, 8, 7));
+        value.setHorizonDays(5);
         value.setStatus("NO_CLEAR_EDGE");
         value.setConclusion("没有明显优势");
         value.setBarCount(2000);

@@ -28,6 +28,8 @@ public class PythonSingleStockForecastClient {
             "FITTED", "NOT_FITTED"));
     private static final Set<String> INTERVAL_STATUSES = new HashSet<String>(Arrays.asList(
             "AVAILABLE", "UNAVAILABLE"));
+    private static final Set<String> DECISIONS = new HashSet<String>(Arrays.asList(
+            "UP", "DOWN", "ABSTAIN"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -42,16 +44,24 @@ public class PythonSingleStockForecastClient {
     }
 
     public SingleStockForecast forecast(String code) {
+        return forecast(code, 5);
+    }
+
+    public SingleStockForecast forecast(String code, int horizonDays) {
         if (code == null || !code.matches("\\d{6}")) {
             throw contract("INVALID_INSTRUMENT", "股票代码必须是六位 A 股代码", false);
+        }
+        if (horizonDays != 1 && horizonDays != 5 && horizonDays != 20) {
+            throw contract("INVALID_HORIZON", "预测周期只支持 1、5、20 个交易日", false);
         }
         URI uri = URI.create(baseUrl + "/v1/quant/single-stock-forecasts");
         try {
             FinanceHttpResponse response = http.postJson(
-                    CLIENT_CODE, uri, "{\"code\":\"" + code + "\"}",
+                    CLIENT_CODE, uri, "{\"code\":\"" + code + "\",\"horizonDays\":"
+                            + horizonDays + "}",
                     Collections.<String, String>emptyMap());
             SingleStockForecast result = json.readValue(response.getBody(), SingleStockForecast.class);
-            validate(result, code);
+            validate(result, code, horizonDays);
             return result;
         } catch (ProviderContractException error) {
             throw error;
@@ -60,10 +70,10 @@ public class PythonSingleStockForecastClient {
         }
     }
 
-    private void validate(SingleStockForecast result, String code) {
+    private void validate(SingleStockForecast result, String code, int horizonDays) {
         String expected = code + "." + market(code);
         if (result == null || !expected.equals(result.getInstrumentCode())
-                || result.getAsOfDate() == null || result.getHorizonDays() != 20
+                || result.getAsOfDate() == null || result.getHorizonDays() != horizonDays
                 || !STATUSES.contains(result.getStatus()) || result.getConclusion() == null
                 || result.getBarCount() == null || result.getBarCount() < 0
                 || result.getDataFingerprint() == null || result.getDataFingerprint().trim().isEmpty()
@@ -89,6 +99,30 @@ public class PythonSingleStockForecastClient {
         if ("single-stock-research-v3".equals(result.getReportSchemaVersion())) {
             validateVersionThree(result);
         }
+        if ("single-stock-research-v4".equals(result.getReportSchemaVersion())) {
+            validateVersionFour(result);
+        }
+    }
+
+    private void validateVersionFour(SingleStockForecast result) {
+        validateVersionThree(result);
+        if (!DECISIONS.contains(result.getDecision()) || result.getDecisionReason() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v4 单股预测缺少选择性决策", false);
+        }
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            return;
+        }
+        SingleStockForecast.SelectiveValidation selective = result.getSelectiveValidation();
+        if (result.getQualification().getSplitAudit().getLabelHorizonDays() != result.getHorizonDays()
+                || selective == null || selective.getSampleCount() < 1 || selective.getCoveredCount() < 0
+                || selective.getCoveredCount() > selective.getSampleCount()
+                || selective.getLowerThreshold() <= 0 || selective.getLowerThreshold() >= 0.5d
+                || selective.getUpperThreshold() <= 0.5d || selective.getUpperThreshold() >= 1d) {
+            throw contract("SCHEMA_DRIFT", "Python v4 单股预测选择性指标无效", false);
+        }
+        probability(selective.getCoverage());
+        probability(selective.getCoveredAccuracy());
+        probability(selective.getAbstainRate());
     }
 
     private void validateVersionThree(SingleStockForecast result) {
@@ -131,7 +165,8 @@ public class PythonSingleStockForecastClient {
         validateSlice(audit.getLockedTest());
         if (audit.getDevelopment().getEndDate().compareTo(audit.getCalibration().getStartDate()) >= 0
                 || audit.getCalibration().getEndDate().compareTo(audit.getLockedTest().getStartDate()) >= 0
-                || audit.getLabelHorizonDays() != 20 || audit.getIndependentStrideDays() != 20
+                || audit.getLabelHorizonDays() < 1
+                || audit.getLabelHorizonDays() != audit.getIndependentStrideDays()
                 || audit.getRule() == null) {
             throw contract("SCHEMA_DRIFT", "Python v3 单股预测时间切分无效", false);
         }

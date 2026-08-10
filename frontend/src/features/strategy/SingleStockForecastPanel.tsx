@@ -11,6 +11,22 @@ const statusCopy: Record<string, { label: string; tone: string }> = {
   INSUFFICIENT_DATA: { label: '数据不足', tone: 'muted' }
 };
 
+type ForecastHorizon = 1 | 5 | 20;
+
+const horizons: Array<{ days: ForecastHorizon; label: string; role: string; note: string }> = [
+  { days: 1, label: '1D', role: '极短期', note: '噪声最高，门槛更严' },
+  { days: 5, label: '5D', role: '默认观察', note: '时效与稳定性平衡' },
+  { days: 20, label: '20D', role: '趋势观察', note: '偏中短期趋势' }
+];
+
+const decisionCopy = {
+  UP: { label: '偏向上涨', code: 'UP' },
+  DOWN: { label: '偏向下跌', code: 'DOWN' },
+  ABSTAIN: { label: '暂不判断', code: 'ABSTAIN' }
+};
+
+const maturityCopy = { PENDING: '待验证', MATURED: '已到期', UNAVAILABLE: '无法验证' };
+
 const percent = (value?: number, digits = 1) => value == null ? '—' : `${(value * 100).toFixed(digits)}%`;
 const signedPercent = (value?: number) => value == null ? '—' : `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
 const number = (value?: number, digits = 2) => value == null ? '—' : value.toFixed(digits);
@@ -99,7 +115,7 @@ function QualificationSection({ qualification, probabilityInterval }: { qualific
         <div className="forecast-quality-comparison"><table aria-label="锁定测试概率质量对照"><thead><tr><th>概率口径</th><th>Brier</th><th>Skill</th><th>Log Loss</th><th>ECE</th></tr></thead><tbody><tr><th>原始模型</th><td>{number(locked.rawMetrics.brierScore, 3)}</td><td>{signedPercent(locked.rawMetrics.brierSkillScore)}</td><td>{number(locked.rawMetrics.logLoss, 3)}</td><td>{percent(locked.rawMetrics.expectedCalibrationError)}</td></tr><tr><th>校准模型</th><td>{number(calibrated.brierScore, 3)}</td><td>{signedPercent(calibrated.brierSkillScore)}</td><td>{number(calibrated.logLoss, 3)}</td><td>{percent(calibrated.expectedCalibrationError)}</td></tr><tr><th>朴素基准</th><td>{number(locked.baselineMetrics.brierScore, 3)}</td><td>0.0%</td><td>{number(locked.baselineMetrics.logLoss, 3)}</td><td>{percent(locked.baselineMetrics.expectedCalibrationError)}</td></tr></tbody></table></div>
       </aside>
     </div>
-    <div className="forecast-uncertainty-strip"><article><span>策略超额收益 95% 区间</span><strong>{interval(intervals.excessReturn, signedPercent)}</strong></article><article><span>策略 Sharpe 95% 区间</span><strong>{interval(intervals.sharpeRatio, item => number(item, 2))}</strong></article><article><span>朴素基准概率</span><strong>{percent(locked.baselineProbability)}</strong></article></div>
+    <div className="forecast-uncertainty-strip"><article><span>年化超额收益 95% 区间</span><strong>{interval(intervals.excessReturn, signedPercent)}</strong></article><article><span>策略 Sharpe 95% 区间</span><strong>{interval(intervals.sharpeRatio, item => number(item, 2))}</strong></article><article><span>朴素基准概率</span><strong>{percent(locked.baselineProbability)}</strong></article></div>
     <footer className="forecast-qualification-foot"><span>TRIAL {qualification.trial.trialId.slice(0, 16)}</span><p>{qualification.trial.featureVersion} · {qualification.trial.splitVersion} · seed {qualification.trial.randomSeed}</p><small>{probabilityInterval?.limitation || '概率区间不覆盖突发事件与市场结构变化'}</small></footer>
   </section>;
 }
@@ -108,6 +124,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
   addToast: Toast; setMessage: (message: string) => void;
 }) {
   const [code, setCode] = useState('');
+  const [horizon, setHorizon] = useState<ForecastHorizon>(5);
   const [runs, setRuns] = useState<SingleStockForecastRun[]>([]);
   const [selected, setSelected] = useState<SingleStockForecastRun>();
   const [busy, setBusy] = useState(false);
@@ -129,7 +146,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
     setBusy(true);
     try {
       const value = await api<SingleStockForecastRun>('/api/quant/single-stock-forecasts', {
-        method: 'POST', body: JSON.stringify({ code: normalized })
+        method: 'POST', body: JSON.stringify({ code: normalized, horizonDays: horizon })
       });
       setSelected(value); setRuns(current => [value, ...current]);
       setMessage(`${value.instrumentCode} · 完整研究已保存`);
@@ -143,6 +160,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
     try {
       const value = await api<SingleStockForecastRun>(`/api/quant/single-stock-forecasts/${item.id}`);
       setSelected(value); setCode(value.instrumentCode.slice(0, 6));
+      if (value.horizonDays === 1 || value.horizonDays === 5 || value.horizonDays === 20) setHorizon(value.horizonDays);
     } catch (error) { addToast(error instanceof Error ? error.message : '预测记录读取失败', 'error'); }
   }
 
@@ -155,8 +173,11 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
       <div><p className="single-forecast-kicker">Single-name research ledger</p><h4>一次预测，<em>留下完整证据。</em></h4><p>用缓存的前复权日线完成滚动样本外验证，把概率、因子、同股基准、风险和当时持仓冻结成可复查记录。</p></div>
       <form className="single-forecast-form" onSubmit={run}>
         <label htmlFor="single-stock-code">股票代码</label>
+        <div className="forecast-horizon-rail" role="group" aria-label="预测周期">
+          {horizons.map(item => <button type="button" key={item.days} aria-pressed={horizon === item.days} onClick={() => setHorizon(item.days)} aria-label={`${item.days} 日预测周期`}><span>{item.label}</span><strong>{item.role}</strong><small>{item.note}</small></button>)}
+        </div>
         <div><input id="single-stock-code" inputMode="numeric" maxLength={6} placeholder="例如 600519" value={code} onChange={event => setCode(event.target.value.replace(/\s/g, ''))} /><button type="submit" disabled={busy}>{busy ? '正在回看历史…' : '运行完整研究'}</button></div>
-        <small>T+1 开盘模拟进入 · 同股买入持有基准 · 每次运行不可变留痕</small>
+        <small>当前 {horizon} 日独立模型 · T+1 可执行口径 · 同股买入持有基准</small>
       </form>
     </section>
 
@@ -167,7 +188,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
         {!historyBusy && runs.length === 0 && <p>运行第一份研究后，它会永久留在这里。</p>}
         <div>{runs.map(item => <button type="button" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => openRun(item)}>
           <span><b>{item.instrumentCode}</b><time>{item.createdAt?.replace('T', ' ').slice(0, 16)}</time></span>
-          <strong>{percent(item.upProbability)}</strong><small>{statusCopy[item.status]?.label ?? item.status}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
+          <strong>{percent(item.upProbability)}</strong><small>{item.horizonDays ?? item.report?.horizonDays ?? 20}D · {statusCopy[item.status]?.label ?? item.status}{item.maturityStatus ? ` · ${maturityCopy[item.maturityStatus]}` : ''}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
         </button>)}</div>
       </aside>
 
@@ -178,10 +199,11 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
 
         {report && report.status !== 'INSUFFICIENT_DATA' && report.upProbability != null && <>
           <section className="single-forecast-board" data-tone={status.tone}>
-            <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>
-            <div className="single-forecast-thesis"><div className="single-forecast-probability"><span>{report.qualification ? '校准后上涨概率' : '未来 20 日净收益为正的概率'}</span><strong>{percent(report.upProbability)}</strong>{report.qualification && <><small className="forecast-probability-range">{interval(report.probabilityInterval, percent)}</small><small>原始模型 {percent(report.rawProbability)}</small></>}<small>未来 20 个交易日 · 概率不是买卖指令</small></div><div className="single-forecast-verdict"><span>FINAL VERDICT</span><p>{report.conclusion}</p>{selected?.sameDataAsPrevious && <small>与上一条记录使用相同数据指纹</small>}</div></div>
+            <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · {report.horizonDays}D 独立试验 · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>
+            <div className="single-forecast-thesis"><div className="single-forecast-probability"><span>{report.qualification ? '校准后上涨概率' : `未来 ${report.horizonDays} 日净收益为正的概率`}</span><strong>{percent(report.upProbability)}</strong>{report.qualification && <><small className="forecast-probability-range">{interval(report.probabilityInterval, percent)}</small><small>原始模型 {percent(report.rawProbability)}</small></>}<small>未来 {report.horizonDays} 个交易日 · 概率不是买卖指令</small></div><div className="single-forecast-verdict"><span>SELECTIVE DECISION</span><div className="forecast-decision-stamp" data-decision={report.decision ?? 'ABSTAIN'}><small>{decisionCopy[report.decision ?? 'ABSTAIN'].code}</small><strong>{decisionCopy[report.decision ?? 'ABSTAIN'].label}</strong></div><p>{report.decisionReason || report.conclusion}</p><small>{report.conclusion}</small>{selected?.sameDataAsPrevious && <small>与上一条记录使用相同数据指纹</small>}</div></div>
             <div className="forecast-probability-tape"><div className="forecast-tape-labels"><span>下行证据</span><b>50% 中线</b><span>上行证据</span></div><div className="forecast-tape-track"><i /><i /><i /><b style={{ left: `${probabilityPosition}%` }} /></div><small style={{ left: `${probabilityPosition}%` }}>{percent(report.upProbability)}</small></div>
             <div className="forecast-return-band"><div><span>相近信号 P20</span><strong>{signedPercent(report.lowerNetReturn)}</strong></div><div><span>相近信号平均</span><strong>{signedPercent(report.expectedNetReturn)}</strong></div><div><span>相近信号 P80</span><strong>{signedPercent(report.upperNetReturn)}</strong></div></div>
+            {report.selectiveValidation && <div className="forecast-selective-strip"><article><span>信号覆盖率</span><strong>{percent(report.selectiveValidation.coverage)}</strong><small>{report.selectiveValidation.coveredCount} / {report.selectiveValidation.sampleCount} 个锁定样本给出方向</small></article><article><span>覆盖后命中率</span><strong>{percent(report.selectiveValidation.coveredAccuracy)}</strong><small>只统计越过 {percent(report.selectiveValidation.lowerThreshold)} / {percent(report.selectiveValidation.upperThreshold)} 阈值的样本</small></article><article><span>弃权率</span><strong>{percent(report.selectiveValidation.abstainRate)}</strong><small>宁可少判断，也不强迫低置信度信号表态</small></article></div>}
           </section>
 
           {report.qualification

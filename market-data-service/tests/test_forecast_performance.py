@@ -42,9 +42,9 @@ def sample(history: list[DailyBar], signal: int, horizon: int = 20) -> ForecastS
     return ForecastSample(
         signal_date=history[signal].trade_date,
         entry_date=history[signal + 1].trade_date,
-        exit_date=history[signal + horizon].trade_date,
+        exit_date=history[signal + horizon + 1].trade_date,
         features=(0, 0, 0, 0, 0, 0, 0),
-        net_return=history[signal + horizon].close / history[signal + 1].open - 1,
+        net_return=history[signal + horizon + 1].open / history[signal + 1].open - 1,
     )
 
 
@@ -75,12 +75,29 @@ def test_strategy_uses_next_open_non_overlapping_holding_and_same_stock_benchmar
     assert report.benchmark_label == "同股买入并持有"
     assert len(report.trades) == 2
     assert report.trades[0].entry_date == history[11].trade_date
-    assert report.trades[0].exit_date == history[30].trade_date
+    assert report.trades[0].exit_date == history[31].trade_date
     assert report.trades[1].entry_date == history[41].trade_date
     assert report.total_cost > 0
     assert report.trade_count == 2
     assert 0 < report.holding_time_ratio < 1
     assert report.strategy.total_return < report.benchmark.total_return
+
+
+def test_open_exit_day_is_not_counted_as_an_invested_holding_day() -> None:
+    history = bars(20)
+    candidate = sample(history, 10, horizon=1)
+
+    report = simulate_strategy(
+        history,
+        [candidate],
+        [observation(candidate, 0.8)],
+        threshold=0.60,
+        holding_days=1,
+        round_trip_cost=0.0015,
+    )
+
+    invested = [item.trade_date for item in report.equity_curve if item.invested]
+    assert invested == [history[11].trade_date]
 
 
 def test_performance_reports_drawdown_duration_risk_and_costs() -> None:

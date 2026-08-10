@@ -9,7 +9,7 @@ import statistics
 from finscope_market_data.forecast.bootstrap import (
     ConfidenceInterval as BootstrapConfidenceInterval,
     bootstrap_interval,
-    paired_compound_excess,
+    paired_annualized_excess,
 )
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.factor_catalog import FACTORS
@@ -39,6 +39,7 @@ from finscope_market_data.forecast.schemas import (
     QualificationSplitAudit,
     RegimePerformance,
     ReliabilityBin,
+    SelectiveValidation,
     SingleStockForecastResult,
     SplitSliceAudit,
     StrategyPolicy,
@@ -48,6 +49,7 @@ from finscope_market_data.forecast.qualification import (
     ModelQualification,
     evaluate_probability_metrics,
     qualify_model,
+    selective_metrics,
 )
 from finscope_market_data.forecast.stability import StabilityReport, analyze_stability
 from finscope_market_data.forecast.walk_forward import (
@@ -60,9 +62,9 @@ from finscope_market_data.models import DailyBar
 
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
-PRIMARY_HORIZON = 20
-MODEL_VERSION = "logistic-platt-qualified-v3"
-REPORT_VERSION = "single-stock-research-v3"
+DEFAULT_HORIZON = 5
+MODEL_VERSION = "logistic-platt-selective-v4"
+REPORT_VERSION = "single-stock-research-v4"
 
 
 def build_forecast(
@@ -73,27 +75,30 @@ def build_forecast(
     source_family: str,
     quality_status: str,
     warnings: list[str],
+    horizon_days: int = DEFAULT_HORIZON,
 ) -> SingleStockForecastResult:
+    if horizon_days not in (1, 5, 20):
+        raise ValueError("单股预测只支持 1、5、20 日周期")
     ordered = sorted(bars, key=lambda item: item.trade_date)
     samples = build_samples(
         ordered,
         transaction_cost_rate=COST_RATE,
-        horizon_days=PRIMARY_HORIZON,
+        horizon_days=horizon_days,
     )
     policy = StrategyPolicy(
         signal_threshold=PRIMARY_THRESHOLD,
-        holding_days=PRIMARY_HORIZON,
+        holding_days=horizon_days,
         entry_rule="T 日收盘产生信号，T+1 开盘买入",
-        exit_rule="持有至第 20 个交易日收盘卖出",
+        exit_rule=f"持有 {horizon_days} 个完整交易日，T+{horizon_days + 1} 开盘卖出",
         overlap_policy="持仓期间忽略新信号，不加仓、不重叠",
         round_trip_cost_rate=COST_RATE,
         benchmark="同股买入并持有",
     )
-    data_fingerprint = _fingerprint(ordered, instrument_code)
+    data_fingerprint = _fingerprint(ordered, instrument_code, horizon_days)
     base = dict(
         instrument_code=instrument_code,
         as_of_date=ordered[-1].trade_date,
-        horizon_days=PRIMARY_HORIZON,
+        horizon_days=horizon_days,
         bar_count=len(ordered),
         data_fingerprint=data_fingerprint,
         source_code=source_code,
@@ -107,12 +112,14 @@ def build_forecast(
             **base,
             status="INSUFFICIENT_DATA",
             conclusion="历史日线不足 750 根，无法形成可信的样本外和稳健性结论。",
+            decision="ABSTAIN",
+            decision_reason="历史数据不足，拒绝输出方向判断。",
             labeled_sample_count=len(samples),
             warnings=[*warnings, "需要更长历史覆盖才能进行滚动样本外验证"],
         )
 
-    validation = validate_walk_forward(samples)
-    qualification = qualify_model(samples)
+    validation = validate_walk_forward(samples, independent_stride_days=horizon_days)
+    qualification = qualify_model(samples, independent_stride_days=horizon_days)
     model = RegularizedLogisticModel.fit(samples)
     features = current_features(ordered)
     raw_probability = model.predict(features)
@@ -130,10 +137,10 @@ def build_forecast(
         samples,
         validation.observations,
         threshold=PRIMARY_THRESHOLD,
-        holding_days=PRIMARY_HORIZON,
+        holding_days=horizon_days,
         round_trip_cost=COST_RATE,
     )
-    stability = analyze_stability(ordered, COST_RATE)
+    stability = analyze_stability(ordered, COST_RATE, horizon_days=horizon_days)
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)
     probability_interval = _probability_interval(
@@ -144,11 +151,20 @@ def build_forecast(
         "校准区或锁定测试区独立锚点不足"
     )
     status, conclusion = _classify(validation, performance, stability, qualification, intervals)
-    trial = _trial(data_fingerprint, seed)
+    decision, decision_reason = _decision(probability, qualification.status)
+    selective = selective_metrics(
+        qualification.locked_test.calibrated_probabilities,
+        qualification.locked_test.labels,
+        lower_threshold=1.0 - PRIMARY_THRESHOLD,
+        upper_threshold=PRIMARY_THRESHOLD,
+    )
+    trial = _trial(data_fingerprint, seed, horizon_days)
     return SingleStockForecastResult(
         **base,
         status=status,
         conclusion=conclusion,
+        decision=decision,
+        decision_reason=decision_reason,
         labeled_sample_count=len(samples),
         up_probability=None if status == "INSUFFICIENT_DATA" else probability,
         raw_probability=None if status == "INSUFFICIENT_DATA" else raw_probability,
@@ -186,14 +202,31 @@ def build_forecast(
         ),
         parameter_stability=ParameterStability.model_validate(asdict(stability)),
         recent_observations=_recent(validation.observations),
-        qualification=_qualification_report(qualification, trial, intervals),
+        qualification=_qualification_report(
+            qualification,
+            trial,
+            intervals,
+            horizon_days,
+        ),
+        selective_validation=SelectiveValidation.model_validate(asdict(selective)),
         warnings=[
             *warnings,
             "收益基于前复权日线、固定规则和固定交易成本模拟，不代表真实成交回放",
             "因子贡献解释模型输出，不证明因果关系",
             "主概率经过独立校准区 Platt 校准；锁定测试从未参与模型或校准器拟合",
+            "方向判断允许弃权；覆盖后命中率必须与覆盖率同时阅读",
         ],
     )
+
+
+def _decision(probability: float, qualification_status: str) -> tuple[str, str]:
+    if qualification_status in {"FAILED", "INSUFFICIENT_DATA"}:
+        return "ABSTAIN", "模型未通过当前周期的资格门槛，拒绝输出方向。"
+    if probability >= PRIMARY_THRESHOLD:
+        return "UP", "校准上涨概率达到预注册上阈值。"
+    if probability <= 1.0 - PRIMARY_THRESHOLD:
+        return "DOWN", "校准上涨概率低于预注册下阈值。"
+    return "ABSTAIN", "概率位于拒绝区间，当前信息不足以形成方向优势。"
 
 
 def _classify(
@@ -265,7 +298,11 @@ def _qualification_intervals(
     strategy_returns, benchmark_returns = _daily_returns(performance)
     excess = bootstrap_interval(
         len(strategy_returns),
-        lambda indices: paired_compound_excess(strategy_returns, benchmark_returns, indices),
+        lambda indices: paired_annualized_excess(
+            strategy_returns,
+            benchmark_returns,
+            indices,
+        ),
         block_length=20,
         iterations=1000,
         seed=seed + 2,
@@ -326,6 +363,7 @@ def _qualification_report(
     qualification: ModelQualification,
     trial: TrialIdentity,
     intervals: QualificationIntervals,
+    horizon_days: int,
 ) -> ModelQualificationSchema:
     calibration = qualification.calibration
     locked = qualification.locked_test
@@ -337,6 +375,8 @@ def _qualification_report(
             development=SplitSliceAudit.model_validate(asdict(qualification.split_audit.development)),
             calibration=SplitSliceAudit.model_validate(asdict(qualification.split_audit.calibration)),
             locked_test=SplitSliceAudit.model_validate(asdict(qualification.split_audit.locked_test)),
+            label_horizon_days=horizon_days,
+            independent_stride_days=horizon_days,
             rule="严格前向 60/20/20；训练标签退出日必须早于待预测日",
         ),
         calibration=CalibrationReport(
@@ -389,14 +429,14 @@ def _unavailable_interval(reason: str) -> BootstrapConfidenceInterval:
     )
 
 
-def _trial(data_fingerprint: str, seed: int) -> TrialIdentity:
+def _trial(data_fingerprint: str, seed: int, horizon_days: int) -> TrialIdentity:
     identity = "|".join(
         (
             data_fingerprint,
             MODEL_VERSION,
             REPORT_VERSION,
             "price-volume-7-v1",
-            "net-return-positive-20d-v1",
+            f"t1-open-net-return-{horizon_days}d-v2",
             "forward-60-20-20-purged-v1",
             "platt-v1",
             "moving-block-v1",
@@ -407,7 +447,7 @@ def _trial(data_fingerprint: str, seed: int) -> TrialIdentity:
     return TrialIdentity(
         trial_id=hashlib.sha256(identity.encode()).hexdigest(),
         feature_version="price-volume-7-v1",
-        label_version="net-return-positive-20d-v1",
+        label_version=f"t1-open-net-return-{horizon_days}d-v2",
         split_version="forward-60-20-20-purged-v1",
         calibration_version="platt-v1",
         bootstrap_version="moving-block-v1",
@@ -494,9 +534,13 @@ def _distribution(observations: list[WalkForwardObservation]) -> tuple[float, fl
     return lower, sum(values) / len(values), upper
 
 
-def _fingerprint(bars: Sequence[DailyBar], instrument_code: str) -> str:
+def _fingerprint(
+    bars: Sequence[DailyBar], instrument_code: str, horizon_days: int
+) -> str:
     digest = hashlib.sha256()
-    digest.update(b"single-stock-research-v3|logistic-platt-qualified-v3|20|0.60|0.0015\n")
+    digest.update(
+        f"{REPORT_VERSION}|{MODEL_VERSION}|{horizon_days}|0.60|0.0015\n".encode()
+    )
     for bar in bars:
         row = "|".join(
             (

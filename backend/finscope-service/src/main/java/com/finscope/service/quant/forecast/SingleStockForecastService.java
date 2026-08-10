@@ -36,18 +36,23 @@ public class SingleStockForecastService {
     }
 
     @Transactional
-    public SingleStockForecastRun forecast(String requestedCode) {
+    public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
         String code = normalizeCode(requestedCode);
-        SingleStockForecast report = client.forecast(code);
+        validateHorizon(horizonDays);
+        SingleStockForecast report = client.forecast(code, horizonDays);
         SingleStockForecastRun.HoldingSnapshot holding = holdingSnapshot(code, report);
         SingleStockForecastRun value = new SingleStockForecastRun();
         value.setInstrumentCode(report.getInstrumentCode());
         value.setAsOfDate(report.getAsOfDate());
+        value.setHorizonDays(report.getHorizonDays());
         value.setStatus(report.getStatus());
         value.setUpProbability(report.getUpProbability());
         value.setDataFingerprint(report.getDataFingerprint());
         value.setModelVersion(report.getModelVersion());
         value.setReportSchemaVersion(report.getReportSchemaVersion());
+        value.setMaturityStatus("INSUFFICIENT_DATA".equals(report.getStatus())
+                ? SingleStockForecastRun.MaturityStatus.UNAVAILABLE
+                : SingleStockForecastRun.MaturityStatus.PENDING);
         try {
             value.setReportJson(json.writeValueAsString(report));
             value.setHoldingSnapshotJson(json.writeValueAsString(holding));
@@ -60,13 +65,16 @@ public class SingleStockForecastService {
         return saved;
     }
 
-    public List<SingleStockForecastRun> history(String requestedCode, int limit) {
+    public List<SingleStockForecastRun> history(String requestedCode, int limit, Integer horizonDays) {
         String instrumentCode = null;
         if (requestedCode != null && !requestedCode.trim().isEmpty()) {
             String code = normalizeCode(requestedCode);
             instrumentCode = code + "." + market(code);
         }
-        return runs.findAll(instrumentCode, limit);
+        if (horizonDays != null) {
+            validateHorizon(horizonDays);
+        }
+        return runs.findAll(instrumentCode, limit, horizonDays);
     }
 
     public SingleStockForecastRun detail(Long id) {
@@ -129,6 +137,12 @@ public class SingleStockForecastService {
         if (normalized.matches("\\d{6}\\.(SH|SZ|BJ)")) normalized = normalized.substring(0, 6);
         if (!normalized.matches("\\d{6}")) throw new IllegalArgumentException("股票代码必须是六位 A 股代码");
         return normalized;
+    }
+
+    private void validateHorizon(int horizonDays) {
+        if (horizonDays != 1 && horizonDays != 5 && horizonDays != 20) {
+            throw new IllegalArgumentException("预测周期只支持 1、5、20 个交易日");
+        }
     }
 
     private String market(String code) {

@@ -34,18 +34,18 @@ class SingleStockForecastControllerTest {
     void startsAuditableSingleStockForecast() throws Exception {
         SingleStockForecast value = new SingleStockForecast();
         value.setInstrumentCode("600519.SH"); value.setAsOfDate(LocalDate.of(2026, 8, 6));
-        value.setHorizonDays(20); value.setStatus("NO_CLEAR_EDGE"); value.setBarCount(2400);
+        value.setHorizonDays(5); value.setStatus("NO_CLEAR_EDGE"); value.setBarCount(2400);
         value.setUpProbability(0.53d); value.setConclusion("未发现稳定优势");
         SingleStockForecastRun run = new SingleStockForecastRun();
         run.setId(12L); run.setInstrumentCode("600519.SH"); run.setReport(value);
-        when(service.forecast("600519")).thenReturn(run);
+        when(service.forecast("600519", 5)).thenReturn(run);
 
         mvc.perform(post("/api/quant/single-stock-forecasts")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"600519\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(12))
                 .andExpect(jsonPath("$.data.report.instrumentCode").value("600519.SH"))
-                .andExpect(jsonPath("$.data.report.horizonDays").value(20))
+                .andExpect(jsonPath("$.data.report.horizonDays").value(5))
                 .andExpect(jsonPath("$.data.report.upProbability").value(0.53));
     }
 
@@ -57,12 +57,20 @@ class SingleStockForecastControllerTest {
     }
 
     @Test
+    void rejectsUnregisteredForecastHorizon() throws Exception {
+        mvc.perform(post("/api/quant/single-stock-forecasts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"600519\",\"horizonDays\":3}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listsAndReadsImmutableForecastRuns() throws Exception {
         SingleStockForecastRun summary = new SingleStockForecastRun();
         summary.setId(8L); summary.setInstrumentCode("603618.SH");
         summary.setStatus("CONDITIONAL"); summary.setUpProbability(0.64);
         summary.setCreatedAt(LocalDateTime.of(2026, 8, 8, 14, 0));
-        when(service.history("603618", 20)).thenReturn(Arrays.asList(summary));
+        when(service.history("603618", 20, null)).thenReturn(Arrays.asList(summary));
         when(service.detail(8L)).thenReturn(summary);
 
         mvc.perform(get("/api/quant/single-stock-forecasts?code=603618&limit=20"))

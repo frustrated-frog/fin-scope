@@ -46,10 +46,27 @@ class SingleStockForecastRunRepositoryTest {
         assertEquals(2, repository.findAll("603618.SH", 20).size());
     }
 
+    @Test
+    void isolatesRepeatedDataAndHistoryByForecastHorizon() {
+        SingleStockForecastRun fiveDay = run("{\"horizon\":5}");
+        fiveDay.setHorizonDays(5);
+        repository.save(fiveDay);
+        SingleStockForecastRun twentyDay = run("{\"horizon\":20}");
+        twentyDay.setHorizonDays(20);
+
+        SingleStockForecastRun saved = repository.save(twentyDay);
+
+        assertTrue(!saved.isSameDataAsPrevious());
+        assertEquals(1, repository.findAll("603618.SH", 20, 5).size());
+        assertEquals(SingleStockForecastRun.MaturityStatus.PENDING, saved.getMaturityStatus());
+    }
+
     private SingleStockForecastRun run(String reportJson) {
         SingleStockForecastRun value = new SingleStockForecastRun();
         value.setInstrumentCode("603618.SH");
         value.setAsOfDate(LocalDate.of(2026, 8, 7));
+        value.setHorizonDays(5);
+        value.setMaturityStatus(SingleStockForecastRun.MaturityStatus.PENDING);
         value.setStatus("NO_CLEAR_EDGE");
         value.setUpProbability(0.61);
         value.setDataFingerprint("same-fingerprint");

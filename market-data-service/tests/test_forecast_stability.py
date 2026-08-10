@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from finscope_market_data.forecast.stability import NEIGHBOR_SCENARIOS
+from finscope_market_data.forecast.stability import neighbor_scenarios
 
 
 def test_stability_uses_fixed_neighbors_without_selecting_a_winner() -> None:
-    assert [(item.holding_days, item.threshold) for item in NEIGHBOR_SCENARIOS] == [
-        (20, 0.60),
-        (20, 0.55),
-        (20, 0.65),
-        (15, 0.60),
-        (25, 0.60),
+    scenarios = neighbor_scenarios(5)
+    assert [(item.holding_days, item.threshold) for item in scenarios] == [
+        (5, 0.60),
+        (5, 0.55),
+        (5, 0.65),
+        (3, 0.60),
+        (10, 0.60),
     ]
-    assert NEIGHBOR_SCENARIOS[0].primary is True
-    assert all(not item.primary for item in NEIGHBOR_SCENARIOS[1:])
+    assert scenarios[0].primary is True
+    assert all(not item.primary for item in scenarios[1:])

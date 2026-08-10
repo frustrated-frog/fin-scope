@@ -8,6 +8,7 @@ from finscope_market_data.forecast.qualification import (
     evaluate_probability_metrics,
     mature_training_samples,
     reliability_bins,
+    selective_metrics,
     split_qualification_samples,
 )
 
@@ -101,3 +102,25 @@ def test_qualification_fails_when_locked_probability_quality_is_worse() -> None:
     )
 
     assert status == "FAILED"
+
+
+def test_selective_metrics_report_accuracy_and_coverage_together() -> None:
+    metrics = selective_metrics(
+        [0.2, 0.45, 0.62, 0.9],
+        [False, True, True, True],
+        lower_threshold=0.4,
+        upper_threshold=0.6,
+    )
+
+    assert metrics.covered_count == 3
+    assert metrics.coverage == 0.75
+    assert metrics.covered_accuracy == 1.0
+    assert metrics.abstain_rate == 0.25
+
+
+def test_independent_audit_uses_requested_horizon_stride() -> None:
+    split = split_qualification_samples(samples(100), independent_stride_days=5)
+
+    assert split.audit.development.independent_sample_count == 12
+    assert split.audit.calibration.independent_sample_count == 4
+    assert split.audit.locked_test.independent_sample_count == 4

@@ -38,7 +38,13 @@ class WalkForwardResult:
     baseline_brier_score: float
 
 
-def validate_walk_forward(samples: Sequence[ForecastSample]) -> WalkForwardResult:
+def validate_walk_forward(
+    samples: Sequence[ForecastSample],
+    *,
+    independent_stride_days: int = 20,
+) -> WalkForwardResult:
+    if independent_stride_days < 1:
+        raise ValueError("独立锚点步长必须为正整数")
     ordered = sorted(samples, key=lambda item: item.signal_date)
     initial_training_size = max(120, math.floor(len(ordered) * 0.60))
     initial_training_size = min(initial_training_size, len(ordered))
@@ -74,6 +80,7 @@ def validate_walk_forward(samples: Sequence[ForecastSample]) -> WalkForwardResul
         initial_training_size,
         in_sample_accuracy,
         in_sample_brier,
+        independent_stride_days,
     )
 
 
@@ -82,8 +89,9 @@ def _metrics(
     initial_training_size: int,
     in_sample_accuracy: float,
     in_sample_brier: float,
+    independent_stride_days: int,
 ) -> WalkForwardResult:
-    independent = observations[::20]
+    independent = observations[::independent_stride_days]
     if not independent:
         return WalkForwardResult(
             (),

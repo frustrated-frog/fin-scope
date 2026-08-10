@@ -49,23 +49,23 @@ def test_features_do_not_read_bars_after_the_signal_date() -> None:
     assert after[0].features == pytest.approx(signal_features)
 
 
-def test_label_uses_next_open_and_twentieth_close_after_costs() -> None:
+def test_label_uses_t_plus_one_entry_and_executable_future_open_after_costs() -> None:
     history = bars(100)
     history[61].open = 100
-    history[80].close = 110
-    history[80].high = 111
+    history[81].open = 110
+    history[81].high = 111
 
     sample = build_samples(history, transaction_cost_rate=0.002)[0]
 
     assert sample.entry_date == history[61].trade_date
-    assert sample.exit_date == history[80].trade_date
+    assert sample.exit_date == history[81].trade_date
     assert sample.net_return == pytest.approx(0.098)
     assert sample.positive is True
 
 
 def test_feature_builder_requires_warmup_and_future_horizon() -> None:
     assert build_samples(bars(80), transaction_cost_rate=0.002) == []
-    assert len(build_samples(bars(81), transaction_cost_rate=0.002)) == 1
+    assert len(build_samples(bars(82), transaction_cost_rate=0.002)) == 1
     assert len(current_features(bars(81))) == 7
 
 
@@ -77,5 +77,17 @@ def test_feature_builder_supports_fixed_neighbor_horizons() -> None:
     )[0]
 
     assert sample.entry_date == history[61].trade_date
-    assert sample.exit_date == history[75].trade_date
+    assert sample.exit_date == history[76].trade_date
     assert tuple(item.code for item in FACTORS) == FEATURE_CODES
+
+
+@pytest.mark.parametrize("horizon_days", [1, 5, 20])
+def test_supported_horizons_hold_complete_trading_days(horizon_days: int) -> None:
+    history = bars(100)
+
+    sample = build_samples(
+        history, transaction_cost_rate=0.002, horizon_days=horizon_days
+    )[0]
+
+    assert sample.entry_date == history[61].trade_date
+    assert sample.exit_date == history[61 + horizon_days].trade_date

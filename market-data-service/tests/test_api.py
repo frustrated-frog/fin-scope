@@ -198,7 +198,9 @@ def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) ->
     provider = ForecastDailyBarProvider()
     api = client(tmp_path, [provider])
 
-    response = api.post("/v1/quant/single-stock-forecasts", json={"code": "600519"})
+    response = api.post(
+        "/v1/quant/single-stock-forecasts", json={"code": "600519", "horizonDays": 1}
+    )
 
     assert response.status_code == 200
     assert provider.requests == [(StockSymbol(market="SH", code="600519"), 5000)]
@@ -207,6 +209,17 @@ def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) ->
     assert body["status"] == "INSUFFICIENT_DATA"
     assert body["barCount"] == 400
     assert body["upProbability"] is None
+    assert body["horizonDays"] == 1
+
+
+def test_single_stock_forecast_endpoint_rejects_unregistered_horizon(tmp_path: Path) -> None:
+    api = client(tmp_path, [ForecastDailyBarProvider()])
+
+    response = api.post(
+        "/v1/quant/single-stock-forecasts", json={"code": "600519", "horizonDays": 3}
+    )
+
+    assert response.status_code == 422
 
 
 def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(
