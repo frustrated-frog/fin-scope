@@ -1351,6 +1351,19 @@ public class DatabaseInitializer implements InitializingBean {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,metric TEXT NOT NULL,baseline TEXT NOT NULL,frequency TEXT NOT NULL,"
                 + "upgrade_condition TEXT NOT NULL,downgrade_condition TEXT NOT NULL,next_review_at TEXT,sort_order INTEGER NOT NULL,"
                 + "FOREIGN KEY(run_id) REFERENCES stock_learning_card_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_supply_chain_snapshot ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,payload_json TEXT NOT NULL,"
+                + "schema_version TEXT NOT NULL,model TEXT,evidence_as_of TEXT,generated_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_supply_chain_refresh_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL,status TEXT NOT NULL,stage TEXT NOT NULL,"
+                + "message TEXT,error_code TEXT,error_message TEXT,retryable INTEGER NOT NULL DEFAULT 0,"
+                + "created_at TEXT NOT NULL,completed_at TEXT,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_supply_chain_run_instrument "
+                + "ON stock_supply_chain_refresh_run(instrument_id,id DESC)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_supply_chain_active_run "
+                + "ON stock_supply_chain_refresh_run(instrument_id) WHERE status='RUNNING'");
     }
 
     private void ensureColumn(String table, String column, String type) {
