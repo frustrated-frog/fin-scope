@@ -48,7 +48,7 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
       setRun(nextRun);
       schedulePoll();
     } catch (refreshError) {
-      if (!stopped.current) setError(messageOf(refreshError, '产业链证据更新失败，请稍后重试'));
+      if (!stopped.current) setError(messageOf(refreshError, '产业链更新失败，请稍后重试'));
     }
   }, [code, schedulePoll]);
 
@@ -88,21 +88,21 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
   }
 
   return (
-    <section className="stock-chain-panel" aria-label={`${name || code} 产业链证据图谱`}>
+    <section className="stock-chain-panel" aria-label={`${name || code} 产业链结论`}>
       <div className="stock-chain-toolbar">
         <div>
-          <span>SUPPLY CHAIN · EVIDENCE MAP</span>
-          <p>基于公司披露与公开资料建立，关系强度取决于可核验的证据。</p>
+          <span>SUPPLY CHAIN · CONCLUSION</span>
+          <p>聚焦公司所处环节、关键关系与结论边界。</p>
         </div>
-        <button type="button" onClick={() => void refresh()} disabled={running} aria-label="更新产业链证据">
-          <span aria-hidden="true">↻</span>{running ? '更新中' : '更新证据'}
+        <button type="button" onClick={() => void refresh()} disabled={running} aria-label="更新产业链">
+          <span aria-hidden="true">↻</span>{running ? '更新中' : '更新产业链'}
         </button>
       </div>
 
       {running && (
         <div className="stock-chain-status" role="status">
           <span aria-hidden="true" />
-          {snapshot ? '正在更新公开证据，当前快照仍可正常查看。' : '正在建立产业链证据图谱，通常需要几十秒。'}
+          {snapshot ? '正在更新产业链结论，当前结果仍可正常查看。' : '正在建立产业链结论，通常需要几十秒。'}
         </div>
       )}
       {error && <div className="stock-chain-status is-error" role="alert">{error}</div>}
@@ -110,13 +110,13 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
       {snapshot ? <SupplyChainSnapshotView snapshot={snapshot} /> : failed ? (
         <div className="stock-chain-empty is-failed" role="alert">
           <strong>产业链生成失败</strong>
-          <p>{run.message || '公开证据或模型服务暂时不可用，未生成不可靠的产业链结果。'}</p>
+          <p>{run.message || '公开信息或模型服务暂时不可用，未生成不可靠的产业链结果。'}</p>
           <button type="button" aria-label="重新生成产业链" onClick={() => void refresh()}>重新生成</button>
         </div>
       ) : !running && (
         <div className="stock-chain-empty">
           <strong>暂时没有可用的产业链快照</strong>
-          <p>更新证据后，系统只会展示能被公开资料支持的上下游关系。</p>
+          <p>更新后，系统将呈现能够被公开信息支持的上下游关系。</p>
           <button type="button" onClick={() => void refresh()}>开始建立图谱</button>
         </div>
       )}
@@ -125,7 +125,7 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
 }
 
 function SupplyChainSnapshotView({ snapshot }: { snapshot: StockSupplyChainSnapshot }) {
-  const evidenceByCode = new Map(snapshot.evidence.map((item) => [item.evidenceCode, item]));
+  const snapshotTime = snapshot.updatedAt || snapshot.generatedAt;
   return (
     <>
       <header className="stock-chain-thesis">
@@ -134,7 +134,7 @@ function SupplyChainSnapshotView({ snapshot }: { snapshot: StockSupplyChainSnaps
           <strong>{snapshot.position}</strong>
         </div>
         <p>{snapshot.summary}</p>
-        <time dateTime={snapshot.evidenceAsOf}>证据截至 {snapshot.evidenceAsOf || '未标注'}</time>
+        <time dateTime={snapshotTime}>更新于 {formatSnapshotTime(snapshotTime)}</time>
       </header>
 
       <div className="stock-chain-rail">
@@ -155,14 +155,6 @@ function SupplyChainSnapshotView({ snapshot }: { snapshot: StockSupplyChainSnaps
                     </div>
                     <small>{relationLabel(node.relationType)}</small>
                     <p>{node.description}</p>
-                    <div className="stock-chain-evidence-refs" aria-label={`${node.name} 证据`}>
-                      {node.evidenceRefs.map((reference) => {
-                        const evidence = evidenceByCode.get(reference);
-                        return evidence?.url ? (
-                          <a key={reference} href={evidence.url} target="_blank" rel="noreferrer" title={evidence.title}>{reference}</a>
-                        ) : <span key={reference}>{reference}</span>;
-                      })}
-                    </div>
                   </article>
                 ))}
               </div>
@@ -171,27 +163,9 @@ function SupplyChainSnapshotView({ snapshot }: { snapshot: StockSupplyChainSnaps
         })}
       </div>
 
-      <section className="stock-chain-sources" aria-labelledby="stock-chain-sources-title">
-        <header><span>VERIFIABLE SOURCES</span><h3 id="stock-chain-sources-title">证据索引</h3></header>
-        <ol>
-          {snapshot.evidence.map((evidence) => (
-            <li key={evidence.evidenceCode}>
-              <span>{evidence.evidenceCode}</span>
-              <div>
-                {evidence.url
-                  ? <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title}<i aria-hidden="true">↗</i></a>
-                  : <strong>{evidence.title}</strong>}
-                <p>{[evidence.sourceTier, evidence.source, evidence.publishedAt].filter(Boolean).join(' · ')}</p>
-                {evidence.excerpt && <blockquote>{evidence.excerpt}</blockquote>}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
       {snapshot.limitations && (
         <aside className="stock-chain-limitations">
-          <strong>证据边界</strong><p>{snapshot.limitations}</p>
+          <strong>结论边界</strong><p>{formatConclusionBoundary(snapshot.limitations)}</p>
         </aside>
       )}
     </>
@@ -204,6 +178,21 @@ function messageOf(error: unknown, fallback: string) {
 
 function confidenceLabel(value: string) {
   return value === 'HIGH' ? '高可信' : value === 'MEDIUM' ? '中可信' : '待验证';
+}
+
+function formatSnapshotTime(value?: string) {
+  if (!value) return '时间未标注';
+  return value.replace('T', ' ').slice(0, 16);
+}
+
+function formatConclusionBoundary(value: string) {
+  return value
+    .replace(/[（(]?\s*E\d+(?:\s*[,，、]\s*E\d+)*\s*[）)]?/gi, '')
+    .replace(/[（(]?\s*T\d(?:级)?\s*[）)]?/gi, '')
+    .replace(/证据/g, '公开信息')
+    .replace(/\s+([，。；：])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function relationLabel(value: string) {

@@ -29,11 +29,16 @@ Expected: FAIL，因为当前页面仍渲染证据索引、证据链接和旧文
 
 **Files:**
 - Modify: `frontend/src/features/watchlist/StockSupplyChainPanel.tsx`
+- Modify: `frontend/src/features/watchlist/WatchlistKlineDrawer.tsx`
+- Modify: `frontend/src/shared/types/index.ts`
 - Modify: `frontend/src/styles.css`
+- Test: `frontend/src/features/watchlist/WatchlistKlineDrawer.test.tsx`
 
 - [ ] **Step 1: Write minimal implementation**
 
 删除 `evidenceByCode`、节点证据引用和完整证据索引；工具栏改为“SUPPLY CHAIN · CONCLUSION / 产业链结论”，按钮改为“更新产业链”；摘要时间使用 `updatedAt || generatedAt`；边界标题改为“结论边界”。同步更新生成、更新、错误和空状态文案。
+
+同时将弹层标题改为“产业链结论”，移除“上下游证据关系”文案，并确保产业链页签不渲染 K 线行情指标。结论边界展示前清除内部 E/T 编号并使用面向用户的“公开信息”表述。
 
 - [ ] **Step 2: Remove obsolete CSS**
 

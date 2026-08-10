@@ -90,6 +90,7 @@ export type StockSupplyChainSnapshot = {
   model?: string;
   evidenceAsOf?: string;
   generatedAt?: string;
+  updatedAt?: string;
   nodes: StockSupplyChainNode[];
   evidence: StockSupplyChainEvidence[];
 };

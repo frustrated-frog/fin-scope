@@ -98,7 +98,7 @@ describe('WatchlistKlineDrawer', () => {
     expect(screen.getByRole('tab', { name: '行情走势' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('loads the evidence map only after opening the supply-chain tab', async () => {
+  test('loads only the supply-chain conclusions after opening the supply-chain tab', async () => {
     vi.mocked(api)
       .mockResolvedValueOnce(bars as never)
       .mockResolvedValueOnce({
@@ -119,6 +119,10 @@ describe('WatchlistKlineDrawer', () => {
     expect(await screen.findByText('连接原料种植与消费市场。')).toBeInTheDocument();
     expect(api).toHaveBeenNthCalledWith(2, '/api/stocks/600519/supply-chain');
     expect(screen.getByRole('tab', { name: '产业链' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('dialog', { name: '贵州茅台 产业链结论' })).toBeInTheDocument();
+    expect(screen.getByText(/上下游关系与核心结论/)).toBeInTheDocument();
+    expect(screen.queryByText('上下游证据关系')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('最新行情与区间指标')).not.toBeInTheDocument();
   });
 
   test('shows cached market activity and range statistics without another request', async () => {

@@ -16815,7 +16815,7 @@ input[type="checkbox"] {
 .watchlist-stock-tabs button:focus-visible { outline: 2px solid var(--fs-mint); outline-offset: -3px; border-radius: 7px; }
 .watchlist-kline-content.is-supply-chain { padding-top: 0; }
 
-/* ---------- 股票产业链证据轨道 ---------- */
+/* ---------- 股票产业链结论轨道 ---------- */
 .stock-chain-panel { padding: 22px 0 28px; }
 
 .stock-chain-toolbar {
@@ -16826,8 +16826,7 @@ input[type="checkbox"] {
   margin-bottom: 18px;
 }
 
-.stock-chain-toolbar > div > span,
-.stock-chain-sources > header > span {
+.stock-chain-toolbar > div > span {
   color: var(--fs-mint);
   font: 800 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: .12em;
@@ -16960,30 +16959,7 @@ input[type="checkbox"] {
 .stock-chain-node-title span.is-high { color: var(--fs-mint); }
 .stock-chain-node-title span.is-low { color: #d18452; }
 .stock-chain-node > small { display: block; margin-top: 5px; color: var(--chain-color); font: 700 8px/1 ui-monospace, monospace; letter-spacing: .05em; }
-.stock-chain-node > p { margin: 8px 0 9px; color: var(--muted); font-size: 10px; line-height: 1.6; }
-.stock-chain-evidence-refs { display: flex; flex-wrap: wrap; gap: 5px; }
-.stock-chain-evidence-refs a,
-.stock-chain-evidence-refs > span {
-  border: 1px solid color-mix(in srgb, var(--chain-color) 28%, var(--line));
-  border-radius: 4px;
-  padding: 3px 5px;
-  color: var(--chain-color);
-  font: 760 8px/1 ui-monospace, monospace;
-  text-decoration: none;
-}
-
-.stock-chain-sources { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 18px; }
-.stock-chain-sources > header { display: flex; align-items: baseline; gap: 11px; }
-.stock-chain-sources h3 { margin: 0; color: var(--ink); font-size: 13px; }
-.stock-chain-sources ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 13px 0 0; padding: 0; list-style: none; }
-.stock-chain-sources li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
-.stock-chain-sources li > span { color: var(--fs-mint); font: 760 9px/1.4 ui-monospace, monospace; }
-.stock-chain-sources a,
-.stock-chain-sources li strong { color: var(--ink); font-size: 10px; font-weight: 700; line-height: 1.45; text-decoration: none; }
-.stock-chain-sources a:hover { color: var(--fs-mint); }
-.stock-chain-sources a i { margin-left: 5px; font-style: normal; }
-.stock-chain-sources li p { margin: 4px 0 0; color: var(--muted); font: 620 8px/1.4 ui-monospace, monospace; }
-.stock-chain-sources blockquote { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.stock-chain-node > p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 
 .stock-chain-limitations { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; margin-top: 14px; border-radius: 9px; background: color-mix(in srgb, #d18452 7%, var(--surface)); padding: 10px 12px; }
 .stock-chain-limitations strong { color: #d18452; font-size: 9px; }
@@ -17439,7 +17415,6 @@ input[type="checkbox"] {
   .stock-chain-thesis { grid-template-columns: 1fr; gap: 10px; }
   .stock-chain-rail { grid-template-columns: 1fr; gap: 26px; }
   .stock-chain-layer:not(:last-child)::after { content: '↓'; top: auto; right: 50%; bottom: -22px; transform: translateX(50%); }
-  .stock-chain-sources ol { grid-template-columns: 1fr; }
   .watchlist-kline-head-actions { gap: 8px; }
   .watchlist-kline-quote { min-width: 0; max-width: 130px; justify-content: flex-end; }
   .watchlist-kline-quote span { display: none; }

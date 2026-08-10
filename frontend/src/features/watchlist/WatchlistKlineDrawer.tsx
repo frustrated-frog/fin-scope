@@ -88,9 +88,9 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel }: {
       <section className="watchlist-kline-modal" role="dialog" aria-modal="true" aria-labelledby="watchlist-kline-title">
         <header className="watchlist-kline-header">
           <div className="watchlist-kline-identity">
-            <span>MARKET VIEW · DAILY</span>
-            <h2 id="watchlist-kline-title">{name} <small>{activeTab === 'chart' ? '行情图表' : '产业链图谱'}</small></h2>
-            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '最近 120 个交易日' : '上下游证据关系'}</p>
+            <span>{activeTab === 'chart' ? 'MARKET VIEW · DAILY' : 'SUPPLY CHAIN · OVERVIEW'}</span>
+            <h2 id="watchlist-kline-title">{name} <small>{activeTab === 'chart' ? '行情图表' : '产业链结论'}</small></h2>
+            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '最近 120 个交易日' : '上下游关系与核心结论'}</p>
           </div>
           <div className="watchlist-kline-head-actions">
             {returnLabel && (
@@ -133,7 +133,7 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel }: {
               <KlineChart bars={bars ?? []} />
             </section>
           )}
-          {!loading && bars && bars.length > 0 && latest && (
+          {activeTab === 'chart' && !loading && bars && bars.length > 0 && latest && (
             <dl className="watchlist-kline-meta" aria-label="最新行情与区间指标">
               <div><dt>开盘</dt><dd>{fmt(latest.open)}</dd></div>
               <div><dt>最高</dt><dd>{fmt(latest.high)}</dd></div>
