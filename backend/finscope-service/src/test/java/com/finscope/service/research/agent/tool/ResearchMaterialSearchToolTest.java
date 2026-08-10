@@ -1,5 +1,6 @@
 package com.finscope.service.research.agent.tool;
 
+import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.agent.ResearchToolObservation;
@@ -62,9 +63,9 @@ class ResearchMaterialSearchToolTest {
         ResearchMaterialSearchTool tool = new ResearchMaterialSearchTool(
                 mock(ResearchMaterialGateway.class), mock(ResearchSearchEvidenceRepository.class));
         Map<String, Object> extra = arguments(); extra.put("limit", 100);
-        assertThrows(IllegalArgumentException.class, () -> tool.validate(extra));
+        assertThrows(BusinessException.class, () -> tool.validate(extra));
         Map<String, Object> invalid = arguments(); invalid.put("stockCode", "NVDA");
-        assertThrows(IllegalArgumentException.class, () -> tool.validate(invalid));
+        assertThrows(BusinessException.class, () -> tool.validate(invalid));
     }
 
     @Test
