@@ -35,6 +35,8 @@ public class EastmoneyFundHoldingProvider implements FundHoldingProvider {
     private static final Pattern STOCK_CODE = Pattern.compile("^\\d{6}$");
     private static final Pattern DISCLOSURE_DATE =
             Pattern.compile("截止至[：:]\\s*(\\d{4}-\\d{2}-\\d{2})");
+    private static final Pattern NO_DISCLOSURE_YEARS =
+            Pattern.compile("arryear\\s*:\\s*\\[\\s*\\]");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final FundDataRequester requester;
@@ -71,6 +73,13 @@ public class EastmoneyFundHoldingProvider implements FundHoldingProvider {
 
     private FundHoldingDisclosure parse(String fundCode, String payload) {
         String content = embeddedContent(payload);
+        if (content.trim().isEmpty()) {
+            if (!NO_DISCLOSURE_YEARS.matcher(payload).find()) {
+                throw drift("基金持仓内容为空且披露年度状态不明确");
+            }
+            return new FundHoldingDisclosure(fundCode, "", null,
+                    LocalDateTime.now(clock), Collections.emptyList());
+        }
         Document document = Jsoup.parse(content);
         Element header = document.selectFirst(".boxitem h4.t");
         Element table = document.selectFirst("table.tzxq");

@@ -32,6 +32,8 @@ public class FundHoldingDetailService {
     private static final String ETF_LINK_NOTE =
             "该基金为 ETF 联接基金；当前仅展示基金直接披露的股票持仓，"
                     + "未穿透目标 ETF，不能代表目标 ETF 的底层成分股。";
+    private static final String NO_DISCLOSURE_NOTE =
+            "该基金尚无公开股票持仓披露，当前没有可用于实时贡献估算的持仓数据。";
 
     private final WatchlistRepository watchlistRepository;
     private final FundHoldingProvider holdingProvider;
@@ -75,7 +77,9 @@ public class FundHoldingDetailService {
 
         String displayName = nonBlank(disclosure.getFundName())
                 ? disclosure.getFundName() : watchlistItem.getName();
-        String note = isEtfLink(displayName) ? ETF_LINK_NOTE : GENERAL_NOTE;
+        String note = disclosure.getDisclosureDate() == null
+                ? NO_DISCLOSURE_NOTE
+                : isEtfLink(displayName) ? ETF_LINK_NOTE : GENERAL_NOTE;
         return new FundHoldingDetail(fundCode, displayName, disclosure.getDisclosureDate(),
                 disclosure.getRetrievedAt(), quoteResult == null ? null : quoteResult.getAsOf(),
                 quoteResult == null ? null : quoteResult.getRetrievedAt(),

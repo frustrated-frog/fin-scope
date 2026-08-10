@@ -112,7 +112,9 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
             <h2 id="watchlist-fund-title">{name} <small>持仓透视</small></h2>
             <p>
               {item.code} · {detail
-                ? <span>最近披露 {detail.disclosureDate}</span>
+                ? <span>{detail.disclosureDate
+                  ? `最近披露 ${detail.disclosureDate}`
+                  : '尚无持仓披露'}</span>
                 : <span>最近公开持仓</span>}
             </p>
           </div>
@@ -162,22 +164,24 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
                 <p>{detail.note}</p>
               </div>
 
-              <dl className="watchlist-fund-summary" aria-label="基金持仓估算摘要">
-                <div>
-                  <dt>前十大披露权重</dt>
-                  <dd>{formatPct(detail.topHoldingsWeightPct)}</dd>
-                </div>
-                <div>
-                  <dt>实时估算覆盖</dt>
-                  <dd>{detail.estimatedHoldingCount} / {detail.totalHoldingCount}</dd>
-                </div>
-                <div>
-                  <dt>合计估算贡献</dt>
-                  <dd className={changeClass(detail.estimatedContributionPct)}>
-                    {formatContribution(detail.estimatedContributionPct)}
-                  </dd>
-                </div>
-              </dl>
+              {detail.disclosureDate && (
+                <dl className="watchlist-fund-summary" aria-label="基金持仓估算摘要">
+                  <div>
+                    <dt>前十大披露权重</dt>
+                    <dd>{formatPct(detail.topHoldingsWeightPct)}</dd>
+                  </div>
+                  <div>
+                    <dt>实时估算覆盖</dt>
+                    <dd>{detail.estimatedHoldingCount} / {detail.totalHoldingCount}</dd>
+                  </div>
+                  <div>
+                    <dt>合计估算贡献</dt>
+                    <dd className={changeClass(detail.estimatedContributionPct)}>
+                      {formatContribution(detail.estimatedContributionPct)}
+                    </dd>
+                  </div>
+                </dl>
+              )}
 
               {detail.quoteWarning && (
                 <p className="watchlist-fund-quality-note" role="status">{detail.quoteWarning}</p>
@@ -185,8 +189,12 @@ export function WatchlistFundHoldingsDrawer({ item, onClose }: {
 
               {detail.holdings.length === 0 ? (
                 <div className="watchlist-fund-empty">
-                  <strong>最近披露期没有股票投资明细</strong>
-                  <p>债券基金、货币基金或未直接持股的基金可能出现这种情况。</p>
+                  <strong>{detail.disclosureDate
+                    ? '最近披露期没有股票投资明细'
+                    : '尚无公开持仓'}</strong>
+                  <p>{detail.disclosureDate
+                    ? '债券基金、货币基金或未直接持股的基金可能出现这种情况。'
+                    : '基金成立时间较短或尚未发布定期报告时，可能暂时没有股票持仓数据。'}</p>
                 </div>
               ) : (
                 <HoldingsTable holdings={detail.holdings} />

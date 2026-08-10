@@ -87,6 +87,31 @@ describe('WatchlistFundHoldingsDrawer', () => {
     expect(api).toHaveBeenLastCalledWith('/api/watchlist/021894/fund-holdings?refresh=true');
   });
 
+  test('shows an honest empty state when the fund has no published holdings yet', async () => {
+    vi.mocked(api).mockResolvedValue({
+      ...detail,
+      fundCode: '024195',
+      fundName: '新成立基金',
+      disclosureDate: undefined,
+      quoteAsOf: undefined,
+      topHoldingsWeightPct: 0,
+      estimatedContributionPct: undefined,
+      estimatedHoldingCount: 0,
+      totalHoldingCount: 0,
+      note: '该基金尚无公开股票持仓披露。',
+      holdings: []
+    } as never);
+
+    render(<WatchlistFundHoldingsDrawer
+      item={{ code: '024195', name: '新成立基金' }}
+      onClose={vi.fn()}
+    />);
+
+    expect(await screen.findByText('尚无持仓披露')).toBeInTheDocument();
+    expect(screen.getByText('尚无公开持仓')).toBeInTheDocument();
+    expect(screen.queryByText(/最近披露 undefined/)).not.toBeInTheDocument();
+  });
+
   test('keeps the dialog usable after failure and retries explicitly', async () => {
     vi.mocked(api)
       .mockRejectedValueOnce(new Error('基金持仓数据暂不可用') as never)

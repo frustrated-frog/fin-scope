@@ -846,7 +846,7 @@ export type FundHoldingPosition = {
 export type FundHoldingDetail = {
   fundCode: string;
   fundName: string;
-  disclosureDate: string;
+  disclosureDate?: string;
   retrievedAt: string;
   quoteAsOf?: string;
   quoteRetrievedAt?: string;

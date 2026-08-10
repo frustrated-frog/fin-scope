@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -66,6 +67,19 @@ class EastmoneyFundHoldingProviderTest {
         FundHoldingDisclosure disclosure = provider.fetch("000001");
 
         assertEquals("纯债基金", disclosure.getFundName());
+        assertTrue(disclosure.getHoldings().isEmpty());
+    }
+
+    @Test
+    void returnsUndisclosedFundWhenUpstreamHasNoDisclosureYears() {
+        EastmoneyFundHoldingProvider provider = new EastmoneyFundHoldingProvider(url ->
+                "var apidata={ content:\"\",arryear:[],curyear:2026};");
+
+        FundHoldingDisclosure disclosure = provider.fetch("024195");
+
+        assertEquals("024195", disclosure.getFundCode());
+        assertEquals("", disclosure.getFundName());
+        assertNull(disclosure.getDisclosureDate());
         assertTrue(disclosure.getHoldings().isEmpty());
     }
 

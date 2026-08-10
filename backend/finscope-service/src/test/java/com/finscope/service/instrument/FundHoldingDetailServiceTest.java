@@ -122,6 +122,22 @@ class FundHoldingDetailServiceTest {
     }
 
     @Test
+    void explainsWhenTheFundHasNotPublishedAnyHoldingsYet() {
+        when(watchlistRepository.findByCodeAndType("024195", "FUND"))
+                .thenReturn(Optional.of(fundItem("024195", "新成立基金")));
+        when(holdingProvider.fetch("024195")).thenReturn(new FundHoldingDisclosure(
+                "024195", "", null, LocalDateTime.of(2026, 8, 10, 14, 30),
+                Collections.emptyList()));
+
+        FundHoldingDetail result = service.load("024195", true);
+
+        assertEquals("新成立基金", result.getFundName());
+        assertNull(result.getDisclosureDate());
+        assertTrue(result.getNote().contains("尚无公开股票持仓披露"));
+        verify(marketDataGateway, never()).fetchQuotes(eq("STOCK"), anyList(), eq(true));
+    }
+
+    @Test
     void rejectsARequestedCodeThatIsNotAWatchlistFund() {
         when(watchlistRepository.findByCodeAndType("000001", "FUND"))
                 .thenReturn(Optional.empty());
