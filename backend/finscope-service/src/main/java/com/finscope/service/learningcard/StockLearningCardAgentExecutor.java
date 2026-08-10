@@ -5,6 +5,7 @@ import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
+import com.finscope.domain.learningcard.StockLearningCardSection;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.search.evidence.SearchDepth;
@@ -78,19 +79,18 @@ public class StockLearningCardAgentExecutor {
             run.setSourceFingerprint(fingerprint(allEvidence));
             progress(run, "SYNTHESIZING_CARDS", "公开资料收集完成，正在生成六维学习卡");
             int order = 1;
-            for (String dimension : StockLearningFramework.dimensions()) {
-                StockLearningCardClaim claim;
-                try {
-                    List<StockLearningCardEvidence> evidence = evidenceByDimension.get(dimension);
-                    if (evidence == null) throw new IllegalStateException("该维度资料收集失败");
-                    claim = synthesis.synthesize(instrument.getName(), instrument.getCode(), dimension, evidence);
-                } catch (Exception error) {
-                    log.warn("Stock learning synthesis failed: runId={}, dimension={}, errorType={}",
-                            run.getId(), dimension, error.getClass().getSimpleName());
-                    claim = failed(dimension);
-                }
-                claim.setSortOrder(order++); claims.add(claim);
+            List<String> dimensions = StockLearningFramework.dimensions();
+            for (int index = 0; index < dimensions.size() - 1; index++) {
+                String dimension = dimensions.get(index);
+                StockLearningCardClaim claim = synthesizePrimary(
+                        instrument, run, dimension, evidenceByDimension.get(dimension));
+                claim.setSortOrder(order++);
+                claims.add(claim);
             }
+            StockLearningCardClaim counterCase = synthesizeCounterCase(instrument, run,
+                    evidenceByDimension.get("COUNTER_CASE"), claims);
+            counterCase.setSortOrder(order);
+            claims.add(counterCase);
             finish(run, claims, collectionFailures);
         } catch (Exception error) {
             log.error("Stock learning agent interrupted: runId={}, stage={}, errorType={}",
@@ -101,6 +101,37 @@ public class StockLearningCardAgentExecutor {
             run.setRetryable(true); run.setSummary("股票学习卡未能完成"); run.setEvidenceCompleteness("MISSING");
             run.setGenerationMode("CONTROLLED");
             cards.updateRun(run, claims, Collections.<StockLearningCardWatchItem>emptyList());
+        }
+    }
+
+    private StockLearningCardClaim synthesizePrimary(Instrument instrument, StockLearningCardRun run,
+                                                     String dimension,
+                                                     List<StockLearningCardEvidence> evidence) {
+        try {
+            if (evidence == null) {
+                throw new IllegalStateException("该维度资料收集失败");
+            }
+            return synthesis.synthesize(instrument.getName(), instrument.getCode(), dimension, evidence);
+        } catch (Exception error) {
+            log.warn("Stock learning synthesis failed: runId={}, dimension={}, errorType={}",
+                    run.getId(), dimension, error.getClass().getSimpleName());
+            return failed(dimension);
+        }
+    }
+
+    private StockLearningCardClaim synthesizeCounterCase(Instrument instrument, StockLearningCardRun run,
+                                                         List<StockLearningCardEvidence> evidence,
+                                                         List<StockLearningCardClaim> primaryClaims) {
+        try {
+            if (evidence == null) {
+                throw new IllegalStateException("反方验证资料收集失败");
+            }
+            return synthesis.synthesize(instrument.getName(), instrument.getCode(), "COUNTER_CASE", evidence,
+                    Collections.unmodifiableList(new ArrayList<StockLearningCardClaim>(primaryClaims)));
+        } catch (Exception error) {
+            log.warn("Stock learning synthesis failed: runId={}, dimension=COUNTER_CASE, errorType={}",
+                    run.getId(), error.getClass().getSimpleName());
+            return failed("COUNTER_CASE");
         }
     }
 
@@ -155,10 +186,27 @@ public class StockLearningCardAgentExecutor {
     }
 
     private StockLearningCardClaim failed(String dimension) {
+        StockLearningDimensionSchema schema = StockLearningFramework.schemaFor(dimension);
         StockLearningCardClaim claim = new StockLearningCardClaim();
-        claim.setDimensionCode(dimension); claim.setStatus("FAILED"); claim.setFailureMessage("该维度生成失败，可以重新生成学习卡");
-        claim.setJudgment("暂未形成判断"); claim.setRationale("该维度处理过程中发生异常，已与其他维度隔离");
-        claim.setCounterargument("仍需补充与现有认识相反的公开材料"); claim.setUnknowns("该维度当前保持未知"); claim.setConfidence("LOW");
+        claim.setDimensionCode(dimension);
+        claim.setStatus("FAILED");
+        claim.setFailureMessage("该维度生成失败，可以重新生成学习卡");
+        claim.setHeadline("暂未形成判断");
+        claim.setRatingLabel(schema.getRatingLabel());
+        claim.setRatingValue("UNKNOWN");
+        claim.setConfidence("LOW");
+        List<StockLearningCardSection> sections = new ArrayList<StockLearningCardSection>();
+        for (StockLearningDimensionSchema.SectionDefinition definition : schema.getRequiredSections()) {
+            StockLearningCardSection section = new StockLearningCardSection();
+            section.setSectionKey(definition.getKey());
+            section.setTitle(definition.getTitle());
+            section.setContent("该维度处理过程中发生异常，当前保持未知");
+            section.setEvidenceRefs(Collections.<String>emptyList());
+            section.setVerificationStatus("UNVERIFIED");
+            section.setSortOrder(sections.size() + 1);
+            sections.add(section);
+        }
+        claim.setSections(sections);
         return claim;
     }
 

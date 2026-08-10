@@ -36,6 +36,13 @@ public class StockLearningCardSynthesisAgent {
 
     public StockLearningCardClaim synthesize(String companyName, String companyCode, String dimension,
                                              List<StockLearningCardEvidence> evidence) throws Exception {
+        return synthesize(companyName, companyCode, dimension, evidence,
+                Collections.<StockLearningCardClaim>emptyList());
+    }
+
+    public StockLearningCardClaim synthesize(String companyName, String companyCode, String dimension,
+                                             List<StockLearningCardEvidence> evidence,
+                                             List<StockLearningCardClaim> priorDimensionClaims) throws Exception {
         StockLearningDimensionSchema schema = StockLearningFramework.schemaFor(dimension);
         if (evidence == null || evidence.isEmpty()) {
             return insufficient(schema, "没有检索到足够的公开资料");
@@ -44,7 +51,7 @@ public class StockLearningCardSynthesisAgent {
             return insufficient(schema, "模型暂不可用，已保留公开资料供后续重试");
         }
         String raw = llm.complete(systemPrompt(), json.writeValueAsString(payload(
-                companyName, companyCode, schema, evidence)), 20_000, 1800);
+                companyName, companyCode, schema, evidence, priorDimensionClaims)), 20_000, 1800);
         JsonNode root = json.readTree(extractJson(raw));
         validateFields(root, immutableSet("headline", "ratingValue", "sections", "confidence"));
         StockLearningCardClaim claim = new StockLearningCardClaim();
@@ -146,7 +153,8 @@ public class StockLearningCardSynthesisAgent {
     }
 
     private Map<String, Object> payload(String name, String code, StockLearningDimensionSchema schema,
-                                        List<StockLearningCardEvidence> evidence) {
+                                        List<StockLearningCardEvidence> evidence,
+                                        List<StockLearningCardClaim> priorDimensionClaims) {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("companyName", name);
         payload.put("companyCode", code);
@@ -165,7 +173,32 @@ public class StockLearningCardSynthesisAgent {
             rows.add(row);
         }
         payload.put("evidence", rows);
+        payload.put("priorDimensionClaims", priorClaimsPayload(priorDimensionClaims));
         return payload;
+    }
+
+    private List<Map<String, Object>> priorClaimsPayload(List<StockLearningCardClaim> claims) {
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        for (StockLearningCardClaim claim : claims == null
+                ? Collections.<StockLearningCardClaim>emptyList() : claims) {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("dimension", claim.getDimensionCode());
+            row.put("status", claim.getStatus());
+            row.put("headline", claim.getHeadline());
+            row.put("ratingLabel", claim.getRatingLabel());
+            row.put("ratingValue", claim.getRatingValue());
+            List<Map<String, String>> sectionRows = new ArrayList<Map<String, String>>();
+            for (StockLearningCardSection section : claim.getSections()) {
+                Map<String, String> sectionRow = new LinkedHashMap<String, String>();
+                sectionRow.put("title", section.getTitle());
+                sectionRow.put("content", section.getContent());
+                sectionRow.put("verificationStatus", section.getVerificationStatus());
+                sectionRows.add(sectionRow);
+            }
+            row.put("sections", sectionRows);
+            rows.add(row);
+        }
+        return rows;
     }
 
     private List<Map<String, String>> sectionPayload(
@@ -181,7 +214,8 @@ public class StockLearningCardSynthesisAgent {
     }
 
     private String systemPrompt() {
-        return "你是股票研究学习卡Agent。只根据输入evidence分析指定dimension，不得补充外部事实。"
+        return "你是股票研究学习卡Agent。只根据输入evidence和priorDimensionClaims分析指定dimension，不得补充外部事实。"
+                + "priorDimensionClaims只用于反方验证中的跨维度假设提取，不是新的外部证据。"
                 + "输出单个JSON对象，只允许headline、ratingValue、sections、confidence。"
                 + "sections必须包含全部requiredSections，可在证据真正支持时加入optionalSections，不得创造栏目或改标题。"
                 + "每个栏目只允许key、title、content、evidenceRefs、verificationStatus；引用编号必须来自evidence。"

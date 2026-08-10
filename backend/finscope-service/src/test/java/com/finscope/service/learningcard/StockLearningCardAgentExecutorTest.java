@@ -54,6 +54,8 @@ class StockLearningCardAgentExecutorTest {
                     claim.setCounterargument("仍需核对反方"); claim.setUnknowns("仍有未知项"); claim.setConfidence("MEDIUM");
                     return claim;
                 });
+        when(synthesis.synthesize(anyString(), anyString(), eq("COUNTER_CASE"), anyList(), anyList()))
+                .thenReturn(ready("COUNTER_CASE"));
         when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         Instrument instrument = new Instrument();
         instrument.setCode("603618"); instrument.setName("杭电股份");
@@ -98,6 +100,13 @@ class StockLearningCardAgentExecutorTest {
             claim.setCounterargument("待补充"); claim.setUnknowns("保持未知"); claim.setConfidence("LOW");
             return claim;
         });
+        when(synthesis.synthesize(anyString(), anyString(), eq("COUNTER_CASE"), anyList(), anyList()))
+                .thenAnswer(invocation -> {
+                    StockLearningCardClaim claim = new StockLearningCardClaim();
+                    claim.setDimensionCode("COUNTER_CASE"); claim.setStatus("INSUFFICIENT_EVIDENCE");
+                    claim.setHeadline("证据不足，暂不形成判断"); claim.setConfidence("LOW");
+                    return claim;
+                });
         when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         Instrument instrument = new Instrument(); instrument.setCode("603618"); instrument.setName("杭电股份");
         StockLearningCardRun run = new StockLearningCardRun(); run.setId(9L); run.setCardId(2L);
@@ -107,5 +116,47 @@ class StockLearningCardAgentExecutorTest {
         assertEquals("DEGRADED", run.getStatus());
         assertEquals("INSUFFICIENT_EVIDENCE", run.getErrorCode());
         assertEquals("COMPLETED", run.getStage());
+    }
+
+    @Test
+    void synthesizesCounterCaseAfterReceivingTheFirstFiveClaims() throws Exception {
+        StockLearningCardRepository cards = mock(StockLearningCardRepository.class);
+        SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
+        SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
+        StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
+        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor(cards, search, content,
+                synthesis, Runnable::run);
+        SearchEvidence hit = new SearchEvidence();
+        hit.setTitle("公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
+        when(search.search(any())).thenReturn(new SearchEvidenceBatch(
+                Collections.singletonList(hit), Collections.emptyList(), false));
+        when(content.acquire(any(), anyString(), anyString(), anyBoolean()))
+                .thenReturn(new ResearchEvidenceAcquisitionResult("公开资料正文", "公开资料摘要",
+                        "FULL_TEXT", "test", "SUCCESS", 6));
+        when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList()))
+                .thenAnswer(invocation -> ready(invocation.getArgument(2)));
+        when(synthesis.synthesize(anyString(), anyString(), eq("COUNTER_CASE"), anyList(), anyList()))
+                .thenReturn(ready("COUNTER_CASE"));
+        when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        Instrument instrument = new Instrument(); instrument.setCode("603618"); instrument.setName("杭电股份");
+        StockLearningCardRun run = new StockLearningCardRun(); run.setId(9L); run.setCardId(2L);
+
+        executor.execute(instrument, run);
+
+        verify(synthesis, org.mockito.Mockito.times(5))
+                .synthesize(anyString(), anyString(), anyString(), anyList());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<StockLearningCardClaim>> priorClaims = ArgumentCaptor.forClass(List.class);
+        verify(synthesis).synthesize(anyString(), anyString(), eq("COUNTER_CASE"), anyList(), priorClaims.capture());
+        assertEquals(5, priorClaims.getValue().size());
+        assertEquals("SPACE", priorClaims.getValue().get(0).getDimensionCode());
+        assertEquals("VALUATION", priorClaims.getValue().get(4).getDimensionCode());
+    }
+
+    private static StockLearningCardClaim ready(String dimension) {
+        StockLearningCardClaim claim = new StockLearningCardClaim();
+        claim.setDimensionCode(dimension); claim.setStatus("READY"); claim.setHeadline(dimension + " 判断");
+        claim.setConfidence("MEDIUM");
+        return claim;
     }
 }
