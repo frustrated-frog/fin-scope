@@ -95,6 +95,30 @@ describe('WatchlistKlineDrawer', () => {
     expect(await screen.findByText('MARKET VIEW · DAILY')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
     expect(screen.getByText('2026-07-31')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '行情走势' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('loads the evidence map only after opening the supply-chain tab', async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce(bars as never)
+      .mockResolvedValueOnce({
+        code: '600519', name: '贵州茅台',
+        snapshot: {
+          companyCode: '600519', companyName: '贵州茅台', summary: '连接原料种植与消费市场。', position: '白酒生产',
+          schemaVersion: 'SUPPLY_CHAIN_V1', nodes: [], evidence: []
+        },
+        refreshRun: { id: 1, status: 'READY', stage: 'COMPLETED' }
+      } as never);
+
+    render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
+    await screen.findByText('2026-07-31');
+    expect(api).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('tab', { name: '产业链' }));
+
+    expect(await screen.findByText('连接原料种植与消费市场。')).toBeInTheDocument();
+    expect(api).toHaveBeenNthCalledWith(2, '/api/stocks/600519/supply-chain');
+    expect(screen.getByRole('tab', { name: '产业链' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('shows cached market activity and range statistics without another request', async () => {

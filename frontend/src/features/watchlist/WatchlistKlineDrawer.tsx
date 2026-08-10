@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { DailyBarPoint, KlineChart } from './KlineChart';
+import { StockSupplyChainPanel } from './StockSupplyChainPanel';
 import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
@@ -11,6 +12,7 @@ export function WatchlistKlineDrawer({ item, onClose }: {
   const [bars, setBars] = useState<DailyBarPoint[]>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'chart' | 'supply-chain'>('chart');
   const backdrop = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -86,11 +88,11 @@ export function WatchlistKlineDrawer({ item, onClose }: {
         <header className="watchlist-kline-header">
           <div className="watchlist-kline-identity">
             <span>MARKET VIEW · DAILY</span>
-            <h2 id="watchlist-kline-title">{name} <small>行情图表</small></h2>
-            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · 最近 120 个交易日</p>
+            <h2 id="watchlist-kline-title">{name} <small>{activeTab === 'chart' ? '行情图表' : '产业链图谱'}</small></h2>
+            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '最近 120 个交易日' : '上下游证据关系'}</p>
           </div>
           <div className="watchlist-kline-head-actions">
-            {latest && (
+            {activeTab === 'chart' && latest && (
               <div className="watchlist-kline-quote" aria-label={`${latest.tradeDate} 收盘行情`}>
                 <span>{latest.tradeDate}</span>
                 <strong>¥ {fmt(latest.close)}</strong>
@@ -99,13 +101,20 @@ export function WatchlistKlineDrawer({ item, onClose }: {
                 </em>
               </div>
             )}
-            <button type="button" className="watchlist-kline-refresh" aria-label="刷新日线数据" onClick={refresh} disabled={loading}>↻</button>
+            {activeTab === 'chart' && <button type="button" className="watchlist-kline-refresh" aria-label="刷新日线数据" onClick={refresh} disabled={loading}>↻</button>}
             <button ref={closeButton} type="button" className="watchlist-kline-close" aria-label="关闭行情图表" onClick={onClose}>×</button>
           </div>
         </header>
 
-        <div className="watchlist-kline-content">
-          {loading ? (
+        <nav className="watchlist-stock-tabs" role="tablist" aria-label="股票详情">
+          <button type="button" role="tab" aria-selected={activeTab === 'chart'} onClick={() => setActiveTab('chart')}>行情走势</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'supply-chain'} onClick={() => setActiveTab('supply-chain')}>产业链</button>
+        </nav>
+
+        <div className={`watchlist-kline-content${activeTab === 'supply-chain' ? ' is-supply-chain' : ''}`}>
+          {activeTab === 'supply-chain' ? (
+            <StockSupplyChainPanel code={item.code} name={name} />
+          ) : loading ? (
             <div className="watchlist-kline-pending" aria-live="polite"><span aria-hidden="true" /><strong>正在加载日线…</strong></div>
           ) : error ? (
             <div className="watchlist-kline-pending is-error" aria-live="polite"><strong>日线加载失败</strong><p>{error}</p></div>

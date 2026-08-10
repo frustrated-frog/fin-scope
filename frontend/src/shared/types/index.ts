@@ -61,6 +61,52 @@ export type StockLearningCardRun = { id?: number; status: 'RUNNING' | 'READY' | 
 export type StockLearningCardView = { card: { code: string; name: string }; latestRun: StockLearningCardRun | null };
 export type StockLearningCardSummary = { code: string; name: string; status: StockLearningCardRun['status']; stage?: StockLearningCardRun['stage']; summary?: string; completedDimensions: number; totalDimensions: number; updatedAt?: string; completedAt?: string };
 
+export type StockSupplyChainLayer = 'UPSTREAM' | 'COMPANY' | 'DOWNSTREAM';
+export type StockSupplyChainConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type StockSupplyChainNode = {
+  layer: StockSupplyChainLayer;
+  name: string;
+  relationType: string;
+  description: string;
+  confidence: StockSupplyChainConfidence;
+  evidenceRefs: string[];
+};
+export type StockSupplyChainEvidence = {
+  evidenceCode: string;
+  title: string;
+  url?: string;
+  source?: string;
+  sourceTier?: string;
+  publishedAt?: string;
+  excerpt?: string;
+};
+export type StockSupplyChainSnapshot = {
+  companyCode: string;
+  companyName: string;
+  summary: string;
+  position: string;
+  limitations?: string;
+  schemaVersion: string;
+  model?: string;
+  evidenceAsOf?: string;
+  generatedAt?: string;
+  nodes: StockSupplyChainNode[];
+  evidence: StockSupplyChainEvidence[];
+};
+export type StockSupplyChainRefreshRun = {
+  id?: number;
+  status: 'RUNNING' | 'READY' | 'FAILED';
+  stage?: 'QUEUED' | 'COLLECTING_EVIDENCE' | 'SYNTHESIZING' | 'COMPLETED' | 'FAILED';
+  startedAt?: string;
+  completedAt?: string;
+};
+export type StockSupplyChainView = {
+  code: string;
+  name: string;
+  snapshot: StockSupplyChainSnapshot | null;
+  refreshRun: StockSupplyChainRefreshRun | null;
+};
+
 export type Source = {
   id?: number;
   name: string;
