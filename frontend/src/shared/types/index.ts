@@ -827,6 +827,42 @@ export type WatchlistItem = MarketDataQuality & {
   attributionChangePct?: number;
 };
 
+export type FundHoldingPosition = {
+  rank: number;
+  stockCode: string;
+  stockName: string;
+  weightPct: number;
+  sharesTenThousand?: number;
+  marketValueTenThousand?: number;
+  latestPrice?: number;
+  changePct?: number;
+  estimatedContributionPct?: number;
+  quoteValid: boolean;
+  quoteTime?: string;
+  qualityStatus?: MarketDataQualityStatus;
+  quoteNote?: string;
+};
+
+export type FundHoldingDetail = {
+  fundCode: string;
+  fundName: string;
+  disclosureDate: string;
+  retrievedAt: string;
+  quoteAsOf?: string;
+  quoteRetrievedAt?: string;
+  quoteSource?: string;
+  quoteQualityStatus?: MarketDataQualityStatus;
+  quoteWarning?: string;
+  refreshId?: string;
+  topHoldingsWeightPct: number;
+  estimatedContributionPct?: number;
+  estimatedHoldingCount: number;
+  totalHoldingCount: number;
+  lookThrough: boolean;
+  note: string;
+  holdings: FundHoldingPosition[];
+};
+
 export type MarketIndexQuote = MarketDataQuality & {
   code: string;
   name: string;
