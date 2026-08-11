@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 /** 只持久化 Radar 事件与产业链之间的影响关系，不复制新闻内容。 */
@@ -77,6 +79,15 @@ public class IndustryChainEventImpactRepository {
         return new LinkedHashSet<Long>(jdbcTemplate.query("SELECT radar_event_id FROM industry_chain_event_impact "
                         + "WHERE chain_id=? ORDER BY radar_event_id",
                 (rs, row) -> rs.getLong("radar_event_id"), chainId));
+    }
+
+    public Map<Long, String> findAnalysisVersionsByRadarEventId(Long chainId) {
+        Map<Long, String> result = new LinkedHashMap<Long, String>();
+        jdbcTemplate.query("SELECT radar_event_id,analysis_version FROM industry_chain_event_impact "
+                        + "WHERE chain_id=? ORDER BY radar_event_id",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        result.put(rs.getLong("radar_event_id"), rs.getString("analysis_version")), chainId);
+        return result;
     }
 
     private int count(Long chainId, Long eventId) {

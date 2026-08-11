@@ -41,11 +41,13 @@ public class IndustryChainEventService {
         IndustryChainGraph graph = requiredGraph(chainId);
         LocalDateTime now = LocalDateTime.now();
         List<RadarEvent> events = radarRepository.findEventsSince(now.minusDays(BACKFILL_DAYS), EVENT_LIMIT);
-        Set<Long> existingEventIds = impactRepository.findRadarEventIds(chainId);
+        Map<Long, String> existingVersions = impactRepository.findAnalysisVersionsByRadarEventId(chainId);
+        String analysisVersion = analyzer.getAnalysisVersion();
         int added = 0;
+        int updated = 0;
         int skipped = 0;
         for (RadarEvent event : events) {
-            if (existingEventIds.contains(event.getId())) {
+            if (analysisVersion.equals(existingVersions.get(event.getId()))) {
                 skipped++;
                 continue;
             }
@@ -58,9 +60,11 @@ public class IndustryChainEventService {
             impact.setChainId(chainId);
             if (impactRepository.upsert(impact, now)) {
                 added++;
+            } else {
+                updated++;
             }
         }
-        return new RefreshSummary(events.size(), added, 0, skipped, now);
+        return new RefreshSummary(events.size(), added, updated, skipped, now);
     }
 
     public IndustryChainEventFeed feed(Long chainId, int hours) {
@@ -79,7 +83,7 @@ public class IndustryChainEventService {
         Map<String, Integer> nodeCounts = new LinkedHashMap<String, Integer>();
         for (IndustryChainEventImpact impact : impactRepository.findByChainId(chainId)) {
             RadarEvent event = eventsById.get(impact.getRadarEventId());
-            if (event == null || !validNodeKeys.contains(impact.getDirectNodeKey())) continue;
+            if (event == null || !isVisible(event) || !validNodeKeys.contains(impact.getDirectNodeKey())) continue;
             impact.setPathNodeKeys(validPath(impact.getPathNodeKeys(), validNodeKeys));
             items.add(item(event, impact));
             for (String nodeKey : impact.getPathNodeKeys()) {
@@ -94,6 +98,10 @@ public class IndustryChainEventService {
         feed.setNodeEventCounts(nodeCounts);
         feed.setEvents(items);
         return feed;
+    }
+
+    private boolean isVisible(RadarEvent event) {
+        return "ACTIVE".equals(event.getStatus()) || "QUIET".equals(event.getStatus());
     }
 
     private IndustryChainGraph requiredGraph(Long chainId) {

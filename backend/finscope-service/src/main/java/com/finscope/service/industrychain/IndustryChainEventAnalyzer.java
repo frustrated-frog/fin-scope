@@ -17,7 +17,11 @@ import java.util.Set;
 /** 用可复现规则把聚合新闻事件映射到已发布的产业链节点。 */
 @Component
 public class IndustryChainEventAnalyzer {
-    private static final String ANALYSIS_VERSION = "RULES_V1";
+    private static final String ANALYSIS_VERSION = "RULES_V2";
+
+    public String getAnalysisVersion() {
+        return ANALYSIS_VERSION;
+    }
 
     public Optional<IndustryChainEventImpact> analyze(IndustryChainGraph graph, RadarEvent event) {
         String content = normalize(text(event.getCanonicalTitle()) + " " + text(event.getSummary()));

@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,6 +61,8 @@ class IndustryChainEventImpactRepositoryTest {
         assertEquals(Arrays.asList("product:hbm", "product:server", "stage:application"),
                 restored.get(0).getPathNodeKeys());
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM industry_chain_event_impact", Integer.class));
+        Map<Long, String> versions = repository.findAnalysisVersionsByRadarEventId(chainId);
+        assertEquals("RULES_V1", versions.get(eventId));
     }
 
     private IndustryChainEventImpact impact(Long eventId, String directNodeKey, List<String> path) {

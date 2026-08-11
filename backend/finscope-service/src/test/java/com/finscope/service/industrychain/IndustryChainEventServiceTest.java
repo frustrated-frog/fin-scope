@@ -11,7 +11,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,8 +44,9 @@ class IndustryChainEventServiceTest {
         impact.setRadarEventId(7L);
         when(chains.findPublishedGraph(1L)).thenReturn(Optional.of(graph));
         when(radar.findEventsSince(any(LocalDateTime.class), anyInt())).thenReturn(Collections.singletonList(event));
-        when(impacts.findRadarEventIds(1L)).thenReturn(Collections.<Long>emptySet(),
-                new HashSet<Long>(Collections.singletonList(7L)));
+        when(analyzer.getAnalysisVersion()).thenReturn("RULES_V2");
+        when(impacts.findAnalysisVersionsByRadarEventId(1L)).thenReturn(Collections.<Long, String>emptyMap(),
+                Collections.singletonMap(7L, "RULES_V2"));
         when(analyzer.analyze(graph, event)).thenReturn(Optional.of(impact));
         when(impacts.upsert(any(IndustryChainEventImpact.class), any(LocalDateTime.class))).thenReturn(true);
 
@@ -59,5 +59,36 @@ class IndustryChainEventServiceTest {
         assertEquals(1, second.getSkipped());
         verify(analyzer, times(1)).analyze(graph, event);
         verify(impacts, times(1)).upsert(any(IndustryChainEventImpact.class), any(LocalDateTime.class));
+    }
+
+    @Test
+    void refreshReanalyzesRelationshipsCreatedByAnOlderRuleVersion() {
+        IndustryChainRepository chains = mock(IndustryChainRepository.class);
+        IndustryChainEventImpactRepository impacts = mock(IndustryChainEventImpactRepository.class);
+        RadarRepository radar = mock(RadarRepository.class);
+        IndustryChainEventAnalyzer analyzer = mock(IndustryChainEventAnalyzer.class);
+        IndustryChainEventService service = new IndustryChainEventService();
+        ReflectionTestUtils.setField(service, "chainRepository", chains);
+        ReflectionTestUtils.setField(service, "impactRepository", impacts);
+        ReflectionTestUtils.setField(service, "radarRepository", radar);
+        ReflectionTestUtils.setField(service, "analyzer", analyzer);
+        IndustryChainGraph graph = new IndustryChainGraph();
+        graph.setChainId(1L);
+        RadarEvent event = new RadarEvent();
+        event.setId(7L);
+        IndustryChainEventImpact impact = new IndustryChainEventImpact();
+        impact.setRadarEventId(7L);
+        when(chains.findPublishedGraph(1L)).thenReturn(Optional.of(graph));
+        when(radar.findEventsSince(any(LocalDateTime.class), anyInt())).thenReturn(Collections.singletonList(event));
+        when(analyzer.getAnalysisVersion()).thenReturn("RULES_V2");
+        when(impacts.findAnalysisVersionsByRadarEventId(1L)).thenReturn(Collections.singletonMap(7L, "RULES_V1"));
+        when(analyzer.analyze(graph, event)).thenReturn(Optional.of(impact));
+        when(impacts.upsert(any(IndustryChainEventImpact.class), any(LocalDateTime.class))).thenReturn(false);
+
+        IndustryChainEventService.RefreshSummary summary = service.refresh(1L);
+
+        assertEquals(0, summary.getAdded());
+        assertEquals(1, summary.getUpdated());
+        assertEquals(0, summary.getSkipped());
     }
 }
