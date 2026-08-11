@@ -30,6 +30,8 @@ public class IndustryChainSynthesisAgent {
     private static final int REPAIR_TIMEOUT_MS = 60_000;
     private static final int MAX_OUTPUT_TOKENS = 6000;
     private static final int MAX_EVIDENCE_EXCERPT = 3000;
+    private static final int MAX_LIMITATIONS_LENGTH = 1600;
+    private static final String REMOVED_SUPPLY_NOTICE = "未明确披露的企业供销关系已从图谱中移除。";
     private static final Set<String> ROOT_FIELDS = set("summary", "limitations", "nodes", "edges");
     private static final Set<String> NODE_FIELDS = set("nodeKey", "type", "name", "description",
             "stageOrder", "stockCode", "confidence", "evidenceRefs");
@@ -75,14 +77,39 @@ public class IndustryChainSynthesisAgent {
         IndustryChainGraph graph = new IndustryChainGraph();
         graph.setName(chainName);
         graph.setSummary(required(root, "summary", 800));
-        graph.setLimitations(required(root, "limitations", 1600));
+        graph.setLimitations(required(root, "limitations", MAX_LIMITATIONS_LENGTH));
         graph.setNodes(nodes(root.path("nodes")));
         graph.setEdges(edges(root.path("edges")));
         graph.setEvidence(evidence);
         graph.setSchemaVersion("INDUSTRY_CHAIN_V1");
         graph.setModel(llm.modelName());
         graph.setGeneratedAt(LocalDateTime.now());
+        removeUndisclosedSupplyRelationships(graph);
         return validator.validate(graph);
+    }
+
+    private void removeUndisclosedSupplyRelationships(IndustryChainGraph graph) {
+        int removed = 0;
+        Iterator<IndustryChainEdge> iterator = graph.getEdges().iterator();
+        while (iterator.hasNext()) {
+            IndustryChainEdge edge = iterator.next();
+            if ("SUPPLIES_TO".equals(edge.getType()) && !"DISCLOSED".equals(edge.getNature())) {
+                iterator.remove();
+                removed++;
+            }
+        }
+        if (removed == 0) {
+            return;
+        }
+        String limitations = graph.getLimitations();
+        if (!limitations.contains(REMOVED_SUPPLY_NOTICE)) {
+            String separator = limitations.endsWith("。") || limitations.endsWith("；") ? "" : "；";
+            String suffix = separator + REMOVED_SUPPLY_NOTICE;
+            int prefixLength = Math.min(limitations.length(), MAX_LIMITATIONS_LENGTH - suffix.length());
+            graph.setLimitations(limitations.substring(0, prefixLength) + suffix);
+        }
+        log.info("Removed undisclosed supply relationships before graph validation: chain={}, count={}",
+                graph.getName(), removed);
     }
 
     private List<IndustryChainNode> nodes(JsonNode values) {

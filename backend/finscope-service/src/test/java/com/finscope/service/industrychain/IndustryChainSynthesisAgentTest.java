@@ -6,6 +6,7 @@ import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -49,6 +50,34 @@ class IndustryChainSynthesisAgentTest {
         assertEquals(2, graph.getEdges().size());
     }
 
+    @Test
+    void removesUndisclosedSupplyRelationshipWithoutRemoteRepair() throws Exception {
+        int[] calls = {0};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                throw new AssertionError("必须使用显式超时");
+            }
+            @Override public String complete(String systemPrompt, String userPrompt,
+                                             int timeoutMs, int maxOutputTokens) throws Exception {
+                calls[0]++;
+                if (calls[0] > 1) {
+                    throw new SocketTimeoutException("repair timed out");
+                }
+                return jsonWithUndisclosedSupplyRelationship();
+            }
+        };
+
+        IndustryChainGraph graph = new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertEquals(1, calls[0]);
+        assertEquals(2, graph.getEdges().size());
+        assertEquals("企业供销关系需以公告为准；未明确披露的企业供销关系已从图谱中移除。",
+                graph.getLimitations());
+    }
+
     private IndustryChainSynthesisAgent agent(String response) {
         LlmChatClient llm = new LlmChatClient() {
             @Override public boolean isConfigured() { return true; }
@@ -79,10 +108,29 @@ class IndustryChainSynthesisAgentTest {
                 + edge("flow:2", "stage:server", "stage:datacenter") + "]}";
     }
 
+    private String jsonWithUndisclosedSupplyRelationship() {
+        return "{\"summary\":\"AI 算力由芯片、服务器和数据中心构成\","
+                + "\"limitations\":\"企业供销关系需以公告为准\",\"nodes\":["
+                + node("stage:chip", "芯片", 1) + ","
+                + node("stage:server", "服务器", 2) + ","
+                + node("stage:datacenter", "数据中心", 3) + ","
+                + company("company:a", "公司甲") + ","
+                + company("company:b", "公司乙") + "],\"edges\":["
+                + edge("flow:1", "stage:chip", "stage:server") + ","
+                + edge("flow:2", "stage:server", "stage:datacenter") + ","
+                + supplyEdge() + "]}";
+    }
+
     private String node(String key, String name, int order) {
         return "{\"nodeKey\":\"" + key + "\",\"type\":\"STAGE\",\"name\":\"" + name
                 + "\",\"description\":\"产业链环节\",\"stageOrder\":" + order
                 + ",\"stockCode\":\"\",\"confidence\":\"HIGH\",\"evidenceRefs\":[\"E1\"]}";
+    }
+
+    private String company(String key, String name) {
+        return "{\"nodeKey\":\"" + key + "\",\"type\":\"COMPANY\",\"name\":\"" + name
+                + "\",\"description\":\"产业链参与企业\",\"stageOrder\":null,"
+                + "\"stockCode\":\"\",\"confidence\":\"MEDIUM\",\"evidenceRefs\":[\"E1\"]}";
     }
 
     private String edge(String key, String source, String target) {
@@ -90,5 +138,12 @@ class IndustryChainSynthesisAgentTest {
                 + "\",\"targetKey\":\"" + target + "\",\"type\":\"FLOWS_TO\","
                 + "\"nature\":\"INDUSTRY_LOGIC\",\"description\":\"价值流转\","
                 + "\"confidence\":\"HIGH\",\"evidenceRefs\":[\"E1\"]}";
+    }
+
+    private String supplyEdge() {
+        return "{\"edgeKey\":\"supply:a-b\",\"sourceKey\":\"company:a\","
+                + "\"targetKey\":\"company:b\",\"type\":\"SUPPLIES_TO\","
+                + "\"nature\":\"INFERRED\",\"description\":\"可能存在供货关系\","
+                + "\"confidence\":\"LOW\",\"evidenceRefs\":[\"E1\"]}";
     }
 }
