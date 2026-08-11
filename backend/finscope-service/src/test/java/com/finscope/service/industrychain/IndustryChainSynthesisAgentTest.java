@@ -25,7 +25,9 @@ class IndustryChainSynthesisAgentTest {
         assertEquals(Arrays.asList("E1"), graph.getEdges().get(0).getEvidenceRefs());
         assertEquals("GROWTH", graph.getResearchContent().getOverview().getLifecycle());
         assertEquals("设备销售与服务", graph.getResearchContent().getStageProfiles().get(0).getBusinessModel());
-        assertEquals("INDUSTRY_CHAIN_V2", graph.getSchemaVersion());
+        assertEquals("PRIMARY", graph.getEdges().get(0).getStrength());
+        assertEquals("算力芯片决定整机性能上限", graph.getResearchContent().getNodeProfiles().get(0).getFunction());
+        assertEquals("INDUSTRY_CHAIN_V3", graph.getSchemaVersion());
     }
 
     @Test
@@ -107,9 +109,12 @@ class IndustryChainSynthesisAgentTest {
         new IndustryChainSynthesisAgent(
                 llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
 
-        assertTrue(prompt[0].contains("node.type 只能是 INDUSTRY_CHAIN、STAGE、PRODUCT、COMPANY"));
+        assertTrue(prompt[0].contains("node.type 只能是 INDUSTRY_CHAIN、STAGE、MATERIAL、EQUIPMENT、COMPONENT、"
+                + "PRODUCT、TECHNOLOGY、APPLICATION、COMPANY"));
         assertTrue(prompt[0].contains("edge.type 只能是 CONTAINS_STAGE、FLOWS_TO、BELONGS_TO_STAGE、"
-                + "INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO"));
+                + "INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO、DEPENDS_ON、ENABLES、USED_IN、"
+                + "SUBSTITUTES、COMPETES_WITH"));
+        assertTrue(prompt[0].contains("strength 只能是 PRIMARY、SECONDARY"));
         assertTrue(prompt[0].contains("nature 只能是 DISCLOSED、INDUSTRY_LOGIC、INFERRED"));
         assertTrue(prompt[0].contains("confidence 只能是 HIGH、MEDIUM、LOW"));
         assertTrue(prompt[0].contains("景气度、供需状态、核心指标、产业瓶颈"));
@@ -177,14 +182,16 @@ class IndustryChainSynthesisAgentTest {
         return "{\"edgeKey\":\"" + key + "\",\"sourceKey\":\"" + source
                 + "\",\"targetKey\":\"" + target + "\",\"type\":\"FLOWS_TO\","
                 + "\"nature\":\"INDUSTRY_LOGIC\",\"description\":\"价值流转\","
-                + "\"confidence\":\"HIGH\",\"evidenceRefs\":[\"E1\"]}";
+                + "\"confidence\":\"HIGH\",\"strength\":\"PRIMARY\","
+                + "\"directionNote\":\"算力芯片进入服务器集成\",\"evidenceRefs\":[\"E1\"]}";
     }
 
     private String supplyEdge() {
         return "{\"edgeKey\":\"supply:a-b\",\"sourceKey\":\"company:a\","
                 + "\"targetKey\":\"company:b\",\"type\":\"SUPPLIES_TO\","
                 + "\"nature\":\"INFERRED\",\"description\":\"可能存在供货关系\","
-                + "\"confidence\":\"LOW\",\"evidenceRefs\":[\"E1\"]}";
+                + "\"confidence\":\"LOW\",\"strength\":\"SECONDARY\","
+                + "\"directionNote\":\"待公开资料确认\",\"evidenceRefs\":[\"E1\"]}";
     }
 
     private String researchContent() {
@@ -200,6 +207,13 @@ class IndustryChainSynthesisAgentTest {
                 + "\"profitDrivers\":[\"产品升级\"],\"barriers\":[\"软硬件生态\"],"
                 + "\"coreMetrics\":[\"出货量\"],\"risks\":[\"出口限制\"],"
                 + "\"keyVariables\":[\"良率\"],\"trendTags\":[\"高性能计算\"]}],"
-                + "\"companyProfiles\":[]}";
+                + "\"companyProfiles\":[],\"nodeProfiles\":[{\"nodeKey\":\"stage:chip\","
+                + "\"definition\":\"提供通用与专用计算能力的芯片环节\","
+                + "\"function\":\"算力芯片决定整机性能上限\",\"inputs\":[\"晶圆制造\"],"
+                + "\"outputs\":[\"加速芯片\"],\"costDrivers\":[\"研发投入\"],"
+                + "\"valueDrivers\":[\"性能与生态\"],\"barriers\":[\"软硬件协同\"],"
+                + "\"coreMetrics\":[\"算力性能\"],\"risks\":[\"出口限制\"],"
+                + "\"maturity\":\"SCALING\",\"valueLevel\":\"HIGH\","
+                + "\"bottleneckLevel\":\"HIGH\",\"localizationLevel\":\"LOW\"}]}";
     }
 }

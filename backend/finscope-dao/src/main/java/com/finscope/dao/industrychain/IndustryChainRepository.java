@@ -141,9 +141,11 @@ public class IndustryChainRepository {
         order = 0;
         for (IndustryChainEdge edge : graph.getEdges()) {
             jdbcTemplate.update("INSERT INTO industry_chain_edge(revision_id,edge_key,source_key,target_key,type,nature,"
-                            + "description,confidence,evidence_refs_json,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            + "description,confidence,strength,direction_note,evidence_refs_json,sort_order) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     revision.getId(), edge.getEdgeKey(), edge.getSourceKey(), edge.getTargetKey(), edge.getType(),
-                    edge.getNature(), edge.getDescription(), edge.getConfidence(), json(edge.getEvidenceRefs()), order++);
+                    edge.getNature(), edge.getDescription(), edge.getConfidence(), edge.getStrength(),
+                    edge.getDirectionNote(), json(edge.getEvidenceRefs()), order++);
         }
         LocalDateTime completed = LocalDateTime.now();
         jdbcTemplate.update("UPDATE industry_chain_revision SET status='READY',stage='COMPLETED',message=?,error_code=NULL,"
@@ -233,6 +235,8 @@ public class IndustryChainRepository {
                     value.setNature(rs.getString("nature"));
                     value.setDescription(rs.getString("description"));
                     value.setConfidence(rs.getString("confidence"));
+                    value.setStrength(rs.getString("strength"));
+                    value.setDirectionNote(rs.getString("direction_note"));
                     value.setEvidenceRefs(refs(rs.getString("evidence_refs_json")));
                     return value;
                 }, revisionId);

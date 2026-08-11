@@ -59,6 +59,9 @@ class IndustryChainRepositoryTest {
         assertEquals("产业资料", restoredGraph.getEvidence().get(0).getTitle());
         assertEquals("GROWTH", restoredGraph.getResearchContent().getOverview().getLifecycle());
         assertEquals("设备销售与服务", restoredGraph.getResearchContent().getStageProfiles().get(0).getBusinessModel());
+        assertEquals("SCALING", restoredGraph.getResearchContent().getNodeProfiles().get(0).getMaturity());
+        assertEquals("PRIMARY", restoredGraph.getEdges().get(0).getStrength());
+        assertEquals("资源进入核心制造", restoredGraph.getEdges().get(0).getDirectionNote());
         assertEquals(1, repository.listChains().size());
         assertEquals("READY", repository.latestRevision(chain.getId()).orElseThrow(AssertionError::new).getStatus());
     }
@@ -127,6 +130,15 @@ class IndustryChainRepositoryTest {
         stage.setProsperity("RISING");
         stage.setSupplyDemand("TIGHT");
         content.setStageProfiles(Collections.singletonList(stage));
+        IndustryChainResearchContent.NodeProfile profile = new IndustryChainResearchContent.NodeProfile();
+        profile.setNodeKey("stage:upstream");
+        profile.setDefinition("产业链所需的上游资源环节");
+        profile.setFunction("提供核心制造所需输入");
+        profile.setMaturity("SCALING");
+        profile.setValueLevel("HIGH");
+        profile.setBottleneckLevel("MEDIUM");
+        profile.setLocalizationLevel("HIGH");
+        content.setNodeProfiles(Collections.singletonList(profile));
         return content;
     }
 
@@ -151,6 +163,8 @@ class IndustryChainRepositoryTest {
         edge.setNature("INDUSTRY_LOGIC");
         edge.setDescription("产业流向");
         edge.setConfidence("HIGH");
+        edge.setStrength("PRIMARY");
+        edge.setDirectionNote("资源进入核心制造");
         edge.setEvidenceRefs(Collections.singletonList("E1"));
         return edge;
     }

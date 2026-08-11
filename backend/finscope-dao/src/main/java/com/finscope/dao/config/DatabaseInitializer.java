@@ -1389,8 +1389,10 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_edge ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,revision_id INTEGER NOT NULL,edge_key TEXT NOT NULL,source_key TEXT NOT NULL,"
                 + "target_key TEXT NOT NULL,type TEXT NOT NULL,nature TEXT NOT NULL,description TEXT NOT NULL,confidence TEXT NOT NULL,"
-                + "evidence_refs_json TEXT NOT NULL,sort_order INTEGER NOT NULL,UNIQUE(revision_id,edge_key),"
+                + "strength TEXT,direction_note TEXT,evidence_refs_json TEXT NOT NULL,sort_order INTEGER NOT NULL,UNIQUE(revision_id,edge_key),"
                 + "FOREIGN KEY(revision_id) REFERENCES industry_chain_revision(id) ON DELETE CASCADE)");
+        ensureColumn("industry_chain_edge", "strength", "TEXT");
+        ensureColumn("industry_chain_edge", "direction_note", "TEXT");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_event_impact ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,chain_id INTEGER NOT NULL,radar_event_id INTEGER NOT NULL,"
                 + "direct_node_key TEXT NOT NULL,direction TEXT NOT NULL,mechanism TEXT NOT NULL,horizon TEXT NOT NULL,"

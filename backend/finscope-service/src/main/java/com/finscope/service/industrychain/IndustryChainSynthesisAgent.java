@@ -37,8 +37,8 @@ public class IndustryChainSynthesisAgent {
     private static final Set<String> NODE_FIELDS = set("nodeKey", "type", "name", "description",
             "stageOrder", "stockCode", "confidence", "evidenceRefs");
     private static final Set<String> EDGE_FIELDS = set("edgeKey", "sourceKey", "targetKey", "type",
-            "nature", "description", "confidence", "evidenceRefs");
-    private static final Set<String> RESEARCH_FIELDS = set("overview", "stageProfiles", "companyProfiles");
+            "nature", "description", "confidence", "strength", "directionNote", "evidenceRefs");
+    private static final Set<String> RESEARCH_FIELDS = set("overview", "stageProfiles", "companyProfiles", "nodeProfiles");
     private static final Set<String> OVERVIEW_FIELDS = set("lifecycle", "prosperity", "supplyDemand", "cycleType",
             "demandDrivers", "supplyDrivers", "keyVariables", "bottlenecks", "overcapacityRisks", "trendTags");
     private static final Set<String> STAGE_PROFILE_FIELDS = set("nodeKey", "roleSummary", "businessModel",
@@ -46,9 +46,16 @@ public class IndustryChainSynthesisAgent {
             "profitDrivers", "barriers", "coreMetrics", "risks", "keyVariables", "trendTags");
     private static final Set<String> COMPANY_PROFILE_FIELDS = set("nodeKey", "industryPosition", "coreProducts",
             "downstreamMarkets", "competitiveAdvantages", "keyVariables");
+    private static final Set<String> NODE_PROFILE_FIELDS = set("nodeKey", "definition", "function", "inputs", "outputs",
+            "costDrivers", "valueDrivers", "barriers", "coreMetrics", "risks", "maturity", "valueLevel",
+            "bottleneckLevel", "localizationLevel");
     private static final Set<String> LIFECYCLES = set("EMERGING", "GROWTH", "MATURE", "CONSOLIDATING", "DECLINING");
     private static final Set<String> PROSPERITY = set("RISING", "STABLE", "COOLING", "MIXED");
     private static final Set<String> SUPPLY_DEMAND = set("TIGHT", "BALANCED", "LOOSE", "STRUCTURAL");
+    private static final Set<String> MATURITY = set("EMERGING", "SCALING", "MATURE", "DECLINING");
+    private static final Set<String> LEVELS = set("HIGH", "MEDIUM", "LOW");
+    private static final Set<String> LOCALIZATION = set("LOW", "MEDIUM", "HIGH", "LEADING");
+    private static final Set<String> EDGE_STRENGTH = set("PRIMARY", "SECONDARY");
 
     private final LlmChatClient llm;
     private final ObjectMapper objectMapper;
@@ -94,7 +101,7 @@ public class IndustryChainSynthesisAgent {
         graph.setNodes(nodes(root.path("nodes")));
         graph.setEdges(edges(root.path("edges")));
         graph.setEvidence(evidence);
-        graph.setSchemaVersion("INDUSTRY_CHAIN_V2");
+        graph.setSchemaVersion("INDUSTRY_CHAIN_V3");
         graph.setModel(llm.modelName());
         graph.setGeneratedAt(LocalDateTime.now());
         removeUndisclosedSupplyRelationships(graph);
@@ -161,6 +168,8 @@ public class IndustryChainSynthesisAgent {
             edge.setNature(required(value, "nature", 30));
             edge.setDescription(required(value, "description", 600));
             edge.setConfidence(required(value, "confidence", 20));
+            edge.setStrength(enumValue(value, "strength", EDGE_STRENGTH));
+            edge.setDirectionNote(required(value, "directionNote", 240));
             edge.setEvidenceRefs(refs(value.path("evidenceRefs")));
             result.add(edge);
         }
@@ -173,6 +182,7 @@ public class IndustryChainSynthesisAgent {
         content.setOverview(overview(value.path("overview")));
         content.setStageProfiles(stageProfiles(value.path("stageProfiles")));
         content.setCompanyProfiles(companyProfiles(value.path("companyProfiles")));
+        content.setNodeProfiles(nodeProfiles(value.path("nodeProfiles")));
         return content;
     }
 
@@ -234,6 +244,34 @@ public class IndustryChainSynthesisAgent {
             profile.setDownstreamMarkets(phrases(value, "downstreamMarkets"));
             profile.setCompetitiveAdvantages(phrases(value, "competitiveAdvantages"));
             profile.setKeyVariables(phrases(value, "keyVariables"));
+            result.add(profile);
+        }
+        return result;
+    }
+
+    private List<IndustryChainResearchContent.NodeProfile> nodeProfiles(JsonNode values) {
+        if (!values.isArray() || values.size() == 0 || values.size() > 80) {
+            throw new IllegalArgumentException("nodeProfiles 必须包含 1 至 80 个节点画像");
+        }
+        List<IndustryChainResearchContent.NodeProfile> result =
+                new ArrayList<IndustryChainResearchContent.NodeProfile>();
+        for (JsonNode value : values) {
+            validateFields(value, NODE_PROFILE_FIELDS);
+            IndustryChainResearchContent.NodeProfile profile = new IndustryChainResearchContent.NodeProfile();
+            profile.setNodeKey(required(value, "nodeKey", 100));
+            profile.setDefinition(required(value, "definition", 240));
+            profile.setFunction(required(value, "function", 240));
+            profile.setInputs(phrases(value, "inputs"));
+            profile.setOutputs(phrases(value, "outputs"));
+            profile.setCostDrivers(phrases(value, "costDrivers"));
+            profile.setValueDrivers(phrases(value, "valueDrivers"));
+            profile.setBarriers(phrases(value, "barriers"));
+            profile.setCoreMetrics(phrases(value, "coreMetrics"));
+            profile.setRisks(phrases(value, "risks"));
+            profile.setMaturity(enumValue(value, "maturity", MATURITY));
+            profile.setValueLevel(enumValue(value, "valueLevel", LEVELS));
+            profile.setBottleneckLevel(enumValue(value, "bottleneckLevel", LEVELS));
+            profile.setLocalizationLevel(enumValue(value, "localizationLevel", LOCALIZATION));
             result.add(profile);
         }
         return result;
@@ -302,10 +340,12 @@ public class IndustryChainSynthesisAgent {
         return "你是谨慎的产业研究员。只依据输入 evidence 输出一个 JSON 对象，不要 markdown。"
                 + "根字段只能是 summary、limitations、researchContent、nodes、edges。节点字段必须完整且只能为 nodeKey、type、"
                 + "name、description、stageOrder、stockCode、confidence、evidenceRefs；关系字段必须完整且只能为"
-                + "edgeKey、sourceKey、targetKey、type、nature、description、confidence、evidenceRefs。"
-                + "node.type 只能是 INDUSTRY_CHAIN、STAGE、PRODUCT、COMPANY；edge.type 只能是 "
-                + "CONTAINS_STAGE、FLOWS_TO、BELONGS_TO_STAGE、INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO；"
+                + "edgeKey、sourceKey、targetKey、type、nature、description、confidence、strength、directionNote、evidenceRefs。"
+                + "node.type 只能是 INDUSTRY_CHAIN、STAGE、MATERIAL、EQUIPMENT、COMPONENT、PRODUCT、TECHNOLOGY、"
+                + "APPLICATION、COMPANY；edge.type 只能是 CONTAINS_STAGE、FLOWS_TO、BELONGS_TO_STAGE、INPUT_TO、"
+                + "PRODUCES、PARTICIPATES_IN、SUPPLIES_TO、DEPENDS_ON、ENABLES、USED_IN、SUBSTITUTES、COMPETES_WITH；"
                 + "nature 只能是 DISCLOSED、INDUSTRY_LOGIC、INFERRED；confidence 只能是 HIGH、MEDIUM、LOW。"
+                + "strength 只能是 PRIMARY、SECONDARY，directionNote 用一句话说明关系方向与作用。"
                 + "至少生成三个按 stageOrder 排序并由 FLOWS_TO 连通的"
                 + "STAGE。每个节点与关系至少引用一个输入中存在的 evidenceCode。行业通用关系使用 INDUSTRY_LOGIC，"
                 + "推断使用 INFERRED；具体企业之间的 SUPPLIES_TO 只能在公开资料明确披露时使用 DISCLOSED，"
@@ -314,7 +354,7 @@ public class IndustryChainSynthesisAgent {
     }
 
     private String researchPrompt() {
-        return "researchContent 必须且只能包含 overview、stageProfiles、companyProfiles。overview 必须输出"
+        return "researchContent 必须且只能包含 overview、stageProfiles、companyProfiles、nodeProfiles。overview 必须输出"
                 + "lifecycle、prosperity、supplyDemand、cycleType、demandDrivers、supplyDrivers、keyVariables、"
                 + "bottlenecks、overcapacityRisks、trendTags，用于表达景气度、供需状态、核心指标、产业瓶颈。"
                 + "lifecycle 只能为 EMERGING、GROWTH、MATURE、CONSOLIDATING、DECLINING；prosperity 只能为"
@@ -323,7 +363,12 @@ public class IndustryChainSynthesisAgent {
                 + "costStructure、valueCapture、bottleneck、prosperity、supplyDemand、lifecycle、profitDrivers、"
                 + "barriers、coreMetrics、risks、keyVariables、trendTags。每个 COMPANY 都应有 companyProfiles"
                 + "公司竞争格局，字段只能为 nodeKey、industryPosition、coreProducts、downstreamMarkets、"
-                + "competitiveAdvantages、keyVariables。画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
+                + "competitiveAdvantages、keyVariables。每个非 COMPANY 语义节点都应有 nodeProfiles，字段只能为"
+                + "nodeKey、definition、function、inputs、outputs、costDrivers、valueDrivers、barriers、coreMetrics、"
+                + "risks、maturity、valueLevel、bottleneckLevel、localizationLevel；maturity 只能为 EMERGING、SCALING、"
+                + "MATURE、DECLINING，valueLevel 和 bottleneckLevel 只能为 HIGH、MEDIUM、LOW，localizationLevel 只能为"
+                + "LOW、MEDIUM、HIGH、LEADING。优先用 MATERIAL、EQUIPMENT、COMPONENT、TECHNOLOGY、APPLICATION 丰富"
+                + "各 STAGE 的直接子节点，每个 STAGE 最多 12 个直接子节点。画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
                 + "未知列表输出 []，未知短文本输出‘待观察’，不要补造价格、份额、客户或产能数字。";
     }
 
