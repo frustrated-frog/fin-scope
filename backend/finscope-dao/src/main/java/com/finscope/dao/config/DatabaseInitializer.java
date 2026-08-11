@@ -1364,6 +1364,32 @@ public class DatabaseInitializer implements InitializingBean {
                 + "ON stock_supply_chain_refresh_run(instrument_id,id DESC)");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_supply_chain_active_run "
                 + "ON stock_supply_chain_refresh_run(instrument_id) WHERE status='RUNNING'");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,normalized_name TEXT NOT NULL UNIQUE,"
+                + "summary TEXT,current_revision_id INTEGER,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_revision ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,chain_id INTEGER NOT NULL,status TEXT NOT NULL,stage TEXT NOT NULL,"
+                + "message TEXT,error_code TEXT,retryable INTEGER NOT NULL DEFAULT 0,graph_summary TEXT,limitations TEXT,"
+                + "schema_version TEXT,model TEXT,generated_at TEXT,created_at TEXT NOT NULL,completed_at TEXT,"
+                + "FOREIGN KEY(chain_id) REFERENCES industry_chain(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_industry_chain_revision_chain "
+                + "ON industry_chain_revision(chain_id,id DESC)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_industry_chain_active_revision "
+                + "ON industry_chain_revision(chain_id) WHERE status='RUNNING'");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_evidence ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,revision_id INTEGER NOT NULL,evidence_code TEXT NOT NULL,title TEXT NOT NULL,"
+                + "url TEXT,source TEXT,source_tier TEXT,published_at TEXT,excerpt TEXT NOT NULL,sort_order INTEGER NOT NULL,"
+                + "UNIQUE(revision_id,evidence_code),FOREIGN KEY(revision_id) REFERENCES industry_chain_revision(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_node ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,revision_id INTEGER NOT NULL,node_key TEXT NOT NULL,type TEXT NOT NULL,"
+                + "name TEXT NOT NULL,description TEXT NOT NULL,stage_order INTEGER,stock_code TEXT,confidence TEXT NOT NULL,"
+                + "evidence_refs_json TEXT NOT NULL,sort_order INTEGER NOT NULL,UNIQUE(revision_id,node_key),"
+                + "FOREIGN KEY(revision_id) REFERENCES industry_chain_revision(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_edge ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,revision_id INTEGER NOT NULL,edge_key TEXT NOT NULL,source_key TEXT NOT NULL,"
+                + "target_key TEXT NOT NULL,type TEXT NOT NULL,nature TEXT NOT NULL,description TEXT NOT NULL,confidence TEXT NOT NULL,"
+                + "evidence_refs_json TEXT NOT NULL,sort_order INTEGER NOT NULL,UNIQUE(revision_id,edge_key),"
+                + "FOREIGN KEY(revision_id) REFERENCES industry_chain_revision(id) ON DELETE CASCADE)");
     }
 
     private void ensureColumn(String table, String column, String type) {
