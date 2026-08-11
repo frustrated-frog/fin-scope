@@ -136,14 +136,14 @@ public class IndustryChainEventAnalyzer {
                 + mechanismLabel(impact.getMechanism()) + "机制沿产业链传导。";
     }
 
-    private String mechanismLabel(IndustryChainEventImpact.Mechanism mechanism) {
+    private String mechanismLabel(String mechanism) {
         switch (mechanism) {
-            case SUPPLY: return "供给";
-            case PRICE: return "价格";
-            case CAPACITY: return "产能";
-            case POLICY: return "政策";
-            case ORDER: return "订单";
-            case TECHNOLOGY: return "技术";
+            case "SUPPLY": return "供给";
+            case "PRICE": return "价格";
+            case "CAPACITY": return "产能";
+            case "POLICY": return "政策";
+            case "ORDER": return "订单";
+            case "TECHNOLOGY": return "技术";
             default: return "需求";
         }
     }
