@@ -132,6 +132,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "industryChainExecutor")
+    public Executor industryChainExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("industry-chain-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(12);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "newsClassificationExecutor")
     public Executor newsClassificationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
