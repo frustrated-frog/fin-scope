@@ -1370,8 +1370,9 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_revision ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,chain_id INTEGER NOT NULL,status TEXT NOT NULL,stage TEXT NOT NULL,"
                 + "message TEXT,error_code TEXT,retryable INTEGER NOT NULL DEFAULT 0,graph_summary TEXT,limitations TEXT,"
-                + "schema_version TEXT,model TEXT,generated_at TEXT,created_at TEXT NOT NULL,completed_at TEXT,"
+                + "research_content_json TEXT,schema_version TEXT,model TEXT,generated_at TEXT,created_at TEXT NOT NULL,completed_at TEXT,"
                 + "FOREIGN KEY(chain_id) REFERENCES industry_chain(id) ON DELETE CASCADE)");
+        ensureColumn("industry_chain_revision", "research_content_json", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_industry_chain_revision_chain "
                 + "ON industry_chain_revision(chain_id,id DESC)");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_industry_chain_active_revision "

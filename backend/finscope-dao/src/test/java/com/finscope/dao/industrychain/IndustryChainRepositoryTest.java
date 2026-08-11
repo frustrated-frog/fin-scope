@@ -8,6 +8,7 @@ import com.finscope.domain.industrychain.IndustryChainEvidence;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.sqlite.SQLiteDataSource;
@@ -56,6 +57,8 @@ class IndustryChainRepositoryTest {
         assertEquals(3, restoredGraph.getNodes().size());
         assertEquals(2, restoredGraph.getEdges().size());
         assertEquals("产业资料", restoredGraph.getEvidence().get(0).getTitle());
+        assertEquals("GROWTH", restoredGraph.getResearchContent().getOverview().getLifecycle());
+        assertEquals("设备销售与服务", restoredGraph.getResearchContent().getStageProfiles().get(0).getBusinessModel());
         assertEquals(1, repository.listChains().size());
         assertEquals("READY", repository.latestRevision(chain.getId()).orElseThrow(AssertionError::new).getStatus());
     }
@@ -98,6 +101,7 @@ class IndustryChainRepositoryTest {
         graph.setModel("test-model");
         graph.setGeneratedAt(LocalDateTime.of(2026, 8, 11, 12, 0));
         graph.setEvidence(Collections.singletonList(evidence()));
+        graph.setResearchContent(researchContent());
         graph.setNodes(Arrays.asList(
                 node("stage:upstream", "上游资源", 1),
                 node("stage:manufacturing", "核心制造", 2),
@@ -106,6 +110,24 @@ class IndustryChainRepositoryTest {
                 edge("edge:1", "stage:upstream", "stage:manufacturing"),
                 edge("edge:2", "stage:manufacturing", "stage:terminal")));
         return graph;
+    }
+
+    private IndustryChainResearchContent researchContent() {
+        IndustryChainResearchContent content = new IndustryChainResearchContent();
+        IndustryChainResearchContent.Overview overview = new IndustryChainResearchContent.Overview();
+        overview.setLifecycle("GROWTH");
+        overview.setProsperity("RISING");
+        overview.setSupplyDemand("STRUCTURAL");
+        overview.setCycleType("成长与资本开支周期共振");
+        content.setOverview(overview);
+        IndustryChainResearchContent.StageProfile stage = new IndustryChainResearchContent.StageProfile();
+        stage.setNodeKey("stage:upstream");
+        stage.setBusinessModel("设备销售与服务");
+        stage.setLifecycle("GROWTH");
+        stage.setProsperity("RISING");
+        stage.setSupplyDemand("TIGHT");
+        content.setStageProfiles(Collections.singletonList(stage));
+        return content;
     }
 
     private IndustryChainNode node(String key, String name, int order) {

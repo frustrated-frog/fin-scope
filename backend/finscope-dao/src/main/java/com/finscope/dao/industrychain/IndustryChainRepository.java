@@ -9,6 +9,7 @@ import com.finscope.domain.industrychain.IndustryChainEvidence;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -146,8 +147,10 @@ public class IndustryChainRepository {
         }
         LocalDateTime completed = LocalDateTime.now();
         jdbcTemplate.update("UPDATE industry_chain_revision SET status='READY',stage='COMPLETED',message=?,error_code=NULL,"
-                        + "retryable=0,graph_summary=?,limitations=?,schema_version=?,model=?,generated_at=?,completed_at=? WHERE id=?",
-                "产业链图谱已更新", graph.getSummary(), graph.getLimitations(), graph.getSchemaVersion(), graph.getModel(),
+                        + "retryable=0,graph_summary=?,limitations=?,research_content_json=?,schema_version=?,model=?,"
+                        + "generated_at=?,completed_at=? WHERE id=?",
+                "产业链图谱已更新", graph.getSummary(), graph.getLimitations(), researchJson(graph.getResearchContent()),
+                graph.getSchemaVersion(), graph.getModel(),
                 TimeUtil.text(graph.getGeneratedAt()), TimeUtil.text(completed), revision.getId());
         jdbcTemplate.update("UPDATE industry_chain SET summary=?,current_revision_id=?,updated_at=? WHERE id=?",
                 graph.getSummary(), revision.getId(), TimeUtil.text(completed), revision.getChainId());
@@ -173,6 +176,7 @@ public class IndustryChainRepository {
         graph.setName(chain.get().getName());
         graph.setSummary(text(row.get("graph_summary")));
         graph.setLimitations(text(row.get("limitations")));
+        graph.setResearchContent(researchContent(row.get("research_content_json")));
         graph.setSchemaVersion(text(row.get("schema_version")));
         graph.setModel(text(row.get("model")));
         graph.setGeneratedAt(parseTime(row.get("generated_at")));
@@ -239,6 +243,27 @@ public class IndustryChainRepository {
             return objectMapper.writeValueAsString(refs == null ? new ArrayList<String>() : refs);
         } catch (Exception error) {
             throw new IllegalStateException("产业链证据引用序列化失败", error);
+        }
+    }
+
+    private String researchJson(IndustryChainResearchContent content) {
+        try {
+            return objectMapper.writeValueAsString(
+                    content == null ? new IndustryChainResearchContent() : content);
+        } catch (Exception error) {
+            throw new IllegalStateException("产业链研究内容序列化失败", error);
+        }
+    }
+
+    private IndustryChainResearchContent researchContent(Object value) {
+        String json = text(value);
+        if (json.isEmpty()) {
+            return new IndustryChainResearchContent();
+        }
+        try {
+            return objectMapper.readValue(json, IndustryChainResearchContent.class);
+        } catch (Exception error) {
+            throw new IllegalStateException("产业链研究内容解析失败", error);
         }
     }
 
