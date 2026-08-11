@@ -103,14 +103,20 @@ public class AppConfig {
     }
 
     @Bean
+    public SearchUrlCanonicalizer searchUrlCanonicalizer() {
+        return new SearchUrlCanonicalizer();
+    }
+
+    @Bean
     public SearchEvidenceGateway searchEvidenceGateway(
             TavilyWebSearchClient tavily,
             AnySearchWebSearchProvider anySearch,
             FirecrawlWebSearchProvider firecrawl,
+            SearchUrlCanonicalizer canonicalizer,
             @Qualifier("searchEvidenceExecutor") ExecutorService executor) {
         FinScopeProperties.SearchFusionProperties fusion = properties.getSearch().getFusion();
         SearchResultFusionService fusionService = new SearchResultFusionService(
-                new SearchUrlCanonicalizer(), fusion.getRrfConstant(), fusion.getMaxPerDomain());
+                canonicalizer, fusion.getRrfConstant(), fusion.getMaxPerDomain());
         return new SearchEvidenceGateway(
                 Arrays.<WebSearchProvider>asList(tavily, anySearch, firecrawl), executor, fusionService);
     }
