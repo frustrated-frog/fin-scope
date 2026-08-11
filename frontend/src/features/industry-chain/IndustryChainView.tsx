@@ -3,9 +3,10 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { IndustryChainCanvas } from './IndustryChainCanvas';
 import { IndustryChainInspector } from './IndustryChainInspector';
+import { IndustryChainLayerBar } from './IndustryChainLayerBar';
 import { IndustryChainDynamics } from './IndustryChainDynamics';
 import { IndustryChainResearchPanel } from './IndustryChainResearchPanel';
-import type { IndustryChain, IndustryChainEventFeed, IndustryChainEventRefreshSummary, IndustryChainWorkspace } from './industryChainTypes';
+import type { IndustryChain, IndustryChainEventFeed, IndustryChainEventRefreshSummary, IndustryChainLayer, IndustryChainWorkspace } from './industryChainTypes';
 import './industry-chain.css';
 
 const SUGGESTIONS = ['AI 算力', '人形机器人', '低空经济', '创新药', '新能源车', '半导体设备'];
@@ -30,6 +31,7 @@ export function IndustryChainView({
   const [selectedNodeKey, setSelectedNodeKey] = useState<string>();
   const [focusMode, setFocusMode] = useState(Boolean(initialStockCode));
   const [expandedNodeKeys, setExpandedNodeKeys] = useState<Set<string>>(new Set());
+  const [activeLayer, setActiveLayer] = useState<IndustryChainLayer>('STRUCTURE');
   const [viewMode, setViewMode] = useState<'panorama' | 'research' | 'dynamics'>('panorama');
   const [eventHours, setEventHours] = useState(168);
   const [eventFeed, setEventFeed] = useState<IndustryChainEventFeed>();
@@ -91,6 +93,7 @@ export function IndustryChainView({
       setWorkspace(value);
       setSelectedNodeKey(undefined);
       setExpandedNodeKeys(new Set());
+      setActiveLayer('STRUCTURE');
       setEventFeed(undefined);
       setSelectedEventId(undefined);
       setViewMode('panorama');
@@ -109,6 +112,7 @@ export function IndustryChainView({
       setWorkspace(next);
       setName('');
       setExpandedNodeKeys(new Set());
+      setActiveLayer('STRUCTURE');
       setMessage(`${next.chain.name} 图谱已进入生成队列`);
       await loadChains();
     } catch (error) { handleError(error); } finally { setLoading(false); }
@@ -160,6 +164,13 @@ export function IndustryChainView({
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }
+
+  function selectNode(key: string) {
+    setSelectedNodeKey(key);
+    if (!workspace?.graph) return;
+    const path = expansionPathToNode(workspace.graph, key);
+    setExpandedNodeKeys((current) => new Set([...current, ...path]));
   }
 
   return (
@@ -253,16 +264,21 @@ export function IndustryChainView({
             {workspace.revision?.status === 'FAILED' && (
               <div className="ic-progress is-error" role="status"><i /><span>{workspace.revision.message}</span></div>
             )}
+            {workspace.graph && viewMode === 'panorama' && (
+              <IndustryChainLayerBar activeLayer={activeLayer} onChange={setActiveLayer} />
+            )}
             {workspace.graph ? (
               viewMode === 'research' ? <IndustryChainResearchPanel graph={workspace.graph} /> : (
                 <div className="ic-graph-grid">
                   <IndustryChainCanvas graph={workspace.graph} selectedNodeKey={selectedNodeKey}
-                    search={search} focusMode={focusMode} expandedNodeKeys={expandedNodeKeys}
+                    search={search} focusMode={focusMode} expandedNodeKeys={expandedNodeKeys} activeLayer={activeLayer}
                     eventCounts={viewMode === 'dynamics' ? eventFeed?.nodeEventCounts : undefined}
                     highlightedPath={viewMode === 'dynamics' ? selectedEvent?.impact.pathNodeKeys : undefined}
-                    onSelectNode={setSelectedNodeKey} onToggleExpanded={toggleExpanded} />
+                    onSelectNode={selectNode} onToggleExpanded={toggleExpanded} />
                   {viewMode === 'panorama' ? (
-                    <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
+                    <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey}
+                      expanded={Boolean(selectedNodeKey && expandedNodeKeys.has(selectedNodeKey))}
+                      onSelectNode={selectNode} onToggleExpanded={toggleExpanded} />
                   ) : (
                     <IndustryChainDynamics graph={workspace.graph} feed={eventFeed} selectedEventId={selectedEventId}
                       hours={eventHours} loading={eventsLoading} onSelectEvent={setSelectedEventId}

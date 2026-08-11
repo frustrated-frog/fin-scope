@@ -82,7 +82,9 @@ export function IndustryChainCanvas({
           {layout.nodes.map((node) => {
             const count = directSemanticNeighbors(graph, node.nodeKey).length;
             const profile = graph.researchContent?.nodeProfiles?.find((item) => item.nodeKey === node.nodeKey);
-            const tone = semanticNodeTone(profile, activeLayer);
+            const tone = activeLayer === 'COMPANY'
+              ? (node.type === 'COMPANY' ? 'high' : 'low')
+              : semanticNodeTone(profile, activeLayer);
             const match = Boolean(normalizedSearch && (`${node.name} ${node.description} ${node.stockCode ?? ''}`)
               .toLocaleLowerCase().includes(normalizedSearch));
             return (

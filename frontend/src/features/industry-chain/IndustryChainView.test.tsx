@@ -27,6 +27,17 @@ const graph: IndustryChainGraph = {
     companyProfiles: [{
       nodeKey: 'company:nvidia', industryPosition: '全球 AI 加速芯片与计算生态龙头', coreProducts: ['GPU', 'CUDA'],
       downstreamMarkets: ['云计算', '企业 AI'], competitiveAdvantages: ['软硬件生态', '产品迭代'], keyVariables: ['云厂商资本开支']
+    }],
+    nodeProfiles: [{
+      nodeKey: 'material:copper', definition: '高速互连所需的高纯导体材料', function: '承担高速信号传输',
+      inputs: ['精炼铜'], outputs: ['高纯铜材'], costDrivers: ['铜价'], valueDrivers: ['纯度'], barriers: ['提纯工艺'],
+      coreMetrics: ['纯度'], risks: ['原料波动'], maturity: 'MATURE', valueLevel: 'MEDIUM',
+      bottleneckLevel: 'HIGH', localizationLevel: 'HIGH'
+    }, {
+      nodeKey: 'technology:advanced-package', definition: '面向高算力芯片的先进封装路线', function: '提升互连密度与带宽',
+      inputs: ['晶圆', '封装基板'], outputs: ['算力模组'], costDrivers: ['设备折旧'], valueDrivers: ['良率'], barriers: ['工艺协同'],
+      coreMetrics: ['良率'], risks: ['产能爬坡'], maturity: 'SCALING', valueLevel: 'HIGH',
+      bottleneckLevel: 'HIGH', localizationLevel: 'MEDIUM'
     }]
   },
   nodes: [
@@ -35,6 +46,7 @@ const graph: IndustryChainGraph = {
     { nodeKey: 'stage:dc', type: 'STAGE', name: '数据中心', description: '算力交付', stageOrder: 3, confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'material:copper', type: 'MATERIAL', name: '高纯铜', description: '高速互连材料', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'equipment:lithography', type: 'EQUIPMENT', name: '光刻设备', description: '芯片制造设备', confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { nodeKey: 'technology:advanced-package', type: 'TECHNOLOGY', name: '先进封装', description: '提高互连密度', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'product:gpu', type: 'PRODUCT', name: 'AI芯片', description: 'GPU 与 ASIC', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'company:nvidia', type: 'COMPANY', name: '英伟达', description: '代表公司', stockCode: 'NVDA.O', confidence: 'HIGH', evidenceRefs: ['E1'] }
   ],
@@ -43,6 +55,7 @@ const graph: IndustryChainGraph = {
     { edgeKey: 'e2', sourceKey: 'stage:server', targetKey: 'stage:dc', type: 'FLOWS_TO', nature: 'INDUSTRY_LOGIC', description: '部署交付', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e-material', sourceKey: 'material:copper', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '属于上游', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e-equipment', sourceKey: 'equipment:lithography', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '支撑制造', confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { edgeKey: 'e-technology', sourceKey: 'technology:advanced-package', targetKey: 'product:gpu', type: 'ENABLES', nature: 'INDUSTRY_LOGIC', description: '提升集成性能', confidence: 'HIGH', strength: 'PRIMARY', directionNote: '先进封装提升算力芯片带宽', evidenceRefs: ['E1'] },
     { edgeKey: 'e3', sourceKey: 'product:gpu', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '属于上游', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e4', sourceKey: 'company:nvidia', targetKey: 'product:gpu', type: 'PARTICIPATES_IN', nature: 'DISCLOSED', description: '参与 AI 芯片', confidence: 'HIGH', evidenceRefs: ['E1'] }
   ],
@@ -125,7 +138,7 @@ test('progressively expands and collapses semantic nodes while preserving dedica
   fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
   expect(container.querySelector('.ic-node--material')).toBeInTheDocument();
   expect(container.querySelector('.ic-node--equipment')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '展开 AI芯片 的 1 个关联节点' }));
+  await userEvent.click(screen.getByRole('button', { name: '展开 AI芯片 的 2 个关联节点' }));
 
   expect(container.querySelector('.ic-edge--stage-flow')).toBeInTheDocument();
   expect(container.querySelector('.ic-edge--stage-membership')).toBeInTheDocument();
@@ -190,4 +203,24 @@ test('switches to the research panel and presents industry operating content', a
   expect(screen.getByText('先进算力芯片')).toBeInTheDocument();
   expect(screen.getByText('芯片销售与软件生态')).toBeInTheDocument();
   expect(screen.getByText('全球 AI 加速芯片与计算生态龙头')).toBeInTheDocument();
+});
+
+test('switches semantic layers without changing visible topology', async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return workspace;
+    throw new Error(`unexpected ${path}`);
+  });
+  const { container } = render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+  expect(screen.getByRole('group', { name: '产业专题图层' })).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /产业结构|价值分配|产业瓶颈|技术路线|国产替代|公司生态/ })).toHaveLength(6);
+  fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
+  const visibleCount = container.querySelectorAll('.ic-node').length;
+
+  await userEvent.click(screen.getByRole('button', { name: /产业瓶颈/ }));
+
+  expect(container.querySelectorAll('.ic-node')).toHaveLength(visibleCount);
+  expect(container.querySelector('.ic-node--material')).toHaveClass('ic-tone--high');
 });
