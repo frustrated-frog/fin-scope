@@ -3,11 +3,14 @@ package com.finscope.web.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.industrychain.IndustryChain;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainEventFeed;
+import com.finscope.service.industrychain.IndustryChainEventService;
 import com.finscope.service.industrychain.IndustryChainService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -46,5 +49,27 @@ class IndustryChainControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.chain.id").value(7));
         verify(service).create(eq("AI算力"));
+    }
+
+    @Test
+    void readsAndRefreshesIndustryChainEvents() throws Exception {
+        IndustryChainService chains = mock(IndustryChainService.class);
+        IndustryChainEventService events = mock(IndustryChainEventService.class);
+        IndustryChainEventFeed feed = new IndustryChainEventFeed();
+        feed.setChainId(7L);
+        feed.setHours(24);
+        when(events.feed(7L, 24)).thenReturn(feed);
+        when(events.refresh(7L)).thenReturn(new IndustryChainEventService.RefreshSummary(5, 2, 0, 3, null));
+        IndustryChainController controller = new IndustryChainController(chains);
+        ReflectionTestUtils.setField(controller, "eventService", events);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        mvc.perform(get("/api/industry-chains/7/events").param("hours", "24"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.chainId").value(7))
+                .andExpect(jsonPath("$.data.hours").value(24));
+        mvc.perform(post("/api/industry-chains/7/events/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.added").value(2));
     }
 }

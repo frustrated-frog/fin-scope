@@ -141,6 +141,12 @@ public class RadarRepository {
         return values.isEmpty() ? Optional.<RadarEvent>empty() : Optional.of(values.get(0));
     }
 
+    public List<RadarEvent> findEventsSince(LocalDateTime since, int limit) {
+        return jdbc.query("SELECT * FROM radar_event WHERE COALESCE(last_seen_at,updated_at)>=? "
+                        + "ORDER BY COALESCE(last_seen_at,updated_at) DESC,id DESC LIMIT ?",
+                eventMapper(), TimeUtil.text(since), Math.max(1, Math.min(limit, 500)));
+    }
+
     public List<RadarSignal> findSignalsByEventId(Long eventId) {
         return jdbc.query("SELECT s.* FROM radar_signal s JOIN radar_event_signal l ON l.signal_id=s.id "
                 + "WHERE l.event_id=? ORDER BY COALESCE(s.published_at,s.first_seen_at) DESC", signalMapper(), eventId);

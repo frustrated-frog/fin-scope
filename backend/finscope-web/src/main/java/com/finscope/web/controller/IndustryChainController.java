@@ -3,6 +3,8 @@ package com.finscope.web.controller;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.industrychain.IndustryChain;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainEventFeed;
+import com.finscope.service.industrychain.IndustryChainEventService;
 import com.finscope.service.industrychain.IndustryChainService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,12 +16,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import javax.annotation.Resource;
 
 /** 产业链图谱工作台 REST 接口。 */
 @RestController
 @RequestMapping("/api/industry-chains")
 public class IndustryChainController {
     private final IndustryChainService service;
+    @Resource
+    private IndustryChainEventService eventService;
 
     public IndustryChainController(IndustryChainService service) {
         this.service = service;
@@ -54,6 +59,17 @@ public class IndustryChainController {
     public ApiResponse<IndustryChainService.FocusResult> focus(
             @PathVariable Long id, @RequestParam String stockCode) {
         return ApiResponses.success(service.focus(id, stockCode));
+    }
+
+    @GetMapping("/{id}/events")
+    public ApiResponse<IndustryChainEventFeed> events(@PathVariable Long id,
+                                                       @RequestParam(defaultValue = "168") int hours) {
+        return ApiResponses.success(eventService.feed(id, Math.max(1, Math.min(hours, 720))));
+    }
+
+    @PostMapping("/{id}/events/refresh")
+    public ApiResponse<IndustryChainEventService.RefreshSummary> refreshEvents(@PathVariable Long id) {
+        return ApiResponses.success(eventService.refresh(id));
     }
 
     public static final class CreateRequest {

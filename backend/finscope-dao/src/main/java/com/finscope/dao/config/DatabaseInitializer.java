@@ -1390,6 +1390,19 @@ public class DatabaseInitializer implements InitializingBean {
                 + "target_key TEXT NOT NULL,type TEXT NOT NULL,nature TEXT NOT NULL,description TEXT NOT NULL,confidence TEXT NOT NULL,"
                 + "evidence_refs_json TEXT NOT NULL,sort_order INTEGER NOT NULL,UNIQUE(revision_id,edge_key),"
                 + "FOREIGN KEY(revision_id) REFERENCES industry_chain_revision(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_event_impact ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,chain_id INTEGER NOT NULL,radar_event_id INTEGER NOT NULL,"
+                + "direct_node_key TEXT NOT NULL,direction TEXT NOT NULL,mechanism TEXT NOT NULL,horizon TEXT NOT NULL,"
+                + "confidence TEXT NOT NULL,impact_summary TEXT NOT NULL,analysis_version TEXT NOT NULL,"
+                + "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(chain_id,radar_event_id),"
+                + "FOREIGN KEY(chain_id) REFERENCES industry_chain(id) ON DELETE CASCADE,"
+                + "FOREIGN KEY(radar_event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_industry_chain_event_impact_chain "
+                + "ON industry_chain_event_impact(chain_id,updated_at DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS industry_chain_event_path ("
+                + "impact_id INTEGER NOT NULL,node_key TEXT NOT NULL,position INTEGER NOT NULL,"
+                + "PRIMARY KEY(impact_id,position),FOREIGN KEY(impact_id) "
+                + "REFERENCES industry_chain_event_impact(id) ON DELETE CASCADE)");
     }
 
     private void ensureColumn(String table, String column, String type) {
