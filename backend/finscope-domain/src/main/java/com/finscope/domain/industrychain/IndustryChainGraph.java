@@ -17,6 +17,7 @@ public class IndustryChainGraph {
     private List<IndustryChainNode> nodes = new ArrayList<IndustryChainNode>();
     private List<IndustryChainEdge> edges = new ArrayList<IndustryChainEdge>();
     private List<IndustryChainEvidence> evidence = new ArrayList<IndustryChainEvidence>();
+    private IndustryChainResearchContent researchContent = new IndustryChainResearchContent();
 
     public Long getChainId() { return chainId; }
     public void setChainId(Long chainId) { this.chainId = chainId; }
@@ -46,5 +47,9 @@ public class IndustryChainGraph {
     public void setEvidence(List<IndustryChainEvidence> evidence) {
         this.evidence = evidence == null
                 ? new ArrayList<IndustryChainEvidence>() : new ArrayList<IndustryChainEvidence>(evidence);
+    }
+    public IndustryChainResearchContent getResearchContent() { return researchContent; }
+    public void setResearchContent(IndustryChainResearchContent researchContent) {
+        this.researchContent = researchContent == null ? new IndustryChainResearchContent() : researchContent;
     }
 }

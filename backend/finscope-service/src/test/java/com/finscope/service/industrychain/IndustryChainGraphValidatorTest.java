@@ -4,6 +4,7 @@ import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainEvidence;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
+import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -69,6 +70,21 @@ class IndustryChainGraphValidatorTest {
         assertEquals("产业链节点类型无效：nodeKey=stage:upstream, type=SEGMENT", error.getMessage());
     }
 
+    @Test
+    void validatesResearchProfilesAgainstGraphNodeTypes() {
+        IndustryChainGraph valid = validGraph();
+        valid.setResearchContent(researchContent("stage:upstream", null));
+        assertDoesNotThrow(() -> validator.validate(valid));
+
+        IndustryChainGraph unknownStage = validGraph();
+        unknownStage.setResearchContent(researchContent("stage:missing", null));
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(unknownStage));
+
+        IndustryChainGraph wrongCompanyType = validGraph();
+        wrongCompanyType.setResearchContent(researchContent("stage:upstream", "stage:terminal"));
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(wrongCompanyType));
+    }
+
     private IndustryChainGraph validGraph() {
         IndustryChainGraph graph = new IndustryChainGraph();
         graph.setName("AI 算力");
@@ -120,5 +136,27 @@ class IndustryChainGraphValidatorTest {
         evidence.setSourceTier("T2");
         evidence.setExcerpt("公开资料内容");
         return evidence;
+    }
+
+    private IndustryChainResearchContent researchContent(String stageKey, String companyKey) {
+        IndustryChainResearchContent content = new IndustryChainResearchContent();
+        IndustryChainResearchContent.Overview overview = new IndustryChainResearchContent.Overview();
+        overview.setLifecycle("GROWTH");
+        overview.setProsperity("RISING");
+        overview.setSupplyDemand("STRUCTURAL");
+        content.setOverview(overview);
+
+        IndustryChainResearchContent.StageProfile stage = new IndustryChainResearchContent.StageProfile();
+        stage.setNodeKey(stageKey);
+        stage.setLifecycle("GROWTH");
+        stage.setProsperity("RISING");
+        stage.setSupplyDemand("TIGHT");
+        content.setStageProfiles(Collections.singletonList(stage));
+        if (companyKey != null) {
+            IndustryChainResearchContent.CompanyProfile company = new IndustryChainResearchContent.CompanyProfile();
+            company.setNodeKey(companyKey);
+            content.setCompanyProfiles(Collections.singletonList(company));
+        }
+        return content;
     }
 }

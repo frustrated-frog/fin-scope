@@ -4,6 +4,7 @@ import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainEvidence;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
+import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -23,6 +24,9 @@ public class IndustryChainGraphValidator {
             "INPUT_TO", "PRODUCES", "PARTICIPATES_IN", "SUPPLIES_TO");
     private static final Set<String> NATURES = set("DISCLOSED", "INDUSTRY_LOGIC", "INFERRED");
     private static final Set<String> CONFIDENCE = set("HIGH", "MEDIUM", "LOW");
+    private static final Set<String> LIFECYCLES = set("EMERGING", "GROWTH", "MATURE", "CONSOLIDATING", "DECLINING");
+    private static final Set<String> PROSPERITY = set("RISING", "STABLE", "COOLING", "MIXED");
+    private static final Set<String> SUPPLY_DEMAND = set("TIGHT", "BALANCED", "LOOSE", "STRUCTURAL");
 
     public IndustryChainGraph validate(IndustryChainGraph graph) {
         if (graph == null || blank(graph.getName()) || graph.getNodes() == null || graph.getEdges() == null) {
@@ -32,7 +36,62 @@ public class IndustryChainGraphValidator {
         Map<String, IndustryChainNode> nodes = nodes(graph.getNodes(), evidenceCodes);
         validateEdges(graph.getEdges(), nodes, evidenceCodes);
         validateStageFlow(graph.getNodes(), graph.getEdges());
+        validateResearchContent(graph.getResearchContent(), nodes);
         return graph;
+    }
+
+    private void validateResearchContent(IndustryChainResearchContent content,
+                                         Map<String, IndustryChainNode> nodes) {
+        if (content == null) {
+            return;
+        }
+        IndustryChainResearchContent.Overview overview = content.getOverview();
+        if (overview != null) {
+            validateOptionalEnum(overview.getLifecycle(), LIFECYCLES, "产业生命周期");
+            validateOptionalEnum(overview.getProsperity(), PROSPERITY, "产业景气度");
+            validateOptionalEnum(overview.getSupplyDemand(), SUPPLY_DEMAND, "产业供需状态");
+        }
+        Set<String> stageKeys = new HashSet<String>();
+        for (IndustryChainResearchContent.StageProfile profile : safeStages(content)) {
+            validateProfileNode(profile.getNodeKey(), "STAGE", nodes, stageKeys, "环节画像");
+            validateRequiredEnum(profile.getLifecycle(), LIFECYCLES, "环节生命周期");
+            validateRequiredEnum(profile.getProsperity(), PROSPERITY, "环节景气度");
+            validateRequiredEnum(profile.getSupplyDemand(), SUPPLY_DEMAND, "环节供需状态");
+        }
+        Set<String> companyKeys = new HashSet<String>();
+        for (IndustryChainResearchContent.CompanyProfile profile : safeCompanies(content)) {
+            validateProfileNode(profile.getNodeKey(), "COMPANY", nodes, companyKeys, "公司画像");
+        }
+    }
+
+    private List<IndustryChainResearchContent.StageProfile> safeStages(IndustryChainResearchContent content) {
+        return content.getStageProfiles() == null
+                ? Collections.<IndustryChainResearchContent.StageProfile>emptyList() : content.getStageProfiles();
+    }
+
+    private List<IndustryChainResearchContent.CompanyProfile> safeCompanies(IndustryChainResearchContent content) {
+        return content.getCompanyProfiles() == null
+                ? Collections.<IndustryChainResearchContent.CompanyProfile>emptyList() : content.getCompanyProfiles();
+    }
+
+    private void validateProfileNode(String nodeKey, String expectedType,
+                                     Map<String, IndustryChainNode> nodes, Set<String> seen, String label) {
+        IndustryChainNode node = nodes.get(nodeKey);
+        if (blank(nodeKey) || node == null || !expectedType.equals(node.getType()) || !seen.add(nodeKey)) {
+            throw new IllegalArgumentException(label + "引用的节点无效或重复：" + nodeKey);
+        }
+    }
+
+    private void validateOptionalEnum(String value, Set<String> allowed, String label) {
+        if (!blank(value)) {
+            validateRequiredEnum(value, allowed, label);
+        }
+    }
+
+    private void validateRequiredEnum(String value, Set<String> allowed, String label) {
+        if (blank(value) || !allowed.contains(value)) {
+            throw new IllegalArgumentException(label + "无效：" + value);
+        }
     }
 
     private Set<String> evidenceCodes(List<IndustryChainEvidence> evidence) {
