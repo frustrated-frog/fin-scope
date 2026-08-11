@@ -58,7 +58,7 @@
   box-shadow: inset 0 1px rgba(255, 255, 255, .025), 0 7px 20px rgba(0, 0, 0, .08);
   transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
 }
-.ic-create:focus-within { border-color: rgba(90, 216, 210, .52); background: rgba(23, 41, 50, .9); box-shadow: 0 0 0 3px rgba(90, 216, 210, .1), 0 10px 24px rgba(0, 0, 0, .14); }
+.ic-create:focus-within { border-color: rgba(90, 216, 210, .48); background: rgba(20, 36, 44, .86); box-shadow: 0 8px 20px rgba(0, 0, 0, .12); }
 .ic-create input,
 .ic-search input {
   min-width: 0;
@@ -68,6 +68,15 @@
   background: transparent;
 }
 .ic-create input { flex: 1; width: 100%; padding: 0; font: 500 11px/1.4 system-ui, "PingFang SC", sans-serif; }
+.ic-workbench .ic-create input:focus,
+.ic-workbench .ic-create input:focus-visible {
+  border: 0;
+  outline: 0;
+  color: var(--ic-ink);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
 .ic-create input::placeholder { color: #6f828b; }
 .ic-create button {
   display: grid;
@@ -76,16 +85,16 @@
   height: 32px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgba(90, 216, 210, .34);
+  border: 1px solid rgba(90, 216, 210, .28);
   border-radius: 10px;
-  color: #092023;
-  background: var(--ic-cyan);
-  box-shadow: 0 5px 14px rgba(78, 215, 209, .16), inset 0 1px rgba(255, 255, 255, .38);
+  color: #8ddbd6;
+  background: rgba(78, 215, 209, .08);
+  box-shadow: none;
   transition: transform .16s ease, opacity .16s ease, box-shadow .16s ease;
 }
 .ic-create button span { font: 400 19px/1 system-ui, sans-serif; transform: translateY(-1px); }
 .ic-create button:active { transform: scale(.93); }
-.ic-create button:disabled { color: #71858c; background: rgba(66, 88, 96, .48); border-color: transparent; box-shadow: none; opacity: .52; }
+.ic-create button:disabled { color: #60747c; background: transparent; border-color: transparent; box-shadow: none; opacity: .72; }
 
 .ic-library-section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 9px; color: #81959e; }
 .ic-library-section-title span { font-size: 10px; font-weight: 600; letter-spacing: .02em; }

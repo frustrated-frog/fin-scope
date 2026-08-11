@@ -27,8 +27,11 @@ test('keeps the create field focus treatment on one container layer', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
 
-  expect(styles).toMatch(/\.ic-create input:focus[^}]*outline:\s*0[^}]*box-shadow:\s*none[^}]*transform:\s*none/s);
-  expect(styles).toMatch(/\.ic-create:focus-within[^}]*border-color:[^}]*box-shadow:\s*0 0 0 2px/s);
+  expect(styles).toMatch(/\.ic-workbench \.ic-create input:focus[^}]*outline:\s*0[^}]*box-shadow:\s*none[^}]*transform:\s*none/s);
+  const focusWithinRule = styles.match(/\.ic-create:focus-within\s*{([^}]*)}/s)?.[1] ?? '';
+  expect(focusWithinRule).toContain('border-color: rgba(90, 216, 210, .48)');
+  expect(focusWithinRule).toContain('box-shadow: 0 8px 20px');
+  expect(focusWithinRule).not.toContain('0 0 0');
 });
 ```
 
@@ -36,7 +39,7 @@ test('keeps the create field focus treatment on one container layer', () => {
 
 Run: `cd frontend && npm test -- IndustryChainCreateStyles`
 
-Expected: FAIL because `.ic-create input:focus` does not yet reset the global rules and the container still uses a 3px halo.
+Expected: FAIL because `.ic-create input:focus` does not yet reset the global rules and the container still uses a separate halo.
 
 ### Task 2: Apply the single-layer focus treatment
 
@@ -47,8 +50,8 @@ Expected: FAIL because `.ic-create input:focus` does not yet reset the global ru
 - [ ] **Step 1: Reset global input focus rules inside the component**
 
 ```css
-.ic-create input:focus,
-.ic-create input:focus-visible {
+.ic-workbench .ic-create input:focus,
+.ic-workbench .ic-create input:focus-visible {
   border: 0;
   outline: 0;
   color: var(--ic-ink);
@@ -64,7 +67,7 @@ Expected: FAIL because `.ic-create input:focus` does not yet reset the global ru
 .ic-create:focus-within {
   border-color: rgba(90, 216, 210, .48);
   background: rgba(20, 36, 44, .86);
-  box-shadow: 0 0 0 2px rgba(90, 216, 210, .08), 0 8px 20px rgba(0, 0, 0, .12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
 }
 
 .ic-create button {
