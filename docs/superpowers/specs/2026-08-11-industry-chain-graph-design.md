@@ -89,12 +89,12 @@ SQLite 新增：
 ## 服务边界
 
 - `IndustryChainService`：创建、读取、刷新与并发保护。
-- `IndustryChainRefreshExecutor`：异步生成和运行状态更新。
+- `IndustryChainGenerationExecutor`：异步生成和运行状态更新。
 - `IndustryChainEvidenceCollector`：通过共享搜索网关生成冻结证据。
 - `IndustryChainSynthesisAgent`：只消费证据并输出严格 JSON。
 - `IndustryChainGraphValidator`：执行结构与证据验证。
 - `IndustryChainRepository`：修订、节点、边和证据持久化。
-- `IndustryChainProjectionService`：生成全景或股票聚焦响应，不修改事实图谱。
+- `IndustryChainService` 的聚焦查询返回与股票连通的节点键，不修改事实图谱；前端基于同一图谱做路径降噪。
 
 外部调用继续位于 `finscope-rpc`；Controller 不直接调用 Repository。
 
