@@ -19,6 +19,8 @@ spring:
     timeout: 1000ms
 
 logging:
+  level:
+    org.apache.pdfbox.pdmodel.font.PDCIDFontType2: ERROR
   charset:
     console: UTF-8
   pattern:

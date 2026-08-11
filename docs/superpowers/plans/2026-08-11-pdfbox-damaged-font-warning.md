@@ -4,7 +4,7 @@
 
 **Goal:** Stop recoverable `PDCIDFontType2` damaged-font warnings from printing stack traces while preserving PDFBox extraction and application-level failures.
 
-**Architecture:** Keep PDF parsing unchanged and configure Spring Boot logging at the application boundary. A focused configuration test loads the real YAML through Spring Boot's YAML loader and locks the exact PDFBox logger level to `ERROR`.
+**Architecture:** Keep PDF parsing unchanged and configure Spring Boot logging at the application boundary. A focused configuration test reads only the real YAML's `logging` section and locks the exact PDFBox logger level to `ERROR` without expanding sensitive configuration in test logs.
 
 **Tech Stack:** Java 21, Spring Boot 2.7, JUnit 5, Maven, YAML
 
@@ -16,42 +16,32 @@
 - Create: `backend/finscope-web/src/test/java/com/finscope/web/config/PdfBoxLoggingConfigurationTest.java`
 - Modify: `backend/finscope-web/src/main/resources/application.yml:21-26`
 
-- [ ] **Step 1: Write the failing configuration test**
+- [x] **Step 1: Write the failing configuration test**
 
 ```java
 package com.finscope.web.config;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.env.YamlPropertySourceLoader;
-import org.springframework.core.env.PropertySource;
-import org.springframework.core.io.ClassPathResource;
 
-import java.util.List;
-import java.util.Objects;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PdfBoxLoggingConfigurationTest {
-    private static final String LOGGER_LEVEL_PROPERTY =
-            "logging.level.org.apache.pdfbox.pdmodel.font.PDCIDFontType2";
-
     @Test
     void suppressesRecoverableDamagedEmbeddedFontWarnings() throws Exception {
-        List<PropertySource<?>> sources = new YamlPropertySourceLoader()
-                .load("application.yml", new ClassPathResource("application.yml"));
+        String yaml = new String(Files.readAllBytes(
+                Paths.get("src/main/resources/application.yml")), StandardCharsets.UTF_8);
+        String logging = yaml.substring(yaml.indexOf("logging:"), yaml.indexOf("\nmanagement:"));
 
-        Object level = sources.stream()
-                .map(source -> source.getProperty(LOGGER_LEVEL_PROPERTY))
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-
-        assertEquals("ERROR", level);
+        assertTrue(logging.contains("org.apache.pdfbox.pdmodel.font.PDCIDFontType2: ERROR"));
     }
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -59,9 +49,9 @@ Run:
 cd backend && mvn -pl finscope-web -am -Dtest=PdfBoxLoggingConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-Expected: FAIL because the logger property is absent and the actual value is `null`.
+Expected: FAIL because the logger entry is absent and the assertion receives `false`.
 
-- [ ] **Step 3: Add the minimal logger configuration**
+- [x] **Step 3: Add the minimal logger configuration**
 
 Extend the existing `logging` block without changing its charset or pattern:
 
@@ -73,7 +63,7 @@ logging:
     console: UTF-8
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -83,7 +73,7 @@ cd backend && mvn -pl finscope-web -am -Dtest=PdfBoxLoggingConfigurationTest -Ds
 
 Expected: PASS with zero test failures.
 
-- [ ] **Step 5: Run module and backend regression verification**
+- [x] **Step 5: Run module and backend regression verification**
 
 Run:
 
@@ -94,7 +84,7 @@ cd backend && mvn test
 
 Expected: both commands exit 0 with zero test failures.
 
-- [ ] **Step 6: Review and commit the implementation**
+- [x] **Step 6: Review and commit the implementation**
 
 ```bash
 git diff --check

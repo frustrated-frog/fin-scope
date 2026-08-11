@@ -29,7 +29,7 @@ PDFBox 会在该分支捕获字体解析异常，将内嵌字体标记为损坏�
 
 ## 测试
 
-新增 Web 模块配置测试，通过 Spring `ApplicationContextRunner` 加载 `application.yml`，断言 `logging.level.org.apache.pdfbox.pdmodel.font.PDCIDFontType2` 的最终值为 `ERROR`。
+新增 Web 模块配置测试，只读取 `application.yml` 的 `logging` 片段并断言 `PDCIDFontType2` 的日志级别为 `ERROR`。测试不使用会在 DEBUG 日志中展开整份 YAML 的加载器，避免固定凭据进入测试输出。
 
 测试按 TDD 执行：先在未增加配置时运行并观察断言失败，再添加最小配置使测试通过。随后运行 `finscope-web` 相关测试及全部后端测试，确认配置加载和既有行为没有回归。
 
