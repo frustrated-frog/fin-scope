@@ -64,6 +64,19 @@ describe('StockSupplyChainPanel', () => {
     expect(api).toHaveBeenCalledWith('/api/stocks/688012/supply-chain');
   });
 
+  test('opens the stock inside the complete industry graph', async () => {
+    const onOpenIndustryChain = vi.fn();
+    vi.mocked(api).mockResolvedValue({
+      code: '688012', name: '中微公司', snapshot,
+      refreshRun: { id: 9, status: 'READY', stage: 'COMPLETED' }
+    } as never);
+
+    render(<StockSupplyChainPanel code="688012" name="中微公司" onOpenIndustryChain={onOpenIndustryChain} />);
+    await userEvent.click(await screen.findByRole('button', { name: '在完整产业图谱中查看' }));
+
+    expect(onOpenIndustryChain).toHaveBeenCalledWith('688012');
+  });
+
   test('automatically creates and polls the first supply-chain result', async () => {
     vi.useFakeTimers();
     vi.mocked(api)

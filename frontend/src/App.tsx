@@ -93,6 +93,7 @@ export default function App() {
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
   const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
   const [dashboardRadarEventId, setDashboardRadarEventId] = useState<number | null>(null);
+  const [industryChainStockCode, setIndustryChainStockCode] = useState<string>();
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -604,8 +605,10 @@ export default function App() {
       )}
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
-      {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
-      {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage} />}
+      {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
+        onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
+      {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
+        initialStockCode={industryChainStockCode} />}
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}

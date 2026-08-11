@@ -16,7 +16,11 @@ const LAYERS: Array<{ key: StockSupplyChainLayer; index: string; title: string; 
 
 const POLL_INTERVAL_MS = 1_000;
 
-export function StockSupplyChainPanel({ code, name }: { code: string; name?: string }) {
+export function StockSupplyChainPanel({ code, name, onOpenIndustryChain }: {
+  code: string;
+  name?: string;
+  onOpenIndustryChain?: (code: string) => void;
+}) {
   const [snapshot, setSnapshot] = useState<StockSupplyChainSnapshot | null>(null);
   const [run, setRun] = useState<StockSupplyChainRefreshRun | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,9 +98,16 @@ export function StockSupplyChainPanel({ code, name }: { code: string; name?: str
           <span>SUPPLY CHAIN · CONCLUSION</span>
           <p>聚焦公司所处环节、关键关系与结论边界。</p>
         </div>
-        <button type="button" onClick={() => void refresh()} disabled={running} aria-label="更新产业链">
-          <span aria-hidden="true">↻</span>{running ? '更新中' : '更新产业链'}
-        </button>
+        <div className="stock-chain-toolbar-actions">
+          {onOpenIndustryChain && (
+            <button type="button" onClick={() => onOpenIndustryChain(code)} aria-label="在完整产业图谱中查看">
+              <span aria-hidden="true">↗</span>完整产业图谱
+            </button>
+          )}
+          <button type="button" onClick={() => void refresh()} disabled={running} aria-label="更新产业链">
+            <span aria-hidden="true">↻</span>{running ? '更新中' : '更新产业链'}
+          </button>
+        </div>
       </div>
 
       {running && (

@@ -6,10 +6,11 @@ import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
 import { acquireWatchlistOverlayScrollLock } from './watchlistOverlayScrollLock';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
-export function WatchlistKlineDrawer({ item, onClose, returnLabel }: {
+export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustryChain }: {
   item: { code: string; name?: string; market?: string };
   onClose: () => void;
   returnLabel?: string;
+  onOpenIndustryChain?: (code: string) => void;
 }) {
   const [bars, setBars] = useState<DailyBarPoint[]>();
   const [error, setError] = useState('');
@@ -119,7 +120,7 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel }: {
 
         <div className={`watchlist-kline-content${activeTab === 'supply-chain' ? ' is-supply-chain' : ''}`}>
           {activeTab === 'supply-chain' ? (
-            <StockSupplyChainPanel code={item.code} name={name} />
+            <StockSupplyChainPanel code={item.code} name={name} onOpenIndustryChain={onOpenIndustryChain} />
           ) : loading ? (
             <div className="watchlist-kline-pending" aria-live="polite"><span aria-hidden="true" /><strong>正在加载日线…</strong></div>
           ) : error ? (

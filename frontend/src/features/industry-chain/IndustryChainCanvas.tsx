@@ -24,7 +24,8 @@ export function IndustryChainCanvas({
 
   return (
     <section className="ic-canvas-shell" role="region" aria-label={`${graph.name}产业链图谱`}>
-      <div className="ic-canvas-scroll">
+      <div className="ic-desktop-graph">
+        <div className="ic-canvas-scroll">
         <div className="ic-canvas" style={{ width: layout.width, height: layout.height }}>
           <div className="ic-lane-grid" aria-hidden="true">
             {layout.stages.map((stage, index) => (
@@ -74,10 +75,27 @@ export function IndustryChainCanvas({
           })}
         </div>
       </div>
-      <div className="ic-legend" aria-label="关系图例">
-        <span><i className="is-logic" />行业逻辑</span>
-        <span><i className="is-disclosed" />公开披露</span>
-        <span><i className="is-inferred" />研究推断</span>
+        <div className="ic-legend" aria-label="关系图例">
+          <span><i className="is-logic" />行业逻辑</span>
+          <span><i className="is-disclosed" />公开披露</span>
+          <span><i className="is-inferred" />研究推断</span>
+        </div>
+      </div>
+      <div className="ic-mobile-reader" aria-label="移动端产业链阅读器">
+        {layout.stages.map((stage, index) => (
+          <section key={stage.nodeKey}>
+            <header><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{stage.name}</strong><small>{stage.description}</small></div></header>
+            <div>
+              {layout.nodes.filter((node) => node.column === index && node.type !== 'STAGE').map((node) => (
+                <button key={node.nodeKey} type="button" onClick={() => onSelectNode(node.nodeKey)}
+                  className={selectedNodeKey === node.nodeKey ? 'is-selected' : ''}>
+                  <span>{node.type === 'COMPANY' ? node.stockCode || '公司' : '产品 / 能力'}</span>
+                  <strong>{node.name}</strong><small>{node.description}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </section>
   );

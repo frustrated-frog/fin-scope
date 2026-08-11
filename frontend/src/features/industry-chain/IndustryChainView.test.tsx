@@ -64,4 +64,5 @@ test('selects graph nodes, searches and switches focus mode', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: /数据中心/ })).toHaveAttribute('data-search-match', 'true'));
   await userEvent.click(screen.getByRole('button', { name: '聚焦链路' }));
   expect(screen.getByRole('button', { name: '查看全图' })).toBeInTheDocument();
+  expect(screen.getByLabelText('移动端产业链阅读器')).toBeInTheDocument();
 });

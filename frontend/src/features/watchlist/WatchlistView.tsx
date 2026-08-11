@@ -83,10 +83,12 @@ function loadCollapsed(): Record<string, boolean> {
 
 export function WatchlistView({
   addToast,
-  setMessage
+  setMessage,
+  onOpenIndustryChain
 }: {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
+  onOpenIndustryChain?: (code: string) => void;
 }) {
   const dashboard = useWatchlistDashboardData();
   const items = dashboard.investments.data;
@@ -662,6 +664,10 @@ export function WatchlistView({
           item={{ code: klineItem.code, name: klineItem.name }}
           onClose={() => setKlineItem(null)}
           returnLabel={fundHoldingItem ? '返回基金持仓' : undefined}
+          onOpenIndustryChain={(stockCode) => {
+            setKlineItem(null);
+            onOpenIndustryChain?.(stockCode);
+          }}
         />
       )}
     </div>

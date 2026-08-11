@@ -34,8 +34,20 @@ export function IndustryChainView({
   };
 
   useEffect(() => {
-    loadChains().catch(handleError).finally(() => setLoading(false));
+    loadChains().then((values) => {
+      if (initialStockCode && values[0]) void openChain(values[0]);
+    }).catch(handleError).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!initialStockCode || !workspace?.graph) return;
+    const company = workspace.graph.nodes.find((node) =>
+      node.type === 'COMPANY' && node.stockCode?.toLocaleLowerCase() === initialStockCode.toLocaleLowerCase());
+    if (company) {
+      setSelectedNodeKey(company.nodeKey);
+      setFocusMode(true);
+    }
+  }, [initialStockCode, workspace?.graph]);
 
   useEffect(() => {
     if (workspace?.revision?.status !== 'RUNNING') return undefined;
