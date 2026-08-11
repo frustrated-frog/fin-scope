@@ -3,9 +3,10 @@ import { stageHighlightsForDisplay } from './industryChainProjection';
 
 const LANE_WIDTH = 292;
 const NODE_WIDTH = 208;
+const STAGE_WIDTH = 232;
 const STAGE_Y = 72;
 const STAGE_HEIGHT = 72;
-const RICH_STAGE_HEIGHT = 176;
+const RICH_STAGE_HEIGHT = 188;
 const NODE_HEIGHT = 64;
 const NODE_GAP = 28;
 const TYPE_GAP = 14;
@@ -46,7 +47,7 @@ export function layoutIndustryGraph(graph: IndustryChainGraph): IndustryGraphLay
   const semanticY = STAGE_Y + stageHeight + 40;
   const stageForNode = parentStageMap(graph, columns);
   const nodes: PositionedIndustryNode[] = stages.map((stage, column) => (
-    positionNode(stage, column, STAGE_Y, stageHeight)
+    positionStageNode(stage, column, stageHeight)
   ));
   const semanticByColumn = new Map<number, IndustryChainNode[]>();
   graph.nodes.filter((node) => node.type !== 'STAGE' && node.type !== 'INDUSTRY_CHAIN').forEach((node) => {
@@ -92,6 +93,10 @@ function compareSemanticNodes(left: IndustryChainNode, right: IndustryChainNode)
 
 function positionNode(node: IndustryChainNode, column: number, y: number, height: number): PositionedIndustryNode {
   return { ...node, column, x: column * LANE_WIDTH + 42, y, width: NODE_WIDTH, height };
+}
+
+function positionStageNode(node: IndustryChainNode, column: number, height: number): PositionedIndustryNode {
+  return { ...node, column, x: column * LANE_WIDTH + 30, y: STAGE_Y, width: STAGE_WIDTH, height };
 }
 
 function edgeRoute(edge: IndustryChainEdge, source: PositionedIndustryNode,

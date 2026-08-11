@@ -68,6 +68,31 @@ describe('industryChainLayout', () => {
       'company:300308', 'product:gpu', 'stage:chip'
     ]));
   });
+
+  it('gives legacy operating cards enough space for readable highlights', () => {
+    const legacyGraph = {
+      ...graph,
+      nodes: graph.nodes.filter((item) => item.type === 'STAGE'),
+      edges: graph.edges.filter((item) => item.type === 'FLOWS_TO'),
+      researchContent: {
+        overview: {
+          lifecycle: 'GROWTH', prosperity: 'RISING', supplyDemand: 'TIGHT', cycleType: '成长周期',
+          demandDrivers: [], supplyDrivers: [], keyVariables: [], bottlenecks: [], overcapacityRisks: [], trendTags: []
+        },
+        companyProfiles: [], nodeProfiles: [],
+        stageProfiles: [{
+          nodeKey: 'stage:chip', roleSummary: '计算核心', businessModel: '芯片销售', costStructure: '研发与制造',
+          valueCapture: '性能与生态溢价', bottleneck: '先进制程与高带宽存储供给', prosperity: 'RISING',
+          supplyDemand: 'TIGHT', lifecycle: 'GROWTH', profitDrivers: [], barriers: ['软硬件生态'],
+          coreMetrics: ['出货量'], risks: [], keyVariables: ['良率'], trendTags: []
+        }]
+      }
+    } as IndustryChainGraph;
+    const stage = nodeByKey(layoutIndustryGraph(legacyGraph), 'stage:chip');
+
+    expect(stage.width).toBe(232);
+    expect(stage.height).toBe(188);
+  });
 });
 
 function nodeByKey(layout: ReturnType<typeof layoutIndustryGraph>, nodeKey: string) {

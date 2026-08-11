@@ -354,8 +354,8 @@
 .ic-node-highlights { display: grid; gap: 0; width: 100%; margin: 6px 0 0; padding: 5px 0 0; border-top: 1px solid rgba(107, 151, 162, .18); }
 .ic-node-highlight { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: start; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(90, 123, 134, .12); }
 .ic-node-highlight:last-child { border-bottom: 0; }
-.ic-node-highlight-label { color: #68818b; font: 600 7px/1.45 "IBM Plex Mono", monospace; letter-spacing: .035em; }
-.ic-node-highlight dd { display: -webkit-box; margin: 0; overflow: hidden; color: #aebfc5; font-size: 8px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ic-node-highlight-label { color: #68818b; font: 600 7.5px/1.45 "IBM Plex Mono", monospace; letter-spacing: .035em; }
+.ic-node-highlight dd { display: -webkit-box; margin: 0; overflow: hidden; color: #aebfc5; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ic-node-highlight.is-critical .ic-node-highlight-label { color: var(--ic-amber); }
 .ic-node-highlight.is-critical dd { color: #d7c19c; }
 .ic-node-highlight.is-value .ic-node-highlight-label { color: var(--ic-gold); }
