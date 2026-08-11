@@ -29,6 +29,17 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void normalizesListLimitationsReturnedByTheModel() throws Exception {
+        String response = validJson().replace(
+                "\"limitations\":\"企业供销关系需以公告为准\"",
+                "\"limitations\":[\"企业供销关系需以公告为准\",\"部分环节仍待观察\"]");
+
+        IndustryChainGraph graph = agent(response).synthesize("AI算力", evidence());
+
+        assertEquals("企业供销关系需以公告为准；部分环节仍待观察", graph.getLimitations());
+    }
+
+    @Test
     void repairsOneInvalidOutputAndValidatesTheRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {

@@ -89,7 +89,7 @@ public class IndustryChainSynthesisAgent {
         IndustryChainGraph graph = new IndustryChainGraph();
         graph.setName(chainName);
         graph.setSummary(required(root, "summary", 800));
-        graph.setLimitations(required(root, "limitations", MAX_LIMITATIONS_LENGTH));
+        graph.setLimitations(requiredNarrative(root, "limitations", MAX_LIMITATIONS_LENGTH));
         graph.setResearchContent(researchContent(root.path("researchContent")));
         graph.setNodes(nodes(root.path("nodes")));
         graph.setEdges(edges(root.path("edges")));
@@ -360,6 +360,34 @@ public class IndustryChainSynthesisAgent {
             throw new IllegalArgumentException(field + " 缺失或超过长度限制");
         }
         return value;
+    }
+
+    private String requiredNarrative(JsonNode node, String field, int maxLength) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            throw new IllegalArgumentException(field + " 缺失或超过长度限制");
+        }
+        if (value.isTextual()) {
+            return required(node, field, maxLength);
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException(field + " 类型无效");
+        }
+        List<String> parts = new ArrayList<String>();
+        for (JsonNode part : value) {
+            if (!part.isTextual()) {
+                throw new IllegalArgumentException(field + " 类型无效");
+            }
+            String text = part.asText().trim();
+            if (!text.isEmpty()) {
+                parts.add(text);
+            }
+        }
+        String narrative = String.join("；", parts);
+        if (narrative.isEmpty() || narrative.length() > maxLength) {
+            throw new IllegalArgumentException(field + " 缺失或超过长度限制");
+        }
+        return narrative;
     }
 
     private String optionalText(JsonNode node, String field, int maxLength) {
