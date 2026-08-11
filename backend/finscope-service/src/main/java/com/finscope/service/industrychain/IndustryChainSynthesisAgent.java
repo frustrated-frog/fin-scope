@@ -191,7 +191,10 @@ public class IndustryChainSynthesisAgent {
                 + "根字段只能是 summary、limitations、nodes、edges。节点字段必须完整且只能为 nodeKey、type、"
                 + "name、description、stageOrder、stockCode、confidence、evidenceRefs；关系字段必须完整且只能为"
                 + "edgeKey、sourceKey、targetKey、type、nature、description、confidence、evidenceRefs。"
-                + "type、nature 与 confidence 必须遵循给定契约；至少生成三个按 stageOrder 排序并由 FLOWS_TO 连通的"
+                + "node.type 只能是 INDUSTRY_CHAIN、STAGE、PRODUCT、COMPANY；edge.type 只能是 "
+                + "CONTAINS_STAGE、FLOWS_TO、BELONGS_TO_STAGE、INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO；"
+                + "nature 只能是 DISCLOSED、INDUSTRY_LOGIC、INFERRED；confidence 只能是 HIGH、MEDIUM、LOW。"
+                + "至少生成三个按 stageOrder 排序并由 FLOWS_TO 连通的"
                 + "STAGE。每个节点与关系至少引用一个输入中存在的 evidenceCode。行业通用关系使用 INDUSTRY_LOGIC，"
                 + "推断使用 INFERRED；具体企业之间的 SUPPLIES_TO 只能在公开资料明确披露时使用 DISCLOSED，"
                 + "否则不得生成。不得猜测匿名客户、供应商或合同，不得输出投资建议。";

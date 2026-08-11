@@ -53,12 +53,28 @@ public class IndustryChainGraphValidator {
     private Map<String, IndustryChainNode> nodes(List<IndustryChainNode> values, Set<String> evidenceCodes) {
         Map<String, IndustryChainNode> result = new HashMap<String, IndustryChainNode>();
         for (IndustryChainNode node : values) {
-            if (node == null || blank(node.getNodeKey()) || !NODE_TYPES.contains(node.getType())
-                    || blank(node.getName()) || !CONFIDENCE.contains(node.getConfidence())
-                    || result.put(node.getNodeKey(), node) != null) {
-                throw new IllegalArgumentException("产业链节点字段无效或重复");
+            if (node == null) {
+                throw new IllegalArgumentException("产业链节点不能为空");
+            }
+            if (blank(node.getNodeKey())) {
+                throw new IllegalArgumentException("产业链节点缺少 nodeKey");
+            }
+            if (result.containsKey(node.getNodeKey())) {
+                throw new IllegalArgumentException("产业链节点 nodeKey 重复：" + node.getNodeKey());
+            }
+            if (!NODE_TYPES.contains(node.getType())) {
+                throw new IllegalArgumentException("产业链节点类型无效：nodeKey=" + node.getNodeKey()
+                        + ", type=" + node.getType());
+            }
+            if (blank(node.getName())) {
+                throw new IllegalArgumentException("产业链节点名称为空：nodeKey=" + node.getNodeKey());
+            }
+            if (!CONFIDENCE.contains(node.getConfidence())) {
+                throw new IllegalArgumentException("产业链节点置信度无效：nodeKey=" + node.getNodeKey()
+                        + ", confidence=" + node.getConfidence());
             }
             validateEvidenceRefs(node.getEvidenceRefs(), evidenceCodes);
+            result.put(node.getNodeKey(), node);
         }
         return result;
     }

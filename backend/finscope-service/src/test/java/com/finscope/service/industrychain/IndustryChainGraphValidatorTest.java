@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class IndustryChainGraphValidatorTest {
@@ -55,6 +56,17 @@ class IndustryChainGraphValidatorTest {
         graph.getEdges().add(edge("edge:supply", "company:a", "company:b", "SUPPLIES_TO", "INFERRED"));
 
         assertThrows(IllegalArgumentException.class, () -> validator.validate(graph));
+    }
+
+    @Test
+    void identifiesTheInvalidNodeAndField() {
+        IndustryChainGraph graph = validGraph();
+        graph.getNodes().get(0).setType("SEGMENT");
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class, () -> validator.validate(graph));
+
+        assertEquals("产业链节点类型无效：nodeKey=stage:upstream, type=SEGMENT", error.getMessage());
     }
 
     private IndustryChainGraph validGraph() {

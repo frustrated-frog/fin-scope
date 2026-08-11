@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IndustryChainSynthesisAgentTest {
 
@@ -76,6 +77,28 @@ class IndustryChainSynthesisAgentTest {
         assertEquals(2, graph.getEdges().size());
         assertEquals("企业供销关系需以公告为准；未明确披露的企业供销关系已从图谱中移除。",
                 graph.getLimitations());
+    }
+
+    @Test
+    void sendsExplicitNodeAndEdgeEnumsToTheModel() throws Exception {
+        String[] prompt = {""};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                prompt[0] = systemPrompt;
+                return validJson();
+            }
+        };
+
+        new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertTrue(prompt[0].contains("node.type 只能是 INDUSTRY_CHAIN、STAGE、PRODUCT、COMPANY"));
+        assertTrue(prompt[0].contains("edge.type 只能是 CONTAINS_STAGE、FLOWS_TO、BELONGS_TO_STAGE、"
+                + "INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO"));
+        assertTrue(prompt[0].contains("nature 只能是 DISCLOSED、INDUSTRY_LOGIC、INFERRED"));
+        assertTrue(prompt[0].contains("confidence 只能是 HIGH、MEDIUM、LOW"));
     }
 
     private IndustryChainSynthesisAgent agent(String response) {
