@@ -7,6 +7,11 @@ import type {
 } from './industryChainTypes';
 
 export type IndustryChainSemanticTone = 'high' | 'medium' | 'low' | 'neutral';
+export type IndustryChainStageHighlight = {
+  label: string;
+  value: string;
+  tone: 'critical' | 'value' | 'neutral';
+};
 
 const NODE_ORDER: Record<IndustryChainNodeType, number> = {
   INDUSTRY_CHAIN: 0,
@@ -109,6 +114,27 @@ export function relatedNodeKeys(graph: IndustryChainGraph, nodeKey: string): str
     if (edge.targetKey === nodeKey) result.add(edge.sourceKey);
   });
   return [...result];
+}
+
+export function stageGraphHighlights(graph: IndustryChainGraph, stageKey: string): IndustryChainStageHighlight[] {
+  const profile = graph.researchContent?.stageProfiles.find((item) => item.nodeKey === stageKey);
+  if (!profile) return [];
+  const candidates: IndustryChainStageHighlight[] = [
+    { label: '核心瓶颈', value: profile.bottleneck, tone: 'critical' },
+    { label: '价值获取', value: profile.valueCapture, tone: 'value' },
+    { label: '关键指标', value: profile.coreMetrics[0], tone: 'neutral' },
+    { label: '行业壁垒', value: profile.barriers[0], tone: 'neutral' },
+    { label: '关键变量', value: profile.keyVariables[0], tone: 'neutral' }
+  ];
+  return candidates.filter((item) => Boolean(item.value?.trim())).slice(0, 3);
+}
+
+export function stageHighlightsForDisplay(
+  graph: IndustryChainGraph,
+  stageKey: string
+): IndustryChainStageHighlight[] {
+  const hasSemanticChildren = directSemanticNeighbors(graph, stageKey).some((node) => node.type !== 'COMPANY');
+  return hasSemanticChildren ? [] : stageGraphHighlights(graph, stageKey);
 }
 
 export function directSemanticNeighbors(graph: IndustryChainGraph, nodeKey: string): IndustryChainNode[] {

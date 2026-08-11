@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { projectSemanticGraph, relatedNodeKeys, semanticNodeTone } from './industryChainProjection';
+import {
+  projectSemanticGraph, relatedNodeKeys, semanticNodeTone, stageGraphHighlights
+} from './industryChainProjection';
 import type { IndustryChainGraph, IndustryChainNodeProfile } from './industryChainTypes';
 
 const graph = {
@@ -92,6 +94,32 @@ describe('industryChainProjection', () => {
 
   it('finds directly related nodes without duplicates', () => {
     expect(relatedNodeKeys(graph, 'technology:harmonic')).toContain('component:reducer');
+  });
+
+  it('extracts compact stage highlights without industry-specific rules', () => {
+    const v2Graph = {
+      ...graph,
+      schemaVersion: 'INDUSTRY_CHAIN_V2',
+      researchContent: {
+        overview: {
+          lifecycle: 'GROWTH', prosperity: 'RISING', supplyDemand: 'TIGHT', cycleType: '成长周期',
+          demandDrivers: [], supplyDrivers: [], keyVariables: [], bottlenecks: [], overcapacityRisks: [], trendTags: []
+        },
+        companyProfiles: [], nodeProfiles: [],
+        stageProfiles: [{
+          nodeKey: 'stage:up', roleSummary: '核心零部件供给', businessModel: '精密制造', costStructure: '材料与加工',
+          valueCapture: '依靠精密制造和规模交付获取溢价', bottleneck: '高精密减速器寿命与一致性仍待提升',
+          prosperity: 'RISING', supplyDemand: 'TIGHT', lifecycle: 'GROWTH', profitDrivers: [], barriers: ['精密工艺'],
+          coreMetrics: ['国产化率'], risks: [], keyVariables: ['良率'], trendTags: []
+        }]
+      }
+    } as IndustryChainGraph;
+
+    expect(stageGraphHighlights(v2Graph, 'stage:up')).toEqual([
+      { label: '核心瓶颈', value: '高精密减速器寿命与一致性仍待提升', tone: 'critical' },
+      { label: '价值获取', value: '依靠精密制造和规模交付获取溢价', tone: 'value' },
+      { label: '关键指标', value: '国产化率', tone: 'neutral' }
+    ]);
   });
 });
 

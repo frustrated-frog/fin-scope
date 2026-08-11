@@ -134,8 +134,6 @@ test('progressively expands and collapses semantic nodes while preserving dedica
   const { container } = render(<IndustryChainView />);
 
   await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
-  expect(container.querySelector('.ic-node--material')).not.toBeInTheDocument();
-  fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
   expect(container.querySelector('.ic-node--material')).toBeInTheDocument();
   expect(container.querySelector('.ic-node--equipment')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '展开 AI芯片 的 2 个关联节点' }));
@@ -145,8 +143,43 @@ test('progressively expands and collapses semantic nodes while preserving dedica
   expect(container.querySelector('.ic-edge--company-link')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '英伟达 · 代表公司' })).toBeInTheDocument();
 
-  fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
-  expect(container.querySelector('.ic-node--material')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '收起 AI芯片 的 2 个关联节点' }));
+  expect(container.querySelector('.ic-node--material')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '英伟达 · 代表公司' })).not.toBeInTheDocument();
+});
+
+test('shows legacy stage operating highlights directly on the graph', async () => {
+  const legacyGraph: IndustryChainGraph = {
+    ...graph,
+    schemaVersion: 'INDUSTRY_CHAIN_V2',
+    nodes: graph.nodes.filter((item) => item.type === 'STAGE'),
+    edges: graph.edges.filter((item) => item.type === 'FLOWS_TO'),
+    researchContent: {
+      ...graph.researchContent!,
+      nodeProfiles: [],
+      companyProfiles: [],
+      stageProfiles: graph.researchContent!.stageProfiles.map((profile) => ({
+        ...profile,
+        bottleneck: '先进制程与 HBM 供给',
+        valueCapture: '性能与生态溢价',
+        coreMetrics: ['出货量']
+      }))
+    }
+  };
+  const legacyWorkspace = { ...workspace, graph: legacyGraph };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return legacyWorkspace;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+
+  expect(screen.getAllByText('核心瓶颈').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('先进制程与 HBM 供给').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('性能与生态溢价').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('出货量').length).toBeGreaterThan(0);
 });
 
 test('shows chain dynamics, changes time window and opens the reused News Wire event', async () => {

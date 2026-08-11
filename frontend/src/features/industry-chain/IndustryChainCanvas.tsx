@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 
 import { focusNeighborhood, layoutIndustryGraph } from './industryChainLayout';
-import { directSemanticNeighbors, projectSemanticGraph, semanticNodeTone } from './industryChainProjection';
+import {
+  directSemanticNeighbors, projectSemanticGraph, semanticNodeTone, stageHighlightsForDisplay
+} from './industryChainProjection';
+import type { IndustryChainStageHighlight } from './industryChainProjection';
 import type { IndustryChainGraph, IndustryChainLayer, IndustryChainNodeType } from './industryChainTypes';
 
 export function IndustryChainCanvas({
@@ -38,6 +41,7 @@ export function IndustryChainCanvas({
     focusMode && selectedNodeKey ? focusNeighborhood(graph, selectedNodeKey, 3) : graph.nodes.map((node) => node.nodeKey)
   ), [focusMode, graph, selectedNodeKey]);
   const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleNodeKeys = new Set(projectedGraph.nodes.map((item) => item.nodeKey));
   const highlightedNodes = new Set(highlightedPath);
   const highlightedEdges = new Set(highlightedPath.slice(0, -1).map((key, index) => `${key}::${highlightedPath[index + 1]}`));
 
@@ -80,7 +84,11 @@ export function IndustryChainCanvas({
             })}
           </svg>
           {layout.nodes.map((node) => {
-            const count = directSemanticNeighbors(graph, node.nodeKey).length;
+            const directNeighbors = directSemanticNeighbors(graph, node.nodeKey);
+            const count = directNeighbors.length;
+            const hiddenCount = directNeighbors.filter((item) => !visibleNodeKeys.has(item.nodeKey)).length;
+            const expanded = expandedNodeKeys.has(node.nodeKey);
+            const stageHighlights = node.type === 'STAGE' ? stageHighlightsForDisplay(projectedGraph, node.nodeKey) : [];
             const profile = graph.researchContent?.nodeProfiles?.find((item) => item.nodeKey === node.nodeKey);
             const tone = activeLayer === 'COMPANY'
               ? (node.type === 'COMPANY' ? 'high' : 'low')
@@ -96,23 +104,24 @@ export function IndustryChainCanvas({
                   data-search-match={match ? 'true' : 'false'}
                   aria-label={`${node.name} · ${node.description}`}
                   onClick={() => onSelectNode(node.nodeKey)}
-                  onDoubleClick={() => count > 0 && onToggleExpanded(node.nodeKey)}>
+                  onDoubleClick={() => (hiddenCount > 0 || expanded) && onToggleExpanded(node.nodeKey)}>
                   <span className="ic-node-kicker">{nodeLabel(node.type)} {node.stockCode && `· ${node.stockCode}`}</span>
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
+                  <StageHighlights highlights={stageHighlights} />
                 </button>
                 {(eventCounts[node.nodeKey] ?? 0) > 0 && (
                   <span className="ic-event-badge" aria-label={`${node.name}关联 ${eventCounts[node.nodeKey]} 条动态`}>
                     {eventCounts[node.nodeKey]}
                   </span>
                 )}
-                {count > 0 && (
+                {(hiddenCount > 0 || expanded) && (
                   <button className="ic-node-expand" type="button"
-                    aria-label={`${expandedNodeKeys.has(node.nodeKey) ? '收起' : '展开'} ${node.name} 的 ${count} 个关联节点`}
-                    aria-expanded={expandedNodeKeys.has(node.nodeKey)}
+                    aria-label={`${expanded ? '收起' : '展开'} ${node.name} 的 ${count} 个关联节点`}
+                    aria-expanded={expanded}
                     onClick={() => onToggleExpanded(node.nodeKey)}>
-                    <span aria-hidden="true">{expandedNodeKeys.has(node.nodeKey) ? '−' : '+'}</span>
-                    {expandedNodeKeys.has(node.nodeKey) ? '收起分支' : `${count} 个关联节点`}
+                    <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+                    {expanded ? '收起分支' : `${hiddenCount} 个待展开节点`}
                   </button>
                 )}
               </div>
@@ -130,6 +139,7 @@ export function IndustryChainCanvas({
         {layout.stages.map((stage, index) => (
           <section key={stage.nodeKey}>
             <header><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{stage.name}</strong><small>{stage.description}</small></div></header>
+            <StageHighlights highlights={stageHighlightsForDisplay(projectedGraph, stage.nodeKey)} />
             <div>
               {layout.nodes.filter((node) => node.column === index && node.type !== 'STAGE').map((node) => (
                 <button key={node.nodeKey} type="button" onClick={() => onSelectNode(node.nodeKey)}
@@ -143,6 +153,20 @@ export function IndustryChainCanvas({
         ))}
       </div>
     </section>
+  );
+}
+
+function StageHighlights({ highlights }: { highlights: IndustryChainStageHighlight[] }) {
+  if (highlights.length === 0) return null;
+  return (
+    <dl className="ic-node-highlights">
+      {highlights.map((item) => (
+        <div className={`ic-node-highlight is-${item.tone}`} key={item.label}>
+          <dt className="ic-node-highlight-label">{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

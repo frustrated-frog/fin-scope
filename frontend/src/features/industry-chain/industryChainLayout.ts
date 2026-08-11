@@ -1,10 +1,11 @@
 import type { IndustryChainEdge, IndustryChainGraph, IndustryChainNode } from './industryChainTypes';
+import { stageHighlightsForDisplay } from './industryChainProjection';
 
 const LANE_WIDTH = 292;
 const NODE_WIDTH = 208;
 const STAGE_Y = 72;
-const SEMANTIC_Y = 184;
 const STAGE_HEIGHT = 72;
+const RICH_STAGE_HEIGHT = 176;
 const NODE_HEIGHT = 64;
 const NODE_GAP = 28;
 const TYPE_GAP = 14;
@@ -40,9 +41,12 @@ export function layoutIndustryGraph(graph: IndustryChainGraph): IndustryGraphLay
     .sort((left, right) => (left.stageOrder ?? Number.MAX_SAFE_INTEGER)
       - (right.stageOrder ?? Number.MAX_SAFE_INTEGER));
   const columns = new Map(stages.map((stage, index) => [stage.nodeKey, index]));
+  const stageHeight = stages.some((stage) => stageHighlightsForDisplay(graph, stage.nodeKey).length > 0)
+    ? RICH_STAGE_HEIGHT : STAGE_HEIGHT;
+  const semanticY = STAGE_Y + stageHeight + 40;
   const stageForNode = parentStageMap(graph, columns);
   const nodes: PositionedIndustryNode[] = stages.map((stage, column) => (
-    positionNode(stage, column, STAGE_Y, STAGE_HEIGHT)
+    positionNode(stage, column, STAGE_Y, stageHeight)
   ));
   const semanticByColumn = new Map<number, IndustryChainNode[]>();
   graph.nodes.filter((node) => node.type !== 'STAGE' && node.type !== 'INDUSTRY_CHAIN').forEach((node) => {
@@ -51,7 +55,7 @@ export function layoutIndustryGraph(graph: IndustryChainGraph): IndustryGraphLay
   });
   const columnBottoms: number[] = [];
   stages.forEach((_, column) => {
-    let cursorY = SEMANTIC_Y;
+    let cursorY = semanticY;
     let previousType = '';
     const semanticNodes = (semanticByColumn.get(column) ?? []).sort(compareSemanticNodes);
     semanticNodes.forEach((node) => {
