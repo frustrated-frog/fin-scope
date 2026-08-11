@@ -22,6 +22,11 @@ test('defines the complete responsive semantic graph visual contract', () => {
   ['structure', 'value', 'bottleneck', 'technology', 'localization', 'company']
     .forEach((layer) => expect(styles).toContain(`.ic-layer-bar--${layer}`));
   expect(styles).toContain('.ic-node-expand');
+  expect(styles).toContain('.ic-node-highlights');
+  expect(styles).toContain('.ic-node-highlight-label');
+  expect(styles).toMatch(/\.ic-node-highlight\.is-critical[^}]*color:/);
+  expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-mobile-reader\s+\.ic-node-highlights/);
+  expect(styles).toContain('text-wrap: balance');
   expect(styles).toContain('.ic-inspector-expand');
   expect(styles).toContain('.ic-edge-type--substitutes');
   expect(styles).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+340px/);
