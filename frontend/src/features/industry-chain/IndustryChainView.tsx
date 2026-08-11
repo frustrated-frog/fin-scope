@@ -29,7 +29,7 @@ export function IndustryChainView({
   const [loading, setLoading] = useState(true);
   const [selectedNodeKey, setSelectedNodeKey] = useState<string>();
   const [focusMode, setFocusMode] = useState(Boolean(initialStockCode));
-  const [expandedCompanyKeys, setExpandedCompanyKeys] = useState<Set<string>>(new Set());
+  const [expandedNodeKeys, setExpandedNodeKeys] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'panorama' | 'research' | 'dynamics'>('panorama');
   const [eventHours, setEventHours] = useState(168);
   const [eventFeed, setEventFeed] = useState<IndustryChainEventFeed>();
@@ -55,6 +55,7 @@ export function IndustryChainView({
     if (company) {
       setSelectedNodeKey(company.nodeKey);
       setFocusMode(true);
+      setExpandedNodeKeys(expansionPathToNode(workspace.graph, company.nodeKey));
     }
   }, [initialStockCode, workspace?.graph]);
 
@@ -89,6 +90,7 @@ export function IndustryChainView({
       const value = await api<IndustryChainWorkspace>(`/api/industry-chains/${chain.id}`);
       setWorkspace(value);
       setSelectedNodeKey(undefined);
+      setExpandedNodeKeys(new Set());
       setEventFeed(undefined);
       setSelectedEventId(undefined);
       setViewMode('panorama');
@@ -106,6 +108,7 @@ export function IndustryChainView({
       });
       setWorkspace(next);
       setName('');
+      setExpandedNodeKeys(new Set());
       setMessage(`${next.chain.name} 图谱已进入生成队列`);
       await loadChains();
     } catch (error) { handleError(error); } finally { setLoading(false); }
@@ -151,8 +154,8 @@ export function IndustryChainView({
     setMessage(next); addToast(next, 'error');
   }
 
-  function toggleCompanies(key: string) {
-    setExpandedCompanyKeys((current) => {
+  function toggleExpanded(key: string) {
+    setExpandedNodeKeys((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -254,10 +257,10 @@ export function IndustryChainView({
               viewMode === 'research' ? <IndustryChainResearchPanel graph={workspace.graph} /> : (
                 <div className="ic-graph-grid">
                   <IndustryChainCanvas graph={workspace.graph} selectedNodeKey={selectedNodeKey}
-                    search={search} focusMode={focusMode} expandedCompanyKeys={expandedCompanyKeys}
+                    search={search} focusMode={focusMode} expandedNodeKeys={expandedNodeKeys}
                     eventCounts={viewMode === 'dynamics' ? eventFeed?.nodeEventCounts : undefined}
                     highlightedPath={viewMode === 'dynamics' ? selectedEvent?.impact.pathNodeKeys : undefined}
-                    onSelectNode={setSelectedNodeKey} onToggleCompanies={toggleCompanies} />
+                    onSelectNode={setSelectedNodeKey} onToggleExpanded={toggleExpanded} />
                   {viewMode === 'panorama' ? (
                     <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
                   ) : (
@@ -280,4 +283,34 @@ export function IndustryChainView({
       </main>
     </div>
   );
+}
+
+function expansionPathToNode(graph: NonNullable<IndustryChainWorkspace['graph']>, nodeKey: string) {
+  const nodeTypes = new Map(graph.nodes.map((node) => [node.nodeKey, node.type]));
+  const queue = [nodeKey];
+  const parent = new Map<string, string>();
+  const visited = new Set(queue);
+  let stageKey: string | undefined;
+  while (queue.length > 0 && !stageKey) {
+    const current = queue.shift()!;
+    if (nodeTypes.get(current) === 'STAGE') {
+      stageKey = current;
+      break;
+    }
+    graph.edges.forEach((edge) => {
+      const next = edge.sourceKey === current ? edge.targetKey
+        : edge.targetKey === current ? edge.sourceKey : undefined;
+      if (!next || visited.has(next)) return;
+      visited.add(next);
+      parent.set(next, current);
+      queue.push(next);
+    });
+  }
+  const result = new Set<string>();
+  let current = stageKey;
+  while (current) {
+    if (current !== nodeKey) result.add(current);
+    current = parent.get(current);
+  }
+  return result;
 }

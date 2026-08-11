@@ -1,24 +1,39 @@
 import { useMemo } from 'react';
 
 import { focusNeighborhood, layoutIndustryGraph } from './industryChainLayout';
-import type { IndustryChainGraph } from './industryChainTypes';
+import { directSemanticNeighbors, projectSemanticGraph, semanticNodeTone } from './industryChainProjection';
+import type { IndustryChainGraph, IndustryChainLayer, IndustryChainNodeType } from './industryChainTypes';
 
 export function IndustryChainCanvas({
-  graph, selectedNodeKey, search, focusMode, expandedCompanyKeys,
-  eventCounts = {}, highlightedPath = [], onSelectNode, onToggleCompanies
+  graph, selectedNodeKey, search, focusMode, expandedNodeKeys, activeLayer = 'STRUCTURE',
+  eventCounts = {}, highlightedPath = [], onSelectNode, onToggleExpanded
 }: {
   graph: IndustryChainGraph;
   selectedNodeKey?: string;
   search: string;
   focusMode: boolean;
-  expandedCompanyKeys: Set<string>;
+  expandedNodeKeys: Set<string>;
+  activeLayer?: IndustryChainLayer;
   eventCounts?: Record<string, number>;
   highlightedPath?: string[];
   onSelectNode: (key: string) => void;
-  onToggleCompanies: (key: string) => void;
+  onToggleExpanded: (key: string) => void;
 }) {
-  const layout = useMemo(() => layoutIndustryGraph(graph, { expandedCompanyKeys }),
-    [graph, expandedCompanyKeys]);
+  const projectionExpansion = useMemo(() => {
+    const result = new Set(expandedNodeKeys);
+    if (highlightedPath.length > 0) {
+      const highlighted = new Set(highlightedPath);
+      graph.edges.forEach((edge) => {
+        if (edge.type === 'BELONGS_TO_STAGE' && highlighted.has(edge.sourceKey)) result.add(edge.targetKey);
+      });
+    }
+    return result;
+  }, [expandedNodeKeys, graph.edges, highlightedPath]);
+  const projectedGraph = useMemo(
+    () => projectSemanticGraph(graph, projectionExpansion, activeLayer),
+    [activeLayer, graph, projectionExpansion]
+  );
+  const layout = useMemo(() => layoutIndustryGraph(projectedGraph), [projectedGraph]);
   const focused = useMemo(() => new Set(
     focusMode && selectedNodeKey ? focusNeighborhood(graph, selectedNodeKey, 3) : graph.nodes.map((node) => node.nodeKey)
   ), [focusMode, graph, selectedNodeKey]);
@@ -50,26 +65,36 @@ export function IndustryChainCanvas({
                 <path d="M 0 0 L 10 5 L 0 10 z" />
               </marker>
             </defs>
-            {layout.edges.map((edge) => (
-              <path key={edge.edgeKey} d={edge.path}
-                className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ic-edge--${edge.route} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'} ${highlightedEdges.has(`${edge.sourceKey}::${edge.targetKey}`) ? 'is-event-path' : ''}`}
-                markerEnd={`url(#ic-arrow-${edge.nature.toLocaleLowerCase().replace('industry_', '')})`}
-                vectorEffect="non-scaling-stroke" />
-            ))}
+            {layout.edges.map((edge, index) => {
+              const selected = selectedNodeKey === edge.sourceKey || selectedNodeKey === edge.targetKey;
+              const pathId = `ic-edge-path-${index}`;
+              return <g key={edge.edgeKey}>
+                <path id={pathId} d={edge.path}
+                  className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ic-edge--${edge.route} ic-edge-type--${edge.type.toLocaleLowerCase()} ic-edge-strength--${(edge.strength ?? 'PRIMARY').toLocaleLowerCase()} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'} ${highlightedEdges.has(`${edge.sourceKey}::${edge.targetKey}`) ? 'is-event-path' : ''}`}
+                  markerEnd={`url(#ic-arrow-${edge.nature.toLocaleLowerCase().replace('industry_', '')})`}
+                  vectorEffect="non-scaling-stroke" />
+                {selected && <text className="ic-edge-label"><textPath href={`#${pathId}`} startOffset="50%">
+                  {edge.directionNote || edge.description}
+                </textPath></text>}
+              </g>;
+            })}
           </svg>
           {layout.nodes.map((node) => {
-            const count = layout.companyCounts.get(node.nodeKey) ?? 0;
+            const count = directSemanticNeighbors(graph, node.nodeKey).length;
+            const profile = graph.researchContent?.nodeProfiles?.find((item) => item.nodeKey === node.nodeKey);
+            const tone = semanticNodeTone(profile, activeLayer);
             const match = Boolean(normalizedSearch && (`${node.name} ${node.description} ${node.stockCode ?? ''}`)
               .toLocaleLowerCase().includes(normalizedSearch));
             return (
               <div className={`ic-node-wrap ${focused.has(node.nodeKey) ? '' : 'is-muted'}`}
                 key={node.nodeKey} style={{ left: node.x, top: node.y, width: node.width }}>
                 <button type="button"
-                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''} ${highlightedNodes.has(node.nodeKey) ? 'is-event-path' : ''}`}
+                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ic-tone--${tone} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''} ${highlightedNodes.has(node.nodeKey) ? 'is-event-path' : ''}`}
                   style={{ height: node.height }}
                   data-search-match={match ? 'true' : 'false'}
                   aria-label={`${node.name} · ${node.description}`}
-                  onClick={() => onSelectNode(node.nodeKey)}>
+                  onClick={() => onSelectNode(node.nodeKey)}
+                  onDoubleClick={() => count > 0 && onToggleExpanded(node.nodeKey)}>
                   <span className="ic-node-kicker">{nodeLabel(node.type)} {node.stockCode && `· ${node.stockCode}`}</span>
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
@@ -80,10 +105,12 @@ export function IndustryChainCanvas({
                   </span>
                 )}
                 {count > 0 && (
-                  <button className="ic-company-toggle" type="button"
-                    aria-label={`${expandedCompanyKeys.has(node.nodeKey) ? '收起' : '展开'} ${node.name} 的 ${count} 家公司`}
-                    onClick={() => onToggleCompanies(node.nodeKey)}>
-                    {expandedCompanyKeys.has(node.nodeKey) ? '收起公司' : `${count} 家代表公司`}
+                  <button className="ic-node-expand" type="button"
+                    aria-label={`${expandedNodeKeys.has(node.nodeKey) ? '收起' : '展开'} ${node.name} 的 ${count} 个关联节点`}
+                    aria-expanded={expandedNodeKeys.has(node.nodeKey)}
+                    onClick={() => onToggleExpanded(node.nodeKey)}>
+                    <span aria-hidden="true">{expandedNodeKeys.has(node.nodeKey) ? '−' : '+'}</span>
+                    {expandedNodeKeys.has(node.nodeKey) ? '收起分支' : `${count} 个关联节点`}
                   </button>
                 )}
               </div>
@@ -105,7 +132,7 @@ export function IndustryChainCanvas({
               {layout.nodes.filter((node) => node.column === index && node.type !== 'STAGE').map((node) => (
                 <button key={node.nodeKey} type="button" onClick={() => onSelectNode(node.nodeKey)}
                   className={selectedNodeKey === node.nodeKey ? 'is-selected' : ''}>
-                  <span>{node.type === 'COMPANY' ? node.stockCode || '公司' : '产品 / 能力'}</span>
+                  <span>{nodeLabel(node.type)}{node.stockCode && ` · ${node.stockCode}`}</span>
                   <strong>{node.name}</strong><small>{node.description}</small>
                 </button>
               ))}
@@ -117,9 +144,14 @@ export function IndustryChainCanvas({
   );
 }
 
-function nodeLabel(type: string) {
+function nodeLabel(type: IndustryChainNodeType) {
   if (type === 'STAGE') return '产业环节';
+  if (type === 'MATERIAL') return '关键材料';
+  if (type === 'EQUIPMENT') return '核心设备';
+  if (type === 'COMPONENT') return '核心部件';
   if (type === 'PRODUCT') return '产品 / 能力';
+  if (type === 'TECHNOLOGY') return '技术路线';
+  if (type === 'APPLICATION') return '下游应用';
   if (type === 'COMPANY') return '代表公司';
   return '产业主题';
 }

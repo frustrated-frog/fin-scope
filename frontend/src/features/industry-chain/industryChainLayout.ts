@@ -3,13 +3,13 @@ import type { IndustryChainEdge, IndustryChainGraph, IndustryChainNode } from '.
 const LANE_WIDTH = 292;
 const NODE_WIDTH = 208;
 const STAGE_Y = 72;
-const PRODUCT_Y = 184;
+const SEMANTIC_Y = 184;
 const STAGE_HEIGHT = 72;
 const NODE_HEIGHT = 64;
-const COMPANY_TOGGLE_HEIGHT = 28;
-const COMPANY_GAP = 12;
-const GROUP_GAP = 32;
+const NODE_GAP = 28;
+const TYPE_GAP = 14;
 const EDGE_GUTTER = 18;
+const TYPE_ORDER = ['MATERIAL', 'EQUIPMENT', 'COMPONENT', 'PRODUCT', 'TECHNOLOGY', 'APPLICATION', 'COMPANY'];
 
 export type PositionedIndustryNode = IndustryChainNode & {
   x: number;
@@ -32,53 +32,33 @@ export type IndustryGraphLayout = {
   stages: PositionedIndustryNode[];
   nodes: PositionedIndustryNode[];
   edges: PositionedIndustryEdge[];
-  companyCounts: Map<string, number>;
 };
 
-export function layoutIndustryGraph(
-  graph: IndustryChainGraph,
-  options: { expandedCompanyKeys?: Set<string> } = {}
-): IndustryGraphLayout {
+export function layoutIndustryGraph(graph: IndustryChainGraph): IndustryGraphLayout {
   const stages = graph.nodes
     .filter((node) => node.type === 'STAGE')
     .sort((left, right) => (left.stageOrder ?? Number.MAX_SAFE_INTEGER)
       - (right.stageOrder ?? Number.MAX_SAFE_INTEGER));
   const columns = new Map(stages.map((stage, index) => [stage.nodeKey, index]));
   const stageForNode = parentStageMap(graph, columns);
-  const companyParent = companyParentMap(graph);
-  const companyCounts = new Map<string, number>();
-  const companiesByParent = new Map<string, IndustryChainNode[]>();
-  graph.nodes.filter((node) => node.type === 'COMPANY').forEach((company) => {
-    const parent = companyParent.get(company.nodeKey);
-    if (!parent) return;
-    companyCounts.set(parent, (companyCounts.get(parent) ?? 0) + 1);
-    companiesByParent.set(parent, [...(companiesByParent.get(parent) ?? []), company]);
-  });
-  const expanded = options.expandedCompanyKeys ?? new Set<string>();
   const nodes: PositionedIndustryNode[] = stages.map((stage, column) => (
     positionNode(stage, column, STAGE_Y, STAGE_HEIGHT)
   ));
-  const productsByColumn = new Map<number, IndustryChainNode[]>();
-  graph.nodes.filter((node) => node.type === 'PRODUCT').forEach((product) => {
-    const column = columns.get(stageForNode.get(product.nodeKey) ?? '') ?? 0;
-    productsByColumn.set(column, [...(productsByColumn.get(column) ?? []), product]);
+  const semanticByColumn = new Map<number, IndustryChainNode[]>();
+  graph.nodes.filter((node) => node.type !== 'STAGE' && node.type !== 'INDUSTRY_CHAIN').forEach((node) => {
+    const column = columns.get(stageForNode.get(node.nodeKey) ?? '') ?? 0;
+    semanticByColumn.set(column, [...(semanticByColumn.get(column) ?? []), node]);
   });
   const columnBottoms: number[] = [];
   stages.forEach((_, column) => {
-    let cursorY = PRODUCT_Y;
-    (productsByColumn.get(column) ?? []).forEach((product) => {
-      nodes.push(positionNode(product, column, cursorY, NODE_HEIGHT));
-      const companies = companiesByParent.get(product.nodeKey) ?? [];
-      cursorY += NODE_HEIGHT;
-      if (companies.length > 0) cursorY += COMPANY_TOGGLE_HEIGHT;
-      if (expanded.has(product.nodeKey)) {
-        companies.forEach((company) => {
-          nodes.push(positionNode(company, column, cursorY, NODE_HEIGHT));
-          cursorY += NODE_HEIGHT + COMPANY_GAP;
-        });
-        if (companies.length > 0) cursorY -= COMPANY_GAP;
-      }
-      cursorY += GROUP_GAP;
+    let cursorY = SEMANTIC_Y;
+    let previousType = '';
+    const semanticNodes = (semanticByColumn.get(column) ?? []).sort(compareSemanticNodes);
+    semanticNodes.forEach((node) => {
+      if (previousType && previousType !== node.type) cursorY += TYPE_GAP;
+      nodes.push(positionNode(node, column, cursorY, NODE_HEIGHT));
+      cursorY += NODE_HEIGHT + NODE_GAP;
+      previousType = node.type;
     });
     columnBottoms.push(cursorY);
   });
@@ -96,8 +76,14 @@ export function layoutIndustryGraph(
   return {
     width: Math.max(900, stages.length * LANE_WIDTH + 32),
     height: Math.max(520, ...columnBottoms.map((bottom) => bottom + 48)),
-    stages: nodes.filter((node) => node.type === 'STAGE'), nodes, edges, companyCounts
+    stages: nodes.filter((node) => node.type === 'STAGE'), nodes, edges
   };
+}
+
+function compareSemanticNodes(left: IndustryChainNode, right: IndustryChainNode) {
+  return TYPE_ORDER.indexOf(left.type) - TYPE_ORDER.indexOf(right.type)
+    || left.name.localeCompare(right.name, 'zh-CN')
+    || left.nodeKey.localeCompare(right.nodeKey);
 }
 
 function positionNode(node: IndustryChainNode, column: number, y: number, height: number): PositionedIndustryNode {
@@ -201,16 +187,6 @@ function parentStageMap(graph: IndustryChainGraph, stageColumns: Map<string, num
       }
     });
   }
-  return result;
-}
-
-function companyParentMap(graph: IndustryChainGraph) {
-  const result = new Map<string, string>();
-  const nodeTypes = new Map(graph.nodes.map((node) => [node.nodeKey, node.type]));
-  graph.edges.forEach((edge) => {
-    if (nodeTypes.get(edge.sourceKey) === 'COMPANY') result.set(edge.sourceKey, edge.targetKey);
-    if (nodeTypes.get(edge.targetKey) === 'COMPANY') result.set(edge.targetKey, edge.sourceKey);
-  });
   return result;
 }
 

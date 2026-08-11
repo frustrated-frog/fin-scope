@@ -33,12 +33,16 @@ const graph: IndustryChainGraph = {
     { nodeKey: 'stage:chip', type: 'STAGE', name: '算力芯片', description: '计算核心', stageOrder: 1, confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'stage:server', type: 'STAGE', name: '服务器', description: '系统集成', stageOrder: 2, confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'stage:dc', type: 'STAGE', name: '数据中心', description: '算力交付', stageOrder: 3, confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { nodeKey: 'material:copper', type: 'MATERIAL', name: '高纯铜', description: '高速互连材料', confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { nodeKey: 'equipment:lithography', type: 'EQUIPMENT', name: '光刻设备', description: '芯片制造设备', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'product:gpu', type: 'PRODUCT', name: 'AI芯片', description: 'GPU 与 ASIC', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'company:nvidia', type: 'COMPANY', name: '英伟达', description: '代表公司', stockCode: 'NVDA.O', confidence: 'HIGH', evidenceRefs: ['E1'] }
   ],
   edges: [
     { edgeKey: 'e1', sourceKey: 'stage:chip', targetKey: 'stage:server', type: 'FLOWS_TO', nature: 'INDUSTRY_LOGIC', description: '进入整机', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e2', sourceKey: 'stage:server', targetKey: 'stage:dc', type: 'FLOWS_TO', nature: 'INDUSTRY_LOGIC', description: '部署交付', confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { edgeKey: 'e-material', sourceKey: 'material:copper', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '属于上游', confidence: 'HIGH', evidenceRefs: ['E1'] },
+    { edgeKey: 'e-equipment', sourceKey: 'equipment:lithography', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '支撑制造', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e3', sourceKey: 'product:gpu', targetKey: 'stage:chip', type: 'BELONGS_TO_STAGE', nature: 'INDUSTRY_LOGIC', description: '属于上游', confidence: 'HIGH', evidenceRefs: ['E1'] },
     { edgeKey: 'e4', sourceKey: 'company:nvidia', targetKey: 'product:gpu', type: 'PARTICIPATES_IN', nature: 'DISCLOSED', description: '参与 AI 芯片', confidence: 'HIGH', evidenceRefs: ['E1'] }
   ],
@@ -98,7 +102,7 @@ test('selects graph nodes, searches and switches focus mode', async () => {
   render(<IndustryChainView />);
 
   await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
-  await userEvent.click(await screen.findByRole('button', { name: /算力芯片/ }));
+  await userEvent.click(await screen.findByRole('button', { name: '算力芯片 · 计算核心' }));
   expect(screen.getByRole('complementary', { name: '图谱详情' })).toHaveTextContent('计算核心');
 
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索图谱节点' }), { target: { value: '数据中心' } });
@@ -108,7 +112,7 @@ test('selects graph nodes, searches and switches focus mode', async () => {
   expect(screen.getByLabelText('移动端产业链阅读器')).toBeInTheDocument();
 });
 
-test('renders dedicated edge routes and expands a company below its product', async () => {
+test('progressively expands and collapses semantic nodes while preserving dedicated edge routes', async () => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/api/industry-chains') return [workspace.chain];
     if (path === '/api/industry-chains/7') return workspace;
@@ -117,12 +121,19 @@ test('renders dedicated edge routes and expands a company below its product', as
   const { container } = render(<IndustryChainView />);
 
   await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
-  await userEvent.click(screen.getByRole('button', { name: '展开 AI芯片 的 1 家公司' }));
+  expect(container.querySelector('.ic-node--material')).not.toBeInTheDocument();
+  fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
+  expect(container.querySelector('.ic-node--material')).toBeInTheDocument();
+  expect(container.querySelector('.ic-node--equipment')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '展开 AI芯片 的 1 个关联节点' }));
 
   expect(container.querySelector('.ic-edge--stage-flow')).toBeInTheDocument();
   expect(container.querySelector('.ic-edge--stage-membership')).toBeInTheDocument();
   expect(container.querySelector('.ic-edge--company-link')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '英伟达 · 代表公司' })).toBeInTheDocument();
+
+  fireEvent.doubleClick(screen.getByRole('button', { name: '算力芯片 · 计算核心' }));
+  expect(container.querySelector('.ic-node--material')).not.toBeInTheDocument();
 });
 
 test('shows chain dynamics, changes time window and opens the reused News Wire event', async () => {
