@@ -11,6 +11,24 @@ vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 const graph: IndustryChainGraph = {
   chainId: 7, revisionId: 11, name: 'AI算力', summary: '算力从芯片流向服务器与数据中心。',
   limitations: '具体供销关系以公司公告为准。', schemaVersion: 'INDUSTRY_CHAIN_V1',
+  researchContent: {
+    overview: {
+      lifecycle: 'GROWTH', prosperity: 'RISING', supplyDemand: 'STRUCTURAL', cycleType: '资本开支驱动的成长周期',
+      demandDrivers: ['云厂商资本开支'], supplyDrivers: ['先进制程产能'], keyVariables: ['GPU 交付周期'],
+      bottlenecks: ['先进算力芯片'], overcapacityRisks: ['低端服务器组装'], trendTags: ['算力升级', '国产替代']
+    },
+    stageProfiles: [{
+      nodeKey: 'stage:chip', roleSummary: '提供计算核心', businessModel: '芯片销售与软件生态',
+      costStructure: '研发、晶圆制造与先进封装', valueCapture: '性能与生态溢价', bottleneck: '先进制程与 HBM 供给',
+      prosperity: 'RISING', supplyDemand: 'TIGHT', lifecycle: 'GROWTH', profitDrivers: ['产品代际升级'],
+      barriers: ['软硬件生态'], coreMetrics: ['出货量', '平均售价'], risks: ['出口限制'],
+      keyVariables: ['良率'], trendTags: ['高性能计算']
+    }],
+    companyProfiles: [{
+      nodeKey: 'company:nvidia', industryPosition: '全球 AI 加速芯片与计算生态龙头', coreProducts: ['GPU', 'CUDA'],
+      downstreamMarkets: ['云计算', '企业 AI'], competitiveAdvantages: ['软硬件生态', '产品迭代'], keyVariables: ['云厂商资本开支']
+    }]
+  },
   nodes: [
     { nodeKey: 'stage:chip', type: 'STAGE', name: '算力芯片', description: '计算核心', stageOrder: 1, confidence: 'HIGH', evidenceRefs: ['E1'] },
     { nodeKey: 'stage:server', type: 'STAGE', name: '服务器', description: '系统集成', stageOrder: 2, confidence: 'HIGH', evidenceRefs: ['E1'] },
@@ -141,4 +159,24 @@ test('shows chain dynamics, changes time window and opens the reused News Wire e
   await waitFor(() => expect(api).toHaveBeenCalledWith('/api/industry-chains/7/events?hours=24'));
   await userEvent.click(screen.getByRole('button', { name: '在 News Wire 查看' }));
   expect(onOpenNewsEvent).toHaveBeenCalledWith(91);
+});
+
+test('switches to the research panel and presents industry operating content', async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return workspace;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+  await userEvent.click(screen.getByRole('button', { name: '研究面板' }));
+
+  expect(screen.getByRole('region', { name: 'AI算力产业研究面板' })).toBeInTheDocument();
+  expect(screen.getAllByText('成长扩张')).not.toHaveLength(0);
+  expect(screen.getAllByText('景气上行')).not.toHaveLength(0);
+  expect(screen.getByText('云厂商资本开支')).toBeInTheDocument();
+  expect(screen.getByText('先进算力芯片')).toBeInTheDocument();
+  expect(screen.getByText('芯片销售与软件生态')).toBeInTheDocument();
+  expect(screen.getByText('全球 AI 加速芯片与计算生态龙头')).toBeInTheDocument();
 });

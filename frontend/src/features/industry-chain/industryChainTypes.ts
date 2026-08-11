@@ -3,6 +3,55 @@ export type IndustryChainEdgeType = 'CONTAINS_STAGE' | 'FLOWS_TO' | 'BELONGS_TO_
   | 'INPUT_TO' | 'PRODUCES' | 'PARTICIPATES_IN' | 'SUPPLIES_TO';
 export type IndustryChainEdgeNature = 'DISCLOSED' | 'INDUSTRY_LOGIC' | 'INFERRED';
 export type IndustryChainConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type IndustryChainLifecycle = 'EMERGING' | 'GROWTH' | 'MATURE' | 'CONSOLIDATING' | 'DECLINING';
+export type IndustryChainProsperity = 'RISING' | 'STABLE' | 'COOLING' | 'MIXED';
+export type IndustryChainSupplyDemand = 'TIGHT' | 'BALANCED' | 'LOOSE' | 'STRUCTURAL';
+
+export type IndustryChainResearchOverview = {
+  lifecycle: IndustryChainLifecycle;
+  prosperity: IndustryChainProsperity;
+  supplyDemand: IndustryChainSupplyDemand;
+  cycleType: string;
+  demandDrivers: string[];
+  supplyDrivers: string[];
+  keyVariables: string[];
+  bottlenecks: string[];
+  overcapacityRisks: string[];
+  trendTags: string[];
+};
+
+export type IndustryChainStageProfile = {
+  nodeKey: string;
+  roleSummary: string;
+  businessModel: string;
+  costStructure: string;
+  valueCapture: string;
+  bottleneck: string;
+  prosperity: IndustryChainProsperity;
+  supplyDemand: IndustryChainSupplyDemand;
+  lifecycle: IndustryChainLifecycle;
+  profitDrivers: string[];
+  barriers: string[];
+  coreMetrics: string[];
+  risks: string[];
+  keyVariables: string[];
+  trendTags: string[];
+};
+
+export type IndustryChainCompanyProfile = {
+  nodeKey: string;
+  industryPosition: string;
+  coreProducts: string[];
+  downstreamMarkets: string[];
+  competitiveAdvantages: string[];
+  keyVariables: string[];
+};
+
+export type IndustryChainResearchContent = {
+  overview: IndustryChainResearchOverview;
+  stageProfiles: IndustryChainStageProfile[];
+  companyProfiles: IndustryChainCompanyProfile[];
+};
 
 export type IndustryChain = {
   id: number;
@@ -70,6 +119,7 @@ export type IndustryChainGraph = {
   nodes: IndustryChainNode[];
   edges: IndustryChainEdge[];
   evidence: IndustryChainEvidence[];
+  researchContent?: IndustryChainResearchContent;
 };
 
 export type IndustryChainWorkspace = {

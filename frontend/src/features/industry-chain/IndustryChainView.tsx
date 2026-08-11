@@ -4,6 +4,7 @@ import { api } from '../../shared/api/client';
 import { IndustryChainCanvas } from './IndustryChainCanvas';
 import { IndustryChainInspector } from './IndustryChainInspector';
 import { IndustryChainDynamics } from './IndustryChainDynamics';
+import { IndustryChainResearchPanel } from './IndustryChainResearchPanel';
 import type { IndustryChain, IndustryChainEventFeed, IndustryChainEventRefreshSummary, IndustryChainWorkspace } from './industryChainTypes';
 import './industry-chain.css';
 
@@ -29,7 +30,7 @@ export function IndustryChainView({
   const [selectedNodeKey, setSelectedNodeKey] = useState<string>();
   const [focusMode, setFocusMode] = useState(Boolean(initialStockCode));
   const [expandedCompanyKeys, setExpandedCompanyKeys] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'panorama' | 'dynamics'>('panorama');
+  const [viewMode, setViewMode] = useState<'panorama' | 'research' | 'dynamics'>('panorama');
   const [eventHours, setEventHours] = useState(168);
   const [eventFeed, setEventFeed] = useState<IndustryChainEventFeed>();
   const [selectedEventId, setSelectedEventId] = useState<number>();
@@ -223,22 +224,24 @@ export function IndustryChainView({
                 {workspace.graph && <nav className="ic-view-switch" aria-label="产业链视图">
                   <button type="button" className={viewMode === 'panorama' ? 'is-active' : ''}
                     aria-pressed={viewMode === 'panorama'} onClick={() => setViewMode('panorama')}>产业全景</button>
+                  <button type="button" className={viewMode === 'research' ? 'is-active' : ''}
+                    aria-pressed={viewMode === 'research'} onClick={() => setViewMode('research')}>研究面板</button>
                   <button type="button" className={viewMode === 'dynamics' ? 'is-active' : ''}
                     aria-pressed={viewMode === 'dynamics'} onClick={() => setViewMode('dynamics')}>链上动态</button>
                 </nav>}
               </div>
               <div className="ic-toolbar-controls">
-                <label className="ic-search">
+                {viewMode === 'panorama' && <label className="ic-search">
                   <span aria-hidden="true">⌕</span>
                   <input type="search" aria-label="搜索图谱节点" value={search}
                     onChange={(event) => setSearch(event.target.value)} placeholder="搜索产品、公司、代码" />
-                </label>
-                <button type="button" className="ic-focus-button" disabled={!selectedNodeKey || viewMode === 'dynamics'}
+                </label>}
+                {viewMode === 'panorama' && <button type="button" className="ic-focus-button" disabled={!selectedNodeKey}
                   onClick={() => setFocusMode((current) => !current)}>
                   {focusMode ? '查看全图' : '聚焦链路'}
-                </button>
+                </button>}
                 <button type="button" className="ic-refresh-button" onClick={() => void refreshGraph()}
-                  disabled={workspace.revision?.status === 'RUNNING'}>刷新证据</button>
+                  disabled={workspace.revision?.status === 'RUNNING'}>刷新图谱</button>
               </div>
             </header>
             {workspace.revision?.status === 'RUNNING' && (
@@ -248,21 +251,23 @@ export function IndustryChainView({
               <div className="ic-progress is-error" role="status"><i /><span>{workspace.revision.message}</span></div>
             )}
             {workspace.graph ? (
-              <div className="ic-graph-grid">
-                <IndustryChainCanvas graph={workspace.graph} selectedNodeKey={selectedNodeKey}
-                  search={search} focusMode={focusMode} expandedCompanyKeys={expandedCompanyKeys}
-                  eventCounts={viewMode === 'dynamics' ? eventFeed?.nodeEventCounts : undefined}
-                  highlightedPath={viewMode === 'dynamics' ? selectedEvent?.impact.pathNodeKeys : undefined}
-                  onSelectNode={setSelectedNodeKey} onToggleCompanies={toggleCompanies} />
-                {viewMode === 'panorama' ? (
-                  <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
-                ) : (
-                  <IndustryChainDynamics graph={workspace.graph} feed={eventFeed} selectedEventId={selectedEventId}
-                    hours={eventHours} loading={eventsLoading} onSelectEvent={setSelectedEventId}
-                    onHoursChange={setEventHours} onRefresh={() => void refreshDynamics()}
-                    onOpenNewsEvent={onOpenNewsEvent} />
-                )}
-              </div>
+              viewMode === 'research' ? <IndustryChainResearchPanel graph={workspace.graph} /> : (
+                <div className="ic-graph-grid">
+                  <IndustryChainCanvas graph={workspace.graph} selectedNodeKey={selectedNodeKey}
+                    search={search} focusMode={focusMode} expandedCompanyKeys={expandedCompanyKeys}
+                    eventCounts={viewMode === 'dynamics' ? eventFeed?.nodeEventCounts : undefined}
+                    highlightedPath={viewMode === 'dynamics' ? selectedEvent?.impact.pathNodeKeys : undefined}
+                    onSelectNode={setSelectedNodeKey} onToggleCompanies={toggleCompanies} />
+                  {viewMode === 'panorama' ? (
+                    <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
+                  ) : (
+                    <IndustryChainDynamics graph={workspace.graph} feed={eventFeed} selectedEventId={selectedEventId}
+                      hours={eventHours} loading={eventsLoading} onSelectEvent={setSelectedEventId}
+                      onHoursChange={setEventHours} onRefresh={() => void refreshDynamics()}
+                      onOpenNewsEvent={onOpenNewsEvent} />
+                  )}
+                </div>
+              )
             ) : (
               <section className="ic-building" aria-label="图谱生成中">
                 <div className="ic-building-line"><i /><i /><i /><i /></div>
