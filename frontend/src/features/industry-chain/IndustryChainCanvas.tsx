@@ -91,7 +91,7 @@ export function IndustryChainCanvas({
               <div className={`ic-node-wrap ${focused.has(node.nodeKey) ? '' : 'is-muted'}`}
                 key={node.nodeKey} style={{ left: node.x, top: node.y, width: node.width }}>
                 <button type="button"
-                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ic-tone--${tone} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''} ${highlightedNodes.has(node.nodeKey) ? 'is-event-path' : ''}`}
+                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ic-layer--${activeLayer.toLocaleLowerCase()} ic-tone--${tone} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''} ${highlightedNodes.has(node.nodeKey) ? 'is-event-path' : ''}`}
                   style={{ height: node.height }}
                   data-search-match={match ? 'true' : 'false'}
                   aria-label={`${node.name} · ${node.description}`}

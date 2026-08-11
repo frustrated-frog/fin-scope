@@ -12,3 +12,20 @@ test('keeps the create field focus treatment on one container layer', () => {
   expect(focusWithinRule).toContain('box-shadow: 0 8px 20px');
   expect(focusWithinRule).not.toContain('0 0 0');
 });
+
+test('defines the complete responsive semantic graph visual contract', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  ['material', 'equipment', 'component', 'product', 'technology', 'application', 'company']
+    .forEach((type) => expect(styles).toContain(`.ic-node--${type}`));
+  ['structure', 'value', 'bottleneck', 'technology', 'localization', 'company']
+    .forEach((layer) => expect(styles).toContain(`.ic-layer-bar--${layer}`));
+  expect(styles).toContain('.ic-node-expand');
+  expect(styles).toContain('.ic-inspector-expand');
+  expect(styles).toContain('.ic-edge-type--substitutes');
+  expect(styles).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+340px/);
+  expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*absolute/);
+  expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*relative/);
+  expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+});
