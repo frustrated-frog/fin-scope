@@ -52,6 +52,25 @@ test('shows research prompts and creates a suggested industry chain', async () =
   expect(screen.getByText('AI 算力产业白皮书')).toBeInTheDocument();
 });
 
+test('presents industry chains as a status-aware research library', async () => {
+  const readyChain = { ...workspace.chain, currentRevisionId: 11 };
+  const pendingChain = { id: 8, name: '半导体', normalizedName: '半导体' };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [readyChain, pendingChain];
+    if (path === '/api/industry-chains/7') return { ...workspace, chain: readyChain };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: 'AI算力 产业链' }));
+
+  expect(screen.getByText('2 个图谱')).toBeInTheDocument();
+  expect(screen.getByText('我的图谱')).toBeInTheDocument();
+  expect(screen.getByText('可查看链上动态')).toBeInTheDocument();
+  expect(screen.getByText('等待首次生成')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'AI算力 产业链' })).toHaveAttribute('aria-current', 'page');
+});
+
 test('selects graph nodes, searches and switches focus mode', async () => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/api/industry-chains') return [workspace.chain];

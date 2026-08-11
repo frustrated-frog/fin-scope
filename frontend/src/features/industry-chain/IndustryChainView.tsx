@@ -161,21 +161,40 @@ export function IndustryChainView({
   return (
     <div className="ic-workbench">
       <aside className="ic-library" aria-label="产业链目录">
-        <div className="ic-library-title">
-          <span>Chain index</span><strong>产业链目录</strong>
+        <div className="ic-library-heading">
+          <div className="ic-library-title">
+            <strong>产业链目录</strong>
+            <span>跟踪产业脉络与实时变化</span>
+          </div>
+          <small>{chains.length} 个图谱</small>
         </div>
         <form className="ic-create" onSubmit={handleSubmit}>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="输入产业主题" aria-label="产业链名称" />
-          <button type="submit" disabled={loading || !name.trim()} aria-label="生成产业链图谱">＋</button>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="新建产业链主题" aria-label="产业链名称" />
+          <button type="submit" disabled={loading || !name.trim()} aria-label="生成产业链图谱"><span aria-hidden="true">＋</span></button>
         </form>
+        {chains.length > 0 && (
+          <div className="ic-library-section-title"><span>我的图谱</span><small>{chains.length}</small></div>
+        )}
         <div className="ic-chain-list">
-          {chains.map((chain) => (
-            <button type="button" key={chain.id} onClick={() => void openChain(chain)}
-              className={workspace?.chain.id === chain.id ? 'is-active' : ''}
-              aria-label={`${chain.name} 产业链`}>
-              <span>{chain.name}</span><small>{chain.currentRevisionId ? `R${chain.currentRevisionId}` : '待生成'}</small>
-            </button>
-          ))}
+          {chains.map((chain) => {
+            const ready = Boolean(chain.currentRevisionId);
+            const active = workspace?.chain.id === chain.id;
+            return (
+              <button type="button" key={chain.id} onClick={() => void openChain(chain)}
+                className={active ? 'is-active' : ''} aria-current={active ? 'page' : undefined}
+                aria-label={`${chain.name} 产业链`}>
+                <i className={`ic-chain-status ${ready ? 'is-ready' : ''}`} aria-hidden="true" />
+                <span className="ic-chain-copy">
+                  <strong>{chain.name}</strong>
+                  <small>{ready ? '可查看链上动态' : '等待首次生成'}</small>
+                </span>
+                <span className="ic-chain-meta">
+                  <small>{ready ? `R${chain.currentRevisionId}` : '未生成'}</small>
+                  <span aria-hidden="true">›</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
         {!chains.length && !loading && (
           <div className="ic-empty-prompts">
