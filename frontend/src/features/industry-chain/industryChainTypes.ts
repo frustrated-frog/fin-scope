@@ -1,8 +1,13 @@
-export type IndustryChainNodeType = 'INDUSTRY_CHAIN' | 'STAGE' | 'PRODUCT' | 'COMPANY';
+export type IndustryChainNodeType = 'INDUSTRY_CHAIN' | 'STAGE' | 'MATERIAL' | 'EQUIPMENT'
+  | 'COMPONENT' | 'PRODUCT' | 'TECHNOLOGY' | 'APPLICATION' | 'COMPANY';
 export type IndustryChainEdgeType = 'CONTAINS_STAGE' | 'FLOWS_TO' | 'BELONGS_TO_STAGE'
-  | 'INPUT_TO' | 'PRODUCES' | 'PARTICIPATES_IN' | 'SUPPLIES_TO';
+  | 'INPUT_TO' | 'PRODUCES' | 'PARTICIPATES_IN' | 'SUPPLIES_TO' | 'DEPENDS_ON'
+  | 'ENABLES' | 'USED_IN' | 'SUBSTITUTES' | 'COMPETES_WITH';
 export type IndustryChainEdgeNature = 'DISCLOSED' | 'INDUSTRY_LOGIC' | 'INFERRED';
 export type IndustryChainConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type IndustryChainEdgeStrength = 'PRIMARY' | 'SECONDARY';
+export type IndustryChainLayer = 'STRUCTURE' | 'VALUE' | 'BOTTLENECK'
+  | 'TECHNOLOGY' | 'LOCALIZATION' | 'COMPANY';
 export type IndustryChainLifecycle = 'EMERGING' | 'GROWTH' | 'MATURE' | 'CONSOLIDATING' | 'DECLINING';
 export type IndustryChainProsperity = 'RISING' | 'STABLE' | 'COOLING' | 'MIXED';
 export type IndustryChainSupplyDemand = 'TIGHT' | 'BALANCED' | 'LOOSE' | 'STRUCTURAL';
@@ -47,10 +52,28 @@ export type IndustryChainCompanyProfile = {
   keyVariables: string[];
 };
 
+export type IndustryChainNodeProfile = {
+  nodeKey: string;
+  definition: string;
+  function: string;
+  inputs: string[];
+  outputs: string[];
+  costDrivers: string[];
+  valueDrivers: string[];
+  barriers: string[];
+  coreMetrics: string[];
+  risks: string[];
+  maturity: 'EMERGING' | 'SCALING' | 'MATURE' | 'DECLINING';
+  valueLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  bottleneckLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  localizationLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'LEADING';
+};
+
 export type IndustryChainResearchContent = {
   overview: IndustryChainResearchOverview;
   stageProfiles: IndustryChainStageProfile[];
   companyProfiles: IndustryChainCompanyProfile[];
+  nodeProfiles?: IndustryChainNodeProfile[];
 };
 
 export type IndustryChain = {
@@ -104,6 +127,8 @@ export type IndustryChainEdge = {
   nature: IndustryChainEdgeNature;
   description: string;
   confidence: IndustryChainConfidence;
+  strength?: IndustryChainEdgeStrength;
+  directionNote?: string;
   evidenceRefs: string[];
 };
 
