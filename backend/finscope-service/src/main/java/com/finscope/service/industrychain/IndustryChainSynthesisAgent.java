@@ -6,6 +6,7 @@ import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainEvidence;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
+import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +29,26 @@ public class IndustryChainSynthesisAgent {
     private static final Logger log = LoggerFactory.getLogger(IndustryChainSynthesisAgent.class);
     private static final int PRIMARY_TIMEOUT_MS = 90_000;
     private static final int REPAIR_TIMEOUT_MS = 60_000;
-    private static final int MAX_OUTPUT_TOKENS = 6000;
+    private static final int MAX_OUTPUT_TOKENS = 9000;
     private static final int MAX_EVIDENCE_EXCERPT = 3000;
     private static final int MAX_LIMITATIONS_LENGTH = 1600;
     private static final String REMOVED_SUPPLY_NOTICE = "未明确披露的企业供销关系已从图谱中移除。";
-    private static final Set<String> ROOT_FIELDS = set("summary", "limitations", "nodes", "edges");
+    private static final Set<String> ROOT_FIELDS = set("summary", "limitations", "researchContent", "nodes", "edges");
     private static final Set<String> NODE_FIELDS = set("nodeKey", "type", "name", "description",
             "stageOrder", "stockCode", "confidence", "evidenceRefs");
     private static final Set<String> EDGE_FIELDS = set("edgeKey", "sourceKey", "targetKey", "type",
             "nature", "description", "confidence", "evidenceRefs");
+    private static final Set<String> RESEARCH_FIELDS = set("overview", "stageProfiles", "companyProfiles");
+    private static final Set<String> OVERVIEW_FIELDS = set("lifecycle", "prosperity", "supplyDemand", "cycleType",
+            "demandDrivers", "supplyDrivers", "keyVariables", "bottlenecks", "overcapacityRisks", "trendTags");
+    private static final Set<String> STAGE_PROFILE_FIELDS = set("nodeKey", "roleSummary", "businessModel",
+            "costStructure", "valueCapture", "bottleneck", "prosperity", "supplyDemand", "lifecycle",
+            "profitDrivers", "barriers", "coreMetrics", "risks", "keyVariables", "trendTags");
+    private static final Set<String> COMPANY_PROFILE_FIELDS = set("nodeKey", "industryPosition", "coreProducts",
+            "downstreamMarkets", "competitiveAdvantages", "keyVariables");
+    private static final Set<String> LIFECYCLES = set("EMERGING", "GROWTH", "MATURE", "CONSOLIDATING", "DECLINING");
+    private static final Set<String> PROSPERITY = set("RISING", "STABLE", "COOLING", "MIXED");
+    private static final Set<String> SUPPLY_DEMAND = set("TIGHT", "BALANCED", "LOOSE", "STRUCTURAL");
 
     private final LlmChatClient llm;
     private final ObjectMapper objectMapper;
@@ -78,10 +90,11 @@ public class IndustryChainSynthesisAgent {
         graph.setName(chainName);
         graph.setSummary(required(root, "summary", 800));
         graph.setLimitations(required(root, "limitations", MAX_LIMITATIONS_LENGTH));
+        graph.setResearchContent(researchContent(root.path("researchContent")));
         graph.setNodes(nodes(root.path("nodes")));
         graph.setEdges(edges(root.path("edges")));
         graph.setEvidence(evidence);
-        graph.setSchemaVersion("INDUSTRY_CHAIN_V1");
+        graph.setSchemaVersion("INDUSTRY_CHAIN_V2");
         graph.setModel(llm.modelName());
         graph.setGeneratedAt(LocalDateTime.now());
         removeUndisclosedSupplyRelationships(graph);
@@ -154,6 +167,105 @@ public class IndustryChainSynthesisAgent {
         return result;
     }
 
+    private IndustryChainResearchContent researchContent(JsonNode value) {
+        validateFields(value, RESEARCH_FIELDS);
+        IndustryChainResearchContent content = new IndustryChainResearchContent();
+        content.setOverview(overview(value.path("overview")));
+        content.setStageProfiles(stageProfiles(value.path("stageProfiles")));
+        content.setCompanyProfiles(companyProfiles(value.path("companyProfiles")));
+        return content;
+    }
+
+    private IndustryChainResearchContent.Overview overview(JsonNode value) {
+        validateFields(value, OVERVIEW_FIELDS);
+        IndustryChainResearchContent.Overview result = new IndustryChainResearchContent.Overview();
+        result.setLifecycle(enumValue(value, "lifecycle", LIFECYCLES));
+        result.setProsperity(enumValue(value, "prosperity", PROSPERITY));
+        result.setSupplyDemand(enumValue(value, "supplyDemand", SUPPLY_DEMAND));
+        result.setCycleType(required(value, "cycleType", 160));
+        result.setDemandDrivers(phrases(value, "demandDrivers"));
+        result.setSupplyDrivers(phrases(value, "supplyDrivers"));
+        result.setKeyVariables(phrases(value, "keyVariables"));
+        result.setBottlenecks(phrases(value, "bottlenecks"));
+        result.setOvercapacityRisks(phrases(value, "overcapacityRisks"));
+        result.setTrendTags(phrases(value, "trendTags"));
+        return result;
+    }
+
+    private List<IndustryChainResearchContent.StageProfile> stageProfiles(JsonNode values) {
+        if (!values.isArray() || values.size() == 0 || values.size() > 40) {
+            throw new IllegalArgumentException("stageProfiles 必须包含 1 至 40 个环节画像");
+        }
+        List<IndustryChainResearchContent.StageProfile> result = new ArrayList<IndustryChainResearchContent.StageProfile>();
+        for (JsonNode value : values) {
+            validateFields(value, STAGE_PROFILE_FIELDS);
+            IndustryChainResearchContent.StageProfile profile = new IndustryChainResearchContent.StageProfile();
+            profile.setNodeKey(required(value, "nodeKey", 100));
+            profile.setRoleSummary(required(value, "roleSummary", 240));
+            profile.setBusinessModel(required(value, "businessModel", 240));
+            profile.setCostStructure(required(value, "costStructure", 240));
+            profile.setValueCapture(required(value, "valueCapture", 240));
+            profile.setBottleneck(required(value, "bottleneck", 240));
+            profile.setProsperity(enumValue(value, "prosperity", PROSPERITY));
+            profile.setSupplyDemand(enumValue(value, "supplyDemand", SUPPLY_DEMAND));
+            profile.setLifecycle(enumValue(value, "lifecycle", LIFECYCLES));
+            profile.setProfitDrivers(phrases(value, "profitDrivers"));
+            profile.setBarriers(phrases(value, "barriers"));
+            profile.setCoreMetrics(phrases(value, "coreMetrics"));
+            profile.setRisks(phrases(value, "risks"));
+            profile.setKeyVariables(phrases(value, "keyVariables"));
+            profile.setTrendTags(phrases(value, "trendTags"));
+            result.add(profile);
+        }
+        return result;
+    }
+
+    private List<IndustryChainResearchContent.CompanyProfile> companyProfiles(JsonNode values) {
+        if (!values.isArray() || values.size() > 40) {
+            throw new IllegalArgumentException("companyProfiles 必须是最多 40 项的数组");
+        }
+        List<IndustryChainResearchContent.CompanyProfile> result = new ArrayList<IndustryChainResearchContent.CompanyProfile>();
+        for (JsonNode value : values) {
+            validateFields(value, COMPANY_PROFILE_FIELDS);
+            IndustryChainResearchContent.CompanyProfile profile = new IndustryChainResearchContent.CompanyProfile();
+            profile.setNodeKey(required(value, "nodeKey", 100));
+            profile.setIndustryPosition(required(value, "industryPosition", 240));
+            profile.setCoreProducts(phrases(value, "coreProducts"));
+            profile.setDownstreamMarkets(phrases(value, "downstreamMarkets"));
+            profile.setCompetitiveAdvantages(phrases(value, "competitiveAdvantages"));
+            profile.setKeyVariables(phrases(value, "keyVariables"));
+            result.add(profile);
+        }
+        return result;
+    }
+
+    private String enumValue(JsonNode node, String field, Set<String> allowed) {
+        String value = required(node, field, 30);
+        if (!allowed.contains(value)) {
+            throw new IllegalArgumentException(field + " 枚举值无效");
+        }
+        return value;
+    }
+
+    private List<String> phrases(JsonNode node, String field) {
+        JsonNode values = node.path(field);
+        if (!values.isArray() || values.size() > 6) {
+            throw new IllegalArgumentException(field + " 必须是最多 6 项的数组");
+        }
+        Set<String> unique = new LinkedHashSet<String>();
+        for (JsonNode value : values) {
+            if (!value.isTextual()) {
+                throw new IllegalArgumentException(field + " 包含非文本内容");
+            }
+            String phrase = value.asText().trim();
+            if (phrase.isEmpty() || phrase.length() > 100) {
+                throw new IllegalArgumentException(field + " 包含无效短语");
+            }
+            unique.add(phrase);
+        }
+        return new ArrayList<String>(unique);
+    }
+
     private List<String> refs(JsonNode values) {
         if (!values.isArray() || values.size() == 0) {
             throw new IllegalArgumentException("图谱节点或关系必须引用证据");
@@ -188,7 +300,7 @@ public class IndustryChainSynthesisAgent {
 
     private String systemPrompt() {
         return "你是谨慎的产业研究员。只依据输入 evidence 输出一个 JSON 对象，不要 markdown。"
-                + "根字段只能是 summary、limitations、nodes、edges。节点字段必须完整且只能为 nodeKey、type、"
+                + "根字段只能是 summary、limitations、researchContent、nodes、edges。节点字段必须完整且只能为 nodeKey、type、"
                 + "name、description、stageOrder、stockCode、confidence、evidenceRefs；关系字段必须完整且只能为"
                 + "edgeKey、sourceKey、targetKey、type、nature、description、confidence、evidenceRefs。"
                 + "node.type 只能是 INDUSTRY_CHAIN、STAGE、PRODUCT、COMPANY；edge.type 只能是 "
@@ -197,7 +309,22 @@ public class IndustryChainSynthesisAgent {
                 + "至少生成三个按 stageOrder 排序并由 FLOWS_TO 连通的"
                 + "STAGE。每个节点与关系至少引用一个输入中存在的 evidenceCode。行业通用关系使用 INDUSTRY_LOGIC，"
                 + "推断使用 INFERRED；具体企业之间的 SUPPLIES_TO 只能在公开资料明确披露时使用 DISCLOSED，"
-                + "否则不得生成。不得猜测匿名客户、供应商或合同，不得输出投资建议。";
+                + "否则不得生成。不得猜测匿名客户、供应商或合同，不得输出投资建议。"
+                + researchPrompt();
+    }
+
+    private String researchPrompt() {
+        return "researchContent 必须且只能包含 overview、stageProfiles、companyProfiles。overview 必须输出"
+                + "lifecycle、prosperity、supplyDemand、cycleType、demandDrivers、supplyDrivers、keyVariables、"
+                + "bottlenecks、overcapacityRisks、trendTags，用于表达景气度、供需状态、核心指标、产业瓶颈。"
+                + "lifecycle 只能为 EMERGING、GROWTH、MATURE、CONSOLIDATING、DECLINING；prosperity 只能为"
+                + "RISING、STABLE、COOLING、MIXED；supplyDemand 只能为 TIGHT、BALANCED、LOOSE、STRUCTURAL。"
+                + "每个 STAGE 都应有 stageProfiles 画像，字段只能为 nodeKey、roleSummary、businessModel、"
+                + "costStructure、valueCapture、bottleneck、prosperity、supplyDemand、lifecycle、profitDrivers、"
+                + "barriers、coreMetrics、risks、keyVariables、trendTags。每个 COMPANY 都应有 companyProfiles"
+                + "公司竞争格局，字段只能为 nodeKey、industryPosition、coreProducts、downstreamMarkets、"
+                + "competitiveAdvantages、keyVariables。画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
+                + "未知列表输出 []，未知短文本输出‘待观察’，不要补造价格、份额、客户或产能数字。";
     }
 
     private String repairPrompt() {

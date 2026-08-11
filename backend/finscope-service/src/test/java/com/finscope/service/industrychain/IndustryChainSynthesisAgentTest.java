@@ -23,7 +23,9 @@ class IndustryChainSynthesisAgentTest {
         assertEquals(3, graph.getNodes().size());
         assertEquals(2, graph.getEdges().size());
         assertEquals(Arrays.asList("E1"), graph.getEdges().get(0).getEvidenceRefs());
-        assertEquals("INDUSTRY_CHAIN_V1", graph.getSchemaVersion());
+        assertEquals("GROWTH", graph.getResearchContent().getOverview().getLifecycle());
+        assertEquals("设备销售与服务", graph.getResearchContent().getStageProfiles().get(0).getBusinessModel());
+        assertEquals("INDUSTRY_CHAIN_V2", graph.getSchemaVersion());
     }
 
     @Test
@@ -99,6 +101,8 @@ class IndustryChainSynthesisAgentTest {
                 + "INPUT_TO、PRODUCES、PARTICIPATES_IN、SUPPLIES_TO"));
         assertTrue(prompt[0].contains("nature 只能是 DISCLOSED、INDUSTRY_LOGIC、INFERRED"));
         assertTrue(prompt[0].contains("confidence 只能是 HIGH、MEDIUM、LOW"));
+        assertTrue(prompt[0].contains("景气度、供需状态、核心指标、产业瓶颈"));
+        assertTrue(prompt[0].contains("公司竞争格局"));
     }
 
     private IndustryChainSynthesisAgent agent(String response) {
@@ -123,7 +127,8 @@ class IndustryChainSynthesisAgentTest {
 
     private String validJson() {
         return "{\"summary\":\"AI 算力由芯片、服务器和数据中心构成\","
-                + "\"limitations\":\"企业供销关系需以公告为准\",\"nodes\":["
+                + "\"limitations\":\"企业供销关系需以公告为准\","
+                + "\"researchContent\":" + researchContent() + ",\"nodes\":["
                 + node("stage:chip", "芯片", 1) + ","
                 + node("stage:server", "服务器", 2) + ","
                 + node("stage:datacenter", "数据中心", 3) + "],\"edges\":["
@@ -133,7 +138,8 @@ class IndustryChainSynthesisAgentTest {
 
     private String jsonWithUndisclosedSupplyRelationship() {
         return "{\"summary\":\"AI 算力由芯片、服务器和数据中心构成\","
-                + "\"limitations\":\"企业供销关系需以公告为准\",\"nodes\":["
+                + "\"limitations\":\"企业供销关系需以公告为准\","
+                + "\"researchContent\":" + researchContent() + ",\"nodes\":["
                 + node("stage:chip", "芯片", 1) + ","
                 + node("stage:server", "服务器", 2) + ","
                 + node("stage:datacenter", "数据中心", 3) + ","
@@ -168,5 +174,21 @@ class IndustryChainSynthesisAgentTest {
                 + "\"targetKey\":\"company:b\",\"type\":\"SUPPLIES_TO\","
                 + "\"nature\":\"INFERRED\",\"description\":\"可能存在供货关系\","
                 + "\"confidence\":\"LOW\",\"evidenceRefs\":[\"E1\"]}";
+    }
+
+    private String researchContent() {
+        return "{\"overview\":{\"lifecycle\":\"GROWTH\",\"prosperity\":\"RISING\","
+                + "\"supplyDemand\":\"STRUCTURAL\",\"cycleType\":\"资本开支驱动的成长周期\","
+                + "\"demandDrivers\":[\"云厂商资本开支\"],\"supplyDrivers\":[\"先进制程产能\"],"
+                + "\"keyVariables\":[\"GPU交付周期\"],\"bottlenecks\":[\"先进算力芯片\"],"
+                + "\"overcapacityRisks\":[\"低端服务器组装\"],\"trendTags\":[\"算力升级\"]},"
+                + "\"stageProfiles\":[{\"nodeKey\":\"stage:chip\",\"roleSummary\":\"提供计算核心\","
+                + "\"businessModel\":\"设备销售与服务\",\"costStructure\":\"研发和晶圆制造\","
+                + "\"valueCapture\":\"性能溢价\",\"bottleneck\":\"先进制程与封装\","
+                + "\"prosperity\":\"RISING\",\"supplyDemand\":\"TIGHT\",\"lifecycle\":\"GROWTH\","
+                + "\"profitDrivers\":[\"产品升级\"],\"barriers\":[\"软硬件生态\"],"
+                + "\"coreMetrics\":[\"出货量\"],\"risks\":[\"出口限制\"],"
+                + "\"keyVariables\":[\"良率\"],\"trendTags\":[\"高性能计算\"]}],"
+                + "\"companyProfiles\":[]}";
     }
 }
