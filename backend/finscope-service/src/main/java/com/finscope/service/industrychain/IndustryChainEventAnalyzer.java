@@ -133,7 +133,19 @@ public class IndustryChainEventAnalyzer {
 
     private String summary(IndustryChainNode node, IndustryChainEventImpact impact) {
         return "事件直接作用于“" + node.getName() + "”，可能通过"
-                + impact.getMechanism() + "机制沿产业链传导。";
+                + mechanismLabel(impact.getMechanism()) + "机制沿产业链传导。";
+    }
+
+    private String mechanismLabel(IndustryChainEventImpact.Mechanism mechanism) {
+        switch (mechanism) {
+            case SUPPLY: return "供给";
+            case PRICE: return "价格";
+            case CAPACITY: return "产能";
+            case POLICY: return "政策";
+            case ORDER: return "订单";
+            case TECHNOLOGY: return "技术";
+            default: return "需求";
+        }
     }
 
     private List<String> tokens(String value) {

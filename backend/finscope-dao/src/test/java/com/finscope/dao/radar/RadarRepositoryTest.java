@@ -221,6 +221,19 @@ class RadarRepositoryTest {
         assertEquals("EXPIRED", repository.findEvent(outsideWindow.getId()).get().getStatus());
     }
 
+    @Test
+    void recentEventQueryExcludesExpiredEvents() {
+        repository.saveEvent(event("event:active"));
+        RadarEvent expired = event("event:expired");
+        expired.setStatus("EXPIRED");
+        repository.saveEvent(expired);
+
+        List<RadarEvent> recent = repository.findEventsSince(now.minusDays(30), 20);
+
+        assertEquals(1, recent.size());
+        assertEquals("event:active", recent.get(0).getEventKey());
+    }
+
     private RadarSignal signal(String itemId, String category) {
         RadarSignal signal = new RadarSignal();
         signal.setItemId(itemId);

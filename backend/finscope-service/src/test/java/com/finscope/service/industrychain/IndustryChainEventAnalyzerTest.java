@@ -28,6 +28,7 @@ class IndustryChainEventAnalyzerTest {
         assertEquals("PRICE", impact.getMechanism());
         assertEquals("SHORT", impact.getHorizon());
         assertEquals("HIGH", impact.getConfidence());
+        assertEquals("事件直接作用于“高带宽内存(HBM)”，可能通过价格机制沿产业链传导。", impact.getImpactSummary());
         assertEquals(Arrays.asList("product:hbm", "product:server", "stage:application"), impact.getPathNodeKeys());
     }
 

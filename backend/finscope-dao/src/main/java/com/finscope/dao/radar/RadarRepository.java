@@ -142,7 +142,8 @@ public class RadarRepository {
     }
 
     public List<RadarEvent> findEventsSince(LocalDateTime since, int limit) {
-        return jdbc.query("SELECT * FROM radar_event WHERE COALESCE(last_seen_at,updated_at)>=? "
+        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') "
+                        + "AND COALESCE(last_seen_at,updated_at)>=? "
                         + "ORDER BY COALESCE(last_seen_at,updated_at) DESC,id DESC LIMIT ?",
                 eventMapper(), TimeUtil.text(since), Math.max(1, Math.min(limit, 500)));
     }
