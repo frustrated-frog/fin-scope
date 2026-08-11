@@ -57,10 +57,16 @@ finscope:
       base-url: https://api.anysearch.com
       timeout-ms: 15000
       max-response-bytes: 2097152
+    firecrawl:
+      enabled: true
+      api-key: fc-e2db3ea3828948d59bac08ff902d10e1
+      base-url: https://api.firecrawl.dev
+      timeout-ms: 15000
+      max-response-bytes: 2097152
     fusion:
       rrf-constant: 60
       max-per-domain: 2
-      concurrency: 2
+      concurrency: 3
   python-market-data:
     base-url: http://127.0.0.1:8000
   acquisition:

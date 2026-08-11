@@ -10,6 +10,7 @@ import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.rpc.llm.OpenAiCompatibleLlmClient;
 import com.finscope.rpc.search.TavilyWebSearchClient;
 import com.finscope.rpc.search.AnySearchWebSearchProvider;
+import com.finscope.rpc.search.FirecrawlWebSearchProvider;
 import com.finscope.rpc.search.WebSearchProvider;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchResultFusionService;
@@ -83,6 +84,13 @@ public class AppConfig {
                 search.getTimeoutMs(), search.getMaxResponseBytes());
     }
 
+    @Bean
+    public FirecrawlWebSearchProvider firecrawlWebSearchProvider() {
+        FinScopeProperties.FirecrawlProperties search = properties.getSearch().getFirecrawl();
+        return new FirecrawlWebSearchProvider(search.isEnabled(), search.getApiKey(), search.getBaseUrl(),
+                search.getTimeoutMs(), search.getMaxResponseBytes());
+    }
+
     @Bean(name = "searchEvidenceExecutor", destroyMethod = "shutdownNow")
     public ExecutorService searchEvidenceExecutor() {
         int concurrency = Math.max(1, properties.getSearch().getFusion().getConcurrency());
@@ -98,11 +106,13 @@ public class AppConfig {
     public SearchEvidenceGateway searchEvidenceGateway(
             TavilyWebSearchClient tavily,
             AnySearchWebSearchProvider anySearch,
+            FirecrawlWebSearchProvider firecrawl,
             @Qualifier("searchEvidenceExecutor") ExecutorService executor) {
         FinScopeProperties.SearchFusionProperties fusion = properties.getSearch().getFusion();
         SearchResultFusionService fusionService = new SearchResultFusionService(
                 new SearchUrlCanonicalizer(), fusion.getRrfConstant(), fusion.getMaxPerDomain());
-        return new SearchEvidenceGateway(Arrays.<WebSearchProvider>asList(tavily, anySearch), executor, fusionService);
+        return new SearchEvidenceGateway(
+                Arrays.<WebSearchProvider>asList(tavily, anySearch, firecrawl), executor, fusionService);
     }
 
     @Bean(name = "ingestTaskExecutor")

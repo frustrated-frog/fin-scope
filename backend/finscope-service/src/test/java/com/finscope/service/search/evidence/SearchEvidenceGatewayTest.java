@@ -43,13 +43,15 @@ class SearchEvidenceGatewayTest {
     void deepKeepsSuccessfulEvidenceWhenAnotherProviderFails() {
         StubProvider tavily = new StubProvider("TAVILY", false);
         StubProvider anySearch = new StubProvider("ANYSEARCH", true);
-        SearchEvidenceGateway gateway = gateway(tavily, anySearch);
+        StubProvider firecrawl = new StubProvider("FIRECRAWL", false);
+        SearchEvidenceGateway gateway = gateway(tavily, anySearch, firecrawl);
 
         SearchEvidenceBatch batch = gateway.search(request(SearchDepth.DEEP));
 
-        assertEquals(1, batch.getEvidence().size());
+        assertEquals(2, batch.getEvidence().size());
         assertFalse(batch.isAllProvidersFailed());
-        assertEquals(2, batch.getDiagnostics().size());
+        assertEquals(3, batch.getDiagnostics().size());
+        assertEquals(1, firecrawl.calls.get());
         assertTrue(batch.getDiagnostics().stream()
                 .anyMatch(item -> "ANYSEARCH".equals(item.getProviderCode()) && item.isFailed()));
     }

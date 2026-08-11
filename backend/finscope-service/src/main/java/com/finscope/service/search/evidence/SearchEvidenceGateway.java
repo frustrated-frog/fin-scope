@@ -70,7 +70,9 @@ public class SearchEvidenceGateway {
         for (WebSearchProvider provider : providers) {
             String code = provider.providerCode() == null ? "" : provider.providerCode().toUpperCase(Locale.ROOT);
             if (depth == SearchDepth.QUICK && !"TAVILY".equals(code)) continue;
-            if ("TAVILY".equals(code) || "ANYSEARCH".equals(code)) result.add(provider);
+            if ("TAVILY".equals(code) || "ANYSEARCH".equals(code) || "FIRECRAWL".equals(code)) {
+                result.add(provider);
+            }
         }
         Collections.sort(result, Comparator.comparing(WebSearchProvider::providerCode));
         return result;

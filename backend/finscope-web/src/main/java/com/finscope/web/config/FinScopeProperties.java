@@ -30,6 +30,7 @@ public class FinScopeProperties {
         private String provider = "tavily";
         private String apiKey = "";
         private AnySearchProperties anySearch = new AnySearchProperties();
+        private FirecrawlProperties firecrawl = new FirecrawlProperties();
         private SearchFusionProperties fusion = new SearchFusionProperties();
     }
 
@@ -38,6 +39,15 @@ public class FinScopeProperties {
         private boolean enabled = false;
         private String apiKey = "";
         private String baseUrl = "https://api.anysearch.com";
+        private int timeoutMs = 15000;
+        private int maxResponseBytes = 2097152;
+    }
+
+    @Data
+    public static class FirecrawlProperties {
+        private boolean enabled = false;
+        private String apiKey = "";
+        private String baseUrl = "https://api.firecrawl.dev";
         private int timeoutMs = 15000;
         private int maxResponseBytes = 2097152;
     }
