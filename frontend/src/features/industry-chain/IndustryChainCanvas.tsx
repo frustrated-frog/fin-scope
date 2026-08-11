@@ -36,14 +36,21 @@ export function IndustryChainCanvas({
           </div>
           <svg className="ic-edge-layer" width={layout.width} height={layout.height} aria-label="产业关系">
             <defs>
-              <marker id="ic-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="ic-arrow-logic" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+              <marker id="ic-arrow-disclosed" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+              <marker id="ic-arrow-inferred" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto">
                 <path d="M 0 0 L 10 5 L 0 10 z" />
               </marker>
             </defs>
             {layout.edges.map((edge) => (
               <path key={edge.edgeKey} d={edge.path}
-                className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'}`}
-                markerEnd="url(#ic-arrow)" />
+                className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ic-edge--${edge.route} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'}`}
+                markerEnd={`url(#ic-arrow-${edge.nature.toLocaleLowerCase().replace('industry_', '')})`}
+                vectorEffect="non-scaling-stroke" />
             ))}
           </svg>
           {layout.nodes.map((node) => {

@@ -36,6 +36,36 @@ describe('industryChainLayout', () => {
     expect(layout.companyCounts.get('product:gpu')).toBe(1);
   });
 
+  it('reserves vertical space for expanded companies inside their product group', () => {
+    const expandedGraph: IndustryChainGraph = {
+      ...graph,
+      nodes: [...graph.nodes, node('product:hbm', 'PRODUCT', 'HBM')],
+      edges: [...graph.edges,
+        edge('belongs:hbm', 'product:hbm', 'stage:chip', 'BELONGS_TO_STAGE')]
+    };
+
+    const layout = layoutIndustryGraph(expandedGraph, {
+      expandedCompanyKeys: new Set(['product:gpu'])
+    });
+    const product = nodeByKey(layout, 'product:gpu');
+    const company = nodeByKey(layout, 'company:300308');
+    const nextProduct = nodeByKey(layout, 'product:hbm');
+
+    expect(company.y).toBeGreaterThanOrEqual(product.y + product.height + 28);
+    expect(nextProduct.y).toBeGreaterThanOrEqual(company.y + company.height + 24);
+  });
+
+  it('routes stage, membership and company edges through dedicated channels', () => {
+    const layout = layoutIndustryGraph(graph, {
+      expandedCompanyKeys: new Set(['product:gpu'])
+    });
+
+    expect(edgeByKey(layout, 'flow:1').route).toBe('stage-flow');
+    expect(edgeByKey(layout, 'belongs:gpu').route).toBe('stage-membership');
+    expect(edgeByKey(layout, 'company:gpu').route).toBe('company-link');
+    expect(edgeByKey(layout, 'belongs:gpu').path).not.toContain(' C ');
+  });
+
   it('finds a bounded focus neighborhood without looping on malformed cycles', () => {
     const cyclic: IndustryChainGraph = {
       ...graph,
@@ -47,6 +77,14 @@ describe('industryChainLayout', () => {
     ]));
   });
 });
+
+function nodeByKey(layout: ReturnType<typeof layoutIndustryGraph>, nodeKey: string) {
+  return layout.nodes.find((item) => item.nodeKey === nodeKey)!;
+}
+
+function edgeByKey(layout: ReturnType<typeof layoutIndustryGraph>, edgeKey: string) {
+  return layout.edges.find((item) => item.edgeKey === edgeKey)!;
+}
 
 function node(nodeKey: string, type: IndustryChainGraph['nodes'][number]['type'], name: string,
               stageOrder?: number, stockCode?: string) {

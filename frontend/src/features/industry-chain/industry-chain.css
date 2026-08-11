@@ -140,10 +140,16 @@
 .ic-lane { position: absolute; top: 0; bottom: 0; width: 292px; border-right: 1px solid rgba(54, 85, 96, .22); }
 .ic-lane > span { position: absolute; top: 19px; left: 42px; color: #38535e; font: 600 10px/1 "IBM Plex Mono", monospace; letter-spacing: .15em; }
 .ic-edge-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.ic-edge { fill: none; stroke: var(--ic-cyan-soft); stroke-width: 1.5; opacity: .86; transition: opacity .25s ease; }
+.ic-edge { fill: none; stroke: var(--ic-cyan-soft); stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; opacity: .7; transition: opacity .25s ease; }
 .ic-edge--disclosed { stroke: var(--ic-gold); stroke-width: 1.8; }
 .ic-edge--inferred { stroke: var(--ic-violet); stroke-dasharray: 5 5; opacity: .62; }
-.ic-edge-layer marker path { fill: var(--ic-cyan-soft); }
+.ic-edge--stage-flow { stroke-width: 1.9; opacity: .95; }
+.ic-edge--stage-membership { opacity: .48; }
+.ic-edge--company-link { opacity: .82; }
+.ic-edge--cross-link { opacity: .58; }
+#ic-arrow-logic path { fill: var(--ic-cyan-soft); }
+#ic-arrow-disclosed path { fill: var(--ic-gold); }
+#ic-arrow-inferred path { fill: var(--ic-violet); }
 .ic-edge.is-muted { opacity: .08; }
 
 .ic-node-wrap { position: absolute; z-index: 2; transition: opacity .22s ease, transform .22s ease; }
@@ -172,7 +178,7 @@
 .ic-node-kicker { color: var(--ic-muted); font: 600 8px/1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .ic-node strong { overflow: hidden; font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .ic-node small { overflow: hidden; color: #78909a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.ic-company-toggle { width: 100%; padding: 5px; border: 1px solid #263a44; border-top: 0; color: var(--ic-gold); background: #101920; font-size: 9px; }
+.ic-company-toggle { width: 100%; height: 28px; padding: 0 5px; border: 1px solid #263a44; border-top: 0; color: var(--ic-gold); background: #101920; font-size: 9px; }
 
 .ic-legend { position: absolute; z-index: 4; left: 18px; bottom: 15px; display: flex; gap: 13px; padding: 8px 10px; border: 1px solid #263a44; background: rgba(9, 19, 26, .91); backdrop-filter: blur(10px); }
 .ic-legend span { display: flex; align-items: center; gap: 5px; color: #81959f; font-size: 9px; }
