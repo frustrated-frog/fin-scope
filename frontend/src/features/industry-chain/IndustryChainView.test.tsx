@@ -87,3 +87,39 @@ test('renders dedicated edge routes and expands a company below its product', as
   expect(container.querySelector('.ic-edge--company-link')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '英伟达 · 代表公司' })).toBeInTheDocument();
 });
+
+test('shows chain dynamics, changes time window and opens the reused News Wire event', async () => {
+  const onOpenNewsEvent = vi.fn();
+  const feed = {
+    chainId: 7, hours: 168, refreshedAt: '2026-08-11T12:00:00',
+    nodeEventCounts: { 'product:gpu': 1, 'stage:chip': 1 },
+    events: [{
+      eventId: 91, title: 'AI 芯片订单增长', summary: '云厂商增加 GPU 采购', categoryCode: 'INDUSTRY',
+      status: 'ACTIVE', firstSeenAt: '2026-08-11T08:00:00', lastSeenAt: '2026-08-11T11:00:00',
+      sourceCount: 3, signalCount: 5, hotspotScore: 82,
+      impact: {
+        radarEventId: 91, directNodeKey: 'product:gpu', direction: 'POSITIVE', mechanism: 'ORDER',
+        horizon: 'SHORT', confidence: 'HIGH', impactSummary: '订单增长直接作用于 AI 芯片，并向服务器传导。',
+        analysisVersion: 'RULES_V1', pathNodeKeys: ['product:gpu', 'stage:chip', 'stage:server']
+      }
+    }]
+  };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return workspace;
+    if (path.startsWith('/api/industry-chains/7/events?hours=')) return { ...feed, hours: Number(path.split('=').pop()) };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView onOpenNewsEvent={onOpenNewsEvent} />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+  await userEvent.click(screen.getByRole('button', { name: '链上动态' }));
+  expect(await screen.findByText('AI 芯片订单增长')).toBeInTheDocument();
+  expect(screen.getByText('订单增长直接作用于 AI 芯片，并向服务器传导。')).toBeInTheDocument();
+  expect(screen.getByLabelText('AI芯片关联 1 条动态')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '24 小时' }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/industry-chains/7/events?hours=24'));
+  await userEvent.click(screen.getByRole('button', { name: '在 News Wire 查看' }));
+  expect(onOpenNewsEvent).toHaveBeenCalledWith(91);
+});

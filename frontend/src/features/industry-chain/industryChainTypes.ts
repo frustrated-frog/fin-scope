@@ -77,3 +77,45 @@ export type IndustryChainWorkspace = {
   revision: IndustryChainRevision | null;
   graph: IndustryChainGraph | null;
 };
+
+export type IndustryChainEventImpact = {
+  radarEventId: number;
+  directNodeKey: string;
+  direction: 'POSITIVE' | 'NEGATIVE' | 'MIXED' | 'UNCERTAIN';
+  mechanism: 'SUPPLY' | 'DEMAND' | 'PRICE' | 'CAPACITY' | 'POLICY' | 'ORDER' | 'TECHNOLOGY';
+  horizon: 'SHORT' | 'MEDIUM' | 'LONG';
+  confidence: IndustryChainConfidence;
+  impactSummary: string;
+  analysisVersion: string;
+  pathNodeKeys: string[];
+};
+
+export type IndustryChainEventItem = {
+  eventId: number;
+  title: string;
+  summary?: string;
+  categoryCode?: string;
+  status?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  sourceCount: number;
+  signalCount: number;
+  hotspotScore: number;
+  impact: IndustryChainEventImpact;
+};
+
+export type IndustryChainEventFeed = {
+  chainId: number;
+  hours: number;
+  refreshedAt: string;
+  nodeEventCounts: Record<string, number>;
+  events: IndustryChainEventItem[];
+};
+
+export type IndustryChainEventRefreshSummary = {
+  scanned: number;
+  added: number;
+  updated: number;
+  skipped: number;
+  refreshedAt: string;
+};

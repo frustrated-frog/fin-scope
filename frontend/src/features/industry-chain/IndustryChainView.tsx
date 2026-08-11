@@ -3,7 +3,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { IndustryChainCanvas } from './IndustryChainCanvas';
 import { IndustryChainInspector } from './IndustryChainInspector';
-import type { IndustryChain, IndustryChainWorkspace } from './industryChainTypes';
+import { IndustryChainDynamics } from './IndustryChainDynamics';
+import type { IndustryChain, IndustryChainEventFeed, IndustryChainEventRefreshSummary, IndustryChainWorkspace } from './industryChainTypes';
 import './industry-chain.css';
 
 const SUGGESTIONS = ['AI 算力', '人形机器人', '低空经济', '创新药', '新能源车', '半导体设备'];
@@ -12,11 +13,13 @@ const POLL_INTERVAL_MS = 2400;
 export function IndustryChainView({
   addToast = () => undefined,
   setMessage = () => undefined,
-  initialStockCode
+  initialStockCode,
+  onOpenNewsEvent = () => undefined
 }: {
   addToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage?: (message: string) => void;
   initialStockCode?: string;
+  onOpenNewsEvent?: (eventId: number) => void;
 }) {
   const [chains, setChains] = useState<IndustryChain[]>([]);
   const [workspace, setWorkspace] = useState<IndustryChainWorkspace | null>(null);
@@ -26,6 +29,11 @@ export function IndustryChainView({
   const [selectedNodeKey, setSelectedNodeKey] = useState<string>();
   const [focusMode, setFocusMode] = useState(Boolean(initialStockCode));
   const [expandedCompanyKeys, setExpandedCompanyKeys] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'panorama' | 'dynamics'>('panorama');
+  const [eventHours, setEventHours] = useState(168);
+  const [eventFeed, setEventFeed] = useState<IndustryChainEventFeed>();
+  const [selectedEventId, setSelectedEventId] = useState<number>();
+  const [eventsLoading, setEventsLoading] = useState(false);
 
   const loadChains = async () => {
     const value = await api<IndustryChain[]>('/api/industry-chains');
@@ -67,6 +75,12 @@ export function IndustryChainView({
   const selectedNode = useMemo(() => workspace?.graph?.nodes.find(
     (node) => node.nodeKey === selectedNodeKey
   ), [selectedNodeKey, workspace?.graph]);
+  const selectedEvent = eventFeed?.events.find((event) => event.eventId === selectedEventId) ?? eventFeed?.events[0];
+
+  useEffect(() => {
+    if (viewMode !== 'dynamics' || !workspace?.graph) return;
+    void loadDynamics(workspace.chain.id, eventHours);
+  }, [viewMode, eventHours, workspace?.chain.id, workspace?.graph?.revisionId]);
 
   async function openChain(chain: IndustryChain) {
     setLoading(true);
@@ -74,6 +88,9 @@ export function IndustryChainView({
       const value = await api<IndustryChainWorkspace>(`/api/industry-chains/${chain.id}`);
       setWorkspace(value);
       setSelectedNodeKey(undefined);
+      setEventFeed(undefined);
+      setSelectedEventId(undefined);
+      setViewMode('panorama');
       setMessage(`已打开 ${chain.name} 产业链图谱`);
     } catch (error) { handleError(error); } finally { setLoading(false); }
   }
@@ -102,6 +119,25 @@ export function IndustryChainView({
       setWorkspace({ ...workspace, revision });
       addToast('已开始刷新图谱，旧版本会保持可读', 'info');
     } catch (error) { handleError(error); }
+  }
+
+  async function loadDynamics(chainId: number, hours: number) {
+    setEventsLoading(true);
+    try {
+      const next = await api<IndustryChainEventFeed>(`/api/industry-chains/${chainId}/events?hours=${hours}`);
+      setEventFeed(next);
+      setSelectedEventId((current) => next.events.some((event) => event.eventId === current) ? current : next.events[0]?.eventId);
+    } catch (error) { handleError(error); } finally { setEventsLoading(false); }
+  }
+
+  async function refreshDynamics() {
+    if (!workspace) return;
+    setEventsLoading(true);
+    try {
+      const summary = await api<IndustryChainEventRefreshSummary>(`/api/industry-chains/${workspace.chain.id}/events/refresh`, { method: 'POST' });
+      await loadDynamics(workspace.chain.id, eventHours);
+      addToast(summary.added ? `新增 ${summary.added} 条链上动态` : '链上动态已是最新', 'success');
+    } catch (error) { handleError(error); } finally { setEventsLoading(false); }
   }
 
   function handleSubmit(event: FormEvent) {
@@ -165,6 +201,12 @@ export function IndustryChainView({
               <div>
                 <span>Industry chain / {workspace.graph?.schemaVersion || 'building'}</span>
                 <h2>{workspace.chain.name}</h2>
+                {workspace.graph && <nav className="ic-view-switch" aria-label="产业链视图">
+                  <button type="button" className={viewMode === 'panorama' ? 'is-active' : ''}
+                    aria-pressed={viewMode === 'panorama'} onClick={() => setViewMode('panorama')}>产业全景</button>
+                  <button type="button" className={viewMode === 'dynamics' ? 'is-active' : ''}
+                    aria-pressed={viewMode === 'dynamics'} onClick={() => setViewMode('dynamics')}>链上动态</button>
+                </nav>}
               </div>
               <div className="ic-toolbar-controls">
                 <label className="ic-search">
@@ -172,7 +214,7 @@ export function IndustryChainView({
                   <input type="search" aria-label="搜索图谱节点" value={search}
                     onChange={(event) => setSearch(event.target.value)} placeholder="搜索产品、公司、代码" />
                 </label>
-                <button type="button" className="ic-focus-button" disabled={!selectedNodeKey}
+                <button type="button" className="ic-focus-button" disabled={!selectedNodeKey || viewMode === 'dynamics'}
                   onClick={() => setFocusMode((current) => !current)}>
                   {focusMode ? '查看全图' : '聚焦链路'}
                 </button>
@@ -190,8 +232,17 @@ export function IndustryChainView({
               <div className="ic-graph-grid">
                 <IndustryChainCanvas graph={workspace.graph} selectedNodeKey={selectedNodeKey}
                   search={search} focusMode={focusMode} expandedCompanyKeys={expandedCompanyKeys}
+                  eventCounts={viewMode === 'dynamics' ? eventFeed?.nodeEventCounts : undefined}
+                  highlightedPath={viewMode === 'dynamics' ? selectedEvent?.impact.pathNodeKeys : undefined}
                   onSelectNode={setSelectedNodeKey} onToggleCompanies={toggleCompanies} />
-                <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
+                {viewMode === 'panorama' ? (
+                  <IndustryChainInspector graph={workspace.graph} selectedNodeKey={selectedNode?.nodeKey} />
+                ) : (
+                  <IndustryChainDynamics graph={workspace.graph} feed={eventFeed} selectedEventId={selectedEventId}
+                    hours={eventHours} loading={eventsLoading} onSelectEvent={setSelectedEventId}
+                    onHoursChange={setEventHours} onRefresh={() => void refreshDynamics()}
+                    onOpenNewsEvent={onOpenNewsEvent} />
+                )}
               </div>
             ) : (
               <section className="ic-building" aria-label="图谱生成中">

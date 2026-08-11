@@ -5,13 +5,15 @@ import type { IndustryChainGraph } from './industryChainTypes';
 
 export function IndustryChainCanvas({
   graph, selectedNodeKey, search, focusMode, expandedCompanyKeys,
-  onSelectNode, onToggleCompanies
+  eventCounts = {}, highlightedPath = [], onSelectNode, onToggleCompanies
 }: {
   graph: IndustryChainGraph;
   selectedNodeKey?: string;
   search: string;
   focusMode: boolean;
   expandedCompanyKeys: Set<string>;
+  eventCounts?: Record<string, number>;
+  highlightedPath?: string[];
   onSelectNode: (key: string) => void;
   onToggleCompanies: (key: string) => void;
 }) {
@@ -21,6 +23,8 @@ export function IndustryChainCanvas({
     focusMode && selectedNodeKey ? focusNeighborhood(graph, selectedNodeKey, 3) : graph.nodes.map((node) => node.nodeKey)
   ), [focusMode, graph, selectedNodeKey]);
   const normalizedSearch = search.trim().toLocaleLowerCase();
+  const highlightedNodes = new Set(highlightedPath);
+  const highlightedEdges = new Set(highlightedPath.slice(0, -1).map((key, index) => `${key}::${highlightedPath[index + 1]}`));
 
   return (
     <section className="ic-canvas-shell" role="region" aria-label={`${graph.name}产业链图谱`}>
@@ -48,7 +52,7 @@ export function IndustryChainCanvas({
             </defs>
             {layout.edges.map((edge) => (
               <path key={edge.edgeKey} d={edge.path}
-                className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ic-edge--${edge.route} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'}`}
+                className={`ic-edge ic-edge--${edge.nature.toLocaleLowerCase()} ic-edge--${edge.route} ${focused.has(edge.sourceKey) && focused.has(edge.targetKey) ? '' : 'is-muted'} ${highlightedEdges.has(`${edge.sourceKey}::${edge.targetKey}`) ? 'is-event-path' : ''}`}
                 markerEnd={`url(#ic-arrow-${edge.nature.toLocaleLowerCase().replace('industry_', '')})`}
                 vectorEffect="non-scaling-stroke" />
             ))}
@@ -61,7 +65,7 @@ export function IndustryChainCanvas({
               <div className={`ic-node-wrap ${focused.has(node.nodeKey) ? '' : 'is-muted'}`}
                 key={node.nodeKey} style={{ left: node.x, top: node.y, width: node.width }}>
                 <button type="button"
-                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''}`}
+                  className={`ic-node ic-node--${node.type.toLocaleLowerCase()} ${selectedNodeKey === node.nodeKey ? 'is-selected' : ''} ${match ? 'is-search-match' : ''} ${highlightedNodes.has(node.nodeKey) ? 'is-event-path' : ''}`}
                   style={{ height: node.height }}
                   data-search-match={match ? 'true' : 'false'}
                   aria-label={`${node.name} · ${node.description}`}
@@ -70,6 +74,11 @@ export function IndustryChainCanvas({
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
                 </button>
+                {(eventCounts[node.nodeKey] ?? 0) > 0 && (
+                  <span className="ic-event-badge" aria-label={`${node.name}关联 ${eventCounts[node.nodeKey]} 条动态`}>
+                    {eventCounts[node.nodeKey]}
+                  </span>
+                )}
                 {count > 0 && (
                   <button className="ic-company-toggle" type="button"
                     aria-label={`${expandedCompanyKeys.has(node.nodeKey) ? '收起' : '展开'} ${node.name} 的 ${count} 家公司`}

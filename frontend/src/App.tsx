@@ -608,7 +608,8 @@ export default function App() {
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
-        initialStockCode={industryChainStockCode} />}
+        initialStockCode={industryChainStockCode}
+        onOpenNewsEvent={(eventId) => { setDashboardRadarEventId(eventId); setView('news'); }} />}
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
