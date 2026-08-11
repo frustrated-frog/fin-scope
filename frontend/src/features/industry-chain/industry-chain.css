@@ -411,11 +411,11 @@
 .ic-profile-lists .ic-phrase-list:nth-child(2n) { border-right: 0; }
 
 .ic-company-matrix-scroll { overflow-x: auto; border: 1px solid #243943; background: #0b171e; }
-.ic-company-matrix { width: 100%; min-width: 980px; border-collapse: collapse; table-layout: fixed; }
+.ic-company-matrix { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; }
 .ic-company-matrix th,
-.ic-company-matrix td { padding: 14px 13px; border-right: 1px solid #1d3039; border-bottom: 1px solid #1d3039; color: #9fb1b8; font-size: 9px; line-height: 1.55; text-align: left; vertical-align: top; }
+.ic-company-matrix td { padding: 14px 11px; border-right: 1px solid #1d3039; border-bottom: 1px solid #1d3039; color: #9fb1b8; font-size: 9px; line-height: 1.55; text-align: left; vertical-align: top; }
 .ic-company-matrix thead th { color: #6f858f; background: #101e26; font: 600 8px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; }
-.ic-company-matrix tbody th { width: 130px; background: #0f1d24; }
+.ic-company-matrix tbody th { width: 112px; background: #0f1d24; }
 .ic-company-matrix tbody th strong { display: block; color: #dbe6e9; font-size: 11px; }
 .ic-company-matrix tbody th small { display: block; margin-top: 5px; color: var(--ic-cyan); font: 500 8px/1 "IBM Plex Mono", monospace; }
 .ic-company-matrix tr:last-child th,
