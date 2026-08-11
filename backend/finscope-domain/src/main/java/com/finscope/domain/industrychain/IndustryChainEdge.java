@@ -12,6 +12,8 @@ public class IndustryChainEdge {
     private String nature;
     private String description;
     private String confidence;
+    private String strength;
+    private String directionNote;
     private List<String> evidenceRefs = new ArrayList<String>();
 
     public String getEdgeKey() { return edgeKey; }
@@ -28,6 +30,10 @@ public class IndustryChainEdge {
     public void setDescription(String description) { this.description = description; }
     public String getConfidence() { return confidence; }
     public void setConfidence(String confidence) { this.confidence = confidence; }
+    public String getStrength() { return strength; }
+    public void setStrength(String strength) { this.strength = strength; }
+    public String getDirectionNote() { return directionNote; }
+    public void setDirectionNote(String directionNote) { this.directionNote = directionNote; }
     public List<String> getEvidenceRefs() { return evidenceRefs; }
     public void setEvidenceRefs(List<String> evidenceRefs) {
         this.evidenceRefs = evidenceRefs == null ? new ArrayList<String>() : new ArrayList<String>(evidenceRefs);

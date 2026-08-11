@@ -19,14 +19,20 @@ import java.util.Set;
 /** 在图谱发布前集中校验结构、证据和关系语义。 */
 @Service
 public class IndustryChainGraphValidator {
-    private static final Set<String> NODE_TYPES = set("INDUSTRY_CHAIN", "STAGE", "PRODUCT", "COMPANY");
+    private static final Set<String> NODE_TYPES = set("INDUSTRY_CHAIN", "STAGE", "MATERIAL", "EQUIPMENT",
+            "COMPONENT", "PRODUCT", "TECHNOLOGY", "APPLICATION", "COMPANY");
     private static final Set<String> EDGE_TYPES = set("CONTAINS_STAGE", "FLOWS_TO", "BELONGS_TO_STAGE",
-            "INPUT_TO", "PRODUCES", "PARTICIPATES_IN", "SUPPLIES_TO");
+            "INPUT_TO", "PRODUCES", "PARTICIPATES_IN", "SUPPLIES_TO", "DEPENDS_ON", "ENABLES",
+            "USED_IN", "SUBSTITUTES", "COMPETES_WITH");
     private static final Set<String> NATURES = set("DISCLOSED", "INDUSTRY_LOGIC", "INFERRED");
     private static final Set<String> CONFIDENCE = set("HIGH", "MEDIUM", "LOW");
     private static final Set<String> LIFECYCLES = set("EMERGING", "GROWTH", "MATURE", "CONSOLIDATING", "DECLINING");
     private static final Set<String> PROSPERITY = set("RISING", "STABLE", "COOLING", "MIXED");
     private static final Set<String> SUPPLY_DEMAND = set("TIGHT", "BALANCED", "LOOSE", "STRUCTURAL");
+    private static final Set<String> MATURITY = set("EMERGING", "SCALING", "MATURE", "DECLINING");
+    private static final Set<String> LEVELS = set("HIGH", "MEDIUM", "LOW");
+    private static final Set<String> LOCALIZATION = set("LOW", "MEDIUM", "HIGH", "LEADING");
+    private static final Set<String> EDGE_STRENGTH = set("PRIMARY", "SECONDARY");
 
     public IndustryChainGraph validate(IndustryChainGraph graph) {
         if (graph == null || blank(graph.getName()) || graph.getNodes() == null || graph.getEdges() == null) {
@@ -62,6 +68,14 @@ public class IndustryChainGraphValidator {
         for (IndustryChainResearchContent.CompanyProfile profile : safeCompanies(content)) {
             validateProfileNode(profile.getNodeKey(), "COMPANY", nodes, companyKeys, "公司画像");
         }
+        Set<String> nodeKeys = new HashSet<String>();
+        for (IndustryChainResearchContent.NodeProfile profile : safeNodeProfiles(content)) {
+            validateProfileNode(profile.getNodeKey(), null, nodes, nodeKeys, "节点画像");
+            validateRequiredEnum(profile.getMaturity(), MATURITY, "节点成熟度");
+            validateRequiredEnum(profile.getValueLevel(), LEVELS, "节点价值等级");
+            validateRequiredEnum(profile.getBottleneckLevel(), LEVELS, "节点瓶颈等级");
+            validateRequiredEnum(profile.getLocalizationLevel(), LOCALIZATION, "节点国产化等级");
+        }
     }
 
     private List<IndustryChainResearchContent.StageProfile> safeStages(IndustryChainResearchContent content) {
@@ -74,10 +88,16 @@ public class IndustryChainGraphValidator {
                 ? Collections.<IndustryChainResearchContent.CompanyProfile>emptyList() : content.getCompanyProfiles();
     }
 
+    private List<IndustryChainResearchContent.NodeProfile> safeNodeProfiles(IndustryChainResearchContent content) {
+        return content.getNodeProfiles() == null
+                ? Collections.<IndustryChainResearchContent.NodeProfile>emptyList() : content.getNodeProfiles();
+    }
+
     private void validateProfileNode(String nodeKey, String expectedType,
                                      Map<String, IndustryChainNode> nodes, Set<String> seen, String label) {
         IndustryChainNode node = nodes.get(nodeKey);
-        if (blank(nodeKey) || node == null || !expectedType.equals(node.getType()) || !seen.add(nodeKey)) {
+        if (blank(nodeKey) || node == null || (expectedType != null && !expectedType.equals(node.getType()))
+                || !seen.add(nodeKey)) {
             throw new IllegalArgumentException(label + "引用的节点无效或重复：" + nodeKey);
         }
     }
@@ -154,6 +174,7 @@ public class IndustryChainGraphValidator {
             if ("SUPPLIES_TO".equals(edge.getType()) && !"DISCLOSED".equals(edge.getNature())) {
                 throw new IllegalArgumentException("企业供销关系必须来自明确披露");
             }
+            validateOptionalEnum(edge.getStrength(), EDGE_STRENGTH, "产业链关系强度");
             validateEvidenceRefs(edge.getEvidenceRefs(), evidenceCodes);
         }
     }

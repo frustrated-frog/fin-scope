@@ -7,6 +7,7 @@ import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainResearchContent;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -83,6 +84,59 @@ class IndustryChainGraphValidatorTest {
         IndustryChainGraph wrongCompanyType = validGraph();
         wrongCompanyType.setResearchContent(researchContent("stage:upstream", "stage:terminal"));
         assertThrows(IllegalArgumentException.class, () -> validator.validate(wrongCompanyType));
+    }
+
+    @Test
+    void acceptsV3SemanticNodesEdgesAndProfiles() {
+        IndustryChainGraph graph = semanticGraph();
+
+        assertDoesNotThrow(() -> validator.validate(graph));
+    }
+
+    @Test
+    void rejectsInvalidSemanticProfileAndEdgeStrength() {
+        IndustryChainGraph missingProfileNode = semanticGraph();
+        missingProfileNode.getResearchContent().getNodeProfiles().get(0).setNodeKey("missing");
+        IllegalArgumentException missingError = assertThrows(
+                IllegalArgumentException.class, () -> validator.validate(missingProfileNode));
+        assertEquals("节点画像引用的节点无效或重复：missing", missingError.getMessage());
+
+        IndustryChainGraph invalidMaturity = semanticGraph();
+        invalidMaturity.getResearchContent().getNodeProfiles().get(0).setMaturity("UNKNOWN");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(invalidMaturity));
+
+        IndustryChainGraph invalidStrength = semanticGraph();
+        invalidStrength.getEdges().get(2).setStrength("DOMINANT");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(invalidStrength));
+    }
+
+    private IndustryChainGraph semanticGraph() {
+        IndustryChainGraph graph = validGraph();
+        graph.setSchemaVersion("INDUSTRY_CHAIN_V3");
+        graph.setNodes(new ArrayList<IndustryChainNode>(graph.getNodes()));
+        graph.setEdges(new ArrayList<IndustryChainEdge>(graph.getEdges()));
+        graph.getNodes().addAll(Arrays.asList(
+                node("material:steel", "MATERIAL", "特种钢", null),
+                node("equipment:grinder", "EQUIPMENT", "精密磨床", null),
+                node("component:reducer", "COMPONENT", "精密减速器", null),
+                node("technology:harmonic", "TECHNOLOGY", "谐波传动", null),
+                node("application:robot", "APPLICATION", "工业机器人", null)));
+        IndustryChainEdge dependency = edge("edge:depends", "component:reducer", "material:steel",
+                "DEPENDS_ON", "INDUSTRY_LOGIC");
+        dependency.setStrength("PRIMARY");
+        dependency.setDirectionNote("特种钢影响寿命与精度");
+        graph.getEdges().add(dependency);
+
+        IndustryChainResearchContent content = researchContent("stage:upstream", null);
+        IndustryChainResearchContent.NodeProfile profile = new IndustryChainResearchContent.NodeProfile();
+        profile.setNodeKey("component:reducer");
+        profile.setMaturity("SCALING");
+        profile.setValueLevel("HIGH");
+        profile.setBottleneckLevel("HIGH");
+        profile.setLocalizationLevel("MEDIUM");
+        content.setNodeProfiles(Collections.singletonList(profile));
+        graph.setResearchContent(content);
+        return graph;
     }
 
     private IndustryChainGraph validGraph() {
