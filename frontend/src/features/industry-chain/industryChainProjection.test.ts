@@ -32,9 +32,38 @@ const materialProfile: IndustryChainNodeProfile = {
 };
 
 describe('industryChainProjection', () => {
-  it('starts with the ordered stage backbone', () => {
+  it('shows core semantic nodes by default and keeps companies collapsed', () => {
     expect(projectSemanticGraph(graph, new Set(), 'STRUCTURE').nodes.map((item) => item.nodeKey))
-      .toEqual(['stage:up', 'stage:mid', 'stage:down']);
+      .toEqual([
+        'stage:up', 'stage:mid', 'stage:down',
+        'material:steel', 'equipment:cnc', 'component:reducer'
+      ]);
+    expect(projectSemanticGraph(graph, new Set(), 'STRUCTURE').nodes.map((item) => item.nodeKey))
+      .not.toContain('company:a');
+  });
+
+  it('distributes the default semantic budget across stages', () => {
+    const stages = ['stage:up', 'stage:mid', 'stage:down'];
+    const semanticNodes = stages.flatMap((stageKey, stageIndex) => Array.from({ length: 12 }, (_, index) =>
+      node(`component:${stageIndex}:${index}`, 'COMPONENT', `部件 ${stageIndex}-${index}`)));
+    const largeGraph = {
+      ...graph,
+      nodes: [...graph.nodes.filter((item) => item.type === 'STAGE'), ...semanticNodes],
+      edges: [
+        edge('flow:1', 'stage:up', 'stage:mid', 'FLOWS_TO'),
+        edge('flow:2', 'stage:mid', 'stage:down', 'FLOWS_TO'),
+        ...semanticNodes.map((item, index) => edge(
+          `belongs:${item.nodeKey}`, item.nodeKey, stages[Math.floor(index / 12)], 'BELONGS_TO_STAGE'
+        ))
+      ]
+    } as IndustryChainGraph;
+    const projected = projectSemanticGraph(largeGraph, new Set(), 'STRUCTURE');
+
+    expect(projected.nodes.length).toBeLessThanOrEqual(25);
+    stages.forEach((stageKey) => {
+      expect(projected.edges.some((item) => item.type === 'BELONGS_TO_STAGE'
+        && item.targetKey === stageKey)).toBe(true);
+    });
   });
 
   it('reveals at most twelve direct semantic neighbors of an expanded node', () => {

@@ -21,6 +21,7 @@ const NODE_ORDER: Record<IndustryChainNodeType, number> = {
 };
 
 const MAX_DIRECT_CHILDREN = 12;
+const MAX_DEFAULT_NODES = 25;
 
 export function projectSemanticGraph(
   graph: IndustryChainGraph,
@@ -33,6 +34,7 @@ export function projectSemanticGraph(
     .sort((left, right) => (left.stageOrder ?? Number.MAX_SAFE_INTEGER)
       - (right.stageOrder ?? Number.MAX_SAFE_INTEGER));
   const visibleKeys = new Set(orderedStages.map((node) => node.nodeKey));
+  defaultSemanticNodes(graph, orderedStages).forEach((node) => visibleKeys.add(node.nodeKey));
   const processed = new Set<string>();
   let changed = true;
   while (changed) {
@@ -53,6 +55,39 @@ export function projectSemanticGraph(
     .sort(compareVisibleNodes);
   const edges = graph.edges.filter((edge) => visibleKeys.has(edge.sourceKey) && visibleKeys.has(edge.targetKey));
   return { ...graph, nodes, edges };
+}
+
+function defaultSemanticNodes(graph: IndustryChainGraph, stages: IndustryChainNode[]): IndustryChainNode[] {
+  const remainingBudget = Math.max(0, MAX_DEFAULT_NODES - stages.length);
+  const queues = stages.map((stage) => directSemanticNeighbors(graph, stage.nodeKey)
+    .filter((node) => node.type !== 'COMPANY')
+    .sort((left, right) => compareDefaultNodes(graph, left, right)));
+  const selected: IndustryChainNode[] = [];
+  const selectedKeys = new Set<string>();
+  while (selected.length < remainingBudget && queues.some((queue) => queue.length > 0)) {
+    queues.forEach((queue) => {
+      while (queue.length > 0 && selectedKeys.has(queue[0].nodeKey)) queue.shift();
+      const next = queue.shift();
+      if (!next || selected.length >= remainingBudget) return;
+      selected.push(next);
+      selectedKeys.add(next.nodeKey);
+    });
+  }
+  return selected;
+}
+
+function compareDefaultNodes(graph: IndustryChainGraph, left: IndustryChainNode, right: IndustryChainNode) {
+  return defaultNodeScore(graph, right) - defaultNodeScore(graph, left) || compareSemanticNodes(left, right);
+}
+
+function defaultNodeScore(graph: IndustryChainGraph, node: IndustryChainNode) {
+  const profile = graph.researchContent?.nodeProfiles?.find((item) => item.nodeKey === node.nodeKey);
+  const primaryRelations = graph.edges.filter((edge) => (edge.sourceKey === node.nodeKey || edge.targetKey === node.nodeKey)
+    && edge.strength !== 'SECONDARY').length;
+  return primaryRelations * 2
+    + (node.confidence === 'HIGH' ? 2 : node.confidence === 'MEDIUM' ? 1 : 0)
+    + (profile?.bottleneckLevel === 'HIGH' ? 4 : profile?.bottleneckLevel === 'MEDIUM' ? 2 : 0)
+    + (profile?.valueLevel === 'HIGH' ? 3 : profile?.valueLevel === 'MEDIUM' ? 1 : 0);
 }
 
 export function semanticNodeTone(
