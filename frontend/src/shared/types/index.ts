@@ -16,7 +16,8 @@ export type View =
   | 'marketIntel'
   | 'financials'
   | 'strategy'
-  | 'majorEvents';
+  | 'majorEvents'
+  | 'industryChain';
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };
 export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };

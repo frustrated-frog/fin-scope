@@ -10,6 +10,7 @@ import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
+import { IndustryChainView } from './features/industry-chain/IndustryChainView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
 import { MajorEventView } from './features/major-events/MajorEventView';
 import { NewsView } from './features/news/NewsView';
@@ -273,6 +274,8 @@ export default function App() {
         return 'Watchlist';
       case 'marketIntel':
         return 'Market Intel · 资金行为';
+      case 'industryChain':
+        return 'Industry Graph · 产业链图谱';
       case 'financials':
         return 'Financials · 公司财报';
       case 'strategy':
@@ -602,6 +605,7 @@ export default function App() {
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage} />}
+      {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage} />}
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
