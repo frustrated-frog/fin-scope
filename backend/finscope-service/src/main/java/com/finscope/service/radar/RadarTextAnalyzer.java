@@ -62,6 +62,35 @@ public class RadarTextAnalyzer {
                 && Collections.disjoint(left.subjects, right.subjects);
     }
 
+    public boolean hasFactConflict(RadarSignalFeatures left, RadarSignalFeatures right) {
+        if (!left.getEntities().isEmpty() && !right.getEntities().isEmpty()
+                && Collections.disjoint(left.getEntities(), right.getEntities())) return true;
+        if (!left.getSubjects().isEmpty() && !right.getSubjects().isEmpty()
+                && Collections.disjoint(left.getSubjects(), right.getSubjects())) return true;
+        return opposite(left.getDirections(), right.getDirections())
+                || conflictingActions(left.getActions(), right.getActions());
+    }
+
+    private boolean opposite(Set<String> left, Set<String> right) {
+        return hasAny(left, "上涨", "走强", "增持", "扩产", "提升")
+                && hasAny(right, "下跌", "走弱", "回落", "减持", "缩产", "下降")
+                || hasAny(right, "上涨", "走强", "增持", "扩产", "提升")
+                && hasAny(left, "下跌", "走弱", "回落", "减持", "缩产", "下降");
+    }
+
+    private boolean conflictingActions(Set<String> left, Set<String> right) {
+        return containsPair(left, right, "增持", "减持") || containsPair(left, right, "加息", "降息");
+    }
+
+    private boolean containsPair(Set<String> left, Set<String> right, String first, String second) {
+        return left.contains(first) && right.contains(second) || left.contains(second) && right.contains(first);
+    }
+
+    private boolean hasAny(Set<String> values, String... candidates) {
+        for (String candidate : candidates) if (values.contains(candidate)) return true;
+        return false;
+    }
+
     public String eventKey(SignalFeatures features) {
         String subject = first(features.subjects);
         if (subject.isEmpty()) subject = first(features.entities);

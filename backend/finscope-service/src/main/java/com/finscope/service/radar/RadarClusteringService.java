@@ -17,6 +17,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -30,6 +33,7 @@ public class RadarClusteringService {
     private final RadarTextAnalyzer analyzer;
     private final RadarPairDecisionRepository decisions;
     private final RadarPairDecisionScheduler scheduler;
+    private final RadarEventIdentityService identities;
 
     public RadarClusteringService(RadarTextAnalyzer analyzer) { this(analyzer, null, null); }
 
@@ -40,16 +44,22 @@ public class RadarClusteringService {
         this.analyzer = analyzer;
         this.decisions = decisions;
         this.scheduler = scheduler;
+        this.identities = new RadarEventIdentityService(analyzer);
     }
 
     public MatchDecision decide(RadarSignal left, RadarSignal right) {
         RadarTextAnalyzer.SignalFeatures a = analyzer.analyze(left);
         RadarTextAnalyzer.SignalFeatures b = analyzer.analyze(right);
-        if (analyzer.normalize(left.getTitle()).equals(analyzer.normalize(right.getTitle()))) {
-            return new MatchDecision("SAME", 1.0, "标题规范化结果一致");
-        }
         if (analyzer.hasSubjectConflict(a, b)) {
             return new MatchDecision("DIFFERENT_SUBJECT", 0.0, "主要主体不同");
+        }
+        RadarSignalFeatures leftFeatures = analyzer.extract(left);
+        RadarSignalFeatures rightFeatures = analyzer.extract(right);
+        if (analyzer.hasFactConflict(leftFeatures, rightFeatures)) {
+            return new MatchDecision("DIFFERENT_FACT", 0.0, "主体、方向或关键动作冲突");
+        }
+        if (analyzer.normalize(left.getTitle()).equals(analyzer.normalize(right.getTitle()))) {
+            return new MatchDecision("SAME", 1.0, "标题规范化结果一致");
         }
         double score = analyzer.similarity(a, b);
         if (!a.getEntities().isEmpty() && !Collections.disjoint(a.getEntities(), b.getEntities())
@@ -73,37 +83,50 @@ public class RadarClusteringService {
                 ? Collections.<RadarSignal>emptyList() : input);
         ordered.sort(Comparator.comparing(RadarSignal::getPublishedAt,
                 Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(RadarSignal::getId));
+        Map<RadarSignal, RadarSignalFeatures> features = new IdentityHashMap<RadarSignal, RadarSignalFeatures>();
+        for (RadarSignal signal : ordered) features.put(signal, analyzer.extract(signal));
+        int[] parents = new int[ordered.size()];
+        for (int index = 0; index < parents.length; index++) parents[index] = index;
         int[] agentCalls = new int[] { 0 };
-        List<ClusterResult> clusters = new ArrayList<ClusterResult>();
-        for (RadarSignal signal : ordered) {
-            boolean added = false;
-            for (ClusterResult cluster : clusters) {
-                if (!isCandidate(cluster.representative, signal)) continue;
-                MatchDecision decision = resolve(cluster.representative, signal, agentCalls);
-                if (decision.isSame()) {
-                    cluster.add(signal, decision);
-                    added = true;
-                    break;
+        Map<String, MatchDecision> edges = new LinkedHashMap<String, MatchDecision>();
+        for (int left = 0; left < ordered.size(); left++) {
+            for (int right = left + 1; right < ordered.size(); right++) {
+                if (!isCandidate(features.get(ordered.get(left)), features.get(ordered.get(right)))) continue;
+                MatchDecision decision = resolve(ordered.get(left), ordered.get(right), agentCalls);
+                edges.put(edgeKey(left, right), decision);
+                if (decision.isSame() && componentsCompatible(parents, ordered, features, left, right)) {
+                    union(parents, left, right);
                 }
             }
-            if (!added) clusters.add(newCluster(signal));
         }
-        for (ClusterResult cluster : clusters) {
-            cluster.finish(analyzer);
+        Map<Integer, List<Integer>> components = new LinkedHashMap<Integer, List<Integer>>();
+        for (int index = 0; index < ordered.size(); index++) {
+            int root = find(parents, index);
+            components.computeIfAbsent(root, ignored -> new ArrayList<Integer>()).add(index);
+        }
+        List<ClusterResult> clusters = new ArrayList<ClusterResult>();
+        for (List<Integer> component : components.values()) {
+            ClusterResult cluster = newCluster(ordered.get(component.get(0)));
+            for (int position = 1; position < component.size(); position++) {
+                int index = component.get(position);
+                MatchDecision decision = supportingDecision(component, position, edges);
+                cluster.add(ordered.get(index), decision == null
+                        ? new MatchDecision("SAME_GRAPH", 0.78D, "事件图传递关联") : decision);
+            }
+            cluster.finish(analyzer, identities);
+            clusters.add(cluster);
         }
         return clusters;
     }
 
-    private boolean isCandidate(RadarSignal left, RadarSignal right) {
-        if (left == null || right == null) return false;
-        LocalDateTime leftTime = eventTime(left);
-        LocalDateTime rightTime = eventTime(right);
+    private boolean isCandidate(RadarSignalFeatures a, RadarSignalFeatures b) {
+        if (a == null || b == null) return false;
+        LocalDateTime leftTime = a.getEventTime();
+        LocalDateTime rightTime = b.getEventTime();
         if (leftTime != null && rightTime != null
                 && Math.abs(Duration.between(leftTime, rightTime).toHours()) > CANDIDATE_TIME_WINDOW_HOURS) {
             return false;
         }
-        RadarTextAnalyzer.SignalFeatures a = analyzer.analyze(left);
-        RadarTextAnalyzer.SignalFeatures b = analyzer.analyze(right);
         if (a.getNormalizedTitle().equals(b.getNormalizedTitle())) return true;
         if (!Collections.disjoint(a.getEntities(), b.getEntities())) return true;
         if (!Collections.disjoint(a.getSubjects(), b.getSubjects())) return true;
@@ -112,8 +135,41 @@ public class RadarClusteringService {
                 || !Collections.disjoint(a.getActions(), b.getActions()));
     }
 
-    private LocalDateTime eventTime(RadarSignal signal) {
-        return signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
+    private boolean componentsCompatible(int[] parents, List<RadarSignal> signals,
+                                         Map<RadarSignal, RadarSignalFeatures> features, int left, int right) {
+        int leftRoot = find(parents, left);
+        int rightRoot = find(parents, right);
+        if (leftRoot == rightRoot) return true;
+        for (int first = 0; first < signals.size(); first++) {
+            if (find(parents, first) != leftRoot) continue;
+            for (int second = 0; second < signals.size(); second++) {
+                if (find(parents, second) == rightRoot
+                        && analyzer.hasFactConflict(features.get(signals.get(first)), features.get(signals.get(second)))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private MatchDecision supportingDecision(List<Integer> component, int position,
+                                             Map<String, MatchDecision> edges) {
+        int current = component.get(position);
+        for (int prior = 0; prior < position; prior++) {
+            MatchDecision decision = edges.get(edgeKey(component.get(prior), current));
+            if (decision != null && decision.isSame()) return decision;
+        }
+        return null;
+    }
+
+    private String edgeKey(int left, int right) { return Math.min(left, right) + ":" + Math.max(left, right); }
+    private int find(int[] parents, int value) {
+        if (parents[value] != value) parents[value] = find(parents, parents[value]);
+        return parents[value];
+    }
+    private void union(int[] parents, int left, int right) {
+        int leftRoot = find(parents, left); int rightRoot = find(parents, right);
+        if (leftRoot != rightRoot) parents[rightRoot] = leftRoot;
     }
 
     private MatchDecision resolve(RadarSignal left, RadarSignal right, int[] agentCalls) {
@@ -184,9 +240,9 @@ public class RadarClusteringService {
             signals.add(signal); RadarEventSignal link = new RadarEventSignal(); link.setSignalId(signal.getId());
             link.setRelationType("SUPPORTING"); link.setMatchScore(decision.score); link.setMatchReason(decision.reason); links.add(link);
         }
-        void finish(RadarTextAnalyzer analyzer) {
+        void finish(RadarTextAnalyzer analyzer, RadarEventIdentityService identities) {
             RadarTextAnalyzer.SignalFeatures features = analyzer.analyze(representative);
-            event.setEventKey(analyzer.eventKey(features)); event.setCanonicalTitle(representative.getTitle());
+            event.setEventKey(identities.eventKey(signals)); event.setCanonicalTitle(representative.getTitle());
             event.setSummary(firstNonBlank(representative.getContent(), representative.getTitle()));
             event.setCategoryCode(features.getCategory()); event.setStatus(RadarEventStatus.ACTIVE.code());
             LocalDateTime first = null, last = null; Set<String> providers = new HashSet<String>();
