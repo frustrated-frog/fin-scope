@@ -43,9 +43,45 @@ public class IndustryChainGraphValidator {
         Map<String, IndustryChainNode> nodes = nodes(graph.getNodes(), evidenceCodes);
         validateEdges(graph.getEdges(), nodes, evidenceCodes);
         validateStageFlow(graph.getNodes(), graph.getEdges());
+        validateV3SemanticDepth(graph, nodes);
         validateResearchContent(graph.getResearchContent(), nodes,
                 "INDUSTRY_CHAIN_V3".equals(graph.getSchemaVersion()));
         return graph;
+    }
+
+    private void validateV3SemanticDepth(IndustryChainGraph graph, Map<String, IndustryChainNode> nodes) {
+        if (!"INDUSTRY_CHAIN_V3".equals(graph.getSchemaVersion())
+                || nodes.values().stream().noneMatch(node -> "INDUSTRY_CHAIN".equals(node.getType()))) {
+            return;
+        }
+        Map<String, Set<String>> childrenByStage = new HashMap<String, Set<String>>();
+        for (IndustryChainNode node : nodes.values()) {
+            if ("STAGE".equals(node.getType())) {
+                childrenByStage.put(node.getNodeKey(), new HashSet<String>());
+            }
+        }
+        for (IndustryChainEdge edge : graph.getEdges()) {
+            IndustryChainNode source = nodes.get(edge.getSourceKey());
+            if ("BELONGS_TO_STAGE".equals(edge.getType()) && source != null
+                    && isSemanticNode(source) && childrenByStage.containsKey(edge.getTargetKey())) {
+                childrenByStage.get(edge.getTargetKey()).add(source.getNodeKey());
+            }
+        }
+        Set<String> shallowStages = new TreeSet<String>();
+        for (Map.Entry<String, Set<String>> item : childrenByStage.entrySet()) {
+            if (item.getValue().size() < 3) {
+                shallowStages.add(item.getKey());
+            }
+        }
+        if (!shallowStages.isEmpty()) {
+            throw new IllegalArgumentException("V3 产业环节语义子节点不足 3 个：" + String.join(",", shallowStages));
+        }
+    }
+
+    private boolean isSemanticNode(IndustryChainNode node) {
+        return !"INDUSTRY_CHAIN".equals(node.getType())
+                && !"STAGE".equals(node.getType())
+                && !"COMPANY".equals(node.getType());
     }
 
     private void validateResearchContent(IndustryChainResearchContent content,

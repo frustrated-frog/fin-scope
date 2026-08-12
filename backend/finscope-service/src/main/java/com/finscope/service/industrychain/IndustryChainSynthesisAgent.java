@@ -32,6 +32,7 @@ public class IndustryChainSynthesisAgent {
     private static final int MAX_OUTPUT_TOKENS = 9000;
     private static final int MAX_EVIDENCE_EXCERPT = 3000;
     private static final int MAX_LIMITATIONS_LENGTH = 1600;
+    private static final int MAX_REPAIR_INVALID_OUTPUT = 48_000;
     private static final String REMOVED_SUPPLY_NOTICE = "未明确披露的企业供销关系已从图谱中移除。";
     private static final Set<String> ROOT_FIELDS = set("summary", "limitations", "researchContent", "nodes", "edges");
     private static final Set<String> NODE_FIELDS = set("nodeKey", "type", "name", "description",
@@ -368,7 +369,9 @@ public class IndustryChainSynthesisAgent {
                 + "risks、maturity、valueLevel、bottleneckLevel、localizationLevel；maturity 只能为 EMERGING、SCALING、"
                 + "MATURE、DECLINING，valueLevel 和 bottleneckLevel 只能为 HIGH、MEDIUM、LOW，localizationLevel 只能为"
                 + "LOW、MEDIUM、HIGH、LEADING。优先用 MATERIAL、EQUIPMENT、COMPONENT、TECHNOLOGY、APPLICATION 丰富"
-                + "各 STAGE 的直接子节点，每个 STAGE 最多 12 个直接子节点。画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
+                + "各 STAGE 的直接子节点，每个 STAGE 至少生成 3 个直接语义子节点、最多 12 个直接子节点。"
+                + "修复输出必须保留原输出中所有有效节点和画像，不得通过删减产业环节规避校验。"
+                + "画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
                 + "未知列表输出 []，未知短文本输出‘待观察’，不要补造价格、份额、客户或产能数字。";
     }
 
@@ -380,7 +383,7 @@ public class IndustryChainSynthesisAgent {
     private String repairInput(String input, String invalid, Exception error) throws Exception {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("validationError", compact(error.getMessage(), 500));
-        result.put("invalidOutput", compact(invalid, 16000));
+        result.put("invalidOutput", compact(invalid, MAX_REPAIR_INVALID_OUTPUT));
         result.put("originalInput", objectMapper.readTree(input));
         return objectMapper.writeValueAsString(result);
     }

@@ -94,6 +94,36 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void keepsTheTailOfALargeInvalidGraphAvailableToTheRepairCall() throws Exception {
+        String marker = "TAIL_MARKER_FOR_REPAIR";
+        String invalid = validJson().replace("AI 算力由芯片、服务器和数据中心构成",
+                String.join("", Collections.nCopies(18_000, "x")) + marker);
+        String[] repairInput = {""};
+        int[] calls = {0};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                throw new AssertionError("必须使用显式超时");
+            }
+            @Override public String complete(String systemPrompt, String userPrompt,
+                                             int timeoutMs, int maxOutputTokens) {
+                calls[0]++;
+                if (calls[0] == 1) {
+                    return invalid;
+                }
+                repairInput[0] = userPrompt;
+                return validJson();
+            }
+        };
+
+        new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertTrue(repairInput[0].contains(marker));
+    }
+
+    @Test
     void removesUndisclosedSupplyRelationshipWithoutRemoteRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {
@@ -146,6 +176,7 @@ class IndustryChainSynthesisAgentTest {
         assertTrue(prompt[0].contains("confidence 只能是 HIGH、MEDIUM、LOW"));
         assertTrue(prompt[0].contains("景气度、供需状态、核心指标、产业瓶颈"));
         assertTrue(prompt[0].contains("公司竞争格局"));
+        assertTrue(prompt[0].contains("每个 STAGE 至少生成 3 个直接语义子节点"));
     }
 
     private IndustryChainSynthesisAgent agent(String response) {

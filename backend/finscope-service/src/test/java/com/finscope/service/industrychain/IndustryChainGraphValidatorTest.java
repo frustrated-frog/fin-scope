@@ -111,6 +111,18 @@ class IndustryChainGraphValidatorTest {
     }
 
     @Test
+    void rejectsV3RootGraphWhenAStageHasFewerThanThreeSemanticChildren() {
+        IndustryChainGraph graph = semanticGraph();
+        graph.getNodes().add(node("chain:root", "INDUSTRY_CHAIN", "产业链", null));
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class, () -> validator.validate(graph));
+
+        assertEquals("V3 产业环节语义子节点不足 3 个：stage:manufacturing,stage:terminal,stage:upstream",
+                error.getMessage());
+    }
+
+    @Test
     void rejectsInvalidSemanticProfileAndEdgeStrength() {
         IndustryChainGraph missingProfileNode = semanticGraph();
         missingProfileNode.getResearchContent().getNodeProfiles().get(0).setNodeKey("missing");
