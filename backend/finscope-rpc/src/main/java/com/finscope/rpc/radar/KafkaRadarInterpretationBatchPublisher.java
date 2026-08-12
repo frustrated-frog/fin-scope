@@ -9,20 +9,23 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
-
 @Component
 public class KafkaRadarInterpretationBatchPublisher implements RadarInterpretationBatchPublisher {
     private static final Logger log = LoggerFactory.getLogger(KafkaRadarInterpretationBatchPublisher.class);
 
+    private final KafkaTemplate<String, RadarInterpretationBatchMessage> kafka;
+    private final boolean enabled;
+    private final String topic;
 
-    @Resource
-    private  KafkaTemplate<String, RadarInterpretationBatchMessage> kafka;
-    @Value("${finscope.radar.kafka.enabled:false}")
-    private boolean enabled;
-    @Value("${finscope.radar.kafka.topic:finscope.radar.interpretation.requested}")
-    private String topic;
-
+    @Autowired
+    public KafkaRadarInterpretationBatchPublisher(
+            KafkaTemplate<String, RadarInterpretationBatchMessage> kafka,
+            @Value("${finscope.radar.kafka.enabled:false}") boolean enabled,
+            @Value("${finscope.radar.kafka.topic:finscope.radar.interpretation.requested}") String topic) {
+        this.kafka = kafka;
+        this.enabled = enabled;
+        this.topic = topic;
+    }
 
     @Override
     public void publish(RadarInterpretationBatchMessage message) {
