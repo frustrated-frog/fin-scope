@@ -58,6 +58,7 @@ public class ForecastModelRaceService {
         List<ForecastModelRace.CandidateMetric> metrics = new ArrayList<ForecastModelRace.CandidateMetric>();
         for (List<ForecastCandidateRun> values : grouped.values()) {
             ForecastModelRace.CandidateMetric value = metric(values);
+            value.setRole(role(value.getModelCode(), result.getChampionCode(), values));
             value.setBrierDeltaVsChampion(value.getBrierScore() - champion.getBrierScore());
             value.setLogLossDeltaVsChampion(value.getLogLoss() - champion.getLogLoss());
             value.setPromotionEligible(eligible(value, champion));
@@ -71,6 +72,18 @@ public class ForecastModelRaceService {
                 .findFirst().orElse(null);
         classify(result, champion, metrics, eligible);
         return result;
+    }
+
+    private String role(String modelCode, String championCode,
+                        List<ForecastCandidateRun> values) {
+        if (modelCode.equals(championCode)) {
+            return "CHAMPION";
+        }
+        ForecastCandidateRun latest = values.stream()
+                .max(Comparator.comparing(ForecastCandidateRun::getAsOfDate)
+                        .thenComparing(ForecastCandidateRun::getForecastRunId))
+                .orElse(values.get(0));
+        return "BASELINE".equals(latest.getRole()) ? "BASELINE" : "CHALLENGER";
     }
 
     private ForecastModelRace.CandidateMetric metric(List<ForecastCandidateRun> values) {

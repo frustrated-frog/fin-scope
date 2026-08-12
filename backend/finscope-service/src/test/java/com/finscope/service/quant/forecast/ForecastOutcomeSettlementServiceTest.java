@@ -1,7 +1,6 @@
 package com.finscope.service.quant.forecast;
 
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
-import com.finscope.dao.quant.ForecastCandidateRunRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
@@ -20,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.doubleThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,26 +28,24 @@ class ForecastOutcomeSettlementServiceTest {
     @Test
     void settlesUsingTradingDayIndicesAndFrozenRoundTripCost() {
         SingleStockForecastRunRepository repository = mock(SingleStockForecastRunRepository.class);
-        ForecastCandidateRunRepository candidates = mock(ForecastCandidateRunRepository.class);
         SingleStockForecastRun run = run("UP", 5, 0.0015d);
         run.setReport(null);
         run.setReportJson("{\"decision\":\"UP\",\"strategyPolicy\":{\"roundTripCostRate\":0.0015}}");
         when(repository.findPending("603618.SH", 200)).thenReturn(Collections.singletonList(run));
-        when(repository.settle(eq(7L), any())).thenReturn(true);
+        ForecastRunPersistenceService persistence = mock(ForecastRunPersistenceService.class);
+        when(persistence.settle(eq(7L), any())).thenReturn(true);
         QuantDailyBarSource bars = (code, limit) -> batch(Arrays.asList(
                 bar("2026-08-07", 9.8), bar("2026-08-10", 10), bar("2026-08-11", 10.2),
                 bar("2026-08-12", 10.3), bar("2026-08-13", 10.4), bar("2026-08-14", 10.6),
                 bar("2026-08-17", 11)));
 
         ForecastOutcomeSettlementService service = new ForecastOutcomeSettlementService(
-                repository, candidates, bars);
+                repository, persistence, bars);
         ForecastOutcomeSettlementService.SettlementSummary summary = service.settlePending("603618.SH");
 
         org.mockito.ArgumentCaptor<SingleStockForecastRun.ForecastOutcome> outcome =
                 org.mockito.ArgumentCaptor.forClass(SingleStockForecastRun.ForecastOutcome.class);
-        verify(repository).settle(eq(7L), outcome.capture());
-        verify(candidates).settleByForecastRunId(eq(7L),
-                doubleThat(value -> Math.abs(value - .0985d) < .000001d), eq("UP"), any());
+        verify(persistence).settle(eq(7L), outcome.capture());
         assertEquals(LocalDate.of(2026, 8, 10), outcome.getValue().getEntryDate());
         assertEquals(LocalDate.of(2026, 8, 17), outcome.getValue().getExitDate());
         assertEquals(0.0985d, outcome.getValue().getActualNetReturn(), 0.000001d);

@@ -27,4 +27,23 @@ public class ForecastRunPersistenceService {
         candidates.saveAll(saved.getId(), candidateRuns);
         return saved;
     }
+
+    @Transactional(rollbackFor = Exception.class)
+    public boolean settle(long forecastRunId, SingleStockForecastRun.ForecastOutcome outcome) {
+        if (!runs.settle(forecastRunId, outcome)) {
+            return false;
+        }
+        candidates.settleByForecastRunId(forecastRunId, outcome.getActualNetReturn(),
+                outcome.getActualDirection(), outcome.getSettledAt());
+        return true;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markUnavailable(long forecastRunId, String note) {
+        if (!runs.markUnavailable(forecastRunId, note)) {
+            return false;
+        }
+        candidates.markUnavailableByForecastRunId(forecastRunId, java.time.LocalDateTime.now());
+        return true;
+    }
 }

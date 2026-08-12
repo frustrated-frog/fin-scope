@@ -56,6 +56,20 @@ class ForecastModelRaceServiceTest {
         assertNull(race.getPromotionCandidateCode());
     }
 
+    @Test
+    void usesLatestRunRolesWhenTheOfflineChampionChanges() {
+        List<ForecastCandidateRun> values = evidence(12, .65d, .80d, "UP");
+        values.stream().filter(item -> item.getForecastRunId() == 12L)
+                .forEach(item -> item.setRole("LOGISTIC".equals(item.getModelCode())
+                        ? "CHALLENGER" : "CHAMPION"));
+
+        ForecastModelRace race = evaluate(values);
+
+        assertEquals("REGIME_LOGISTIC", race.getChampionCode());
+        assertEquals("CHAMPION", metric(race, "REGIME_LOGISTIC").getRole());
+        assertEquals("CHALLENGER", metric(race, "LOGISTIC").getRole());
+    }
+
     private ForecastModelRace evaluate(List<ForecastCandidateRun> evidence) {
         ForecastCandidateRunRepository repository = mock(ForecastCandidateRunRepository.class);
         when(repository.findMaturedEvidence("600519.SH", 5, 20)).thenReturn(evidence);
