@@ -1,6 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
+import com.finscope.domain.quant.forecast.ForecastModelRace;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.service.quant.forecast.SingleStockForecastService;
@@ -114,5 +115,22 @@ class SingleStockForecastControllerTest {
                         .param("horizonDays", "3")
                         .param("modelVersion", "model-v1"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void exposesTrueForwardModelRaceWithoutAutomaticPromotion() throws Exception {
+        ForecastModelRace race = new ForecastModelRace();
+        race.setInstrumentCode("600519.SH");
+        race.setHorizonDays(5);
+        race.setStatus("PROMOTION_REVIEW");
+        race.setSampleCount(12);
+        race.setPromotionCandidateCode("REGIME_LOGISTIC");
+        when(service.race("600519", 5)).thenReturn(race);
+
+        mvc.perform(get("/api/quant/single-stock-forecasts/race")
+                        .param("code", "600519").param("horizonDays", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROMOTION_REVIEW"))
+                .andExpect(jsonPath("$.data.promotionCandidateCode").value("REGIME_LOGISTIC"));
     }
 }

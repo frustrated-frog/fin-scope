@@ -169,7 +169,7 @@ class SingleStockForecastServiceTest {
             return value;
         });
         SingleStockForecastService service = new SingleStockForecastService(
-                client, runs, candidates, null, holdings, null, null);
+                client, runs, candidates, null, holdings, null, null, null);
 
         service.forecast("600519", 5);
 

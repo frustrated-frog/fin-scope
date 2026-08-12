@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
+import com.finscope.domain.quant.forecast.ForecastModelRace;
 import com.finscope.service.quant.forecast.SingleStockForecastService;
 import com.finscope.web.request.quant.RunSingleStockForecastRequest;
 import com.finscope.web.response.ApiResponses;
@@ -53,6 +54,12 @@ public class SingleStockForecastController {
                                                    @RequestParam int horizonDays,
                                                    @RequestParam String modelVersion) {
         return ApiResponses.success(service.health(code, horizonDays, modelVersion));
+    }
+
+    @GetMapping("/race")
+    public ApiResponse<ForecastModelRace> race(@RequestParam String code,
+                                                @RequestParam int horizonDays) {
+        return ApiResponses.success(service.race(code, horizonDays));
     }
 
     @GetMapping("/{id}")

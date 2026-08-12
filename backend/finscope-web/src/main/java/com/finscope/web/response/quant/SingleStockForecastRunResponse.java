@@ -1,6 +1,7 @@
 package com.finscope.web.response.quant;
 
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
+import com.finscope.domain.quant.forecast.ForecastModelRace;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import lombok.Data;
@@ -26,6 +27,7 @@ public class SingleStockForecastRunResponse {
     private SingleStockForecastRun.HoldingSnapshot holdingSnapshot;
     private SingleStockForecastRun.ForecastOutcome outcome;
     private ForecastModelHealth modelHealth;
+    private ForecastModelRace modelRace;
 
     public static SingleStockForecastRunResponse of(SingleStockForecastRun value) {
         SingleStockForecastRunResponse response = new SingleStockForecastRunResponse();
@@ -45,6 +47,7 @@ public class SingleStockForecastRunResponse {
         response.holdingSnapshot = value.getHoldingSnapshot();
         response.outcome = value.getOutcome();
         response.modelHealth = value.getModelHealth();
+        response.modelRace = value.getModelRace();
         return response;
     }
 }

@@ -12,6 +12,7 @@ import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.quant.forecast.ForecastCandidateRun;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
+import com.finscope.domain.quant.forecast.ForecastModelRace;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ public class SingleStockForecastService {
     private final StrategyHoldingRepository holdings;
     private final ForecastOutcomeSettlementService settlement;
     private final ForecastModelHealthService health;
+    private final ForecastModelRaceService race;
     private final ObjectMapper json = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -44,7 +46,8 @@ public class SingleStockForecastService {
                                       ForecastRunPersistenceService persistence,
                                       StrategyHoldingRepository holdings,
                                       ForecastOutcomeSettlementService settlement,
-                                      ForecastModelHealthService health) {
+                                      ForecastModelHealthService health,
+                                      ForecastModelRaceService race) {
         this.client = client;
         this.runs = runs;
         this.candidates = candidates;
@@ -52,12 +55,13 @@ public class SingleStockForecastService {
         this.holdings = holdings;
         this.settlement = settlement;
         this.health = health;
+        this.race = race;
     }
 
     SingleStockForecastService(PythonSingleStockForecastClient client,
                                SingleStockForecastRunRepository runs,
                                StrategyHoldingRepository holdings) {
-        this(client, runs, null, null, holdings, null, null);
+        this(client, runs, null, null, holdings, null, null, null);
     }
 
     SingleStockForecastService(PythonSingleStockForecastClient client,
@@ -65,7 +69,7 @@ public class SingleStockForecastService {
                                StrategyHoldingRepository holdings,
                                ForecastOutcomeSettlementService settlement,
                                ForecastModelHealthService health) {
-        this(client, runs, null, null, holdings, settlement, health);
+        this(client, runs, null, null, holdings, settlement, health, null);
     }
 
     public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
@@ -104,6 +108,7 @@ public class SingleStockForecastService {
         saved.setReport(report);
         saved.setHoldingSnapshot(holding);
         saved.setModelHealth(modelHealth);
+        saved.setModelRace(modelRace(report.getInstrumentCode(), horizonDays));
         return saved;
     }
 
@@ -165,6 +170,7 @@ public class SingleStockForecastService {
                     value.getHoldingSnapshotJson(), SingleStockForecastRun.HoldingSnapshot.class));
             value.setModelHealth(modelHealth(value.getInstrumentCode(), value.getHorizonDays(),
                     value.getModelVersion()));
+            value.setModelRace(modelRace(value.getInstrumentCode(), value.getHorizonDays()));
             return value;
         } catch (Exception error) {
             throw new IllegalStateException("无法读取单股预测研究记录", error);
@@ -179,6 +185,18 @@ public class SingleStockForecastService {
         }
         settle(code + "." + market(code));
         return modelHealth(code + "." + market(code), horizonDays, modelVersion.trim());
+    }
+
+    public ForecastModelRace race(String requestedCode, int horizonDays) {
+        String code = normalizeCode(requestedCode);
+        validateHorizon(horizonDays);
+        String instrumentCode = code + "." + market(code);
+        settle(instrumentCode);
+        return modelRace(instrumentCode, horizonDays);
+    }
+
+    private ForecastModelRace modelRace(String instrumentCode, int horizonDays) {
+        return race == null ? null : race.evaluate(instrumentCode, horizonDays);
     }
 
     private ForecastModelHealth modelHealth(String instrumentCode, int horizonDays, String modelVersion) {
