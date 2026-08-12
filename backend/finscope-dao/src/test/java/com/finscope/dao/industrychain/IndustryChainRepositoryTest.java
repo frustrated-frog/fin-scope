@@ -112,8 +112,9 @@ class IndustryChainRepositoryTest {
     @Test
     void expiredRevisionCannotPublishOverANewerRevision() {
         IndustryChain chain = repository.createChain("机器人", "机器人");
-        IndustryChainRevision expired = repository.createRevision(chain.getId());
-        repository.claimGeneration(chain.getId(), expired.getId());
+        IndustryChainRevision queued = repository.createRevision(chain.getId());
+        IndustryChainRevision expired = repository.claimGeneration(chain.getId(), queued.getId())
+                .orElseThrow(AssertionError::new);
         repository.fail(expired, "STALE_REVISION_EXPIRED", "任务租约已过期");
         IndustryChainRevision current = repository.createRevision(chain.getId());
 

@@ -1385,6 +1385,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "research_content_json TEXT,schema_version TEXT,model TEXT,generated_at TEXT,created_at TEXT NOT NULL,completed_at TEXT,"
                 + "FOREIGN KEY(chain_id) REFERENCES industry_chain(id) ON DELETE CASCADE)");
         ensureColumn("industry_chain_revision", "research_content_json", "TEXT");
+        ensureColumn("industry_chain_revision", "lease_token", "TEXT");
         ensureColumn("industry_chain_revision", "lease_updated_at", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_industry_chain_revision_chain "
                 + "ON industry_chain_revision(chain_id,id DESC)");
