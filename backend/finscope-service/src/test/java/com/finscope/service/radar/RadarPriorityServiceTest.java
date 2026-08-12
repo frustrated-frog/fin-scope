@@ -109,6 +109,27 @@ class RadarPriorityServiceTest {
         assertTrue(result.getRecencyScore() <= 6);
     }
 
+    @Test
+    void combinesRelevanceHotnessAndConfidenceForResearchPriority() {
+        RadarPriorityService.PriorityResult result = service.score(
+                event("300750发布业绩预告", NOW.minusMinutes(30)),
+                Collections.singletonList(signal("CLS", "TIER_1", "300750发布业绩预告", NOW.minusMinutes(30))),
+                Collections.singletonList(watchlist("300750", "宁德时代")), NOW, 80, 90);
+
+        assertEquals(100, result.getRelevanceScore());
+        assertEquals(91, result.getTotalScore());
+    }
+
+    @Test
+    void doesNotTreatSingleCharacterNameAsDirectRelationship() {
+        RadarPriorityService.PriorityResult result = service.score(
+                event("中美利率政策变化", NOW.minusHours(1)),
+                Collections.singletonList(signal("CLS", "TIER_1", "中美利率政策变化", NOW.minusHours(1))),
+                Collections.singletonList(watchlist("000001", "中")), NOW, 80, 80);
+
+        assertEquals(0, result.getRelevanceScore());
+    }
+
     private RadarEvent event(String title, LocalDateTime time) {
         RadarEvent event = new RadarEvent();
         event.setCanonicalTitle(title); event.setSummary(title); event.setFirstSeenAt(time); event.setLastSeenAt(time);
