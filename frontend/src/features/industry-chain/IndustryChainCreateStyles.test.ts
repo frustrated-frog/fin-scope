@@ -39,11 +39,17 @@ test('defines the complete responsive semantic graph visual contract', () => {
   expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
 });
 
-test('centers a fixed graph on wide desktops and keeps the semantic layer copy readable', () => {
+test('lets the responsive layout own canvas and lane widths while keeping layer copy readable', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
 
-  expect(styles).toMatch(/\.ic-canvas\s*{[^}]*margin-inline:\s*auto/s);
+  const canvasRule = styles.match(/\.ic-canvas\s*{([^}]*)}/s)?.[1] ?? '';
+  const laneRule = styles.match(/\.ic-lane\s*{([^}]*)}/s)?.[1] ?? '';
+  const laneLabelRule = styles.match(/\.ic-lane > span\s*{([^}]*)}/s)?.[1] ?? '';
+  expect(canvasRule).not.toContain('margin-inline: auto');
+  expect(laneRule).not.toContain('width: 292px');
+  expect(laneLabelRule).toContain('left: 50%');
+  expect(laneLabelRule).toContain('translateX(-50%)');
   expect(styles).toMatch(/\.ic-layer-title strong\s*{[^}]*font-size:\s*14px/s);
   expect(styles).toMatch(/\.ic-layer-options button strong\s*{[^}]*font-size:\s*12px/s);
   expect(styles).toMatch(/\.ic-layer-options button small\s*{[^}]*font-size:\s*9px/s);

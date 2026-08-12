@@ -25,6 +25,36 @@ const graph: IndustryChainGraph = {
 };
 
 describe('industryChainLayout', () => {
+  it('divides a wide canvas equally across three stages and centers every node', () => {
+    const layout = layoutIndustryGraph(graph, 1500);
+
+    expect(layout.laneWidth).toBe(500);
+    expect(layout.width).toBe(1500);
+    expect(layout.stages.map((stage) => stage.x)).toEqual([134, 634, 1134]);
+    expect(nodeByKey(layout, 'material:copper').x).toBe(146);
+  });
+
+  it('divides a wide canvas equally across four stages', () => {
+    const fourStageGraph: IndustryChainGraph = {
+      ...graph,
+      nodes: [...graph.nodes, node('stage:application', 'STAGE', '应用', 4)],
+      edges: [...graph.edges, edge('flow:3', 'stage:dc', 'stage:application', 'FLOWS_TO')]
+    };
+
+    const layout = layoutIndustryGraph(fourStageGraph, 1600);
+
+    expect(layout.laneWidth).toBe(400);
+    expect(layout.width).toBe(1600);
+    expect(layout.stages.map((stage) => stage.x)).toEqual([84, 484, 884, 1284]);
+  });
+
+  it('preserves a readable minimum lane width when the canvas is narrow', () => {
+    const layout = layoutIndustryGraph(graph, 720);
+
+    expect(layout.laneWidth).toBe(292);
+    expect(layout.width).toBe(876);
+  });
+
   it('orders stage lanes and semantic node groups inside their stage column', () => {
     const projected = projectSemanticGraph(graph, new Set(['stage:chip']), 'STRUCTURE');
     const layout = layoutIndustryGraph(projected);

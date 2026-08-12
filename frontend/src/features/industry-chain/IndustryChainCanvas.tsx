@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { focusNeighborhood, layoutIndustryGraph } from './industryChainLayout';
 import { industryChainNodeLayerLabel } from './industryChainLayers';
@@ -23,6 +23,22 @@ export function IndustryChainCanvas({
   onSelectNode: (key: string) => void;
   onToggleExpanded: (key: string) => void;
 }) {
+  const canvasScrollRef = useRef<HTMLDivElement>(null);
+  const [availableWidth, setAvailableWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const container = canvasScrollRef.current;
+    if (!container) return undefined;
+    const updateWidth = (width: number) => setAvailableWidth((current) => current === width ? current : width);
+    updateWidth(container.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver((entries) => {
+      updateWidth(entries[0]?.contentRect.width ?? container.clientWidth);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   const projectionExpansion = useMemo(() => {
     const result = new Set(expandedNodeKeys);
     if (highlightedPath.length > 0) {
@@ -37,7 +53,10 @@ export function IndustryChainCanvas({
     () => projectSemanticGraph(graph, projectionExpansion, activeLayer),
     [activeLayer, graph, projectionExpansion]
   );
-  const layout = useMemo(() => layoutIndustryGraph(projectedGraph), [projectedGraph]);
+  const layout = useMemo(
+    () => layoutIndustryGraph(projectedGraph, availableWidth),
+    [availableWidth, projectedGraph]
+  );
   const focused = useMemo(() => new Set(
     focusMode && selectedNodeKey ? focusNeighborhood(graph, selectedNodeKey, 3) : graph.nodes.map((node) => node.nodeKey)
   ), [focusMode, graph, selectedNodeKey]);
@@ -49,11 +68,12 @@ export function IndustryChainCanvas({
   return (
     <section className="ic-canvas-shell" role="region" aria-label={`${graph.name}产业链图谱`}>
       <div className="ic-desktop-graph">
-        <div className="ic-canvas-scroll">
+        <div className="ic-canvas-scroll" ref={canvasScrollRef}>
         <div className="ic-canvas" style={{ width: layout.width, height: layout.height }}>
           <div className="ic-lane-grid" aria-hidden="true">
             {layout.stages.map((stage, index) => (
-              <div className="ic-lane" key={stage.nodeKey} style={{ left: index * 292 }}>
+              <div className="ic-lane" key={stage.nodeKey}
+                style={{ left: index * layout.laneWidth, width: layout.laneWidth }}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
               </div>
             ))}

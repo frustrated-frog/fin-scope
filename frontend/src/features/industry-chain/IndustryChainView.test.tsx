@@ -69,6 +69,7 @@ const workspace: IndustryChainWorkspace = {
 };
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   vi.mocked(api).mockReset();
 });
 
@@ -141,6 +142,30 @@ test('selects graph nodes, searches and switches focus mode', async () => {
   await userEvent.click(screen.getByRole('button', { name: '聚焦链路' }));
   expect(screen.getByRole('button', { name: '查看全图' })).toBeInTheDocument();
   expect(screen.getByLabelText('移动端产业链阅读器')).toBeInTheDocument();
+});
+
+test('divides the measured desktop canvas equally across its industry stages', async () => {
+  const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1500);
+  vi.stubGlobal('ResizeObserver', class {
+    observe() { return undefined; }
+    disconnect() { return undefined; }
+  });
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return workspace;
+    throw new Error(`unexpected ${path}`);
+  });
+  const { container } = render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+
+  await waitFor(() => {
+    const lanes = [...container.querySelectorAll<HTMLElement>('.ic-lane')];
+    expect(lanes).toHaveLength(3);
+    expect(lanes.map((lane) => lane.style.left)).toEqual(['0px', '500px', '1000px']);
+    expect(lanes.map((lane) => lane.style.width)).toEqual(['500px', '500px', '500px']);
+  });
+  clientWidth.mockRestore();
 });
 
 test('progressively expands and collapses semantic nodes while preserving dedicated edge routes', async () => {
