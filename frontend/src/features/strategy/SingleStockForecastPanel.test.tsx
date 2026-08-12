@@ -231,6 +231,21 @@ test('defensively rejects a historical qualified status contradicted by locked m
   expect(screen.getByText('锁定测试的概率质量未达到当前资格门槛')).toBeInTheDocument();
 });
 
+test('labels gated model decisions as shadow outcomes rather than public calls', async () => {
+  const gated = { ...run, outcome: { ...run.outcome, correct: true },
+    report: { ...report, decision: 'ABSTAIN' as const, modelDecision: 'UP' as const } };
+  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    apiResponse(init?.method === 'POST' ? gated : [])));
+  const user = userEvent.setup();
+
+  render(<SingleStockForecastPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  await user.type(screen.getByLabelText('股票代码'), '600519');
+  await user.click(screen.getByRole('button', { name: '运行完整研究' }));
+
+  expect(await screen.findByText('影子方向命中')).toBeInTheDocument();
+  expect(screen.getByText(/健康门禁未向用户输出方向/)).toBeInTheDocument();
+});
+
 test('opens an immutable historical report without posting a new run', async () => {
   const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
     apiResponse(String(input).endsWith('/7') ? run : [summary]));

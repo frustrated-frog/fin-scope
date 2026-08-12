@@ -135,18 +135,18 @@ public class SingleStockForecastRunRepository {
                 mapper, instrumentCode, Math.max(1, Math.min(limit, 200)));
     }
 
-    public List<String> findPendingInstrumentCodes(int limit) {
-        return jdbcTemplate.query("SELECT instrument_code FROM single_stock_forecast_run "
-                        + "WHERE maturity_status='PENDING' GROUP BY instrument_code "
-                        + "ORDER BY MIN(as_of_date),instrument_code LIMIT ?",
-                (rs, rowNum) -> rs.getString(1), Math.max(1, Math.min(limit, 50)));
-    }
-
     public List<SingleStockForecastRun> findHealthEvidence(String instrumentCode, int horizonDays,
                                                             String modelVersion, int limit) {
-        return jdbcTemplate.query("SELECT * FROM single_stock_forecast_run WHERE instrument_code=? "
-                        + "AND horizon_days=? AND model_version=? AND maturity_status='MATURED' "
-                        + "AND same_data_as_previous=0 ORDER BY as_of_date DESC,id DESC LIMIT ?",
+        return jdbcTemplate.query("SELECT current.* FROM single_stock_forecast_run current "
+                        + "WHERE current.instrument_code=? AND current.horizon_days=? "
+                        + "AND current.model_version=? AND current.maturity_status='MATURED' "
+                        + "AND current.id=(SELECT MIN(first.id) FROM single_stock_forecast_run first "
+                        + "WHERE first.instrument_code=current.instrument_code "
+                        + "AND first.horizon_days=current.horizon_days "
+                        + "AND first.model_version=current.model_version "
+                        + "AND first.data_fingerprint=current.data_fingerprint "
+                        + "AND first.maturity_status='MATURED') "
+                        + "ORDER BY current.as_of_date DESC,current.id DESC LIMIT ?",
                 mapper, instrumentCode, horizonDays, modelVersion, Math.max(1, Math.min(limit, 200)));
     }
 

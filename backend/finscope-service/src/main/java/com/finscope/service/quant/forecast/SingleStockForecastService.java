@@ -12,6 +12,8 @@ import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +23,7 @@ import java.util.Optional;
 /** Python owns analytics; this service freezes each report with personal context. */
 @Service
 public class SingleStockForecastService {
+    private static final Logger log = LoggerFactory.getLogger(SingleStockForecastService.class);
     private final PythonSingleStockForecastClient client;
     private final SingleStockForecastRunRepository runs;
     private final StrategyHoldingRepository holdings;
@@ -92,9 +95,7 @@ public class SingleStockForecastService {
         if (horizonDays != null) {
             validateHorizon(horizonDays);
         }
-        if (instrumentCode == null) {
-            settleAll();
-        } else {
+        if (instrumentCode != null) {
             settle(instrumentCode);
         }
         return runs.findAll(instrumentCode, limit, horizonDays);
@@ -135,6 +136,7 @@ public class SingleStockForecastService {
         if (modelHealth == null || !modelHealth.isDirectionOutputPaused()) {
             return;
         }
+        report.setModelDecision(report.getDecision());
         report.setDecision("ABSTAIN");
         report.setDecisionReason(modelHealth.getConclusion());
         report.getWarnings().add("真实到期验证门禁已暂停方向输出；概率与完整研究证据仅供复核");
@@ -142,13 +144,12 @@ public class SingleStockForecastService {
 
     private void settle(String instrumentCode) {
         if (settlement != null) {
-            settlement.settlePending(instrumentCode);
-        }
-    }
-
-    private void settleAll() {
-        if (settlement != null) {
-            settlement.settleAllPending();
+            try {
+                settlement.settlePending(instrumentCode);
+            } catch (RuntimeException error) {
+                log.warn("预测到期结算暂缓 instrumentCode={} error={}",
+                        instrumentCode, error.getMessage());
+            }
         }
     }
 

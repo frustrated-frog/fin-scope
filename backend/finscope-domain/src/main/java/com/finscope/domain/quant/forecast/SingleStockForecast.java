@@ -16,6 +16,8 @@ public class SingleStockForecast {
     private String status;
     private String conclusion;
     private String decision;
+    /** Ungated model direction retained for shadow evaluation while public output is paused. */
+    private String modelDecision;
     private String decisionReason;
     private Integer barCount;
     private Integer labeledSampleCount;

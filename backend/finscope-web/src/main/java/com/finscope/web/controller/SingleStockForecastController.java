@@ -50,7 +50,7 @@ public class SingleStockForecastController {
 
     @GetMapping("/health")
     public ApiResponse<ForecastModelHealth> health(@RequestParam String code,
-                                                   @RequestParam @Min(1) @Max(20) int horizonDays,
+                                                   @RequestParam int horizonDays,
                                                    @RequestParam String modelVersion) {
         return ApiResponses.success(service.health(code, horizonDays, modelVersion));
     }

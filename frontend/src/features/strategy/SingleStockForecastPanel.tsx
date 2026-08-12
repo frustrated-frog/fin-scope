@@ -189,7 +189,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
         {!historyBusy && runs.length === 0 && <p>运行第一份研究后，它会永久留在这里。</p>}
         <div>{runs.map(item => <button type="button" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => openRun(item)}>
           <span><b>{item.instrumentCode}</b><time>{item.createdAt?.replace('T', ' ').slice(0, 16)}</time></span>
-          <strong>{item.maturityStatus === 'MATURED' && item.outcome?.actualNetReturn != null ? signedPercent(item.outcome.actualNetReturn) : percent(item.upProbability)}</strong><small>{item.horizonDays ?? item.report?.horizonDays ?? 20}D · {statusCopy[item.status]?.label ?? item.status}{item.maturityStatus ? ` · ${maturityCopy[item.maturityStatus]}` : ''}{item.outcome?.correct != null ? ` · ${item.outcome.correct ? '命中' : '偏离'}` : ''}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
+          <strong>{item.maturityStatus === 'MATURED' && item.outcome?.actualNetReturn != null ? signedPercent(item.outcome.actualNetReturn) : percent(item.upProbability)}</strong><small>{item.horizonDays ?? item.report?.horizonDays ?? 20}D · {statusCopy[item.status]?.label ?? item.status}{item.maturityStatus ? ` · ${maturityCopy[item.maturityStatus]}` : ''}{item.outcome?.correct != null ? ` · 方向${item.outcome.correct ? '命中' : '偏离'}` : ''}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
         </button>)}</div>
       </aside>
 

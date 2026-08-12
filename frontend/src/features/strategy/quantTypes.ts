@@ -241,7 +241,8 @@ export interface SingleStockForecast {
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
   status: SingleStockForecastStatus; conclusion: string;
-  decision?: 'UP' | 'DOWN' | 'ABSTAIN'; decisionReason?: string;
+  decision?: 'UP' | 'DOWN' | 'ABSTAIN'; modelDecision?: 'UP' | 'DOWN' | 'ABSTAIN';
+  decisionReason?: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
   rawProbability?: number; probabilityInterval?: ForecastConfidenceInterval;

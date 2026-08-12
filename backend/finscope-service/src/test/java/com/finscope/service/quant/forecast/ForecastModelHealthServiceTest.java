@@ -51,6 +51,21 @@ class ForecastModelHealthServiceTest {
         assertEquals(1d, health.getCoveredAccuracy(), 0.000001d);
     }
 
+    @Test
+    void evaluatesShadowDirectionWhilePublicDirectionIsPaused() {
+        List<SingleStockForecastRun> values = outcomes(8, 0.8, true);
+        values.forEach(run -> {
+            run.getReport().setModelDecision("UP");
+            run.getReport().setDecision("ABSTAIN");
+        });
+
+        ForecastModelHealth health = health(values);
+
+        assertEquals("HEALTHY", health.getStatus());
+        assertEquals(8, health.getCoveredCount());
+        assertEquals(1d, health.getCoveredAccuracy(), 0.000001d);
+    }
+
     private ForecastModelHealth health(List<SingleStockForecastRun> values) {
         SingleStockForecastRunRepository repository = mock(SingleStockForecastRunRepository.class);
         when(repository.findHealthEvidence("603618.SH", 5, "model-v1", 20)).thenReturn(values);

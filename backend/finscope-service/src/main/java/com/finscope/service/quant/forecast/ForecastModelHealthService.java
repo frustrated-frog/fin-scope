@@ -60,7 +60,9 @@ public class ForecastModelHealthService {
             if (up) {
                 actualUp++;
             }
-            String decision = report(run).getDecision();
+            SingleStockForecast report = report(run);
+            String decision = report.getModelDecision() == null
+                    ? report.getDecision() : report.getModelDecision();
             if ("UP".equals(decision) || "DOWN".equals(decision)) {
                 covered++;
                 if (decision.equals(run.getOutcome().getActualDirection())) {

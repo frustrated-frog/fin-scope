@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -115,9 +116,34 @@ class SingleStockForecastServiceTest {
         SingleStockForecastRun result = service.forecast("600519", 5);
 
         assertEquals("ABSTAIN", result.getReport().getDecision());
+        assertEquals("UP", result.getReport().getModelDecision());
         assertEquals("真实结果持续弱于门槛", result.getReport().getDecisionReason());
         assertEquals(0.62d, result.getReport().getUpProbability(), 0.000001d);
         assertSame(health, result.getModelHealth());
+    }
+
+    @Test
+    void forecastContinuesWhenBestEffortOutcomeSettlementTemporarilyFails() {
+        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
+        ForecastOutcomeSettlementService settlement = mock(ForecastOutcomeSettlementService.class);
+        ForecastModelHealthService healthService = mock(ForecastModelHealthService.class);
+        SingleStockForecast forecast = forecast();
+        doThrow(new IllegalStateException("provider timeout"))
+                .when(settlement).settlePending("600519.SH");
+        when(client.forecast("600519", 5)).thenReturn(forecast);
+        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
+        when(healthService.evaluate("600519.SH", 5, forecast.getModelVersion()))
+                .thenReturn(new ForecastModelHealth());
+        when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SingleStockForecastService service = new SingleStockForecastService(
+                client, runs, holdings, settlement, healthService);
+
+        SingleStockForecastRun result = service.forecast("600519", 5);
+
+        assertSame(forecast, result.getReport());
+        verify(client).forecast("600519", 5);
     }
 
     private SingleStockForecast forecast() {

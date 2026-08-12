@@ -9,8 +9,6 @@ import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.rpc.quant.QuantDailyBarBatch;
 import com.finscope.rpc.quant.QuantDailyBarSource;
 import lombok.Value;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,7 +20,6 @@ import java.util.List;
 @Service
 public class ForecastOutcomeSettlementService {
     private static final double DEFAULT_ROUND_TRIP_COST = 0.0015d;
-    private static final Logger log = LoggerFactory.getLogger(ForecastOutcomeSettlementService.class);
     private final SingleStockForecastRunRepository runs;
     private final QuantDailyBarSource bars;
     private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
@@ -64,7 +61,8 @@ public class ForecastOutcomeSettlementService {
             double cost = roundTripCost(report);
             double netReturn = exit.getOpen().doubleValue() / entry.getOpen().doubleValue() - 1d - cost;
             String actualDirection = netReturn > 0d ? "UP" : "DOWN";
-            String decision = report == null ? null : report.getDecision();
+            String decision = report == null ? null : report.getModelDecision() == null
+                    ? report.getDecision() : report.getModelDecision();
             SingleStockForecastRun.ForecastOutcome outcome = new SingleStockForecastRun.ForecastOutcome();
             outcome.setEntryDate(entry.getTradeDate());
             outcome.setExitDate(exit.getTradeDate());
@@ -82,25 +80,6 @@ public class ForecastOutcomeSettlementService {
             }
         }
         return new SettlementSummary(matured, waiting, unavailable);
-    }
-
-    public SettlementSummary settleAllPending() {
-        int matured = 0;
-        int pending = 0;
-        int unavailable = 0;
-        for (String instrumentCode : runs.findPendingInstrumentCodes(20)) {
-            try {
-                SettlementSummary result = settlePending(instrumentCode);
-                matured += result.getMatured();
-                pending += result.getPending();
-                unavailable += result.getUnavailable();
-            } catch (RuntimeException error) {
-                pending += runs.findPending(instrumentCode, 200).size();
-                log.warn("预测到期结算暂缓 instrumentCode={} error={}",
-                        instrumentCode, error.getMessage());
-            }
-        }
-        return new SettlementSummary(matured, pending, unavailable);
     }
 
     private int indexOf(List<QuantDailyBar> values, java.time.LocalDate date) {

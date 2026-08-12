@@ -18,6 +18,12 @@ function outcomeResult(run: SingleStockForecastRun) {
   if (run.maturityStatus !== 'MATURED') return {
     title: '等待到期行情', detail: `需要信号日后第 ${run.horizonDays ?? run.report?.horizonDays ?? 20} 个交易日的退出开盘价；系统在再次进入策略工作台时自动结算。`
   };
+  if (run.report?.decision === 'ABSTAIN'
+      && (run.report.modelDecision === 'UP' || run.report.modelDecision === 'DOWN')) {
+    return run.outcome?.correct
+      ? { title: '影子方向命中', detail: '当时健康门禁未向用户输出方向；系统保留模型原始方向作影子验证，本次与实际方向一致。' }
+      : { title: '影子方向偏离', detail: '当时健康门禁未向用户输出方向；系统保留模型原始方向作影子验证，本次与实际方向不一致。' };
+  }
   if (run.report?.decision === 'ABSTAIN' || run.outcome?.correct == null) return { title: '本次当时弃权', detail: '保留真实收益用于概率评分，但不把弃权记录算作方向命中或偏离。' };
   return run.outcome.correct
     ? { title: '本次命中', detail: '当时给出的选择性方向与扣除冻结交易成本后的实际方向一致。' }

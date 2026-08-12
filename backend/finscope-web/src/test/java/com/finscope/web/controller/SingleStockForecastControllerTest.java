@@ -103,4 +103,16 @@ class SingleStockForecastControllerTest {
                 .andExpect(jsonPath("$.data.sampleCount").value(12))
                 .andExpect(jsonPath("$.data.brierScore").value(0.214));
     }
+
+    @Test
+    void rejectsUnregisteredHealthHorizon() throws Exception {
+        when(service.health("600519", 3, "model-v1"))
+                .thenThrow(new IllegalArgumentException("预测周期只支持 1、5、20 个交易日"));
+
+        mvc.perform(get("/api/quant/single-stock-forecasts/health")
+                        .param("code", "600519")
+                        .param("horizonDays", "3")
+                        .param("modelVersion", "model-v1"))
+                .andExpect(status().isBadRequest());
+    }
 }

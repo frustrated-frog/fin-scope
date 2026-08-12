@@ -1315,6 +1315,11 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("single_stock_forecast_run", "outcome_note", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_code_created "
                 + "ON single_stock_forecast_run(instrument_code,created_at DESC,id DESC)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_pending "
+                + "ON single_stock_forecast_run(instrument_code,maturity_status,as_of_date,id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_health "
+                + "ON single_stock_forecast_run(instrument_code,horizon_days,model_version,"
+                + "maturity_status,data_fingerprint,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,framework_code TEXT NOT NULL,"
                 + "latest_run_id INTEGER,status TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"

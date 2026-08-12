@@ -104,6 +104,37 @@ class SingleStockForecastRunRepositoryTest {
                 repository.findById(first.getId()).orElseThrow(AssertionError::new).getMaturityStatus());
     }
 
+    @Test
+    void healthEvidenceDeduplicatesFingerprintAcrossNonAdjacentRunsAndModelVersions() {
+        SingleStockForecastRun first = repository.save(run("{\"sequence\":1}"));
+        SingleStockForecastRun different = run("{\"sequence\":2}");
+        different.setDataFingerprint("different-fingerprint");
+        SingleStockForecastRun second = repository.save(different);
+        SingleStockForecastRun repeated = repository.save(run("{\"sequence\":3}"));
+        settle(first);
+        settle(second);
+        settle(repeated);
+
+        List<SingleStockForecastRun> evidence = repository.findHealthEvidence(
+                "603618.SH", 5, "logistic-walk-forward-v2", 50);
+
+        assertEquals(2, evidence.size());
+        assertTrue(evidence.stream().noneMatch(item -> item.getId().equals(repeated.getId())));
+    }
+
+    private void settle(SingleStockForecastRun run) {
+        SingleStockForecastRun.ForecastOutcome outcome = new SingleStockForecastRun.ForecastOutcome();
+        outcome.setEntryDate(LocalDate.of(2026, 8, 10));
+        outcome.setExitDate(LocalDate.of(2026, 8, 17));
+        outcome.setEntryOpen(10d);
+        outcome.setExitOpen(11d);
+        outcome.setActualNetReturn(.0985d);
+        outcome.setActualDirection("UP");
+        outcome.setCorrect(true);
+        outcome.setSettledAt(LocalDateTime.of(2026, 8, 17, 18, 0));
+        repository.settle(run.getId(), outcome);
+    }
+
     private SingleStockForecastRun run(String reportJson) {
         SingleStockForecastRun value = new SingleStockForecastRun();
         value.setInstrumentCode("603618.SH");
