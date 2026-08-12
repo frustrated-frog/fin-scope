@@ -36,14 +36,24 @@ public class PythonSingleStockForecastClient {
 
     private final String baseUrl;
     private final FinanceHttpClient http;
+    private final int timeoutMs;
     private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Autowired
     public PythonSingleStockForecastClient(
             @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl,
-            FinanceHttpClient http) {
+            FinanceHttpClient http,
+            @Value("${finscope.python-market-data.forecast-timeout-ms:240000}") int timeoutMs) {
         this.baseUrl = trimTrailingSlash(baseUrl);
         this.http = http;
+        if (timeoutMs <= 0) {
+            throw new IllegalArgumentException("Python 单股预测超时必须大于零");
+        }
+        this.timeoutMs = timeoutMs;
+    }
+
+    PythonSingleStockForecastClient(String baseUrl, FinanceHttpClient http) {
+        this(baseUrl, http, 240_000);
     }
 
     public SingleStockForecast forecast(String code) {
@@ -62,7 +72,7 @@ public class PythonSingleStockForecastClient {
             FinanceHttpResponse response = http.postJson(
                     CLIENT_CODE, uri, "{\"code\":\"" + code + "\",\"horizonDays\":"
                             + horizonDays + "}",
-                    Collections.<String, String>emptyMap());
+                    Collections.<String, String>emptyMap(), timeoutMs);
             SingleStockForecast result = json.readValue(response.getBody(), SingleStockForecast.class);
             validate(result, code, horizonDays);
             return result;

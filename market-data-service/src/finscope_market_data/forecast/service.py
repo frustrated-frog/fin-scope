@@ -157,6 +157,8 @@ def build_forecast(
         horizon_days=horizon_days,
         model_code=selected_model,
         context=context,
+        primary_samples=samples,
+        primary_validation=validation,
     )
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)

@@ -87,14 +87,30 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
                 "application/json"), headers, maxBytes);
     }
 
+    @Override
+    public FinanceHttpResponse postJson(String provider, URI uri, String body,
+                                        Map<String, String> headers, int requestTimeoutMs) throws Exception {
+        return execute(provider, AcquisitionRequest.post(uri, body,
+                "application/json"), headers, maxBytes, requestTimeoutMs);
+    }
+
     private FinanceHttpResponse execute(String provider, AcquisitionRequest.Builder request,
                                         Map<String, String> headers, int requestedMaxBytes) throws Exception {
+        return execute(provider, request, headers, requestedMaxBytes, readTimeoutMs);
+    }
+
+    private FinanceHttpResponse execute(String provider, AcquisitionRequest.Builder request,
+                                        Map<String, String> headers, int requestedMaxBytes,
+                                        int requestTimeoutMs) throws Exception {
+        if (requestTimeoutMs <= 0) {
+            throw new IllegalArgumentException("请求超时必须大于零");
+        }
         int responseLimit = Math.min(16 * 1024 * 1024, Math.max(maxBytes, requestedMaxBytes));
         try {
             request.purpose("MARKET_PROVIDER:" + provider)
                     .connectTimeoutMs(boundedTimeout(connectTimeoutMs, provider))
-                    .readTimeoutMs(boundedTimeout(readTimeoutMs, provider))
-                    .deadlineMs(deadlineMillis(provider))
+                    .readTimeoutMs(boundedTimeout(requestTimeoutMs, provider))
+                    .deadlineMs(deadlineMillis(requestTimeoutMs, provider))
                     .maxResponseBytes(responseLimit)
                     .maxRetries(0)
                     .header("User-Agent", BROWSER_USER_AGENT);
@@ -111,12 +127,12 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
         }
     }
 
-    private int deadlineMillis(String provider) {
+    private int deadlineMillis(int requestTimeoutMs, String provider) {
         long remaining = ProviderCallDeadline.remainingMillis();
         if (remaining <= 0L) {
             throw new ProviderContractException("TIMEOUT", provider + " exceeded provider deadline", true);
         }
-        long configured = (long) connectTimeoutMs + (long) readTimeoutMs;
+        long configured = (long) connectTimeoutMs + (long) requestTimeoutMs;
         return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.min(configured, remaining)));
     }
 

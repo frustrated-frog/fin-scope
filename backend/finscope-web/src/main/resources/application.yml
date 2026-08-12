@@ -85,6 +85,7 @@ finscope:
       concurrency: 3
   python-market-data:
     base-url: http://127.0.0.1:8000
+    forecast-timeout-ms: 240000
   acquisition:
     browser:
       enabled: false

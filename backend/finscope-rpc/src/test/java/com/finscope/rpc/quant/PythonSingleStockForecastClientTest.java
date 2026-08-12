@@ -17,6 +17,35 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PythonSingleStockForecastClientTest {
     @Test
+    void usesForecastSpecificTimeoutInsteadOfTheSharedMarketDataTimeout() {
+        AtomicReference<Integer> timeoutMs = new AtomicReference<Integer>();
+        FinanceHttpClient http = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                                Map<String, String> headers) {
+                throw new AssertionError("forecast must use its dedicated timeout");
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                                Map<String, String> headers, int requestTimeoutMs) {
+                timeoutMs.set(requestTimeoutMs);
+                return response(v5Payload());
+            }
+        };
+
+        new PythonSingleStockForecastClient("http://127.0.0.1:8000", http, 240_000)
+                .forecast("600519", 5);
+
+        assertEquals(240_000, timeoutMs.get());
+    }
+
+    @Test
     void postsCodeAndMapsTheCompleteForecastContract() {
         AtomicReference<URI> uri = new AtomicReference<URI>();
         AtomicReference<String> body = new AtomicReference<String>();

@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from finscope_market_data.forecast.context import AlignedForecastContext
-from finscope_market_data.forecast.features import build_samples
+from finscope_market_data.forecast.features import ForecastSample, build_samples
 from finscope_market_data.forecast.performance import simulate_strategy
-from finscope_market_data.forecast.walk_forward import validate_walk_forward
+from finscope_market_data.forecast.walk_forward import WalkForwardResult, validate_walk_forward
 from finscope_market_data.models import DailyBar
 
 
@@ -62,20 +62,30 @@ def analyze_stability(
     horizon_days: int = 20,
     model_code: str = "LOGISTIC",
     context: AlignedForecastContext | None = None,
+    primary_samples: Sequence[ForecastSample] | None = None,
+    primary_validation: WalkForwardResult | None = None,
 ) -> StabilityReport:
     results: list[StabilityScenarioResult] = []
+    analyses: dict[int, tuple[Sequence[ForecastSample], WalkForwardResult]] = {}
+    if primary_samples is not None and primary_validation is not None:
+        analyses[horizon_days] = (primary_samples, primary_validation)
     for scenario in neighbor_scenarios(horizon_days):
-        samples = build_samples(
-            bars,
-            transaction_cost_rate=transaction_cost_rate,
-            horizon_days=scenario.holding_days,
-            context=context,
-        )
-        validation = validate_walk_forward(
-            samples,
-            independent_stride_days=scenario.holding_days,
-            model_code=model_code,
-        )
+        analysis = analyses.get(scenario.holding_days)
+        if analysis is None:
+            samples = build_samples(
+                bars,
+                transaction_cost_rate=transaction_cost_rate,
+                horizon_days=scenario.holding_days,
+                context=context,
+            )
+            validation = validate_walk_forward(
+                samples,
+                independent_stride_days=scenario.holding_days,
+                model_code=model_code,
+            )
+            analysis = (samples, validation)
+            analyses[scenario.holding_days] = analysis
+        samples, validation = analysis
         if not validation.observations:
             results.append(
                 StabilityScenarioResult(
