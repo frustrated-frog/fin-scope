@@ -24,6 +24,7 @@ public class SingleStockForecastRun {
     private LocalDateTime createdAt;
     private SingleStockForecast report;
     private HoldingSnapshot holdingSnapshot;
+    private ForecastModelHealth modelHealth;
 
     public enum MaturityStatus {
         PENDING,

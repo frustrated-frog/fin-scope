@@ -9,6 +9,7 @@ import com.finscope.dao.quant.SingleStockForecastRunRepository;
 import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
+import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,7 @@ public class SingleStockForecastService {
     private final SingleStockForecastRunRepository runs;
     private final StrategyHoldingRepository holdings;
     private final ForecastOutcomeSettlementService settlement;
+    private final ForecastModelHealthService health;
     private final ObjectMapper json = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -32,17 +34,19 @@ public class SingleStockForecastService {
     public SingleStockForecastService(PythonSingleStockForecastClient client,
                                       SingleStockForecastRunRepository runs,
                                       StrategyHoldingRepository holdings,
-                                      ForecastOutcomeSettlementService settlement) {
+                                      ForecastOutcomeSettlementService settlement,
+                                      ForecastModelHealthService health) {
         this.client = client;
         this.runs = runs;
         this.holdings = holdings;
         this.settlement = settlement;
+        this.health = health;
     }
 
     SingleStockForecastService(PythonSingleStockForecastClient client,
                                SingleStockForecastRunRepository runs,
                                StrategyHoldingRepository holdings) {
-        this(client, runs, holdings, null);
+        this(client, runs, holdings, null, null);
     }
 
     public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
@@ -50,6 +54,9 @@ public class SingleStockForecastService {
         validateHorizon(horizonDays);
         settle(code + "." + market(code));
         SingleStockForecast report = client.forecast(code, horizonDays);
+        ForecastModelHealth modelHealth = modelHealth(report.getInstrumentCode(), horizonDays,
+                report.getModelVersion());
+        applyHealthGate(report, modelHealth);
         SingleStockForecastRun.HoldingSnapshot holding = holdingSnapshot(code, report);
         SingleStockForecastRun value = new SingleStockForecastRun();
         value.setInstrumentCode(report.getInstrumentCode());
@@ -72,6 +79,7 @@ public class SingleStockForecastService {
         SingleStockForecastRun saved = runs.save(value);
         saved.setReport(report);
         saved.setHoldingSnapshot(holding);
+        saved.setModelHealth(modelHealth);
         return saved;
     }
 
@@ -101,10 +109,35 @@ public class SingleStockForecastService {
             value.setReport(json.readValue(value.getReportJson(), SingleStockForecast.class));
             value.setHoldingSnapshot(json.readValue(
                     value.getHoldingSnapshotJson(), SingleStockForecastRun.HoldingSnapshot.class));
+            value.setModelHealth(modelHealth(value.getInstrumentCode(), value.getHorizonDays(),
+                    value.getModelVersion()));
             return value;
         } catch (Exception error) {
             throw new IllegalStateException("无法读取单股预测研究记录", error);
         }
+    }
+
+    public ForecastModelHealth health(String requestedCode, int horizonDays, String modelVersion) {
+        String code = normalizeCode(requestedCode);
+        validateHorizon(horizonDays);
+        if (modelVersion == null || modelVersion.trim().isEmpty()) {
+            throw new IllegalArgumentException("模型版本不能为空");
+        }
+        settle(code + "." + market(code));
+        return modelHealth(code + "." + market(code), horizonDays, modelVersion.trim());
+    }
+
+    private ForecastModelHealth modelHealth(String instrumentCode, int horizonDays, String modelVersion) {
+        return health == null ? null : health.evaluate(instrumentCode, horizonDays, modelVersion);
+    }
+
+    private void applyHealthGate(SingleStockForecast report, ForecastModelHealth modelHealth) {
+        if (modelHealth == null || !modelHealth.isDirectionOutputPaused()) {
+            return;
+        }
+        report.setDecision("ABSTAIN");
+        report.setDecisionReason(modelHealth.getConclusion());
+        report.getWarnings().add("真实到期验证门禁已暂停方向输出；概率与完整研究证据仅供复核");
     }
 
     private void settle(String instrumentCode) {

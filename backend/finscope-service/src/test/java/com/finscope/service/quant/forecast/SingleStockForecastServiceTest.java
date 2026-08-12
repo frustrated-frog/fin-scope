@@ -4,6 +4,7 @@ import com.finscope.dao.quant.SingleStockForecastRunRepository;
 import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
+import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
 import org.junit.jupiter.api.Test;
@@ -89,6 +90,34 @@ class SingleStockForecastServiceTest {
 
         assertEquals(SingleStockForecastRun.MaturityStatus.UNAVAILABLE,
                 result.getMaturityStatus());
+    }
+
+    @Test
+    void pausesOnlyTheDirectionWhenRealOutcomeHealthGateIsClosed() {
+        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
+        ForecastOutcomeSettlementService settlement = mock(ForecastOutcomeSettlementService.class);
+        ForecastModelHealthService healthService = mock(ForecastModelHealthService.class);
+        SingleStockForecast forecast = forecast();
+        forecast.setDecision("UP");
+        ForecastModelHealth health = new ForecastModelHealth();
+        health.setStatus("PAUSED");
+        health.setDirectionOutputPaused(true);
+        health.setConclusion("真实结果持续弱于门槛");
+        when(client.forecast("600519", 5)).thenReturn(forecast);
+        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
+        when(healthService.evaluate("600519.SH", 5, forecast.getModelVersion())).thenReturn(health);
+        when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SingleStockForecastService service = new SingleStockForecastService(
+                client, runs, holdings, settlement, healthService);
+
+        SingleStockForecastRun result = service.forecast("600519", 5);
+
+        assertEquals("ABSTAIN", result.getReport().getDecision());
+        assertEquals("真实结果持续弱于门槛", result.getReport().getDecisionReason());
+        assertEquals(0.62d, result.getReport().getUpProbability(), 0.000001d);
+        assertSame(health, result.getModelHealth());
     }
 
     private SingleStockForecast forecast() {
