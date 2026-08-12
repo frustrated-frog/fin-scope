@@ -182,7 +182,9 @@ class IndustryChainSynthesisAgentTest {
     private String jsonWithUndisclosedSupplyRelationship() {
         return "{\"summary\":\"AI 算力由芯片、服务器和数据中心构成\","
                 + "\"limitations\":\"企业供销关系需以公告为准\","
-                + "\"researchContent\":" + researchContent() + ",\"nodes\":["
+                + "\"researchContent\":" + researchContent().replace("\"companyProfiles\":[]",
+                "\"companyProfiles\":[" + companyProfile("company:a") + ","
+                        + companyProfile("company:b") + "]") + ",\"nodes\":["
                 + node("stage:chip", "芯片", 1) + ","
                 + node("stage:server", "服务器", 2) + ","
                 + node("stage:datacenter", "数据中心", 3) + ","
@@ -227,13 +229,8 @@ class IndustryChainSynthesisAgentTest {
                 + "\"demandDrivers\":[\"云厂商资本开支\"],\"supplyDrivers\":[\"先进制程产能\"],"
                 + "\"keyVariables\":[\"GPU交付周期\"],\"bottlenecks\":[\"先进算力芯片\"],"
                 + "\"overcapacityRisks\":[\"低端服务器组装\"],\"trendTags\":[\"算力升级\"]},"
-                + "\"stageProfiles\":[{\"nodeKey\":\"stage:chip\",\"roleSummary\":\"提供计算核心\","
-                + "\"businessModel\":\"设备销售与服务\",\"costStructure\":\"研发和晶圆制造\","
-                + "\"valueCapture\":\"性能溢价\",\"bottleneck\":\"先进制程与封装\","
-                + "\"prosperity\":\"RISING\",\"supplyDemand\":\"TIGHT\",\"lifecycle\":\"GROWTH\","
-                + "\"profitDrivers\":[\"产品升级\"],\"barriers\":[\"软硬件生态\"],"
-                + "\"coreMetrics\":[\"出货量\"],\"risks\":[\"出口限制\"],"
-                + "\"keyVariables\":[\"良率\"],\"trendTags\":[\"高性能计算\"]}],"
+                + "\"stageProfiles\":[" + stageProfile("stage:chip") + ","
+                + stageProfile("stage:server") + "," + stageProfile("stage:datacenter") + "],"
                 + "\"companyProfiles\":[],\"nodeProfiles\":[{\"nodeKey\":\"stage:chip\","
                 + "\"definition\":\"提供通用与专用计算能力的芯片环节\","
                 + "\"function\":\"算力芯片决定整机性能上限\",\"inputs\":[\"晶圆制造\"],"
@@ -242,5 +239,21 @@ class IndustryChainSynthesisAgentTest {
                 + "\"coreMetrics\":[\"算力性能\"],\"risks\":[\"出口限制\"],"
                 + "\"maturity\":\"SCALING\",\"valueLevel\":\"HIGH\","
                 + "\"bottleneckLevel\":\"HIGH\",\"localizationLevel\":\"LOW\"}]}";
+    }
+
+    private String stageProfile(String nodeKey) {
+        return "{\"nodeKey\":\"" + nodeKey + "\",\"roleSummary\":\"提供计算核心\","
+                + "\"businessModel\":\"设备销售与服务\",\"costStructure\":\"研发和晶圆制造\","
+                + "\"valueCapture\":\"性能溢价\",\"bottleneck\":\"先进制程与封装\","
+                + "\"prosperity\":\"RISING\",\"supplyDemand\":\"TIGHT\",\"lifecycle\":\"GROWTH\","
+                + "\"profitDrivers\":[\"产品升级\"],\"barriers\":[\"软硬件生态\"],"
+                + "\"coreMetrics\":[\"出货量\"],\"risks\":[\"出口限制\"],"
+                + "\"keyVariables\":[\"良率\"],\"trendTags\":[\"高性能计算\"]}";
+    }
+
+    private String companyProfile(String nodeKey) {
+        return "{\"nodeKey\":\"" + nodeKey + "\",\"industryPosition\":\"代表企业\","
+                + "\"coreProducts\":[\"算力产品\"],\"downstreamMarkets\":[\"数据中心\"],"
+                + "\"competitiveAdvantages\":[\"技术积累\"],\"keyVariables\":[\"产品迭代\"]}";
     }
 }

@@ -94,6 +94,23 @@ class IndustryChainGraphValidatorTest {
     }
 
     @Test
+    void rejectsV3WhenSemanticOrCompanyProfilesDoNotCoverGraphNodes() {
+        IndustryChainGraph missingSemantic = semanticGraph();
+        missingSemantic.getResearchContent().setNodeProfiles(new ArrayList<IndustryChainResearchContent.NodeProfile>(
+                missingSemantic.getResearchContent().getNodeProfiles()));
+        missingSemantic.getResearchContent().getNodeProfiles().remove(0);
+        IllegalArgumentException semanticError = assertThrows(
+                IllegalArgumentException.class, () -> validator.validate(missingSemantic));
+        assertEquals("V3 节点画像未覆盖全部语义节点：material:steel", semanticError.getMessage());
+
+        IndustryChainGraph missingCompany = semanticGraph();
+        missingCompany.getNodes().add(node("company:a", "COMPANY", "企业甲", null));
+        IllegalArgumentException companyError = assertThrows(
+                IllegalArgumentException.class, () -> validator.validate(missingCompany));
+        assertEquals("V3 公司画像未覆盖全部公司节点：company:a", companyError.getMessage());
+    }
+
+    @Test
     void rejectsInvalidSemanticProfileAndEdgeStrength() {
         IndustryChainGraph missingProfileNode = semanticGraph();
         missingProfileNode.getResearchContent().getNodeProfiles().get(0).setNodeKey("missing");
@@ -128,13 +145,16 @@ class IndustryChainGraphValidatorTest {
         graph.getEdges().add(dependency);
 
         IndustryChainResearchContent content = researchContent("stage:upstream", null);
-        IndustryChainResearchContent.NodeProfile profile = new IndustryChainResearchContent.NodeProfile();
-        profile.setNodeKey("component:reducer");
-        profile.setMaturity("SCALING");
-        profile.setValueLevel("HIGH");
-        profile.setBottleneckLevel("HIGH");
-        profile.setLocalizationLevel("MEDIUM");
-        content.setNodeProfiles(Collections.singletonList(profile));
+        content.setStageProfiles(Arrays.asList(
+                stageProfile("stage:upstream"),
+                stageProfile("stage:manufacturing"),
+                stageProfile("stage:terminal")));
+        content.setNodeProfiles(Arrays.asList(
+                nodeProfile("material:steel"),
+                nodeProfile("equipment:grinder"),
+                nodeProfile("component:reducer"),
+                nodeProfile("technology:harmonic"),
+                nodeProfile("application:robot")));
         graph.setResearchContent(content);
         return graph;
     }
@@ -212,5 +232,24 @@ class IndustryChainGraphValidatorTest {
             content.setCompanyProfiles(Collections.singletonList(company));
         }
         return content;
+    }
+
+    private IndustryChainResearchContent.StageProfile stageProfile(String nodeKey) {
+        IndustryChainResearchContent.StageProfile stage = new IndustryChainResearchContent.StageProfile();
+        stage.setNodeKey(nodeKey);
+        stage.setLifecycle("GROWTH");
+        stage.setProsperity("RISING");
+        stage.setSupplyDemand("TIGHT");
+        return stage;
+    }
+
+    private IndustryChainResearchContent.NodeProfile nodeProfile(String nodeKey) {
+        IndustryChainResearchContent.NodeProfile profile = new IndustryChainResearchContent.NodeProfile();
+        profile.setNodeKey(nodeKey);
+        profile.setMaturity("SCALING");
+        profile.setValueLevel("HIGH");
+        profile.setBottleneckLevel("HIGH");
+        profile.setLocalizationLevel("MEDIUM");
+        return profile;
     }
 }

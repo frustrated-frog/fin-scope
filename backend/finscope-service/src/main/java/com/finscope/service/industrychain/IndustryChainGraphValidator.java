@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /** 在图谱发布前集中校验结构、证据和关系语义。 */
 @Service
@@ -42,13 +43,18 @@ public class IndustryChainGraphValidator {
         Map<String, IndustryChainNode> nodes = nodes(graph.getNodes(), evidenceCodes);
         validateEdges(graph.getEdges(), nodes, evidenceCodes);
         validateStageFlow(graph.getNodes(), graph.getEdges());
-        validateResearchContent(graph.getResearchContent(), nodes);
+        validateResearchContent(graph.getResearchContent(), nodes,
+                "INDUSTRY_CHAIN_V3".equals(graph.getSchemaVersion()));
         return graph;
     }
 
     private void validateResearchContent(IndustryChainResearchContent content,
-                                         Map<String, IndustryChainNode> nodes) {
+                                         Map<String, IndustryChainNode> nodes,
+                                         boolean requireCompleteCoverage) {
         if (content == null) {
+            if (requireCompleteCoverage) {
+                throw new IllegalArgumentException("V3 图谱缺少研究画像");
+            }
             return;
         }
         IndustryChainResearchContent.Overview overview = content.getOverview();
@@ -75,6 +81,37 @@ public class IndustryChainGraphValidator {
             validateRequiredEnum(profile.getValueLevel(), LEVELS, "节点价值等级");
             validateRequiredEnum(profile.getBottleneckLevel(), LEVELS, "节点瓶颈等级");
             validateRequiredEnum(profile.getLocalizationLevel(), LOCALIZATION, "节点国产化等级");
+        }
+        if (requireCompleteCoverage) {
+            validateCoverage(nodes, stageKeys, companyKeys, nodeKeys);
+        }
+    }
+
+    private void validateCoverage(Map<String, IndustryChainNode> nodes,
+                                  Set<String> stageProfiles,
+                                  Set<String> companyProfiles,
+                                  Set<String> nodeProfiles) {
+        Set<String> missingStages = new TreeSet<String>();
+        Set<String> missingCompanies = new TreeSet<String>();
+        Set<String> missingSemanticNodes = new TreeSet<String>();
+        for (IndustryChainNode node : nodes.values()) {
+            if ("STAGE".equals(node.getType()) && !stageProfiles.contains(node.getNodeKey())) {
+                missingStages.add(node.getNodeKey());
+            } else if ("COMPANY".equals(node.getType()) && !companyProfiles.contains(node.getNodeKey())) {
+                missingCompanies.add(node.getNodeKey());
+            } else if (!"STAGE".equals(node.getType()) && !"COMPANY".equals(node.getType())
+                    && !"INDUSTRY_CHAIN".equals(node.getType()) && !nodeProfiles.contains(node.getNodeKey())) {
+                missingSemanticNodes.add(node.getNodeKey());
+            }
+        }
+        if (!missingStages.isEmpty()) {
+            throw new IllegalArgumentException("V3 环节画像未覆盖全部产业环节：" + String.join(",", missingStages));
+        }
+        if (!missingCompanies.isEmpty()) {
+            throw new IllegalArgumentException("V3 公司画像未覆盖全部公司节点：" + String.join(",", missingCompanies));
+        }
+        if (!missingSemanticNodes.isEmpty()) {
+            throw new IllegalArgumentException("V3 节点画像未覆盖全部语义节点：" + String.join(",", missingSemanticNodes));
         }
     }
 
