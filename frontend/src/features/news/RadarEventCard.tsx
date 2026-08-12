@@ -20,7 +20,7 @@ export function RadarEventCard({ event, addToast, onResearch, onOpen, onStateCha
         <div className="radar-event-meta">
           <div className="radar-event-badges">
             <span className="radar-recommendation">{event.recommendation}</span>
-            {event.hotspotLifecycleState ? <span className="radar-hotspot-state">{hotspotLifecycleLabel(event.hotspotLifecycleState)}</span> : null}
+            {event.hotspotLifecycleState ? <span className="radar-hotspot-state">热点 · {hotspotLifecycleLabel(event.hotspotLifecycleState)}</span> : null}
             {event.interpretationStatus === 'SUCCESS' ? <span className="radar-interpretation-ready">已有解读</span> : null}
             {!event.read ? <span className="radar-event-unread">未读</span> : null}
             {event.followed ? <span className="radar-event-followed">关注中</span> : null}

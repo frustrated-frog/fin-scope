@@ -26,6 +26,7 @@ const event = {
   evidenceWarning: '',
   evidenceCount: 2,
   evidenceSourceCount: 2,
+  hotspotLifecycleState: 'QUIET',
   changeType: 'MULTI_SOURCE',
   changeSummary: '新增独立来源确认同一事件',
   interpretationStatus: 'SUCCESS',
@@ -205,6 +206,7 @@ test('shows high-priority cards without a duplicated latest-changes panel', asyn
 
   const focus = screen.getByRole('heading', { name: '高优先级事件' });
   expect(screen.getByText('与自选「宁德时代」直接相关')).toBeInTheDocument();
+  expect(screen.getByText('热点 · 趋于平稳')).toBeInTheDocument();
   expect(screen.getByText('92')).toBeInTheDocument();
   const board = screen.getByTestId('research-radar-board');
   expect(within(board).getByRole('heading', { name: '高优先级事件' })).toBe(focus);

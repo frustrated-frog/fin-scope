@@ -16449,6 +16449,7 @@ input[type="checkbox"] {
 .radar-event-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .radar-event-meta time { color: var(--muted); font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .radar-recommendation { padding: 5px 8px; border-radius: 999px; background: color-mix(in srgb, var(--news-pulse) 13%, transparent); color: var(--news-pulse); font-size: 10px; font-weight: 800; }
+.radar-hotspot-state { display: inline-flex; align-items: center; min-height: 20px; padding-left: 9px; border-left: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent); color: color-mix(in srgb, var(--muted) 88%, var(--news-pulse)); font-size: 10px; font-weight: 700; letter-spacing: .01em; }
 .radar-interpretation-ready { padding: 4px 7px; border: 1px solid color-mix(in srgb, #3ba679 38%, var(--line)); border-radius: 999px; color: #3ba679; font-size: 9px; font-weight: 800; }
 .radar-event-unread, .radar-event-followed { padding: 4px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; }
 .radar-event-unread { background: color-mix(in srgb, var(--accent-2) 10%, transparent); color: var(--accent-2); }
