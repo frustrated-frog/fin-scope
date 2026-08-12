@@ -2,6 +2,9 @@ package com.finscope.service.radar;
 
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.domain.radar.RadarRefreshRun;
+import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarInterpretationBatchMessage;
+import com.finscope.domain.radar.RadarInterpretationBatchPublisher;
 import com.finscope.service.news.NewsFeedSnapshot;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.inOrder;
 
 class RadarHotspotRefreshServiceTest {
     @Test
@@ -85,5 +89,77 @@ class RadarHotspotRefreshServiceTest {
         assertTrue(service.requestScheduledRefresh());
 
         verify(snapshots).prewarm(result.getEvents(), result.getRun());
+    }
+
+    @Test
+    void publishesTopTwentyInterpretationsOnlyAfterSnapshotIsVisible() {
+        RadarHotspotProductionPipeline pipeline = mock(RadarHotspotProductionPipeline.class);
+        RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
+        RadarSnapshotProjectionService snapshots = mock(RadarSnapshotProjectionService.class);
+        RadarInterpretationBatchPublisher publisher = mock(RadarInterpretationBatchPublisher.class);
+        RadarRefreshRun run = new RadarRefreshRun();
+        run.setRunKey("radar-run-1");
+        run.setCompletedAt(java.time.LocalDateTime.of(2026, 8, 12, 10, 0));
+        List<RadarEvent> events = new ArrayList<RadarEvent>();
+        for (long id = 1; id <= 25; id++) {
+            RadarEvent event = new RadarEvent(); event.setId(id); events.add(event);
+        }
+        RadarHotspotProductionPipeline.ProductionResult result = new RadarHotspotProductionPipeline.ProductionResult(run,
+                new NewsFeedSnapshot(java.util.Collections.emptyList(), java.util.Collections.emptyList(), run.getCompletedAt(), 0), events);
+        when(pipeline.run(any(), any(), any())).thenReturn(result);
+        when(snapshots.prewarm(events, run)).thenReturn(true);
+        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+                Runnable::run, Clock.systemDefaultZone());
+
+        assertTrue(service.requestScheduledRefresh());
+
+        org.mockito.InOrder order = inOrder(snapshots, publisher);
+        order.verify(snapshots).prewarm(events, run);
+        order.verify(publisher).publish(org.mockito.ArgumentMatchers.argThat((RadarInterpretationBatchMessage message) ->
+                "radar-run-1".equals(message.getRunKey()) && message.getEventIds().size() == 20
+                        && message.getEventIds().get(0).equals(1L) && message.getEventIds().get(19).equals(20L)));
+    }
+
+    @Test
+    void skipsInterpretationMessageWhenSnapshotPublicationFails() {
+        RadarHotspotProductionPipeline pipeline = mock(RadarHotspotProductionPipeline.class);
+        RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
+        RadarSnapshotProjectionService snapshots = mock(RadarSnapshotProjectionService.class);
+        RadarInterpretationBatchPublisher publisher = mock(RadarInterpretationBatchPublisher.class);
+        RadarRefreshRun run = new RadarRefreshRun(); run.setRunKey("radar-run-2");
+        RadarHotspotProductionPipeline.ProductionResult result = new RadarHotspotProductionPipeline.ProductionResult(run,
+                new NewsFeedSnapshot(java.util.Collections.emptyList(), java.util.Collections.emptyList(), java.time.LocalDateTime.now(), 0),
+                java.util.Collections.emptyList());
+        when(pipeline.run(any(), any(), any())).thenReturn(result);
+        when(snapshots.prewarm(result.getEvents(), run)).thenReturn(false);
+        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+                Runnable::run, Clock.systemDefaultZone());
+
+        assertTrue(service.requestScheduledRefresh());
+
+        verify(publisher, never()).publish(any());
+    }
+
+    @Test
+    void keepsCompletedRankingVisibleWhenKafkaPublicationFails() {
+        RadarHotspotProductionPipeline pipeline = mock(RadarHotspotProductionPipeline.class);
+        RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
+        RadarSnapshotProjectionService snapshots = mock(RadarSnapshotProjectionService.class);
+        RadarInterpretationBatchPublisher publisher = mock(RadarInterpretationBatchPublisher.class);
+        RadarRefreshRun run = new RadarRefreshRun(); run.setRunKey("radar-run-3");
+        RadarEvent event = new RadarEvent(); event.setId(10L);
+        RadarHotspotProductionPipeline.ProductionResult result = new RadarHotspotProductionPipeline.ProductionResult(run,
+                new NewsFeedSnapshot(java.util.Collections.emptyList(), java.util.Collections.emptyList(), java.time.LocalDateTime.now(), 0),
+                java.util.Collections.singletonList(event));
+        when(pipeline.run(any(), any(), any())).thenReturn(result);
+        when(snapshots.prewarm(result.getEvents(), run)).thenReturn(true);
+        org.mockito.Mockito.doThrow(new IllegalStateException("Kafka unavailable")).when(publisher).publish(any());
+        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+                Runnable::run, Clock.systemDefaultZone());
+
+        assertTrue(service.requestScheduledRefresh());
+
+        verify(snapshots).prewarm(result.getEvents(), run);
+        assertFalse(service.isRunning());
     }
 }

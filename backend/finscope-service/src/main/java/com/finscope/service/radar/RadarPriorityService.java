@@ -19,7 +19,7 @@ public class RadarPriorityService {
                                 List<WatchlistItem> watchlist, LocalDateTime now) {
         LocalDateTime firstSeen = event.getFirstSeenAt();
         LocalDateTime lastSeen = latestTime(event, signals);
-        int novelty = ageScore(firstSeen, now, 25, 20, 12, 5);
+        int novelty = ageScore(firstSeen, now, 15, 12, 7, 0);
         Match match = findWatchlistMatch(event, signals, watchlist);
         int watchlistScore = match.item == null ? 0 : 25;
         int diversity = sourceDiversity(signals);
@@ -95,20 +95,21 @@ public class RadarPriorityService {
     private int recency(LocalDateTime time, LocalDateTime now) {
         if (time == null || now == null) return 0;
         long hours = Math.max(0, Duration.between(time, now).toHours());
-        if (hours <= 1) return 15;
-        if (hours <= 3) return 12;
-        if (hours <= 8) return 8;
-        if (hours <= 24) return 4;
+        if (hours <= 1) return 25;
+        if (hours <= 3) return 20;
+        if (hours <= 6) return 12;
+        if (hours <= 12) return 6;
+        if (hours <= 24) return 2;
         return 0;
     }
 
     private LocalDateTime latestTime(RadarEvent event, List<RadarSignal> signals) {
-        LocalDateTime latest = event.getLastSeenAt();
+        LocalDateTime latest = null;
         for (RadarSignal signal : safeSignals(signals)) {
-            LocalDateTime time = signal.getPublishedAt() == null ? signal.getLastSeenAt() : signal.getPublishedAt();
+            LocalDateTime time = signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
             if (time != null && (latest == null || time.isAfter(latest))) latest = time;
         }
-        return latest;
+        return latest == null && event != null ? event.getFirstSeenAt() : latest;
     }
 
     private String uncertainty(LocalDateTime lastSeen, List<RadarSignal> signals, int diversity) {

@@ -35,9 +35,9 @@ public class RadarHotspotScoreService {
         double novelty = average(values, signal -> recency(signal, now));
         double spread = clamp(uniqueSourceNames(values) / 4.0D);
         double persistence = persistence(values, previous);
-        double weighted = sourceBreadth * 0.22D + velocity * 0.20D + authority * 0.15D
-                + novelty * 0.12D + spread * 0.10D + persistence * 0.08D;
-        int total = bounded(round(weighted / 0.87D * 100.0D));
+        double weighted = sourceBreadth * 0.20D + velocity * 0.20D + authority * 0.15D
+                + novelty * 0.24D + spread * 0.12D + persistence * 0.09D;
+        int total = bounded(round(weighted * 100.0D));
         String lifecycle = lifecycle(previous, total, velocity);
 
         List<String> reasons = new ArrayList<String>();
@@ -45,7 +45,7 @@ public class RadarHotspotScoreService {
         if (uniqueProviders(values) > 1) reasons.add("多源交叉覆盖");
         reasons.add("传播速度 " + percentage(velocity));
         reasons.add("来源权威 " + percentage(authority));
-        reasons.add("新意 " + percentage(novelty));
+        reasons.add("时效 " + percentage(novelty));
         reasons.add("跨源扩散 " + percentage(spread));
         reasons.add("持续性 " + percentage(persistence));
         reasons.add("生命周期 " + lifecycle);
@@ -67,10 +67,20 @@ public class RadarHotspotScoreService {
 
     private double recency(RadarSignal signal, LocalDateTime now) {
         if (signal == null || now == null) return 0;
-        LocalDateTime published = signal.getPublishedAt() == null ? signal.getLastSeenAt() : signal.getPublishedAt();
+        LocalDateTime published = signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
         if (published == null) return 0;
         long minutes = Math.max(0, Duration.between(published, now).toMinutes());
-        return clamp(1.0D - minutes / (24.0D * 60.0D));
+        double hours = minutes / 60.0D;
+        if (hours <= 2.0D) return interpolate(hours, 0.0D, 2.0D, 1.0D, 0.85D);
+        if (hours <= 6.0D) return interpolate(hours, 2.0D, 6.0D, 0.85D, 0.45D);
+        if (hours <= 12.0D) return interpolate(hours, 6.0D, 12.0D, 0.45D, 0.20D);
+        if (hours <= 24.0D) return interpolate(hours, 12.0D, 24.0D, 0.20D, 0.05D);
+        if (hours <= 48.0D) return interpolate(hours, 24.0D, 48.0D, 0.05D, 0.0D);
+        return 0;
+    }
+
+    private double interpolate(double value, double start, double end, double high, double low) {
+        return clamp(high + (low - high) * ((value - start) / (end - start)));
     }
 
     private int uniqueProviders(List<RadarSignal> signals) {

@@ -17,6 +17,20 @@ spring:
     host: 127.0.0.1
     port: 6379
     timeout: 1000ms
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.finscope.domain.radar
+    listener:
+      ack-mode: record
 
 logging:
   level:
@@ -92,3 +106,7 @@ finscope:
   radar:
     refresh-initial-delay-ms: 15000
     refresh-interval-ms: 300000
+    kafka:
+      enabled: true
+      topic: finscope.radar.interpretation.requested
+      group-id: finscope-radar-interpretation

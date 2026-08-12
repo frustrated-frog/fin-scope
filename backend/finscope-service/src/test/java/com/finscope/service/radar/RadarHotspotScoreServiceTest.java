@@ -72,6 +72,43 @@ class RadarHotspotScoreServiceTest {
         assertTrue(!"RISING".equals(score.getLifecycleState()));
     }
 
+    @Test
+    void fallsBackToFirstSeenInsteadOfTreatingRepeatedCollectionAsFresh() {
+        RadarSignal old = signal("CLS", 1, 0.95D, null);
+        old.setFirstSeenAt(now.minusDays(2));
+        old.setLastSeenAt(now);
+
+        RadarHotspotScoreService.Score score = service.score(Collections.singletonList(old), now);
+
+        assertEquals(0D, score.getNoveltyScore(), 0.0001D);
+    }
+
+    @Test
+    void appliesStrongDecayAfterSixHoursAndExpiresRecencyAtFortyEightHours() {
+        double sixHours = service.score(Collections.singletonList(
+                signal("CLS", 1, 0.95D, now.minusHours(6))), now).getNoveltyScore();
+        double oneDay = service.score(Collections.singletonList(
+                signal("CLS", 1, 0.95D, now.minusHours(24))), now).getNoveltyScore();
+        double twoDays = service.score(Collections.singletonList(
+                signal("CLS", 1, 0.95D, now.minusHours(48))), now).getNoveltyScore();
+
+        assertTrue(sixHours <= 0.45D);
+        assertTrue(oneDay <= 0.05D);
+        assertEquals(0D, twoDays, 0.0001D);
+    }
+
+    @Test
+    void freshSignalsGainAtLeastTwentyHotspotPointsOverOldReposts() {
+        RadarHotspotScoreService.Score fresh = service.score(Arrays.asList(
+                signal("CLS", 1, 0.95D, now.minusMinutes(20)),
+                signal("THS", 2, 0.80D, now.minusMinutes(35))), now);
+        RadarHotspotScoreService.Score old = service.score(Arrays.asList(
+                signal("CLS", 1, 0.95D, now.minusDays(2)),
+                signal("THS", 2, 0.80D, now.minusDays(2))), now);
+
+        assertTrue(fresh.getTotalScore() - old.getTotalScore() >= 20);
+    }
+
     private RadarSignal signal(String provider, int rank, double weight, LocalDateTime publishedAt) {
         RadarSignal value = new RadarSignal();
         value.setProviderCode(provider);

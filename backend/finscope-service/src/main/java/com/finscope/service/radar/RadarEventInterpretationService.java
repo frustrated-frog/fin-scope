@@ -146,6 +146,7 @@ public class RadarEventInterpretationService {
             queued.setCompletedAt(LocalDateTime.now());
             try {
                 interpretations.update(queued);
+                if (viewRevisions != null) viewRevisions.invalidate("radar");
             } finally { inFlight.remove(key); }
         }
     }

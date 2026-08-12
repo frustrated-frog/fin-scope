@@ -7,6 +7,7 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.service.cache.ViewRevisionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +34,7 @@ class RadarEventInterpretationServiceTest {
     private RadarEvidenceRepository evidence;
     private RadarEventInterpretationAgent agent;
     private CapturingExecutor executor;
+    private ViewRevisionService revisions;
     private RadarEventInterpretationService service;
     private RadarEvent event;
     private RadarSignal signal;
@@ -42,7 +44,8 @@ class RadarEventInterpretationServiceTest {
         interpretations = mock(RadarEventInterpretationRepository.class);
         radar = mock(RadarRepository.class); evidence = mock(RadarEvidenceRepository.class);
         agent = mock(RadarEventInterpretationAgent.class); executor = new CapturingExecutor();
-        service = new RadarEventInterpretationService(interpretations, radar, evidence, agent, executor);
+        revisions = mock(ViewRevisionService.class);
+        service = new RadarEventInterpretationService(interpretations, radar, evidence, agent, executor, revisions);
         event = new RadarEvent(); event.setId(10L); event.setCanonicalTitle("宁德时代发布新一代电池");
         event.setSummary("新品正式发布");
         signal = new RadarSignal(); signal.setId(1L); signal.setContentHash("signal-hash");
@@ -138,6 +141,19 @@ class RadarEventInterpretationServiceTest {
                 Collections.<RadarEvidence>emptyList()).get();
 
         assertTrue(current.isStale());
+    }
+
+    @Test
+    void publishesRadarRevisionAfterBackgroundInterpretationCompletes() {
+        RadarEventInterpretation queued = queued();
+        when(interpretations.findByEventFingerprint(eq(10L), any())).thenReturn(Optional.empty());
+        when(interpretations.saveQueued(eq(10L), any())).thenReturn(queued);
+        when(agent.interpret(eq(event), any(), any())).thenReturn(successResult());
+
+        service.request(10L);
+        executor.runNext();
+
+        verify(revisions).invalidate("radar");
     }
 
     private RadarEventInterpretation queued() {

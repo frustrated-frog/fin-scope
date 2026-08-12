@@ -31,10 +31,10 @@ class RadarPriorityServiceTest {
         assertEquals(25, result.getWatchlistScore());
         assertTrue(result.getReasons().contains("与自选「宁德时代」直接相关"));
         assertEquals(result.componentTotal(), result.getTotalScore());
-        assertTrue(result.getNoveltyScore() <= 25);
+        assertTrue(result.getNoveltyScore() <= 15);
         assertTrue(result.getSourceDiversityScore() <= 20);
         assertTrue(result.getSourceQualityScore() <= 15);
-        assertTrue(result.getRecencyScore() <= 15);
+        assertTrue(result.getRecencyScore() <= 25);
     }
 
     @Test
@@ -80,6 +80,33 @@ class RadarPriorityServiceTest {
         assertEquals(0, result.getRecencyScore());
         assertEquals(5, result.getSourceQualityScore());
         assertTrue(result.getUncertainty().contains("发布时间"));
+    }
+
+    @Test
+    void repeatedCollectionDoesNotRefreshPriorityRecency() {
+        RadarEvent oldEvent = event("昨日新闻再次抓取", NOW.minusDays(2));
+        oldEvent.setLastSeenAt(NOW);
+        RadarSignal oldSignal = signal("CLS", "TIER_1", "昨日新闻再次抓取", NOW.minusDays(2));
+        oldSignal.setLastSeenAt(NOW);
+
+        RadarPriorityService.PriorityResult result = service.score(oldEvent,
+                Collections.singletonList(oldSignal), Collections.<WatchlistItem>emptyList(), NOW);
+
+        assertEquals(0, result.getRecencyScore());
+    }
+
+    @Test
+    void missingPublishedTimeUsesFirstSeenTime() {
+        RadarEvent event = event("缺少来源发布时间", NOW.minusHours(8));
+        event.setLastSeenAt(NOW);
+        RadarSignal signal = signal("CLS", "TIER_1", "缺少来源发布时间", null);
+        signal.setFirstSeenAt(NOW.minusHours(8));
+        signal.setLastSeenAt(NOW);
+
+        RadarPriorityService.PriorityResult result = service.score(event, Collections.singletonList(signal),
+                Collections.<WatchlistItem>emptyList(), NOW);
+
+        assertTrue(result.getRecencyScore() <= 6);
     }
 
     private RadarEvent event(String title, LocalDateTime time) {
