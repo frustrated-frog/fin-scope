@@ -86,6 +86,13 @@ describe('industryChainProjection', () => {
       .toEqual(structureKeys);
   });
 
+  it('automatically reveals company nodes only in the company layer', () => {
+    expect(projectSemanticGraph(graph, new Set(), 'COMPANY').nodes.map((item) => item.nodeKey))
+      .toContain('company:a');
+    expect(projectSemanticGraph(graph, new Set(), 'VALUE').nodes.map((item) => item.nodeKey))
+      .not.toContain('company:a');
+  });
+
   it('maps profile dimensions to semantic tones', () => {
     expect(semanticNodeTone(materialProfile, 'BOTTLENECK')).toBe('high');
     expect(semanticNodeTone(materialProfile, 'VALUE')).toBe('medium');

@@ -204,14 +204,15 @@
   z-index: 6;
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
-  min-height: 76px;
+  grid-template-rows: auto auto;
+  min-height: 108px;
   padding: 8px 12px 8px 20px;
   border-bottom: 1px solid rgba(77, 109, 121, .22);
   background: rgba(10, 21, 28, .78);
   box-shadow: 0 12px 30px rgba(0, 0, 0, .13), inset 0 1px rgba(255, 255, 255, .018);
   backdrop-filter: blur(22px) saturate(145%);
 }
-.ic-layer-title { display: grid; align-content: center; gap: 6px; padding-right: 15px; border-right: 1px solid rgba(82, 116, 128, .2); }
+.ic-layer-title { display: grid; grid-row: 1 / span 2; align-content: center; gap: 6px; padding-right: 15px; border-right: 1px solid rgba(82, 116, 128, .2); }
 .ic-layer-title span { color: #53717d; font: 600 8px/1 "IBM Plex Mono", monospace; letter-spacing: .16em; text-transform: uppercase; }
 .ic-layer-title strong { color: #b8c8ce; font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
 .ic-layer-options { display: grid; grid-template-columns: repeat(6, minmax(104px, 1fr)); gap: 5px; padding-left: 9px; overflow-x: auto; }
@@ -246,13 +247,24 @@
 .ic-layer-bar--technology .ic-layer-options button.is-active > i { background: var(--ic-blue); box-shadow: 0 0 13px rgba(114, 169, 212, .34); }
 .ic-layer-bar--localization .ic-layer-options button.is-active > i { background: var(--ic-jade); box-shadow: 0 0 13px rgba(96, 185, 159, .34); }
 .ic-layer-bar--company .ic-layer-options button.is-active > i { background: #c4a777; box-shadow: 0 0 13px rgba(196, 167, 119, .32); }
+.ic-layer-guide { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 0; margin-left: 9px; padding: 8px 9px 1px; border-top: 1px solid rgba(82, 116, 128, .13); overflow: hidden; }
+.ic-layer-guide p { display: flex; align-items: baseline; gap: 9px; min-width: 0; margin: 0; white-space: nowrap; }
+.ic-layer-guide p strong { flex: none; color: #c8d7dc; font-size: 9px; font-weight: 600; }
+.ic-layer-guide p span { overflow: hidden; color: #607985; font-size: 8px; text-overflow: ellipsis; }
+.ic-layer-legend { display: flex; flex: none; align-items: center; gap: 10px; }
+.ic-layer-legend > span { display: flex; align-items: center; gap: 4px; color: #657b84; font: 500 7px/1 "IBM Plex Mono", monospace; white-space: nowrap; }
+.ic-layer-legend i { width: 6px; height: 6px; border: 1px solid #637982; border-radius: 50%; background: #334852; }
+.ic-layer-legend .is-high i { border-color: var(--ic-gold); background: var(--ic-gold); box-shadow: 0 0 7px rgba(217, 181, 109, .28); }
+.ic-layer-legend .is-medium i { border-color: #76929c; background: #76929c; }
+.ic-layer-legend .is-low i { border-color: #425c67; background: #263d47; }
+.ic-layer-legend .is-neutral i { border-color: #40545d; background: transparent; }
 
 .ic-progress { display: flex; align-items: center; gap: 10px; padding: 8px 28px; color: #abc0c8; background: #0e2028; border-bottom: 1px solid #1c363f; font-size: 11px; }
 .ic-progress i { width: 7px; height: 7px; border-radius: 50%; background: var(--ic-cyan); box-shadow: 0 0 12px var(--ic-cyan); animation: ic-pulse 1.4s ease-in-out infinite; }
 .ic-progress.is-error i { background: #d07d70; box-shadow: none; animation: none; }
 
 .ic-graph-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: calc(100vh - 220px); min-height: 540px; }
-.ic-layer-bar + .ic-graph-grid { height: calc(100vh - 296px); }
+.ic-layer-bar + .ic-graph-grid { height: calc(100vh - 328px); }
 .ic-canvas-shell { position: relative; min-width: 0; overflow: hidden; background-color: #081118; background-image: linear-gradient(rgba(48, 72, 84, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(48, 72, 84, .09) 1px, transparent 1px); background-size: 24px 24px; }
 .ic-desktop-graph { position: relative; width: 100%; height: 100%; }
 .ic-canvas-scroll { width: 100%; height: 100%; overflow: auto; scrollbar-color: #2e4853 #0a151c; }
@@ -330,21 +342,22 @@
 .ic-node.ic-tone--low { opacity: .5; filter: saturate(.5); }
 .ic-node.ic-layer--bottleneck.ic-tone--high { border-color: var(--ic-amber); }
 .ic-node.ic-layer--bottleneck.ic-tone--high::before { background: var(--ic-amber); box-shadow: 0 0 10px rgba(216, 145, 88, .42); }
-.ic-node.ic-layer--bottleneck.ic-tone--high::after,
-.ic-node.ic-layer--value.ic-tone--high::after {
-  content: "关键卡点";
+.ic-node-layer-badge {
   position: absolute;
   top: 5px;
   right: 7px;
   padding: 3px 4px;
-  border: 1px solid rgba(216, 145, 88, .3);
+  border: 1px solid rgba(82, 112, 123, .3);
   border-radius: 5px;
-  color: #dba474;
-  background: rgba(39, 27, 22, .88);
+  color: #748a93;
+  background: rgba(13, 25, 32, .9);
   font: 600 6px/1 "IBM Plex Mono", monospace;
   letter-spacing: .06em;
 }
-.ic-node.ic-layer--value.ic-tone--high::after { content: "高价值"; border-color: rgba(217, 181, 109, .3); color: var(--ic-gold); }
+.ic-node-layer-badge.is-high { border-color: rgba(217, 181, 109, .3); color: var(--ic-gold); background: rgba(40, 33, 24, .9); }
+.ic-node-layer-badge.is-medium { border-color: rgba(114, 145, 156, .3); color: #9ab0b8; }
+.ic-node-layer-badge.is-low { color: #61747d; opacity: .85; }
+.ic-node-layer-badge.is-neutral { border-style: dashed; color: #586c75; }
 .ic-node-kicker { color: var(--ic-muted); font: 600 8px/1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .ic-node strong { overflow: hidden; font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .ic-node small { overflow: hidden; color: #78909a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
@@ -631,6 +644,9 @@
   .ic-layer-title { display: none; }
   .ic-layer-options { grid-template-columns: repeat(6, 118px); padding: 0 0 3px; scroll-snap-type: x proximity; }
   .ic-layer-options button { min-width: 118px; scroll-snap-align: start; }
+  .ic-layer-guide { grid-column: 1; display: block; margin: 3px 0 0; padding: 9px 1px 1px; overflow-x: auto; }
+  .ic-layer-guide p { margin-bottom: 8px; }
+  .ic-layer-legend { width: max-content; padding-bottom: 3px; }
   .ic-research-panel { height: auto; min-height: 560px; padding: 24px 15px 54px; }
   .ic-research-lead { display: grid; align-items: start; }
   .ic-trend-tags { justify-content: flex-start; }

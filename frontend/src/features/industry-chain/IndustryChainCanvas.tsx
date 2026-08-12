@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { focusNeighborhood, layoutIndustryGraph } from './industryChainLayout';
+import { industryChainNodeLayerLabel } from './industryChainLayers';
 import {
   directSemanticNeighbors, projectSemanticGraph, semanticNodeTone, stageHighlightsForDisplay
 } from './industryChainProjection';
@@ -93,6 +94,7 @@ export function IndustryChainCanvas({
             const tone = activeLayer === 'COMPANY'
               ? (node.type === 'COMPANY' ? 'high' : 'low')
               : semanticNodeTone(profile, activeLayer);
+            const layerLabel = industryChainNodeLayerLabel(profile, activeLayer, node.type);
             const match = Boolean(normalizedSearch && (`${node.name} ${node.description} ${node.stockCode ?? ''}`)
               .toLocaleLowerCase().includes(normalizedSearch));
             return (
@@ -106,6 +108,7 @@ export function IndustryChainCanvas({
                   onClick={() => onSelectNode(node.nodeKey)}
                   onDoubleClick={() => (hiddenCount > 0 || expanded) && onToggleExpanded(node.nodeKey)}>
                   <span className="ic-node-kicker">{nodeLabel(node.type)} {node.stockCode && `· ${node.stockCode}`}</span>
+                  {layerLabel && <span className={`ic-node-layer-badge is-${tone}`}>{layerLabel}</span>}
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
                   <StageHighlights highlights={stageHighlights} />

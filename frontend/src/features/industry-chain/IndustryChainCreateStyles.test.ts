@@ -29,6 +29,10 @@ test('defines the complete responsive semantic graph visual contract', () => {
   expect(styles).toContain('text-wrap: balance');
   expect(styles).toContain('.ic-inspector-expand');
   expect(styles).toContain('.ic-edge-type--substitutes');
+  expect(styles).toMatch(/\.ic-layer-guide\s*{/);
+  expect(styles).toMatch(/\.ic-layer-legend\s*{/);
+  expect(styles).toMatch(/\.ic-node-layer-badge\s*{/);
+  expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*?\.ic-layer-guide[^}]*overflow-x:\s*auto/s);
   expect(styles).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+340px/);
   expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*absolute/);
   expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*relative/);

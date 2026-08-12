@@ -238,7 +238,7 @@ test('switches to the research panel and presents industry operating content', a
   expect(screen.getByText('全球 AI 加速芯片与计算生态龙头')).toBeInTheDocument();
 });
 
-test('switches semantic layers without changing visible topology', async () => {
+test('explains semantic layers, labels node ratings and reveals companies automatically', async () => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/api/industry-chains') return [workspace.chain];
     if (path === '/api/industry-chains/7') return workspace;
@@ -256,4 +256,11 @@ test('switches semantic layers without changing visible topology', async () => {
 
   expect(container.querySelectorAll('.ic-node')).toHaveLength(visibleCount);
   expect(container.querySelector('.ic-node--material')).toHaveClass('ic-tone--high');
+  expect(screen.getByText('突出制约扩产、交付或性能的关键卡点。')).toBeInTheDocument();
+  expect(screen.getAllByText('关键卡点').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('暂无评级').length).toBeGreaterThan(0);
+
+  await userEvent.click(screen.getByRole('button', { name: /公司生态/ }));
+  expect(screen.getByRole('button', { name: '英伟达 · 代表公司' })).toBeInTheDocument();
+  expect(screen.getByText('自动展示代表公司及其所在产业环节。')).toBeInTheDocument();
 });

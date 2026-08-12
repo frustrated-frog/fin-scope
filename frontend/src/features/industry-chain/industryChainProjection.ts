@@ -33,13 +33,15 @@ export function projectSemanticGraph(
   expandedNodeKeys: Set<string>,
   activeLayer: IndustryChainLayer
 ): IndustryChainGraph {
-  void activeLayer;
   const orderedStages = graph.nodes
     .filter((node) => node.type === 'STAGE')
     .sort((left, right) => (left.stageOrder ?? Number.MAX_SAFE_INTEGER)
       - (right.stageOrder ?? Number.MAX_SAFE_INTEGER));
   const visibleKeys = new Set(orderedStages.map((node) => node.nodeKey));
   defaultSemanticNodes(graph, orderedStages).forEach((node) => visibleKeys.add(node.nodeKey));
+  if (activeLayer === 'COMPANY') {
+    graph.nodes.filter((node) => node.type === 'COMPANY').forEach((node) => visibleKeys.add(node.nodeKey));
+  }
   const processed = new Set<string>();
   let changed = true;
   while (changed) {
