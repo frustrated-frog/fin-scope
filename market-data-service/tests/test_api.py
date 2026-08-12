@@ -138,6 +138,14 @@ class LegacyThenAdjustedForecastProvider(ForecastDailyBarProvider):
         return bars
 
 
+class EmptyForecastDailyBarProvider(ForecastDailyBarProvider):
+    async def fetch(
+        self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any
+    ) -> Any:
+        self.requests.append((symbol, int(kwargs["limit"])))
+        return []
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -227,6 +235,19 @@ def test_single_stock_forecast_endpoint_rejects_unregistered_horizon(tmp_path: P
     )
 
     assert response.status_code == 422
+
+
+def test_single_stock_forecast_endpoint_returns_structured_error_for_empty_history(
+    tmp_path: Path,
+) -> None:
+    api = client(tmp_path, [EmptyForecastDailyBarProvider()])
+
+    response = api.post(
+        "/v1/quant/single-stock-forecasts", json={"code": "600519", "horizonDays": 5}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "前复权历史行情当前不可用"
 
 
 def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(

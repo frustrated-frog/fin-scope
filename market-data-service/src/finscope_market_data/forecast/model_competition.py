@@ -96,15 +96,19 @@ def run_model_competition(
 ) -> ModelCompetition:
     ordered = tuple(sorted(samples, key=lambda item: item.signal_date))
     development_end = max(120, int(len(ordered) * 0.60))
-    calibration_start = max(development_end + 1, int(len(ordered) * 0.80))
     selection_start = max(80, int(development_end * 0.75))
-    validation = ordered[selection_start:development_end:independent_stride_days]
+    calibration_start_date = ordered[development_end].signal_date
+    validation = tuple(
+        item
+        for item in ordered[selection_start:development_end:independent_stride_days]
+        if item.exit_date < calibration_start_date
+    )
     validation_start = ordered[selection_start].signal_date
     training = tuple(
         item for item in ordered[:selection_start]
         if item.exit_date < validation_start
     )
-    if not training or not validation or calibration_start >= len(ordered):
+    if not training or not validation or development_end >= len(ordered):
         raise ValueError("模型竞赛样本不足")
     candidates: tuple[tuple[str, str, ProbabilityModel], ...] = (
         ("LOGISTIC", "正则化逻辑回归", RegularizedLogisticModel.fit(training)),
@@ -137,8 +141,8 @@ def run_model_competition(
     )
     return ModelCompetition(
         selected_model=selected_code,
-        selection_end_date=ordered[development_end - 1].signal_date,
-        calibration_start_date=ordered[calibration_start].signal_date,
+        selection_end_date=validation[-1].signal_date,
+        calibration_start_date=calibration_start_date,
         selection_rule="只使用开发区尾段比较 Brier 与 Log Loss；训练标签退出日早于验证起点；校准区和锁定测试不参与冠军选择",
         candidates=results,
     )

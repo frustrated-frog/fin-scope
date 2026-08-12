@@ -109,7 +109,8 @@ def test_context_features_align_on_target_dates_without_reading_future_bars() ->
     after = current_features(target, context=aligned)
 
     assert aligned.market_coverage == 1.0
-    assert aligned.market_dates == tuple(item.trade_date for item in target)
+    assert aligned.market_code == "000300.SH"
+    assert aligned.industry_code is None
     assert after == pytest.approx(before)
 
 

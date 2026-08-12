@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pytest
+
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.qualification import (
     assess_qualification_status,
     evaluate_probability_metrics,
     mature_training_samples,
+    qualify_model,
     reliability_bins,
     selective_metrics,
     split_qualification_samples,
@@ -50,6 +53,21 @@ def test_training_samples_only_include_labels_matured_before_prediction() -> Non
     assert matured
     assert all(item.exit_date < prediction_date for item in matured)
     assert ordered[59] not in matured
+
+
+@pytest.mark.parametrize("model_code", ["LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE"])
+def test_qualification_exposes_the_exact_model_its_calibrator_was_fitted_for(
+    model_code: str,
+) -> None:
+    history = samples(600)
+
+    result = qualify_model(history, independent_stride_days=5, model_code=model_code)
+    split = split_qualification_samples(history, independent_stride_days=5)
+    anchors = split.calibration[::5]
+
+    assert tuple(result.model.predict(item.features) for item in anchors) == pytest.approx(
+        result.calibration_raw_probabilities
+    )
 
 
 def test_split_rejects_duplicate_signal_dates() -> None:

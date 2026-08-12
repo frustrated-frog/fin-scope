@@ -30,6 +30,9 @@ public class PythonSingleStockForecastClient {
             "AVAILABLE", "UNAVAILABLE"));
     private static final Set<String> DECISIONS = new HashSet<String>(Arrays.asList(
             "UP", "DOWN", "ABSTAIN"));
+    private static final Set<String> REPORT_SCHEMA_VERSIONS = new HashSet<String>(Arrays.asList(
+            "single-stock-research-v2", "single-stock-research-v3",
+            "single-stock-research-v4", "single-stock-research-v5"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -77,7 +80,8 @@ public class PythonSingleStockForecastClient {
                 || !STATUSES.contains(result.getStatus()) || result.getConclusion() == null
                 || result.getBarCount() == null || result.getBarCount() < 0
                 || result.getDataFingerprint() == null || result.getDataFingerprint().trim().isEmpty()
-                || result.getReportSchemaVersion() == null || result.getModelVersion() == null
+                || !REPORT_SCHEMA_VERSIONS.contains(result.getReportSchemaVersion())
+                || result.getModelVersion() == null
                 || result.getStrategyPolicy() == null || result.getLastClose() == null) {
             throw contract("SCHEMA_DRIFT", "Python 单股预测缺少必需字段", false);
         }

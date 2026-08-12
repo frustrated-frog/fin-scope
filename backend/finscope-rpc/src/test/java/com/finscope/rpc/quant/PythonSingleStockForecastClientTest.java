@@ -131,6 +131,14 @@ class PythonSingleStockForecastClientTest {
         assertThrows(ProviderContractException.class, () -> client.forecast("600519", 5));
     }
 
+    @Test
+    void rejectsUnknownForecastSchemaVersion() {
+        PythonSingleStockForecastClient client = clientReturning(
+                v5Payload().replace("single-stock-research-v5", "single-stock-research-v6"));
+
+        assertThrows(ProviderContractException.class, () -> client.forecast("600519", 5));
+    }
+
     private static FinanceHttpResponse response(String body) {
         return new FinanceHttpResponse(200, body, Instant.parse("2026-08-07T07:00:00Z"), "hash");
     }

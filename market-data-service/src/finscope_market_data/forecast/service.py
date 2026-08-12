@@ -15,8 +15,7 @@ from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.factor_catalog import FACTORS
 from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import FEATURE_CODES, build_samples, current_features
-from finscope_market_data.forecast.logistic import RegularizedLogisticModel
-from finscope_market_data.forecast.model_competition import fit_model, run_model_competition
+from finscope_market_data.forecast.model_competition import run_model_competition
 from finscope_market_data.forecast.performance import (
     BacktestReport,
     annual_performance,
@@ -70,7 +69,7 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "competition-platt-selective-v5"
+MODEL_VERSION = "competition-platt-selective-v5.1"
 REPORT_VERSION = "single-stock-research-v5"
 
 
@@ -139,18 +138,10 @@ def build_forecast(
     qualification = qualify_model(
         samples, independent_stride_days=horizon_days, model_code=selected_model
     )
-    model = fit_model(selected_model, samples)
-    explanation_model = RegularizedLogisticModel.fit(samples)
     features = current_features(ordered, context=context)
-    raw_probability = model.predict(features)
+    raw_probability = qualification.model.predict(features)
     probability = qualification.calibration.calibrate(raw_probability)
-    comparable = [
-        item
-        for item in validation.observations
-        if abs(item.probability - probability) <= 0.10
-    ]
-    if len(comparable) < 10:
-        comparable = list(validation.observations)
+    comparable = _comparable_observations(validation.observations, raw_probability)
     lower, expected, upper = _distribution(comparable)
     performance = simulate_strategy(
         ordered,
@@ -160,7 +151,13 @@ def build_forecast(
         holding_days=horizon_days,
         round_trip_cost=COST_RATE,
     )
-    stability = analyze_stability(ordered, COST_RATE, horizon_days=horizon_days)
+    stability = analyze_stability(
+        ordered,
+        COST_RATE,
+        horizon_days=horizon_days,
+        model_code=selected_model,
+        context=context,
+    )
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)
     probability_interval = _probability_interval(
@@ -178,7 +175,7 @@ def build_forecast(
         lower_threshold=1.0 - PRIMARY_THRESHOLD,
         upper_threshold=PRIMARY_THRESHOLD,
     )
-    runtime_model_version = f"competition-{selected_model.lower()}-platt-v5"
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v5.1"
     trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
@@ -199,7 +196,8 @@ def build_forecast(
         upper_net_return=upper,
         validation=_validation(validation),
         factor_explanations=_factor_explanations(
-            samples, features, explanation_model, selected_model=selected_model
+            samples, features, qualification.explanation_model,
+            selected_model=selected_model,
         ),
         performance=_performance_report(performance),
         equity_curve=[EquityPoint.model_validate(asdict(item)) for item in performance.equity_curve],
@@ -242,7 +240,7 @@ def build_forecast(
         ),
         warnings=[
             *warnings,
-            "收益基于前复权日线、固定规则和固定交易成本模拟，不代表真实成交回放",
+            "收益基于滚动原始概率、前复权日线、固定规则和固定交易成本模拟，不代表校准后概率策略或真实成交回放",
             "因子贡献解释模型输出，不证明因果关系",
             *(
                 ["冠军为非线性或规则模型；因子贡献使用同训练集逻辑回归作为可解释代理，不等同于冠军模型内部归因"]
@@ -499,7 +497,7 @@ def _context_report(context: AlignedForecastContext | None) -> ForecastContextRe
     industry_coverage = context.industry_coverage if context is not None else 0.0
     return ForecastContextReport(
         market=ContextSource(
-            code="000300.SH" if market_coverage else None,
+            code=context.market_code if context is not None else None,
             label="沪深300",
             status="AVAILABLE" if market_coverage >= 0.95 else "DEGRADED",
             coverage=market_coverage,
@@ -507,7 +505,7 @@ def _context_report(context: AlignedForecastContext | None) -> ForecastContextRe
             reason=None if market_coverage >= 0.95 else "市场日线未完整覆盖目标股票交易日",
         ),
         industry=ContextSource(
-            code=None,
+            code=context.industry_code if context is not None else None,
             label="行业代理指数",
             status="AVAILABLE" if industry_coverage >= 0.95 else "UNAVAILABLE",
             coverage=industry_coverage,
@@ -521,10 +519,9 @@ def _context_report(context: AlignedForecastContext | None) -> ForecastContextRe
 
 def _leakage_audit(samples, feature_count: int) -> LeakageAudit:
     checks = [
-        "标签退出日严格晚于信号日且训练仅使用已到期标签",
-        "滚动特征只使用信号日及以前数据",
-        "上下文按目标交易日对齐且不向未来填充",
-        "模型冠军只在开发区内部选择，校准区和锁定测试不参与选择",
+        "样本标签满足信号日 < T+1 入场日 <= 退出日",
+        "每个样本特征维度与版本目录一致且数值有限",
+        "训练到期标签、上下文对齐及模型切分由对应回归测试约束",
     ]
     valid = all(
         item.signal_date < item.entry_date <= item.exit_date
@@ -621,6 +618,17 @@ def _distribution(observations: list[WalkForwardObservation]) -> tuple[float, fl
     lower = values[math.floor((len(values) - 1) * 0.20)]
     upper = values[math.floor((len(values) - 1) * 0.80)]
     return lower, sum(values) / len(values), upper
+
+
+def _comparable_observations(
+    observations: Sequence[WalkForwardObservation], raw_probability: float
+) -> list[WalkForwardObservation]:
+    comparable = [
+        item
+        for item in observations
+        if abs(item.probability - raw_probability) <= 0.10
+    ]
+    return comparable if len(comparable) >= 10 else list(observations)
 
 
 def _fingerprint(

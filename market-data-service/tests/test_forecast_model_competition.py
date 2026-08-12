@@ -37,6 +37,16 @@ def test_model_competition_selects_only_from_development_validation() -> None:
     assert result.selected_model in {item.code for item in result.candidates}
     assert all(item.selection_sample_count > 0 for item in result.candidates)
     assert result.selection_end_date < result.calibration_start_date
+    assert result.calibration_start_date == history[int(len(history) * 0.60)].signal_date
+    selected_validation = history[
+        max(80, int(int(len(history) * 0.60) * 0.75)) : int(len(history) * 0.60) : 5
+    ]
+    expected_last_mature = max(
+        item.signal_date
+        for item in selected_validation
+        if item.exit_date < result.calibration_start_date
+    )
+    assert result.selection_end_date == expected_last_mature
     assert "锁定测试" in result.selection_rule
 
 

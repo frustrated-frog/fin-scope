@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import build_samples
 from finscope_market_data.forecast.performance import simulate_strategy
 from finscope_market_data.forecast.walk_forward import validate_walk_forward
@@ -55,7 +56,12 @@ class StabilityReport:
 
 
 def analyze_stability(
-    bars: Sequence[DailyBar], transaction_cost_rate: float, *, horizon_days: int = 20
+    bars: Sequence[DailyBar],
+    transaction_cost_rate: float,
+    *,
+    horizon_days: int = 20,
+    model_code: str = "LOGISTIC",
+    context: AlignedForecastContext | None = None,
 ) -> StabilityReport:
     results: list[StabilityScenarioResult] = []
     for scenario in neighbor_scenarios(horizon_days):
@@ -63,10 +69,12 @@ def analyze_stability(
             bars,
             transaction_cost_rate=transaction_cost_rate,
             horizon_days=scenario.holding_days,
+            context=context,
         )
         validation = validate_walk_forward(
             samples,
             independent_stride_days=scenario.holding_days,
+            model_code=model_code,
         )
         if not validation.observations:
             results.append(

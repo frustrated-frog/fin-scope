@@ -9,9 +9,10 @@ from finscope_market_data.models import DailyBar
 
 @dataclass(frozen=True)
 class AlignedForecastContext:
+    market_code: str | None
+    industry_code: str | None
     market_bars: tuple[DailyBar | None, ...]
     industry_bars: tuple[DailyBar | None, ...]
-    market_dates: tuple[str, ...]
     market_coverage: float
     industry_coverage: float
     market_regime: str
@@ -30,14 +31,25 @@ def build_aligned_context(
     market = _align(ordered, market_bars)
     industry = _align(ordered, industry_bars)
     return AlignedForecastContext(
+        market_code=_single_code(market_bars),
+        industry_code=_single_code(industry_bars),
         market_bars=market,
         industry_bars=industry,
-        market_dates=tuple(item.trade_date for item in ordered),
         market_coverage=_coverage(market),
         industry_coverage=_coverage(industry),
         market_regime=_regime(market),
         industry_regime=_regime(industry) if any(industry) else None,
     )
+
+
+def _single_code(bars: Sequence[DailyBar]) -> str | None:
+    codes = {
+        f"{item.symbol.code}.{item.symbol.market.value}"
+        for item in bars
+    }
+    if len(codes) > 1:
+        raise ValueError("同一上下文序列不能混入多个标的")
+    return next(iter(codes), None)
 
 
 def _align(

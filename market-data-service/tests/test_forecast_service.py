@@ -4,7 +4,7 @@ import math
 from datetime import date, timedelta
 
 from finscope_market_data.forecast.features import ForecastSample
-from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.service import _comparable_observations, build_forecast
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.walk_forward import validate_walk_forward
 from finscope_market_data.models import DailyBar, StockSymbol
@@ -75,6 +75,16 @@ def test_walk_forward_metrics_are_deterministic() -> None:
     assert len(first.observations) == len(second.observations)
 
 
+def test_similar_signal_distribution_compares_probabilities_on_the_raw_scale() -> None:
+    observations = validate_walk_forward(samples(500)).observations
+    raw_probability = observations[-1].probability
+
+    comparable = _comparable_observations(observations, raw_probability)
+
+    assert comparable
+    assert all(abs(item.probability - raw_probability) <= 0.10 for item in comparable)
+
+
 def test_forecast_returns_structured_insufficient_state() -> None:
     result = build_forecast(
         bars(400),
@@ -133,6 +143,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert len(result.recent_observations) <= 12
     assert result.report_schema_version == "single-stock-research-v5"
     assert result.model_version.startswith("competition-")
+    assert result.model_version.endswith("-v5.1")
     assert result.raw_probability is not None
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
@@ -156,6 +167,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.model_competition.selected_model in {"LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE"}
     assert result.leakage_audit.status == "PASSED"
     assert result.leakage_audit.checked_sample_count > 0
+    assert all("训练仅使用" not in item for item in result.leakage_audit.checks)
     assert result.qlib_reference.status == "NOT_RUN"
     assert result.in_sample is not None
     assert result.out_of_sample is not None
