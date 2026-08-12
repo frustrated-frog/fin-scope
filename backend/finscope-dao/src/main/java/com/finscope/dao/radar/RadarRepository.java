@@ -56,13 +56,15 @@ public class RadarRepository {
         jdbc.update("INSERT INTO radar_event(event_key,canonical_title,summary,category_code,dashboard_category,status,first_seen_at,last_seen_at,"
                         + "source_count,signal_count,hotspot_score,hotspot_explanation,priority_score,score_explanation,watchlist_relevance,watchlist_explanation,"
                         + "uncertainty,next_observation,hotspot_lifecycle_state,evidence_status,evidence_summary,evidence_warning,evidence_fingerprint,"
-                        + "evidence_count,evidence_source_count,evidence_updated_at,updated_at) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "evidence_count,evidence_source_count,evidence_updated_at,confidence_score,confidence_explanation,score_version,updated_at) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_key) DO UPDATE SET canonical_title=excluded.canonical_title,summary=excluded.summary,"
                         + "category_code=excluded.category_code,dashboard_category=excluded.dashboard_category,status=excluded.status,last_seen_at=excluded.last_seen_at,"
                         + "source_count=excluded.source_count,signal_count=excluded.signal_count,hotspot_score=excluded.hotspot_score,"
                         + "hotspot_explanation=excluded.hotspot_explanation,priority_score=excluded.priority_score,"
                         + "hotspot_lifecycle_state=excluded.hotspot_lifecycle_state,"
+                        + "confidence_score=excluded.confidence_score,confidence_explanation=excluded.confidence_explanation,"
+                        + "score_version=excluded.score_version,"
                         + "score_explanation=excluded.score_explanation,watchlist_relevance=excluded.watchlist_relevance,"
                         + "watchlist_explanation=excluded.watchlist_explanation,uncertainty=excluded.uncertainty,"
                         + "next_observation=excluded.next_observation,"
@@ -79,7 +81,8 @@ public class RadarRepository {
                 event.getSignalCount(), event.getHotspotScore(), event.getHotspotExplanation(), event.getPriorityScore(), event.getScoreExplanation(), event.getWatchlistRelevance(),
                 event.getWatchlistExplanation(), event.getUncertainty(), event.getNextObservation(), event.getHotspotLifecycleState(), event.getEvidenceStatus(),
                 event.getEvidenceSummary(), event.getEvidenceWarning(), event.getEvidenceFingerprint(), event.getEvidenceCount(),
-                event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()), TimeUtil.text(event.getUpdatedAt()));
+                event.getEvidenceSourceCount(), TimeUtil.text(event.getEvidenceUpdatedAt()), event.getConfidenceScore(),
+                event.getConfidenceExplanation(), event.getScoreVersion(), TimeUtil.text(event.getUpdatedAt()));
         RadarEvent stored = jdbc.queryForObject("SELECT * FROM radar_event WHERE event_key=?", eventMapper(), event.getEventKey());
         return stored;
     }
@@ -248,6 +251,8 @@ public class RadarRepository {
             value.setLastSeenAt(TimeUtil.localDateTime(rs,"last_seen_at")); value.setSourceCount(rs.getInt("source_count"));
             value.setSignalCount(rs.getInt("signal_count")); value.setHotspotScore(rs.getInt("hotspot_score"));
             value.setHotspotExplanation(rs.getString("hotspot_explanation")); value.setHotspotLifecycleState(rs.getString("hotspot_lifecycle_state"));
+            value.setConfidenceScore(rs.getInt("confidence_score")); value.setConfidenceExplanation(rs.getString("confidence_explanation"));
+            value.setScoreVersion(rs.getString("score_version"));
             value.setPriorityScore(rs.getInt("priority_score"));
             value.setScoreExplanation(rs.getString("score_explanation")); value.setWatchlistRelevance(rs.getInt("watchlist_relevance"));
             value.setWatchlistExplanation(rs.getString("watchlist_explanation")); value.setUncertainty(rs.getString("uncertainty"));

@@ -138,7 +138,11 @@ public class RadarHotspotProductionPipeline {
                     previousSnapshot(event, now));
             event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());
             event.setHotspotLifecycleState(hotspot.getLifecycleState());
-            RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
+            event.setConfidenceScore(hotspot.getConfidenceScore());
+            event.setConfidenceExplanation(hotspot.getExplanation());
+            event.setScoreVersion(RadarHotspotScoreService.SCORE_VERSION);
+            RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now,
+                    hotspot.getTotalScore(), hotspot.getConfidenceScore());
             event.setPriorityScore(result.getTotalScore());
             event.setScoreExplanation(hotspot.getExplanation() + "；" + String.join("；", result.getReasons()));
             event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());

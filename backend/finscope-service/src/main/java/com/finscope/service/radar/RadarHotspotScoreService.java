@@ -234,6 +234,11 @@ public class RadarHotspotScoreService {
             snapshot.setIndependentSourceCount(independentSourceCount);
             snapshot.setVelocityScore(burstScore);
             snapshot.setHotnessScore(totalScore);
+            snapshot.setConfirmationScore(confirmationScore);
+            snapshot.setFreshnessScore(freshnessScore);
+            snapshot.setRankTrendScore(rankTrendScore);
+            snapshot.setConfidenceScore(confidenceScore);
+            snapshot.setScoreVersion(SCORE_VERSION);
             snapshot.setLifecycleState(lifecycleState);
             snapshot.setExplanation(explanation);
             return snapshot;

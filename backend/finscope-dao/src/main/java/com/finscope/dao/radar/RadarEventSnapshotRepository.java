@@ -17,13 +17,19 @@ public class RadarEventSnapshotRepository {
 
     public RadarEventSnapshot save(RadarEventSnapshot snapshot) {
         jdbc.update("INSERT INTO radar_event_snapshot(event_id,snapshot_at,signal_count,independent_source_count,"
-                        + "velocity_score,hotness_score,lifecycle_state,explanation) VALUES(?,?,?,?,?,?,?,?) "
+                        + "velocity_score,hotness_score,confirmation_score,freshness_score,rank_trend_score,"
+                        + "confidence_score,score_version,lifecycle_state,explanation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(event_id,snapshot_at) DO UPDATE SET signal_count=excluded.signal_count,"
                         + "independent_source_count=excluded.independent_source_count,velocity_score=excluded.velocity_score,"
-                        + "hotness_score=excluded.hotness_score,lifecycle_state=excluded.lifecycle_state,explanation=excluded.explanation",
+                        + "hotness_score=excluded.hotness_score,confirmation_score=excluded.confirmation_score,"
+                        + "freshness_score=excluded.freshness_score,rank_trend_score=excluded.rank_trend_score,"
+                        + "confidence_score=excluded.confidence_score,score_version=excluded.score_version,"
+                        + "lifecycle_state=excluded.lifecycle_state,explanation=excluded.explanation",
                 snapshot.getEventId(), TimeUtil.text(snapshot.getSnapshotAt()), snapshot.getSignalCount(),
                 snapshot.getIndependentSourceCount(), snapshot.getVelocityScore(), snapshot.getHotnessScore(),
-                snapshot.getLifecycleState(), snapshot.getExplanation());
+                snapshot.getConfirmationScore(), snapshot.getFreshnessScore(), snapshot.getRankTrendScore(),
+                snapshot.getConfidenceScore(), snapshot.getScoreVersion(), snapshot.getLifecycleState(),
+                snapshot.getExplanation());
         return jdbc.queryForObject("SELECT * FROM radar_event_snapshot WHERE event_id=? AND snapshot_at=?",
                 mapper(), snapshot.getEventId(), TimeUtil.text(snapshot.getSnapshotAt()));
     }
@@ -51,7 +57,10 @@ public class RadarEventSnapshotRepository {
             value.setId(rs.getLong("id")); value.setEventId(rs.getLong("event_id"));
             value.setSnapshotAt(TimeUtil.localDateTime(rs, "snapshot_at")); value.setSignalCount(rs.getInt("signal_count"));
             value.setIndependentSourceCount(rs.getInt("independent_source_count")); value.setVelocityScore(rs.getDouble("velocity_score"));
-            value.setHotnessScore(rs.getInt("hotness_score")); value.setLifecycleState(rs.getString("lifecycle_state"));
+            value.setHotnessScore(rs.getInt("hotness_score")); value.setConfirmationScore(rs.getDouble("confirmation_score"));
+            value.setFreshnessScore(rs.getDouble("freshness_score")); value.setRankTrendScore(rs.getDouble("rank_trend_score"));
+            value.setConfidenceScore(rs.getInt("confidence_score")); value.setScoreVersion(rs.getString("score_version"));
+            value.setLifecycleState(rs.getString("lifecycle_state"));
             value.setExplanation(rs.getString("explanation")); return value;
         };
     }

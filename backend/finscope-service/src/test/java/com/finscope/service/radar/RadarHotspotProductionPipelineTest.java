@@ -96,6 +96,8 @@ class RadarHotspotProductionPipelineTest {
         assertEquals(2, result.getEvents().get(0).getSourceCount());
         assertEquals(2, result.getEvents().get(0).getSignalCount());
         assertTrue(result.getEvents().get(0).getHotspotScore() >= 75);
+        assertTrue(result.getEvents().get(0).getConfidenceScore() > 0);
+        assertEquals("HOTSPOT_V2", result.getEvents().get(0).getScoreVersion());
         assertEquals("TECHNOLOGY", result.getEvents().get(0).getDashboardCategory());
         ArgumentCaptor<RadarSignal> capturedSignals = ArgumentCaptor.forClass(RadarSignal.class);
         verify(repository, times(2)).capture(capturedSignals.capture(), eq(now));
@@ -106,7 +108,10 @@ class RadarHotspotProductionPipelineTest {
         }
         assertEquals(new HashSet<String>(Arrays.asList("CLS_NEWS_FLASH", "EASTMONEY_NEWS_FLASH")), providers);
         verify(repository).replaceEventSignals(eq(11L), any());
-        verify(snapshots).save(any());
+        ArgumentCaptor<com.finscope.domain.radar.RadarEventSnapshot> snapshotCaptor =
+                ArgumentCaptor.forClass(com.finscope.domain.radar.RadarEventSnapshot.class);
+        verify(snapshots).save(snapshotCaptor.capture());
+        assertEquals("HOTSPOT_V2", snapshotCaptor.getValue().getScoreVersion());
         verify(repository).expireEventsExcept(any(), eq(now.minusHours(48)), eq(now));
         org.mockito.InOrder order = inOrder(runs);
         order.verify(runs).startStep(7L, "FETCH", now);
