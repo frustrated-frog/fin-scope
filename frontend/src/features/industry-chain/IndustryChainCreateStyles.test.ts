@@ -37,6 +37,11 @@ test('defines the complete responsive semantic graph visual contract', () => {
   expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*absolute/);
   expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*relative/);
   expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+  expect(styles).toContain('.ic-structure-meter');
+  expect(styles).toContain('.ic-structure-dial');
+  expect(styles).toContain('conic-gradient');
+  expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-structure-meter/);
+  expect(styles).toContain('@media (prefers-reduced-transparency: reduce)');
 });
 
 test('lets the responsive layout own canvas and lane widths while keeping layer copy readable', () => {

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { IndustryChainCanvas } from './IndustryChainCanvas';
@@ -137,7 +137,9 @@ export function IndustryChainView({
         `/api/industry-chains/${workspace.chain.id}/refresh`, { method: 'POST' }
       );
       setWorkspace({ ...workspace, revision });
-      addToast('已开始刷新图谱，旧版本会保持可读', 'info');
+      const isCompletion = workspace.structure?.status === 'UPGRADE_AVAILABLE'
+        || workspace.structure?.status === 'ENRICHMENT_RECOMMENDED';
+      addToast(isCompletion ? '已开始补全结构，当前图谱会保持可读' : '已开始更新图谱，当前版本会保持可读', 'info');
     } catch (error) { handleError(error); }
   }
 
@@ -271,7 +273,11 @@ export function IndustryChainView({
                     aria-pressed={viewMode === 'dynamics'} onClick={() => setViewMode('dynamics')}>链上动态</button>
                 </nav>}
               </div>
-              <div className="ic-toolbar-controls">
+              <div className="ic-toolbar-actions">
+                {workspace.structure && workspace.graph && (
+                  <StructureMeter structure={workspace.structure} running={workspace.revision?.status === 'RUNNING'} />
+                )}
+                <div className="ic-toolbar-controls">
                 {viewMode === 'panorama' && <label className="ic-search">
                   <span aria-hidden="true">⌕</span>
                   <input type="search" aria-label="搜索图谱节点" value={search}
@@ -282,11 +288,13 @@ export function IndustryChainView({
                   {focusMode ? '查看全图' : '聚焦链路'}
                 </button>}
                 <button type="button" className="ic-refresh-button" onClick={() => void refreshGraph()}
-                  disabled={workspace.revision?.status === 'RUNNING'}>刷新图谱</button>
+                  disabled={workspace.revision?.status === 'RUNNING'}>{completionActionLabel(workspace)}</button>
+                </div>
               </div>
             </header>
             {workspace.revision?.status === 'RUNNING' && (
-              <div className="ic-progress" role="status"><i /><span>{workspace.revision.message || '正在生成产业链图谱'}</span></div>
+              <div className="ic-progress" role="status"><i /><strong>{revisionStageLabel(workspace.revision.stage)}</strong>
+                <span>{workspace.revision.message || '正在生成产业链图谱'}</span></div>
             )}
             {workspace.revision?.status === 'FAILED' && (
               <div className="ic-progress is-error" role="status"><i /><span>{workspace.revision.message}</span></div>
@@ -326,6 +334,51 @@ export function IndustryChainView({
       </main>
     </div>
   );
+}
+
+function StructureMeter({ structure, running }: {
+  structure: NonNullable<IndustryChainWorkspace['structure']>;
+  running: boolean;
+}) {
+  const label = structureStatusLabel(structure.status, running);
+  const tone = structure.status === 'COMPLETE' ? 'is-complete'
+    : structure.status === 'BUILDING' ? 'is-building' : 'is-attention';
+  const style = { '--ic-structure-score': `${Math.max(0, Math.min(100, structure.score))}%` } as CSSProperties;
+  return (
+    <section className={`ic-structure-meter ${tone}`} aria-label={`图谱结构完整度 ${structure.score} 分`}>
+      <div className="ic-structure-dial" style={style} aria-hidden="true">
+        <strong>{structure.score}</strong><span>/100</span>
+      </div>
+      <div className="ic-structure-copy">
+        <header><span>Structure depth</span><strong>{label}</strong></header>
+        <p>{structure.coveredStageCount} / {structure.stageCount} 环节 · {structure.semanticNodeCount} 个语义节点</p>
+        {structure.gaps[0] && <small title={structure.gaps.join('；')}>{structure.gaps[0]}</small>}
+      </div>
+    </section>
+  );
+}
+
+function structureStatusLabel(status: NonNullable<IndustryChainWorkspace['structure']>['status'], running: boolean) {
+  if (running) return '补全进行中';
+  if (status === 'COMPLETE') return '结构完整';
+  if (status === 'UPGRADE_AVAILABLE') return '结构待升级';
+  if (status === 'ENRICHMENT_RECOMMENDED') return '建议继续补全';
+  return '正在建立结构';
+}
+
+function completionActionLabel(workspace: IndustryChainWorkspace) {
+  if (workspace.structure?.status === 'UPGRADE_AVAILABLE') return '升级为 V3';
+  if (workspace.structure?.status === 'ENRICHMENT_RECOMMENDED') return '补全结构';
+  return '更新图谱';
+}
+
+function revisionStageLabel(stage: NonNullable<IndustryChainWorkspace['revision']>['stage']) {
+  if (stage === 'QUEUED' || stage === 'DISPATCHED') return '等待异步执行';
+  if (stage === 'COLLECTING_EVIDENCE') return '正在核对产业资料';
+  if (stage === 'COMPLETING_STRUCTURE') return '正在补全结构';
+  if (stage === 'VALIDATING_STRUCTURE') return '正在校验新版本';
+  if (stage === 'SYNTHESIZING') return '正在生成首版图谱';
+  return '正在更新图谱';
 }
 
 function expansionPathToNode(graph: NonNullable<IndustryChainWorkspace['graph']>, nodeKey: string) {

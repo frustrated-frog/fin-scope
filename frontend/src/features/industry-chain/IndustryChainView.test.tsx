@@ -65,7 +65,12 @@ const graph: IndustryChainGraph = {
 const workspace: IndustryChainWorkspace = {
   chain: { id: 7, name: 'AI算力', normalizedName: 'ai算力', summary: graph.summary },
   revision: { id: 11, chainId: 7, status: 'READY', stage: 'COMPLETED', message: '产业链图谱已更新' },
-  graph
+  graph,
+  structure: {
+    status: 'UPGRADE_AVAILABLE', score: 46, semanticNodeCount: 5,
+    coveredStageCount: 2, stageCount: 3,
+    gaps: ['升级为可展开的 V3 语义图谱', '补齐尚未展开的产业环节']
+  }
 };
 
 beforeEach(() => {
@@ -142,6 +147,50 @@ test('selects graph nodes, searches and switches focus mode', async () => {
   await userEvent.click(screen.getByRole('button', { name: '聚焦链路' }));
   expect(screen.getByRole('button', { name: '查看全图' })).toBeInTheDocument();
   expect(screen.getByLabelText('移动端产业链阅读器')).toBeInTheDocument();
+});
+
+test('presents structure depth and offers a semantic completion action', async () => {
+  vi.mocked(api).mockImplementation(async (path, options) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7' && !options?.method) return workspace;
+    if (path === '/api/industry-chains/7/refresh' && options?.method === 'POST') {
+      return { ...workspace.revision, status: 'RUNNING', stage: 'QUEUED' };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+
+  expect(screen.getByLabelText('图谱结构完整度 46 分')).toBeInTheDocument();
+  expect(screen.getByText('结构待升级')).toBeInTheDocument();
+  expect(screen.getByText('2 / 3 环节 · 5 个语义节点')).toBeInTheDocument();
+  expect(screen.getByText('升级为可展开的 V3 语义图谱')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '升级为 V3' }));
+  expect(api).toHaveBeenCalledWith('/api/industry-chains/7/refresh', { method: 'POST' });
+});
+
+test('names the active structure completion stage while preserving the old graph', async () => {
+  const completing = {
+    ...workspace,
+    revision: {
+      ...workspace.revision!, status: 'RUNNING' as const, stage: 'COMPLETING_STRUCTURE' as const,
+      message: '正在补齐材料、设备、部件、技术与应用节点'
+    }
+  };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7') return completing;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+
+  expect(screen.getByText('正在补全结构')).toBeInTheDocument();
+  expect(screen.getByText('正在补齐材料、设备、部件、技术与应用节点')).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'AI算力产业链图谱' })).toBeInTheDocument();
 });
 
 test('divides the measured desktop canvas equally across its industry stages', async () => {
