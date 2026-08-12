@@ -64,6 +64,29 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void removesDuplicateNodeAndEdgeKeysWithoutRemoteRepair() throws Exception {
+        int[] calls = {0};
+        String response = validJson()
+                .replace("\"nodes\":[", "\"nodes\":[" + node("stage:chip", "重复芯片", 1) + ",")
+                .replace("\"edges\":[", "\"edges\":[" + edge("flow:1", "stage:chip", "stage:server") + ",");
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                calls[0]++;
+                return response;
+            }
+        };
+
+        IndustryChainGraph graph = new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertEquals(1, calls[0]);
+        assertEquals(3, graph.getNodes().size());
+        assertEquals(2, graph.getEdges().size());
+    }
+
+    @Test
     void repairsOneInvalidOutputAndValidatesTheRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {

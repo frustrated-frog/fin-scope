@@ -105,8 +105,28 @@ public class IndustryChainSynthesisAgent {
         graph.setSchemaVersion("INDUSTRY_CHAIN_V3");
         graph.setModel(llm.modelName());
         graph.setGeneratedAt(LocalDateTime.now());
+        removeDuplicateGraphEntries(graph);
         removeUndisclosedSupplyRelationships(graph);
         return validator.validate(graph);
+    }
+
+    private void removeDuplicateGraphEntries(IndustryChainGraph graph) {
+        Map<String, IndustryChainNode> nodes = new LinkedHashMap<String, IndustryChainNode>();
+        for (IndustryChainNode node : graph.getNodes()) {
+            nodes.putIfAbsent(node.getNodeKey(), node);
+        }
+        Map<String, IndustryChainEdge> edges = new LinkedHashMap<String, IndustryChainEdge>();
+        for (IndustryChainEdge edge : graph.getEdges()) {
+            edges.putIfAbsent(edge.getEdgeKey(), edge);
+        }
+        int removedNodes = graph.getNodes().size() - nodes.size();
+        int removedEdges = graph.getEdges().size() - edges.size();
+        graph.setNodes(new ArrayList<IndustryChainNode>(nodes.values()));
+        graph.setEdges(new ArrayList<IndustryChainEdge>(edges.values()));
+        if (removedNodes > 0 || removedEdges > 0) {
+            log.info("Removed duplicate graph entries before validation: chain={}, nodes={}, edges={}",
+                    graph.getName(), removedNodes, removedEdges);
+        }
     }
 
     private void removeUndisclosedSupplyRelationships(IndustryChainGraph graph) {
