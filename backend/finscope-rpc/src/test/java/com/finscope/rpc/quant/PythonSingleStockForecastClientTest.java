@@ -161,6 +161,29 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsAndValidatesVersionSixFrozenCandidateEvidence() {
+        SingleStockForecast result = clientReturning(v6Payload()).forecast("600519", 5);
+
+        assertEquals(4, result.getModelCompetition().getCandidates().size());
+        SingleStockForecast.ModelCandidate champion = result.getModelCompetition().getCandidates().stream()
+                .filter(SingleStockForecast.ModelCandidate::isSelected).findFirst().orElseThrow();
+        assertEquals("CHAMPION", champion.getRole());
+        assertEquals(.61d, champion.getCalibratedProbability(), .000001d);
+        assertEquals(15, champion.getLockedMetrics().getSampleCount());
+    }
+
+    @Test
+    void rejectsVersionSixCandidateWithInvalidRoleOrProbability() {
+        PythonSingleStockForecastClient invalidRole = clientReturning(
+                v6Payload().replace("\"role\":\"CHALLENGER\"", "\"role\":\"UNKNOWN\""));
+        PythonSingleStockForecastClient invalidProbability = clientReturning(
+                v6Payload().replace("\"calibratedProbability\":0.55", "\"calibratedProbability\":1.2"));
+
+        assertThrows(ProviderContractException.class, () -> invalidRole.forecast("600519", 5));
+        assertThrows(ProviderContractException.class, () -> invalidProbability.forecast("600519", 5));
+    }
+
+    @Test
     void rejectsUnknownForecastSchemaVersion() {
         PythonSingleStockForecastClient client = clientReturning(
                 v5Payload().replace("single-stock-research-v5", "single-stock-research-v6"));
@@ -257,6 +280,41 @@ class PythonSingleStockForecastClientTest {
                                 "\"leakageAudit\":{\"status\":\"PASSED\",\"checkedSampleCount\":100," +
                                 "\"checks\":[\"无未来数据\"]},\"qlibReference\":{\"status\":\"NOT_RUN\"," +
                                 "\"role\":\"离线辅助\",\"runtimeDependency\":false},\"warnings\":[]}");
+    }
+
+    private static String v6Payload() {
+        String locked = "{\"sampleCount\":15,\"accuracy\":0.6,\"brierScore\":0.22," +
+                "\"baselineBrierScore\":0.24,\"brierSkillScore\":0.08,\"logLoss\":0.64," +
+                "\"expectedCalibrationError\":0.08}";
+        String champion = "{\"code\":\"LOGISTIC\",\"name\":\"正则化逻辑回归\"," +
+                "\"selected\":true,\"selectionSampleCount\":45,\"accuracy\":0.6," +
+                "\"brierScore\":0.22,\"logLoss\":0.64,\"baselineBrierScore\":0.24," +
+                "\"validationFoldCount\":3,\"brierStd\":0.01,\"role\":\"CHAMPION\"," +
+                "\"modelVersion\":\"competition-logistic-platt-v6\",\"rawProbability\":0.66," +
+                "\"calibratedProbability\":0.61,\"shadowDecision\":\"UP\"," +
+                "\"qualificationStatus\":\"QUALIFIED\",\"lockedMetrics\":" + locked +
+                ",\"reason\":\"最优\"}";
+        String challenger = "{\"code\":\"BOOSTED_STUMPS\",\"name\":\"轻量梯度提升树桩\"," +
+                "\"selected\":false,\"selectionSampleCount\":45,\"accuracy\":0.58," +
+                "\"brierScore\":0.23,\"logLoss\":0.66,\"baselineBrierScore\":0.24," +
+                "\"validationFoldCount\":3,\"brierStd\":0.02,\"role\":\"CHALLENGER\"," +
+                "\"modelVersion\":\"competition-boosted_stumps-platt-v6\",\"rawProbability\":0.57," +
+                "\"calibratedProbability\":0.55,\"shadowDecision\":\"ABSTAIN\"," +
+                "\"qualificationStatus\":\"CONDITIONAL\",\"lockedMetrics\":" + locked +
+                ",\"reason\":\"对照\"}";
+        String regime = challenger.replace("BOOSTED_STUMPS", "REGIME_LOGISTIC")
+                .replace("轻量梯度提升树桩", "市场状态感知逻辑回归");
+        String baseline = challenger.replace("BOOSTED_STUMPS", "RULE_BASELINE")
+                .replace("轻量梯度提升树桩", "确定性动量规则")
+                .replace("CHALLENGER", "BASELINE");
+        return v5Payload()
+                .replace("single-stock-research-v5", "single-stock-research-v6")
+                .replace("competition-logistic-platt-v5", "competition-logistic-platt-v6")
+                .replace("\"candidates\":[{\"code\":\"LOGISTIC\",\"name\":\"逻辑回归\"," +
+                                "\"selected\":true,\"selectionSampleCount\":20,\"accuracy\":0.6," +
+                                "\"brierScore\":0.22,\"logLoss\":0.64,\"baselineBrierScore\":0.24," +
+                                "\"reason\":\"最优\"}]",
+                        "\"candidates\":[" + champion + "," + challenger + "," + regime + "," + baseline + "]");
     }
 
     private static String slice(String startDate, String endDate) {

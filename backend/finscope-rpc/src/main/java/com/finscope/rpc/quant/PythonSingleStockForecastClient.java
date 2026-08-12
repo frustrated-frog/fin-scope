@@ -32,7 +32,10 @@ public class PythonSingleStockForecastClient {
             "UP", "DOWN", "ABSTAIN"));
     private static final Set<String> REPORT_SCHEMA_VERSIONS = new HashSet<String>(Arrays.asList(
             "single-stock-research-v2", "single-stock-research-v3",
-            "single-stock-research-v4", "single-stock-research-v5"));
+            "single-stock-research-v4", "single-stock-research-v5",
+            "single-stock-research-v6"));
+    private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
+            "CHAMPION", "CHALLENGER", "BASELINE"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -118,6 +121,46 @@ public class PythonSingleStockForecastClient {
         }
         if ("single-stock-research-v5".equals(result.getReportSchemaVersion())) {
             validateVersionFive(result);
+        }
+        if ("single-stock-research-v6".equals(result.getReportSchemaVersion())) {
+            validateVersionSix(result);
+        }
+    }
+
+    private void validateVersionSix(SingleStockForecast result) {
+        validateVersionFive(result);
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            return;
+        }
+        int champions = 0;
+        for (SingleStockForecast.ModelCandidate candidate
+                : result.getModelCompetition().getCandidates()) {
+            if (!CANDIDATE_ROLES.contains(candidate.getRole())
+                    || candidate.getModelVersion() == null
+                    || !DECISIONS.contains(candidate.getShadowDecision())
+                    || !QUALIFICATION_STATUSES.contains(candidate.getQualificationStatus())
+                    || candidate.getValidationFoldCount() < 3
+                    || !finiteNonNegative(candidate.getBrierStd())
+                    || candidate.getLockedMetrics() == null) {
+                throw contract("SCHEMA_DRIFT", "Python v6 冻结候选证据无效", false);
+            }
+            probability(candidate.getRawProbability());
+            probability(candidate.getCalibratedProbability());
+            if (candidate.getRawProbability() == null || candidate.getCalibratedProbability() == null) {
+                throw contract("SCHEMA_DRIFT", "Python v6 候选概率缺失", false);
+            }
+            validateMetrics(candidate.getLockedMetrics());
+            if ("CHAMPION".equals(candidate.getRole())) {
+                champions++;
+                if (!candidate.isSelected()) {
+                    throw contract("SCHEMA_DRIFT", "Python v6 冠军角色与选择标识不一致", false);
+                }
+            } else if (candidate.isSelected()) {
+                throw contract("SCHEMA_DRIFT", "Python v6 非冠军候选不应被选中", false);
+            }
+        }
+        if (champions != 1) {
+            throw contract("SCHEMA_DRIFT", "Python v6 必须且只能冻结一个冠军", false);
         }
     }
 

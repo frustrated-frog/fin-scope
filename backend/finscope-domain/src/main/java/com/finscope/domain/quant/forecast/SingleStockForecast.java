@@ -313,6 +313,15 @@ public class SingleStockForecast {
         private double brierScore;
         private double logLoss;
         private double baselineBrierScore;
+        private int validationFoldCount;
+        private double brierStd;
+        private String role;
+        private String modelVersion;
+        private Double rawProbability;
+        private Double calibratedProbability;
+        private String shadowDecision;
+        private String qualificationStatus;
+        private ProbabilityMetricSet lockedMetrics;
         private String reason;
     }
 

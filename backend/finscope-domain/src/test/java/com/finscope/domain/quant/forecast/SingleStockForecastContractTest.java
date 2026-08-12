@@ -18,6 +18,11 @@ class SingleStockForecastContractTest {
         forecast.setContext(context);
         SingleStockForecast.ModelCompetition competition = new SingleStockForecast.ModelCompetition();
         competition.setSelectedModel("LOGISTIC");
+        SingleStockForecast.ModelCandidate candidate = new SingleStockForecast.ModelCandidate();
+        candidate.setCode("LOGISTIC");
+        candidate.setRole("CHAMPION");
+        candidate.setCalibratedProbability(.61d);
+        competition.getCandidates().add(candidate);
         forecast.setModelCompetition(competition);
         SingleStockForecast.LeakageAudit audit = new SingleStockForecast.LeakageAudit();
         audit.setStatus("PASSED");
@@ -28,6 +33,9 @@ class SingleStockForecastContractTest {
 
         assertEquals("000300.SH", forecast.getContext().getMarket().getCode());
         assertEquals("LOGISTIC", forecast.getModelCompetition().getSelectedModel());
+        assertEquals("CHAMPION", forecast.getModelCompetition().getCandidates().get(0).getRole());
+        assertEquals(.61d, forecast.getModelCompetition().getCandidates().get(0)
+                .getCalibratedProbability(), .000001d);
         assertEquals("PASSED", forecast.getLeakageAudit().getStatus());
         assertFalse(forecast.getQlibReference().isRuntimeDependency());
     }
