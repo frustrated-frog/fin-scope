@@ -42,6 +42,7 @@ def validate_walk_forward(
     samples: Sequence[ForecastSample],
     *,
     independent_stride_days: int = 20,
+    model_code: str = "LOGISTIC",
 ) -> WalkForwardResult:
     if independent_stride_days < 1:
         raise ValueError("独立锚点步长必须为正整数")
@@ -49,7 +50,7 @@ def validate_walk_forward(
     initial_training_size = max(120, math.floor(len(ordered) * 0.60))
     initial_training_size = min(initial_training_size, len(ordered))
     in_sample_accuracy, in_sample_brier = _in_sample_metrics(
-        ordered[:initial_training_size]
+        ordered[:initial_training_size], model_code
     )
     observations: list[WalkForwardObservation] = []
     model: RegularizedLogisticModel | None = None
@@ -64,7 +65,7 @@ def validate_walk_forward(
             continue
         matured = ordered[:matured_count]
         if model is None or len(observations) % 20 == 0:
-            model = RegularizedLogisticModel.fit(matured)
+            model = _fit_model(model_code, matured)
         baseline = sum(sample.positive for sample in matured) / len(matured)
         observations.append(
             WalkForwardObservation(
@@ -126,10 +127,12 @@ def _metrics(
     )
 
 
-def _in_sample_metrics(samples: Sequence[ForecastSample]) -> tuple[float, float]:
+def _in_sample_metrics(
+    samples: Sequence[ForecastSample], model_code: str = "LOGISTIC"
+) -> tuple[float, float]:
     if not samples:
         return 0.0, 0.0
-    model = RegularizedLogisticModel.fit(samples)
+    model = _fit_model(model_code, samples)
     probabilities = [model.predict(item.features) for item in samples]
     accuracy = sum(
         (probability >= 0.5) == sample.positive
@@ -140,3 +143,10 @@ def _in_sample_metrics(samples: Sequence[ForecastSample]) -> tuple[float, float]
         for probability, sample in zip(probabilities, samples)
     ) / len(samples)
     return accuracy, brier
+
+
+def _fit_model(model_code: str, samples: Sequence[ForecastSample]):
+    if model_code == "LOGISTIC":
+        return RegularizedLogisticModel.fit(samples)
+    from finscope_market_data.forecast.model_competition import fit_model
+    return fit_model(model_code, samples)

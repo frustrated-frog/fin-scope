@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+import math
+
+from finscope_market_data.forecast.features import ForecastSample
+from finscope_market_data.forecast.model_competition import run_model_competition
+
+
+def samples(count: int) -> list[ForecastSample]:
+    first = date(2010, 1, 1)
+    result: list[ForecastSample] = []
+    for index in range(count):
+        signal = math.sin(index / 9.0)
+        nonlinear = signal * signal
+        positive = nonlinear > 0.45
+        result.append(ForecastSample(
+            signal_date=(first + timedelta(days=index)).isoformat(),
+            entry_date=(first + timedelta(days=index + 1)).isoformat(),
+            exit_date=(first + timedelta(days=index + 6)).isoformat(),
+            features=(signal, nonlinear, math.cos(index / 13.0)),
+            net_return=0.02 if positive else -0.02,
+        ))
+    return result
+
+
+def test_model_competition_selects_only_from_development_validation() -> None:
+    history = samples(600)
+
+    result = run_model_competition(history, independent_stride_days=5)
+
+    assert len(result.candidates) == 3
+    assert {item.code for item in result.candidates} == {
+        "LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE",
+    }
+    assert sum(item.selected for item in result.candidates) == 1
+    assert result.selected_model in {item.code for item in result.candidates}
+    assert all(item.selection_sample_count > 0 for item in result.candidates)
+    assert result.selection_end_date < result.calibration_start_date
+    assert "锁定测试" in result.selection_rule
+
+
+def test_model_competition_is_deterministic_and_bounded() -> None:
+    first = run_model_competition(samples(600), independent_stride_days=5)
+    second = run_model_competition(samples(600), independent_stride_days=5)
+
+    assert first == second
+    assert all(0 <= item.brier_score <= 1 for item in first.candidates)
+    assert all(item.log_loss >= 0 for item in first.candidates)

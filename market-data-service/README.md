@@ -52,6 +52,10 @@ GET /v1/stocks/SH/600519/overview
 
 `/health` 只表示进程存活；`/ready` 还会检查快照库可写且至少配置了一个 Provider。运维就绪探针应使用 `/ready`。
 
+## Qlib 研究边界
+
+在线预测不安装、不导入也不调用 Qlib。`forecast.qlib_reference` 只提供前复权日线 CSV 导出和安装状态检查，供未来在独立 Python 环境中做离线基准复核；Qlib 的结果不会直接覆盖 FinScope 的锁定测试结论。
+
 ## Java 接入
 
 Java 中的 `PythonMarketDataCapitalFlowProvider` 会固定注册到现有 `MarketDataGateway`，不提供关闭开关。启动 Java 前应先启动 Python 服务：

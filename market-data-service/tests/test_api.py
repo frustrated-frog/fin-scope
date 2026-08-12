@@ -203,13 +203,20 @@ def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) ->
     )
 
     assert response.status_code == 200
-    assert provider.requests == [(StockSymbol(market="SH", code="600519"), 5000)]
+    assert provider.requests == [
+        (StockSymbol(market="SH", code="600519"), 5000),
+        (StockSymbol(market="SH", code="000300"), 5000),
+    ]
     body = response.json()
     assert body["instrumentCode"] == "600519.SH"
     assert body["status"] == "INSUFFICIENT_DATA"
     assert body["barCount"] == 400
     assert body["upProbability"] is None
     assert body["horizonDays"] == 1
+    assert body["context"]["market"]["code"] == "000300.SH"
+    assert body["context"]["market"]["coverage"] == 1.0
+    assert body["context"]["industry"]["status"] == "UNAVAILABLE"
+    assert body["qlibReference"]["runtimeDependency"] is False
 
 
 def test_single_stock_forecast_endpoint_rejects_unregistered_horizon(tmp_path: Path) -> None:
@@ -234,6 +241,7 @@ def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(
     assert provider.requests == [
         (StockSymbol(market="SH", code="603618"), 5000),
         (StockSymbol(market="SH", code="603618"), 5000),
+        (StockSymbol(market="SH", code="000300"), 5000),
     ]
     assert response.json()["barCount"] == 400
 

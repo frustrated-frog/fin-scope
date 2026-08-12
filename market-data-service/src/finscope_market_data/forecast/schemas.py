@@ -232,6 +232,54 @@ class SelectiveValidation(ForecastModel):
     abstain_rate: float
 
 
+class ContextSource(ForecastModel):
+    code: str | None = None
+    label: str
+    status: str
+    coverage: float
+    regime: str | None = None
+    reason: str | None = None
+
+
+class ForecastContextReport(ForecastModel):
+    market: ContextSource
+    industry: ContextSource
+    feature_codes: list[str] = Field(default_factory=list)
+    alignment_rule: str
+
+
+class ModelCandidate(ForecastModel):
+    code: str
+    name: str
+    selected: bool
+    selection_sample_count: int
+    accuracy: float
+    brier_score: float
+    log_loss: float
+    baseline_brier_score: float
+    reason: str
+
+
+class ModelCompetitionReport(ForecastModel):
+    selected_model: str
+    selection_end_date: str
+    calibration_start_date: str
+    selection_rule: str
+    candidates: list[ModelCandidate] = Field(default_factory=list)
+
+
+class LeakageAudit(ForecastModel):
+    status: str
+    checked_sample_count: int
+    checks: list[str] = Field(default_factory=list)
+
+
+class QlibReference(ForecastModel):
+    status: str = "NOT_RUN"
+    role: str = "可选离线对照实验，不参与线上预测"
+    runtime_dependency: bool = False
+
+
 class QualificationIntervals(ForecastModel):
     brier_skill_score: ConfidenceInterval
     accuracy: ConfidenceInterval
@@ -261,8 +309,8 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v4"
-    model_version: str = "logistic-platt-selective-v4"
+    report_schema_version: str = "single-stock-research-v5"
+    model_version: str = "competition-pending-v5"
     instrument_code: str
     as_of_date: str
     horizon_days: int = 5
@@ -296,4 +344,8 @@ class SingleStockForecastResult(ForecastModel):
     recent_observations: list[ForecastObservation] = Field(default_factory=list)
     qualification: ModelQualification | None = None
     selective_validation: SelectiveValidation | None = None
+    context: ForecastContextReport | None = None
+    model_competition: ModelCompetitionReport | None = None
+    leakage_audit: LeakageAudit | None = None
+    qlib_reference: QlibReference = Field(default_factory=QlibReference)
     warnings: list[str] = Field(default_factory=list)

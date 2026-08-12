@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.walk_forward import validate_walk_forward
 from finscope_market_data.models import DailyBar, StockSymbol
 
@@ -108,13 +109,17 @@ def test_forecast_refuses_probability_when_locked_qualification_is_too_small() -
 
 
 def test_forecast_produces_auditable_default_five_day_probability() -> None:
+    history = bars(1600)
+    market_symbol = StockSymbol(market="SH", code="000300")
+    market = [item.model_copy(update={"symbol": market_symbol}) for item in history]
     result = build_forecast(
-        bars(1600),
+        history,
         instrument_code="600519.SH",
         source_code="PYTDX",
         source_family="TDX",
         quality_status="FRESH_FALLBACK",
         warnings=[],
+        context=build_aligned_context(history, market_bars=market),
     )
 
     assert result.instrument_code == "600519.SH"
@@ -126,8 +131,8 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v4"
-    assert result.model_version == "logistic-platt-selective-v4"
+    assert result.report_schema_version == "single-stock-research-v5"
+    assert result.model_version.startswith("competition-")
     assert result.raw_probability is not None
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
@@ -141,7 +146,17 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.performance is not None
     assert result.performance.benchmark_label == "同股买入并持有"
     assert result.performance.trade_count >= 0
-    assert len(result.factor_explanations) == 7
+    assert len(result.factor_explanations) == len(result.context.feature_codes)
+    assert result.context.market.code == "000300.SH"
+    assert result.context.market.coverage == 1.0
+    assert result.context.market.regime in {"UPTREND", "DOWNTREND", "RANGE", "HIGH_VOLATILITY"}
+    assert result.context.industry.status == "UNAVAILABLE"
+    assert len(result.model_competition.candidates) == 3
+    assert sum(item.selected for item in result.model_competition.candidates) == 1
+    assert result.model_competition.selected_model in {"LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE"}
+    assert result.leakage_audit.status == "PASSED"
+    assert result.leakage_audit.checked_sample_count > 0
+    assert result.qlib_reference.status == "NOT_RUN"
     assert result.in_sample is not None
     assert result.out_of_sample is not None
     assert len(result.parameter_stability.scenarios) == 5
@@ -170,3 +185,23 @@ def test_forecast_keeps_each_horizon_trial_identity_independent() -> None:
     assert one_day.qualification is not None
     assert twenty_day.qualification is not None
     assert one_day.qualification.trial.trial_id != twenty_day.qualification.trial.trial_id
+
+
+def test_context_history_participates_in_forecast_fingerprint() -> None:
+    history = bars(400)
+    market_symbol = StockSymbol(market="SH", code="000300")
+    market = [item.model_copy(update={"symbol": market_symbol}) for item in history]
+    changed_market = list(market)
+    changed_market[-1] = changed_market[-1].model_copy(update={
+        "close": changed_market[-1].close + 1,
+        "high": changed_market[-1].high + 1,
+    })
+
+    first = build_forecast(history, instrument_code="600519.SH", source_code="PYTDX",
+        source_family="TDX", quality_status="FRESH", warnings=[],
+        context=build_aligned_context(history, market_bars=market))
+    second = build_forecast(history, instrument_code="600519.SH", source_code="PYTDX",
+        source_family="TDX", quality_status="FRESH", warnings=[],
+        context=build_aligned_context(history, market_bars=changed_market))
+
+    assert first.data_fingerprint != second.data_fingerprint
