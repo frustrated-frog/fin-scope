@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -33,6 +34,7 @@ public class IndustryChainSynthesisAgent {
     private static final int MAX_EVIDENCE_EXCERPT = 3000;
     private static final int MAX_LIMITATIONS_LENGTH = 1600;
     private static final int MAX_REPAIR_INVALID_OUTPUT = 48_000;
+    private static final int MAX_REPAIR_ATTEMPTS = 2;
     private static final String REMOVED_SUPPLY_NOTICE = "未明确披露的企业供销关系已从图谱中移除。";
     private static final Set<String> ROOT_FIELDS = set("summary", "limitations", "researchContent", "nodes", "edges");
     private static final Set<String> NODE_FIELDS = set("nodeKey", "type", "name", "description",
@@ -78,16 +80,21 @@ public class IndustryChainSynthesisAgent {
             throw new IllegalStateException("产业链归纳模型暂不可用");
         }
         String input = objectMapper.writeValueAsString(payload(chainName, evidence));
-        String raw = llm.complete(systemPrompt(), input, PRIMARY_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-        try {
-            return parse(raw, chainName, evidence);
-        } catch (Exception firstError) {
-            log.info("Industry-chain graph output rejected before repair: chain={}, reason={}",
-                    chainName, compact(firstError.getMessage(), 200));
-            String repaired = llm.complete(repairPrompt(), repairInput(input, raw, firstError),
-                    REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            return parse(repaired, chainName, evidence);
+        String candidate = llm.complete(systemPrompt(), input, PRIMARY_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+        for (int attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
+            try {
+                return parse(candidate, chainName, evidence);
+            } catch (Exception error) {
+                if (attempt == MAX_REPAIR_ATTEMPTS) {
+                    throw error;
+                }
+                log.info("Industry-chain graph output rejected before repair: chain={}, attempt={}, reason={}",
+                        chainName, attempt + 1, compact(error.getMessage(), 200));
+                candidate = llm.complete(repairPrompt(), repairInput(input, candidate, error),
+                        REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+            }
         }
+        throw new IllegalStateException("产业链修复流程异常结束");
     }
 
     private IndustryChainGraph parse(String raw, String chainName,
@@ -308,6 +315,13 @@ public class IndustryChainSynthesisAgent {
 
     private List<String> phrases(JsonNode node, String field) {
         JsonNode values = node.path(field);
+        if (values.isTextual()) {
+            String phrase = values.asText().trim();
+            if (phrase.isEmpty() || phrase.length() > 100) {
+                throw new IllegalArgumentException(field + " 包含无效短语");
+            }
+            return Collections.singletonList(phrase);
+        }
         if (!values.isArray()) {
             throw new IllegalArgumentException(field + " 必须是数组");
         }

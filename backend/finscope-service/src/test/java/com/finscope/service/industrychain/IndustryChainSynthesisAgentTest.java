@@ -112,6 +112,35 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void retriesASecondTimeWhenTheFirstRepairIsStillInvalid() throws Exception {
+        int[] calls = {0};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                throw new AssertionError("必须使用显式超时");
+            }
+            @Override public String complete(String systemPrompt, String userPrompt,
+                                             int timeoutMs, int maxOutputTokens) {
+                calls[0]++;
+                if (calls[0] == 1) {
+                    return validJson().replace("\"nature\":\"INDUSTRY_LOGIC\"", "\"nature\":\"UNKNOWN\"");
+                }
+                if (calls[0] == 2) {
+                    return validJson().replace("\"maturity\":\"SCALING\"", "\"maturity\":\"UNKNOWN\"");
+                }
+                return validJson();
+            }
+        };
+
+        IndustryChainGraph graph = new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertEquals(3, calls[0]);
+        assertEquals("INDUSTRY_CHAIN_V3", graph.getSchemaVersion());
+    }
+
+    @Test
     void reservesEnoughTimeForLargeV3PrimaryAndRepairResponses() throws Exception {
         int[] calls = {0};
         int[] timeouts = {0, 0};
