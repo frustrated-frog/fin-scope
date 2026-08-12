@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { ForecastConfidenceInterval, ForecastQualification, SingleStockForecast, SingleStockForecastRun } from './quantTypes';
+import { ForecastOutcomeHealth } from './ForecastOutcomeHealth';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -188,7 +189,7 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
         {!historyBusy && runs.length === 0 && <p>运行第一份研究后，它会永久留在这里。</p>}
         <div>{runs.map(item => <button type="button" key={item.id} aria-pressed={selected?.id === item.id} onClick={() => openRun(item)}>
           <span><b>{item.instrumentCode}</b><time>{item.createdAt?.replace('T', ' ').slice(0, 16)}</time></span>
-          <strong>{percent(item.upProbability)}</strong><small>{item.horizonDays ?? item.report?.horizonDays ?? 20}D · {statusCopy[item.status]?.label ?? item.status}{item.maturityStatus ? ` · ${maturityCopy[item.maturityStatus]}` : ''}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
+          <strong>{item.maturityStatus === 'MATURED' && item.outcome?.actualNetReturn != null ? signedPercent(item.outcome.actualNetReturn) : percent(item.upProbability)}</strong><small>{item.horizonDays ?? item.report?.horizonDays ?? 20}D · {statusCopy[item.status]?.label ?? item.status}{item.maturityStatus ? ` · ${maturityCopy[item.maturityStatus]}` : ''}{item.outcome?.correct != null ? ` · ${item.outcome.correct ? '命中' : '偏离'}` : ''}{item.sameDataAsPrevious ? ' · 同一数据' : ''}</small>
         </button>)}</div>
       </aside>
 
@@ -205,6 +206,8 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
             <div className="forecast-return-band"><div><span>相近信号 P20</span><strong>{signedPercent(report.lowerNetReturn)}</strong></div><div><span>相近信号平均</span><strong>{signedPercent(report.expectedNetReturn)}</strong></div><div><span>相近信号 P80</span><strong>{signedPercent(report.upperNetReturn)}</strong></div></div>
             {report.selectiveValidation && <div className="forecast-selective-strip"><article><span>信号覆盖率</span><strong>{percent(report.selectiveValidation.coverage)}</strong><small>{report.selectiveValidation.coveredCount} / {report.selectiveValidation.sampleCount} 个锁定样本给出方向</small></article><article><span>覆盖后命中率</span><strong>{percent(report.selectiveValidation.coveredAccuracy)}</strong><small>只统计越过 {percent(report.selectiveValidation.lowerThreshold)} / {percent(report.selectiveValidation.upperThreshold)} 阈值的样本</small></article><article><span>弃权率</span><strong>{percent(report.selectiveValidation.abstainRate)}</strong><small>宁可少判断，也不强迫低置信度信号表态</small></article></div>}
           </section>
+
+          <ForecastOutcomeHealth run={selected} />
 
           {report.qualification
             ? <QualificationSection qualification={report.qualification} probabilityInterval={report.probabilityInterval} />

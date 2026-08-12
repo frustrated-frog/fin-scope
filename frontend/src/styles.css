@@ -17508,5 +17508,57 @@ input[type="checkbox"] {
 .forecast-research-console>footer p{flex-basis:100%;margin:0}
 .forecast-research-console>footer span::before{content:"✓";margin-right:5px;color:var(--forecast-cyan)}
 
-@media(max-width:900px){.forecast-context-ribbon{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.forecast-context-ribbon,.forecast-model-race>header{grid-template-columns:1fr}.forecast-context-ribbon article+article{border-left:0}.forecast-model-race>header{align-items:start}}
+.forecast-live-proof{--health-accent:var(--forecast-amber);position:relative;border-color:color-mix(in srgb,var(--health-accent) 35%,var(--line));box-shadow:0 20px 58px rgba(18,47,61,.07)}
+.forecast-live-proof[data-health="HEALTHY"]{--health-accent:var(--forecast-cyan)}
+.forecast-live-proof[data-health="WATCH"]{--health-accent:var(--forecast-amber)}
+.forecast-live-proof[data-health="PAUSED"]{--health-accent:var(--forecast-oxide)}
+.forecast-live-proof-head{display:flex;align-items:center;justify-content:space-between;gap:32px;padding:22px 24px;border-bottom:1px solid var(--line);background:linear-gradient(112deg,color-mix(in srgb,var(--surface) 91%,var(--health-accent)),var(--surface) 70%)}
+.forecast-live-proof-head>div:first-child{display:grid;gap:5px}
+.forecast-live-proof-head span,.forecast-outcome-docket header span,.forecast-vital-primary>span{color:var(--health-accent);font:760 8px ui-monospace,monospace;letter-spacing:.14em}
+.forecast-live-proof-head h4{margin:0;font:500 25px "Iowan Old Style","Palatino Linotype",serif;letter-spacing:-.025em}
+.forecast-live-proof-head p{max-width:700px;margin:1px 0 0;color:var(--muted);font-size:9px;line-height:1.6}
+.forecast-health-seal{display:grid;grid-template-columns:auto auto;gap:2px 8px;min-width:142px;padding:10px 13px;border:1px solid color-mix(in srgb,var(--health-accent) 48%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--surface) 82%,transparent);box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--health-accent) 6%,transparent)}
+.forecast-health-seal i{grid-row:1/3;align-self:center;width:9px;height:9px;border-radius:50%;background:var(--health-accent);box-shadow:0 0 0 5px color-mix(in srgb,var(--health-accent) 14%,transparent)}
+.forecast-health-seal span{color:var(--health-accent);font-size:7px}
+.forecast-health-seal strong{font:500 15px "Iowan Old Style","Palatino Linotype",serif;white-space:nowrap}
+.forecast-health-rail{display:grid;grid-template-columns:repeat(4,1fr);padding:0 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 97%,var(--forecast-indigo))}
+.forecast-health-rail>div{position:relative;display:flex;align-items:center;gap:8px;padding:11px 0;color:var(--muted);font:700 8px ui-monospace,monospace}
+.forecast-health-rail>div:not(:last-child)::after{content:"";position:absolute;right:10px;left:20px;height:1px;background:var(--line)}
+.forecast-health-rail i{position:relative;z-index:1;width:7px;height:7px;border:1px solid var(--line-strong);border-radius:50%;background:var(--surface)}
+.forecast-health-rail>div[data-current="true"]{color:var(--health-accent)}
+.forecast-health-rail>div[data-current="true"] i{border-color:var(--health-accent);background:var(--health-accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--health-accent) 14%,transparent)}
+.forecast-live-proof-body{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(330px,.88fr);min-height:315px}
+.forecast-outcome-docket{display:grid;align-content:start;padding:25px 26px;border-right:1px solid var(--line);background-image:linear-gradient(color-mix(in srgb,var(--ink) 3.5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--ink) 3.5%,transparent) 1px,transparent 1px);background-size:28px 28px}
+.forecast-outcome-docket>header{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.forecast-outcome-docket>header span{grid-column:1/-1}
+.forecast-outcome-docket>header strong{font:500 27px "Iowan Old Style","Palatino Linotype",serif}
+.forecast-outcome-docket>header small{align-self:end;color:var(--muted);font:8px ui-monospace,monospace}
+.forecast-outcome-docket[data-result="settled"]>header strong{color:var(--forecast-cyan)}
+.forecast-outcome-docket[data-result="miss"]>header strong{color:var(--forecast-oxide)}
+.forecast-outcome-route{display:grid;grid-template-columns:minmax(110px,1fr) auto minmax(110px,1fr) minmax(145px,1.15fr);align-items:center;gap:15px;padding:25px 0 20px}
+.forecast-outcome-route>div{display:grid;gap:4px;min-width:0}
+.forecast-outcome-route>div>span{color:var(--muted);font-size:8px}
+.forecast-outcome-route>div>strong{font:500 21px "Iowan Old Style","Palatino Linotype",serif;font-variant-numeric:tabular-nums}
+.forecast-outcome-route>div>small{overflow:hidden;color:var(--muted);font:8px ui-monospace,monospace;text-overflow:ellipsis;white-space:nowrap}
+.forecast-outcome-route>i{color:var(--muted);font-style:normal}
+.forecast-outcome-route .forecast-outcome-return{padding:11px 13px;border-left:2px solid var(--health-accent);background:color-mix(in srgb,var(--surface) 88%,var(--health-accent))}
+.forecast-outcome-return strong{color:var(--health-accent)!important;font-size:27px!important}
+.forecast-outcome-docket>p{margin:auto 0 0;padding-top:15px;border-top:1px solid var(--line);color:var(--muted);font-size:9px;line-height:1.65}
+.forecast-health-vitals{display:grid;grid-template-rows:auto auto 1fr;background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 94%,#34446f),var(--surface))}
+.forecast-vital-primary{position:relative;display:grid;grid-template-columns:1fr auto;gap:4px 14px;padding:22px 24px 26px;border-bottom:1px solid var(--line)}
+.forecast-vital-primary>strong{grid-row:1/3;grid-column:2;font:500 38px/.9 "Iowan Old Style","Palatino Linotype",serif;font-variant-numeric:tabular-nums}
+.forecast-vital-primary>small{color:var(--muted);font-size:8px}
+.forecast-vital-primary>i{position:absolute;right:24px;bottom:13px;left:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--health-accent) 0 var(--health-score),var(--line) var(--health-score) 100%)}
+.forecast-health-vitals dl{display:grid;grid-template-columns:repeat(2,1fr);margin:0}
+.forecast-health-vitals dl>div{display:grid;gap:4px;padding:15px 18px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.forecast-health-vitals dl>div:nth-child(2n){border-right:0}
+.forecast-health-vitals dt{color:var(--muted);font-size:8px}
+.forecast-health-vitals dd{margin:0;font:500 21px "Iowan Old Style","Palatino Linotype",serif;font-variant-numeric:tabular-nums}
+.forecast-health-vitals dd small{margin-left:3px;color:var(--muted);font:8px ui-monospace,monospace}
+.forecast-health-vitals dl>div>small{color:var(--muted);font-size:7px;line-height:1.45}
+.forecast-health-vitals>footer{display:grid;align-content:center;gap:6px;padding:17px 20px;border-left:3px solid var(--health-accent);background:color-mix(in srgb,var(--surface) 89%,var(--health-accent))}
+.forecast-health-vitals>footer strong{font-size:9px;line-height:1.6}
+.forecast-health-vitals>footer small{color:var(--muted);font:7px/1.5 ui-monospace,monospace;word-break:break-word}
+
+@media(max-width:900px){.forecast-context-ribbon{grid-template-columns:repeat(2,1fr)}.forecast-live-proof-body{grid-template-columns:1fr}.forecast-outcome-docket{border-right:0;border-bottom:1px solid var(--line)}}
+@media(max-width:560px){.forecast-context-ribbon,.forecast-model-race>header{grid-template-columns:1fr}.forecast-context-ribbon article+article{border-left:0}.forecast-model-race>header{align-items:start}.forecast-live-proof-head{align-items:flex-start;flex-direction:column}.forecast-health-seal{width:100%}.forecast-health-rail{padding:0 16px}.forecast-health-rail>div:not(:last-child)::after{display:none}.forecast-outcome-route{grid-template-columns:1fr 1fr}.forecast-outcome-route>i{display:none}.forecast-outcome-route .forecast-outcome-return{grid-column:1/-1}.forecast-health-vitals dl{grid-template-columns:1fr}.forecast-health-vitals dl>div{border-right:0}.forecast-outcome-docket{padding:22px 18px}}

@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.service.quant.forecast.SingleStockForecastService;
@@ -80,5 +81,26 @@ class SingleStockForecastControllerTest {
         mvc.perform(get("/api/quant/single-stock-forecasts/8"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(8));
+    }
+
+    @Test
+    void exposesHealthForTheSameInstrumentHorizonAndModelVersion() throws Exception {
+        ForecastModelHealth health = new ForecastModelHealth();
+        health.setInstrumentCode("600519.SH");
+        health.setHorizonDays(5);
+        health.setModelVersion("logistic-platt-selective-v4");
+        health.setStatus("HEALTHY");
+        health.setSampleCount(12);
+        health.setBrierScore(0.214d);
+        when(service.health("600519", 5, "logistic-platt-selective-v4")).thenReturn(health);
+
+        mvc.perform(get("/api/quant/single-stock-forecasts/health")
+                        .param("code", "600519")
+                        .param("horizonDays", "5")
+                        .param("modelVersion", "logistic-platt-selective-v4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("HEALTHY"))
+                .andExpect(jsonPath("$.data.sampleCount").value(12))
+                .andExpect(jsonPath("$.data.brierScore").value(0.214));
     }
 }

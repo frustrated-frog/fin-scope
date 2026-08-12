@@ -301,8 +301,22 @@ export interface SingleStockForecastRun {
   upProbability?: number; dataFingerprint: string; modelVersion: string;
   reportSchemaVersion: string; sameDataAsPrevious: boolean; createdAt: string;
   report?: SingleStockForecast;
+  outcome?: { entryDate?: string; exitDate?: string; entryOpen?: number; exitOpen?: number;
+    actualNetReturn?: number; actualDirection?: 'UP' | 'DOWN'; correct?: boolean | null;
+    settledAt?: string; sourceCode?: string; note?: string };
+  modelHealth?: ForecastModelHealth;
   holdingSnapshot?: { held: boolean; instrumentCode: string; instrumentName?: string; role?: string;
     targetWeight?: number; currentWeight?: number; quantity?: number; averageCost?: number;
     lastClose?: number; estimatedMarketValue?: number; unrealizedReturn?: number;
     note?: string; interpretation: string };
+}
+
+export interface ForecastModelHealth {
+  instrumentCode: string; horizonDays: number; modelVersion: string;
+  status: 'INSUFFICIENT_EVIDENCE' | 'HEALTHY' | 'WATCH' | 'PAUSED';
+  directionOutputPaused: boolean; sampleCount: number; coveredCount: number;
+  abstainedCount: number; coverage: number; coveredAccuracy?: number;
+  brierScore?: number; baselineBrierScore?: number; logLoss?: number;
+  observedUpRate?: number; firstAsOfDate?: string; lastAsOfDate?: string;
+  conclusion: string;
 }

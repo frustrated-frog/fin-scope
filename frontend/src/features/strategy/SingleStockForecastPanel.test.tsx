@@ -117,10 +117,19 @@ const report = {
     actualNetReturn: .034, correct: true }], warnings: ['收益基于前复权日线模拟']
 };
 
-const run = { ...summary, report, holdingSnapshot: { held: true, instrumentCode: '600519.SH',
+const run = { ...summary, maturityStatus: 'MATURED', report, holdingSnapshot: { held: true, instrumentCode: '600519.SH',
   instrumentName: '贵州茅台', quantity: 10, averageCost: 1400, lastClose: 1505,
   estimatedMarketValue: 15050, unrealizedReturn: .075,
-  interpretation: '没有发现稳定优势，不能由本次概率单独强化。' } };
+  interpretation: '没有发现稳定优势，不能由本次概率单独强化。' },
+  outcome: { entryDate: '2026-08-07', exitDate: '2026-08-14', entryOpen: 1500,
+    exitOpen: 1540, actualNetReturn: .0251, actualDirection: 'UP', correct: null,
+    settledAt: '2026-08-14T17:30:00', sourceCode: 'PYTDX' },
+  modelHealth: { instrumentCode: '600519.SH', horizonDays: 5,
+    modelVersion: 'logistic-platt-selective-v4', status: 'HEALTHY',
+    directionOutputPaused: false, sampleCount: 12, coveredCount: 8, abstainedCount: 4,
+    coverage: .6667, coveredAccuracy: .75, brierScore: .214, baselineBrierScore: .25,
+    logLoss: .612, observedUpRate: .5833, firstAsOfDate: '2026-05-01',
+    lastAsOfDate: '2026-08-06', conclusion: '近 12 次到期预测的概率质量优于 0.5 无信息基准，方向门禁开放。' } };
 
 beforeEach(() => vi.unstubAllGlobals());
 
@@ -163,6 +172,11 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('轻量梯度提升树桩')).toBeInTheDocument();
   expect(screen.getByText('防未来检查通过')).toBeInTheDocument();
   expect(screen.getByText('Qlib 未参与本次预测')).toBeInTheDocument();
+  expect(screen.getByText('真实到期验证与模型健康')).toBeInTheDocument();
+  expect(screen.getByText('方向门禁开放')).toBeInTheDocument();
+  expect(screen.getAllByText('+2.5%').length).toBeGreaterThan(0);
+  expect(screen.getByText('本次当时弃权')).toBeInTheDocument();
+  expect(screen.getByText('0.214')).toBeInTheDocument();
   const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST');
   expect(JSON.parse(String(post?.[1]?.body))).toEqual({ code: '600519', horizonDays: 5 });
 });

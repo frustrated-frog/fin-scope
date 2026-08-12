@@ -1,6 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
+import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.service.quant.forecast.SingleStockForecastService;
 import com.finscope.web.request.quant.RunSingleStockForecastRequest;
 import com.finscope.web.response.ApiResponses;
@@ -11,8 +12,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Max;
@@ -45,6 +46,13 @@ public class SingleStockForecastController {
         return ApiResponses.success(service.history(code, limit, horizonDays).stream()
                 .map(SingleStockForecastRunResponse::of)
                 .collect(Collectors.toList()));
+    }
+
+    @GetMapping("/health")
+    public ApiResponse<ForecastModelHealth> health(@RequestParam String code,
+                                                   @RequestParam @Min(1) @Max(20) int horizonDays,
+                                                   @RequestParam String modelVersion) {
+        return ApiResponses.success(service.health(code, horizonDays, modelVersion));
     }
 
     @GetMapping("/{id}")
