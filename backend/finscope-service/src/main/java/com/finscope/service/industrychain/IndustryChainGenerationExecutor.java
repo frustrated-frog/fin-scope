@@ -37,6 +37,23 @@ public class IndustryChainGenerationExecutor {
         executor.execute(() -> execute(chain, revision));
     }
 
+    public void executeRequested(Long chainId, Long revisionId, String eventId) {
+        IndustryChainRevision revision = repository.claimGeneration(chainId, revisionId).orElse(null);
+        if (revision == null) {
+            log.info("Skipping duplicate industry-chain generation: eventId={}, chainId={}, revisionId={}",
+                    eventId, chainId, revisionId);
+            return;
+        }
+        IndustryChain chain = repository.findChain(chainId).orElse(null);
+        if (chain == null) {
+            repository.fail(revision, "CHAIN_NOT_FOUND", "产业链主题不存在，无法继续补全");
+            return;
+        }
+        log.info("Industry-chain generation claimed: eventId={}, chainId={}, revisionId={}",
+                eventId, chainId, revisionId);
+        execute(chain, revision);
+    }
+
     public void execute(IndustryChain chain, IndustryChainRevision revision) {
         String stage = "COLLECTING_EVIDENCE";
         try {

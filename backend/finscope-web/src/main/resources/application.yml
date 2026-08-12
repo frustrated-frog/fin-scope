@@ -28,7 +28,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: com.finscope.domain.radar
+        spring.json.trusted.packages: com.finscope.domain.radar,com.finscope.domain.industrychain
     listener:
       ack-mode: record
 
@@ -111,3 +111,9 @@ finscope:
       enabled: true
       topic: finscope.radar.interpretation.requested
       group-id: finscope-radar-interpretation
+  industry-chain:
+    kafka:
+      enabled: true
+      topic: finscope.industry-chain.structure-completion.requested
+      group-id: finscope-industry-chain-completion
+      ack-timeout-ms: 2000

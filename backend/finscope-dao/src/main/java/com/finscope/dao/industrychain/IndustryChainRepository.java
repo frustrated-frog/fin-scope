@@ -97,6 +97,14 @@ public class IndustryChainRepository {
                 + "ORDER BY id DESC LIMIT 1", revisionMapper, chainId));
     }
 
+    /** 通过条件更新原子领取一次尚未消费的生成任务。 */
+    public Optional<IndustryChainRevision> claimGeneration(Long chainId, Long revisionId) {
+        int updated = jdbcTemplate.update("UPDATE industry_chain_revision SET stage='DISPATCHED',message=? "
+                        + "WHERE id=? AND chain_id=? AND status='RUNNING' AND stage='QUEUED'",
+                "图谱补全任务已进入异步执行", revisionId, chainId);
+        return updated == 1 ? findRevision(revisionId) : Optional.empty();
+    }
+
     public List<IndustryChainRevision> findRevisions(Long chainId) {
         return jdbcTemplate.query("SELECT * FROM industry_chain_revision WHERE chain_id=? ORDER BY id DESC",
                 revisionMapper, chainId);
@@ -188,7 +196,7 @@ public class IndustryChainRepository {
         return Optional.of(graph);
     }
 
-    private Optional<IndustryChainRevision> findRevision(Long id) {
+    public Optional<IndustryChainRevision> findRevision(Long id) {
         return first(jdbcTemplate.query("SELECT * FROM industry_chain_revision WHERE id=?", revisionMapper, id));
     }
 
