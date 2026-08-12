@@ -22,16 +22,28 @@ public class RadarTextAnalyzer {
             "降息", "加息", "维持", "开展", "处罚", "批准", "推出", "上线");
     private static final List<String> VARIABLES = Arrays.asList(
             "电池", "芯片", "汽车", "利率", "逆回购", "黄金", "财报", "订单", "融资", "并购", "产能", "价格");
+    private static final List<String> DIRECTIONS = Arrays.asList(
+            "上涨", "走强", "增持", "扩产", "提升", "下跌", "走弱", "回落", "减持", "缩产", "下降");
 
     private final FingerprintService fingerprints;
 
     public RadarTextAnalyzer(FingerprintService fingerprints) { this.fingerprints = fingerprints; }
 
     public SignalFeatures analyze(RadarSignal signal) {
-        String title = safe(signal.getTitle());
-        String text = title + " " + safe(signal.getContent());
-        return new SignalFeatures(normalize(title), normalizedCategory(signal.getCategoryCode()),
-                matches(text, SUBJECTS), matches(text, ACTIONS), matches(text, VARIABLES), identifiers(text));
+        RadarSignalFeatures features = extract(signal);
+        return new SignalFeatures(features.getNormalizedTitle(), features.getCategory(),
+                features.getSubjects(), features.getActions(), features.getVariables(), features.getEntities());
+    }
+
+    public RadarSignalFeatures extract(RadarSignal signal) {
+        String title = safe(signal == null ? null : signal.getTitle());
+        String content = safe(signal == null ? null : signal.getContent());
+        String text = title + " " + content;
+        return new RadarSignalFeatures(normalize(title), normalize(content),
+                normalizedCategory(signal == null ? null : signal.getCategoryCode()),
+                matches(text, SUBJECTS), matches(text, ACTIONS), matches(text, VARIABLES),
+                matches(text, DIRECTIONS), identifiers(text), signal == null ? null
+                : signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt());
     }
 
     public double similarity(SignalFeatures left, SignalFeatures right) {
