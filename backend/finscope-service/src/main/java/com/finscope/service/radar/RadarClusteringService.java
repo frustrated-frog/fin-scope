@@ -49,6 +49,10 @@ public class RadarClusteringService {
         if (analyzer.hasFactConflict(leftFeatures, rightFeatures)) {
             return new MatchDecision("DIFFERENT_FACT", 0.0, "主体、方向或关键动作冲突");
         }
+        if (!leftFeatures.getNormalizedContent().isEmpty()
+                && leftFeatures.getNormalizedContent().equals(rightFeatures.getNormalizedContent())) {
+            return new MatchDecision("SAME", 1.0, "正文规范化结果一致");
+        }
         if (analyzer.normalize(left.getTitle()).equals(analyzer.normalize(right.getTitle()))) {
             return new MatchDecision("SAME", 1.0, "标题规范化结果一致");
         }

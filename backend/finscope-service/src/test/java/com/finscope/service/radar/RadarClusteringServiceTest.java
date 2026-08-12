@@ -164,6 +164,19 @@ class RadarClusteringServiceTest {
     }
 
     @Test
+    void mergesAHeadlineThatOmitsTheNumericFactWhenItsBodyContainsTheSameFact() {
+        RadarSignal digest = signal(1L, "THS_NEWS_DIGEST", "腾讯控股ADR日内跌幅扩大", "MARKET_MOVE");
+        digest.setContent("腾讯控股ADR日内跌幅扩大至5%。");
+        RadarSignal flash = signal(2L, "EASTMONEY_NEWS_FLASH", "腾讯控股ADR日内跌幅扩大至5%", "MARKET_MOVE");
+        flash.setContent("腾讯控股ADR日内跌幅扩大至5%。");
+
+        List<RadarClusteringService.ClusterResult> clusters = service.cluster(Arrays.asList(digest, flash));
+
+        assertEquals(1, clusters.size());
+        assertEquals(2, clusters.get(0).getSignals().size());
+    }
+
+    @Test
     void stableIdentityIgnoresWordingAndCategoryChanges() {
         RadarTextAnalyzer analyzer = new RadarTextAnalyzer(new FingerprintService());
         RadarEventIdentityService identities = new RadarEventIdentityService(analyzer);
