@@ -90,11 +90,22 @@ public class IndustryChainSynthesisAgent {
                 }
                 log.info("Industry-chain graph output rejected before repair: chain={}, attempt={}, reason={}",
                         chainName, attempt + 1, compact(error.getMessage(), 200));
-                candidate = llm.complete(repairPrompt(), repairInput(input, candidate, error),
-                        REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+                candidate = completeRepairWithRetry(
+                        repairInput(input, candidate, error), chainName, attempt + 1);
             }
         }
         throw new IllegalStateException("产业链修复流程异常结束");
+    }
+
+    private String completeRepairWithRetry(String repairInput, String chainName,
+                                           int validationAttempt) throws Exception {
+        try {
+            return llm.complete(repairPrompt(), repairInput, REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+        } catch (java.net.SocketTimeoutException timeout) {
+            log.info("Industry-chain repair call timed out and will retry once: chain={}, attempt={}",
+                    chainName, validationAttempt);
+            return llm.complete(repairPrompt(), repairInput, REPAIR_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
+        }
     }
 
     private IndustryChainGraph parse(String raw, String chainName,
