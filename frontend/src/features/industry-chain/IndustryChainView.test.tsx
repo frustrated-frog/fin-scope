@@ -106,6 +106,24 @@ test('presents industry chains as a status-aware research library', async () => 
   expect(screen.getByRole('button', { name: 'AI算力 产业链' })).toHaveAttribute('aria-current', 'page');
 });
 
+test('collapses the industry chain library into a compact rail and restores it', async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  expect(await screen.findByRole('textbox', { name: '产业链名称' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '收起产业链目录' }));
+
+  expect(screen.queryByRole('textbox', { name: '产业链名称' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '展开产业链目录' })).toHaveAttribute('aria-expanded', 'false');
+
+  await userEvent.click(screen.getByRole('button', { name: '展开产业链目录' }));
+  expect(screen.getByRole('textbox', { name: '产业链名称' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '收起产业链目录' })).toHaveAttribute('aria-expanded', 'true');
+});
+
 test('selects graph nodes, searches and switches focus mode', async () => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/api/industry-chains') return [workspace.chain];

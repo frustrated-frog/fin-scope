@@ -28,6 +28,7 @@ export function IndustryChainView({
   const [name, setName] = useState('');
   const [search, setSearch] = useState(initialStockCode ?? '');
   const [loading, setLoading] = useState(true);
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false);
   const [selectedNodeKey, setSelectedNodeKey] = useState<string>();
   const [focusMode, setFocusMode] = useState(Boolean(initialStockCode));
   const [expandedNodeKeys, setExpandedNodeKeys] = useState<Set<string>>(new Set());
@@ -48,6 +49,17 @@ export function IndustryChainView({
     loadChains().then((values) => {
       if (initialStockCode && values[0]) void openChain(values[0]);
     }).catch(handleError).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mobile = window.matchMedia('(max-width: 760px)');
+    const expandForMobile = () => {
+      if (mobile.matches) setLibraryCollapsed(false);
+    };
+    expandForMobile();
+    mobile.addEventListener('change', expandForMobile);
+    return () => mobile.removeEventListener('change', expandForMobile);
   }, []);
 
   useEffect(() => {
@@ -174,51 +186,66 @@ export function IndustryChainView({
   }
 
   return (
-    <div className="ic-workbench">
-      <aside className="ic-library" aria-label="产业链目录">
-        <div className="ic-library-heading">
-          <div className="ic-library-title">
-            <strong>产业链目录</strong>
-            <span>跟踪产业脉络与实时变化</span>
-          </div>
-          <small>{chains.length} 个图谱</small>
+    <div className={`ic-workbench ${libraryCollapsed ? 'is-library-collapsed' : ''}`}>
+      <aside className={`ic-library ${libraryCollapsed ? 'is-collapsed' : ''}`} aria-label="产业链目录">
+        <div className="ic-library-rail" hidden={!libraryCollapsed}>
+          <span aria-hidden="true">IC</span>
+          <button type="button" aria-label="展开产业链目录" aria-expanded="false"
+            aria-controls="industry-chain-library-content" onClick={() => setLibraryCollapsed(false)}>
+            <span aria-hidden="true">›</span>
+          </button>
         </div>
-        <form className="ic-create" onSubmit={handleSubmit}>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="新建产业链主题" aria-label="产业链名称" />
-          <button type="submit" disabled={loading || !name.trim()} aria-label="生成产业链图谱"><span aria-hidden="true">＋</span></button>
-        </form>
-        {chains.length > 0 && (
-          <div className="ic-library-section-title"><span>我的图谱</span><small>{chains.length}</small></div>
-        )}
-        <div className="ic-chain-list">
-          {chains.map((chain) => {
-            const ready = Boolean(chain.currentRevisionId);
-            const active = workspace?.chain.id === chain.id;
-            return (
-              <button type="button" key={chain.id} onClick={() => void openChain(chain)}
-                className={active ? 'is-active' : ''} aria-current={active ? 'page' : undefined}
-                aria-label={`${chain.name} 产业链`}>
-                <i className={`ic-chain-status ${ready ? 'is-ready' : ''}`} aria-hidden="true" />
-                <span className="ic-chain-copy">
-                  <strong>{chain.name}</strong>
-                  <small>{ready ? '可查看链上动态' : '等待首次生成'}</small>
-                </span>
-                <span className="ic-chain-meta">
-                  <small>{ready ? `R${chain.currentRevisionId}` : '未生成'}</small>
-                  <span aria-hidden="true">›</span>
-                </span>
+        <div id="industry-chain-library-content" className="ic-library-content" hidden={libraryCollapsed}>
+          <div className="ic-library-heading">
+            <div className="ic-library-title">
+              <strong>产业链目录</strong>
+              <span>跟踪产业脉络与实时变化</span>
+            </div>
+            <div className="ic-library-heading-actions">
+              <small>{chains.length} 个图谱</small>
+              <button type="button" aria-label="收起产业链目录" aria-expanded="true"
+                aria-controls="industry-chain-library-content" onClick={() => setLibraryCollapsed(true)}>
+                <span aria-hidden="true">‹</span>
               </button>
-            );
-          })}
-        </div>
-        {!chains.length && !loading && (
-          <div className="ic-empty-prompts">
-            <p>从一个产业主题开始，系统会核对全景、上下游、应用与代表公司。</p>
-            {SUGGESTIONS.map((suggestion) => (
-              <button type="button" key={suggestion} onClick={() => void createChain(suggestion)}>{suggestion}</button>
-            ))}
+            </div>
           </div>
-        )}
+          <form className="ic-create" onSubmit={handleSubmit}>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="新建产业链主题" aria-label="产业链名称" />
+            <button type="submit" disabled={loading || !name.trim()} aria-label="生成产业链图谱"><span aria-hidden="true">＋</span></button>
+          </form>
+          {chains.length > 0 && (
+            <div className="ic-library-section-title"><span>我的图谱</span><small>{chains.length}</small></div>
+          )}
+          <div className="ic-chain-list">
+            {chains.map((chain) => {
+              const ready = Boolean(chain.currentRevisionId);
+              const active = workspace?.chain.id === chain.id;
+              return (
+                <button type="button" key={chain.id} onClick={() => void openChain(chain)}
+                  className={active ? 'is-active' : ''} aria-current={active ? 'page' : undefined}
+                  aria-label={`${chain.name} 产业链`}>
+                  <i className={`ic-chain-status ${ready ? 'is-ready' : ''}`} aria-hidden="true" />
+                  <span className="ic-chain-copy">
+                    <strong>{chain.name}</strong>
+                    <small>{ready ? '可查看链上动态' : '等待首次生成'}</small>
+                  </span>
+                  <span className="ic-chain-meta">
+                    <small>{ready ? `R${chain.currentRevisionId}` : '未生成'}</small>
+                    <span aria-hidden="true">›</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {!chains.length && !loading && (
+            <div className="ic-empty-prompts">
+              <p>从一个产业主题开始，系统会核对全景、上下游、应用与代表公司。</p>
+              {SUGGESTIONS.map((suggestion) => (
+                <button type="button" key={suggestion} onClick={() => void createChain(suggestion)}>{suggestion}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </aside>
 
       <main className="ic-main">
