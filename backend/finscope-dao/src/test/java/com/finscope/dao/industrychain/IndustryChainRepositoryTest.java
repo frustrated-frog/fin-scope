@@ -20,9 +20,11 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IndustryChainRepositoryTest {
@@ -92,6 +94,33 @@ class IndustryChainRepositoryTest {
                 .orElseThrow(AssertionError::new).getId());
         assertTrue(repository.activeRevision(chain.getId()).isPresent());
         assertEquals(revision.getId(), repository.activeRevision(chain.getId())
+                .orElseThrow(AssertionError::new).getId());
+    }
+
+    @Test
+    void claimsLocallyAndRejectsASecondGeneratorForTheSameRevision() {
+        IndustryChain chain = repository.createChain("机器人", "机器人");
+        IndustryChainRevision revision = repository.createRevision(chain.getId());
+
+        Optional<IndustryChainRevision> first = repository.claimGeneration(chain.getId(), revision.getId());
+        Optional<IndustryChainRevision> duplicate = repository.claimGeneration(chain.getId(), revision.getId());
+
+        assertTrue(first.isPresent());
+        assertFalse(duplicate.isPresent());
+    }
+
+    @Test
+    void expiredRevisionCannotPublishOverANewerRevision() {
+        IndustryChain chain = repository.createChain("机器人", "机器人");
+        IndustryChainRevision queued = repository.createRevision(chain.getId());
+        IndustryChainRevision expired = repository.claimGeneration(chain.getId(), queued.getId())
+                .orElseThrow(AssertionError::new);
+        repository.fail(expired, "STALE_REVISION_EXPIRED", "任务租约已过期");
+        IndustryChainRevision current = repository.createRevision(chain.getId());
+
+        assertThrows(IllegalStateException.class, () -> repository.publish(expired, graph("过期版本")));
+        assertFalse(repository.findPublishedGraph(chain.getId()).isPresent());
+        assertEquals(current.getId(), repository.activeRevision(chain.getId())
                 .orElseThrow(AssertionError::new).getId());
     }
 

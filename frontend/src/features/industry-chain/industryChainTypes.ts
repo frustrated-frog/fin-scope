@@ -90,12 +90,22 @@ export type IndustryChainRevision = {
   id: number;
   chainId: number;
   status: 'RUNNING' | 'READY' | 'FAILED';
-  stage: 'QUEUED' | 'COLLECTING_EVIDENCE' | 'SYNTHESIZING' | 'COMPLETED';
+  stage: 'QUEUED' | 'DISPATCHED' | 'COLLECTING_EVIDENCE' | 'SYNTHESIZING'
+    | 'COMPLETING_STRUCTURE' | 'VALIDATING_STRUCTURE' | 'COMPLETED';
   message?: string;
   errorCode?: string;
   retryable?: boolean;
   createdAt?: string;
   completedAt?: string;
+};
+
+export type IndustryChainStructureAssessment = {
+  status: 'BUILDING' | 'UPGRADE_AVAILABLE' | 'ENRICHMENT_RECOMMENDED' | 'COMPLETE';
+  score: number;
+  semanticNodeCount: number;
+  coveredStageCount: number;
+  stageCount: number;
+  gaps: string[];
 };
 
 export type IndustryChainEvidence = {
@@ -151,6 +161,7 @@ export type IndustryChainWorkspace = {
   chain: IndustryChain;
   revision: IndustryChainRevision | null;
   graph: IndustryChainGraph | null;
+  structure?: IndustryChainStructureAssessment;
 };
 
 export type IndustryChainEventImpact = {

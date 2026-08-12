@@ -34,26 +34,64 @@ public class IndustryChainGenerationExecutor {
     }
 
     public void schedule(IndustryChain chain, IndustryChainRevision revision) {
-        executor.execute(() -> execute(chain, revision));
+        schedule(chain.getId(), revision.getId());
     }
 
+    public void schedule(Long chainId, Long revisionId) {
+        executor.execute(() -> executeRequested(chainId, revisionId, "local-recovery"));
+    }
+
+    public void executeRequested(Long chainId, Long revisionId, String eventId) {
+        IndustryChainRevision revision = repository.claimGeneration(chainId, revisionId).orElse(null);
+        if (revision == null) {
+            log.info("Skipping duplicate industry-chain generation: eventId={}, chainId={}, revisionId={}",
+                    eventId, chainId, revisionId);
+            return;
+        }
+        IndustryChain chain = repository.findChain(chainId).orElse(null);
+        if (chain == null) {
+            repository.fail(revision, "CHAIN_NOT_FOUND", "产业链主题不存在，无法继续补全");
+            return;
+        }
+        log.info("Industry-chain generation claimed: eventId={}, chainId={}, revisionId={}",
+                eventId, chainId, revisionId);
+        executeClaimed(chain, revision);
+    }
+
+    /** 仅供同步单元测试与兼容调用；生产异步入口必须先通过 executeRequested 领取。 */
     public void execute(IndustryChain chain, IndustryChainRevision revision) {
+        executeClaimed(chain, revision);
+    }
+
+    private void executeClaimed(IndustryChain chain, IndustryChainRevision revision) {
         String stage = "COLLECTING_EVIDENCE";
         try {
             progress(revision, stage, "正在通过三路搜索核对产业全景、上下游与代表公司");
             List<IndustryChainEvidence> evidence = collector.collect(chain.getName());
-            stage = "SYNTHESIZING";
-            progress(revision, stage, "公开资料已冻结，正在生成节点、关系与证据引用");
-            IndustryChainGraph graph = synthesis.synthesize(chain.getName(), evidence);
+            IndustryChainGraph previous = repository.findPublishedGraph(chain.getId()).orElse(null);
+            stage = previous == null ? "SYNTHESIZING" : "COMPLETING_STRUCTURE";
+            progress(revision, stage, previous == null
+                    ? "公开资料已冻结，正在生成节点、关系与证据引用"
+                    : "正在沿用有效产业骨架，补齐材料、设备、部件、技术与应用节点");
+            IndustryChainGraph graph = previous == null
+                    ? synthesis.synthesize(chain.getName(), evidence)
+                    : synthesis.synthesize(chain.getName(), evidence, previous);
             graph.setChainId(chain.getId());
             graph.setRevisionId(revision.getId());
+            stage = "VALIDATING_STRUCTURE";
+            progress(revision, stage, "结构补全已完成，正在校验环节覆盖、关系语义与研究画像");
             repository.publish(revision, graph);
-        } catch (Exception error) {
+        } catch (IllegalArgumentException error) {
             log.warn("Industry-chain generation failed: chainId={}, stage={}, errorType={}, reason={}",
                     chain.getId(), stage, error.getClass().getSimpleName(), compactReason(error));
-            String code = "COLLECTING_EVIDENCE".equals(stage)
-                    ? "EVIDENCE_COLLECTION_FAILED" : "SYNTHESIS_FAILED";
-            repository.fail(revision, code, "本次图谱生成失败，已保留上一版图谱，可以稍后重试");
+            repository.fail(revision, "SYNTHESIS_FAILED",
+                    "本次图谱结构未通过校验，已保留上一版图谱，可以重新生成");
+        } catch (Exception error) {
+            log.warn("Industry-chain generation will retry: chainId={}, stage={}, errorType={}, reason={}",
+                    chain.getId(), stage, error.getClass().getSimpleName(), compactReason(error));
+            repository.releaseGeneration(revision, "生成服务暂时不可用，任务等待 Kafka 重试或恢复扫描");
+            throw error instanceof RuntimeException ? (RuntimeException) error
+                    : new IllegalStateException("产业链图谱生成暂时失败", error);
         }
     }
 

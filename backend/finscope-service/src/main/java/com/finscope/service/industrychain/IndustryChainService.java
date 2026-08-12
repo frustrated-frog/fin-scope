@@ -8,8 +8,11 @@ import com.finscope.dao.industrychain.IndustryChainRepository;
 import com.finscope.domain.industrychain.IndustryChain;
 import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainGraph;
+import com.finscope.domain.industrychain.IndustryChainGenerationMessage;
+import com.finscope.domain.industrychain.IndustryChainGenerationPublisher;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainStructureAssessment;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
@@ -29,11 +32,17 @@ public class IndustryChainService {
 
     private final IndustryChainRepository repository;
     private final IndustryChainGenerationExecutor executor;
+    private final IndustryChainStructureAssessor structureAssessor;
+    private final IndustryChainGenerationPublisher generationPublisher;
 
     public IndustryChainService(IndustryChainRepository repository,
-                                IndustryChainGenerationExecutor executor) {
+                                IndustryChainGenerationExecutor executor,
+                                IndustryChainStructureAssessor structureAssessor,
+                                IndustryChainGenerationPublisher generationPublisher) {
         this.repository = repository;
         this.executor = executor;
+        this.structureAssessor = structureAssessor;
+        this.generationPublisher = generationPublisher;
     }
 
     public List<IndustryChain> list() {
@@ -52,13 +61,15 @@ public class IndustryChainService {
             }
         }
         IndustryChainRevision revision = start(chain);
-        return new Workspace(chain, revision, repository.findPublishedGraph(chain.getId()).orElse(null));
+        IndustryChainGraph graph = repository.findPublishedGraph(chain.getId()).orElse(null);
+        return new Workspace(chain, revision, graph, structureAssessor.assess(graph));
     }
 
     public Workspace get(Long chainId) {
         IndustryChain chain = requiredChain(chainId);
-        return new Workspace(chain, repository.latestRevision(chainId).orElse(null),
-                repository.findPublishedGraph(chainId).orElse(null));
+        IndustryChainGraph graph = repository.findPublishedGraph(chainId).orElse(null);
+        return new Workspace(chain, repository.latestRevision(chainId).orElse(null), graph,
+                structureAssessor.assess(graph));
     }
 
     public IndustryChainRevision refresh(Long chainId) {
@@ -112,7 +123,11 @@ public class IndustryChainService {
             throw error;
         }
         try {
-            executor.schedule(chain, revision);
+            IndustryChainGenerationMessage message = IndustryChainGenerationMessage.requested(
+                    chain.getId(), revision.getId());
+            if (!generationPublisher.publish(message)) {
+                executor.schedule(chain, revision);
+            }
         } catch (RuntimeException error) {
             return repository.fail(revision, "QUEUE_REJECTED", "图谱生成队列暂时繁忙，可以稍后重试");
         }
@@ -120,7 +135,9 @@ public class IndustryChainService {
     }
 
     private boolean isStale(IndustryChainRevision revision) {
-        return revision.getCreatedAt() != null && revision.getCreatedAt()
+        LocalDateTime heartbeat = revision.getLeaseUpdatedAt() == null
+                ? revision.getCreatedAt() : revision.getLeaseUpdatedAt();
+        return heartbeat != null && heartbeat
                 .isBefore(LocalDateTime.now().minusMinutes(REVISION_LEASE_MINUTES));
     }
 
@@ -141,16 +158,24 @@ public class IndustryChainService {
         private final IndustryChain chain;
         private final IndustryChainRevision revision;
         private final IndustryChainGraph graph;
+        private final IndustryChainStructureAssessment structure;
 
-        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph) {
+        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph,
+                         IndustryChainStructureAssessment structure) {
             this.chain = chain;
             this.revision = revision;
             this.graph = graph;
+            this.structure = structure;
+        }
+
+        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph) {
+            this(chain, revision, graph, null);
         }
 
         public IndustryChain getChain() { return chain; }
         public IndustryChainRevision getRevision() { return revision; }
         public IndustryChainGraph getGraph() { return graph; }
+        public IndustryChainStructureAssessment getStructure() { return structure; }
     }
 
     public static final class FocusResult {

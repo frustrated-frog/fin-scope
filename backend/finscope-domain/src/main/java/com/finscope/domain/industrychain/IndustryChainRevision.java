@@ -12,6 +12,8 @@ public class IndustryChainRevision {
     private String errorCode;
     private boolean retryable;
     private LocalDateTime createdAt;
+    private String leaseToken;
+    private LocalDateTime leaseUpdatedAt;
     private LocalDateTime completedAt;
 
     public Long getId() { return id; }
@@ -30,6 +32,10 @@ public class IndustryChainRevision {
     public void setRetryable(boolean retryable) { this.retryable = retryable; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getLeaseToken() { return leaseToken; }
+    public void setLeaseToken(String leaseToken) { this.leaseToken = leaseToken; }
+    public LocalDateTime getLeaseUpdatedAt() { return leaseUpdatedAt; }
+    public void setLeaseUpdatedAt(LocalDateTime leaseUpdatedAt) { this.leaseUpdatedAt = leaseUpdatedAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 }
