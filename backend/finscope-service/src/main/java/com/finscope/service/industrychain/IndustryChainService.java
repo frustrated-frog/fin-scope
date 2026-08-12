@@ -8,6 +8,8 @@ import com.finscope.dao.industrychain.IndustryChainRepository;
 import com.finscope.domain.industrychain.IndustryChain;
 import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainGraph;
+import com.finscope.domain.industrychain.IndustryChainGenerationMessage;
+import com.finscope.domain.industrychain.IndustryChainGenerationPublisher;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainRevision;
 import com.finscope.domain.industrychain.IndustryChainStructureAssessment;
@@ -31,13 +33,16 @@ public class IndustryChainService {
     private final IndustryChainRepository repository;
     private final IndustryChainGenerationExecutor executor;
     private final IndustryChainStructureAssessor structureAssessor;
+    private final IndustryChainGenerationPublisher generationPublisher;
 
     public IndustryChainService(IndustryChainRepository repository,
                                 IndustryChainGenerationExecutor executor,
-                                IndustryChainStructureAssessor structureAssessor) {
+                                IndustryChainStructureAssessor structureAssessor,
+                                IndustryChainGenerationPublisher generationPublisher) {
         this.repository = repository;
         this.executor = executor;
         this.structureAssessor = structureAssessor;
+        this.generationPublisher = generationPublisher;
     }
 
     public List<IndustryChain> list() {
@@ -118,7 +123,11 @@ public class IndustryChainService {
             throw error;
         }
         try {
-            executor.schedule(chain, revision);
+            IndustryChainGenerationMessage message = IndustryChainGenerationMessage.requested(
+                    chain.getId(), revision.getId());
+            if (!generationPublisher.publish(message)) {
+                executor.schedule(chain, revision);
+            }
         } catch (RuntimeException error) {
             return repository.fail(revision, "QUEUE_REJECTED", "图谱生成队列暂时繁忙，可以稍后重试");
         }
