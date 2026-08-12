@@ -141,9 +141,9 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v5"
+    assert result.report_schema_version == "single-stock-research-v6"
     assert result.model_version.startswith("competition-")
-    assert result.model_version.endswith("-v5.1")
+    assert result.model_version.endswith("-v6")
     assert result.raw_probability is not None
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
@@ -167,6 +167,22 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.model_competition.selected_model in {
         "LOGISTIC", "BOOSTED_STUMPS", "REGIME_LOGISTIC", "RULE_BASELINE",
     }
+    for candidate in result.model_competition.candidates:
+        assert candidate.role in {"CHAMPION", "CHALLENGER", "BASELINE"}
+        assert candidate.model_version.endswith("-v6")
+        assert 0 <= candidate.raw_probability <= 1
+        assert 0 <= candidate.calibrated_probability <= 1
+        assert candidate.shadow_decision in {"UP", "DOWN", "ABSTAIN"}
+        assert candidate.qualification_status in {
+            "QUALIFIED", "CONDITIONAL", "FAILED", "INSUFFICIENT_DATA",
+        }
+        assert candidate.locked_metrics.sample_count > 0
+        assert 0 <= candidate.locked_metrics.brier_score <= 1
+    champion = next(
+        item for item in result.model_competition.candidates if item.selected
+    )
+    assert champion.role == "CHAMPION"
+    assert champion.calibrated_probability == result.up_probability
     assert result.leakage_audit.status == "PASSED"
     assert result.leakage_audit.checked_sample_count > 0
     assert all("训练仅使用" not in item for item in result.leakage_audit.checks)

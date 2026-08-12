@@ -69,8 +69,8 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "competition-platt-selective-v5.1"
-REPORT_VERSION = "single-stock-research-v5"
+MODEL_VERSION = "competition-shadow-race-v6"
+REPORT_VERSION = "single-stock-research-v6"
 
 
 def build_forecast(
@@ -135,12 +135,24 @@ def build_forecast(
     validation = validate_walk_forward(
         samples, independent_stride_days=horizon_days, model_code=selected_model
     )
-    qualification = qualify_model(
-        samples, independent_stride_days=horizon_days, model_code=selected_model
-    )
     features = current_features(ordered, context=context)
-    raw_probability = qualification.model.predict(features)
-    probability = qualification.calibration.calibrate(raw_probability)
+    candidate_qualifications = {
+        item.code: qualify_model(
+            samples,
+            independent_stride_days=horizon_days,
+            model_code=item.code,
+        )
+        for item in competition.candidates
+    }
+    qualification = candidate_qualifications[selected_model]
+    candidate_probabilities = {
+        code: (
+            candidate.model.predict(features),
+            candidate.calibration.calibrate(candidate.model.predict(features)),
+        )
+        for code, candidate in candidate_qualifications.items()
+    }
+    raw_probability, probability = candidate_probabilities[selected_model]
     comparable = _comparable_observations(validation.observations, raw_probability)
     lower, expected, upper = _distribution(comparable)
     performance = simulate_strategy(
@@ -177,7 +189,7 @@ def build_forecast(
         lower_threshold=1.0 - PRIMARY_THRESHOLD,
         upper_threshold=PRIMARY_THRESHOLD,
     )
-    runtime_model_version = f"competition-{selected_model.lower()}-platt-v5.1"
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v6"
     trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
@@ -238,7 +250,15 @@ def build_forecast(
             selection_end_date=competition.selection_end_date,
             calibration_start_date=competition.calibration_start_date,
             selection_rule=competition.selection_rule,
-            candidates=[ModelCandidate.model_validate(asdict(item)) for item in competition.candidates],
+            candidates=[
+                _candidate_report(
+                    item,
+                    candidate_qualifications[item.code],
+                    candidate_probabilities[item.code],
+                    selected_model,
+                )
+                for item in competition.candidates
+            ],
         ),
         warnings=[
             *warnings,
@@ -252,6 +272,37 @@ def build_forecast(
             "主概率经过独立校准区 Platt 校准；锁定测试从未参与模型或校准器拟合",
             "方向判断允许弃权；覆盖后命中率必须与覆盖率同时阅读",
         ],
+    )
+
+
+def _candidate_report(
+    candidate,
+    qualification: ModelQualification,
+    probabilities: tuple[float, float],
+    selected_model: str,
+) -> ModelCandidate:
+    raw_probability, calibrated_probability = probabilities
+    role = (
+        "CHAMPION"
+        if candidate.code == selected_model
+        else "BASELINE"
+        if candidate.code == "RULE_BASELINE"
+        else "CHALLENGER"
+    )
+    shadow_decision, _ = _decision(
+        calibrated_probability, qualification.status
+    )
+    return ModelCandidate(
+        **asdict(candidate),
+        role=role,
+        model_version=f"competition-{candidate.code.lower()}-platt-v6",
+        raw_probability=raw_probability,
+        calibrated_probability=calibrated_probability,
+        shadow_decision=shadow_decision,
+        qualification_status=qualification.status,
+        locked_metrics=ProbabilityMetricSet.model_validate(
+            asdict(qualification.locked_test.calibrated_metrics)
+        ),
     )
 
 

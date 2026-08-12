@@ -257,6 +257,17 @@ class ModelCandidate(ForecastModel):
     brier_score: float
     log_loss: float
     baseline_brier_score: float
+    validation_fold_count: int = 1
+    brier_std: float = 0.0
+    role: Literal["CHAMPION", "CHALLENGER", "BASELINE"] = "CHALLENGER"
+    model_version: str = "competition-pending-v6"
+    raw_probability: float = Field(default=0.5, ge=0, le=1)
+    calibrated_probability: float = Field(default=0.5, ge=0, le=1)
+    shadow_decision: Literal["UP", "DOWN", "ABSTAIN"] = "ABSTAIN"
+    qualification_status: Literal[
+        "QUALIFIED", "CONDITIONAL", "FAILED", "INSUFFICIENT_DATA"
+    ] = "INSUFFICIENT_DATA"
+    locked_metrics: ProbabilityMetricSet | None = None
     reason: str
 
 
@@ -309,7 +320,7 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v5"
+    report_schema_version: str = "single-stock-research-v6"
     model_version: str = "competition-pending-v5"
     instrument_code: str
     as_of_date: str
