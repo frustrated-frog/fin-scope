@@ -273,7 +273,7 @@ class IndustryChainSynthesisAgentTest {
         assertTrue(prompt[0].contains("confidence 只能是 HIGH、MEDIUM、LOW"));
         assertTrue(prompt[0].contains("景气度、供需状态、核心指标、产业瓶颈"));
         assertTrue(prompt[0].contains("公司竞争格局"));
-        assertTrue(prompt[0].contains("每个 STAGE 至少生成 3 个直接语义子节点"));
+        assertTrue(prompt[0].contains("整图至少生成 9 个语义节点"));
     }
 
     private IndustryChainSynthesisAgent agent(String response) {
