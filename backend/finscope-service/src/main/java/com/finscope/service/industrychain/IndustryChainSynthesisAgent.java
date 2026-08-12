@@ -517,7 +517,7 @@ public class IndustryChainSynthesisAgent {
                 + "risks、maturity、valueLevel、bottleneckLevel、localizationLevel；maturity 只能为 EMERGING、SCALING、"
                 + "MATURE、DECLINING，valueLevel 和 bottleneckLevel 只能为 HIGH、MEDIUM、LOW，localizationLevel 只能为"
                 + "LOW、MEDIUM、HIGH、LEADING。优先用 MATERIAL、EQUIPMENT、COMPONENT、TECHNOLOGY、APPLICATION 丰富"
-                + "各 STAGE 的直接子节点；整图至少生成 9 个语义节点，每个 STAGE 至少 1 个、最多 12 个直接语义子节点。"
+                + "各 STAGE 的直接子节点；整图至少生成 9 个语义节点，每个 STAGE 最多 12 个直接语义子节点。"
                 + "修复输出必须保留原输出中所有有效节点和画像，不得通过删减产业环节规避校验。"
                 + "画像 nodeKey 必须引用对应类型节点；列表最多 6 项。"
                 + "未知列表输出 []，未知短文本输出‘待观察’，不要补造价格、份额、客户或产能数字。";

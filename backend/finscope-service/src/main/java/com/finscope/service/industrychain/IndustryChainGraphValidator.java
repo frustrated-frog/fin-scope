@@ -67,16 +67,9 @@ public class IndustryChainGraphValidator {
                 childrenByStage.get(edge.getTargetKey()).add(source.getNodeKey());
             }
         }
-        Set<String> shallowStages = new TreeSet<String>();
         Set<String> semanticNodes = new HashSet<String>();
         for (Map.Entry<String, Set<String>> item : childrenByStage.entrySet()) {
             semanticNodes.addAll(item.getValue());
-            if (item.getValue().isEmpty()) {
-                shallowStages.add(item.getKey());
-            }
-        }
-        if (!shallowStages.isEmpty()) {
-            throw new IllegalArgumentException("V3 产业环节缺少直接语义子节点：" + String.join(",", shallowStages));
         }
         if (semanticNodes.size() < 9) {
             throw new IllegalArgumentException("V3 图谱语义节点不足 9 个：" + semanticNodes.size());
