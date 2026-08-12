@@ -9,6 +9,7 @@ import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.rpc.quant.QuantDailyBarBatch;
 import com.finscope.rpc.quant.QuantDailyBarSource;
 import lombok.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,6 +26,7 @@ public class ForecastOutcomeSettlementService {
     private final QuantDailyBarSource bars;
     private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
 
+    @Autowired
     public ForecastOutcomeSettlementService(SingleStockForecastRunRepository runs,
                                             ForecastRunPersistenceService persistence,
                                             QuantDailyBarSource bars) {
