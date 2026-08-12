@@ -11,8 +11,8 @@ import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,22 +23,32 @@ public class SingleStockForecastService {
     private final PythonSingleStockForecastClient client;
     private final SingleStockForecastRunRepository runs;
     private final StrategyHoldingRepository holdings;
+    private final ForecastOutcomeSettlementService settlement;
     private final ObjectMapper json = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
+    @Autowired
     public SingleStockForecastService(PythonSingleStockForecastClient client,
                                       SingleStockForecastRunRepository runs,
-                                      StrategyHoldingRepository holdings) {
+                                      StrategyHoldingRepository holdings,
+                                      ForecastOutcomeSettlementService settlement) {
         this.client = client;
         this.runs = runs;
         this.holdings = holdings;
+        this.settlement = settlement;
     }
 
-    @Transactional
+    SingleStockForecastService(PythonSingleStockForecastClient client,
+                               SingleStockForecastRunRepository runs,
+                               StrategyHoldingRepository holdings) {
+        this(client, runs, holdings, null);
+    }
+
     public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
         String code = normalizeCode(requestedCode);
         validateHorizon(horizonDays);
+        settle(code + "." + market(code));
         SingleStockForecast report = client.forecast(code, horizonDays);
         SingleStockForecastRun.HoldingSnapshot holding = holdingSnapshot(code, report);
         SingleStockForecastRun value = new SingleStockForecastRun();
@@ -74,12 +84,19 @@ public class SingleStockForecastService {
         if (horizonDays != null) {
             validateHorizon(horizonDays);
         }
+        if (instrumentCode == null) {
+            settleAll();
+        } else {
+            settle(instrumentCode);
+        }
         return runs.findAll(instrumentCode, limit, horizonDays);
     }
 
     public SingleStockForecastRun detail(Long id) {
-        SingleStockForecastRun value = runs.findById(id)
+        SingleStockForecastRun existing = runs.findById(id)
                 .orElseThrow(() -> new BusinessException(BizErrorCode.SINGLE_STOCK_FORECAST_NOT_FOUND));
+        settle(existing.getInstrumentCode());
+        SingleStockForecastRun value = runs.findById(id).orElse(existing);
         try {
             value.setReport(json.readValue(value.getReportJson(), SingleStockForecast.class));
             value.setHoldingSnapshot(json.readValue(
@@ -87,6 +104,18 @@ public class SingleStockForecastService {
             return value;
         } catch (Exception error) {
             throw new IllegalStateException("无法读取单股预测研究记录", error);
+        }
+    }
+
+    private void settle(String instrumentCode) {
+        if (settlement != null) {
+            settlement.settlePending(instrumentCode);
+        }
+    }
+
+    private void settleAll() {
+        if (settlement != null) {
+            settlement.settleAllPending();
         }
     }
 

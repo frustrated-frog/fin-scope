@@ -135,6 +135,13 @@ public class SingleStockForecastRunRepository {
                 mapper, instrumentCode, Math.max(1, Math.min(limit, 200)));
     }
 
+    public List<String> findPendingInstrumentCodes(int limit) {
+        return jdbcTemplate.query("SELECT instrument_code FROM single_stock_forecast_run "
+                        + "WHERE maturity_status='PENDING' GROUP BY instrument_code "
+                        + "ORDER BY MIN(as_of_date),instrument_code LIMIT ?",
+                (rs, rowNum) -> rs.getString(1), Math.max(1, Math.min(limit, 50)));
+    }
+
     public List<SingleStockForecastRun> findHealthEvidence(String instrumentCode, int horizonDays,
                                                             String modelVersion, int limit) {
         return jdbcTemplate.query("SELECT * FROM single_stock_forecast_run WHERE instrument_code=? "
