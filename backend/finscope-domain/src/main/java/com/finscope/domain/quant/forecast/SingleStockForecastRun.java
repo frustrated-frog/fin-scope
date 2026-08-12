@@ -20,6 +20,7 @@ public class SingleStockForecastRun {
     private MaturityStatus maturityStatus = MaturityStatus.PENDING;
     private String reportJson;
     private String holdingSnapshotJson;
+    private ForecastOutcome outcome;
     private LocalDateTime createdAt;
     private SingleStockForecast report;
     private HoldingSnapshot holdingSnapshot;
@@ -45,5 +46,19 @@ public class SingleStockForecastRun {
         private Double unrealizedReturn;
         private String note;
         private String interpretation;
+    }
+
+    @Data
+    public static class ForecastOutcome {
+        private LocalDate entryDate;
+        private LocalDate exitDate;
+        private Double entryOpen;
+        private Double exitOpen;
+        private Double actualNetReturn;
+        private String actualDirection;
+        private Boolean correct;
+        private LocalDateTime settledAt;
+        private String sourceCode;
+        private String note;
     }
 }

@@ -38,6 +38,21 @@ public class SingleStockForecastRunRepository {
                 rs.getString("maturity_status")));
         value.setReportJson(rs.getString("report_json"));
         value.setHoldingSnapshotJson(rs.getString("holding_snapshot_json"));
+        if (rs.getString("settled_at") != null || rs.getString("outcome_note") != null) {
+            SingleStockForecastRun.ForecastOutcome outcome = new SingleStockForecastRun.ForecastOutcome();
+            outcome.setEntryDate(date(rs.getString("entry_date")));
+            outcome.setExitDate(date(rs.getString("exit_date")));
+            outcome.setEntryOpen(nullableDouble(rs, "entry_open"));
+            outcome.setExitOpen(nullableDouble(rs, "exit_open"));
+            outcome.setActualNetReturn(nullableDouble(rs, "actual_net_return"));
+            outcome.setActualDirection(rs.getString("actual_direction"));
+            int correct = rs.getInt("prediction_correct");
+            outcome.setCorrect(rs.wasNull() ? null : correct == 1);
+            outcome.setSettledAt(TimeUtil.localDateTime(rs, "settled_at"));
+            outcome.setSourceCode(rs.getString("outcome_source_code"));
+            outcome.setNote(rs.getString("outcome_note"));
+            value.setOutcome(outcome);
+        }
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         return value;
     };
@@ -112,5 +127,49 @@ public class SingleStockForecastRunRepository {
         return jdbcTemplate.query(
                 "SELECT * FROM single_stock_forecast_run WHERE instrument_code=? ORDER BY id DESC LIMIT ?",
                 mapper, instrumentCode, bounded);
+    }
+
+    public List<SingleStockForecastRun> findPending(String instrumentCode, int limit) {
+        return jdbcTemplate.query("SELECT * FROM single_stock_forecast_run WHERE instrument_code=? "
+                        + "AND maturity_status='PENDING' ORDER BY as_of_date,id LIMIT ?",
+                mapper, instrumentCode, Math.max(1, Math.min(limit, 200)));
+    }
+
+    public List<SingleStockForecastRun> findHealthEvidence(String instrumentCode, int horizonDays,
+                                                            String modelVersion, int limit) {
+        return jdbcTemplate.query("SELECT * FROM single_stock_forecast_run WHERE instrument_code=? "
+                        + "AND horizon_days=? AND model_version=? AND maturity_status='MATURED' "
+                        + "AND same_data_as_previous=0 ORDER BY as_of_date DESC,id DESC LIMIT ?",
+                mapper, instrumentCode, horizonDays, modelVersion, Math.max(1, Math.min(limit, 200)));
+    }
+
+    public boolean settle(Long id, SingleStockForecastRun.ForecastOutcome outcome) {
+        return jdbcTemplate.update("UPDATE single_stock_forecast_run SET maturity_status='MATURED',"
+                        + "entry_date=?,exit_date=?,entry_open=?,exit_open=?,actual_net_return=?,actual_direction=?,"
+                        + "prediction_correct=?,settled_at=?,outcome_source_code=?,outcome_note=? "
+                        + "WHERE id=? AND maturity_status='PENDING'",
+                text(outcome.getEntryDate()), text(outcome.getExitDate()), outcome.getEntryOpen(),
+                outcome.getExitOpen(), outcome.getActualNetReturn(), outcome.getActualDirection(),
+                outcome.getCorrect() == null ? null : outcome.getCorrect() ? 1 : 0,
+                TimeUtil.text(outcome.getSettledAt()), outcome.getSourceCode(), outcome.getNote(), id) == 1;
+    }
+
+    public boolean markUnavailable(Long id, String note) {
+        return jdbcTemplate.update("UPDATE single_stock_forecast_run SET maturity_status='UNAVAILABLE',"
+                        + "settled_at=?,outcome_note=? WHERE id=? AND maturity_status='PENDING'",
+                TimeUtil.text(LocalDateTime.now()), note, id) == 1;
+    }
+
+    private static LocalDate date(String value) {
+        return value == null ? null : LocalDate.parse(value);
+    }
+
+    private static String text(LocalDate value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static Double nullableDouble(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        double value = rs.getDouble(column);
+        return rs.wasNull() ? null : value;
     }
 }

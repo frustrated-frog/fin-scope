@@ -1298,9 +1298,21 @@ public class DatabaseInitializer implements InitializingBean {
                 + "data_fingerprint TEXT NOT NULL,model_version TEXT NOT NULL,"
                 + "report_schema_version TEXT NOT NULL,same_data_as_previous INTEGER NOT NULL DEFAULT 0,"
                 + "maturity_status TEXT NOT NULL DEFAULT 'PENDING',report_json TEXT NOT NULL,"
-                + "holding_snapshot_json TEXT,created_at TEXT NOT NULL)");
+                + "holding_snapshot_json TEXT,entry_date TEXT,exit_date TEXT,entry_open REAL,exit_open REAL,"
+                + "actual_net_return REAL,actual_direction TEXT,prediction_correct INTEGER,settled_at TEXT,"
+                + "outcome_source_code TEXT,outcome_note TEXT,created_at TEXT NOT NULL)");
         ensureColumn("single_stock_forecast_run", "horizon_days", "INTEGER NOT NULL DEFAULT 20");
         ensureColumn("single_stock_forecast_run", "maturity_status", "TEXT NOT NULL DEFAULT 'PENDING'");
+        ensureColumn("single_stock_forecast_run", "entry_date", "TEXT");
+        ensureColumn("single_stock_forecast_run", "exit_date", "TEXT");
+        ensureColumn("single_stock_forecast_run", "entry_open", "REAL");
+        ensureColumn("single_stock_forecast_run", "exit_open", "REAL");
+        ensureColumn("single_stock_forecast_run", "actual_net_return", "REAL");
+        ensureColumn("single_stock_forecast_run", "actual_direction", "TEXT");
+        ensureColumn("single_stock_forecast_run", "prediction_correct", "INTEGER");
+        ensureColumn("single_stock_forecast_run", "settled_at", "TEXT");
+        ensureColumn("single_stock_forecast_run", "outcome_source_code", "TEXT");
+        ensureColumn("single_stock_forecast_run", "outcome_note", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_code_created "
                 + "ON single_stock_forecast_run(instrument_code,created_at DESC,id DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
