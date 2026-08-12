@@ -109,6 +109,44 @@ class RadarHotspotScoreServiceTest {
         assertTrue(fresh.getTotalScore() - old.getTotalScore() >= 20);
     }
 
+    @Test
+    void copiedReportsDoNotCreateIndependentConfirmation() {
+        RadarSignal first = detailedSignal("CLS", "财联社", 1, 0.75D, now.minusMinutes(10),
+                "宁德时代发布新电池", "宁德时代发布新电池，能量密度提升20%");
+        RadarSignal copied = detailedSignal("AGGREGATOR", "资讯聚合", 1, 0.75D, now.minusMinutes(8),
+                "宁德时代发布新电池", "宁德时代发布新电池，能量密度提升20%");
+
+        RadarHotspotScoreService.Score score = service.score(Arrays.asList(first, copied), now);
+
+        assertEquals(1, score.getIndependentSourceCount());
+        assertTrue(score.getConfirmationScore() < 0.5D);
+        assertTrue(score.getConfidenceScore() < 70);
+    }
+
+    @Test
+    void rewardsSourceRankImprovementAndPenalizesFallingRank() {
+        RadarSignal rising = signal("CLS", 2, 0.80D, now.minusMinutes(10));
+        rising.setPreviousSourceRank(12);
+        RadarSignal falling = signal("CLS", 15, 0.80D, now.minusMinutes(10));
+        falling.setPreviousSourceRank(2);
+
+        RadarHotspotScoreService.Score risingScore = service.score(Collections.singletonList(rising), now);
+        RadarHotspotScoreService.Score fallingScore = service.score(Collections.singletonList(falling), now);
+
+        assertTrue(risingScore.getRankTrendScore() > fallingScore.getRankTrendScore());
+        assertTrue(risingScore.getTotalScore() > fallingScore.getTotalScore());
+    }
+
+    private RadarSignal detailedSignal(String provider, String source, int rank, double weight,
+                                       LocalDateTime publishedAt, String title, String content) {
+        RadarSignal value = signal(provider, rank, weight, publishedAt);
+        value.setSourceName(source);
+        value.setTitle(title);
+        value.setContent(content);
+        value.setCategoryCode("COMPANY");
+        return value;
+    }
+
     private RadarSignal signal(String provider, int rank, double weight, LocalDateTime publishedAt) {
         RadarSignal value = new RadarSignal();
         value.setProviderCode(provider);

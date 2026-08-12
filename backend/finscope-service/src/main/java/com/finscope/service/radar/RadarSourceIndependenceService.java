@@ -27,7 +27,7 @@ public class RadarSourceIndependenceService {
         for (RadarSignal signal : values) {
             if (signal == null) continue;
             RadarSignalFeatures features = analyzer.extract(signal);
-            observations.add(new Observation(signal, features, sourceGroup(signal), repostFingerprint(features)));
+            observations.add(new Observation(signal, features, sourceGroup(signal), repostFingerprint(signal, features)));
         }
         if (observations.isEmpty()) return Analysis.empty();
 
@@ -72,9 +72,10 @@ public class RadarSourceIndependenceService {
         return provider.isEmpty() ? "UNKNOWN" : provider;
     }
 
-    private String repostFingerprint(RadarSignalFeatures features) {
+    private String repostFingerprint(RadarSignal signal, RadarSignalFeatures features) {
         String content = features.getNormalizedContent();
         String value = features.getNormalizedTitle() + "|" + (content.isEmpty() ? features.getNormalizedTitle() : content);
+        if ("|".equals(value)) value = "empty:" + safe(signal.getItemId()) + ":" + sourceGroup(signal);
         return sha256(value);
     }
 
