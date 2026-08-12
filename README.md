@@ -54,13 +54,14 @@ FinScope 是一个本地优先的个人投资研究工作台。它把公开信�
 - 后端：Java 21、Spring Boot 2.7、Maven 多模块、SQLite、Jsoup、Rome RSS。
 - 前端：React 18、TypeScript、Vite 5、Vitest。
 - 缓存：Redis 7，用于研究资料和热点查询的可失效加速缓存，SQLite 仍是主数据源。
+- 消息队列：Kafka 3.9，用于雷达榜单生产完成后的热点预解读通知；榜单发布不等待模型调用。
 - 行情侧车：Python 3.11+、FastAPI、AkShare、pytdx、httpx，推荐通过 Docker 运行。
 - AI：OpenAI 兼容 Chat Completions 客户端、多个领域 Agent、统一运行留痕。
 - 持久化：SQLite 主库、Markdown Vault、抓取原文与上传文档。
 
 当前继续使用 SQLite，不引入 MySQL。FinScope 是单用户、本机运行的应用，SQLite 的单文件迁移、低运维成本和本地优先特性更适合当前阶段；项目已经启用 WAL、外键、连接池限制和 busy timeout。只有未来出现多用户并发写入、远程共享数据库或独立服务扩容需求时，才有必要评估 PostgreSQL/MySQL。
 
-Docker Compose 可以一次启动 Redis、Java 后端、React/Nginx 前端和 Python 行情侧车。SQLite 与 Markdown 数据通过 `./data` 挂载到后端容器，Redis 使用独立卷；Redis 重启或暂时不可用时，应用会回退到原有实时抓取链路。
+Docker Compose 可以一次启动 Redis、Kafka、Java 后端、React/Nginx 前端和 Python 行情侧车。SQLite 与 Markdown 数据通过 `./data` 挂载到后端容器，Redis 和 Kafka 使用独立卷；Redis 重启或暂时不可用时，应用会回退到原有实时抓取链路。
 
 ## 系统结构
 
@@ -72,13 +73,14 @@ Spring Boot :8080
     ├── SQLite: $FINSCOPE_DATA_ROOT/finance.db
     ├── Markdown/files: $FINSCOPE_DATA_ROOT/vault|raw|financials|exports
     ├── Redis :6379 (研究资料加速缓存)
+    ├── Kafka :19092 (雷达榜单完成事件与异步预解读)
     ├── RSS / Web / X / search / model providers
     └── Python market-data :8000
             ├── Tencent / Sina / Eastmoney / AkShare / pytdx
             └── provider snapshot SQLite in Docker volume
 
 Docker Compose
-    └── Nginx :5173 -> Spring Boot :8080 -> Redis / Python market-data
+    └── Nginx :5173 -> Spring Boot :8080 -> Redis / Kafka / Python market-data
 ```
 
 后端是模块化单体，依赖方向为 `web -> service -> dao/rpc -> domain/common`。Controller 不直接调用 Repository，外部访问统一放在 `finscope-rpc` 或独立行情服务中。
@@ -191,7 +193,7 @@ test -f data/finance.db
 docker compose up --build
 ```
 
-启动后访问 `http://localhost:5173`。后端、Redis 和行情侧车分别可通过 `http://localhost:8080`、`127.0.0.1:6379` 和 `http://localhost:8000/ready` 检查。后台运行可使用：
+启动后访问 `http://localhost:5173`。后端、Redis、Kafka 和行情侧车分别使用 `http://localhost:8080`、`127.0.0.1:6379`、`127.0.0.1:9092` 和 `http://localhost:8000/ready`。雷达每次完成 Top 20 快照后，会向 `finscope.radar.interpretation.requested.v1` 发送一条批次消息；消费者按事件幂等预生成 AI 解读并刷新视图版本。Kafka 或模型暂时不可用不会阻塞新榜单展示。
 
 ```bash
 docker compose up --build -d
@@ -199,7 +201,7 @@ docker compose logs -f backend
 docker compose down
 ```
 
-`docker compose down` 不会删除 Redis 和行情侧车卷；如需清理缓存卷，再执行 `docker compose down -v`。
+`docker compose down` 不会删除 Redis、Kafka 和行情侧车卷；如需清理缓存卷，再执行 `docker compose down -v`。
 
 ### 1. 准备本地数据目录
 
