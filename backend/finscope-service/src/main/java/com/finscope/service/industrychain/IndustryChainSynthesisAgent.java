@@ -27,8 +27,8 @@ import java.util.Set;
 @Service
 public class IndustryChainSynthesisAgent {
     private static final Logger log = LoggerFactory.getLogger(IndustryChainSynthesisAgent.class);
-    private static final int PRIMARY_TIMEOUT_MS = 90_000;
-    private static final int REPAIR_TIMEOUT_MS = 60_000;
+    private static final int PRIMARY_TIMEOUT_MS = 240_000;
+    private static final int REPAIR_TIMEOUT_MS = 180_000;
     private static final int MAX_OUTPUT_TOKENS = 9000;
     private static final int MAX_EVIDENCE_EXCERPT = 3000;
     private static final int MAX_LIMITATIONS_LENGTH = 1600;

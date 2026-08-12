@@ -49,8 +49,8 @@ public class IndustryChainGenerationExecutor {
             graph.setRevisionId(revision.getId());
             repository.publish(revision, graph);
         } catch (Exception error) {
-            log.warn("Industry-chain generation failed: chainId={}, stage={}, errorType={}",
-                    chain.getId(), stage, error.getClass().getSimpleName());
+            log.warn("Industry-chain generation failed: chainId={}, stage={}, errorType={}, reason={}",
+                    chain.getId(), stage, error.getClass().getSimpleName(), compactReason(error));
             String code = "COLLECTING_EVIDENCE".equals(stage)
                     ? "EVIDENCE_COLLECTION_FAILED" : "SYNTHESIS_FAILED";
             repository.fail(revision, code, "本次图谱生成失败，已保留上一版图谱，可以稍后重试");
@@ -62,5 +62,14 @@ public class IndustryChainGenerationExecutor {
         revision.setStage(stage);
         revision.setMessage(message);
         repository.updateRevision(revision);
+    }
+
+    private String compactReason(Exception error) {
+        String message = error.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            return "no-message";
+        }
+        String compact = message.replaceAll("[\\r\\n\\t]+", " ").replaceAll("\\s{2,}", " ").trim();
+        return compact.length() <= 240 ? compact : compact.substring(0, 240) + "...";
     }
 }
