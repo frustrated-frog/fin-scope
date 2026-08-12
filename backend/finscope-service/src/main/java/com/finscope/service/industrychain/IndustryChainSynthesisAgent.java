@@ -73,13 +73,18 @@ public class IndustryChainSynthesisAgent {
 
     public IndustryChainGraph synthesize(String chainName,
                                          List<IndustryChainEvidence> evidence) throws Exception {
+        return synthesize(chainName, evidence, null);
+    }
+
+    public IndustryChainGraph synthesize(String chainName, List<IndustryChainEvidence> evidence,
+                                         IndustryChainGraph previousGraph) throws Exception {
         if (evidence == null || evidence.isEmpty()) {
             throw new IllegalArgumentException("产业链归纳缺少公开证据");
         }
         if (llm == null || !llm.isConfigured()) {
             throw new IllegalStateException("产业链归纳模型暂不可用");
         }
-        String input = objectMapper.writeValueAsString(payload(chainName, evidence));
+        String input = objectMapper.writeValueAsString(payload(chainName, evidence, previousGraph));
         String candidate = llm.complete(systemPrompt(), input, PRIMARY_TIMEOUT_MS, MAX_OUTPUT_TOKENS);
         for (int attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
             try {
@@ -482,7 +487,8 @@ public class IndustryChainSynthesisAgent {
         return new ArrayList<String>(result);
     }
 
-    private Map<String, Object> payload(String chainName, List<IndustryChainEvidence> evidence) {
+    private Map<String, Object> payload(String chainName, List<IndustryChainEvidence> evidence,
+                                        IndustryChainGraph previousGraph) {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("chainName", chainName);
         List<Map<String, String>> rows = new ArrayList<Map<String, String>>();
@@ -497,11 +503,20 @@ public class IndustryChainSynthesisAgent {
             rows.add(row);
         }
         result.put("evidence", rows);
+        if (previousGraph != null) {
+            Map<String, Object> previous = new LinkedHashMap<String, Object>();
+            previous.put("schemaVersion", previousGraph.getSchemaVersion());
+            previous.put("nodes", previousGraph.getNodes());
+            previous.put("edges", previousGraph.getEdges());
+            result.put("previousGraph", previous);
+        }
         return result;
     }
 
     private String systemPrompt() {
         return "你是谨慎的产业研究员。只依据输入 evidence 输出一个 JSON 对象，不要 markdown。"
+                + "如果输入包含 previousGraph，旧图只提供结构候选、既有命名和待补环节；"
+                + "事实仍只能引用本轮 evidence 中存在的 evidenceCode，不得把旧图内容当作证据。"
                 + "根字段只能是 summary、limitations、researchContent、nodes、edges。节点字段必须完整且只能为 nodeKey、type、"
                 + "name、description、stageOrder、stockCode、confidence、evidenceRefs；关系字段必须完整且只能为"
                 + "edgeKey、sourceKey、targetKey、type、nature、description、confidence、strength、directionNote、evidenceRefs。"

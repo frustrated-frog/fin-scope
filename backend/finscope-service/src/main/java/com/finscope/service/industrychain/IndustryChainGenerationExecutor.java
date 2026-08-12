@@ -59,11 +59,18 @@ public class IndustryChainGenerationExecutor {
         try {
             progress(revision, stage, "正在通过三路搜索核对产业全景、上下游与代表公司");
             List<IndustryChainEvidence> evidence = collector.collect(chain.getName());
-            stage = "SYNTHESIZING";
-            progress(revision, stage, "公开资料已冻结，正在生成节点、关系与证据引用");
-            IndustryChainGraph graph = synthesis.synthesize(chain.getName(), evidence);
+            IndustryChainGraph previous = repository.findPublishedGraph(chain.getId()).orElse(null);
+            stage = previous == null ? "SYNTHESIZING" : "COMPLETING_STRUCTURE";
+            progress(revision, stage, previous == null
+                    ? "公开资料已冻结，正在生成节点、关系与证据引用"
+                    : "正在沿用有效产业骨架，补齐材料、设备、部件、技术与应用节点");
+            IndustryChainGraph graph = previous == null
+                    ? synthesis.synthesize(chain.getName(), evidence)
+                    : synthesis.synthesize(chain.getName(), evidence, previous);
             graph.setChainId(chain.getId());
             graph.setRevisionId(revision.getId());
+            stage = "VALIDATING_STRUCTURE";
+            progress(revision, stage, "结构补全已完成，正在校验环节覆盖、关系语义与研究画像");
             repository.publish(revision, graph);
         } catch (Exception error) {
             log.warn("Industry-chain generation failed: chainId={}, stage={}, errorType={}, reason={}",

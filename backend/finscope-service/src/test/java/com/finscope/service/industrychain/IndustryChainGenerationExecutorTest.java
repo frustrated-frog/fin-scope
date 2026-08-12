@@ -63,16 +63,19 @@ class IndustryChainGenerationExecutorTest {
         IndustryChain chain = chain();
         IndustryChainRevision revision = revision();
         IndustryChainGraph graph = new IndustryChainGraph();
+        IndustryChainGraph previous = new IndustryChainGraph();
         when(repository.claimGeneration(7L, 11L)).thenReturn(Optional.of(revision));
         when(repository.findChain(7L)).thenReturn(Optional.of(chain));
+        when(repository.findPublishedGraph(7L)).thenReturn(Optional.of(previous));
         when(collector.collect("AI算力")).thenReturn(Collections.emptyList());
-        when(synthesis.synthesize("AI算力", Collections.emptyList())).thenReturn(graph);
+        when(synthesis.synthesize("AI算力", Collections.emptyList(), previous)).thenReturn(graph);
         IndustryChainGenerationExecutor executor = new IndustryChainGenerationExecutor(
                 repository, collector, synthesis, Runnable::run);
 
         executor.executeRequested(7L, 11L, "event-1");
 
         verify(repository).publish(revision, graph);
+        verify(synthesis).synthesize("AI算力", Collections.emptyList(), previous);
     }
 
     @Test

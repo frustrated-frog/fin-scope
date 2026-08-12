@@ -317,6 +317,34 @@ class IndustryChainSynthesisAgentTest {
         assertTrue(prompt[0].contains("整图至少生成 9 个语义节点"));
     }
 
+    @Test
+    void suppliesPreviousV2StructureAsCompletionContextWithoutMakingItEvidence() throws Exception {
+        String[] userPrompt = {""};
+        String[] systemPrompt = {""};
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String system, String user) {
+                systemPrompt[0] = system;
+                userPrompt[0] = user;
+                return validJson();
+            }
+        };
+        IndustryChainGraph previous = new IndustryChainGraph();
+        previous.setSchemaVersion("INDUSTRY_CHAIN_V2");
+        previous.setNodes(Arrays.asList(previousNode("stage:old", "STAGE", "旧版核心环节")));
+        previous.setEdges(Collections.emptyList());
+
+        new IndustryChainSynthesisAgent(llm, new ObjectMapper(), new IndustryChainGraphValidator())
+                .synthesize("AI算力", evidence(), previous);
+
+        assertTrue(userPrompt[0].contains("previousGraph"));
+        assertTrue(userPrompt[0].contains("旧版核心环节"));
+        assertTrue(userPrompt[0].contains("INDUSTRY_CHAIN_V2"));
+        assertTrue(systemPrompt[0].contains("旧图只提供结构候选"));
+        assertTrue(systemPrompt[0].contains("事实仍只能引用本轮 evidence"));
+    }
+
     private IndustryChainSynthesisAgent agent(String response) {
         LlmChatClient llm = new LlmChatClient() {
             @Override public boolean isConfigured() { return true; }
@@ -335,6 +363,16 @@ class IndustryChainSynthesisAgentTest {
         value.setSourceTier("T2");
         value.setExcerpt("芯片经服务器集成后进入数据中心");
         return Collections.singletonList(value);
+    }
+
+    private com.finscope.domain.industrychain.IndustryChainNode previousNode(String key, String type, String name) {
+        com.finscope.domain.industrychain.IndustryChainNode node =
+                new com.finscope.domain.industrychain.IndustryChainNode();
+        node.setNodeKey(key);
+        node.setType(type);
+        node.setName(name);
+        node.setDescription("旧版结构描述");
+        return node;
     }
 
     private String validJson() {
