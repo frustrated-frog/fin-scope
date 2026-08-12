@@ -11,6 +11,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** 统一管理页面快照 revision，生产完成后才向订阅端发布。 */
 @Service
@@ -44,10 +46,30 @@ public class ViewRevisionService {
     /** 发布已经完整写入 Redis 的指定版本，避免读取端观察到半成品快照。 */
     public ViewRevision publish(String scope, long revision, LocalDateTime completedAt) {
         String normalized = normalize(scope);
-        cache.activateRevision(normalized, revision);
+        if (!cache.activateRevision(normalized, revision)) {
+            throw new IllegalStateException("页面版本发布失败: " + normalized);
+        }
         ViewRevision published = new ViewRevision(normalized, revision, completedAt);
         publisher.publish(published);
         return published;
+    }
+
+    /** 同一生产批次涉及的页面范围必须全部激活成功后才广播。 */
+    public boolean publishBatch(Map<String, Long> revisions, LocalDateTime completedAt) {
+        if (revisions == null || revisions.isEmpty()) {
+            return false;
+        }
+        Map<String, Long> normalized = new LinkedHashMap<String, Long>();
+        for (Map.Entry<String, Long> entry : revisions.entrySet()) {
+            normalized.put(normalize(entry.getKey()), entry.getValue());
+        }
+        if (!cache.activateRevisions(normalized)) {
+            return false;
+        }
+        for (Map.Entry<String, Long> entry : normalized.entrySet()) {
+            publisher.publish(new ViewRevision(entry.getKey(), entry.getValue(), completedAt));
+        }
+        return true;
     }
 
     public List<ViewRevision> current(Collection<String> scopes) {

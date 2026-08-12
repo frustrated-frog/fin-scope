@@ -7,8 +7,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,5 +44,24 @@ class ViewRevisionServiceTest {
         assertEquals(Arrays.asList(3L, 4L), Arrays.asList(
                 service.current(Arrays.asList("NEWS", "radar")).get(0).getRevision(),
                 service.current(Arrays.asList("NEWS", "radar")).get(1).getRevision()));
+    }
+
+    @Test
+    void publishesARevisionBatchOnlyAfterAtomicCacheActivationSucceeds() {
+        VersionedViewCacheRepository cache = mock(VersionedViewCacheRepository.class);
+        ViewRevisionPublisher publisher = mock(ViewRevisionPublisher.class);
+        ViewRevisionService service = new ViewRevisionService(cache, publisher, Clock.systemUTC());
+        Map<String, Long> revisions = new LinkedHashMap<String, Long>();
+        revisions.put("RADAR", 4L);
+        revisions.put("dashboard", 9L);
+        Map<String, Long> normalized = new LinkedHashMap<String, Long>();
+        normalized.put("radar", 4L);
+        normalized.put("dashboard", 9L);
+        when(cache.activateRevisions(normalized)).thenReturn(true);
+
+        assertTrue(service.publishBatch(revisions, null));
+
+        verify(cache).activateRevisions(normalized);
+        verify(publisher, org.mockito.Mockito.times(2)).publish(any());
     }
 }

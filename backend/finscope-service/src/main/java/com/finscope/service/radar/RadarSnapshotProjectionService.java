@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 /** 只消费本轮生产结果，将可点击的页面列表一次性物化为 Redis 快照。 */
 @Service
@@ -56,8 +57,12 @@ public class RadarSnapshotProjectionService {
                 rankings.rankings(values), TTL);
         if (!radarWritten || !dashboardWritten) return false;
         LocalDateTime completedAt = run.getCompletedAt();
-        revisions.publish("radar", radarRevision, completedAt);
-        revisions.publish("dashboard", dashboardRevision, completedAt);
+        Map<String, Long> batchRevisions = new LinkedHashMap<String, Long>();
+        batchRevisions.put("radar", radarRevision);
+        batchRevisions.put("dashboard", dashboardRevision);
+        if (!revisions.publishBatch(batchRevisions, completedAt)) {
+            return false;
+        }
         latestEvents = new ArrayList<RadarEvent>(values);
         latestRun = run;
         return true;

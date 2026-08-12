@@ -12,8 +12,11 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -37,6 +40,9 @@ class RadarSnapshotProjectionServiceTest {
         when(snapshots.nextRevision("dashboard")).thenReturn(9L);
         when(snapshots.write(eq("radar"), eq(4L), eq(RadarSnapshotProjectionService.DEFAULT_RADAR_VARIANT), any(), any())).thenReturn(true);
         when(snapshots.write(eq("dashboard"), eq(9L), eq(RadarSnapshotProjectionService.HOTSPOT_VARIANT), any(), any())).thenReturn(true);
+        Map<String, Long> revisionsToPublish = new LinkedHashMap<String, Long>();
+        revisionsToPublish.put("radar", 4L); revisionsToPublish.put("dashboard", 9L);
+        when(revisions.publishBatch(revisionsToPublish, run.getCompletedAt())).thenReturn(true);
         RadarEventInterpretation interpretation = new RadarEventInterpretation();
         interpretation.setStatus("COMPLETED");
         RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary();
@@ -51,14 +57,29 @@ class RadarSnapshotProjectionServiceTest {
         verify(rankings).rankings(any());
         verify(workspace, times(2)).reconcileRead(any(), any());
         verify(workspace).createChangeNotifications(any(), any());
-        verify(revisions).publish("radar", 4L, run.getCompletedAt());
-        verify(revisions).publish("dashboard", 9L, run.getCompletedAt());
+        verify(revisions).publishBatch(revisionsToPublish, run.getCompletedAt());
         ArgumentCaptor<Object> radarView = ArgumentCaptor.forClass(Object.class);
         verify(snapshots).write(eq("radar"), eq(4L), eq(RadarSnapshotProjectionService.DEFAULT_RADAR_VARIANT),
                 radarView.capture(), any());
         ResearchRadarView projected = (ResearchRadarView) radarView.getValue();
         assertTrue(projected.getEvents().get(0).isFollowed());
         assertTrue("COMPLETED".equals(projected.getEvents().get(0).getInterpretationStatus()));
+    }
+
+    @Test
+    void doesNotReportSuccessWhenTheAtomicRevisionActivationFails() {
+        ViewSnapshotCacheService snapshots = mock(ViewSnapshotCacheService.class);
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
+        DashboardHotspotRankingService rankings = mock(DashboardHotspotRankingService.class);
+        RadarSnapshotProjectionService service = new RadarSnapshotProjectionService(snapshots, revisions, rankings,
+                null, null);
+        RadarRefreshRun run = run();
+        when(snapshots.nextRevision("radar")).thenReturn(4L);
+        when(snapshots.nextRevision("dashboard")).thenReturn(9L);
+        when(snapshots.write(eq("radar"), eq(4L), any(), any(), any())).thenReturn(true);
+        when(snapshots.write(eq("dashboard"), eq(9L), any(), any(), any())).thenReturn(true);
+
+        assertFalse(service.prewarm(Collections.singletonList(event(1L, "FINANCE")), run));
     }
 
     private RadarRefreshRun run() {

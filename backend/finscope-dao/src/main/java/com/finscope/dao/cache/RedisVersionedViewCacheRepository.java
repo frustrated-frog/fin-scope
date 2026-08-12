@@ -5,10 +5,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -81,14 +85,42 @@ public class RedisVersionedViewCacheRepository implements VersionedViewCacheRepo
     }
 
     @Override
-    public void activateRevision(String namespace, long revision) {
+    public boolean activateRevision(String namespace, long revision) {
         if (!enabled || invalid(namespace) || revision < 0) {
-            return;
+            return false;
         }
         try {
             redisTemplate.opsForValue().set(revisionKey(namespace), String.valueOf(revision));
+            return true;
         } catch (RuntimeException error) {
             log.warn("Redis 页面快照版本发布失败，保留上一版本: namespace={}, error={}", namespace, error.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean activateRevisions(Map<String, Long> revisions) {
+        if (!enabled || revisions == null || revisions.isEmpty()) {
+            return false;
+        }
+        List<String> keys = new ArrayList<String>();
+        List<String> values = new ArrayList<String>();
+        for (Map.Entry<String, Long> entry : revisions.entrySet()) {
+            if (invalid(entry.getKey()) || entry.getValue() == null || entry.getValue() < 0) {
+                return false;
+            }
+            keys.add(revisionKey(entry.getKey()));
+            values.add(String.valueOf(entry.getValue()));
+        }
+        String scriptText = "for i=1,#KEYS do redis.call('SET',KEYS[i],ARGV[i]) end return 1";
+        try {
+            Long result = redisTemplate.execute(new DefaultRedisScript<Long>(scriptText, Long.class), keys,
+                    values.toArray(new String[0]));
+            return Long.valueOf(1L).equals(result);
+        } catch (RuntimeException error) {
+            log.warn("Redis 页面快照批量版本发布失败，保留上一批版本: namespaces={}, error={}",
+                    revisions.keySet(), error.getMessage());
+            return false;
         }
     }
 
