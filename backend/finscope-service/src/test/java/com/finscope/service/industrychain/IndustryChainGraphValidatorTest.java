@@ -94,14 +94,12 @@ class IndustryChainGraphValidatorTest {
     }
 
     @Test
-    void rejectsV3WhenSemanticOrCompanyProfilesDoNotCoverGraphNodes() {
+    void allowsTransparentUnratedSemanticNodesButRejectsMissingCompanyProfiles() {
         IndustryChainGraph missingSemantic = semanticGraph();
         missingSemantic.getResearchContent().setNodeProfiles(new ArrayList<IndustryChainResearchContent.NodeProfile>(
                 missingSemantic.getResearchContent().getNodeProfiles()));
         missingSemantic.getResearchContent().getNodeProfiles().remove(0);
-        IllegalArgumentException semanticError = assertThrows(
-                IllegalArgumentException.class, () -> validator.validate(missingSemantic));
-        assertEquals("V3 节点画像未覆盖全部语义节点：material:steel", semanticError.getMessage());
+        assertDoesNotThrow(() -> validator.validate(missingSemantic));
 
         IndustryChainGraph missingCompany = semanticGraph();
         missingCompany.getNodes().add(node("company:a", "COMPANY", "企业甲", null));

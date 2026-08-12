@@ -124,25 +124,20 @@ public class IndustryChainGraphValidator {
             validateRequiredEnum(profile.getLocalizationLevel(), LOCALIZATION, "节点国产化等级");
         }
         if (requireCompleteCoverage) {
-            validateCoverage(nodes, stageKeys, companyKeys, nodeKeys);
+            validateCoverage(nodes, stageKeys, companyKeys);
         }
     }
 
     private void validateCoverage(Map<String, IndustryChainNode> nodes,
                                   Set<String> stageProfiles,
-                                  Set<String> companyProfiles,
-                                  Set<String> nodeProfiles) {
+                                  Set<String> companyProfiles) {
         Set<String> missingStages = new TreeSet<String>();
         Set<String> missingCompanies = new TreeSet<String>();
-        Set<String> missingSemanticNodes = new TreeSet<String>();
         for (IndustryChainNode node : nodes.values()) {
             if ("STAGE".equals(node.getType()) && !stageProfiles.contains(node.getNodeKey())) {
                 missingStages.add(node.getNodeKey());
             } else if ("COMPANY".equals(node.getType()) && !companyProfiles.contains(node.getNodeKey())) {
                 missingCompanies.add(node.getNodeKey());
-            } else if (!"STAGE".equals(node.getType()) && !"COMPANY".equals(node.getType())
-                    && !"INDUSTRY_CHAIN".equals(node.getType()) && !nodeProfiles.contains(node.getNodeKey())) {
-                missingSemanticNodes.add(node.getNodeKey());
             }
         }
         if (!missingStages.isEmpty()) {
@@ -150,9 +145,6 @@ public class IndustryChainGraphValidator {
         }
         if (!missingCompanies.isEmpty()) {
             throw new IllegalArgumentException("V3 公司画像未覆盖全部公司节点：" + String.join(",", missingCompanies));
-        }
-        if (!missingSemanticNodes.isEmpty()) {
-            throw new IllegalArgumentException("V3 节点画像未覆盖全部语义节点：" + String.join(",", missingSemanticNodes));
         }
     }
 
