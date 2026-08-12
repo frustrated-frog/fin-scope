@@ -17504,6 +17504,58 @@ input[type="checkbox"] {
 .forecast-model-race>header p{margin:0;color:var(--muted);font-size:9px;line-height:1.6}
 .forecast-model-race td:first-child{display:grid;gap:3px}
 .forecast-model-race td:first-child small{color:var(--muted);font:7px ui-monospace,monospace}
+.forecast-model-race{--race-accent:var(--forecast-indigo);border-top:1px solid var(--line);background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 95%,var(--forecast-indigo)),var(--surface) 42%)}
+.forecast-model-race>.forecast-race-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:23px 24px 19px}
+.forecast-race-heading>div:first-child{display:grid;gap:5px}
+.forecast-race-heading h4{margin:0;font:500 23px "Iowan Old Style","Palatino Linotype",serif;letter-spacing:-.02em}
+.forecast-race-heading h4 b{font:inherit}
+.forecast-race-heading h4 i{padding:0 6px;color:var(--forecast-cyan);font-style:normal}
+.forecast-race-heading p{max-width:720px}
+.forecast-race-status{display:grid;grid-template-columns:auto auto;gap:3px 13px;min-width:190px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--race-accent) 34%,var(--line));border-radius:11px;background:color-mix(in srgb,var(--surface) 88%,var(--race-accent))}
+.forecast-race-status>span{align-self:end;color:var(--race-accent)!important}
+.forecast-race-status>strong{grid-row:1/3;grid-column:2;align-self:center;font:500 25px "Iowan Old Style","Palatino Linotype",serif!important;font-variant-numeric:tabular-nums}
+.forecast-race-status>small{color:var(--muted);font:7px ui-monospace,monospace;white-space:nowrap}
+.forecast-race-status[data-status="PROMOTION_REVIEW"]{--race-accent:var(--forecast-cyan)}
+.forecast-race-status[data-status="CHAMPION_LEADS"]{--race-accent:var(--forecast-cyan)}
+.forecast-race-status[data-status="EVIDENCE_INCOMPLETE"]{--race-accent:var(--forecast-oxide)}
+.forecast-race-progress{height:3px;background:var(--line)}
+.forecast-race-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--forecast-indigo),var(--forecast-cyan));transition:width 280ms ease}
+.forecast-race-legend{display:flex;align-items:center;gap:17px;padding:12px 24px;border-bottom:1px solid var(--line);color:var(--muted);font-size:8px}
+.forecast-race-legend>span{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.forecast-race-legend>span i{width:8px;height:8px;border:2px solid var(--forecast-indigo);border-radius:50%}
+.forecast-race-legend>span:nth-child(2) i{border-color:var(--forecast-cyan);border-radius:2px;transform:rotate(45deg)}
+.forecast-race-legend>span:nth-child(3) i{border-color:var(--muted);border-radius:0}
+.forecast-race-legend>p{margin:0 0 0 auto;text-align:right;line-height:1.5}
+.forecast-race-lanes{display:grid}
+.forecast-race-lane{--lane-color:var(--forecast-cyan);position:relative;display:grid;gap:16px;padding:20px 24px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,color-mix(in srgb,var(--lane-color) 4%,transparent),transparent 32%)}
+.forecast-race-lane[data-role="CHAMPION"]{--lane-color:var(--forecast-indigo);box-shadow:inset 3px 0 var(--lane-color)}
+.forecast-race-lane[data-role="BASELINE"]{--lane-color:var(--muted)}
+.forecast-race-lane[data-review="true"]{box-shadow:inset 3px 0 var(--forecast-cyan),inset 0 0 40px color-mix(in srgb,var(--forecast-cyan) 8%,transparent)}
+.forecast-race-lane>header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px}
+.forecast-race-lane>header>div:first-child{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.forecast-race-lane>header span{grid-column:1/-1;color:var(--lane-color)}
+.forecast-race-lane h5{margin:0;font:600 14px/1.25 inherit}
+.forecast-race-lane code{align-self:center;color:var(--muted);font-size:7px}
+.forecast-race-probability{display:grid!important;gap:3px!important;text-align:right}
+.forecast-race-probability strong{font:650 12px ui-monospace,monospace!important;font-variant-numeric:tabular-nums}
+.forecast-race-probability small{color:var(--muted);font-size:8px}
+.forecast-race-track{position:relative;display:grid;grid-template-columns:40% 20% 40%;height:18px;margin:0 3px;border-top:1px solid var(--line-strong);color:var(--muted);font:7px ui-monospace,monospace}
+.forecast-race-track::before{content:"";position:absolute;top:-3px;left:40%;width:20%;height:5px;background:color-mix(in srgb,var(--forecast-amber) 22%,transparent)}
+.forecast-race-track>i{position:absolute;z-index:2;top:-6px;width:10px;height:10px;margin-left:-5px;border:2px solid var(--surface);border-radius:50%;background:var(--lane-color);box-shadow:0 0 0 1px var(--lane-color),0 2px 7px color-mix(in srgb,var(--lane-color) 40%,transparent)}
+.forecast-race-track>span{padding-top:6px}
+.forecast-race-track>span:nth-of-type(2){text-align:center}
+.forecast-race-track>span:nth-of-type(3){text-align:right}
+.forecast-race-evidence{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden;background:color-mix(in srgb,var(--surface) 94%,transparent)}
+.forecast-race-evidence section{display:grid;gap:4px;min-width:0;padding:11px 13px}
+.forecast-race-evidence section+section{border-left:1px solid var(--line)}
+.forecast-race-evidence span{color:var(--muted);font:7px ui-monospace,monospace}
+.forecast-race-evidence strong{font:650 10px ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.forecast-race-evidence small{overflow:hidden;color:var(--muted);font-size:7px;text-overflow:ellipsis;white-space:nowrap}
+.forecast-race-evidence section[data-live="true"]{background:color-mix(in srgb,var(--lane-color) 7%,transparent)}
+.forecast-race-evidence section[data-improved="true"] strong{color:var(--forecast-cyan)}
+.forecast-model-race>footer{display:grid;gap:5px;padding:15px 24px!important;border-left:3px solid var(--forecast-indigo);background:color-mix(in srgb,var(--surface) 91%,var(--forecast-indigo))!important}
+.forecast-model-race>footer strong{font-size:9px;line-height:1.55}
+.forecast-model-race>footer span{color:var(--muted);font:7px/1.5 ui-monospace,monospace}
 .forecast-research-console>footer{display:flex;flex-wrap:wrap;gap:7px 16px;padding:13px 22px;background:color-mix(in srgb,var(--surface) 97%,#eef3f6);color:var(--muted);font-size:8px}
 .forecast-research-console>footer p{flex-basis:100%;margin:0}
 .forecast-research-console>footer span::before{content:"✓";margin-right:5px;color:var(--forecast-cyan)}
@@ -17560,5 +17612,5 @@ input[type="checkbox"] {
 .forecast-health-vitals>footer strong{font-size:9px;line-height:1.6}
 .forecast-health-vitals>footer small{color:var(--muted);font:7px/1.5 ui-monospace,monospace;word-break:break-word}
 
-@media(max-width:900px){.forecast-context-ribbon{grid-template-columns:repeat(2,1fr)}.forecast-live-proof-body{grid-template-columns:1fr}.forecast-outcome-docket{border-right:0;border-bottom:1px solid var(--line)}}
-@media(max-width:560px){.forecast-context-ribbon,.forecast-model-race>header{grid-template-columns:1fr}.forecast-context-ribbon article+article{border-left:0}.forecast-model-race>header{align-items:start}.forecast-live-proof-head{align-items:flex-start;flex-direction:column}.forecast-health-seal{width:100%}.forecast-health-rail{padding:0 16px}.forecast-health-rail>div:not(:last-child)::after{display:none}.forecast-outcome-route{grid-template-columns:1fr 1fr}.forecast-outcome-route>i{display:none}.forecast-outcome-route .forecast-outcome-return{grid-column:1/-1}.forecast-health-vitals dl{grid-template-columns:1fr}.forecast-health-vitals dl>div{border-right:0}.forecast-outcome-docket{padding:22px 18px}}
+@media(max-width:900px){.forecast-context-ribbon{grid-template-columns:repeat(2,1fr)}.forecast-race-evidence{grid-template-columns:repeat(2,1fr)}.forecast-race-evidence section:nth-child(3){border-left:0;border-top:1px solid var(--line)}.forecast-race-evidence section:nth-child(4){border-top:1px solid var(--line)}.forecast-live-proof-body{grid-template-columns:1fr}.forecast-outcome-docket{border-right:0;border-bottom:1px solid var(--line)}}
+@media(max-width:560px){.forecast-context-ribbon,.forecast-model-race>.forecast-race-heading{grid-template-columns:1fr}.forecast-context-ribbon article+article{border-left:0}.forecast-model-race>.forecast-race-heading{align-items:start}.forecast-race-status{width:100%}.forecast-race-legend{align-items:flex-start;flex-wrap:wrap}.forecast-race-legend>p{flex-basis:100%;margin:0;text-align:left}.forecast-race-lane{padding:18px 16px}.forecast-race-lane>header{align-items:flex-start;flex-direction:column}.forecast-race-probability{text-align:left}.forecast-race-evidence{grid-template-columns:1fr 1fr}.forecast-live-proof-head{align-items:flex-start;flex-direction:column}.forecast-health-seal{width:100%}.forecast-health-rail{padding:0 16px}.forecast-health-rail>div:not(:last-child)::after{display:none}.forecast-outcome-route{grid-template-columns:1fr 1fr}.forecast-outcome-route>i{display:none}.forecast-outcome-route .forecast-outcome-return{grid-column:1/-1}.forecast-health-vitals dl{grid-template-columns:1fr}.forecast-health-vitals dl>div{border-right:0}.forecast-outcome-docket{padding:22px 18px}}

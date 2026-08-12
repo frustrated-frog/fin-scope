@@ -290,7 +290,13 @@ export interface SingleStockForecast {
     calibrationStartDate: string; selectionRule: string;
     candidates: Array<{ code: string; name: string; selected: boolean;
       selectionSampleCount: number; accuracy: number; brierScore: number;
-      logLoss: number; baselineBrierScore: number; reason: string }> };
+      logLoss: number; baselineBrierScore: number; reason: string;
+      validationFoldCount?: number; brierStd?: number;
+      role?: 'CHAMPION' | 'CHALLENGER' | 'BASELINE'; modelVersion?: string;
+      rawProbability?: number; calibratedProbability?: number;
+      shadowDecision?: 'UP' | 'DOWN' | 'ABSTAIN';
+      qualificationStatus?: 'QUALIFIED' | 'CONDITIONAL' | 'FAILED' | 'INSUFFICIENT_DATA';
+      lockedMetrics?: ForecastProbabilityMetrics }> };
   leakageAudit?: { status: string; checkedSampleCount: number; checks: string[] };
   qlibReference?: { status: string; role: string; runtimeDependency: boolean };
   warnings: string[];
@@ -306,6 +312,7 @@ export interface SingleStockForecastRun {
     actualNetReturn?: number; actualDirection?: 'UP' | 'DOWN'; correct?: boolean | null;
     settledAt?: string; sourceCode?: string; note?: string };
   modelHealth?: ForecastModelHealth;
+  modelRace?: ForecastModelRace;
   holdingSnapshot?: { held: boolean; instrumentCode: string; instrumentName?: string; role?: string;
     targetWeight?: number; currentWeight?: number; quantity?: number; averageCost?: number;
     lastClose?: number; estimatedMarketValue?: number; unrealizedReturn?: number;
@@ -320,4 +327,19 @@ export interface ForecastModelHealth {
   brierScore?: number; baselineBrierScore?: number; logLoss?: number;
   observedUpRate?: number; firstAsOfDate?: string; lastAsOfDate?: string;
   conclusion: string;
+}
+
+export interface ForecastModelRace {
+  instrumentCode: string; horizonDays: number;
+  status: 'EVIDENCE_ACCUMULATING' | 'EVIDENCE_INCOMPLETE' | 'PROMOTION_REVIEW'
+    | 'CHAMPION_LEADS' | 'NO_STABLE_EDGE';
+  sampleCount: number; minimumPromotionSamples: number; championCode?: string;
+  promotionCandidateCode?: string; conclusion: string;
+  firstAsOfDate?: string; lastAsOfDate?: string;
+  candidates: Array<{ modelCode: string; modelName: string;
+    role: 'CHAMPION' | 'CHALLENGER' | 'BASELINE'; sampleCount: number;
+    brierScore: number; logLoss: number; brierSkillScore: number;
+    coveredCount: number; coverage: number; coveredAccuracy?: number;
+    brierDeltaVsChampion: number; logLossDeltaVsChampion: number;
+    promotionEligible: boolean }>;
 }

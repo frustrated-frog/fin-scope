@@ -106,9 +106,37 @@ const report = {
   modelCompetition: { selectedModel: 'BOOSTED_STUMPS', selectionEndDate: '2021-01-01',
     calibrationStartDate: '2021-01-02', selectionRule: '锁定测试不参与冠军选择', candidates: [
       { code: 'LOGISTIC', name: '正则化逻辑回归', selected: false, selectionSampleCount: 20,
-        accuracy: .55, brierScore: .245, logLoss: .68, baselineBrierScore: .25, reason: '未胜出' },
+        accuracy: .55, brierScore: .245, logLoss: .68, baselineBrierScore: .25, reason: '未胜出',
+        validationFoldCount: 3, brierStd: .018, role: 'CHALLENGER',
+        modelVersion: 'competition-logistic-platt-v6', rawProbability: .57,
+        calibratedProbability: .55, shadowDecision: 'ABSTAIN', qualificationStatus: 'CONDITIONAL',
+        lockedMetrics: { sampleCount: 24, accuracy: .54, brierScore: .247,
+          baselineBrierScore: .25, brierSkillScore: .012, logLoss: .684,
+          expectedCalibrationError: .09 } },
       { code: 'BOOSTED_STUMPS', name: '轻量梯度提升树桩', selected: true, selectionSampleCount: 20,
-        accuracy: .6, brierScore: .23, logLoss: .65, baselineBrierScore: .25, reason: '开发区内部验证最优' }
+        accuracy: .6, brierScore: .23, logLoss: .65, baselineBrierScore: .25,
+        reason: '开发区内部验证最优', validationFoldCount: 3, brierStd: .011, role: 'CHAMPION',
+        modelVersion: 'competition-boosted-stumps-platt-v6', rawProbability: .64,
+        calibratedProbability: .62, shadowDecision: 'UP', qualificationStatus: 'QUALIFIED',
+        lockedMetrics: { sampleCount: 24, accuracy: .63, brierScore: .226,
+          baselineBrierScore: .25, brierSkillScore: .096, logLoss: .641,
+          expectedCalibrationError: .06 } },
+      { code: 'REGIME_LOGISTIC', name: '市场状态感知逻辑回归', selected: false,
+        selectionSampleCount: 20, accuracy: .59, brierScore: .234, logLoss: .657,
+        baselineBrierScore: .25, reason: '多折结果接近冠军，进入影子观察', validationFoldCount: 3,
+        brierStd: .009, role: 'CHALLENGER', modelVersion: 'competition-regime-logistic-platt-v6',
+        rawProbability: .61, calibratedProbability: .59, shadowDecision: 'ABSTAIN',
+        qualificationStatus: 'CONDITIONAL', lockedMetrics: { sampleCount: 24, accuracy: .58,
+          brierScore: .236, baselineBrierScore: .25, brierSkillScore: .056, logLoss: .659,
+          expectedCalibrationError: .07 } },
+      { code: 'RULE_BASELINE', name: '规则基线', selected: false, selectionSampleCount: 20,
+        accuracy: .52, brierScore: .252, logLoss: .697, baselineBrierScore: .25,
+        reason: '保留可解释的简单基线', validationFoldCount: 3, brierStd: .014,
+        role: 'BASELINE', modelVersion: 'competition-rule-baseline-platt-v6', rawProbability: .51,
+        calibratedProbability: .50, shadowDecision: 'ABSTAIN', qualificationStatus: 'FAILED',
+        lockedMetrics: { sampleCount: 24, accuracy: .5, brierScore: .251,
+          baselineBrierScore: .25, brierSkillScore: -.004, logLoss: .695,
+          expectedCalibrationError: .11 } }
     ] },
   leakageAudit: { status: 'PASSED', checkedSampleCount: 2320,
     checks: ['滚动特征只使用信号日及以前数据', '锁定测试不参与冠军选择'] },
@@ -129,7 +157,23 @@ const run = { ...summary, maturityStatus: 'MATURED', report, holdingSnapshot: { 
     directionOutputPaused: false, sampleCount: 12, coveredCount: 8, abstainedCount: 4,
     coverage: .6667, coveredAccuracy: .75, brierScore: .214, baselineBrierScore: .25,
     logLoss: .612, observedUpRate: .5833, firstAsOfDate: '2026-05-01',
-    lastAsOfDate: '2026-08-06', conclusion: '近 12 次到期预测的概率质量优于 0.5 无信息基准，方向门禁开放。' } };
+    lastAsOfDate: '2026-08-06', conclusion: '近 12 次到期预测的概率质量优于 0.5 无信息基准，方向门禁开放。' },
+  modelRace: { instrumentCode: '600519.SH', horizonDays: 5, championCode: 'BOOSTED_STUMPS',
+    status: 'EVIDENCE_ACCUMULATING', sampleCount: 8, minimumPromotionSamples: 12,
+    conclusion: '真实到期证据仍在积累，当前不触发模型晋升审查。', candidates: [
+      { modelCode: 'BOOSTED_STUMPS', modelName: '轻量梯度提升树桩', role: 'CHAMPION',
+        sampleCount: 8, coveredCount: 6, coverage: .75, coveredAccuracy: .667,
+        brierScore: .231, brierSkillScore: .076, logLoss: .651,
+        brierDeltaVsChampion: 0, logLossDeltaVsChampion: 0, promotionEligible: false },
+      { modelCode: 'REGIME_LOGISTIC', modelName: '市场状态感知逻辑回归', role: 'CHALLENGER',
+        sampleCount: 8, coveredCount: 5, coverage: .625, coveredAccuracy: .8,
+        brierScore: .219, brierSkillScore: .124, logLoss: .637,
+        brierDeltaVsChampion: -.012, logLossDeltaVsChampion: -.014, promotionEligible: false },
+      { modelCode: 'RULE_BASELINE', modelName: '规则基线', role: 'BASELINE', sampleCount: 8,
+        coveredCount: 3, coverage: .375, coveredAccuracy: .667, brierScore: .252,
+        brierSkillScore: -.008, logLoss: .697, brierDeltaVsChampion: .021,
+        logLossDeltaVsChampion: .046, promotionEligible: false }
+    ] } };
 
 beforeEach(() => vi.unstubAllGlobals());
 
@@ -170,6 +214,12 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('市场上下文与模型赛马')).toBeInTheDocument();
   expect(screen.getByText('沪深300')).toBeInTheDocument();
   expect(screen.getByText('轻量梯度提升树桩')).toBeInTheDocument();
+  expect(screen.getAllByText('市场状态感知逻辑回归').length).toBeGreaterThan(0);
+  expect(screen.getByText('历史离线资格赛')).toBeInTheDocument();
+  expect(screen.getByText('真实到期影子赛')).toBeInTheDocument();
+  expect(screen.getByText('8 / 12')).toBeInTheDocument();
+  expect(screen.getByText('冻结概率 62.0%')).toBeInTheDocument();
+  expect(screen.getByText(/不会自动换模/)).toBeInTheDocument();
   expect(screen.getByText('防未来检查通过')).toBeInTheDocument();
   expect(screen.getByText('Qlib 未参与本次预测')).toBeInTheDocument();
   expect(screen.getByText('真实到期验证与模型健康')).toBeInTheDocument();
