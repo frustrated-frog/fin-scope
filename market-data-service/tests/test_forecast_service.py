@@ -162,9 +162,11 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.context.market.coverage == 1.0
     assert result.context.market.regime in {"UPTREND", "DOWNTREND", "RANGE", "HIGH_VOLATILITY"}
     assert result.context.industry.status == "UNAVAILABLE"
-    assert len(result.model_competition.candidates) == 3
+    assert len(result.model_competition.candidates) == 4
     assert sum(item.selected for item in result.model_competition.candidates) == 1
-    assert result.model_competition.selected_model in {"LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE"}
+    assert result.model_competition.selected_model in {
+        "LOGISTIC", "BOOSTED_STUMPS", "REGIME_LOGISTIC", "RULE_BASELINE",
+    }
     assert result.leakage_audit.status == "PASSED"
     assert result.leakage_audit.checked_sample_count > 0
     assert all("训练仅使用" not in item for item in result.leakage_audit.checks)

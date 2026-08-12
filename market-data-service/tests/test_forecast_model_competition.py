@@ -4,7 +4,10 @@ from datetime import date, timedelta
 import math
 
 from finscope_market_data.forecast.features import ForecastSample
-from finscope_market_data.forecast.model_competition import run_model_competition
+from finscope_market_data.forecast.model_competition import (
+    RegimeAwareLogisticModel,
+    run_model_competition,
+)
 
 
 def samples(count: int) -> list[ForecastSample]:
@@ -29,13 +32,15 @@ def test_model_competition_selects_only_from_development_validation() -> None:
 
     result = run_model_competition(history, independent_stride_days=5)
 
-    assert len(result.candidates) == 3
+    assert len(result.candidates) == 4
     assert {item.code for item in result.candidates} == {
-        "LOGISTIC", "BOOSTED_STUMPS", "RULE_BASELINE",
+        "LOGISTIC", "BOOSTED_STUMPS", "REGIME_LOGISTIC", "RULE_BASELINE",
     }
     assert sum(item.selected for item in result.candidates) == 1
     assert result.selected_model in {item.code for item in result.candidates}
     assert all(item.selection_sample_count > 0 for item in result.candidates)
+    assert all(item.validation_fold_count >= 3 for item in result.candidates)
+    assert all(item.brier_std >= 0 for item in result.candidates)
     assert result.selection_end_date < result.calibration_start_date
     assert result.calibration_start_date == history[int(len(history) * 0.60)].signal_date
     selected_validation = history[
@@ -57,3 +62,25 @@ def test_model_competition_is_deterministic_and_bounded() -> None:
     assert first == second
     assert all(0 <= item.brier_score <= 1 for item in first.candidates)
     assert all(item.log_loss >= 0 for item in first.candidates)
+
+
+def test_regime_model_falls_back_to_global_probability_for_small_regimes() -> None:
+    history = samples(180)
+
+    model = RegimeAwareLogisticModel.fit(history, minimum_regime_samples=500)
+
+    assert model.regime_models == ()
+    assert model.predict(history[-1].features) == model.global_model.predict(
+        history[-1].features
+    )
+
+
+def test_each_competition_fold_purges_labels_that_exit_after_validation_starts() -> None:
+    result = run_model_competition(samples(600), independent_stride_days=5)
+
+    assert len(result.fold_audits) >= 3
+    assert all(
+        audit.training_last_exit_date < audit.validation_start_date
+        for audit in result.fold_audits
+    )
+    assert all(audit.validation_sample_count > 0 for audit in result.fold_audits)
