@@ -38,3 +38,15 @@ test('defines the complete responsive semantic graph visual contract', () => {
   expect(styles).toMatch(/@media\s*\(max-width:\s*760px\)[\s\S]*\.ic-inspector\s*{[^}]*position:\s*relative/);
   expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
 });
+
+test('centers a fixed graph on wide desktops and keeps the semantic layer copy readable', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  expect(styles).toMatch(/\.ic-canvas\s*{[^}]*margin-inline:\s*auto/s);
+  expect(styles).toMatch(/\.ic-layer-title strong\s*{[^}]*font-size:\s*14px/s);
+  expect(styles).toMatch(/\.ic-layer-options button strong\s*{[^}]*font-size:\s*12px/s);
+  expect(styles).toMatch(/\.ic-layer-options button small\s*{[^}]*font-size:\s*9px/s);
+  expect(styles).toMatch(/\.ic-layer-guide p span\s*{[^}]*font-size:\s*10px/s);
+  expect(styles).toMatch(/\.ic-layer-legend > span\s*{[^}]*font:\s*500 9px\/1\.2/s);
+});
