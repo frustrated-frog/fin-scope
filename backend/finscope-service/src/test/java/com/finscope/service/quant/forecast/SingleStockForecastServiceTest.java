@@ -1,6 +1,7 @@
 package com.finscope.service.quant.forecast;
 
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
+import com.finscope.dao.quant.ForecastCandidateRunRepository;
 import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -144,6 +146,58 @@ class SingleStockForecastServiceTest {
 
         assertSame(forecast, result.getReport());
         verify(client).forecast("600519", 5);
+    }
+
+    @Test
+    void savesEveryVersionSixCandidateAsFrozenShadowEvidence() {
+        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+        ForecastCandidateRunRepository candidates = mock(ForecastCandidateRunRepository.class);
+        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
+        SingleStockForecast forecast = forecast();
+        forecast.setReportSchemaVersion("single-stock-research-v6");
+        SingleStockForecast.ModelCompetition competition = new SingleStockForecast.ModelCompetition();
+        competition.setSelectedModel("LOGISTIC");
+        competition.getCandidates().add(candidate("LOGISTIC", "CHAMPION", .61d));
+        competition.getCandidates().add(candidate("REGIME_LOGISTIC", "CHALLENGER", .66d));
+        forecast.setModelCompetition(competition);
+        when(client.forecast("600519", 5)).thenReturn(forecast);
+        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
+        when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> {
+            SingleStockForecastRun value = invocation.getArgument(0);
+            value.setId(17L);
+            return value;
+        });
+        SingleStockForecastService service = new SingleStockForecastService(
+                client, runs, candidates, null, holdings, null, null);
+
+        service.forecast("600519", 5);
+
+        org.mockito.ArgumentCaptor<java.util.List> saved =
+                org.mockito.ArgumentCaptor.forClass(java.util.List.class);
+        verify(candidates).saveAll(eq(17L), saved.capture());
+        assertEquals(2, saved.getValue().size());
+    }
+
+    private SingleStockForecast.ModelCandidate candidate(String code, String role, double probability) {
+        SingleStockForecast.ModelCandidate value = new SingleStockForecast.ModelCandidate();
+        value.setCode(code);
+        value.setName(code);
+        value.setSelected("CHAMPION".equals(role));
+        value.setRole(role);
+        value.setModelVersion("competition-" + code.toLowerCase() + "-platt-v6");
+        value.setRawProbability(probability + .02d);
+        value.setCalibratedProbability(probability);
+        value.setShadowDecision(probability >= .6d ? "UP" : "ABSTAIN");
+        value.setQualificationStatus("QUALIFIED");
+        SingleStockForecast.ProbabilityMetricSet metrics = new SingleStockForecast.ProbabilityMetricSet();
+        metrics.setSampleCount(15);
+        metrics.setAccuracy(.60d);
+        metrics.setBrierScore(.22d);
+        metrics.setLogLoss(.64d);
+        metrics.setBrierSkillScore(.08d);
+        value.setLockedMetrics(metrics);
+        return value;
     }
 
     private SingleStockForecast forecast() {

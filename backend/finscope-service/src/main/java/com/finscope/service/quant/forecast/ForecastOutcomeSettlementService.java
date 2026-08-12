@@ -3,6 +3,7 @@ package com.finscope.service.quant.forecast;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
+import com.finscope.dao.quant.ForecastCandidateRunRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
@@ -21,13 +22,21 @@ import java.util.List;
 public class ForecastOutcomeSettlementService {
     private static final double DEFAULT_ROUND_TRIP_COST = 0.0015d;
     private final SingleStockForecastRunRepository runs;
+    private final ForecastCandidateRunRepository candidates;
     private final QuantDailyBarSource bars;
     private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
 
     public ForecastOutcomeSettlementService(SingleStockForecastRunRepository runs,
+                                            ForecastCandidateRunRepository candidates,
                                             QuantDailyBarSource bars) {
         this.runs = runs;
+        this.candidates = candidates;
         this.bars = bars;
+    }
+
+    ForecastOutcomeSettlementService(SingleStockForecastRunRepository runs,
+                                     QuantDailyBarSource bars) {
+        this(runs, null, bars);
     }
 
     public SettlementSummary settlePending(String instrumentCode) {
@@ -45,6 +54,9 @@ public class ForecastOutcomeSettlementService {
             int signal = indexOf(ordered, run.getAsOfDate());
             if (signal < 0) {
                 if (runs.markUnavailable(run.getId(), "历史信号日无法在当前 QFQ 日线中定位")) {
+                    if (candidates != null) {
+                        candidates.markUnavailableByForecastRunId(run.getId(), LocalDateTime.now());
+                    }
                     unavailable++;
                 }
                 continue;
@@ -76,6 +88,10 @@ public class ForecastOutcomeSettlementService {
             outcome.setSourceCode(batch.getSourceCode());
             outcome.setNote("按冻结 T+1 开盘入场、T+N+1 开盘退出与双边成本口径结算");
             if (runs.settle(run.getId(), outcome)) {
+                if (candidates != null) {
+                    candidates.settleByForecastRunId(run.getId(), netReturn,
+                            actualDirection, outcome.getSettledAt());
+                }
                 matured++;
             }
         }

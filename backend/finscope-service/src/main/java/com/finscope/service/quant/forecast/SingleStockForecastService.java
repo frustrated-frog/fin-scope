@@ -6,9 +6,11 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
+import com.finscope.dao.quant.ForecastCandidateRunRepository;
 import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
+import com.finscope.domain.quant.forecast.ForecastCandidateRun;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
@@ -26,6 +28,8 @@ public class SingleStockForecastService {
     private static final Logger log = LoggerFactory.getLogger(SingleStockForecastService.class);
     private final PythonSingleStockForecastClient client;
     private final SingleStockForecastRunRepository runs;
+    private final ForecastCandidateRunRepository candidates;
+    private final ForecastRunPersistenceService persistence;
     private final StrategyHoldingRepository holdings;
     private final ForecastOutcomeSettlementService settlement;
     private final ForecastModelHealthService health;
@@ -36,11 +40,15 @@ public class SingleStockForecastService {
     @Autowired
     public SingleStockForecastService(PythonSingleStockForecastClient client,
                                       SingleStockForecastRunRepository runs,
+                                      ForecastCandidateRunRepository candidates,
+                                      ForecastRunPersistenceService persistence,
                                       StrategyHoldingRepository holdings,
                                       ForecastOutcomeSettlementService settlement,
                                       ForecastModelHealthService health) {
         this.client = client;
         this.runs = runs;
+        this.candidates = candidates;
+        this.persistence = persistence;
         this.holdings = holdings;
         this.settlement = settlement;
         this.health = health;
@@ -49,7 +57,15 @@ public class SingleStockForecastService {
     SingleStockForecastService(PythonSingleStockForecastClient client,
                                SingleStockForecastRunRepository runs,
                                StrategyHoldingRepository holdings) {
-        this(client, runs, holdings, null, null);
+        this(client, runs, null, null, holdings, null, null);
+    }
+
+    SingleStockForecastService(PythonSingleStockForecastClient client,
+                               SingleStockForecastRunRepository runs,
+                               StrategyHoldingRepository holdings,
+                               ForecastOutcomeSettlementService settlement,
+                               ForecastModelHealthService health) {
+        this(client, runs, null, null, holdings, settlement, health);
     }
 
     public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
@@ -79,11 +95,48 @@ public class SingleStockForecastService {
         } catch (Exception error) {
             throw new IllegalStateException("无法序列化单股预测研究记录", error);
         }
-        SingleStockForecastRun saved = runs.save(value);
+        List<ForecastCandidateRun> candidateRuns = candidateRuns(report);
+        SingleStockForecastRun saved = persistence == null
+                ? runs.save(value) : persistence.save(value, candidateRuns);
+        if (persistence == null && candidates != null) {
+            candidates.saveAll(saved.getId(), candidateRuns);
+        }
         saved.setReport(report);
         saved.setHoldingSnapshot(holding);
         saved.setModelHealth(modelHealth);
         return saved;
+    }
+
+    private List<ForecastCandidateRun> candidateRuns(SingleStockForecast report) {
+        List<ForecastCandidateRun> values = new java.util.ArrayList<ForecastCandidateRun>();
+        if (report.getModelCompetition() == null
+                || report.getModelCompetition().getCandidates() == null) {
+            return values;
+        }
+        for (SingleStockForecast.ModelCandidate candidate
+                : report.getModelCompetition().getCandidates()) {
+            if (candidate.getLockedMetrics() == null) {
+                continue;
+            }
+            ForecastCandidateRun value = new ForecastCandidateRun();
+            value.setModelCode(candidate.getCode());
+            value.setModelName(candidate.getName());
+            value.setModelVersion(candidate.getModelVersion());
+            value.setRole(candidate.getRole());
+            value.setRawProbability(candidate.getRawProbability());
+            value.setCalibratedProbability(candidate.getCalibratedProbability());
+            value.setShadowDecision(candidate.getShadowDecision());
+            value.setQualificationStatus(candidate.getQualificationStatus());
+            value.setLockedSampleCount(candidate.getLockedMetrics().getSampleCount());
+            value.setLockedAccuracy(candidate.getLockedMetrics().getAccuracy());
+            value.setLockedBrierScore(candidate.getLockedMetrics().getBrierScore());
+            value.setLockedLogLoss(candidate.getLockedMetrics().getLogLoss());
+            value.setLockedBrierSkillScore(candidate.getLockedMetrics().getBrierSkillScore());
+            value.setMaturityStatus("INSUFFICIENT_DATA".equals(report.getStatus())
+                    ? "UNAVAILABLE" : "PENDING");
+            values.add(value);
+        }
+        return values;
     }
 
     public List<SingleStockForecastRun> history(String requestedCode, int limit, Integer horizonDays) {

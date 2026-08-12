@@ -1320,6 +1320,22 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_single_stock_forecast_health "
                 + "ON single_stock_forecast_run(instrument_code,horizon_days,model_version,"
                 + "maturity_status,data_fingerprint,id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS single_stock_forecast_candidate_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,forecast_run_id INTEGER NOT NULL,"
+                + "instrument_code TEXT NOT NULL,as_of_date TEXT NOT NULL,horizon_days INTEGER NOT NULL,"
+                + "data_fingerprint TEXT NOT NULL,model_code TEXT NOT NULL,model_name TEXT NOT NULL,"
+                + "model_version TEXT NOT NULL,role TEXT NOT NULL,raw_probability REAL NOT NULL,"
+                + "calibrated_probability REAL NOT NULL,shadow_decision TEXT NOT NULL,"
+                + "qualification_status TEXT NOT NULL,locked_sample_count INTEGER NOT NULL,"
+                + "locked_accuracy REAL NOT NULL,locked_brier_score REAL NOT NULL,"
+                + "locked_log_loss REAL NOT NULL,locked_brier_skill_score REAL NOT NULL,"
+                + "maturity_status TEXT NOT NULL DEFAULT 'PENDING',actual_net_return REAL,"
+                + "actual_direction TEXT,prediction_correct INTEGER,settled_at TEXT,created_at TEXT NOT NULL,"
+                + "UNIQUE(forecast_run_id,model_code),"
+                + "FOREIGN KEY(forecast_run_id) REFERENCES single_stock_forecast_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_forecast_candidate_evidence "
+                + "ON single_stock_forecast_candidate_run(instrument_code,horizon_days,maturity_status,"
+                + "data_fingerprint,forecast_run_id,model_code)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,framework_code TEXT NOT NULL,"
                 + "latest_run_id INTEGER,status TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
