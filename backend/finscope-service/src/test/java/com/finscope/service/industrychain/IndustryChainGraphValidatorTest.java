@@ -116,7 +116,7 @@ class IndustryChainGraphValidatorTest {
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class, () -> validator.validate(graph));
 
-        assertEquals("V3 图谱语义节点不足 9 个：0",
+        assertEquals("V3 图谱语义节点不足 9 个：5",
                 error.getMessage());
     }
 

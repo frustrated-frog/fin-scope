@@ -137,16 +137,31 @@ public class IndustryChainSynthesisAgent {
             }
         }
         Set<String> assigned = new HashSet<String>();
+        Map<String, IndustryChainNode> relatedStages = new LinkedHashMap<String, IndustryChainNode>();
+        Map<String, IndustryChainNode> nodesByKey = new LinkedHashMap<String, IndustryChainNode>();
+        for (IndustryChainNode node : graph.getNodes()) {
+            nodesByKey.put(node.getNodeKey(), node);
+        }
         Set<String> edgeKeys = new HashSet<String>();
         for (IndustryChainEdge edge : graph.getEdges()) {
             edgeKeys.add(edge.getEdgeKey());
             if ("BELONGS_TO_STAGE".equals(edge.getType())) {
                 assigned.add(edge.getSourceKey());
             }
+            IndustryChainNode source = nodesByKey.get(edge.getSourceKey());
+            IndustryChainNode target = nodesByKey.get(edge.getTargetKey());
+            if (source != null && target != null && isSemanticNode(source) && "STAGE".equals(target.getType())) {
+                relatedStages.putIfAbsent(source.getNodeKey(), target);
+            } else if (source != null && target != null && "STAGE".equals(source.getType()) && isSemanticNode(target)) {
+                relatedStages.putIfAbsent(target.getNodeKey(), source);
+            }
         }
         int added = 0;
         for (IndustryChainNode node : graph.getNodes()) {
-            IndustryChainNode stage = stagesByOrder.get(node.getStageOrder());
+            IndustryChainNode stage = relatedStages.get(node.getNodeKey());
+            if (stage == null) {
+                stage = stagesByOrder.get(node.getStageOrder());
+            }
             if (!isSemanticNode(node) || stage == null || assigned.contains(node.getNodeKey())) {
                 continue;
             }

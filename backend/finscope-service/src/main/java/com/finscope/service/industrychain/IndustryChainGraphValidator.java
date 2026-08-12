@@ -54,22 +54,11 @@ public class IndustryChainGraphValidator {
                 || nodes.values().stream().noneMatch(node -> "INDUSTRY_CHAIN".equals(node.getType()))) {
             return;
         }
-        Map<String, Set<String>> childrenByStage = new HashMap<String, Set<String>>();
-        for (IndustryChainNode node : nodes.values()) {
-            if ("STAGE".equals(node.getType())) {
-                childrenByStage.put(node.getNodeKey(), new HashSet<String>());
-            }
-        }
-        for (IndustryChainEdge edge : graph.getEdges()) {
-            IndustryChainNode source = nodes.get(edge.getSourceKey());
-            if ("BELONGS_TO_STAGE".equals(edge.getType()) && source != null
-                    && isSemanticNode(source) && childrenByStage.containsKey(edge.getTargetKey())) {
-                childrenByStage.get(edge.getTargetKey()).add(source.getNodeKey());
-            }
-        }
         Set<String> semanticNodes = new HashSet<String>();
-        for (Map.Entry<String, Set<String>> item : childrenByStage.entrySet()) {
-            semanticNodes.addAll(item.getValue());
+        for (IndustryChainNode node : nodes.values()) {
+            if (isSemanticNode(node)) {
+                semanticNodes.add(node.getNodeKey());
+            }
         }
         if (semanticNodes.size() < 9) {
             throw new IllegalArgumentException("V3 图谱语义节点不足 9 个：" + semanticNodes.size());
