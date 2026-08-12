@@ -87,6 +87,29 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void removesDuplicateResearchProfilesWithoutRemoteRepair() throws Exception {
+        int[] calls = {0};
+        String response = validJson()
+                .replace("\"stageProfiles\":[", "\"stageProfiles\":[" + stageProfile("stage:chip") + ",")
+                .replace("\"nodeProfiles\":[", "\"nodeProfiles\":[" + nodeProfile("stage:chip") + ",");
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                calls[0]++;
+                return response;
+            }
+        };
+
+        IndustryChainGraph graph = new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertEquals(1, calls[0]);
+        assertEquals(3, graph.getResearchContent().getStageProfiles().size());
+        assertEquals(1, graph.getResearchContent().getNodeProfiles().size());
+    }
+
+    @Test
     void repairsOneInvalidOutputAndValidatesTheRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {
@@ -360,5 +383,14 @@ class IndustryChainSynthesisAgentTest {
         return "{\"nodeKey\":\"" + nodeKey + "\",\"industryPosition\":\"代表企业\","
                 + "\"coreProducts\":[\"算力产品\"],\"downstreamMarkets\":[\"数据中心\"],"
                 + "\"competitiveAdvantages\":[\"技术积累\"],\"keyVariables\":[\"产品迭代\"]}";
+    }
+
+    private String nodeProfile(String nodeKey) {
+        return "{\"nodeKey\":\"" + nodeKey + "\",\"definition\":\"算力环节\","
+                + "\"function\":\"决定整机能力\",\"inputs\":[\"晶圆制造\"],\"outputs\":[\"加速芯片\"],"
+                + "\"costDrivers\":[\"研发投入\"],\"valueDrivers\":[\"性能与生态\"],"
+                + "\"barriers\":[\"软硬件协同\"],\"coreMetrics\":[\"算力性能\"],\"risks\":[\"出口限制\"],"
+                + "\"maturity\":\"SCALING\",\"valueLevel\":\"HIGH\","
+                + "\"bottleneckLevel\":\"HIGH\",\"localizationLevel\":\"LOW\"}";
     }
 }

@@ -130,10 +130,52 @@ public class IndustryChainSynthesisAgent {
         int removedEdges = graph.getEdges().size() - edges.size();
         graph.setNodes(new ArrayList<IndustryChainNode>(nodes.values()));
         graph.setEdges(new ArrayList<IndustryChainEdge>(edges.values()));
+        int removedProfiles = removeDuplicateOrUnknownProfiles(graph, nodes);
         if (removedNodes > 0 || removedEdges > 0) {
             log.info("Removed duplicate graph entries before validation: chain={}, nodes={}, edges={}",
                     graph.getName(), removedNodes, removedEdges);
         }
+        if (removedProfiles > 0) {
+            log.info("Removed duplicate or unknown graph profiles before validation: chain={}, profiles={}",
+                    graph.getName(), removedProfiles);
+        }
+    }
+
+    private int removeDuplicateOrUnknownProfiles(IndustryChainGraph graph,
+                                                 Map<String, IndustryChainNode> nodes) {
+        IndustryChainResearchContent content = graph.getResearchContent();
+        if (content == null) {
+            return 0;
+        }
+        int before = content.getStageProfiles().size() + content.getCompanyProfiles().size()
+                + content.getNodeProfiles().size();
+        Set<String> seenStages = new HashSet<String>();
+        List<IndustryChainResearchContent.StageProfile> stages = new ArrayList<IndustryChainResearchContent.StageProfile>();
+        for (IndustryChainResearchContent.StageProfile profile : content.getStageProfiles()) {
+            IndustryChainNode node = nodes.get(profile.getNodeKey());
+            if (node != null && "STAGE".equals(node.getType()) && seenStages.add(profile.getNodeKey())) {
+                stages.add(profile);
+            }
+        }
+        Set<String> seenCompanies = new HashSet<String>();
+        List<IndustryChainResearchContent.CompanyProfile> companies = new ArrayList<IndustryChainResearchContent.CompanyProfile>();
+        for (IndustryChainResearchContent.CompanyProfile profile : content.getCompanyProfiles()) {
+            IndustryChainNode node = nodes.get(profile.getNodeKey());
+            if (node != null && "COMPANY".equals(node.getType()) && seenCompanies.add(profile.getNodeKey())) {
+                companies.add(profile);
+            }
+        }
+        Set<String> seenNodes = new HashSet<String>();
+        List<IndustryChainResearchContent.NodeProfile> profiles = new ArrayList<IndustryChainResearchContent.NodeProfile>();
+        for (IndustryChainResearchContent.NodeProfile profile : content.getNodeProfiles()) {
+            if (nodes.containsKey(profile.getNodeKey()) && seenNodes.add(profile.getNodeKey())) {
+                profiles.add(profile);
+            }
+        }
+        content.setStageProfiles(stages);
+        content.setCompanyProfiles(companies);
+        content.setNodeProfiles(profiles);
+        return before - stages.size() - companies.size() - profiles.size();
     }
 
     private void removeUndisclosedSupplyRelationships(IndustryChainGraph graph) {
