@@ -42,6 +42,28 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void deterministicallyCapsResearchPhraseListsWithoutRewritingTheGraph() throws Exception {
+        int[] calls = {0};
+        String response = validJson().replace("[\"云厂商资本开支\"]",
+                "[\"驱动1\",\"驱动2\",\"驱动3\",\"驱动4\",\"驱动5\",\"驱动6\",\"驱动7\"]");
+        LlmChatClient llm = new LlmChatClient() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String modelName() { return "test-model"; }
+            @Override public String complete(String systemPrompt, String userPrompt) {
+                calls[0]++;
+                return response;
+            }
+        };
+
+        IndustryChainGraph graph = new IndustryChainSynthesisAgent(
+                llm, new ObjectMapper(), new IndustryChainGraphValidator()).synthesize("AI算力", evidence());
+
+        assertEquals(1, calls[0]);
+        assertEquals(Arrays.asList("驱动1", "驱动2", "驱动3", "驱动4", "驱动5", "驱动6"),
+                graph.getResearchContent().getOverview().getDemandDrivers());
+    }
+
+    @Test
     void repairsOneInvalidOutputAndValidatesTheRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {

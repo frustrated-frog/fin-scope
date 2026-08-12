@@ -288,8 +288,8 @@ public class IndustryChainSynthesisAgent {
 
     private List<String> phrases(JsonNode node, String field) {
         JsonNode values = node.path(field);
-        if (!values.isArray() || values.size() > 6) {
-            throw new IllegalArgumentException(field + " 必须是最多 6 项的数组");
+        if (!values.isArray()) {
+            throw new IllegalArgumentException(field + " 必须是数组");
         }
         Set<String> unique = new LinkedHashSet<String>();
         for (JsonNode value : values) {
@@ -300,7 +300,9 @@ public class IndustryChainSynthesisAgent {
             if (phrase.isEmpty() || phrase.length() > 100) {
                 throw new IllegalArgumentException(field + " 包含无效短语");
             }
-            unique.add(phrase);
+            if (unique.size() < 6) {
+                unique.add(phrase);
+            }
         }
         return new ArrayList<String>(unique);
     }
