@@ -10,6 +10,7 @@ import com.finscope.domain.industrychain.IndustryChainEdge;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.industrychain.IndustryChainRevision;
+import com.finscope.domain.industrychain.IndustryChainStructureAssessment;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
@@ -29,11 +30,14 @@ public class IndustryChainService {
 
     private final IndustryChainRepository repository;
     private final IndustryChainGenerationExecutor executor;
+    private final IndustryChainStructureAssessor structureAssessor;
 
     public IndustryChainService(IndustryChainRepository repository,
-                                IndustryChainGenerationExecutor executor) {
+                                IndustryChainGenerationExecutor executor,
+                                IndustryChainStructureAssessor structureAssessor) {
         this.repository = repository;
         this.executor = executor;
+        this.structureAssessor = structureAssessor;
     }
 
     public List<IndustryChain> list() {
@@ -52,13 +56,15 @@ public class IndustryChainService {
             }
         }
         IndustryChainRevision revision = start(chain);
-        return new Workspace(chain, revision, repository.findPublishedGraph(chain.getId()).orElse(null));
+        IndustryChainGraph graph = repository.findPublishedGraph(chain.getId()).orElse(null);
+        return new Workspace(chain, revision, graph, structureAssessor.assess(graph));
     }
 
     public Workspace get(Long chainId) {
         IndustryChain chain = requiredChain(chainId);
-        return new Workspace(chain, repository.latestRevision(chainId).orElse(null),
-                repository.findPublishedGraph(chainId).orElse(null));
+        IndustryChainGraph graph = repository.findPublishedGraph(chainId).orElse(null);
+        return new Workspace(chain, repository.latestRevision(chainId).orElse(null), graph,
+                structureAssessor.assess(graph));
     }
 
     public IndustryChainRevision refresh(Long chainId) {
@@ -141,16 +147,20 @@ public class IndustryChainService {
         private final IndustryChain chain;
         private final IndustryChainRevision revision;
         private final IndustryChainGraph graph;
+        private final IndustryChainStructureAssessment structure;
 
-        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph) {
+        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph,
+                         IndustryChainStructureAssessment structure) {
             this.chain = chain;
             this.revision = revision;
             this.graph = graph;
+            this.structure = structure;
         }
 
         public IndustryChain getChain() { return chain; }
         public IndustryChainRevision getRevision() { return revision; }
         public IndustryChainGraph getGraph() { return graph; }
+        public IndustryChainStructureAssessment getStructure() { return structure; }
     }
 
     public static final class FocusResult {
