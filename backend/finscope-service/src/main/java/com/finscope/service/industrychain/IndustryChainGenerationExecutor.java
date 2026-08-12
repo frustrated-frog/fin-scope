@@ -34,7 +34,11 @@ public class IndustryChainGenerationExecutor {
     }
 
     public void schedule(IndustryChain chain, IndustryChainRevision revision) {
-        executor.execute(() -> execute(chain, revision));
+        schedule(chain.getId(), revision.getId());
+    }
+
+    public void schedule(Long chainId, Long revisionId) {
+        executor.execute(() -> executeRequested(chainId, revisionId, "local-recovery"));
     }
 
     public void executeRequested(Long chainId, Long revisionId, String eventId) {
@@ -51,10 +55,15 @@ public class IndustryChainGenerationExecutor {
         }
         log.info("Industry-chain generation claimed: eventId={}, chainId={}, revisionId={}",
                 eventId, chainId, revisionId);
-        execute(chain, revision);
+        executeClaimed(chain, revision);
     }
 
+    /** 仅供同步单元测试与兼容调用；生产异步入口必须先通过 executeRequested 领取。 */
     public void execute(IndustryChain chain, IndustryChainRevision revision) {
+        executeClaimed(chain, revision);
+    }
+
+    private void executeClaimed(IndustryChain chain, IndustryChainRevision revision) {
         String stage = "COLLECTING_EVIDENCE";
         try {
             progress(revision, stage, "正在通过三路搜索核对产业全景、上下游与代表公司");
@@ -72,12 +81,17 @@ public class IndustryChainGenerationExecutor {
             stage = "VALIDATING_STRUCTURE";
             progress(revision, stage, "结构补全已完成，正在校验环节覆盖、关系语义与研究画像");
             repository.publish(revision, graph);
-        } catch (Exception error) {
+        } catch (IllegalArgumentException error) {
             log.warn("Industry-chain generation failed: chainId={}, stage={}, errorType={}, reason={}",
                     chain.getId(), stage, error.getClass().getSimpleName(), compactReason(error));
-            String code = "COLLECTING_EVIDENCE".equals(stage)
-                    ? "EVIDENCE_COLLECTION_FAILED" : "SYNTHESIS_FAILED";
-            repository.fail(revision, code, "本次图谱生成失败，已保留上一版图谱，可以稍后重试");
+            repository.fail(revision, "SYNTHESIS_FAILED",
+                    "本次图谱结构未通过校验，已保留上一版图谱，可以重新生成");
+        } catch (Exception error) {
+            log.warn("Industry-chain generation will retry: chainId={}, stage={}, errorType={}, reason={}",
+                    chain.getId(), stage, error.getClass().getSimpleName(), compactReason(error));
+            repository.releaseGeneration(revision, "生成服务暂时不可用，任务等待 Kafka 重试或恢复扫描");
+            throw error instanceof RuntimeException ? (RuntimeException) error
+                    : new IllegalStateException("产业链图谱生成暂时失败", error);
         }
     }
 

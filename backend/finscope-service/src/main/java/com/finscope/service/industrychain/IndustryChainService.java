@@ -135,7 +135,9 @@ public class IndustryChainService {
     }
 
     private boolean isStale(IndustryChainRevision revision) {
-        return revision.getCreatedAt() != null && revision.getCreatedAt()
+        LocalDateTime heartbeat = revision.getLeaseUpdatedAt() == null
+                ? revision.getCreatedAt() : revision.getLeaseUpdatedAt();
+        return heartbeat != null && heartbeat
                 .isBefore(LocalDateTime.now().minusMinutes(REVISION_LEASE_MINUTES));
     }
 

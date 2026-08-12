@@ -506,9 +506,41 @@ public class IndustryChainSynthesisAgent {
         if (previousGraph != null) {
             Map<String, Object> previous = new LinkedHashMap<String, Object>();
             previous.put("schemaVersion", previousGraph.getSchemaVersion());
-            previous.put("nodes", previousGraph.getNodes());
-            previous.put("edges", previousGraph.getEdges());
+            previous.put("nodes", structureNodes(previousGraph));
+            previous.put("edges", structureEdges(previousGraph));
             result.put("previousGraph", previous);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> structureNodes(IndustryChainGraph graph) {
+        List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+        if (graph.getNodes() == null) {
+            return result;
+        }
+        for (IndustryChainNode node : graph.getNodes()) {
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("nodeKey", node.getNodeKey());
+            row.put("type", node.getType());
+            row.put("name", node.getName());
+            row.put("stageOrder", node.getStageOrder());
+            result.add(row);
+        }
+        return result;
+    }
+
+    private List<Map<String, String>> structureEdges(IndustryChainGraph graph) {
+        List<Map<String, String>> result = new ArrayList<Map<String, String>>();
+        if (graph.getEdges() == null) {
+            return result;
+        }
+        for (IndustryChainEdge edge : graph.getEdges()) {
+            Map<String, String> row = new LinkedHashMap<String, String>();
+            row.put("edgeKey", edge.getEdgeKey());
+            row.put("sourceKey", edge.getSourceKey());
+            row.put("targetKey", edge.getTargetKey());
+            row.put("type", edge.getType());
+            result.add(row);
         }
         return result;
     }

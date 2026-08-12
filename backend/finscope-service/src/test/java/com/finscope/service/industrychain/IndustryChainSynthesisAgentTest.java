@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IndustryChainSynthesisAgentTest {
@@ -341,6 +342,8 @@ class IndustryChainSynthesisAgentTest {
         assertTrue(userPrompt[0].contains("previousGraph"));
         assertTrue(userPrompt[0].contains("旧版核心环节"));
         assertTrue(userPrompt[0].contains("INDUSTRY_CHAIN_V2"));
+        assertFalse(userPrompt[0].contains("旧版结构描述"));
+        assertFalse(userPrompt[0].contains("evidenceRefs"));
         assertTrue(systemPrompt[0].contains("旧图只提供结构候选"));
         assertTrue(systemPrompt[0].contains("事实仍只能引用本轮 evidence"));
     }

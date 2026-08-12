@@ -24,6 +24,7 @@ import java.util.Optional;
 /** 产业链主题、修订以及版本内节点和关系的 SQLite 存储。 */
 @Repository
 public class IndustryChainRepository {
+    private static final int GENERATION_LEASE_MINUTES = 25;
     @Resource
     private JdbcTemplate jdbcTemplate;
     @Resource
@@ -52,6 +53,7 @@ public class IndustryChainRepository {
         value.setErrorCode(rs.getString("error_code"));
         value.setRetryable(rs.getInt("retryable") == 1);
         value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
+        value.setLeaseUpdatedAt(TimeUtil.localDateTime(rs, "lease_updated_at"));
         value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
         return value;
     };
@@ -99,10 +101,22 @@ public class IndustryChainRepository {
 
     /** 通过条件更新原子领取一次尚未消费的生成任务。 */
     public Optional<IndustryChainRevision> claimGeneration(Long chainId, Long revisionId) {
-        int updated = jdbcTemplate.update("UPDATE industry_chain_revision SET stage='DISPATCHED',message=? "
-                        + "WHERE id=? AND chain_id=? AND status='RUNNING' AND stage='QUEUED'",
-                "图谱补全任务已进入异步执行", revisionId, chainId);
+        String now = TimeUtil.text(LocalDateTime.now());
+        String expired = TimeUtil.text(LocalDateTime.now().minusMinutes(GENERATION_LEASE_MINUTES));
+        int updated = jdbcTemplate.update("UPDATE industry_chain_revision SET stage='DISPATCHED',message=?,"
+                        + "lease_updated_at=? WHERE id=? AND chain_id=? AND status='RUNNING' AND (stage='QUEUED' "
+                        + "OR (stage NOT IN ('PUBLISHING') AND lease_updated_at IS NOT NULL AND lease_updated_at<?))",
+                "图谱补全任务已进入异步执行", now, revisionId, chainId, expired);
         return updated == 1 ? findRevision(revisionId) : Optional.empty();
+    }
+
+    public List<IndustryChainRevision> findRecoverableGenerations() {
+        String queuedBefore = TimeUtil.text(LocalDateTime.now().minusMinutes(5));
+        String leaseBefore = TimeUtil.text(LocalDateTime.now().minusMinutes(GENERATION_LEASE_MINUTES));
+        return jdbcTemplate.query("SELECT * FROM industry_chain_revision WHERE status='RUNNING' AND "
+                        + "((stage='QUEUED' AND created_at<?) OR (stage NOT IN ('QUEUED','PUBLISHING') "
+                        + "AND lease_updated_at IS NOT NULL AND lease_updated_at<?)) ORDER BY id",
+                revisionMapper, queuedBefore, leaseBefore);
     }
 
     public List<IndustryChainRevision> findRevisions(Long chainId) {
@@ -112,24 +126,44 @@ public class IndustryChainRepository {
 
     public IndustryChainRevision updateRevision(IndustryChainRevision revision) {
         LocalDateTime completedAt = "RUNNING".equals(revision.getStatus()) ? null : LocalDateTime.now();
-        jdbcTemplate.update("UPDATE industry_chain_revision SET status=?,stage=?,message=?,error_code=?,retryable=?,"
-                        + "completed_at=? WHERE id=?",
+        int updated = jdbcTemplate.update("UPDATE industry_chain_revision SET status=?,stage=?,message=?,error_code=?,"
+                        + "retryable=?,completed_at=?,lease_updated_at=? WHERE id=? AND status='RUNNING'",
                 revision.getStatus(), revision.getStage(), revision.getMessage(), revision.getErrorCode(),
-                revision.isRetryable() ? 1 : 0, TimeUtil.text(completedAt), revision.getId());
+                revision.isRetryable() ? 1 : 0, TimeUtil.text(completedAt), TimeUtil.text(LocalDateTime.now()),
+                revision.getId());
+        if (updated != 1) {
+            throw new IllegalStateException("产业链修订已失效");
+        }
         return findRevision(revision.getId()).orElseThrow(() -> new IllegalStateException("产业链修订不存在"));
     }
 
     public IndustryChainRevision fail(IndustryChainRevision revision, String errorCode, String message) {
-        revision.setStatus("FAILED");
-        revision.setStage("COMPLETED");
-        revision.setErrorCode(errorCode);
-        revision.setMessage(message);
-        revision.setRetryable(true);
-        return updateRevision(revision);
+        int updated = jdbcTemplate.update("UPDATE industry_chain_revision SET status='FAILED',stage='COMPLETED',"
+                        + "error_code=?,message=?,retryable=1,completed_at=? WHERE id=? AND status='RUNNING'",
+                errorCode, message, TimeUtil.text(LocalDateTime.now()), revision.getId());
+        if (updated != 1) {
+            return findRevision(revision.getId())
+                    .orElseThrow(() -> new IllegalStateException("产业链修订不存在"));
+        }
+        return findRevision(revision.getId()).orElseThrow(() -> new IllegalStateException("产业链修订不存在"));
+    }
+
+    public void releaseGeneration(IndustryChainRevision revision, String message) {
+        jdbcTemplate.update("UPDATE industry_chain_revision SET stage='QUEUED',message=?,retryable=1,"
+                        + "lease_updated_at=NULL WHERE id=? AND chain_id=? AND status='RUNNING'",
+                message, revision.getId(), revision.getChainId());
     }
 
     @Transactional
     public IndustryChainGraph publish(IndustryChainRevision revision, IndustryChainGraph graph) {
+        int claimed = jdbcTemplate.update("UPDATE industry_chain_revision SET stage='PUBLISHING',message=? "
+                        + "WHERE id=? AND chain_id=? AND status='RUNNING' "
+                        + "AND stage IN ('QUEUED','DISPATCHED','COLLECTING_EVIDENCE','SYNTHESIZING',"
+                        + "'COMPLETING_STRUCTURE','VALIDATING_STRUCTURE')",
+                "结构校验完成，正在原子发布新版本", revision.getId(), revision.getChainId());
+        if (claimed != 1) {
+            throw new IllegalStateException("产业链修订已失效，拒绝发布过期结果");
+        }
         graph.setChainId(revision.getChainId());
         graph.setRevisionId(revision.getId());
         int order = 0;
@@ -156,14 +190,23 @@ public class IndustryChainRepository {
                     edge.getDirectionNote(), json(edge.getEvidenceRefs()), order++);
         }
         LocalDateTime completed = LocalDateTime.now();
-        jdbcTemplate.update("UPDATE industry_chain_revision SET status='READY',stage='COMPLETED',message=?,error_code=NULL,"
+        int published = jdbcTemplate.update("UPDATE industry_chain_revision SET status='READY',stage='COMPLETED',message=?,error_code=NULL,"
                         + "retryable=0,graph_summary=?,limitations=?,research_content_json=?,schema_version=?,model=?,"
-                        + "generated_at=?,completed_at=? WHERE id=?",
+                        + "generated_at=?,completed_at=? WHERE id=? AND chain_id=? AND status='RUNNING' AND stage='PUBLISHING'",
                 "产业链图谱已更新", graph.getSummary(), graph.getLimitations(), researchJson(graph.getResearchContent()),
                 graph.getSchemaVersion(), graph.getModel(),
-                TimeUtil.text(graph.getGeneratedAt()), TimeUtil.text(completed), revision.getId());
-        jdbcTemplate.update("UPDATE industry_chain SET summary=?,current_revision_id=?,updated_at=? WHERE id=?",
-                graph.getSummary(), revision.getId(), TimeUtil.text(completed), revision.getChainId());
+                TimeUtil.text(graph.getGeneratedAt()), TimeUtil.text(completed), revision.getId(), revision.getChainId());
+        if (published != 1) {
+            throw new IllegalStateException("产业链修订发布期间已失效");
+        }
+        int switched = jdbcTemplate.update("UPDATE industry_chain SET summary=?,current_revision_id=?,updated_at=? "
+                        + "WHERE id=? AND EXISTS(SELECT 1 FROM industry_chain_revision "
+                        + "WHERE id=? AND chain_id=? AND status='READY')",
+                graph.getSummary(), revision.getId(), TimeUtil.text(completed), revision.getChainId(),
+                revision.getId(), revision.getChainId());
+        if (switched != 1) {
+            throw new IllegalStateException("产业链当前版本切换失败");
+        }
         return findPublishedGraph(revision.getChainId())
                 .orElseThrow(() -> new IllegalStateException("产业链图谱发布失败"));
     }

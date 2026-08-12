@@ -87,6 +87,24 @@ class IndustryChainServiceTest {
     }
 
     @Test
+    void doesNotExpireARevisionWithARecentLeaseHeartbeat() {
+        IndustryChainRepository repository = mock(IndustryChainRepository.class);
+        IndustryChainGenerationExecutor executor = mock(IndustryChainGenerationExecutor.class);
+        IndustryChainStructureAssessor assessor = mock(IndustryChainStructureAssessor.class);
+        IndustryChainGenerationPublisher publisher = mock(IndustryChainGenerationPublisher.class);
+        IndustryChain chain = chain(7L, "AI算力");
+        IndustryChainRevision active = revision(12L, 7L, LocalDateTime.now().minusHours(1));
+        active.setLeaseUpdatedAt(LocalDateTime.now());
+        when(repository.findChain(7L)).thenReturn(Optional.of(chain));
+        when(repository.activeRevision(7L)).thenReturn(Optional.of(active));
+        IndustryChainService service = new IndustryChainService(repository, executor, assessor, publisher);
+
+        assertThrows(BusinessConflictException.class, () -> service.refresh(7L));
+
+        verify(repository, never()).fail(eq(active), any(), any());
+    }
+
+    @Test
     void exposesPublishedGraphStructureAssessmentInWorkspace() {
         IndustryChainRepository repository = mock(IndustryChainRepository.class);
         IndustryChainGenerationExecutor executor = mock(IndustryChainGenerationExecutor.class);

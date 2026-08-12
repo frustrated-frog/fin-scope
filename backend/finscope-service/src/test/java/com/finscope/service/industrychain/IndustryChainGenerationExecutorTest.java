@@ -94,6 +94,44 @@ class IndustryChainGenerationExecutorTest {
                 org.mockito.ArgumentMatchers.anyList());
     }
 
+    @Test
+    void localFallbackClaimsTheSameRevisionBeforeExecuting() throws Exception {
+        IndustryChainRepository repository = mock(IndustryChainRepository.class);
+        IndustryChainEvidenceCollector collector = mock(IndustryChainEvidenceCollector.class);
+        IndustryChainSynthesisAgent synthesis = mock(IndustryChainSynthesisAgent.class);
+        IndustryChain chain = chain();
+        IndustryChainRevision revision = revision();
+        when(repository.claimGeneration(7L, 11L)).thenReturn(Optional.empty());
+        IndustryChainGenerationExecutor executor = new IndustryChainGenerationExecutor(
+                repository, collector, synthesis, Runnable::run);
+
+        executor.schedule(chain, revision);
+
+        verify(repository).claimGeneration(7L, 11L);
+        verify(collector, never()).collect(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void releasesTransientFailuresForKafkaRedelivery() throws Exception {
+        IndustryChainRepository repository = mock(IndustryChainRepository.class);
+        IndustryChainEvidenceCollector collector = mock(IndustryChainEvidenceCollector.class);
+        IndustryChainSynthesisAgent synthesis = mock(IndustryChainSynthesisAgent.class);
+        IndustryChain chain = chain();
+        IndustryChainRevision revision = revision();
+        when(repository.claimGeneration(7L, 11L)).thenReturn(Optional.of(revision));
+        when(repository.findChain(7L)).thenReturn(Optional.of(chain));
+        when(collector.collect("AI算力")).thenThrow(new IllegalStateException("search timeout"));
+        IndustryChainGenerationExecutor executor = new IndustryChainGenerationExecutor(
+                repository, collector, synthesis, Runnable::run);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> executor.executeRequested(7L, 11L, "event-retry"));
+
+        verify(repository).releaseGeneration(eq(revision), org.mockito.ArgumentMatchers.anyString());
+        verify(repository, never()).fail(eq(revision), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
     private IndustryChain chain() {
         IndustryChain value = new IndustryChain();
         value.setId(7L);
