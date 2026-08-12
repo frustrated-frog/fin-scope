@@ -166,6 +166,10 @@ public class IndustryChainService {
             this.structure = structure;
         }
 
+        public Workspace(IndustryChain chain, IndustryChainRevision revision, IndustryChainGraph graph) {
+            this(chain, revision, graph, null);
+        }
+
         public IndustryChain getChain() { return chain; }
         public IndustryChainRevision getRevision() { return revision; }
         public IndustryChainGraph getGraph() { return graph; }

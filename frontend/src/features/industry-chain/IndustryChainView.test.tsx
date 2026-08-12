@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -74,6 +74,7 @@ const workspace: IndustryChainWorkspace = {
 };
 
 beforeEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.mocked(api).mockReset();
 });
@@ -191,6 +192,43 @@ test('names the active structure completion stage while preserving the old graph
   expect(screen.getByText('正在补全结构')).toBeInTheDocument();
   expect(screen.getByText('正在补齐材料、设备、部件、技术与应用节点')).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'AI算力产业链图谱' })).toBeInTheDocument();
+});
+
+test('keeps polling while a revision remains in the same running stage', async () => {
+  const running = {
+    ...workspace,
+    revision: {
+      ...workspace.revision!, status: 'RUNNING' as const, stage: 'COMPLETING_STRUCTURE' as const,
+      message: '正在补齐语义节点'
+    }
+  };
+  let pollLoads = 0;
+  vi.mocked(api).mockImplementation(async (path, options) => {
+    if (path === '/api/industry-chains') return [workspace.chain];
+    if (path === '/api/industry-chains/7/refresh' && options?.method === 'POST') return running.revision;
+    if (path === '/api/industry-chains/7' && !options?.method) {
+      if (pollLoads === 0) return workspace;
+      pollLoads += 1;
+      return pollLoads < 3 ? running : workspace;
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<IndustryChainView />);
+
+  await userEvent.click(await screen.findByRole('button', { name: /AI算力/ }));
+  vi.useFakeTimers();
+  pollLoads = 1;
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '升级为 V3' }));
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(4_800);
+  });
+
+  expect(pollLoads).toBe(3);
+  expect(screen.getByRole('button', { name: '升级为 V3' })).toBeEnabled();
+  vi.useRealTimers();
 });
 
 test('divides the measured desktop canvas equally across its industry stages', async () => {

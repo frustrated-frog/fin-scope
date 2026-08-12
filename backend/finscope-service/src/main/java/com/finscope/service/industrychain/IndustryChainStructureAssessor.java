@@ -8,10 +8,8 @@ import com.finscope.domain.industrychain.IndustryChainStructureAssessment;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /** 按图结构而非行业名称评估内容完整度。 */
@@ -41,9 +39,7 @@ public class IndustryChainStructureAssessor {
 
     private GraphStructure inspect(IndustryChainGraph graph) {
         GraphStructure result = new GraphStructure();
-        Map<String, String> nodeTypes = new HashMap<String, String>();
         for (IndustryChainNode node : safeNodes(graph)) {
-            nodeTypes.put(node.getNodeKey(), node.getType());
             if ("STAGE".equals(node.getType())) {
                 result.stageKeys.add(node.getNodeKey());
             } else if (isSemantic(node.getType())) {

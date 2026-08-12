@@ -75,17 +75,29 @@ export function IndustryChainView({
 
   useEffect(() => {
     if (workspace?.revision?.status !== 'RUNNING') return undefined;
-    const timer = window.setTimeout(async () => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
       try {
         const next = await api<IndustryChainWorkspace>(`/api/industry-chains/${workspace.chain.id}`);
+        if (cancelled) return;
         setWorkspace(next);
         if (next.revision?.status === 'READY') {
           addToast('产业链图谱已生成', 'success');
           await loadChains();
+        } else if (next.revision?.status === 'RUNNING') {
+          timer = window.setTimeout(poll, POLL_INTERVAL_MS);
         }
-      } catch (error) { handleError(error); }
-    }, POLL_INTERVAL_MS);
-    return () => window.clearTimeout(timer);
+      } catch (error) {
+        handleError(error);
+        if (!cancelled) timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    };
+    timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [workspace?.revision?.status, workspace?.revision?.id]);
 
   const selectedNode = useMemo(() => workspace?.graph?.nodes.find(
