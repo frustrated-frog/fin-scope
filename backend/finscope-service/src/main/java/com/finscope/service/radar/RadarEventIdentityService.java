@@ -3,6 +3,7 @@ package com.finscope.service.radar;
 import com.finscope.domain.radar.RadarSignal;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -25,27 +26,38 @@ public class RadarEventIdentityService {
         Set<String> entities = new TreeSet<String>();
         Set<String> actions = new TreeSet<String>();
         Set<String> variables = new TreeSet<String>();
+        Set<String> numericFacts = new TreeSet<String>();
         String fallback = "";
-        LocalDateTime firstTime = null;
+        LocalDate firstDate = null;
         for (RadarSignal signal : values) {
             RadarSignalFeatures features = analyzer.extract(signal);
             subjects.addAll(features.getSubjects());
             entities.addAll(features.getEntities());
-            for (String action : features.getActions()) actions.add(canonicalAction(action));
+            for (String action : features.getActions()) {
+                actions.add(canonicalAction(action));
+            }
             variables.addAll(features.getVariables());
-            if (fallback.isEmpty()) fallback = features.getNormalizedTitle();
-            LocalDateTime time = features.getEventTime();
-            if (time != null && (firstTime == null || time.isBefore(firstTime))) firstTime = time;
+            numericFacts.addAll(features.getNumericFacts());
+            if (fallback.isEmpty()) {
+                fallback = features.getNormalizedTitle();
+            }
+            LocalDateTime eventTime = features.getEventTime();
+            if (eventTime != null && (firstDate == null || eventTime.toLocalDate().isBefore(firstDate))) {
+                firstDate = eventTime.toLocalDate();
+            }
         }
-        String subject = first(entities, first(subjects, abbreviated(fallback)));
+        String subject = first(subjects, first(entities, abbreviated(fallback)));
         String action = first(actions, "事件");
         String variable = first(variables, "信息");
-        String date = firstTime == null ? "unknown" : firstTime.format(DateTimeFormatter.ISO_LOCAL_DATE);
-        return subject + ":" + action + ":" + variable + ":" + date;
+        String date = firstDate == null ? "unknown" : firstDate.format(DateTimeFormatter.BASIC_ISO_DATE);
+        String numeric = numericFacts.isEmpty() ? "" : ":" + numericFacts.iterator().next();
+        return subject + ":" + action + ":" + variable + ":" + date + numeric;
     }
 
     private String canonicalAction(String action) {
-        if ("正式发布".equals(action)) return "发布";
+        if ("正式发布".equals(action)) {
+            return "发布";
+        }
         return action;
     }
 
@@ -54,7 +66,9 @@ public class RadarEventIdentityService {
     }
 
     private String abbreviated(String value) {
-        if (value == null || value.isEmpty()) return "信息";
+        if (value == null || value.isEmpty()) {
+            return "信息";
+        }
         return value.length() <= 32 ? value : value.substring(0, 32);
     }
 }

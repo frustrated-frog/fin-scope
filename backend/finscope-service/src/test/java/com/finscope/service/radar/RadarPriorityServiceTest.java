@@ -130,6 +130,18 @@ class RadarPriorityServiceTest {
         assertEquals(0, result.getRelevanceScore());
     }
 
+    @Test
+    void v2ExplanationUsesEffectiveIndependentSourceCount() {
+        RadarPriorityService.PriorityResult result = service.score(
+                event("转载稿集中传播", NOW.minusMinutes(30)),
+                Arrays.asList(signal("MEDIA_A", "TIER_2", "转载稿集中传播", NOW.minusMinutes(30)),
+                        signal("MEDIA_B", "TIER_2", "转载稿集中传播", NOW.minusMinutes(20))),
+                Collections.<WatchlistItem>emptyList(), NOW, 70, 40, 1);
+
+        assertEquals(8, result.getSourceDiversityScore());
+        assertTrue(result.getUncertainty().contains("第二个独立来源"));
+    }
+
     private RadarEvent event(String title, LocalDateTime time) {
         RadarEvent event = new RadarEvent();
         event.setCanonicalTitle(title); event.setSummary(title); event.setFirstSeenAt(time); event.setLastSeenAt(time);

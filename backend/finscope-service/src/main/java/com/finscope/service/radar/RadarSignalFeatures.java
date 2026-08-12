@@ -15,11 +15,13 @@ public final class RadarSignalFeatures {
     private final Set<String> variables;
     private final Set<String> directions;
     private final Set<String> entities;
+    private final Set<String> numericFacts;
     private final LocalDateTime eventTime;
 
     RadarSignalFeatures(String normalizedTitle, String normalizedContent, String category,
                         Set<String> subjects, Set<String> actions, Set<String> variables,
-                        Set<String> directions, Set<String> entities, LocalDateTime eventTime) {
+                        Set<String> directions, Set<String> entities, Set<String> numericFacts,
+                        LocalDateTime eventTime) {
         this.normalizedTitle = normalizedTitle;
         this.normalizedContent = normalizedContent;
         this.category = category;
@@ -28,6 +30,7 @@ public final class RadarSignalFeatures {
         this.variables = immutable(variables);
         this.directions = immutable(directions);
         this.entities = immutable(entities);
+        this.numericFacts = immutable(numericFacts);
         this.eventTime = eventTime;
     }
 
@@ -43,5 +46,6 @@ public final class RadarSignalFeatures {
     public Set<String> getVariables() { return variables; }
     public Set<String> getDirections() { return directions; }
     public Set<String> getEntities() { return entities; }
+    public Set<String> getNumericFacts() { return numericFacts; }
     public LocalDateTime getEventTime() { return eventTime; }
 }

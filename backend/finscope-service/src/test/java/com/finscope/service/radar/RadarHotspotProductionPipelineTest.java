@@ -81,6 +81,11 @@ class RadarHotspotProductionPipelineTest {
         when(repository.findActiveSignals(now.minusHours(48), 500)).thenAnswer(invocation -> Arrays.asList(
                 signal(1L, first, 1), signal(2L, second, 1)));
 
+        RadarEvent legacy = new RadarEvent();
+        legacy.setId(10L); legacy.setEventKey("宁德时代:发布:电池");
+        legacy.setLastSeenAt(now.minusMinutes(20));
+        when(repository.findEventByKey("宁德时代:发布:电池")).thenReturn(Optional.of(legacy));
+
         RadarEvent event = new RadarEvent();
         event.setEventKey("COMPANY:宁德时代:发布:电池"); event.setCanonicalTitle(first.getTitle());
         event.setSummary(first.getContent()); event.setCategoryCode("COMPANY"); event.setStatus("ACTIVE");
@@ -98,6 +103,7 @@ class RadarHotspotProductionPipelineTest {
         assertTrue(result.getEvents().get(0).getHotspotScore() >= 75);
         assertTrue(result.getEvents().get(0).getConfidenceScore() > 0);
         assertEquals("HOTSPOT_V2", result.getEvents().get(0).getScoreVersion());
+        assertEquals("宁德时代:发布:电池", result.getEvents().get(0).getEventKey());
         assertEquals("TECHNOLOGY", result.getEvents().get(0).getDashboardCategory());
         ArgumentCaptor<RadarSignal> capturedSignals = ArgumentCaptor.forClass(RadarSignal.class);
         verify(repository, times(2)).capture(capturedSignals.capture(), eq(now));

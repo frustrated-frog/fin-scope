@@ -6,14 +6,19 @@ import com.finscope.service.dedupe.FingerprintService;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
 
 public class RadarTextAnalyzer {
     private static final Pattern SECURITY_CODE = Pattern.compile("(?<!\\d)\\d{6}(?!\\d)");
+    private static final Pattern NUMERIC_FACT = Pattern.compile(
+            "(?<![\\d.])(\\d+(?:\\.\\d+)?)\\s*(GWH|MWH|KWH|GW|MW|亿元|万元|元|%|％)",
+            Pattern.CASE_INSENSITIVE);
     private static final List<String> SUBJECTS = Arrays.asList(
             "宁德时代", "比亚迪", "小米", "阿里巴巴", "腾讯", "百度", "京东", "特斯拉",
             "英伟达", "微软", "苹果", "美联储", "中国央行", "人民银行", "证监会", "国务院");
@@ -42,7 +47,7 @@ public class RadarTextAnalyzer {
         return new RadarSignalFeatures(normalize(title), normalize(content),
                 normalizedCategory(signal == null ? null : signal.getCategoryCode()),
                 matches(text, SUBJECTS), matches(text, ACTIONS), matches(text, VARIABLES),
-                matches(text, DIRECTIONS), identifiers(text), signal == null ? null
+                matches(text, DIRECTIONS), identifiers(text), numericFacts(text), signal == null ? null
                 : signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt());
     }
 
@@ -68,7 +73,31 @@ public class RadarTextAnalyzer {
         if (!left.getSubjects().isEmpty() && !right.getSubjects().isEmpty()
                 && Collections.disjoint(left.getSubjects(), right.getSubjects())) return true;
         return opposite(left.getDirections(), right.getDirections())
-                || conflictingActions(left.getActions(), right.getActions());
+                || conflictingActions(left.getActions(), right.getActions())
+                || conflictingNumericFacts(left.getNumericFacts(), right.getNumericFacts());
+    }
+
+    private boolean conflictingNumericFacts(Set<String> left, Set<String> right) {
+        if (left.isEmpty() || right.isEmpty()) {
+            return false;
+        }
+        Map<String, Set<String>> leftByUnit = factsByUnit(left);
+        Map<String, Set<String>> rightByUnit = factsByUnit(right);
+        for (Map.Entry<String, Set<String>> entry : leftByUnit.entrySet()) {
+            Set<String> rightValues = rightByUnit.get(entry.getKey());
+            if (rightValues != null && Collections.disjoint(entry.getValue(), rightValues)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, Set<String>> factsByUnit(Set<String> facts) {
+        Map<String, Set<String>> values = new LinkedHashMap<String, Set<String>>();
+        for (String fact : facts) {
+            values.computeIfAbsent(factUnit(fact), ignored -> new LinkedHashSet<String>()).add(fact);
+        }
+        return values;
     }
 
     private boolean opposite(Set<String> left, Set<String> right) {
@@ -105,6 +134,7 @@ public class RadarTextAnalyzer {
     }
 
     public String normalize(String value) { return fingerprints.normalizeText(value); }
+    public double textSimilarity(String left, String right) { return fingerprints.titleSimilarity(left, right); }
 
     private Set<String> matches(String text, List<String> candidates) {
         Set<String> values = new LinkedHashSet<String>();
@@ -118,6 +148,19 @@ public class RadarTextAnalyzer {
         Matcher matcher = SECURITY_CODE.matcher(safe(text));
         while (matcher.find()) values.add(matcher.group());
         return values;
+    }
+
+    private Set<String> numericFacts(String text) {
+        Set<String> values = new LinkedHashSet<String>();
+        Matcher matcher = NUMERIC_FACT.matcher(safe(text));
+        while (matcher.find()) {
+            values.add(matcher.group(1) + matcher.group(2).toUpperCase(Locale.ROOT));
+        }
+        return values;
+    }
+
+    private String factUnit(String value) {
+        return value == null ? "" : value.replaceFirst("^[0-9.]+", "");
     }
 
     private String normalizedCategory(String value) {

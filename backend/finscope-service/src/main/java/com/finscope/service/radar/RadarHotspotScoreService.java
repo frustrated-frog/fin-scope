@@ -38,20 +38,23 @@ public class RadarHotspotScoreService {
 
     public Score score(List<RadarSignal> signals, LocalDateTime now, RadarEventSnapshot previous) {
         List<RadarSignal> values = signals == null ? Collections.<RadarSignal>emptyList() : signals;
-        if (values.isEmpty()) return Score.empty();
+        if (values.isEmpty()) {
+            return Score.empty();
+        }
         RadarSourceIndependenceService.Analysis sources = independence.analyze(values);
+        List<RadarSignal> independentSignals = representativeSignals(sources);
         int independentCount = sources.getIndependentSourceCount();
-        double freshness = freshness(values, now);
+        double freshness = freshness(independentSignals, now);
         double burst = burst(independentCount, previous, freshness, now);
         double confirmation = confirmation(independentCount);
         double authority = sources.getAuthorityScore();
-        double rankTrend = rankTrend(values);
+        double rankTrend = rankTrend(independentSignals);
         double persistence = persistence(independentCount, previous);
         double weighted = burst * 0.30D + confirmation * 0.22D + freshness * 0.18D
                 + authority * 0.15D + rankTrend * 0.10D + persistence * 0.05D;
         int total = bounded(weighted * 100.0D);
-        int confidence = confidence(sources, values);
-        LocalDateTime latest = latestTime(values);
+        int confidence = confidence(sources);
+        LocalDateTime latest = latestTime(independentSignals);
         String lifecycle = lifecycles.next(normalizedPrevious(previous, independentCount), total,
                 independentCount, latest, now);
         String explanation = "传播速度/爆发强度 " + percentage(burst)
@@ -68,7 +71,9 @@ public class RadarHotspotScoreService {
     }
 
     private RadarEventSnapshot normalizedPrevious(RadarEventSnapshot previous, int independentCount) {
-        if (previous == null || previous.getIndependentSourceCount() > 0) return previous;
+        if (previous == null || previous.getIndependentSourceCount() > 0) {
+            return previous;
+        }
         RadarEventSnapshot normalized = new RadarEventSnapshot();
         normalized.setSnapshotAt(previous.getSnapshotAt());
         normalized.setSignalCount(previous.getSignalCount());
@@ -76,6 +81,14 @@ public class RadarHotspotScoreService {
         normalized.setHotnessScore(previous.getHotnessScore());
         normalized.setLifecycleState(previous.getLifecycleState());
         return normalized;
+    }
+
+    private List<RadarSignal> representativeSignals(RadarSourceIndependenceService.Analysis sources) {
+        List<RadarSignal> values = new java.util.ArrayList<RadarSignal>();
+        for (RadarSourceIndependenceService.Observation observation : sources.getRepresentatives()) {
+            values.add(observation.getSignal());
+        }
+        return values;
     }
 
     private double burst(int independentCount, RadarEventSnapshot previous, double freshness, LocalDateTime now) {
@@ -91,8 +104,12 @@ public class RadarHotspotScoreService {
     }
 
     private double confirmation(int independentCount) {
-        if (independentCount <= 0) return 0;
-        if (independentCount == 1) return 0.25D;
+        if (independentCount <= 0) {
+            return 0;
+        }
+        if (independentCount == 1) {
+            return 0.25D;
+        }
         return clamp(0.25D + Math.log(independentCount) / Math.log(3.0D) * 0.75D);
     }
 
@@ -100,9 +117,13 @@ public class RadarHotspotScoreService {
         double total = 0;
         for (RadarSignal signal : signals) {
             LocalDateTime at = eventTime(signal);
-            if (at == null || now == null) continue;
+            if (at == null || now == null) {
+                continue;
+            }
             double ageHours = Math.max(0, Duration.between(at, now).toMinutes()) / 60.0D;
-            if (ageHours >= 48.0D) continue;
+            if (ageHours >= 48.0D) {
+                continue;
+            }
             total += Math.pow(0.5D, ageHours / halfLifeHours(signal.getCategoryCode()));
         }
         return total / signals.size();
@@ -133,38 +154,48 @@ public class RadarHotspotScoreService {
     }
 
     private double persistence(int independentCount, RadarEventSnapshot previous) {
-        if (previous == null) return independentCount > 1 ? 0.45D : 0.25D;
+        if (previous == null) {
+            return independentCount > 1 ? 0.45D : 0.25D;
+        }
         int before = previous.getIndependentSourceCount() > 0
                 ? previous.getIndependentSourceCount() : previous.getSignalCount();
-        if (independentCount > before) return 1.0D;
-        if (independentCount == before) return 0.65D;
+        if (independentCount > before) {
+            return 1.0D;
+        }
+        if (independentCount == before) {
+            return 0.65D;
+        }
         return 0.25D;
     }
 
-    private int confidence(RadarSourceIndependenceService.Analysis sources, List<RadarSignal> signals) {
+    private int confidence(RadarSourceIndependenceService.Analysis sources) {
         double official = sources.hasOfficialSource() ? 0.30D : 0;
         double independent = confirmation(sources.getIndependentSourceCount()) * 0.30D;
         double authority = sources.getAuthorityScore() * 0.25D;
-        double completeness = factCompleteness(signals) * 0.15D;
+        double completeness = factCompleteness(sources.getObservations()) * 0.15D;
         double repostPenalty = sources.getRepostConcentration() * 0.20D;
         return bounded((official + independent + authority + completeness - repostPenalty) * 100.0D);
     }
 
-    private double factCompleteness(List<RadarSignal> signals) {
+    private double factCompleteness(List<RadarSourceIndependenceService.Observation> observations) {
         int complete = 0;
-        for (RadarSourceIndependenceService.Observation observation : independence.analyze(signals).getObservations()) {
+        for (RadarSourceIndependenceService.Observation observation : observations) {
             RadarSignalFeatures value = observation.getFeatures();
             if ((!value.getSubjects().isEmpty() || !value.getEntities().isEmpty())
-                    && (!value.getActions().isEmpty() || !value.getVariables().isEmpty())) complete++;
+                    && (!value.getActions().isEmpty() || !value.getVariables().isEmpty())) {
+                complete++;
+            }
         }
-        return signals.isEmpty() ? 0 : complete / (double) signals.size();
+        return observations.isEmpty() ? 0 : complete / (double) observations.size();
     }
 
     private LocalDateTime latestTime(List<RadarSignal> signals) {
         LocalDateTime latest = null;
         for (RadarSignal signal : signals) {
             LocalDateTime at = eventTime(signal);
-            if (at != null && (latest == null || at.isAfter(latest))) latest = at;
+            if (at != null && (latest == null || at.isAfter(latest))) {
+                latest = at;
+            }
         }
         return latest;
     }

@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -121,6 +123,26 @@ class RadarHotspotScoreServiceTest {
         assertEquals(1, score.getIndependentSourceCount());
         assertTrue(score.getConfirmationScore() < 0.5D);
         assertTrue(score.getConfidenceScore() < 70);
+    }
+
+    @Test
+    void freshRepostsCannotManufactureHotnessFromAnOldIndependentReport() {
+        RadarSignal original = detailedSignal("MEDIA_A", "媒体A", 12, 0.75D, now.minusHours(24),
+                "宁德时代发布产能计划", "宁德时代发布产能计划，新增产能100GWh");
+        List<RadarSignal> copied = new ArrayList<RadarSignal>();
+        copied.add(original);
+        for (int index = 0; index < 9; index++) {
+            copied.add(detailedSignal("COPY_" + index, "转载媒体" + index, 1, 0.75D,
+                    now.minusMinutes(2), "宁德时代发布产能计划",
+                    "宁德时代发布产能计划，新增产能100GWh"));
+        }
+
+        RadarHotspotScoreService.Score baseline = service.score(Collections.singletonList(original), now);
+        RadarHotspotScoreService.Score amplified = service.score(copied, now);
+
+        assertEquals(1, amplified.getIndependentSourceCount());
+        assertTrue(amplified.getTotalScore() <= baseline.getTotalScore());
+        assertTrue(amplified.getNoveltyScore() <= baseline.getNoveltyScore());
     }
 
     @Test

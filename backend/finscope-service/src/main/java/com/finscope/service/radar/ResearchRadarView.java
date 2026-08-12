@@ -114,6 +114,9 @@ public final class ResearchRadarView {
         private final int hotspotScore;
         private final String hotspotExplanation;
         private final String hotspotLifecycleState;
+        private final int confidenceScore;
+        private final String confidenceExplanation;
+        private final String scoreVersion;
         private final int priorityScore;
         private final String recommendation;
         private final List<String> reasons;
@@ -153,6 +156,8 @@ public final class ResearchRadarView {
             this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
             this.categoryCode=event.getCategoryCode(); this.hotspotScore=event.getHotspotScore(); this.hotspotExplanation=event.getHotspotExplanation();
             this.hotspotLifecycleState=event.getHotspotLifecycleState();
+            this.confidenceScore=event.getConfidenceScore(); this.confidenceExplanation=event.getConfidenceExplanation();
+            this.scoreVersion=event.getScoreVersion();
             this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
             this.watchlistRelated=event.getWatchlistRelevance()>0; this.watchlistExplanation=event.getWatchlistExplanation();
@@ -197,6 +202,9 @@ public final class ResearchRadarView {
         public int getHotspotScore() { return hotspotScore; }
         public String getHotspotExplanation() { return hotspotExplanation; }
         public String getHotspotLifecycleState() { return hotspotLifecycleState; }
+        public int getConfidenceScore() { return confidenceScore; }
+        public String getConfidenceExplanation() { return confidenceExplanation; }
+        public String getScoreVersion() { return scoreVersion; }
         public int getPriorityScore() { return priorityScore; }
         public String getRecommendation() { return recommendation; }
         public List<String> getReasons() { return reasons; }
