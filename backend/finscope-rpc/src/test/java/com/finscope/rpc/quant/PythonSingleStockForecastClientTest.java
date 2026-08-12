@@ -110,6 +110,27 @@ class PythonSingleStockForecastClientTest {
         assertEquals(5, result.getQualification().getSplitAudit().getLabelHorizonDays());
     }
 
+    @Test
+    void mapsAndValidatesVersionFiveContextCompetitionAndLeakageEvidence() {
+        PythonSingleStockForecastClient client = clientReturning(v5Payload());
+
+        SingleStockForecast result = client.forecast("600519", 5);
+
+        assertEquals("000300.SH", result.getContext().getMarket().getCode());
+        assertEquals("LOGISTIC", result.getModelCompetition().getSelectedModel());
+        assertEquals("PASSED", result.getLeakageAudit().getStatus());
+        assertEquals(false, result.getQlibReference().isRuntimeDependency());
+    }
+
+    @Test
+    void rejectsVersionFiveWhenSelectedCandidateDoesNotMatchWinnerCode() {
+        PythonSingleStockForecastClient client = clientReturning(
+                v5Payload().replace("\"selectedModel\":\"LOGISTIC\"",
+                        "\"selectedModel\":\"BOOSTED_STUMPS\""));
+
+        assertThrows(ProviderContractException.class, () -> client.forecast("600519", 5));
+    }
+
     private static FinanceHttpResponse response(String body) {
         return new FinanceHttpResponse(200, body, Instant.parse("2026-08-07T07:00:00Z"), "hash");
     }
@@ -178,6 +199,27 @@ class PythonSingleStockForecastClientTest {
                                 + "\"coveredCount\":9,\"coverage\":0.6,"
                                 + "\"coveredAccuracy\":0.67,\"abstainRate\":0.4},"
                                 + "\"warnings\":[]}");
+    }
+
+    private static String v5Payload() {
+        return v4Payload()
+                .replace("single-stock-research-v4", "single-stock-research-v5")
+                .replace("logistic-platt-selective-v4", "competition-logistic-platt-v5")
+                .replace("\"warnings\":[]}",
+                        "\"context\":{\"market\":{\"code\":\"000300.SH\",\"label\":\"沪深300\"," +
+                                "\"status\":\"AVAILABLE\",\"coverage\":1.0,\"regime\":\"UPTREND\"}," +
+                                "\"industry\":{\"label\":\"行业代理指数\",\"status\":\"UNAVAILABLE\"," +
+                                "\"coverage\":0.0},\"featureCodes\":[\"MOMENTUM_5\"]," +
+                                "\"alignmentRule\":\"strict left join\"}," +
+                                "\"modelCompetition\":{\"selectedModel\":\"LOGISTIC\"," +
+                                "\"selectionEndDate\":\"2020-01-01\",\"calibrationStartDate\":\"2020-01-02\"," +
+                                "\"selectionRule\":\"锁定测试不参与冠军选择\",\"candidates\":[{" +
+                                "\"code\":\"LOGISTIC\",\"name\":\"逻辑回归\",\"selected\":true," +
+                                "\"selectionSampleCount\":20,\"accuracy\":0.6,\"brierScore\":0.22," +
+                                "\"logLoss\":0.64,\"baselineBrierScore\":0.24,\"reason\":\"最优\"}]}," +
+                                "\"leakageAudit\":{\"status\":\"PASSED\",\"checkedSampleCount\":100," +
+                                "\"checks\":[\"无未来数据\"]},\"qlibReference\":{\"status\":\"NOT_RUN\"," +
+                                "\"role\":\"离线辅助\",\"runtimeDependency\":false},\"warnings\":[]}");
     }
 
     private static String slice(String startDate, String endDate) {

@@ -210,6 +210,17 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
             ? <QualificationSection qualification={report.qualification} probabilityInterval={report.probabilityInterval} />
             : <section className="forecast-paper-section forecast-qualification-legacy"><SectionHead eyebrow="MODEL QUALIFICATION" title="预测可信度" /><p>该记录生成时尚未启用锁定资格检验</p><small>仍可查看当时的滚动样本外、同股基准和因子证据，但不能补写未来版本的校准结论。</small></section>}
 
+          {(report.context || report.modelCompetition) && <section className="forecast-paper-section forecast-research-console">
+            <SectionHead eyebrow="CONTEXT / MODEL RACE" title="市场上下文与模型赛马" aside={`${report.context?.featureCodes.length ?? 0} 个冻结特征`} />
+            <div className="forecast-context-ribbon">
+              {[report.context?.market, report.context?.industry].filter(Boolean).map(item => <article key={item!.label} data-status={item!.status}><span>{item!.label}</span><strong>{item!.regime || item!.status}</strong><small>{item!.code || '未启用代理'} · 覆盖 {percent(item!.coverage)}</small>{item!.reason && <p>{item!.reason}</p>}</article>)}
+              <article data-status={report.leakageAudit?.status}><span>研究完整性</span><strong>{report.leakageAudit?.status === 'PASSED' ? '防未来检查通过' : '检查不可用'}</strong><small>{report.leakageAudit?.checkedSampleCount ?? 0} 个样本完成结构审计</small></article>
+              <article data-status={report.qlibReference?.status}><span>Qlib reference</span><strong>{report.qlibReference?.status === 'NOT_RUN' ? 'Qlib 未参与本次预测' : report.qlibReference?.status}</strong><small>{report.qlibReference?.role || '仅作可选离线辅助'}</small></article>
+            </div>
+            {report.modelCompetition && <div className="forecast-model-race"><header><div><span>SELECTED MODEL</span><strong>{report.modelCompetition.selectedModel}</strong></div><p>{report.modelCompetition.selectionRule}</p></header><div className="forecast-table-wrap"><table aria-label="模型赛马"><thead><tr><th>候选模型</th><th>结果</th><th>选择样本</th><th>命中率</th><th>Brier</th><th>Log Loss</th><th>朴素 Brier</th></tr></thead><tbody>{report.modelCompetition.candidates.map(item => <tr key={item.code} data-primary={item.selected}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.selected ? '入选' : '对照'}</td><td>{item.selectionSampleCount}</td><td>{percent(item.accuracy)}</td><td>{number(item.brierScore, 3)}</td><td>{number(item.logLoss, 3)}</td><td>{number(item.baselineBrierScore, 3)}</td></tr>)}</tbody></table></div></div>}
+            <footer><p>{report.context?.alignmentRule}</p>{report.leakageAudit?.checks.map(item => <span key={item}>{item}</span>)}</footer>
+          </section>}
+
           {report.performance && <section className="forecast-paper-section forecast-performance">
             <SectionHead eyebrow="PERFORMANCE / SAME STOCK" title="策略与同股买入并持有" aside={`入场阈值 ${percent(report.strategyPolicy.signalThreshold)} · 持有 ${report.strategyPolicy.holdingDays} 日`} />
             <EquityChart report={report} />
