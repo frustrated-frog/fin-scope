@@ -124,8 +124,67 @@ public class IndustryChainSynthesisAgent {
         graph.setModel(llm.modelName());
         graph.setGeneratedAt(LocalDateTime.now());
         removeDuplicateGraphEntries(graph);
+        addMissingStageMembership(graph);
         removeUndisclosedSupplyRelationships(graph);
         return validator.validate(graph);
+    }
+
+    private void addMissingStageMembership(IndustryChainGraph graph) {
+        Map<Integer, IndustryChainNode> stagesByOrder = new LinkedHashMap<Integer, IndustryChainNode>();
+        for (IndustryChainNode node : graph.getNodes()) {
+            if ("STAGE".equals(node.getType()) && node.getStageOrder() != null) {
+                stagesByOrder.put(node.getStageOrder(), node);
+            }
+        }
+        Set<String> assigned = new HashSet<String>();
+        Set<String> edgeKeys = new HashSet<String>();
+        for (IndustryChainEdge edge : graph.getEdges()) {
+            edgeKeys.add(edge.getEdgeKey());
+            if ("BELONGS_TO_STAGE".equals(edge.getType())) {
+                assigned.add(edge.getSourceKey());
+            }
+        }
+        int added = 0;
+        for (IndustryChainNode node : graph.getNodes()) {
+            IndustryChainNode stage = stagesByOrder.get(node.getStageOrder());
+            if (!isSemanticNode(node) || stage == null || assigned.contains(node.getNodeKey())) {
+                continue;
+            }
+            IndustryChainEdge edge = new IndustryChainEdge();
+            String baseKey = "membership:" + node.getNodeKey() + ":" + stage.getNodeKey();
+            edge.setEdgeKey(uniqueEdgeKey(baseKey, edgeKeys));
+            edge.setSourceKey(node.getNodeKey());
+            edge.setTargetKey(stage.getNodeKey());
+            edge.setType("BELONGS_TO_STAGE");
+            edge.setNature("INDUSTRY_LOGIC");
+            edge.setDescription(node.getName() + "属于" + stage.getName() + "产业环节");
+            edge.setConfidence(node.getConfidence());
+            edge.setStrength("PRIMARY");
+            edge.setDirectionNote(node.getName() + "归入" + stage.getName());
+            edge.setEvidenceRefs(new ArrayList<String>(node.getEvidenceRefs()));
+            graph.getEdges().add(edge);
+            assigned.add(node.getNodeKey());
+            added++;
+        }
+        if (added > 0) {
+            log.info("Added deterministic stage membership before validation: chain={}, edges={}",
+                    graph.getName(), added);
+        }
+    }
+
+    private boolean isSemanticNode(IndustryChainNode node) {
+        return !"INDUSTRY_CHAIN".equals(node.getType())
+                && !"STAGE".equals(node.getType())
+                && !"COMPANY".equals(node.getType());
+    }
+
+    private String uniqueEdgeKey(String baseKey, Set<String> edgeKeys) {
+        String result = baseKey;
+        int suffix = 2;
+        while (!edgeKeys.add(result)) {
+            result = baseKey + ":" + suffix++;
+        }
+        return result;
     }
 
     private void removeDuplicateGraphEntries(IndustryChainGraph graph) {

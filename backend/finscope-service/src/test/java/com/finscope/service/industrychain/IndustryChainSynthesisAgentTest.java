@@ -110,6 +110,18 @@ class IndustryChainSynthesisAgentTest {
     }
 
     @Test
+    void addsMissingStageMembershipFromMatchingStageOrder() throws Exception {
+        String response = validJson()
+                .replace("\"nodes\":[", "\"nodes\":[" + semanticNode("product:chip", "PRODUCT", "算力芯片", 1) + ",")
+                .replace("\"nodeProfiles\":[", "\"nodeProfiles\":[" + nodeProfile("product:chip") + ",");
+
+        IndustryChainGraph graph = agent(response).synthesize("AI算力", evidence());
+
+        assertTrue(graph.getEdges().stream().anyMatch(edge -> "BELONGS_TO_STAGE".equals(edge.getType())
+                && "product:chip".equals(edge.getSourceKey()) && "stage:chip".equals(edge.getTargetKey())));
+    }
+
+    @Test
     void repairsOneInvalidOutputAndValidatesTheRepair() throws Exception {
         int[] calls = {0};
         LlmChatClient llm = new LlmChatClient() {
@@ -362,6 +374,12 @@ class IndustryChainSynthesisAgentTest {
         return "{\"nodeKey\":\"" + key + "\",\"type\":\"COMPANY\",\"name\":\"" + name
                 + "\",\"description\":\"产业链参与企业\",\"stageOrder\":null,"
                 + "\"stockCode\":\"\",\"confidence\":\"MEDIUM\",\"evidenceRefs\":[\"E1\"]}";
+    }
+
+    private String semanticNode(String key, String type, String name, int order) {
+        return "{\"nodeKey\":\"" + key + "\",\"type\":\"" + type + "\",\"name\":\"" + name
+                + "\",\"description\":\"产业语义节点\",\"stageOrder\":" + order
+                + ",\"stockCode\":\"\",\"confidence\":\"HIGH\",\"evidenceRefs\":[\"E1\"]}";
     }
 
     private String edge(String key, String source, String target) {
