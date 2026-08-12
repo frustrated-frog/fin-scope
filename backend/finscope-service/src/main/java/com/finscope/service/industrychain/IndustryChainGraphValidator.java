@@ -60,8 +60,8 @@ public class IndustryChainGraphValidator {
                 semanticNodes.add(node.getNodeKey());
             }
         }
-        if (semanticNodes.size() < 9) {
-            throw new IllegalArgumentException("V3 图谱语义节点不足 9 个：" + semanticNodes.size());
+        if (semanticNodes.size() < 6) {
+            throw new IllegalArgumentException("V3 图谱语义节点不足 6 个：" + semanticNodes.size());
         }
     }
 

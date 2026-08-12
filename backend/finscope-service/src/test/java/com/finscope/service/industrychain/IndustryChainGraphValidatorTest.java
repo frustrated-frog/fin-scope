@@ -109,14 +109,14 @@ class IndustryChainGraphValidatorTest {
     }
 
     @Test
-    void rejectsV3RootGraphWhenAStageHasFewerThanThreeSemanticChildren() {
+    void rejectsV3RootGraphWhenItHasFewerThanSixSemanticNodes() {
         IndustryChainGraph graph = semanticGraph();
         graph.getNodes().add(node("chain:root", "INDUSTRY_CHAIN", "产业链", null));
 
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class, () -> validator.validate(graph));
 
-        assertEquals("V3 图谱语义节点不足 9 个：5",
+        assertEquals("V3 图谱语义节点不足 6 个：5",
                 error.getMessage());
     }
 
