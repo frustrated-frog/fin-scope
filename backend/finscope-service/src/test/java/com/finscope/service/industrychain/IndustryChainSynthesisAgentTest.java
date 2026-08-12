@@ -334,7 +334,13 @@ class IndustryChainSynthesisAgentTest {
         IndustryChainGraph previous = new IndustryChainGraph();
         previous.setSchemaVersion("INDUSTRY_CHAIN_V2");
         previous.setNodes(Arrays.asList(previousNode("stage:old", "STAGE", "旧版核心环节")));
-        previous.setEdges(Collections.emptyList());
+        com.finscope.domain.industrychain.IndustryChainEdge factual =
+                new com.finscope.domain.industrychain.IndustryChainEdge();
+        factual.setEdgeKey("old-supply");
+        factual.setSourceKey("company:a");
+        factual.setTargetKey("company:b");
+        factual.setType("SUPPLIES_TO");
+        previous.setEdges(Collections.singletonList(factual));
 
         new IndustryChainSynthesisAgent(llm, new ObjectMapper(), new IndustryChainGraphValidator())
                 .synthesize("AI算力", evidence(), previous);
@@ -344,6 +350,7 @@ class IndustryChainSynthesisAgentTest {
         assertTrue(userPrompt[0].contains("INDUSTRY_CHAIN_V2"));
         assertFalse(userPrompt[0].contains("旧版结构描述"));
         assertFalse(userPrompt[0].contains("evidenceRefs"));
+        assertFalse(userPrompt[0].contains("old-supply"));
         assertTrue(systemPrompt[0].contains("旧图只提供结构候选"));
         assertTrue(systemPrompt[0].contains("事实仍只能引用本轮 evidence"));
     }

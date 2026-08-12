@@ -535,6 +535,9 @@ public class IndustryChainSynthesisAgent {
             return result;
         }
         for (IndustryChainEdge edge : graph.getEdges()) {
+            if (!isStructuralContextEdge(edge.getType())) {
+                continue;
+            }
             Map<String, String> row = new LinkedHashMap<String, String>();
             row.put("edgeKey", edge.getEdgeKey());
             row.put("sourceKey", edge.getSourceKey());
@@ -543,6 +546,11 @@ public class IndustryChainSynthesisAgent {
             result.add(row);
         }
         return result;
+    }
+
+    private boolean isStructuralContextEdge(String type) {
+        return "CONTAINS_STAGE".equals(type) || "FLOWS_TO".equals(type)
+                || "BELONGS_TO_STAGE".equals(type);
     }
 
     private String systemPrompt() {
