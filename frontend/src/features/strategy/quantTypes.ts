@@ -280,6 +280,18 @@ export interface SingleStockForecast {
   selectiveValidation?: { lowerThreshold: number; upperThreshold: number;
     sampleCount: number; coveredCount: number; coverage: number;
     coveredAccuracy: number; abstainRate: number };
+  context?: { market: { code?: string; label: string; status: string; coverage: number;
+      regime?: string; reason?: string };
+    industry: { code?: string; label: string; status: string; coverage: number;
+      regime?: string; reason?: string };
+    featureCodes: string[]; alignmentRule: string };
+  modelCompetition?: { selectedModel: string; selectionEndDate: string;
+    calibrationStartDate: string; selectionRule: string;
+    candidates: Array<{ code: string; name: string; selected: boolean;
+      selectionSampleCount: number; accuracy: number; brierScore: number;
+      logLoss: number; baselineBrierScore: number; reason: string }> };
+  leakageAudit?: { status: string; checkedSampleCount: number; checks: string[] };
+  qlibReference?: { status: string; role: string; runtimeDependency: boolean };
   warnings: string[];
 }
 

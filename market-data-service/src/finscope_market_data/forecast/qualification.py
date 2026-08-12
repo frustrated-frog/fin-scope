@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Sequence
+from typing import Protocol, Sequence
 
 from finscope_market_data.forecast.calibration import CalibrationResult, PlattCalibrator
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.logistic import RegularizedLogisticModel
+
+
+class ProbabilityModel(Protocol):
+    def predict(self, features: Sequence[float]) -> float: ...
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,8 @@ class ModelQualification:
     locked_test: LockedTestResult
     calibration_raw_probabilities: tuple[float, ...]
     calibration_labels: tuple[bool, ...]
+    model: ProbabilityModel
+    explanation_model: RegularizedLogisticModel
 
 
 def split_qualification_samples(
@@ -125,6 +131,7 @@ def qualify_model(
     samples: Sequence[ForecastSample],
     *,
     independent_stride_days: int = 20,
+    model_code: str = "LOGISTIC",
 ) -> ModelQualification:
     split = split_qualification_samples(
         samples,
@@ -138,7 +145,12 @@ def qualify_model(
     locked_anchors = split.locked_test[::independent_stride_days]
     if not training or not calibration_anchors or not locked_anchors:
         raise ValueError("资格检验切分无法形成有效训练和测试样本")
-    model = RegularizedLogisticModel.fit(training)
+    model = _fit_model(model_code, training)
+    explanation_model = (
+        model
+        if isinstance(model, RegularizedLogisticModel)
+        else RegularizedLogisticModel.fit(training)
+    )
     calibration_raw = tuple(model.predict(item.features) for item in calibration_anchors)
     calibration_labels = tuple(item.positive for item in calibration_anchors)
     calibration = PlattCalibrator.fit(calibration_raw, calibration_labels)
@@ -203,7 +215,16 @@ def qualify_model(
         ),
         calibration_raw_probabilities=calibration_raw,
         calibration_labels=calibration_labels,
+        model=model,
+        explanation_model=explanation_model,
     )
+
+
+def _fit_model(model_code: str, samples: Sequence[ForecastSample]):
+    if model_code == "LOGISTIC":
+        return RegularizedLogisticModel.fit(samples)
+    from finscope_market_data.forecast.model_competition import fit_model
+    return fit_model(model_code, samples)
 
 
 def mature_training_samples(

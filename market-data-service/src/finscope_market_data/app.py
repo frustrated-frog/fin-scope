@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
@@ -107,14 +108,27 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
             )
         if envelope.data is None:
             raise HTTPException(status_code=503, detail="前复权历史行情当前不可用")
+        market_symbol = StockSymbol(market="SH", code="000300")
+        market_envelope = await _router(application).fetch(
+            DataCapability.DAILY_BARS,
+            market_symbol,
+            limit=5000,
+        )
+        market_bars = market_envelope.data or []
+        context = build_aligned_context(envelope.data, market_bars=market_bars)
+        context_warnings = list(envelope.warnings)
+        if context.market_coverage < 0.95:
+            context_warnings.append("沪深300上下文覆盖不足，相关特征已按中性值降级")
+        context_warnings.append("第一批未启用行业代理指数，行业因子按中性值降级")
         result = build_forecast(
             envelope.data,
             instrument_code=f"{request.code}.{market}",
             source_code=envelope.source_code or "UNKNOWN",
             source_family=envelope.source_family or "UNKNOWN",
             quality_status=envelope.quality_status.value,
-            warnings=list(envelope.warnings),
+            warnings=context_warnings,
             horizon_days=request.horizon_days,
+            context=context,
         )
         return JSONResponse(
             status_code=200,

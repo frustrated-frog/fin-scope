@@ -98,6 +98,21 @@ const report = {
     } },
   selectiveValidation: { lowerThreshold: .4, upperThreshold: .6, sampleCount: 24,
     coveredCount: 14, coverage: .5833, coveredAccuracy: .714, abstainRate: .4167 },
+  context: { market: { code: '000300.SH', label: '沪深300', status: 'AVAILABLE',
+      coverage: 1, regime: 'UPTREND' },
+    industry: { label: '行业代理指数', status: 'UNAVAILABLE', coverage: 0,
+      reason: '未匹配到可靠行业代理' }, featureCodes: ['MOMENTUM_20', 'MARKET_MOMENTUM_20'],
+    alignmentRule: '按目标交易日左连接，不向未来填充' },
+  modelCompetition: { selectedModel: 'BOOSTED_STUMPS', selectionEndDate: '2021-01-01',
+    calibrationStartDate: '2021-01-02', selectionRule: '锁定测试不参与冠军选择', candidates: [
+      { code: 'LOGISTIC', name: '正则化逻辑回归', selected: false, selectionSampleCount: 20,
+        accuracy: .55, brierScore: .245, logLoss: .68, baselineBrierScore: .25, reason: '未胜出' },
+      { code: 'BOOSTED_STUMPS', name: '轻量梯度提升树桩', selected: true, selectionSampleCount: 20,
+        accuracy: .6, brierScore: .23, logLoss: .65, baselineBrierScore: .25, reason: '开发区内部验证最优' }
+    ] },
+  leakageAudit: { status: 'PASSED', checkedSampleCount: 2320,
+    checks: ['滚动特征只使用信号日及以前数据', '锁定测试不参与冠军选择'] },
+  qlibReference: { status: 'NOT_RUN', role: '可选离线对照实验，不参与线上预测', runtimeDependency: false },
   recentObservations: [{ signalDate: '2026-05-08', probability: .61,
     actualNetReturn: .034, correct: true }], warnings: ['收益基于前复权日线模拟']
 };
@@ -143,6 +158,11 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('暂不判断')).toBeInTheDocument();
   expect(screen.getByText('覆盖后命中率')).toBeInTheDocument();
   expect(screen.getByText('信号覆盖率')).toBeInTheDocument();
+  expect(screen.getByText('市场上下文与模型赛马')).toBeInTheDocument();
+  expect(screen.getByText('沪深300')).toBeInTheDocument();
+  expect(screen.getByText('轻量梯度提升树桩')).toBeInTheDocument();
+  expect(screen.getByText('防未来检查通过')).toBeInTheDocument();
+  expect(screen.getByText('Qlib 未参与本次预测')).toBeInTheDocument();
   const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST');
   expect(JSON.parse(String(post?.[1]?.body))).toEqual({ code: '600519', horizonDays: 5 });
 });

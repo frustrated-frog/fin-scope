@@ -17488,3 +17488,24 @@ input[type="checkbox"] {
   outline: 2px solid var(--fs-mint);
   outline-offset: 3px;
 }
+
+.forecast-research-console{border-color:color-mix(in srgb,var(--forecast-cyan) 24%,var(--line));box-shadow:0 18px 48px rgba(21,74,82,.05)}
+.forecast-context-ribbon{display:grid;grid-template-columns:repeat(4,1fr);background:linear-gradient(118deg,color-mix(in srgb,var(--surface) 94%,var(--forecast-cyan)),var(--surface))}
+.forecast-context-ribbon article{display:grid;align-content:start;gap:5px;min-height:112px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.forecast-context-ribbon article+article{border-left:1px solid var(--line)}
+.forecast-context-ribbon span,.forecast-model-race header span{color:var(--forecast-indigo);font:760 8px ui-monospace,monospace;letter-spacing:.11em;text-transform:uppercase}
+.forecast-context-ribbon strong{font:500 19px "Iowan Old Style","Palatino Linotype",serif}
+.forecast-context-ribbon small,.forecast-context-ribbon p{margin:0;color:var(--muted);font-size:8px;line-height:1.5}
+.forecast-context-ribbon article[data-status="PASSED"] strong,.forecast-context-ribbon article[data-status="AVAILABLE"] strong{color:var(--forecast-cyan)}
+.forecast-model-race>header{display:grid;grid-template-columns:minmax(160px,.35fr) minmax(0,1fr);gap:20px;align-items:center;padding:18px 22px;border-bottom:1px solid var(--line)}
+.forecast-model-race>header div{display:grid;gap:4px}
+.forecast-model-race>header strong{font:700 13px ui-monospace,monospace}
+.forecast-model-race>header p{margin:0;color:var(--muted);font-size:9px;line-height:1.6}
+.forecast-model-race td:first-child{display:grid;gap:3px}
+.forecast-model-race td:first-child small{color:var(--muted);font:7px ui-monospace,monospace}
+.forecast-research-console>footer{display:flex;flex-wrap:wrap;gap:7px 16px;padding:13px 22px;background:color-mix(in srgb,var(--surface) 97%,#eef3f6);color:var(--muted);font-size:8px}
+.forecast-research-console>footer p{flex-basis:100%;margin:0}
+.forecast-research-console>footer span::before{content:"✓";margin-right:5px;color:var(--forecast-cyan)}
+
+@media(max-width:900px){.forecast-context-ribbon{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.forecast-context-ribbon,.forecast-model-race>header{grid-template-columns:1fr}.forecast-context-ribbon article+article{border-left:0}.forecast-model-race>header{align-items:start}}

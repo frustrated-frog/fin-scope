@@ -13,8 +13,9 @@ from finscope_market_data.forecast.bootstrap import (
 )
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.factor_catalog import FACTORS
-from finscope_market_data.forecast.features import build_samples, current_features
-from finscope_market_data.forecast.logistic import RegularizedLogisticModel
+from finscope_market_data.forecast.context import AlignedForecastContext
+from finscope_market_data.forecast.features import FEATURE_CODES, build_samples, current_features
+from finscope_market_data.forecast.model_competition import run_model_competition
 from finscope_market_data.forecast.performance import (
     BacktestReport,
     annual_performance,
@@ -30,7 +31,12 @@ from finscope_market_data.forecast.schemas import (
     FactorExplanation,
     ForecastObservation,
     ForecastValidation,
+    ForecastContextReport,
+    ContextSource,
+    LeakageAudit,
     LockedTestReport,
+    ModelCandidate,
+    ModelCompetitionReport,
     ModelQualification as ModelQualificationSchema,
     ParameterStability,
     PerformanceReport,
@@ -63,8 +69,8 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "logistic-platt-selective-v4"
-REPORT_VERSION = "single-stock-research-v4"
+MODEL_VERSION = "competition-platt-selective-v5.1"
+REPORT_VERSION = "single-stock-research-v5"
 
 
 def build_forecast(
@@ -76,6 +82,7 @@ def build_forecast(
     quality_status: str,
     warnings: list[str],
     horizon_days: int = DEFAULT_HORIZON,
+    context: AlignedForecastContext | None = None,
 ) -> SingleStockForecastResult:
     if horizon_days not in (1, 5, 20):
         raise ValueError("单股预测只支持 1、5、20 日周期")
@@ -84,6 +91,7 @@ def build_forecast(
         ordered,
         transaction_cost_rate=COST_RATE,
         horizon_days=horizon_days,
+        context=context,
     )
     policy = StrategyPolicy(
         signal_threshold=PRIMARY_THRESHOLD,
@@ -94,7 +102,9 @@ def build_forecast(
         round_trip_cost_rate=COST_RATE,
         benchmark="同股买入并持有",
     )
-    data_fingerprint = _fingerprint(ordered, instrument_code, horizon_days)
+    data_fingerprint = _fingerprint(
+        ordered, instrument_code, horizon_days, context=context
+    )
     base = dict(
         instrument_code=instrument_code,
         as_of_date=ordered[-1].trade_date,
@@ -106,6 +116,8 @@ def build_forecast(
         quality_status=quality_status,
         last_close=ordered[-1].close,
         strategy_policy=policy,
+        context=_context_report(context),
+        leakage_audit=_leakage_audit(samples, len(FEATURE_CODES)),
     )
     if len(ordered) < 750:
         return SingleStockForecastResult(
@@ -118,19 +130,18 @@ def build_forecast(
             warnings=[*warnings, "需要更长历史覆盖才能进行滚动样本外验证"],
         )
 
-    validation = validate_walk_forward(samples, independent_stride_days=horizon_days)
-    qualification = qualify_model(samples, independent_stride_days=horizon_days)
-    model = RegularizedLogisticModel.fit(samples)
-    features = current_features(ordered)
-    raw_probability = model.predict(features)
+    competition = run_model_competition(samples, independent_stride_days=horizon_days)
+    selected_model = competition.selected_model
+    validation = validate_walk_forward(
+        samples, independent_stride_days=horizon_days, model_code=selected_model
+    )
+    qualification = qualify_model(
+        samples, independent_stride_days=horizon_days, model_code=selected_model
+    )
+    features = current_features(ordered, context=context)
+    raw_probability = qualification.model.predict(features)
     probability = qualification.calibration.calibrate(raw_probability)
-    comparable = [
-        item
-        for item in validation.observations
-        if abs(item.probability - probability) <= 0.10
-    ]
-    if len(comparable) < 10:
-        comparable = list(validation.observations)
+    comparable = _comparable_observations(validation.observations, raw_probability)
     lower, expected, upper = _distribution(comparable)
     performance = simulate_strategy(
         ordered,
@@ -140,7 +151,13 @@ def build_forecast(
         holding_days=horizon_days,
         round_trip_cost=COST_RATE,
     )
-    stability = analyze_stability(ordered, COST_RATE, horizon_days=horizon_days)
+    stability = analyze_stability(
+        ordered,
+        COST_RATE,
+        horizon_days=horizon_days,
+        model_code=selected_model,
+        context=context,
+    )
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)
     probability_interval = _probability_interval(
@@ -158,10 +175,12 @@ def build_forecast(
         lower_threshold=1.0 - PRIMARY_THRESHOLD,
         upper_threshold=PRIMARY_THRESHOLD,
     )
-    trial = _trial(data_fingerprint, seed, horizon_days)
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v5.1"
+    trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
         status=status,
+        model_version=runtime_model_version,
         conclusion=conclusion,
         decision=decision,
         decision_reason=decision_reason,
@@ -176,7 +195,10 @@ def build_forecast(
         lower_net_return=lower,
         upper_net_return=upper,
         validation=_validation(validation),
-        factor_explanations=_factor_explanations(samples, features, model),
+        factor_explanations=_factor_explanations(
+            samples, features, qualification.explanation_model,
+            selected_model=selected_model,
+        ),
         performance=_performance_report(performance),
         equity_curve=[EquityPoint.model_validate(asdict(item)) for item in performance.equity_curve],
         annual_performance=[
@@ -209,10 +231,22 @@ def build_forecast(
             horizon_days,
         ),
         selective_validation=SelectiveValidation.model_validate(asdict(selective)),
+        model_competition=ModelCompetitionReport(
+            selected_model=competition.selected_model,
+            selection_end_date=competition.selection_end_date,
+            calibration_start_date=competition.calibration_start_date,
+            selection_rule=competition.selection_rule,
+            candidates=[ModelCandidate.model_validate(asdict(item)) for item in competition.candidates],
+        ),
         warnings=[
             *warnings,
-            "收益基于前复权日线、固定规则和固定交易成本模拟，不代表真实成交回放",
+            "收益基于滚动原始概率、前复权日线、固定规则和固定交易成本模拟，不代表校准后概率策略或真实成交回放",
             "因子贡献解释模型输出，不证明因果关系",
+            *(
+                ["冠军为非线性或规则模型；因子贡献使用同训练集逻辑回归作为可解释代理，不等同于冠军模型内部归因"]
+                if selected_model != "LOGISTIC"
+                else []
+            ),
             "主概率经过独立校准区 Platt 校准；锁定测试从未参与模型或校准器拟合",
             "方向判断允许弃权；覆盖后命中率必须与覆盖率同时阅读",
         ],
@@ -429,13 +463,15 @@ def _unavailable_interval(reason: str) -> BootstrapConfidenceInterval:
     )
 
 
-def _trial(data_fingerprint: str, seed: int, horizon_days: int) -> TrialIdentity:
+def _trial(
+    data_fingerprint: str, seed: int, horizon_days: int, model_version: str
+) -> TrialIdentity:
     identity = "|".join(
         (
             data_fingerprint,
-            MODEL_VERSION,
+            model_version,
             REPORT_VERSION,
-            "price-volume-7-v1",
+            "price-volume-context-20-v1",
             f"t1-open-net-return-{horizon_days}d-v2",
             "forward-60-20-20-purged-v1",
             "platt-v1",
@@ -446,13 +482,57 @@ def _trial(data_fingerprint: str, seed: int, horizon_days: int) -> TrialIdentity
     )
     return TrialIdentity(
         trial_id=hashlib.sha256(identity.encode()).hexdigest(),
-        feature_version="price-volume-7-v1",
+        feature_version="price-volume-context-20-v1",
         label_version=f"t1-open-net-return-{horizon_days}d-v2",
         split_version="forward-60-20-20-purged-v1",
         calibration_version="platt-v1",
         bootstrap_version="moving-block-v1",
         random_seed=seed,
-        model_version=MODEL_VERSION,
+        model_version=model_version,
+    )
+
+
+def _context_report(context: AlignedForecastContext | None) -> ForecastContextReport:
+    market_coverage = context.market_coverage if context is not None else 0.0
+    industry_coverage = context.industry_coverage if context is not None else 0.0
+    return ForecastContextReport(
+        market=ContextSource(
+            code=context.market_code if context is not None else None,
+            label="沪深300",
+            status="AVAILABLE" if market_coverage >= 0.95 else "DEGRADED",
+            coverage=market_coverage,
+            regime=context.market_regime if context is not None else None,
+            reason=None if market_coverage >= 0.95 else "市场日线未完整覆盖目标股票交易日",
+        ),
+        industry=ContextSource(
+            code=context.industry_code if context is not None else None,
+            label="行业代理指数",
+            status="AVAILABLE" if industry_coverage >= 0.95 else "UNAVAILABLE",
+            coverage=industry_coverage,
+            regime=context.industry_regime if context is not None else None,
+            reason=None if industry_coverage >= 0.95 else "未匹配到具有可靠历史覆盖的行业代理",
+        ),
+        feature_codes=list(item.code for item in FACTORS),
+        alignment_rule="只按目标股票交易日左连接；缺失上下文使用中性值，禁止向未来填充",
+    )
+
+
+def _leakage_audit(samples, feature_count: int) -> LeakageAudit:
+    checks = [
+        "样本标签满足信号日 < T+1 入场日 <= 退出日",
+        "每个样本特征维度与版本目录一致且数值有限",
+        "训练到期标签、上下文对齐及模型切分由对应回归测试约束",
+    ]
+    valid = all(
+        item.signal_date < item.entry_date <= item.exit_date
+        and len(item.features) == feature_count
+        and all(math.isfinite(value) for value in item.features)
+        for item in samples
+    )
+    return LeakageAudit(
+        status="PASSED" if valid else "FAILED",
+        checked_sample_count=len(samples),
+        checks=checks,
     )
 
 
@@ -461,7 +541,9 @@ def _seed(data_fingerprint: str, purpose: str) -> int:
     return int(digest[:8], 16) & 0x7FFFFFFF
 
 
-def _factor_explanations(samples, features, model) -> list[FactorExplanation]:
+def _factor_explanations(
+    samples, features, model, *, selected_model: str
+) -> list[FactorExplanation]:
     normalized = model.normalized(features)
     contributions = model.contributions(features)
     result: list[FactorExplanation] = []
@@ -485,7 +567,11 @@ def _factor_explanations(samples, features, model) -> list[FactorExplanation]:
                     "支持上涨" if contribution > 1e-9 else "压低概率" if contribution < -1e-9 else "影响中性"
                 ),
                 economic_meaning=definition.economic_meaning,
-                boundary=definition.boundary,
+                boundary=(
+                    definition.boundary
+                    if selected_model == "LOGISTIC"
+                    else f"{definition.boundary}；当前贡献为逻辑回归代理解释，不是 {selected_model} 的内部归因。"
+                ),
             )
         )
     return result
@@ -534,8 +620,23 @@ def _distribution(observations: list[WalkForwardObservation]) -> tuple[float, fl
     return lower, sum(values) / len(values), upper
 
 
+def _comparable_observations(
+    observations: Sequence[WalkForwardObservation], raw_probability: float
+) -> list[WalkForwardObservation]:
+    comparable = [
+        item
+        for item in observations
+        if abs(item.probability - raw_probability) <= 0.10
+    ]
+    return comparable if len(comparable) >= 10 else list(observations)
+
+
 def _fingerprint(
-    bars: Sequence[DailyBar], instrument_code: str, horizon_days: int
+    bars: Sequence[DailyBar],
+    instrument_code: str,
+    horizon_days: int,
+    *,
+    context: AlignedForecastContext | None,
 ) -> str:
     digest = hashlib.sha256()
     digest.update(
@@ -556,4 +657,28 @@ def _fingerprint(
             )
         )
         digest.update((row + "\n").encode())
+    if context is not None:
+        for role, aligned in (
+            ("MARKET", context.market_bars),
+            ("INDUSTRY", context.industry_bars),
+        ):
+            for target, bar in zip(bars, aligned):
+                if bar is None:
+                    digest.update(f"{role}|{target.trade_date}|MISSING\n".encode())
+                    continue
+                row = "|".join(
+                    (
+                        role,
+                        target.trade_date,
+                        bar.symbol.cache_key,
+                        str(bar.open),
+                        str(bar.high),
+                        str(bar.low),
+                        str(bar.close),
+                        str(bar.volume),
+                        str(bar.amount),
+                        bar.adjustment,
+                    )
+                )
+                digest.update((row + "\n").encode())
     return digest.hexdigest()

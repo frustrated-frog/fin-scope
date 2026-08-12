@@ -43,6 +43,10 @@ public class SingleStockForecast {
     private List<Observation> recentObservations = new ArrayList<Observation>();
     private ModelQualification qualification;
     private SelectiveValidation selectiveValidation;
+    private ForecastContext context;
+    private ModelCompetition modelCompetition;
+    private LeakageAudit leakageAudit;
+    private QlibReference qlibReference;
     private List<String> warnings = new ArrayList<String>();
 
     @Data
@@ -277,6 +281,60 @@ public class SingleStockForecast {
         private double coverage;
         private double coveredAccuracy;
         private double abstainRate;
+    }
+
+    @Data
+    public static class ContextSource {
+        private String code;
+        private String label;
+        private String status;
+        private double coverage;
+        private String regime;
+        private String reason;
+    }
+
+    @Data
+    public static class ForecastContext {
+        private ContextSource market;
+        private ContextSource industry;
+        private List<String> featureCodes = new ArrayList<String>();
+        private String alignmentRule;
+    }
+
+    @Data
+    public static class ModelCandidate {
+        private String code;
+        private String name;
+        private boolean selected;
+        private int selectionSampleCount;
+        private double accuracy;
+        private double brierScore;
+        private double logLoss;
+        private double baselineBrierScore;
+        private String reason;
+    }
+
+    @Data
+    public static class ModelCompetition {
+        private String selectedModel;
+        private LocalDate selectionEndDate;
+        private LocalDate calibrationStartDate;
+        private String selectionRule;
+        private List<ModelCandidate> candidates = new ArrayList<ModelCandidate>();
+    }
+
+    @Data
+    public static class LeakageAudit {
+        private String status;
+        private int checkedSampleCount;
+        private List<String> checks = new ArrayList<String>();
+    }
+
+    @Data
+    public static class QlibReference {
+        private String status;
+        private String role;
+        private boolean runtimeDependency;
     }
 
     @Data

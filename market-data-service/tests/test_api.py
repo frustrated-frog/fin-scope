@@ -138,6 +138,14 @@ class LegacyThenAdjustedForecastProvider(ForecastDailyBarProvider):
         return bars
 
 
+class EmptyForecastDailyBarProvider(ForecastDailyBarProvider):
+    async def fetch(
+        self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any
+    ) -> Any:
+        self.requests.append((symbol, int(kwargs["limit"])))
+        return []
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -203,13 +211,20 @@ def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) ->
     )
 
     assert response.status_code == 200
-    assert provider.requests == [(StockSymbol(market="SH", code="600519"), 5000)]
+    assert provider.requests == [
+        (StockSymbol(market="SH", code="600519"), 5000),
+        (StockSymbol(market="SH", code="000300"), 5000),
+    ]
     body = response.json()
     assert body["instrumentCode"] == "600519.SH"
     assert body["status"] == "INSUFFICIENT_DATA"
     assert body["barCount"] == 400
     assert body["upProbability"] is None
     assert body["horizonDays"] == 1
+    assert body["context"]["market"]["code"] == "000300.SH"
+    assert body["context"]["market"]["coverage"] == 1.0
+    assert body["context"]["industry"]["status"] == "UNAVAILABLE"
+    assert body["qlibReference"]["runtimeDependency"] is False
 
 
 def test_single_stock_forecast_endpoint_rejects_unregistered_horizon(tmp_path: Path) -> None:
@@ -220,6 +235,19 @@ def test_single_stock_forecast_endpoint_rejects_unregistered_horizon(tmp_path: P
     )
 
     assert response.status_code == 422
+
+
+def test_single_stock_forecast_endpoint_returns_structured_error_for_empty_history(
+    tmp_path: Path,
+) -> None:
+    api = client(tmp_path, [EmptyForecastDailyBarProvider()])
+
+    response = api.post(
+        "/v1/quant/single-stock-forecasts", json={"code": "600519", "horizonDays": 5}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "前复权历史行情当前不可用"
 
 
 def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(
@@ -234,6 +262,7 @@ def test_single_stock_forecast_endpoint_refreshes_legacy_unadjusted_cache(
     assert provider.requests == [
         (StockSymbol(market="SH", code="603618"), 5000),
         (StockSymbol(market="SH", code="603618"), 5000),
+        (StockSymbol(market="SH", code="000300"), 5000),
     ]
     assert response.json()["barCount"] == 400
 

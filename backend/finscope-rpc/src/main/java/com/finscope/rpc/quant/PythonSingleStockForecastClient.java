@@ -30,6 +30,9 @@ public class PythonSingleStockForecastClient {
             "AVAILABLE", "UNAVAILABLE"));
     private static final Set<String> DECISIONS = new HashSet<String>(Arrays.asList(
             "UP", "DOWN", "ABSTAIN"));
+    private static final Set<String> REPORT_SCHEMA_VERSIONS = new HashSet<String>(Arrays.asList(
+            "single-stock-research-v2", "single-stock-research-v3",
+            "single-stock-research-v4", "single-stock-research-v5"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -77,7 +80,8 @@ public class PythonSingleStockForecastClient {
                 || !STATUSES.contains(result.getStatus()) || result.getConclusion() == null
                 || result.getBarCount() == null || result.getBarCount() < 0
                 || result.getDataFingerprint() == null || result.getDataFingerprint().trim().isEmpty()
-                || result.getReportSchemaVersion() == null || result.getModelVersion() == null
+                || !REPORT_SCHEMA_VERSIONS.contains(result.getReportSchemaVersion())
+                || result.getModelVersion() == null
                 || result.getStrategyPolicy() == null || result.getLastClose() == null) {
             throw contract("SCHEMA_DRIFT", "Python 单股预测缺少必需字段", false);
         }
@@ -101,6 +105,55 @@ public class PythonSingleStockForecastClient {
         }
         if ("single-stock-research-v4".equals(result.getReportSchemaVersion())) {
             validateVersionFour(result);
+        }
+        if ("single-stock-research-v5".equals(result.getReportSchemaVersion())) {
+            validateVersionFive(result);
+        }
+    }
+
+    private void validateVersionFive(SingleStockForecast result) {
+        validateVersionFour(result);
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            if (result.getContext() == null || result.getLeakageAudit() == null) {
+                throw contract("SCHEMA_DRIFT", "Python v5 数据不足报告缺少上下文审计", false);
+            }
+            return;
+        }
+        SingleStockForecast.ForecastContext context = result.getContext();
+        SingleStockForecast.ModelCompetition competition = result.getModelCompetition();
+        SingleStockForecast.LeakageAudit leakage = result.getLeakageAudit();
+        SingleStockForecast.QlibReference qlib = result.getQlibReference();
+        if (context == null || context.getMarket() == null || context.getIndustry() == null
+                || context.getFeatureCodes() == null || context.getFeatureCodes().isEmpty()
+                || context.getAlignmentRule() == null || competition == null
+                || competition.getSelectedModel() == null || competition.getCandidates() == null
+                || competition.getCandidates().isEmpty() || competition.getSelectionEndDate() == null
+                || competition.getCalibrationStartDate() == null
+                || !competition.getSelectionEndDate().isBefore(competition.getCalibrationStartDate())
+                || leakage == null || !"PASSED".equals(leakage.getStatus())
+                || leakage.getCheckedSampleCount() < 1 || qlib == null || qlib.isRuntimeDependency()) {
+            throw contract("SCHEMA_DRIFT", "Python v5 上下文、竞赛或泄漏审计无效", false);
+        }
+        probability(context.getMarket().getCoverage());
+        probability(context.getIndustry().getCoverage());
+        int selected = 0;
+        String selectedCandidateCode = null;
+        for (SingleStockForecast.ModelCandidate candidate : competition.getCandidates()) {
+            if (candidate == null || candidate.getCode() == null || candidate.getName() == null
+                    || candidate.getSelectionSampleCount() < 1 || candidate.getReason() == null
+                    || !finiteNonNegative(candidate.getLogLoss())) {
+                throw contract("SCHEMA_DRIFT", "Python v5 模型候选无效", false);
+            }
+            probability(candidate.getAccuracy());
+            probability(candidate.getBrierScore());
+            probability(candidate.getBaselineBrierScore());
+            if (candidate.isSelected()) {
+                selected++;
+                selectedCandidateCode = candidate.getCode();
+            }
+        }
+        if (selected != 1 || !competition.getSelectedModel().equals(selectedCandidateCode)) {
+            throw contract("SCHEMA_DRIFT", "Python v5 模型竞赛冠军标识不一致", false);
         }
     }
 

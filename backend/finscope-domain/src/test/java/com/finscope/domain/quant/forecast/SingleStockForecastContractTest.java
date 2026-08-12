@@ -3,9 +3,34 @@ package com.finscope.domain.quant.forecast;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class SingleStockForecastContractTest {
+
+    @Test
+    void exposesContextCompetitionLeakageAndQlibReferenceEvidence() {
+        SingleStockForecast forecast = new SingleStockForecast();
+        SingleStockForecast.ForecastContext context = new SingleStockForecast.ForecastContext();
+        SingleStockForecast.ContextSource market = new SingleStockForecast.ContextSource();
+        market.setCode("000300.SH");
+        context.setMarket(market);
+        forecast.setContext(context);
+        SingleStockForecast.ModelCompetition competition = new SingleStockForecast.ModelCompetition();
+        competition.setSelectedModel("LOGISTIC");
+        forecast.setModelCompetition(competition);
+        SingleStockForecast.LeakageAudit audit = new SingleStockForecast.LeakageAudit();
+        audit.setStatus("PASSED");
+        forecast.setLeakageAudit(audit);
+        SingleStockForecast.QlibReference qlib = new SingleStockForecast.QlibReference();
+        qlib.setRuntimeDependency(false);
+        forecast.setQlibReference(qlib);
+
+        assertEquals("000300.SH", forecast.getContext().getMarket().getCode());
+        assertEquals("LOGISTIC", forecast.getModelCompetition().getSelectedModel());
+        assertEquals("PASSED", forecast.getLeakageAudit().getStatus());
+        assertFalse(forecast.getQlibReference().isRuntimeDependency());
+    }
     @Test
     void exposesVersionThreeQualificationEvidence() {
         SingleStockForecast value = new SingleStockForecast();
