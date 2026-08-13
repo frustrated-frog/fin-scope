@@ -80,3 +80,11 @@ test('presents search and graph actions as one polished desktop control family',
   expect(styles).toMatch(/@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.ic-search/s);
   expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ic-focus-button/s);
 });
+
+test('keeps the native search input borderless against later global theme rules', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  expect(styles).toMatch(/\.ic-workbench \.ic-search input\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s);
+  expect(styles).toMatch(/\.ic-workbench \.ic-search input:focus,[\s\S]*?\.ic-workbench \.ic-search input:focus-visible\s*{[^}]*border:\s*0[^}]*box-shadow:\s*none/s);
+});
