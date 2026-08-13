@@ -118,7 +118,7 @@ export function AppShell({
         </nav>
       </aside>
 
-      <main className="workspace">
+      <main className={view === 'industryChain' ? 'workspace workspace--flush-content' : 'workspace'}>
         <header className="topbar">
           <div>
             <p className="eyebrow">Local-first investment intelligence</p>
