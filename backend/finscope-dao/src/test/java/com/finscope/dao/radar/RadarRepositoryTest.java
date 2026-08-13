@@ -281,6 +281,7 @@ class RadarRepositoryTest {
                 + "canonical_title TEXT NOT NULL,summary TEXT,category_code TEXT,dashboard_category TEXT NOT NULL DEFAULT 'UNCLASSIFIED',status TEXT NOT NULL,"
                 + "first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,source_count INTEGER NOT NULL DEFAULT 0,"
                 + "signal_count INTEGER NOT NULL DEFAULT 0,hotspot_score INTEGER NOT NULL DEFAULT 0,hotspot_explanation TEXT,hotspot_lifecycle_state TEXT,"
+                + "confidence_score INTEGER NOT NULL DEFAULT 0,confidence_explanation TEXT,score_version TEXT NOT NULL DEFAULT 'HOTSPOT_V1',"
                 + "priority_score INTEGER NOT NULL DEFAULT 0,"
                 + "score_explanation TEXT,watchlist_relevance INTEGER NOT NULL DEFAULT 0,watchlist_explanation TEXT,"
                 + "uncertainty TEXT,next_observation TEXT,evidence_status TEXT,evidence_summary TEXT,evidence_warning TEXT,"

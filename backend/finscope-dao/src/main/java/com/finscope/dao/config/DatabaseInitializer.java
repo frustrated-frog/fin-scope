@@ -206,6 +206,9 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("radar_event", "hotspot_score", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("radar_event", "hotspot_explanation", "TEXT");
         ensureColumn("radar_event", "hotspot_lifecycle_state", "TEXT");
+        ensureColumn("radar_event", "confidence_score", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("radar_event", "confidence_explanation", "TEXT");
+        ensureColumn("radar_event", "score_version", "TEXT NOT NULL DEFAULT 'HOTSPOT_V1'");
         ensureColumn("radar_event", "dashboard_category", "TEXT NOT NULL DEFAULT 'UNCLASSIFIED'");
         ensureColumn("radar_event", "evidence_status", "TEXT");
         ensureColumn("radar_event", "evidence_summary", "TEXT");
@@ -222,6 +225,11 @@ public class DatabaseInitializer implements InitializingBean {
                 + "velocity_score REAL NOT NULL DEFAULT 0,hotness_score INTEGER NOT NULL DEFAULT 0,"
                 + "lifecycle_state TEXT NOT NULL,explanation TEXT,UNIQUE(event_id,snapshot_at),"
                 + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
+        ensureColumn("radar_event_snapshot", "confirmation_score", "REAL NOT NULL DEFAULT 0");
+        ensureColumn("radar_event_snapshot", "freshness_score", "REAL NOT NULL DEFAULT 0");
+        ensureColumn("radar_event_snapshot", "rank_trend_score", "REAL NOT NULL DEFAULT 0");
+        ensureColumn("radar_event_snapshot", "confidence_score", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("radar_event_snapshot", "score_version", "TEXT NOT NULL DEFAULT 'HOTSPOT_V1'");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_event_snapshot_time "
                 + "ON radar_event_snapshot(event_id,snapshot_at DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_signal ("

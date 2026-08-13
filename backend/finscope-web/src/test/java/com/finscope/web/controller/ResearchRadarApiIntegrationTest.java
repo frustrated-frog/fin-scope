@@ -43,10 +43,14 @@ class ResearchRadarApiIntegrationTest {
     @MockBean private ViewSnapshotCacheService snapshots;
 
     @Test
-    void readsTheCurrentRadarWorkspaceInsteadOfAStaleRankedSnapshot() throws Exception {
+    void readsThePublishedRadarSnapshotWithoutQueryingSqlite() throws Exception {
+        RadarEvent cachedEvent = new RadarEvent();
+        cachedEvent.setId(9L); cachedEvent.setCanonicalTitle("缓存事件");
         when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL")))
                 .thenReturn(Optional.of(new ObjectMapper().findAndRegisterModules()
-                        .valueToTree(ResearchRadarView.empty(LocalDateTime.of(2026, 7, 31, 16, 0)))));
+                        .valueToTree(new ResearchRadarView(Collections.singletonList(
+                                new ResearchRadarView.EventCard(cachedEvent)), Collections.emptyList(),
+                                Collections.emptyList(), LocalDateTime.of(2026, 7, 31, 16, 0)))));
         RadarEvent event = new RadarEvent(); event.setId(10L); event.setCanonicalTitle("当前事件");
         ResearchRadarView current = new ResearchRadarView(Collections.singletonList(
                 new ResearchRadarView.EventCard(event)), Collections.emptyList(), Collections.emptyList(),
@@ -58,9 +62,10 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.events").isArray())
                 .andExpect(jsonPath("$.data.latestChanges").doesNotExist())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
+                .andExpect(jsonPath("$.data.events[0].id").value(9))
                 .andExpect(jsonPath("$.data.overview.eventCount").value(1));
-        verify(service).loadStored("ALL", false, 20, "ALL");
-        verify(snapshots, never()).read(any(), any());
+        verify(service, never()).loadStored(any(), anyBoolean(), anyInt(), any());
+        verify(snapshots).read("radar", "category=ALL&watchlist=false&limit=20&state=ALL");
     }
 
     @Test

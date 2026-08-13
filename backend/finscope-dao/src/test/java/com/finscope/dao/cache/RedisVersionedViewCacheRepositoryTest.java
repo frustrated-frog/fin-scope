@@ -8,6 +8,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -77,11 +80,24 @@ class RedisVersionedViewCacheRepositoryTest {
 
         assertEquals(8L, repository.nextRevision("radar"));
         assertTrue(repository.put("radar", 8L, "default", "{\"events\":[]}", Duration.ofSeconds(60)));
-        repository.activateRevision("radar", 8L);
+        assertTrue(repository.activateRevision("radar", 8L));
 
         verify(valueOperations).set(eq("finscope:view:radar:8:default"),
                 eq("{\"events\":[]}"), eq(60000L), eq(TimeUnit.MILLISECONDS));
         verify(valueOperations).set("finscope:view:radar:revision", "8");
+    }
+
+    @Test
+    void activatesRadarAndDashboardRevisionsWithOneRedisScript() {
+        Map<String, Long> revisions = new LinkedHashMap<String, Long>();
+        revisions.put("radar", 8L);
+        revisions.put("dashboard", 13L);
+        when(redisTemplate.execute(org.mockito.ArgumentMatchers.any(), eq(Arrays.asList(
+                        "finscope:view:radar:revision", "finscope:view:dashboard:revision")),
+                eq("8"), eq("13"))).thenReturn(1L);
+        RedisVersionedViewCacheRepository repository = new RedisVersionedViewCacheRepository(redisTemplate);
+
+        assertTrue(repository.activateRevisions(revisions));
     }
 
     @Test

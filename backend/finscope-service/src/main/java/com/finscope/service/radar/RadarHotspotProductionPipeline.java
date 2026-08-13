@@ -131,14 +131,21 @@ public class RadarHotspotProductionPipeline {
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,
                                      List<WatchlistItem> followed, LocalDateTime now) {
         List<RankedCluster> values = new ArrayList<RankedCluster>();
+        Set<String> claimedLegacyKeys = new HashSet<String>();
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
+            reuseSameDayLegacyIdentity(event, claimedLegacyKeys);
             event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
                     previousSnapshot(event, now));
             event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());
             event.setHotspotLifecycleState(hotspot.getLifecycleState());
-            RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now);
+            event.setSourceCount(hotspot.getIndependentSourceCount());
+            event.setConfidenceScore(hotspot.getConfidenceScore());
+            event.setConfidenceExplanation(hotspot.getExplanation());
+            event.setScoreVersion(RadarHotspotScoreService.SCORE_VERSION);
+            RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now,
+                    hotspot.getTotalScore(), hotspot.getConfidenceScore(), hotspot.getIndependentSourceCount());
             event.setPriorityScore(result.getTotalScore());
             event.setScoreExplanation(hotspot.getExplanation() + "；" + String.join("；", result.getReasons()));
             event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
@@ -151,6 +158,49 @@ public class RadarHotspotProductionPipeline {
         return values;
     }
 
+    private void reuseSameDayLegacyIdentity(RadarEvent event, Set<String> claimedLegacyKeys) {
+        String key = event == null ? null : event.getEventKey();
+        if (key == null || repository.findEventByKey(key).isPresent()) {
+            return;
+        }
+        String[] parts = key.split(":");
+        if (parts.length < 4) {
+            return;
+        }
+        if (parts.length > 4) {
+            String dateOnlyKey = parts[0] + ":" + parts[1] + ":" + parts[2] + ":" + parts[3];
+            Optional<RadarEvent> dateOnly = repository.findEventByKey(dateOnlyKey);
+            if (dateOnly.isPresent() && claimedLegacyKeys.add(dateOnlyKey)) {
+                event.setEventKey(dateOnlyKey);
+                return;
+            }
+        }
+        String legacyKey = parts[0] + ":" + parts[1] + ":" + parts[2];
+        Optional<RadarEvent> legacy = repository.findEventByKey(legacyKey);
+        if (legacy.isPresent() && sameDate(legacy.get().getLastSeenAt(), event.getLastSeenAt())
+                && claimedLegacyKeys.add(legacyKey)) {
+            event.setEventKey(legacyKey);
+            return;
+        }
+        String categoryLegacyKey = legacyCategoryKey(event, legacyKey);
+        Optional<RadarEvent> categoryLegacy = repository.findEventByKey(categoryLegacyKey);
+        if (categoryLegacy.isPresent()
+                && sameDate(categoryLegacy.get().getLastSeenAt(), event.getLastSeenAt())
+                && claimedLegacyKeys.add(categoryLegacyKey)) {
+            event.setEventKey(categoryLegacyKey);
+        }
+    }
+
+    private String legacyCategoryKey(RadarEvent event, String legacyKey) {
+        String category = event == null || event.getCategoryCode() == null
+                ? "UNCLASSIFIED" : event.getCategoryCode().trim().toUpperCase(Locale.ROOT);
+        return category + ":" + legacyKey;
+    }
+
+    private boolean sameDate(LocalDateTime left, LocalDateTime right) {
+        return left != null && right != null && left.toLocalDate().equals(right.toLocalDate());
+    }
+
     private List<RadarEvent> persist(List<RankedCluster> ranked, LocalDateTime now) {
         if (ranked.isEmpty()) return new ArrayList<RadarEvent>();
         List<RadarEvent> events = new ArrayList<RadarEvent>();
@@ -158,7 +208,10 @@ public class RadarHotspotProductionPipeline {
         for (RankedCluster rankedCluster : ranked) {
             RadarClusteringService.ClusterResult cluster = rankedCluster.cluster;
             events.add(cluster.getEvent());
-            linksByEventKey.put(cluster.getEvent().getEventKey(), cluster.getLinks());
+            if (linksByEventKey.put(cluster.getEvent().getEventKey(), cluster.getLinks()) != null) {
+                throw new IllegalStateException("同一生产批次出现重复事件身份: "
+                        + cluster.getEvent().getEventKey());
+            }
         }
         // 事件与信号关系在单个事务内写入，避免出现事件已写、关系未写的半状态。
         List<RadarEvent> saved = persistence.persistEvents(events, linksByEventKey);

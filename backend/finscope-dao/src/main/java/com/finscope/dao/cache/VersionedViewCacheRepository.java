@@ -1,6 +1,7 @@
 package com.finscope.dao.cache;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -21,7 +22,10 @@ public interface VersionedViewCacheRepository {
     boolean put(String namespace, long revision, String variant, String payload, Duration ttl);
 
     /** 激活已完整写入的版本，后续读取才会切换到该版本。 */
-    void activateRevision(String namespace, long revision);
+    boolean activateRevision(String namespace, long revision);
+
+    /** 在一个 Redis 原子操作中同时激活多个页面范围，避免同批页面版本撕裂。 */
+    boolean activateRevisions(Map<String, Long> revisions);
 
     long currentRevision(String namespace);
 
@@ -50,8 +54,13 @@ public interface VersionedViewCacheRepository {
             }
 
             @Override
-            public void activateRevision(String namespace, long revision) {
-                // Redis 未启用时不发布不可读取的版本。
+            public boolean activateRevision(String namespace, long revision) {
+                return false;
+            }
+
+            @Override
+            public boolean activateRevisions(Map<String, Long> revisions) {
+                return false;
             }
 
             @Override

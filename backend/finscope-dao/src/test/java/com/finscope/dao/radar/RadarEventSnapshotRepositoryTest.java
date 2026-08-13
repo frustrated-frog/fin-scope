@@ -29,6 +29,9 @@ class RadarEventSnapshotRepositoryTest {
         jdbc.execute("CREATE TABLE radar_event_snapshot(id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,"
                 + "snapshot_at TEXT NOT NULL,signal_count INTEGER NOT NULL,independent_source_count INTEGER NOT NULL,"
                 + "velocity_score REAL NOT NULL,hotness_score INTEGER NOT NULL,lifecycle_state TEXT NOT NULL,"
+                + "confirmation_score REAL NOT NULL DEFAULT 0,freshness_score REAL NOT NULL DEFAULT 0,"
+                + "rank_trend_score REAL NOT NULL DEFAULT 0,"
+                + "confidence_score INTEGER NOT NULL DEFAULT 0,score_version TEXT NOT NULL DEFAULT 'HOTSPOT_V1',"
                 + "explanation TEXT,UNIQUE(event_id,snapshot_at),FOREIGN KEY(event_id) REFERENCES radar_event(id))");
         repository = new RadarEventSnapshotRepository(jdbc);
     }
@@ -43,6 +46,8 @@ class RadarEventSnapshotRepositoryTest {
         assertEquals(4, value.getSignalCount());
         assertEquals(68, value.getHotnessScore());
         assertEquals("RISING", value.getLifecycleState());
+        assertEquals(76, value.getConfidenceScore());
+        assertEquals("HOTSPOT_V2", value.getScoreVersion());
     }
 
     @Test
@@ -76,6 +81,7 @@ class RadarEventSnapshotRepositoryTest {
         RadarEventSnapshot value = new RadarEventSnapshot();
         value.setEventId(7L); value.setSnapshotAt(at); value.setSignalCount(signals);
         value.setIndependentSourceCount(2); value.setVelocityScore(0.8D); value.setHotnessScore(score);
+        value.setConfidenceScore(76); value.setScoreVersion("HOTSPOT_V2");
         value.setLifecycleState("RISING"); value.setExplanation("test"); return value;
     }
 }

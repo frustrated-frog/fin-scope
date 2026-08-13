@@ -17,6 +17,9 @@ public class RadarEvent {
     private int hotspotScore;
     private String hotspotExplanation;
     private String hotspotLifecycleState;
+    private int confidenceScore;
+    private String confidenceExplanation;
+    private String scoreVersion = "HOTSPOT_V1";
     private int priorityScore;
     private String scoreExplanation;
     private int watchlistRelevance;
@@ -60,6 +63,12 @@ public class RadarEvent {
     public void setHotspotExplanation(String hotspotExplanation) { this.hotspotExplanation = hotspotExplanation; }
     public String getHotspotLifecycleState() { return hotspotLifecycleState; }
     public void setHotspotLifecycleState(String hotspotLifecycleState) { this.hotspotLifecycleState = hotspotLifecycleState; }
+    public int getConfidenceScore() { return confidenceScore; }
+    public void setConfidenceScore(int confidenceScore) { this.confidenceScore = confidenceScore; }
+    public String getConfidenceExplanation() { return confidenceExplanation; }
+    public void setConfidenceExplanation(String confidenceExplanation) { this.confidenceExplanation = confidenceExplanation; }
+    public String getScoreVersion() { return scoreVersion; }
+    public void setScoreVersion(String scoreVersion) { this.scoreVersion = scoreVersion; }
     public int getPriorityScore() { return priorityScore; }
     public void setPriorityScore(int priorityScore) { this.priorityScore = priorityScore; }
     public String getScoreExplanation() { return scoreExplanation; }
