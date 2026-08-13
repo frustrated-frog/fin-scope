@@ -2943,8 +2943,13 @@ a:focus-visible {
   overflow: hidden;
 }
 
+.workspace.workspace--flush-content {
+  padding-top: 0;
+}
+
 .workspace--flush-content > .topbar {
   flex: 0 0 auto;
+  margin-top: 0;
   margin-bottom: 0;
 }
 

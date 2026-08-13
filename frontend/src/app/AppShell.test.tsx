@@ -64,10 +64,12 @@ test('removes the topbar gap only for the industry chain workspace', () => {
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
   const flushRule = styles.match(/\.workspace--flush-content\s*{([^}]*)}/s)?.[1] ?? '';
+  const flushWorkspaceRule = styles.match(/\.workspace\.workspace--flush-content\s*{([^}]*)}/s)?.[1] ?? '';
   expect(flushRule).toContain('display: flex');
   expect(flushRule).toContain('flex-direction: column');
   expect(flushRule).toContain('height: 100dvh');
   expect(flushRule).toContain('overflow: hidden');
-  expect(styles).toMatch(/\.workspace--flush-content > \.topbar\s*{[^}]*margin-bottom:\s*0/s);
+  expect(flushWorkspaceRule).toContain('padding-top: 0');
+  expect(styles).toMatch(/\.workspace--flush-content > \.topbar\s*{[^}]*margin-top:\s*0[^}]*margin-bottom:\s*0/s);
   expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.workspace--flush-content\s*{[^}]*height:\s*auto[^}]*overflow:\s*visible/s);
 });
