@@ -18,11 +18,11 @@
 - Create: `market-data-service/src/finscope_market_data/discovery/__init__.py`
 - Test: `market-data-service/tests/test_discovery_ranking.py`
 
-- [ ] Write failing tests proving budget is admission-only, ordering is input-independent, and fewer than five qualified candidates are returned.
-- [ ] Run `cd market-data-service && uv run pytest tests/test_discovery_ranking.py -q` and confirm failures identify missing discovery modules.
-- [ ] Add Pydantic request/report contracts and pure ranking functions with versioned scoring explanations.
-- [ ] Run the focused tests and confirm all pass.
-- [ ] Commit with `feat: 增加股票发现量化排序契约` and push the branch.
+- [x] Write failing tests proving budget is admission-only, ordering is input-independent, and fewer than five qualified candidates are returned.
+- [x] Run `cd market-data-service && uv run pytest tests/test_discovery_ranking.py -q` and confirm failures identify missing discovery modules.
+- [x] Add Pydantic request/report contracts and pure ranking functions with versioned scoring explanations.
+- [x] Run the focused tests and confirm all pass.
+- [x] Commit with `feat: 增加股票发现量化排序契约` and push the branch.
 
 ### Task 2: Python provider acquisition and full discovery pipeline
 
@@ -34,12 +34,12 @@
 - Test: `market-data-service/tests/test_discovery_service.py`
 - Test: `market-data-service/tests/test_api.py`
 
-- [ ] Write provider tests using fixed same-format frames for Tonghuashun failure, Eastmoney fallback, constituent de-duplication, and candidate-level data failure.
-- [ ] Run the tests and confirm the discovery endpoint and provider classes are absent.
-- [ ] Implement bounded provider access, sector/constituent normalization, QFQ admission, batch factor ranking, top-15 deep forecast, and final qualification.
-- [ ] Add `POST /v1/quant/stock-discoveries`, wiring the service through app state so tests can inject deterministic fakes.
-- [ ] Run all Python tests with `cd market-data-service && uv run pytest -q`.
-- [ ] Commit with `feat: 实现Python自动股票发现流水线` and push.
+- [x] Write provider tests using fixed same-format frames for Tonghuashun failure, Eastmoney fallback, constituent de-duplication, and candidate-level data failure.
+- [x] Run the tests and confirm the discovery endpoint and provider classes are absent.
+- [x] Implement bounded provider access, sector/constituent normalization, QFQ admission, batch factor ranking, top-15 deep forecast, and final qualification.
+- [x] Add `POST /v1/quant/stock-discoveries`, wiring the service through app state so tests can inject deterministic fakes.
+- [x] Run all Python tests with `cd market-data-service && uv run pytest -q`.
+- [x] Commit with `feat: 实现Python自动股票发现流水线` and push.
 
 ### Task 3: Java persistence and Python RPC contract
 
@@ -53,11 +53,11 @@
 - Test: `backend/finscope-dao/src/test/java/com/finscope/dao/quant/StockDiscoveryRepositoryTest.java`
 - Test: `backend/finscope-rpc/src/test/java/com/finscope/rpc/quant/PythonStockDiscoveryClientTest.java`
 
-- [ ] Write failing schema/repository tests for the unique business key, report transaction, and latest successful run query.
-- [ ] Write failing RPC tests for request serialization, response parsing, timeouts, and provider errors.
-- [ ] Add domain DTOs in the domain module, SQLite operations in DAO, and HTTP protocol mapping in RPC using project-standard field injection.
-- [ ] Run `cd backend && mvn -pl finscope-dao,finscope-rpc -am test`.
-- [ ] Commit with `feat: 增加股票发现持久化与Python契约` and push.
+- [x] Write failing schema/repository tests for the unique business key, report transaction, and latest successful run query.
+- [x] Write failing RPC tests for request serialization, response parsing, timeouts, and provider errors.
+- [x] Add domain DTOs in the domain module, SQLite operations in DAO, and HTTP protocol mapping in RPC using project-standard field injection.
+- [x] Run `cd backend && mvn -pl finscope-dao,finscope-rpc -am test`.
+- [x] Commit with `feat: 增加股票发现持久化与Python契约` and push.
 
 ### Task 4: Java automatic orchestration and read APIs
 
@@ -73,12 +73,12 @@
 - Test: `backend/finscope-service/src/test/java/com/finscope/service/quant/discovery/StockDiscoveryServiceTest.java`
 - Test: `backend/finscope-web/src/test/java/com/finscope/web/controller/StockDiscoveryControllerTest.java`
 
-- [ ] Write failing tests for idempotent scheduling, completion, candidate-level partial failures, failed-run preservation, and latest/history reads.
-- [ ] Implement the DB-first event flow: create-or-find run, publish versioned event, execute outside a DB transaction, and transactionally freeze the completed report.
-- [ ] Add the 15:30 Asia/Shanghai schedule plus startup/missed-run compensation.
-- [ ] Add latest, status, run history, and run detail endpoints.
-- [ ] Run `cd backend && mvn -pl finscope-web -am test`.
-- [ ] Commit with `feat: 实现股票发现自动调度与查询` and push.
+- [x] Write failing tests for idempotent scheduling, completion, candidate-level partial failures, failed-run preservation, and latest/history reads.
+- [x] Implement the DB-first event flow: create-or-find run, publish versioned event, execute outside a DB transaction, and transactionally freeze the completed report.
+- [x] Add the 15:30 Asia/Shanghai schedule plus startup/missed-run compensation.
+- [x] Add latest, status, run history, and run detail endpoints.
+- [x] Run `cd backend && mvn -pl finscope-web -am test`.
+- [x] Commit with `feat: 实现股票发现自动调度与查询` and push.
 
 ### Task 5: High-fidelity stock-discovery tab
 
@@ -90,12 +90,12 @@
 - Modify: `frontend/src/features/strategy/quantTypes.ts`
 - Modify: the strategy/quant stylesheet resolved from existing imports
 
-- [ ] Write failing UI tests for navigation, latest summary, source provenance, final candidate evidence, funnel counts, degraded status, and empty state.
-- [ ] Add “股票发现” before “单股预测”, keeping it inside the existing Quant workspace.
-- [ ] Build the daily research hero, sector strip, ranked candidate cards, evidence details, funnel, and deep-review watch table.
-- [ ] Add responsive and reduced-motion styles matching the existing visual system.
-- [ ] Run `cd frontend && npm test -- --run` and `cd frontend && npm run build`.
-- [ ] Commit with `feat: 增加自动股票发现工作台` and push.
+- [x] Write failing UI tests for navigation, latest summary, source provenance, final candidate evidence, funnel counts, degraded status, and empty state.
+- [x] Add “股票发现” before “单股预测”, keeping it inside the existing Quant workspace.
+- [x] Build the daily research hero, sector strip, ranked candidate cards, evidence details, funnel, and evidence details.
+- [x] Add responsive and reduced-motion styles matching the existing visual system.
+- [x] Run `cd frontend && npm test -- --run` and `cd frontend && npm run build`.
+- [x] Commit with `feat: 增加自动股票发现工作台` and push.
 
 ### Task 6: End-to-end verification and documentation
 

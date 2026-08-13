@@ -7,7 +7,29 @@ from finscope_market_data.discovery.ranking import (
 from finscope_market_data.discovery.schemas import (
     DeepCandidateEvidence,
     DiscoveryCandidate,
+    DiscoveryRequest,
 )
+
+
+def test_discovery_request_accepts_java_camel_case_contract() -> None:
+    request = DiscoveryRequest.model_validate(
+        {
+            "businessDate": "2026-08-14",
+            "budget": 5500,
+            "sectorLimit": 4,
+            "deepLimit": 10,
+            "finalLimit": 3,
+            "horizonDays": 1,
+            "policyVersion": "stock-discovery-v2",
+        }
+    )
+
+    assert request.business_date == "2026-08-14"
+    assert request.sector_limit == 4
+    assert request.deep_limit == 10
+    assert request.final_limit == 3
+    assert request.horizon_days == 1
+    assert request.policy_version == "stock-discovery-v2"
 
 
 def candidate(code: str, price: float, momentum: float, risk: float = 0.1) -> DiscoveryCandidate:

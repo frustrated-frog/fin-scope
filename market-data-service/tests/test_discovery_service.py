@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -46,10 +46,11 @@ class BrokenConstituentProvider(FakeProvider):
 class FakeMarket:
     async def bars(self, market: str, code: str):
         symbol = StockSymbol(market=market, code=code)
+        start = date(2023, 1, 1)
         return [
             DailyBar(
                 symbol=symbol,
-                trade_date=f"{2020 + index // 240:04d}-{index % 12 + 1:02d}-{index % 27 + 1:02d}",
+                trade_date=(start + timedelta(days=index)).isoformat(),
                 open=10 + index * 0.01,
                 high=10.3 + index * 0.01,
                 low=9.8 + index * 0.01,
@@ -118,3 +119,31 @@ async def test_service_falls_back_when_primary_sector_members_are_unavailable() 
     assert report.source_family == "FAKE"
     assert report.funnel.constituent_count == 2
     assert any("constituent contract drift" in warning for warning in report.warnings)
+
+
+@pytest.mark.asyncio
+async def test_service_never_uses_bars_after_requested_business_date() -> None:
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=FakeMarket(),
+        forecast_builder=lambda candidate, bars, request: {
+            "qualified": False,
+            "conclusion": "NO_CLEAR_ADVANTAGE",
+            "calibrated_probability": 0.5,
+            "probability_lower_bound": 0.4,
+            "brier_skill_score": 0,
+            "locked_accuracy": 0.5,
+            "locked_log_loss": 0.7,
+            "risk_adjusted_return": 0,
+            "max_drawdown": -0.1,
+            "stability_score": 0.5,
+            "health_status": "DEGRADED",
+        },
+    )
+
+    report = await service.discover(
+        DiscoveryRequest(business_date="2025-02-28", budget=6000)
+    )
+
+    assert report.as_of_date == "2025-02-28"
+    assert report.funnel.admitted_count == 1

@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def _to_camel(value: str) -> str:
+    head, *tail = value.split("_")
+    return head + "".join(part.title() for part in tail)
 
 
 class DiscoveryRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
+
     business_date: str | None = None
     budget: float = Field(default=6000.0, gt=0)
     sector_limit: int = Field(default=5, ge=1, le=10)

@@ -78,9 +78,11 @@ class StockDiscoveryRepositoryTest {
                 Map.entry("sector_names", List.of("人工智能")), Map.entry("lightweight_score", 0.72),
                 Map.entry("lightweight_rank", 1))));
         report.setDeepEvidence(List.of(Map.of(
+                "code", "600001",
+                "conclusion", "ROBUST", "calibrated_probability", 0.63, "health_status", "HEALTHY")));
+        report.setFinalCandidates(List.of(Map.of(
                 "code", "600001", "deep_score", 0.78, "final_rank", 1,
                 "conclusion", "ROBUST", "calibrated_probability", 0.63, "health_status", "HEALTHY")));
-        report.setFinalCandidates(report.getDeepEvidence());
         StockDiscoveryReport.Funnel funnel = new StockDiscoveryReport.Funnel();
         funnel.setConstituentCount(88);
         funnel.setAdmittedCount(20);

@@ -99,6 +99,9 @@ public class StockDiscoveryRepository {
         Map<String, Map<String, Object>> evidenceByCode = report.getDeepEvidence().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         value -> text(value, "code"), value -> value, (left, right) -> left));
+        for (Map<String, Object> selected : report.getFinalCandidates()) {
+            evidenceByCode.put(text(selected, "code"), selected);
+        }
         for (Map<String, Object> candidate : report.getCandidates()) {
             String code = text(candidate, "code");
             Map<String, Object> evidence = evidenceByCode.get(code);

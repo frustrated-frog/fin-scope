@@ -180,6 +180,12 @@ class StockDiscoveryService:
                 try:
                     async with semaphore:
                         bars = await self.market.bars(market, code)
+                    if request.business_date:
+                        bars = tuple(
+                            item
+                            for item in bars
+                            if item.trade_date <= request.business_date
+                        )
                 except Exception as error:
                     warnings.append(f"{code} 行情不可用：{_safe(error)}")
                     reasons.append("MARKET_DATA_UNAVAILABLE")
