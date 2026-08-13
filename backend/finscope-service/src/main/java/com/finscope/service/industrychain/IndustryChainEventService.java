@@ -117,9 +117,11 @@ public class IndustryChainEventService {
     }
 
     private List<String> validPath(List<String> path, Set<String> validNodeKeys) {
-        List<String> result = new ArrayList<String>();
+        List<String> result = new ArrayList<>();
         for (String nodeKey : path) {
-            if (validNodeKeys.contains(nodeKey)) result.add(nodeKey);
+            if (validNodeKeys.contains(nodeKey)) {
+                result.add(nodeKey);
+            }
         }
         return result;
     }
