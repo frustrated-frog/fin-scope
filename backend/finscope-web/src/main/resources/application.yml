@@ -28,7 +28,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: com.finscope.domain.radar,com.finscope.domain.industrychain
+        spring.json.trusted.packages: com.finscope.domain.radar,com.finscope.domain.industrychain,com.finscope.domain.quant.discovery
     listener:
       ack-mode: record
 
@@ -86,6 +86,7 @@ finscope:
   python-market-data:
     base-url: http://127.0.0.1:8000
     forecast-timeout-ms: 240000
+    discovery-timeout-ms: 900000
   acquisition:
     browser:
       enabled: false
@@ -104,6 +105,13 @@ finscope:
     warmup-interval-ms: 60000
   quant:
     market-data-sync-cron: 0 30 18 * * MON-FRI
+  stock-discovery:
+    cron: 0 30 15 * * MON-FRI
+    kafka:
+      enabled: true
+      topic: finscope.quant.stock-discovery.requested
+      group-id: finscope-stock-discovery
+      ack-timeout-ms: 2000
   radar:
     refresh-initial-delay-ms: 15000
     refresh-interval-ms: 300000

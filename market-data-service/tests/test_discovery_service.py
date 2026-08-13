@@ -36,6 +36,13 @@ class BrokenProvider(FakeProvider):
         raise RuntimeError("upstream unavailable")
 
 
+class BrokenConstituentProvider(FakeProvider):
+    source_family = "BROKEN_MEMBERS"
+
+    def constituents(self, sector: DiscoverySector):
+        raise RuntimeError("constituent contract drift")
+
+
 class FakeMarket:
     async def bars(self, market: str, code: str):
         symbol = StockSymbol(market=market, code=code)
@@ -84,3 +91,30 @@ async def test_service_falls_back_and_rejects_st_candidate() -> None:
     rejected = next(item for item in report.candidates if item.code == "000002")
     assert "SPECIAL_TREATMENT" in rejected.rejection_reasons
     assert any("upstream unavailable" in warning for warning in report.warnings)
+
+
+@pytest.mark.asyncio
+async def test_service_falls_back_when_primary_sector_members_are_unavailable() -> None:
+    service = StockDiscoveryService(
+        providers=[BrokenConstituentProvider(), FakeProvider()],
+        market=FakeMarket(),
+        forecast_builder=lambda candidate, bars, request: {
+            "qualified": True,
+            "conclusion": "ROBUST",
+            "calibrated_probability": 0.64,
+            "probability_lower_bound": 0.55,
+            "brier_skill_score": 0.1,
+            "locked_accuracy": 0.58,
+            "locked_log_loss": 0.64,
+            "risk_adjusted_return": 0.45,
+            "max_drawdown": -0.12,
+            "stability_score": 0.8,
+            "health_status": "HEALTHY",
+        },
+    )
+
+    report = await service.discover(DiscoveryRequest(budget=6000))
+
+    assert report.source_family == "FAKE"
+    assert report.funnel.constituent_count == 2
+    assert any("constituent contract drift" in warning for warning in report.warnings)

@@ -52,8 +52,9 @@ class StockDiscoveryService:
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
-        sectors, provider, warnings = await self._sectors(request.sector_limit)
-        members = await self._members(provider, sectors, warnings)
+        sectors, provider, members, warnings = await self._universe(
+            request.sector_limit
+        )
         candidates, bars_by_code = await self._admit(members, request, warnings)
         lightweight = rank_lightweight_candidates(candidates)
         by_code = {item.code: item for item in candidates}
@@ -106,20 +107,30 @@ class StockDiscoveryService:
             duration_ms=round((time.monotonic() - started) * 1000),
         )
 
-    async def _sectors(
+    async def _universe(
         self, limit: int
-    ) -> tuple[list[DiscoverySector], HotSectorProvider, list[str]]:
+    ) -> tuple[
+        list[DiscoverySector],
+        HotSectorProvider,
+        dict[str, tuple[str, str, set[str], set[str]]],
+        list[str],
+    ]:
         warnings: list[str] = []
         for provider in self.providers:
             try:
                 sectors = await asyncio.to_thread(provider.sectors, limit)
                 if sectors:
-                    return sectors, provider, warnings
+                    members = await self._members(provider, sectors, warnings)
+                    if members:
+                        return sectors, provider, members, warnings
+                    warnings.append(
+                        f"{provider.source_family} 板块成分为空，已切换备用源"
+                    )
             except Exception as error:
                 warnings.append(
                     f"{provider.source_family} 热门板块不可用：{_safe(error)}"
                 )
-        raise RuntimeError("所有热门板块数据源均不可用")
+        raise RuntimeError("所有热门板块或成分股数据源均不可用")
 
     async def _members(
         self,
