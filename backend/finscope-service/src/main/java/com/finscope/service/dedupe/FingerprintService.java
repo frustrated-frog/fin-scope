@@ -59,8 +59,8 @@ public class FingerprintService {
         all.putAll(a);
         all.putAll(b);
         for (String token : all.keySet()) {
-            int av = a.containsKey(token) ? a.get(token) : 0;
-            int bv = b.containsKey(token) ? b.get(token) : 0;
+            int av = a.getOrDefault(token, 0);
+            int bv = b.getOrDefault(token, 0);
             intersection += Math.min(av, bv);
             leftSize += av;
             rightSize += bv;
