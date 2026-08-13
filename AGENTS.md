@@ -177,21 +177,57 @@ Markdown 文件存储在 `data/vault/` 中：
 
 **严禁提交：** 公司内部数据、代码、凭据、专有 Prompt 或私有文档。现有两个固定的本地 LLM/搜索 Key 是明确的项目约定；不得打印、复制或移动其值。
 
-## 代码规范注意
+## 强制编码规范
 
-if语句或者是for语句书写的时候，格式必须为如下：
+以下规则是本项目的合入硬性要求，不得用个人偏好或通用最佳实践替换。开始编码前必须阅读《项目开发规范与代码评审清单.md》，完成修改后必须逐项自检。
+
+### 依赖注入
+
+- Spring Bean 的依赖必须采用注解字段注入：在 `private` 字段上使用 `@Autowired` 或 `@Resource`，并沿用相邻代码已经采用的注解方式。
+- 禁止把 Spring Bean 依赖改为构造方法注入，禁止为了构造方法注入将依赖字段声明为 `final`，也禁止手动 `new` 业务 Bean 或在同一个类中混用字段注入与构造方法注入。
+- 只有框架限制或该类型不是 Spring Bean 时才允许使用构造方法传递依赖；存在例外时必须先说明原因，不得自行改变项目既有注入风格。
+
+### `if` 和 `for` 语句
+
+- 所有 `if`、`else if`、`else`、传统 `for` 和增强 `for` 都必须使用完整大括号并展开书写，即使代码块中只有一条语句，或者只有 `return`、`break`、`continue`，也不得省略大括号。
+- 禁止使用 `if (condition) return;`、`for (Item item : items) handle(item);` 等单行写法；条件、左大括号、语句体和右大括号必须按照项目格式分行书写。
 
 ```java
-if () {
-	.....
+if (condition) {
+    return;
 }
 
-for () {
-  .....
+for (Item item : items) {
+    handle(item);
 }
 ```
 
+### 类、接口和枚举的代码落点
 
+新建或移动类、接口、枚举前，必须先检查模块职责、依赖方向、相邻包中的同类文件以及实际使用方，确认代码落点后再实现。禁止为了就近使用或暂时通过编译，把类型随意放进当前模块、当前类或 `common`。
+
+| 类型 | 应放位置 |
+|---|---|
+| 无业务逻辑的通用工具、基础类型、跨模块稳定常量 | `finscope-common` 对应的 `util`、`constant` 等包 |
+| 跨模块复用的稳定枚举 | `finscope-common/src/main/java/com/finscope/common/enums/`；按业务域建立子包，例如 `financials`、`research`、`factorresearch` |
+| 领域模型、领域规则、跨层内部 DTO | `finscope-domain` 对应的业务包 |
+| Repository、SQLite 持久化和 Schema 初始化 | `finscope-dao` 对应的业务包 |
+| 外部 HTTP/RPC/MQ 适配器及外部协议模型 | `finscope-rpc` 对应的业务包 |
+| 业务编排、Agent、去重、简报、知识库和导出服务 | `finscope-service` 对应的业务包 |
+| REST Controller、应用装配、Web 请求和响应对象 | `finscope-web` 的 `controller`、`config`、`request`、`response` 等包 |
+
+- 需要被多个类或模块使用的枚举必须定义为独立文件，不得为了方便定义成某个 Service、Controller 或领域类的内部枚举。
+- 仅服务于单个实现细节且不会跨类复用的私有类型，可以保留在所属类内；一旦承载领域状态、类型、来源或持久化取值等公共语义，就必须提升到正确的独立包中。
+- 放置类型时必须保持依赖方向 `web -> service -> dao/rpc -> domain/common`，下层模块不得为了引用上层类型而产生反向依赖。
+
+### 提交前自检
+
+每批代码提交前必须检查：
+
+1. Spring Bean 是否全部使用项目规定的注解字段注入，是否误加了构造方法注入。
+2. 新增或修改的所有 `if`、`for` 是否完整展开了大括号。
+3. 新增或移动的类、接口、枚举是否位于职责正确的模块和包，是否引入了反向依赖。
+4. 是否已经对照《项目开发规范与代码评审清单.md》和相邻代码完成风格检查。
 
 ## 重要说明
 
