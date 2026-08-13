@@ -1344,6 +1344,33 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_forecast_candidate_evidence "
                 + "ON single_stock_forecast_candidate_run(instrument_code,horizon_days,maturity_status,"
                 + "data_fingerprint,forecast_run_id,model_code)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_discovery_run ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_key TEXT NOT NULL UNIQUE,business_date TEXT NOT NULL,"
+                + "trigger_type TEXT NOT NULL,status TEXT NOT NULL,budget REAL NOT NULL,policy_version TEXT NOT NULL,"
+                + "as_of_date TEXT,source_family TEXT,quality_status TEXT,data_fingerprint TEXT,"
+                + "sector_count INTEGER NOT NULL DEFAULT 0,constituent_count INTEGER NOT NULL DEFAULT 0,"
+                + "admitted_count INTEGER NOT NULL DEFAULT 0,deep_review_count INTEGER NOT NULL DEFAULT 0,"
+                + "final_count INTEGER NOT NULL DEFAULT 0,report_json TEXT,error_message TEXT,"
+                + "created_at TEXT NOT NULL,started_at TEXT,completed_at TEXT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_run_latest "
+                + "ON stock_discovery_run(status,business_date DESC,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_discovery_sector ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,sector_code TEXT NOT NULL,"
+                + "sector_name TEXT NOT NULL,category TEXT NOT NULL,source_code TEXT NOT NULL,source_family TEXT NOT NULL,"
+                + "period TEXT NOT NULL,source_rank INTEGER NOT NULL,change_pct REAL,main_net_inflow REAL,"
+                + "main_net_inflow_ratio REAL,leader_stock_name TEXT,retrieved_at TEXT NOT NULL,"
+                + "UNIQUE(run_id,sector_code,category),"
+                + "FOREIGN KEY(run_id) REFERENCES stock_discovery_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_discovery_candidate ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,instrument_code TEXT NOT NULL,"
+                + "name TEXT NOT NULL,price REAL NOT NULL,lot_cost REAL NOT NULL,admitted INTEGER NOT NULL,"
+                + "rejection_reasons_json TEXT NOT NULL,sector_codes_json TEXT NOT NULL,sector_names_json TEXT NOT NULL,"
+                + "lightweight_score REAL,lightweight_rank INTEGER,deep_score REAL,final_rank INTEGER,"
+                + "conclusion TEXT,calibrated_probability REAL,health_status TEXT,detail_json TEXT NOT NULL,"
+                + "UNIQUE(run_id,instrument_code),"
+                + "FOREIGN KEY(run_id) REFERENCES stock_discovery_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_candidate_rank "
+                + "ON stock_discovery_candidate(run_id,final_rank,lightweight_rank)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,framework_code TEXT NOT NULL,"
                 + "latest_run_id INTEGER,status TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
