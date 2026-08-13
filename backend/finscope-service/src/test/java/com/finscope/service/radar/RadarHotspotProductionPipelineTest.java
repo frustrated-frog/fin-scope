@@ -53,8 +53,7 @@ class RadarHotspotProductionPipelineTest {
         RadarDashboardCategoryService dashboardCategories = new RadarDashboardCategoryService();
         RadarHotspotPersistenceService persistence = new RadarHotspotPersistenceService(repository);
         RadarEventSnapshotRepository snapshots = mock(RadarEventSnapshotRepository.class);
-        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline(news, repository, clustering,
-                priority, watchlist, runs, enhancement, scores, dashboardCategories, persistence, snapshots);
+        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
 
         NewsFeedItem first = item("CLS:1", "CLS_NEWS_FLASH", "财联社",
                 "宁德时代发布新一代电池", now.minusMinutes(20));
@@ -135,9 +134,7 @@ class RadarHotspotProductionPipelineTest {
         RadarPriorityService priority = new RadarPriorityService();
         WatchlistRepository watchlist = mock(WatchlistRepository.class);
         RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
-        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline(news, repository, clustering,
-                priority, watchlist, runs, null, new RadarHotspotScoreService(),
-                new RadarDashboardCategoryService(), new RadarHotspotPersistenceService(repository), null);
+        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
         NewsFeedSnapshot feed = new NewsFeedSnapshot(Collections.emptyList(), Collections.emptyList(), now, 0);
         when(news.load("ALL", 100)).thenReturn(feed);
         when(watchlist.findByTypes(Arrays.asList("STOCK", "FUND"))).thenReturn(Collections.emptyList());
