@@ -9,6 +9,7 @@ import com.finscope.domain.industrychain.IndustryChainEventImpact;
 import com.finscope.domain.industrychain.IndustryChainGraph;
 import com.finscope.domain.industrychain.IndustryChainNode;
 import com.finscope.domain.radar.RadarEvent;
+import lombok.Data;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -52,7 +53,7 @@ public class IndustryChainEventService {
                 continue;
             }
             Optional<IndustryChainEventImpact> analyzed = analyzer.analyze(graph, event);
-            if (!analyzed.isPresent()) {
+            if (analyzed.isEmpty()) {
                 skipped++;
                 continue;
             }
@@ -76,14 +77,20 @@ public class IndustryChainEventService {
         LocalDateTime now = LocalDateTime.now();
         List<RadarEvent> radarEvents = radarRepository.findEventsSince(now.minusHours(normalizedHours), EVENT_LIMIT);
         Map<Long, RadarEvent> eventsById = new HashMap<Long, RadarEvent>();
-        for (RadarEvent event : radarEvents) eventsById.put(event.getId(), event);
+        for (RadarEvent event : radarEvents) {
+            eventsById.put(event.getId(), event);
+        }
         Set<String> validNodeKeys = new HashSet<String>();
-        for (IndustryChainNode node : graph.getNodes()) validNodeKeys.add(node.getNodeKey());
+        for (IndustryChainNode node : graph.getNodes()) {
+            validNodeKeys.add(node.getNodeKey());
+        }
         List<IndustryChainEventFeed.EventItem> items = new ArrayList<IndustryChainEventFeed.EventItem>();
         Map<String, Integer> nodeCounts = new LinkedHashMap<String, Integer>();
         for (IndustryChainEventImpact impact : impactRepository.findByChainId(chainId)) {
             RadarEvent event = eventsById.get(impact.getRadarEventId());
-            if (event == null || !isVisible(event) || !validNodeKeys.contains(impact.getDirectNodeKey())) continue;
+            if (event == null || !isVisible(event) || !validNodeKeys.contains(impact.getDirectNodeKey())) {
+                continue;
+            }
             impact.setPathNodeKeys(validPath(impact.getPathNodeKeys(), validNodeKeys));
             items.add(item(event, impact));
             for (String nodeKey : impact.getPathNodeKeys()) {
@@ -110,9 +117,11 @@ public class IndustryChainEventService {
     }
 
     private List<String> validPath(List<String> path, Set<String> validNodeKeys) {
-        List<String> result = new ArrayList<String>();
+        List<String> result = new ArrayList<>();
         for (String nodeKey : path) {
-            if (validNodeKeys.contains(nodeKey)) result.add(nodeKey);
+            if (validNodeKeys.contains(nodeKey)) {
+                result.add(nodeKey);
+            }
         }
         return result;
     }
@@ -134,31 +143,24 @@ public class IndustryChainEventService {
     }
 
     private int compare(LocalDateTime left, LocalDateTime right) {
-        if (left == null && right == null) return 0;
-        if (left == null) return -1;
-        if (right == null) return 1;
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return -1;
+        }
+        if (right == null) {
+            return 1;
+        }
         return left.compareTo(right);
     }
 
+    @Data
     public static final class RefreshSummary {
         private final int scanned;
         private final int added;
         private final int updated;
         private final int skipped;
         private final LocalDateTime refreshedAt;
-
-        public RefreshSummary(int scanned, int added, int updated, int skipped, LocalDateTime refreshedAt) {
-            this.scanned = scanned;
-            this.added = added;
-            this.updated = updated;
-            this.skipped = skipped;
-            this.refreshedAt = refreshedAt;
-        }
-
-        public int getScanned() { return scanned; }
-        public int getAdded() { return added; }
-        public int getUpdated() { return updated; }
-        public int getSkipped() { return skipped; }
-        public LocalDateTime getRefreshedAt() { return refreshedAt; }
     }
 }

@@ -2935,6 +2935,10 @@ a:focus-visible {
   animation: fadeIn 0.3s ease-out;
 }
 
+.workspace--flush-content > .topbar {
+  margin-bottom: 0;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

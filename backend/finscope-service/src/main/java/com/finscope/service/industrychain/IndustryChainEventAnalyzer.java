@@ -17,6 +17,7 @@ import java.util.Set;
 /** 用可复现规则把聚合新闻事件映射到已发布的产业链节点。 */
 @Component
 public class IndustryChainEventAnalyzer {
+
     private static final String ANALYSIS_VERSION = "RULES_V2";
 
     public String getAnalysisVersion() {
@@ -121,12 +122,24 @@ public class IndustryChainEventAnalyzer {
     }
 
     private IndustryChainEventImpact.Mechanism mechanism(String content) {
-        if (containsAny(content, "价格", "报价", "涨价", "降价")) return IndustryChainEventImpact.Mechanism.PRICE;
-        if (containsAny(content, "政策", "监管", "补贴", "制裁")) return IndustryChainEventImpact.Mechanism.POLICY;
-        if (containsAny(content, "产能", "扩产", "减产")) return IndustryChainEventImpact.Mechanism.CAPACITY;
-        if (containsAny(content, "订单", "中标", "合同")) return IndustryChainEventImpact.Mechanism.ORDER;
-        if (containsAny(content, "技术", "突破", "发布", "迭代")) return IndustryChainEventImpact.Mechanism.TECHNOLOGY;
-        if (containsAny(content, "供应", "供给", "短缺")) return IndustryChainEventImpact.Mechanism.SUPPLY;
+        if (containsAny(content, "价格", "报价", "涨价", "降价")) {
+            return IndustryChainEventImpact.Mechanism.PRICE;
+        }
+        if (containsAny(content, "政策", "监管", "补贴", "制裁")) {
+            return IndustryChainEventImpact.Mechanism.POLICY;
+        }
+        if (containsAny(content, "产能", "扩产", "减产")) {
+            return IndustryChainEventImpact.Mechanism.CAPACITY;
+        }
+        if (containsAny(content, "订单", "中标", "合同")) {
+            return IndustryChainEventImpact.Mechanism.ORDER;
+        }
+        if (containsAny(content, "技术", "突破", "发布", "迭代")) {
+            return IndustryChainEventImpact.Mechanism.TECHNOLOGY;
+        }
+        if (containsAny(content, "供应", "供给", "短缺")) {
+            return IndustryChainEventImpact.Mechanism.SUPPLY;
+        }
         return IndustryChainEventImpact.Mechanism.DEMAND;
     }
 
@@ -136,8 +149,7 @@ public class IndustryChainEventAnalyzer {
     }
 
     private String summary(IndustryChainNode node, IndustryChainEventImpact impact) {
-        return "事件直接作用于“" + node.getName() + "”，可能通过"
-                + mechanismLabel(impact.getMechanism()) + "机制沿产业链传导。";
+        return "事件直接作用于“" + node.getName() + "”，可能通过" + mechanismLabel(impact.getMechanism()) + "机制沿产业链传导。";
     }
 
     private String mechanismLabel(String mechanism) {

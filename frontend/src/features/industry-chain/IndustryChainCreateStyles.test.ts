@@ -61,3 +61,30 @@ test('lets the responsive layout own canvas and lane widths while keeping layer 
   expect(styles).toMatch(/\.ic-layer-guide p span\s*{[^}]*font-size:\s*10px/s);
   expect(styles).toMatch(/\.ic-layer-legend > span\s*{[^}]*font:\s*500 9px\/1\.2/s);
 });
+
+test('presents search and graph actions as one polished desktop control family', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  const searchRule = styles.match(/\.ic-search\s*{([^}]*)}/s)?.[1] ?? '';
+  const buttonRule = styles.match(/\.ic-focus-button,\s*\.ic-refresh-button\s*{([^}]*)}/s)?.[1] ?? '';
+  expect(searchRule).toContain('height: 44px');
+  expect(searchRule).toContain('border-radius: 12px');
+  expect(searchRule).toContain('backdrop-filter: blur(18px) saturate(140%)');
+  expect(buttonRule).toContain('height: 44px');
+  expect(buttonRule).toContain('border-radius: 12px');
+  expect(styles).toMatch(/\.ic-search:focus-within\s*{[^}]*box-shadow:/s);
+  expect(styles).toMatch(/\.ic-refresh-button\s*{[^}]*rgba\(78, 215, 209,/s);
+  expect(styles).toMatch(/\.ic-focus-button:active,[\s\S]*?\.ic-refresh-button:active\s*{[^}]*transform:\s*scale\(\.97\)/s);
+  expect(styles).toMatch(/\.ic-focus-button:focus-visible,[\s\S]*?\.ic-refresh-button:focus-visible\s*{[^}]*outline:/s);
+  expect(styles).toMatch(/@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.ic-search/s);
+  expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ic-focus-button/s);
+});
+
+test('keeps the native search input borderless against later global theme rules', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  expect(styles).toMatch(/\.ic-workbench \.ic-search input\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s);
+  expect(styles).toMatch(/\.ic-workbench \.ic-search input:focus,[\s\S]*?\.ic-workbench \.ic-search input:focus-visible\s*{[^}]*border:\s*0[^}]*box-shadow:\s*none/s);
+});

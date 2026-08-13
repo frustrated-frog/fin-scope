@@ -1,3 +1,6 @@
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
@@ -35,4 +38,30 @@ test('groups the workspace and exposes one knowledge entry', () => {
   expect(screen.queryByRole('button', { name: 'Learning' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('认识档案 3')).toHaveTextContent('Files');
   expect(screen.queryByLabelText('主题数量 3')).not.toBeInTheDocument();
+  expect(document.querySelector('main.workspace')).not.toHaveClass('workspace--flush-content');
+});
+
+test('removes the topbar gap only for the industry chain workspace', () => {
+  const { container } = render(
+    <AppShell
+      view="industryChain"
+      currentTitle="Industry Graph · 产业链图谱"
+      theme="dark"
+      articlesCount={31}
+      topicsCount={4}
+      message="已打开产业链图谱"
+      toasts={[]}
+      onChangeView={vi.fn()}
+      onToggleTheme={vi.fn()}
+      onRefresh={vi.fn()}
+    >
+      <div />
+    </AppShell>
+  );
+
+  expect(container.querySelector('main.workspace')).toHaveClass('workspace--flush-content');
+
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+  expect(styles).toMatch(/\.workspace--flush-content > \.topbar\s*{[^}]*margin-bottom:\s*0/s);
 });
