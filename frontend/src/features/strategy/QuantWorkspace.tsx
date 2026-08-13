@@ -4,9 +4,10 @@ import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
 import { SingleStockForecastPanel } from './SingleStockForecastPanel';
+import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments';
+type Pane = 'discovery' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -39,7 +40,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
 }) {
-  const [pane, setPane] = useState<Pane>('forecast');
+  const [pane, setPane] = useState<Pane>('discovery');
   const [datasets, setDatasets] = useState<QuantDataset[]>([]);
   const [researchFactors, setResearchFactors] = useState<ResearchFactorDefinition[]>([]);
   const [datasetQuality, setDatasetQuality] = useState<QuantDatasetQuality>();
@@ -169,8 +170,10 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </header>
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略素材库'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'forecast' ? '20D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'SOURCE' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
+      {([['discovery','股票发现'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略素材库'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'SOURCE' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
     </nav>
+
+    {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} />}
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} />}
 
