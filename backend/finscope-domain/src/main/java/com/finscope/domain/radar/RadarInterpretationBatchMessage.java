@@ -1,11 +1,14 @@
 package com.finscope.domain.radar;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+@Data
 public class RadarInterpretationBatchMessage {
     public static final int MAX_EVENT_COUNT = 20;
 

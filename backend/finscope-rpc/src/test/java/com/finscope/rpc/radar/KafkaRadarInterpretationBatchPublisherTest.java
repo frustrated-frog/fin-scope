@@ -3,6 +3,7 @@ package com.finscope.rpc.radar;
 import com.finscope.domain.radar.RadarInterpretationBatchMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
 import java.time.LocalDateTime;
@@ -18,8 +19,10 @@ class KafkaRadarInterpretationBatchPublisherTest {
     void sendsEnabledBatchWithRunKeyAsKafkaKey() {
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, RadarInterpretationBatchMessage> kafka = mock(KafkaTemplate.class);
-        KafkaRadarInterpretationBatchPublisher publisher = new KafkaRadarInterpretationBatchPublisher(
-                kafka, true, "finscope.radar.interpretation.requested");
+        KafkaRadarInterpretationBatchPublisher publisher = new KafkaRadarInterpretationBatchPublisher();
+        ReflectionTestUtils.setField(publisher, "kafka", kafka);
+        ReflectionTestUtils.setField(publisher, "enabled", true);
+        ReflectionTestUtils.setField(publisher, "topic", "finscope.radar.interpretation.requested");
         RadarInterpretationBatchMessage message = new RadarInterpretationBatchMessage("run-1",
                 LocalDateTime.of(2026, 8, 12, 10, 0), Arrays.asList(1L, 2L));
         when(kafka.send("finscope.radar.interpretation.requested", "run-1", message))
@@ -34,8 +37,10 @@ class KafkaRadarInterpretationBatchPublisherTest {
     void doesNotContactKafkaWhenFeatureIsDisabled() {
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, RadarInterpretationBatchMessage> kafka = mock(KafkaTemplate.class);
-        KafkaRadarInterpretationBatchPublisher publisher = new KafkaRadarInterpretationBatchPublisher(
-                kafka, false, "finscope.radar.interpretation.requested");
+        KafkaRadarInterpretationBatchPublisher publisher = new KafkaRadarInterpretationBatchPublisher();
+        ReflectionTestUtils.setField(publisher, "kafka", kafka);
+        ReflectionTestUtils.setField(publisher, "enabled", false);
+        ReflectionTestUtils.setField(publisher, "topic", "finscope.radar.interpretation.requested");
 
         publisher.publish(new RadarInterpretationBatchMessage("run-2", LocalDateTime.now(), Arrays.asList(1L)));
 

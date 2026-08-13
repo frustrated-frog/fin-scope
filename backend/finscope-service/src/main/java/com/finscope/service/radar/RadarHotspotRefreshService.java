@@ -57,13 +57,21 @@ public class RadarHotspotRefreshService {
         this.executor = executor; this.clock = clock;
     }
 
-    public boolean requestRefresh() { return request("MANUAL"); }
+    public boolean requestRefresh() {
+        return request("MANUAL");
+    }
 
-    public boolean requestScheduledRefresh() { return request("SCHEDULED"); }
+    public boolean requestScheduledRefresh() {
+        return request("SCHEDULED");
+    }
 
-    public boolean isRunning() { return running.get(); }
+    public boolean isRunning() {
+        return running.get();
+    }
 
-    public Optional<RadarRefreshRun> latestCompletedRun() { return runs.findLatestCompletedRun(); }
+    public Optional<RadarRefreshRun> latestCompletedRun() {
+        return runs.findLatestCompletedRun();
+    }
 
     /** 最近一次批次（任意状态），供页面区分正在生产、成功与失败。 */
     public Optional<RadarRefreshRun> latestRun() { return runs.findLatestRun(); }
@@ -95,19 +103,24 @@ public class RadarHotspotRefreshService {
     }
 
     private void publishInterpretations(RadarHotspotProductionPipeline.ProductionResult result) {
-        List<Long> eventIds = new ArrayList<Long>();
+        List<Long> eventIds = new ArrayList<>();
         for (RadarEvent event : result.getEvents()) {
-            if (event != null && event.getId() != null) eventIds.add(event.getId());
-            if (eventIds.size() >= RadarInterpretationBatchMessage.MAX_EVENT_COUNT) break;
+            if (event != null && event.getId() != null) {
+                eventIds.add(event.getId());
+            }
+            if (eventIds.size() >= RadarInterpretationBatchMessage.MAX_EVENT_COUNT) {
+                break;
+            }
         }
-        if (eventIds.isEmpty()) return;
+        if (eventIds.isEmpty()) {
+            return;
+        }
         try {
             RadarRefreshRun run = result.getRun();
             interpretationPublisher.publish(new RadarInterpretationBatchMessage(
                     run == null ? null : run.getRunKey(), run == null ? null : run.getCompletedAt(), eventIds));
         } catch (RuntimeException error) {
-            log.warn("雷达榜单已发布，但 Kafka 预解读消息发送失败，runKey={}",
-                    result.getRun() == null ? null : result.getRun().getRunKey(), error);
+            log.warn("雷达榜单已发布，但 Kafka 预解读消息发送失败，runKey={}", result.getRun() == null ? null : result.getRun().getRunKey(), error);
         }
     }
 

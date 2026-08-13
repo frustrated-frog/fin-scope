@@ -4,18 +4,20 @@ import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.dao.radar.RadarEventSnapshotRepository;
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
-import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEventSnapshot;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
+import lombok.Data;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -34,38 +36,35 @@ import java.util.UUID;
 
 @Service
 public class RadarHotspotProductionPipeline {
-    private final NewsFeedService news;
-    private final RadarRepository repository;
-    private final RadarClusteringService clustering;
-    private final RadarPriorityService priority;
-    private final WatchlistRepository watchlist;
     private static final int SIGNAL_WINDOW_HOURS = 48;
     private static final int SNAPSHOT_KEEP_DAYS = 7;
-    private final RadarRefreshRunRepository runs;
-    private final RadarEventEnhancementScheduler enhancement;
-    private final RadarHotspotScoreService hotspotScores;
-    private final RadarDashboardCategoryService dashboardCategories;
-    private final RadarHotspotPersistenceService persistence;
-    private final RadarEventSnapshotRepository snapshots;
 
-    public RadarHotspotProductionPipeline(NewsFeedService news, RadarRepository repository,
-                                          RadarClusteringService clustering, RadarPriorityService priority,
-                                          WatchlistRepository watchlist, RadarRefreshRunRepository runs,
-                                          RadarEventEnhancementScheduler enhancement,
-                                          RadarHotspotScoreService hotspotScores,
-                                          RadarDashboardCategoryService dashboardCategories,
-                                          RadarHotspotPersistenceService persistence,
-                                          RadarEventSnapshotRepository snapshots) {
-        this.news = news; this.repository = repository; this.clustering = clustering;
-        this.priority = priority; this.watchlist = watchlist; this.runs = runs;
-        this.enhancement = enhancement; this.hotspotScores = hotspotScores;
-        this.dashboardCategories = dashboardCategories;
-        this.persistence = persistence; this.snapshots = snapshots;
-    }
+    @Resource
+    private NewsFeedService news;
+    @Resource
+    private RadarRepository repository;
+    @Resource
+    private RadarClusteringService clustering;
+    @Resource
+    private RadarPriorityService priority;
+    @Resource
+    private WatchlistRepository watchlist;
+    @Resource
+    private RadarRefreshRunRepository runs;
+    @Resource
+    private RadarEventEnhancementScheduler enhancement;
+    @Resource
+    private RadarHotspotScoreService hotspotScores;
+    @Resource
+    private RadarDashboardCategoryService dashboardCategories;
+    @Resource
+    private RadarHotspotPersistenceService persistence;
+    @Resource
+    private RadarEventSnapshotRepository snapshots;
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
         String category = normalizeCategory(requestedCategory);
-        RadarRefreshRun run = runs.startRun("radar-" + UUID.randomUUID().toString(), triggerType, now);
+        RadarRefreshRun run = runs.startRun("radar-" + UUID.randomUUID(), triggerType, now);
         try {
             runs.startStep(run.getId(), "FETCH", now);
             NewsFeedSnapshot snapshot = news.load(category, 100);
@@ -76,8 +75,7 @@ public class RadarHotspotProductionPipeline {
             List<RadarSignal> captured = captureSignals(snapshot.getItems(), now);
             repository.expireSignals(now.minusHours(SIGNAL_WINDOW_HOURS), now);
             List<RadarSignal> active = repository.findActiveSignals(now.minusHours(SIGNAL_WINDOW_HOURS), 500);
-            runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(),
-                    "dedupe=provider+item", now);
+            runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", now);
 
             runs.startStep(run.getId(), "AGGREGATE", now);
             List<RadarClusteringService.ClusterResult> clusters = clustering.cluster(active);
@@ -94,14 +92,16 @@ public class RadarHotspotProductionPipeline {
             List<RadarEvent> savedEvents = persist(ranked, now);
             classifyDashboardEvents();
             Set<String> activeEventKeys = new HashSet<String>();
-            for (RadarEvent event : savedEvents) activeEventKeys.add(event.getEventKey());
+            for (RadarEvent event : savedEvents) {
+                activeEventKeys.add(event.getEventKey());
+            }
             repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
-            if (snapshots != null) snapshots.deleteExpired(now.minusDays(SNAPSHOT_KEEP_DAYS));
-            runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(),
-                    "snapshot=latest-completed", now);
+            if (snapshots != null) {
+                snapshots.deleteExpired(now.minusDays(SNAPSHOT_KEEP_DAYS));
+            }
+            runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(), "snapshot=latest-completed", now);
             String warning = joinWarnings(snapshot.getWarnings());
-            RadarRefreshRun completed = runs.completeRun(run.getId(), providerCount(captured), active.size(),
-                    savedEvents.size(), warning, now);
+            RadarRefreshRun completed = runs.completeRun(run.getId(), providerCount(captured), active.size(), savedEvents.size(), warning, now);
             return new ProductionResult(completed, snapshot, savedEvents);
         } catch (RuntimeException error) {
             runs.failRun(run.getId(), safeMessage(error), now);
@@ -111,18 +111,18 @@ public class RadarHotspotProductionPipeline {
 
     private List<RadarSignal> captureSignals(List<NewsFeedItem> items, LocalDateTime now) {
         List<NewsFeedItem> ordered = new ArrayList<NewsFeedItem>(items == null
-                ? Collections.<NewsFeedItem>emptyList() : items);
+                ? Collections.emptyList() : items);
         ordered.sort(Comparator.comparing(NewsFeedItem::getPublishedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(NewsFeedItem::getId,
                 Comparator.nullsLast(Comparator.naturalOrder())));
-        Map<String, Integer> ranks = new LinkedHashMap<String, Integer>();
-        List<RadarSignal> captured = new ArrayList<RadarSignal>();
+        Map<String, Integer> ranks = new LinkedHashMap<>();
+        List<RadarSignal> captured = new ArrayList<>();
         for (NewsFeedItem item : ordered) {
             String provider = firstNonBlank(item.getProviderCode(), item.getSourceName()).toUpperCase(Locale.ROOT);
             int rank = nextRank(ranks, provider);
             RadarSignal signal = toSignal(item, rank);
             Optional<RadarSignal> previous = repository.findSignalByItemId(item.getId());
-            if (previous.isPresent()) signal.setPreviousSourceRank(previous.get().getSourceRank());
+            previous.ifPresent(radarSignal -> signal.setPreviousSourceRank(radarSignal.getSourceRank()));
             captured.add(repository.capture(signal, now));
         }
         return captured;
@@ -130,15 +130,16 @@ public class RadarHotspotProductionPipeline {
 
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,
                                      List<WatchlistItem> followed, LocalDateTime now) {
-        List<RankedCluster> values = new ArrayList<RankedCluster>();
-        Set<String> claimedLegacyKeys = new HashSet<String>();
+        List<RankedCluster> values = new ArrayList<>();
+        Set<String> claimedLegacyKeys = new HashSet<>();
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
             reuseSameDayLegacyIdentity(event, claimedLegacyKeys);
             event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
                     previousSnapshot(event, now));
-            event.setHotspotScore(hotspot.getTotalScore()); event.setHotspotExplanation(hotspot.getExplanation());
+            event.setHotspotScore(hotspot.getTotalScore());
+            event.setHotspotExplanation(hotspot.getExplanation());
             event.setHotspotLifecycleState(hotspot.getLifecycleState());
             event.setSourceCount(hotspot.getIndependentSourceCount());
             event.setConfidenceScore(hotspot.getConfidenceScore());
@@ -148,8 +149,11 @@ public class RadarHotspotProductionPipeline {
                     hotspot.getTotalScore(), hotspot.getConfidenceScore(), hotspot.getIndependentSourceCount());
             event.setPriorityScore(result.getTotalScore());
             event.setScoreExplanation(hotspot.getExplanation() + "；" + String.join("；", result.getReasons()));
-            event.setWatchlistRelevance(result.getWatchlistScore()); event.setWatchlistExplanation(result.getWatchlistExplanation());
-            event.setUncertainty(result.getUncertainty()); event.setNextObservation(result.getNextObservation()); event.setUpdatedAt(now);
+            event.setWatchlistRelevance(result.getWatchlistScore());
+            event.setWatchlistExplanation(result.getWatchlistExplanation());
+            event.setUncertainty(result.getUncertainty());
+            event.setNextObservation(result.getNextObservation());
+            event.setUpdatedAt(now);
             values.add(new RankedCluster(cluster, hotspot));
         }
         values.sort(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getPriorityScore()).reversed()
@@ -232,7 +236,9 @@ public class RadarHotspotProductionPipeline {
         return saved;
     }
 
-    /** 分类在生产事务之后收敛，首页读取阶段始终只读，避免 Dashboard 请求产生写入。 */
+    /**
+     * 分类在生产事务之后收敛，首页读取阶段始终只读，避免 Dashboard 请求产生写入。
+     */
     private void classifyDashboardEvents() {
         for (RadarEvent event : repository.findEventsForDashboardClassification(500)) {
             String classified = dashboardCategories.classify(event);
@@ -250,52 +256,83 @@ public class RadarHotspotProductionPipeline {
     }
 
     private RadarSignal toSignal(NewsFeedItem item, int rank) {
-        RadarSignal signal = new RadarSignal(); signal.setItemId(item.getId()); signal.setProviderCode(item.getProviderCode());
-        signal.setSourceName(item.getSourceName()); signal.setSourceTier(item.getSourceTier()); signal.setCategoryCode(item.getCategoryCode());
-        signal.setTitle(item.getTitle()); signal.setContent(item.getContent()); signal.setUrl(item.getUrl()); signal.setPublishedAt(item.getPublishedAt());
-        signal.setSourceRank(rank); signal.setSourceWeight(sourceWeight(item.getSourceTier())); signal.setContentHash(hash(item.getTitle()+"\n"+item.getContent()+"\n"+item.getUrl()));
-        signal.setStatus(RadarSignalStatus.ACTIVE.code()); return signal;
+        return RadarSignal.builder()
+                .itemId(item.getId())
+                .providerCode(item.getProviderCode())
+                .sourceName(item.getSourceName())
+                .sourceTier(item.getSourceTier())
+                .categoryCode(item.getCategoryCode())
+                .title(item.getTitle())
+                .content(item.getContent())
+                .url(item.getUrl())
+                .publishedAt(item.getPublishedAt())
+                .sourceRank(rank)
+                .sourceWeight(sourceWeight(item.getSourceTier()))
+                .contentHash(hash(item.getTitle() + "\n" + item.getContent() + "\n" + item.getUrl()))
+                .status(RadarSignalStatus.ACTIVE.code())
+                .build();
     }
 
     private int nextRank(Map<String, Integer> ranks, String provider) {
         int next = ranks.containsKey(provider) ? ranks.get(provider) + 1 : 1;
-        ranks.put(provider, next); return next;
+        ranks.put(provider, next);
+        return next;
     }
+
     private double sourceWeight(String tier) {
         return RadarSourceQuality.resolve(tier).getHotnessWeight();
     }
+
     private int providerCount(List<RadarSignal> signals) {
-        Set<String> providers = new HashSet<String>();
-        for (RadarSignal signal : signals) providers.add(firstNonBlank(signal.getProviderCode(), signal.getSourceName()));
+        Set<String> providers = new HashSet<>();
+        for (RadarSignal signal : signals)
+            providers.add(firstNonBlank(signal.getProviderCode(), signal.getSourceName()));
         return providers.size();
     }
-    private String joinWarnings(List<String> warnings) { return warnings == null ? "" : String.join("；", warnings); }
-    private String normalizeCategory(String value) { return value == null || value.trim().isEmpty() ? "ALL" : value.trim().toUpperCase(Locale.ROOT); }
-    private String firstNonBlank(String first, String second) { return first == null || first.trim().isEmpty() ? (second == null ? "" : second.trim()) : first.trim(); }
-    private String safeMessage(RuntimeException error) { return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage(); }
+
+    private String joinWarnings(List<String> warnings) {
+        return warnings == null ? "" : String.join("；", warnings);
+    }
+
+    private String normalizeCategory(String value) {
+        return value == null || value.trim().isEmpty() ? "ALL" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.trim().isEmpty() ? (second == null ? "" : second.trim()) : first.trim();
+    }
+
+    private String safeMessage(RuntimeException error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
     private String hash(String value) {
-        try { byte[] digest = MessageDigest.getInstance("SHA-256").digest(String.valueOf(value).getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(); for (byte item : digest) result.append(String.format("%02x", item)); return result.toString();
-        } catch (Exception error) { throw new IllegalStateException("无法生成雷达内容指纹", error); }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(String.valueOf(value).getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte item : digest) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (Exception error) {
+            throw new IllegalStateException("无法生成雷达内容指纹", error);
+        }
     }
 
     private static final class RankedCluster {
         private final RadarClusteringService.ClusterResult cluster;
         private final RadarHotspotScoreService.Score hotspot;
+
         private RankedCluster(RadarClusteringService.ClusterResult cluster, RadarHotspotScoreService.Score hotspot) {
-            this.cluster = cluster; this.hotspot = hotspot;
+            this.cluster = cluster;
+            this.hotspot = hotspot;
         }
     }
 
+    @Data
     public static final class ProductionResult {
         private final RadarRefreshRun run;
         private final NewsFeedSnapshot snapshot;
         private final List<RadarEvent> events;
-        ProductionResult(RadarRefreshRun run, NewsFeedSnapshot snapshot, List<RadarEvent> events) {
-            this.run = run; this.snapshot = snapshot; this.events = Collections.unmodifiableList(new ArrayList<RadarEvent>(events));
-        }
-        public RadarRefreshRun getRun() { return run; }
-        public NewsFeedSnapshot getSnapshot() { return snapshot; }
-        public List<RadarEvent> getEvents() { return events; }
     }
 }
