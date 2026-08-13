@@ -1,9 +1,8 @@
 package com.finscope.service.factorresearch;
 
 import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.FactorIdentity;
-import com.finscope.domain.factorresearch.FactorLifecycleStatus;
+import com.finscope.common.enums.factorresearch.FactorLifecycleStatus;
 import com.finscope.domain.factorresearch.ResearchFactorDefinition;
 import org.springframework.stereotype.Service;
 

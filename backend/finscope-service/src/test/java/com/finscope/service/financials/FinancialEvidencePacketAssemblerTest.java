@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.financials.FinancialEvidence;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
-import com.finscope.domain.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.domain.financials.FinancialReport;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
-import com.finscope.domain.financials.FinancialStatementType;
-import com.finscope.domain.financials.FinancialValueOrigin;
+import com.finscope.common.enums.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialValueOrigin;
 import com.finscope.domain.instrument.Instrument;
 import org.junit.jupiter.api.Test;
 

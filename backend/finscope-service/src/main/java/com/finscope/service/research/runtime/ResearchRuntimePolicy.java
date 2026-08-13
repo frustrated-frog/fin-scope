@@ -1,6 +1,6 @@
 package com.finscope.service.research.runtime;
 
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import org.springframework.stereotype.Component;
 

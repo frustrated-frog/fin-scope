@@ -1,5 +1,6 @@
 package com.finscope.domain.financials;
 
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;

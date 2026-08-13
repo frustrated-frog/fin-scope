@@ -1,5 +1,7 @@
 package com.finscope.domain.factorresearch;
 
+import com.finscope.common.enums.factorresearch.FactorLifecycleStatus;
+import com.finscope.common.enums.factorresearch.ObservationQuality;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

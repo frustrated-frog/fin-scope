@@ -4,11 +4,11 @@ import com.finscope.domain.financials.BrokerResearchClaim;
 import com.finscope.domain.financials.BrokerResearchForecast;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
-import com.finscope.domain.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.domain.financials.FinancialReport;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
-import com.finscope.domain.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialStatementType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

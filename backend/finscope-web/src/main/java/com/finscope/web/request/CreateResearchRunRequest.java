@@ -1,6 +1,6 @@
 package com.finscope.web.request;
 
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import lombok.Data;
 
 import java.time.LocalDate;

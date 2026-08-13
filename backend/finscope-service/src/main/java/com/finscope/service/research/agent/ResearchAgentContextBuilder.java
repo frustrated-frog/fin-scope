@@ -7,7 +7,7 @@ import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchAgentTraceView;
 import com.finscope.domain.research.agent.ResearchToolObservation;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.mission.ResearchMission;
 import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.domain.research.mission.ResearchMissionTask;

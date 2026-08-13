@@ -2,7 +2,7 @@ package com.finscope.dao.research;
 
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.research.ResearchRun;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.SourceProfile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;

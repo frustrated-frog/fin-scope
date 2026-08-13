@@ -3,7 +3,7 @@ package com.finscope.web.controller;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.factorresearch.FactorIdentity;
-import com.finscope.domain.factorresearch.FactorLifecycleStatus;
+import com.finscope.common.enums.factorresearch.FactorLifecycleStatus;
 import com.finscope.domain.factorresearch.ResearchFactorDefinition;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.service.factorresearch.CapitalFlowFreezeService;

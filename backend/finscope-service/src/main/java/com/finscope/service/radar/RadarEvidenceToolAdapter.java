@@ -3,7 +3,7 @@ package com.finscope.service.radar;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarEvidencePlan;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;

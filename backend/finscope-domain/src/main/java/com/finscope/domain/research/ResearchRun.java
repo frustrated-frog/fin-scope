@@ -1,5 +1,7 @@
 package com.finscope.domain.research;
 
+import com.finscope.common.enums.research.ResearchMode;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;

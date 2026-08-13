@@ -1,6 +1,6 @@
 package com.finscope.rpc.financials;
 
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.beans.factory.annotation.Autowired;

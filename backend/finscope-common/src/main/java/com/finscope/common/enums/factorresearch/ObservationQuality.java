@@ -1,4 +1,4 @@
-package com.finscope.domain.factorresearch;
+package com.finscope.common.enums.factorresearch;
 
 /**
  * A1 因子观测的数据质量状态。

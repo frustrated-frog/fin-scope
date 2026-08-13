@@ -2,6 +2,7 @@ package com.finscope.service.financials;
 
 import com.finscope.domain.financials.FinancialEvidence;
 import com.finscope.domain.financials.FinancialInterpretation;
+import com.finscope.common.enums.financials.FinancialInterpretationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -16,7 +17,7 @@ public class FinancialInterpretationFallbackBuilder {
         FinancialInterpretation value = new FinancialInterpretation();
         value.setReportId(packet.getReportId());
         value.setPromptVersion(packet.getPromptVersion());
-        value.setStatus("FALLBACK");
+        value.setStatus(FinancialInterpretationStatus.FALLBACK.code());
         value.setGenerationMode("DETERMINISTIC_FALLBACK");
         value.setFailureCode(reason);
         FinancialInterpretation.Result result = new FinancialInterpretation.Result();

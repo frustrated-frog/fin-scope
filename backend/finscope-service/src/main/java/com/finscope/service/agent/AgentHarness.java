@@ -8,9 +8,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentHarness {
 
-    public <T> AgentNodeResult<T> runNode(AgentRunContext context,
-                                          AgentActionFingerprint fingerprint,
-                                          NodeExecutor<T> executor) {
+    public <T> AgentNodeResult<T> runNode(AgentRunContext context, AgentActionFingerprint fingerprint, NodeExecutor<T> executor) {
         AgentRunContext actualContext = context == null
                 ? AgentRunContext.start(null, null)
                 : context;
@@ -22,7 +20,6 @@ public class AgentHarness {
             return AgentNodeResult.skipped("REPEATED_ACTION",
                     "Repeated action reached hard threshold: " + actionRecord.getFingerprint());
         }
-
         try {
             return executor.execute(actualContext);
         } catch (Exception ex) {

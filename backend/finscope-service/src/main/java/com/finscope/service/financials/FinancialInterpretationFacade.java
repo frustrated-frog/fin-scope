@@ -13,6 +13,7 @@ import com.finscope.domain.agent.AgentTraceSubject;
 import com.finscope.domain.financials.FinancialAnalysisSnapshot;
 import com.finscope.domain.financials.FinancialEvidence;
 import com.finscope.domain.financials.FinancialInterpretation;
+import com.finscope.common.enums.financials.FinancialInterpretationStatus;
 import com.finscope.domain.financials.FinancialReport;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.service.agent.AgentHarness;
@@ -96,12 +97,12 @@ public class FinancialInterpretationFacade {
         pending.setGenerationKey(generationKey);
         pending.setPromptVersion(packet.getPromptVersion());
         pending.setModelName(agent.modelName());
-        pending.setStatus("QUEUED");
+        pending.setStatus(FinancialInterpretationStatus.QUEUED.code());
         interpretations.save(pending);
         try {
             executor.execute(() -> complete(pending, packet));
         } catch (RuntimeException error) {
-            pending.setStatus("FAILED");
+            pending.setStatus(FinancialInterpretationStatus.FAILED.code());
             pending.setFailureCode("EXECUTOR_REJECTED");
             pending.setFailureMessage(error.getMessage());
             pending.setCompletedAt(LocalDateTime.now());
@@ -161,25 +162,25 @@ public class FinancialInterpretationFacade {
                 "financial-interpret:" + pending.getGenerationKey(), packet.getInputHash());
         AgentNodeResult<FinancialInterpretation> node;
         try {
-            pending.setStatus("RUNNING");
+            pending.setStatus(FinancialInterpretationStatus.RUNNING.code());
             pending.setStartedAt(LocalDateTime.now());
             interpretations.update(pending);
             node = harness.runNode(context, fingerprint, actual -> {
                 FinancialInterpretationAgent.Execution execution = agent.interpretWithMetrics(packet);
                 actual.recordLlmCalls(execution.getLlmCallCount());
                 FinancialInterpretation output = execution.getValue();
-                if ("FALLBACK".equals(output.getStatus())) {
+                if (FinancialInterpretationStatus.FALLBACK.matches(output.getStatus())) {
                     return AgentNodeResult.fallback(output, "snapshot=" + pending.getSnapshotId(),
                             "status=" + output.getStatus(), output.getFailureCode(), 1);
                 }
                 return AgentNodeResult.success(output, "snapshot=" + pending.getSnapshotId(),
                         "status=" + output.getStatus(), 1);
             });
-            pending.setStatus("VALIDATING");
+            pending.setStatus(FinancialInterpretationStatus.VALIDATING.code());
             interpretations.update(pending);
             FinancialInterpretation output = node.getValue();
             if (output == null) {
-                pending.setStatus("FAILED");
+                pending.setStatus(FinancialInterpretationStatus.FAILED.code());
                 pending.setFailureCode(node.getErrorType());
                 pending.setFailureMessage(node.getErrorMessage());
             } else {
@@ -187,7 +188,7 @@ public class FinancialInterpretationFacade {
             }
         } catch (RuntimeException error) {
             node = AgentNodeResult.failed("UNEXPECTED_RUNTIME_ERROR", safeMessage(error));
-            pending.setStatus("FAILED");
+            pending.setStatus(FinancialInterpretationStatus.FAILED.code());
             pending.setFailureCode("UNEXPECTED_RUNTIME_ERROR");
             pending.setFailureMessage("Agent 解读执行异常，请重新运行");
         }

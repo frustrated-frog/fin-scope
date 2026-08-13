@@ -1,8 +1,8 @@
 package com.finscope.rpc.financials;
 
-import com.finscope.domain.financials.FinancialQualityStatus;
-import com.finscope.domain.financials.FinancialReportType;
-import com.finscope.domain.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialStatementType;
 import lombok.Data;
 
 import java.math.BigDecimal;

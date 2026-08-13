@@ -1,5 +1,6 @@
 package com.finscope.domain.research;
 
+import com.finscope.common.enums.research.ResearchMode;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

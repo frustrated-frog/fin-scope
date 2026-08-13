@@ -3,9 +3,9 @@ package com.finscope.service.financials;
 import com.finscope.domain.financials.FinancialFinding;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
-import com.finscope.domain.financials.FinancialQualityStatus;
-import com.finscope.domain.financials.FinancialStatementType;
-import com.finscope.domain.financials.FinancialValueOrigin;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialValueOrigin;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

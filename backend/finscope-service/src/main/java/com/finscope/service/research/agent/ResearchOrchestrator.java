@@ -1,6 +1,6 @@
 package com.finscope.service.research.agent;
 
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.search.SearchResult;
 
 import java.util.Collections;

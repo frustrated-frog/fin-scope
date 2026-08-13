@@ -5,7 +5,7 @@ import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;

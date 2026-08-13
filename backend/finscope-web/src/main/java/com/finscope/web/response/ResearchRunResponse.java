@@ -2,7 +2,7 @@ package com.finscope.web.response;
 
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.SourceProfile;
 
 import java.time.LocalDate;

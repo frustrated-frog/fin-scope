@@ -3,7 +3,7 @@ package com.finscope.service.research.runtime;
 import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
 import com.finscope.domain.research.runtime.ResearchRuntimeView;

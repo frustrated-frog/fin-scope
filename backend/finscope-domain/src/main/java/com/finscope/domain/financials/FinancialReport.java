@@ -1,5 +1,7 @@
 package com.finscope.domain.financials;
 
+import com.finscope.common.enums.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialReportType;
 import lombok.Data;
 
 import java.time.LocalDate;

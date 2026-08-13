@@ -1,4 +1,4 @@
-package com.finscope.domain.research.material;
+package com.finscope.common.enums.research;
 
 public enum ResearchMaterialType {
     ANNOUNCEMENT,

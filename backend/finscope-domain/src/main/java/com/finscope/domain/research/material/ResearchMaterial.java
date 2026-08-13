@@ -1,5 +1,7 @@
 package com.finscope.domain.research.material;
 
+import com.finscope.common.enums.research.ResearchMaterialType;
+
 import java.time.LocalDateTime;
 
 /** 可被研究 Agent 引用的标准化外部资料。 */

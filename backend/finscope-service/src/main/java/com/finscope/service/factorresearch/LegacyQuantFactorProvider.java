@@ -2,7 +2,7 @@ package com.finscope.service.factorresearch;
 
 import com.finscope.domain.factorresearch.FactorIdentity;
 import com.finscope.domain.factorresearch.FactorObservation;
-import com.finscope.domain.factorresearch.ObservationQuality;
+import com.finscope.common.enums.factorresearch.ObservationQuality;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.service.quant.factor.FactorCalculator;
 import com.finscope.service.quant.factor.FactorRegistry;

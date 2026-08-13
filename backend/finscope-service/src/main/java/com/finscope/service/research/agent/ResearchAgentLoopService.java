@@ -3,7 +3,7 @@ package com.finscope.service.research.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchMissionGap;
@@ -15,8 +15,6 @@ import com.finscope.service.research.mission.ResearchPlanPatch;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.runtime.RuntimeNodeStart;
 import org.springframework.stereotype.Service;
-
-import java.util.Map;
 
 @Service
 public class ResearchAgentLoopService {

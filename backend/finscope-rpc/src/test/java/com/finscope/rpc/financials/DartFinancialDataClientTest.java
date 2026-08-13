@@ -1,7 +1,7 @@
 package com.finscope.rpc.financials;
 
-import com.finscope.domain.financials.FinancialReportType;
-import com.finscope.domain.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialStatementType;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.search.SearchResult;
 import com.finscope.domain.search.WebSearchRequest;

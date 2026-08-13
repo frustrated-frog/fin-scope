@@ -1,4 +1,4 @@
-package com.finscope.domain.financials;
+package com.finscope.common.enums.financials;
 
 public enum FinancialStatementType {
     INCOME,

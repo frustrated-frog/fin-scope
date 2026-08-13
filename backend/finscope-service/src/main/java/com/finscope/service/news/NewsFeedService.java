@@ -1,13 +1,11 @@
 package com.finscope.service.news;
 
 import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsClassificationRepository;
 import com.finscope.domain.news.NewsCategory;
 import com.finscope.domain.news.NewsItemClassification;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;

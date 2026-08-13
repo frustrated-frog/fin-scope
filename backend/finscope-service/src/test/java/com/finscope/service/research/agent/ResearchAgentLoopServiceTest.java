@@ -4,7 +4,7 @@ import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.dao.research.runtime.ResearchRuntimeRepository;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;

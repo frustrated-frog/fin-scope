@@ -3,7 +3,7 @@ package com.finscope.rpc.research.material;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.rpc.acquisition.AcquisitionRequest;
 import com.finscope.rpc.acquisition.AcquisitionResponse;
 import com.finscope.rpc.acquisition.AcquisitionRuntime;

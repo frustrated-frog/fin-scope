@@ -1,7 +1,7 @@
 package com.finscope.rpc.research.material;
 
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.provider.ExternalDataProvider;
 

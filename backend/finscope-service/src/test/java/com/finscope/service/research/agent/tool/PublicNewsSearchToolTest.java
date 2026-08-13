@@ -2,7 +2,7 @@ package com.finscope.service.research.agent.tool;
 
 import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.domain.research.ResearchSearchEvidence;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;

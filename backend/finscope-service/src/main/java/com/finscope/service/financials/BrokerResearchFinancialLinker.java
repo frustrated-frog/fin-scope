@@ -5,7 +5,7 @@ import com.finscope.domain.financials.BrokerResearchForecast;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
 import com.finscope.domain.financials.FinancialReportView;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;

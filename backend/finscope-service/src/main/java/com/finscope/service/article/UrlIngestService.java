@@ -8,7 +8,7 @@ import com.finscope.common.util.StringUtils;
 import com.finscope.domain.article.ArticleIngestResult;
 import com.finscope.domain.fetch.RawItem;
 import com.finscope.domain.source.Source;
-import com.finscope.domain.source.SourceType;
+import com.finscope.common.enums.SourceType;
 import com.finscope.domain.task.TaskPhase;
 import com.finscope.rpc.source.SourceAdapter;
 import com.finscope.rpc.source.SourceAdapterRegistry;

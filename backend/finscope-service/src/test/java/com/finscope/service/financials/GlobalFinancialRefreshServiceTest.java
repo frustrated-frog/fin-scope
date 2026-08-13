@@ -1,7 +1,7 @@
 package com.finscope.service.financials;
 
 import com.finscope.dao.instrument.InstrumentRepository;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.instrument.Instrument;
 import org.junit.jupiter.api.Test;

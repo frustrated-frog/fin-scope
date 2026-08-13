@@ -1,7 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.financials.FinancialReport;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.financials.FinancialDocument;
 import com.finscope.domain.financials.FinancialEvidence;

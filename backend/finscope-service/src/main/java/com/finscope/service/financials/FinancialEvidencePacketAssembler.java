@@ -5,7 +5,7 @@ import com.finscope.domain.financials.FinancialEvidence;
 import com.finscope.domain.financials.FinancialFinding;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
-import com.finscope.domain.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.domain.financials.FinancialReportView;
 import org.springframework.stereotype.Component;
 

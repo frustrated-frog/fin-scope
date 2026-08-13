@@ -1,5 +1,6 @@
 package com.finscope.domain.source;
 
+import com.finscope.common.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

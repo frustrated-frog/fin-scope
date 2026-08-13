@@ -3,7 +3,7 @@ package com.finscope.service.financials;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.InstrumentRepository;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.instrument.Instrument;
 import org.springframework.stereotype.Service;

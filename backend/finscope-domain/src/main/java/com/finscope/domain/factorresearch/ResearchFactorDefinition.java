@@ -1,5 +1,7 @@
 package com.finscope.domain.factorresearch;
 
+import com.finscope.common.enums.factorresearch.FactorLifecycleStatus;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

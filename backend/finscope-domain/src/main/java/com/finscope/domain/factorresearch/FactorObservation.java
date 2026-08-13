@@ -1,5 +1,6 @@
 package com.finscope.domain.factorresearch;
 
+import com.finscope.common.enums.factorresearch.ObservationQuality;
 import com.finscope.domain.instrument.InstrumentCodeCanonicalizer;
 
 import java.math.BigDecimal;

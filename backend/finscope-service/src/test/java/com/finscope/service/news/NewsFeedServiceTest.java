@@ -6,7 +6,7 @@ import com.finscope.dao.news.NewsClassificationRepository;
 import com.finscope.domain.news.NewsCategory;
 import com.finscope.domain.news.NewsItemClassification;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.service.research.material.ResearchMaterialGateway;
 import com.finscope.service.research.material.ResearchMaterialGatewayResult;
 import org.junit.jupiter.api.Test;

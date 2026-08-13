@@ -1,5 +1,6 @@
 package com.finscope.domain.financials;
 
+import com.finscope.common.enums.financials.FinancialStatementType;
 import com.finscope.domain.instrument.Instrument;
 import lombok.Data;
 

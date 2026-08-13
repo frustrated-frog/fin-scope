@@ -2,7 +2,7 @@ package com.finscope.service.research.material;
 
 import com.finscope.domain.financials.BrokerResearchCandidate;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.domain.research.material.ResearchMaterialType;
+import com.finscope.common.enums.research.ResearchMaterialType;
 import com.finscope.rpc.research.material.ResearchMaterialRequest;
 import com.finscope.service.financials.BrokerResearchSource;
 import org.junit.jupiter.api.Test;

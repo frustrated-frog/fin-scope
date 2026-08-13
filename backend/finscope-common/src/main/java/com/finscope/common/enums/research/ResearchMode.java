@@ -1,4 +1,4 @@
-package com.finscope.domain.research;
+package com.finscope.common.enums.research;
 
 import java.util.Locale;
 

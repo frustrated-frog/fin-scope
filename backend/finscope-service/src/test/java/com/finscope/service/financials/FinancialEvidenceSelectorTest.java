@@ -1,7 +1,7 @@
 package com.finscope.service.financials;
 
 import com.finscope.domain.financials.FinancialEvidence;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

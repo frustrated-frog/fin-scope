@@ -1,6 +1,6 @@
 package com.finscope.service.factorresearch;
 
-import com.finscope.domain.factorresearch.FactorLifecycleStatus;
+import com.finscope.common.enums.factorresearch.FactorLifecycleStatus;
 import com.finscope.domain.factorresearch.ResearchFactorDefinition;
 import com.finscope.service.quant.factor.FactorRegistry;
 import org.junit.jupiter.api.Test;

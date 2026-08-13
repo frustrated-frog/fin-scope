@@ -2,11 +2,11 @@ package com.finscope.service.financials;
 
 import com.finscope.dao.financials.FinancialReportRepository;
 import com.finscope.dao.instrument.InstrumentRepository;
-import com.finscope.domain.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.domain.financials.FinancialReport;
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import com.finscope.domain.financials.FinancialReportView;
-import com.finscope.domain.financials.FinancialStatementType;
+import com.finscope.common.enums.financials.FinancialStatementType;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.rpc.financials.ExternalFinancialStatements;
 import com.finscope.rpc.financials.StructuredFinancialDataGateway;

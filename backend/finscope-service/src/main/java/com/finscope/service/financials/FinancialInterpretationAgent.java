@@ -3,6 +3,7 @@ package com.finscope.service.financials;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.financials.FinancialInterpretation;
+import com.finscope.common.enums.financials.FinancialInterpretationStatus;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
@@ -95,7 +96,7 @@ public class FinancialInterpretationAgent {
             JsonNode root = parser.parse(output);
             FinancialInterpretation.Result accepted = gate.apply(root, packet);
             FinancialInterpretation value = base(packet);
-            value.setStatus("SUCCESS");
+            value.setStatus(FinancialInterpretationStatus.SUCCESS.code());
             value.setGenerationMode(mode);
             value.setResult(accepted);
             value.setValidationErrors(new ArrayList<String>(priorErrors));

@@ -1,7 +1,7 @@
 package com.finscope.dao.research;
 
 import com.finscope.dao.config.DatabaseInitializer;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.ResearchRun;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

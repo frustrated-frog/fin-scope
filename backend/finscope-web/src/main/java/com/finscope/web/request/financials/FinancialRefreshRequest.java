@@ -1,6 +1,6 @@
 package com.finscope.web.request.financials;
 
-import com.finscope.domain.financials.FinancialReportType;
+import com.finscope.common.enums.financials.FinancialReportType;
 import lombok.Data;
 
 import javax.validation.constraints.NotNull;

@@ -1,5 +1,6 @@
 package com.finscope.service.research;
 
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.ContentIdeaRepository;
@@ -50,7 +51,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -553,12 +553,12 @@ class ResearchServiceHarnessTest {
         when(fetches.fetch(12L)).thenReturn(fetchRun());
         when(fetches.fetch(any(Source.class))).thenReturn(fetchRun());
         when(reports.generate(501L)).thenReturn(report(501L));
-        when(agentLoop.run(501L, com.finscope.domain.research.ResearchMode.DEEP))
+        when(agentLoop.run(501L, ResearchMode.DEEP))
                 .thenReturn(ResearchAgentLoopResult.aborted(9, 3,
                 "EVIDENCE_INSUFFICIENT"));
 
         service.createRun(3L, LocalDate.of(2026, 7, 26),
-                Collections.singletonList(ResearchEnums.THEME_MARKET), com.finscope.domain.research.ResearchMode.DEEP);
+                Collections.singletonList(ResearchEnums.THEME_MARKET), ResearchMode.DEEP);
         executor.runCaptured();
 
         verify(missions).initializePending(any(ResearchRun.class), eq(thesis),
@@ -566,7 +566,7 @@ class ResearchServiceHarnessTest {
         verify(missions).plan(any(ResearchRun.class), eq(thesis));
         verify(missions).startTask(501L, "scan_context");
         verify(missions).assess(501L, "scan_context");
-        verify(agentLoop).run(501L, com.finscope.domain.research.ResearchMode.DEEP);
+        verify(agentLoop).run(501L, ResearchMode.DEEP);
         verify(missions).startTask(501L, "write_report");
         verify(reports).generate(501L);
         verify(missions).completeMission(501L, true, null);

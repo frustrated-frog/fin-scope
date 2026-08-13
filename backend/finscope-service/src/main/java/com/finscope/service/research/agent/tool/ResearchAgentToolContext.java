@@ -1,6 +1,6 @@
 package com.finscope.service.research.agent.tool;
 
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 
 public class ResearchAgentToolContext {
     private final Long researchRunId;

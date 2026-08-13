@@ -3,7 +3,7 @@ package com.finscope.service.financials;
 import com.finscope.domain.financials.FinancialFinding;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
-import com.finscope.domain.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialQualityStatus;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

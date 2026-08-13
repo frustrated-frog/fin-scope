@@ -17,7 +17,7 @@ import com.finscope.domain.agent.AgentNodeResult;
 import com.finscope.domain.agent.AgentRunContext;
 import com.finscope.domain.fetch.FetchRun;
 import com.finscope.domain.research.ResearchEnums;
-import com.finscope.domain.research.ResearchMode;
+import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchRunPlan;
 import com.finscope.domain.research.ResearchRunPlanStep;
