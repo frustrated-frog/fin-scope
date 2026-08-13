@@ -88,3 +88,13 @@ test('keeps the native search input borderless against later global theme rules'
   expect(styles).toMatch(/\.ic-workbench \.ic-search input\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s);
   expect(styles).toMatch(/\.ic-workbench \.ic-search input:focus,[\s\S]*?\.ic-workbench \.ic-search input:focus-visible\s*{[^}]*border:\s*0[^}]*box-shadow:\s*none/s);
 });
+
+test('fills the desktop workspace without relying on a viewport height magic number', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/features/industry-chain/industry-chain.css`, 'utf8');
+
+  const workbenchRule = styles.match(/\.ic-workbench\s*{([^}]*)}/s)?.[1] ?? '';
+  expect(workbenchRule).toContain('flex: 1 1 auto');
+  expect(workbenchRule).toContain('min-height: 0');
+  expect(workbenchRule).not.toContain('100vh - 132px');
+});

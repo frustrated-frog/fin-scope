@@ -2935,7 +2935,16 @@ a:focus-visible {
   animation: fadeIn 0.3s ease-out;
 }
 
+.workspace--flush-content {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .workspace--flush-content > .topbar {
+  flex: 0 0 auto;
   margin-bottom: 0;
 }
 
@@ -7707,6 +7716,11 @@ td {
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .workspace--flush-content {
+    height: auto;
+    overflow: visible;
   }
 
   .sidebar {

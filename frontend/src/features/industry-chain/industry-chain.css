@@ -12,8 +12,9 @@
   --ic-jade: #60b99f;
   --ic-blue: #72a9d4;
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: 256px minmax(0, 1fr);
-  min-height: calc(100vh - 132px);
+  min-height: 0;
   margin: 0 -22px -24px;
   overflow: hidden;
   color: var(--ic-ink);
