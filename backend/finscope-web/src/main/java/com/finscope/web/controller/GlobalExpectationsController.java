@@ -5,6 +5,7 @@ import com.finscope.domain.globalexpectations.GlobalExpectationItem;
 import com.finscope.service.globalexpectations.GlobalExpectationsService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,5 +21,10 @@ public class GlobalExpectationsController {
     @GetMapping
     public ApiResponse<List<GlobalExpectationItem>> list() {
         return ApiResponses.success(globalExpectationsService.list());
+    }
+
+    @PostMapping("/refresh")
+    public ApiResponse<List<GlobalExpectationItem>> refresh() {
+        return ApiResponses.success(globalExpectationsService.refresh());
     }
 }

@@ -17,7 +17,7 @@ import java.util.Map;
 @Component
 public class PolymarketPublicClient {
     private static final URI ACTIVE_MARKETS_URI = URI.create(
-            "https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=0");
+            "https://gamma-api.polymarket.com/markets?closed=false&limit=500&offset=0");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Resource

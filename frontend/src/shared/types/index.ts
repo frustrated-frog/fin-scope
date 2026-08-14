@@ -26,6 +26,8 @@ export type GlobalExpectationItem = {
   question: string;
   marketUrl: string;
   probability: number;
+  change5m?: number;
+  change1h?: number;
   change24h?: number;
   volume?: number;
   openInterest?: number;
@@ -33,7 +35,10 @@ export type GlobalExpectationItem = {
   endDate?: string;
   observation: string;
   status: 'WATCHING' | 'SIGNAL' | 'BASELINE';
+  dataStatus?: 'LIVE' | 'STALE' | 'UNAVAILABLE';
   observedAt?: string;
+  lastRefreshAt?: string;
+  priceHistory?: Array<{ observedAt: string; probability: number }>;
 };
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };

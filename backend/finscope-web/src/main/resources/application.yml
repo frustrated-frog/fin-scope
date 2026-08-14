@@ -103,6 +103,9 @@ finscope:
     max-intraday-fallback-age-seconds: 120
     warmup-enabled: false
     warmup-interval-ms: 60000
+  global-expectations:
+    refresh-initial-delay-ms: 2000
+    refresh-interval-ms: 60000
   quant:
     market-data-sync-cron: 0 30 18 * * MON-FRI
   stock-discovery:
