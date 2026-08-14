@@ -82,7 +82,7 @@ public class PythonStockDiscoveryClient {
                 || report.getFunnel().getAdmittedCount() < report.getFunnel().getDeepReviewCount()
                 || report.getFunnel().getQuantifiedCount() != report.getFunnel().getAdmittedCount()
                 || report.getFunnel().getAdmittedCount() > report.getCandidates().size()
-                || report.getCandidates().size() > report.getFunnel().getConstituentCount()) {
+                || report.getCandidates().size() != report.getFunnel().getConstituentCount()) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现缺少必需字段或漏斗计数无效", false, null);
         }
         try {
@@ -96,12 +96,13 @@ public class PythonStockDiscoveryClient {
     private void validateCandidateRelations(StockDiscoveryReport report) {
         Set<String> candidateCodes = codes(report.getCandidates());
         Set<String> deepCodes = codes(report.getDeepEvidence());
+        Set<String> selectedCodes = new HashSet<String>();
         Set<Integer> ranks = new HashSet<Integer>();
         int expectedCount = report.getFinalCandidates().size();
         for (Map<String, Object> selected : report.getFinalCandidates()) {
             String code = text(selected.get("code"));
             int rank = integer(selected.get("final_rank"));
-            if (!candidateCodes.contains(code) || !deepCodes.contains(code)
+            if (!selectedCodes.add(code) || !candidateCodes.contains(code) || !deepCodes.contains(code)
                     || rank < 1 || rank > expectedCount || !ranks.add(rank)
                     || !Boolean.TRUE.equals(selected.get("qualified"))
                     || !"HEALTHY".equals(text(selected.get("health_status")))

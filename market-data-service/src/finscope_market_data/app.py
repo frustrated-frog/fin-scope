@@ -68,8 +68,8 @@ def create_app(
         if application.state.discovery is None:
             application.state.discovery = StockDiscoveryService(
                 providers=[
-                    TonghuashunHotSectorProvider(),
                     EastmoneyHotSectorProvider(),
+                    TonghuashunHotSectorProvider(),
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
                 universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",

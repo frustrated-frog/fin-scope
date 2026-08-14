@@ -109,7 +109,7 @@
 - [ ] Inspect the rendered tab at desktop and narrow widths, checking overflow, hierarchy, source labels, and empty/error states.
 - [x] Review every changed Java `if`/`for`, Spring dependency, and type location against `项目开发规范与代码评审清单.md`.
 - [x] Remove unused code and temporary diagnostics.
-- [ ] Commit with `docs: 补充自动股票发现运行说明` and push.
+- [x] Commit and push the final operating notes, verification record, and production-hardening changes.
 
 ### Final verification record (2026-08-14)
 

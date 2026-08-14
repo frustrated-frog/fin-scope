@@ -118,7 +118,7 @@ class PythonStockDiscoveryClientTest {
                 + "\"health_status\":\"HEALTHY\",\"conclusion\":\"CONDITIONALLY_EFFECTIVE\","
                 + "\"calibrated_probability\":0.61,\"probability_lower_bound\":0.53,"
                 + "\"evidence\":[\"locked test\"],\"risks\":[],\"forecast_report\":{}}],"
-                + "\"funnel\":{\"constituent_count\":88,\"admitted_count\":2,"
+                + "\"funnel\":{\"constituent_count\":2,\"admitted_count\":2,"
                 + "\"quantified_count\":2,\"deep_review_count\":2,\"final_count\":2},"
                 + "\"warnings\":[],\"duration_ms\":12000}";
     }

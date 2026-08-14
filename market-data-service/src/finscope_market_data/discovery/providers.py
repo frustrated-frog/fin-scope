@@ -101,30 +101,27 @@ class TonghuashunHotSectorProvider:
 
         retrieved_at = datetime.now().isoformat()
         result: list[DiscoverySector] = []
-        for category, frame in (
-            ("INDUSTRY", ak.stock_board_industry_summary_ths()),
-            ("CONCEPT", ak.stock_board_concept_summary_ths()),
-        ):
-            ordered = frame.sort_values("净流入", ascending=False).head(limit)
-            for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
-                name = str(row.get("板块", "")).strip()
-                if not name:
-                    continue
-                result.append(
-                    DiscoverySector(
-                        code=name,
-                        name=name,
-                        category=category,
-                        source_code=self.source_code,
-                        source_family=self.source_family,
-                        period="1D",
-                        source_rank=rank,
-                        change_pct=_number(row.get("涨跌幅")),
-                        main_net_inflow=_number(row.get("净流入")),
-                        leader_stock_name=_text(row.get("领涨股")),
-                        retrieved_at=retrieved_at,
-                    )
+        frame = ak.stock_board_industry_summary_ths()
+        ordered = frame.sort_values("净流入", ascending=False).head(limit)
+        for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
+            name = str(row.get("板块", "")).strip()
+            if not name:
+                continue
+            result.append(
+                DiscoverySector(
+                    code=name,
+                    name=name,
+                    category="INDUSTRY",
+                    source_code=self.source_code,
+                    source_family=self.source_family,
+                    period="1D",
+                    source_rank=rank,
+                    change_pct=_number(row.get("涨跌幅")),
+                    main_net_inflow=_number(row.get("净流入")),
+                    leader_stock_name=_text(row.get("领涨股")),
+                    retrieved_at=retrieved_at,
                 )
+            )
         if not result:
             raise RuntimeError("同花顺热门行业榜单为空")
         return result
