@@ -78,7 +78,7 @@ public class RadarHotspotProductionPipeline {
             runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", now);
 
             runs.startStep(run.getId(), "AGGREGATE", now);
-            List<RadarClusteringService.ClusterResult> clusters = clustering.cluster(active);
+            List<RadarClusteringService.ClusterResult> clusters = mergeDuplicateClusters(clustering.cluster(active));
             runs.completeStep(run.getId(), "AGGREGATE", "SUCCESS", active.size(), clusters.size(),
                     "connected-components=true", now);
 
@@ -160,6 +160,71 @@ public class RadarHotspotProductionPipeline {
                 .thenComparing(Comparator.comparingInt((RankedCluster value) -> value.cluster.getEvent().getHotspotScore()).reversed())
                 .thenComparing(value -> value.cluster.getEvent().getEventKey(), Comparator.nullsLast(Comparator.naturalOrder())));
         return values;
+    }
+
+    List<RadarClusteringService.ClusterResult> mergeDuplicateClusters(
+            List<RadarClusteringService.ClusterResult> clusters) {
+        Map<String, RadarClusteringService.ClusterResult> merged = new LinkedHashMap<String, RadarClusteringService.ClusterResult>();
+        int missingIdentity = 0;
+        for (RadarClusteringService.ClusterResult cluster : clusters) {
+            String eventKey = cluster.getEvent().getEventKey();
+            String mergeKey = eventKey == null || eventKey.trim().isEmpty()
+                    ? "__MISSING__" + missingIdentity++ : eventKey;
+            RadarClusteringService.ClusterResult existing = merged.get(mergeKey);
+            if (existing == null) {
+                merged.put(mergeKey, cluster);
+                continue;
+            }
+            mergeCluster(existing, cluster);
+        }
+        return new ArrayList<RadarClusteringService.ClusterResult>(merged.values());
+    }
+
+    private void mergeCluster(RadarClusteringService.ClusterResult target,
+                              RadarClusteringService.ClusterResult duplicate) {
+        Set<Long> signalIds = new HashSet<Long>();
+        for (RadarSignal signal : target.getSignals()) {
+            signalIds.add(signal.getId());
+        }
+        for (RadarSignal signal : duplicate.getSignals()) {
+            if (signalIds.add(signal.getId())) {
+                target.getSignals().add(signal);
+            }
+        }
+        Set<Long> linkedSignalIds = new HashSet<Long>();
+        for (RadarEventSignal link : target.getLinks()) {
+            linkedSignalIds.add(link.getSignalId());
+        }
+        for (RadarEventSignal link : duplicate.getLinks()) {
+            if (linkedSignalIds.add(link.getSignalId())) {
+                link.setRelationType("SUPPORTING");
+                target.getLinks().add(link);
+            }
+        }
+        refreshMergedEvent(target);
+    }
+
+    private void refreshMergedEvent(RadarClusteringService.ClusterResult cluster) {
+        Set<String> providers = new HashSet<String>();
+        LocalDateTime firstSeenAt = null;
+        LocalDateTime lastSeenAt = null;
+        for (RadarSignal signal : cluster.getSignals()) {
+            providers.add(firstNonBlank(signal.getProviderCode(), signal.getSourceName()));
+            LocalDateTime seenAt = signal.getPublishedAt() == null
+                    ? signal.getFirstSeenAt() : signal.getPublishedAt();
+            if (seenAt != null && (firstSeenAt == null || seenAt.isBefore(firstSeenAt))) {
+                firstSeenAt = seenAt;
+            }
+            if (seenAt != null && (lastSeenAt == null || seenAt.isAfter(lastSeenAt))) {
+                lastSeenAt = seenAt;
+            }
+        }
+        RadarEvent event = cluster.getEvent();
+        event.setSignalCount(cluster.getSignals().size());
+        event.setSourceCount(providers.size());
+        event.setFirstSeenAt(firstSeenAt);
+        event.setLastSeenAt(lastSeenAt);
+        event.setUpdatedAt(lastSeenAt);
     }
 
     private void reuseSameDayLegacyIdentity(RadarEvent event, Set<String> claimedLegacyKeys) {

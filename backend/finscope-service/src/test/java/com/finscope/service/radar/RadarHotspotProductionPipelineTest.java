@@ -5,6 +5,7 @@ import com.finscope.dao.radar.RadarEventSnapshotRepository;
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarRefreshStep;
 import com.finscope.domain.radar.RadarSignal;
@@ -14,6 +15,7 @@ import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -41,6 +43,28 @@ class RadarHotspotProductionPipelineTest {
     private final LocalDateTime now = LocalDateTime.of(2026, 8, 5, 10, 0);
 
     @Test
+    void mergesClustersThatResolveToTheSameEventIdentity() {
+        RadarSignal firstSignal = signal(1L, item("CLS:1", "CLS", "财联社",
+                "中国交建上半年新签合同额下降", now.minusMinutes(20)), 1);
+        RadarSignal secondSignal = signal(2L, item("THS:2", "THS", "同花顺",
+                "中国交建上半年新签合同额同比下降", now.minusMinutes(10)), 1);
+        RadarClusteringService.ClusterResult first = cluster(firstSignal,
+                "601800:公告:信息:20260814:20.61%");
+        RadarClusteringService.ClusterResult second = cluster(secondSignal,
+                "601800:公告:信息:20260814:20.61%");
+        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+
+        List<RadarClusteringService.ClusterResult> merged = pipeline.mergeDuplicateClusters(
+                Arrays.asList(first, second));
+
+        assertEquals(1, merged.size());
+        assertEquals(2, merged.get(0).getSignals().size());
+        assertEquals(2, merged.get(0).getLinks().size());
+        assertEquals(2, merged.get(0).getEvent().getSignalCount());
+        assertEquals(2, merged.get(0).getEvent().getSourceCount());
+    }
+
+    @Test
     void runsFetchNormalizeAggregateRankAndPersistAsOneProductionBatch() {
         NewsFeedService news = mock(NewsFeedService.class);
         RadarRepository repository = mock(RadarRepository.class);
@@ -54,6 +78,8 @@ class RadarHotspotProductionPipelineTest {
         RadarHotspotPersistenceService persistence = new RadarHotspotPersistenceService(repository);
         RadarEventSnapshotRepository snapshots = mock(RadarEventSnapshotRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        wire(pipeline, news, repository, clustering, priority, watchlist, runs, enhancement,
+                scores, dashboardCategories, persistence, snapshots);
 
         NewsFeedItem first = item("CLS:1", "CLS_NEWS_FLASH", "财联社",
                 "宁德时代发布新一代电池", now.minusMinutes(20));
@@ -135,6 +161,10 @@ class RadarHotspotProductionPipelineTest {
         WatchlistRepository watchlist = mock(WatchlistRepository.class);
         RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        wire(pipeline, news, repository, clustering, priority, watchlist, runs,
+                mock(RadarEventEnhancementScheduler.class), new RadarHotspotScoreService(),
+                new RadarDashboardCategoryService(), new RadarHotspotPersistenceService(repository),
+                mock(RadarEventSnapshotRepository.class));
         NewsFeedSnapshot feed = new NewsFeedSnapshot(Collections.emptyList(), Collections.emptyList(), now, 0);
         when(news.load("ALL", 100)).thenReturn(feed);
         when(watchlist.findByTypes(Arrays.asList("STOCK", "FUND"))).thenReturn(Collections.emptyList());
@@ -174,5 +204,44 @@ class RadarHotspotProductionPipelineTest {
         signal.setTitle(item.getTitle()); signal.setContent(item.getContent()); signal.setPublishedAt(item.getPublishedAt());
         signal.setFirstSeenAt(item.getPublishedAt()); signal.setLastSeenAt(item.getPublishedAt()); signal.setSourceRank(rank);
         signal.setSourceWeight(1.0D); signal.setStatus("ACTIVE"); return signal;
+    }
+
+    private RadarClusteringService.ClusterResult cluster(RadarSignal signal, String eventKey) {
+        RadarClusteringService.ClusterResult cluster = new RadarClusteringService.ClusterResult(signal);
+        cluster.getEvent().setEventKey(eventKey);
+        cluster.getEvent().setSignalCount(1);
+        cluster.getEvent().setSourceCount(1);
+        RadarEventSignal link = new RadarEventSignal();
+        link.setSignalId(signal.getId());
+        link.setRelationType("PRIMARY");
+        link.setMatchScore(1.0D);
+        link.setMatchReason("代表信号");
+        cluster.getLinks().add(link);
+        return cluster;
+    }
+
+    private void wire(RadarHotspotProductionPipeline pipeline,
+                      NewsFeedService news,
+                      RadarRepository repository,
+                      RadarClusteringService clustering,
+                      RadarPriorityService priority,
+                      WatchlistRepository watchlist,
+                      RadarRefreshRunRepository runs,
+                      RadarEventEnhancementScheduler enhancement,
+                      RadarHotspotScoreService scores,
+                      RadarDashboardCategoryService dashboardCategories,
+                      RadarHotspotPersistenceService persistence,
+                      RadarEventSnapshotRepository snapshots) {
+        ReflectionTestUtils.setField(pipeline, "news", news);
+        ReflectionTestUtils.setField(pipeline, "repository", repository);
+        ReflectionTestUtils.setField(pipeline, "clustering", clustering);
+        ReflectionTestUtils.setField(pipeline, "priority", priority);
+        ReflectionTestUtils.setField(pipeline, "watchlist", watchlist);
+        ReflectionTestUtils.setField(pipeline, "runs", runs);
+        ReflectionTestUtils.setField(pipeline, "enhancement", enhancement);
+        ReflectionTestUtils.setField(pipeline, "hotspotScores", scores);
+        ReflectionTestUtils.setField(pipeline, "dashboardCategories", dashboardCategories);
+        ReflectionTestUtils.setField(pipeline, "persistence", persistence);
+        ReflectionTestUtils.setField(pipeline, "snapshots", snapshots);
     }
 }
