@@ -22,7 +22,7 @@ export type View =
 
 export type GlobalExpectationItem = {
   id: number;
-  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关';
+  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关' | '数据状态';
   question: string;
   marketUrl: string;
   probability: number;
@@ -35,7 +35,7 @@ export type GlobalExpectationItem = {
   endDate?: string;
   observation: string;
   status: 'WATCHING' | 'SIGNAL' | 'BASELINE';
-  dataStatus?: 'LIVE' | 'STALE' | 'UNAVAILABLE';
+  dataStatus?: 'LIVE' | 'PARTIAL' | 'STALE' | 'UNAVAILABLE';
   observedAt?: string;
   lastRefreshAt?: string;
   priceHistory?: Array<{ observedAt: string; probability: number }>;

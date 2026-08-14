@@ -5,6 +5,7 @@ import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -20,7 +21,7 @@ public class RedisGlobalExpectationsCacheRepository implements GlobalExpectation
     private static final String HISTORY_PREFIX = "finscope:global-expectations:history:";
     private static final long TTL_MS = TimeUnit.HOURS.toMillis(26L);
 
-    @Resource
+    @Autowired
     private StringRedisTemplate redisTemplate;
     @Resource
     private ObjectMapper objectMapper;
