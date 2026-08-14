@@ -15,7 +15,7 @@
 
 ## 数据流与模块边界
 
-1. `finscope-rpc` 的 Gamma 客户端读取活跃市场、Yes token ID、当前概率及官方变化字段。
+1. `finscope-rpc` 的 Gamma 客户端按累计成交量倒序读取前两页活跃市场（每页 100 条）、Yes token ID、当前概率及官方变化字段。
 2. Service 先完成关键词匹配并按成交量选出最多 20 个观察市场。
 3. `finscope-rpc` 的 CLOB 客户端一次批量读取这些 Yes token 的最近 24 小时历史。
 4. `finscope-service` 计算 5 分钟变化、构造趋势点，并直接采用 Gamma 的 1 小时和 24 小时变化。

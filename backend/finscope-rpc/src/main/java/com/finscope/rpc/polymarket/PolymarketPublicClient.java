@@ -17,8 +17,11 @@ import java.util.Map;
 /** 仅访问 Polymarket Gamma 公共市场接口；不携带钱包、签名或交易凭证。 */
 @Component
 public class PolymarketPublicClient {
-    private static final URI ACTIVE_MARKETS_URI = URI.create(
-            "https://gamma-api.polymarket.com/markets?closed=false&limit=500&offset=0");
+    private static final String ACTIVE_MARKETS_URL =
+            "https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=%d"
+                    + "&order=volumeNum&ascending=false";
+    private static final int ACTIVE_MARKET_PAGE_SIZE = 100;
+    private static final int ACTIVE_MARKET_PAGES = 2;
     private static final URI BATCH_HISTORY_URI = URI.create("https://clob.polymarket.com/batch-prices-history");
     private static final int MAX_HISTORY_MARKETS = 20;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -27,9 +30,14 @@ public class PolymarketPublicClient {
     private FinanceHttpClient financeHttpClient;
 
     public List<PolymarketPublicMarket> fetchActiveMarkets() throws Exception {
-        FinanceHttpResponse response = financeHttpClient.get("polymarket-gamma", ACTIVE_MARKETS_URI,
-                Map.of("Accept", "application/json"));
-        return parseActiveMarkets(response.getBody());
+        List<PolymarketPublicMarket> markets = new ArrayList<PolymarketPublicMarket>();
+        for (int page = 0; page < ACTIVE_MARKET_PAGES; page++) {
+            URI uri = URI.create(String.format(ACTIVE_MARKETS_URL, page * ACTIVE_MARKET_PAGE_SIZE));
+            FinanceHttpResponse response = financeHttpClient.get("polymarket-gamma", uri,
+                    Map.of("Accept", "application/json"));
+            markets.addAll(parseActiveMarkets(response.getBody()));
+        }
+        return markets;
     }
 
     public Map<String, List<PolymarketPricePoint>> fetchPriceHistory(List<String> tokenIds) throws Exception {

@@ -22,7 +22,7 @@ export type View =
 
 export type GlobalExpectationItem = {
   id: number;
-  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关' | '数据状态';
+  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关' | '全球地缘' | '数据状态';
   question: string;
   marketUrl: string;
   probability: number;

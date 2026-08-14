@@ -1,13 +1,45 @@
 package com.finscope.rpc.polymarket;
 
+import com.finscope.rpc.marketintel.FinanceHttpClient;
+import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.net.URI;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PolymarketPublicClientTest {
+    @Test
+    void fetchesTwoVolumeOrderedPagesInsteadOfAssumingGammaAcceptsFiveHundredItems() throws Exception {
+        List<URI> requested = new ArrayList<URI>();
+        FinanceHttpClient httpClient = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                requested.add(uri);
+                String id = uri.getQuery().contains("offset=0") ? "market-1" : "market-2";
+                String body = "[{\"id\":\"" + id + "\",\"question\":\"Will oil rise?\","
+                        + "\"slug\":\"" + id + "\",\"outcomePrices\":\"[\\\"0.31\\\",\\\"0.69\\\"]\"}]";
+                return new FinanceHttpResponse(200, body, Instant.now(), "hash");
+            }
+        };
+        PolymarketPublicClient client = new PolymarketPublicClient();
+        ReflectionTestUtils.setField(client, "financeHttpClient", httpClient);
+
+        List<PolymarketPublicMarket> markets = client.fetchActiveMarkets();
+
+        assertEquals(2, markets.size());
+        assertEquals(2, requested.size());
+        assertEquals("closed=false&limit=100&offset=0&order=volumeNum&ascending=false",
+                requested.get(0).getQuery());
+        assertEquals("closed=false&limit=100&offset=100&order=volumeNum&ascending=false",
+                requested.get(1).getQuery());
+    }
+
     @Test
     void parsesYesPriceAndMarketMetadataFromGammaResponse() throws Exception {
         String response = "[{\"id\":\"market-1\",\"question\":\"Will oil exceed $100?\","
