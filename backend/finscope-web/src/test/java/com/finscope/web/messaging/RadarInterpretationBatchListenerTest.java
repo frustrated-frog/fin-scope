@@ -5,10 +5,12 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.radar.RadarInterpretationBatchMessage;
 import com.finscope.service.radar.RadarEventInterpretationService;
 import org.junit.jupiter.api.Test;
+import org.springframework.kafka.annotation.KafkaListener;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -16,6 +18,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 class RadarInterpretationBatchListenerTest {
+    @Test
+    void usesTheRadarSpecificListenerContainer() throws Exception {
+        KafkaListener listener = RadarInterpretationBatchListener.class
+                .getMethod("consume", RadarInterpretationBatchMessage.class)
+                .getAnnotation(KafkaListener.class);
+
+        assertEquals("radarKafkaListenerContainerFactory", listener.containerFactory());
+    }
+
     @Test
     void requestsEachUniqueEventInBatchOrder() {
         RadarEventInterpretationService interpretations = mock(RadarEventInterpretationService.class);

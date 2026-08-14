@@ -112,6 +112,9 @@ finscope:
       topic: finscope.quant.stock-discovery.requested
       group-id: finscope-stock-discovery
       ack-timeout-ms: 2000
+      retry-interval-ms: 5000
+      retry-attempts: 2
+      dlt-topic: finscope.quant.stock-discovery.requested.dlt
   radar:
     refresh-initial-delay-ms: 15000
     refresh-interval-ms: 300000
@@ -119,6 +122,9 @@ finscope:
       enabled: true
       topic: finscope.radar.interpretation.requested
       group-id: finscope-radar-interpretation
+      retry-interval-ms: 1000
+      retry-attempts: 1
+      dlt-topic: finscope.radar.interpretation.requested.dlt
   industry-chain:
     kafka:
       enabled: true

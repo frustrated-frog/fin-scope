@@ -21,6 +21,7 @@ public class RadarInterpretationBatchListener {
     @KafkaListener(
             topics = "${finscope.radar.kafka.topic:finscope.radar.interpretation.requested}",
             groupId = "${finscope.radar.kafka.group-id:finscope-radar-interpretation}",
+            containerFactory = "radarKafkaListenerContainerFactory",
             autoStartup = "${finscope.radar.kafka.enabled:false}")
     public void consume(RadarInterpretationBatchMessage message) {
         if (message == null) return;
