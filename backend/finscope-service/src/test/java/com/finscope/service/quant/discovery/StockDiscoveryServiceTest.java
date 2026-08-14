@@ -11,6 +11,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -24,7 +25,30 @@ import static org.mockito.Mockito.when;
 
 class StockDiscoveryServiceTest {
     @Test
-    void executesLocallyWhenKafkaIsUnavailableAndFreezesTheReport() {
+    void dispatchesKafkaFallbackWithoutBlockingTheSchedulingThread() {
+        StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
+        StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
+        PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
+        Executor executor = mock(Executor.class);
+        StockDiscoveryRun run = run("CREATED");
+        StockDiscoveryReport report = new StockDiscoveryReport();
+        when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(run);
+        when(repository.findById(7L)).thenReturn(Optional.of(run));
+        when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
+        when(publisher.publish(any())).thenReturn(false);
+        when(client.discover(LocalDate.of(2026, 8, 14), 6000d, StockDiscoveryService.POLICY_VERSION))
+                .thenReturn(report);
+        StockDiscoveryService service = service(repository, publisher, client);
+        ReflectionTestUtils.setField(service, "fallbackExecutor", executor);
+
+        service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
+
+        verify(executor).execute(any(Runnable.class));
+        verify(client, never()).discover(any(), any(Double.class), any());
+    }
+
+    @Test
+    void fallbackWorkerExecutesAndFreezesTheReport() {
         StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
         StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
@@ -37,6 +61,7 @@ class StockDiscoveryServiceTest {
         when(client.discover(LocalDate.of(2026, 8, 14), 6000d, StockDiscoveryService.POLICY_VERSION))
                 .thenReturn(report);
         StockDiscoveryService service = service(repository, publisher, client);
+        ReflectionTestUtils.setField(service, "fallbackExecutor", (Executor) Runnable::run);
 
         service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
 

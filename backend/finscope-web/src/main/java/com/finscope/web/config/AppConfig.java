@@ -319,6 +319,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "stockDiscoveryExecutor")
+    public Executor stockDiscoveryExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("stock-discovery-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "radarInterpretationExecutor")
     public Executor radarInterpretationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

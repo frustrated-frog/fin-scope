@@ -6,6 +6,7 @@ import com.finscope.domain.quant.discovery.StockDiscoveryReport;
 import com.finscope.domain.quant.discovery.StockDiscoveryRequestedEvent;
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.rpc.quant.PythonStockDiscoveryClient;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -13,7 +14,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
+@Slf4j
 @Service
 public class StockDiscoveryService {
     public static final String POLICY_VERSION = "stock-discovery-v1";
@@ -23,6 +26,8 @@ public class StockDiscoveryService {
     private StockDiscoveryEventPublisher publisher;
     @Resource
     private PythonStockDiscoveryClient client;
+    @Resource(name = "stockDiscoveryExecutor")
+    private Executor fallbackExecutor;
 
     public StockDiscoveryRun schedule(LocalDate businessDate, String triggerType) {
         String runKey = businessDate + ":" + POLICY_VERSION;
@@ -33,7 +38,11 @@ public class StockDiscoveryService {
         }
         StockDiscoveryRequestedEvent event = event(run);
         if (!publisher.publish(event)) {
-            execute(event);
+            try {
+                fallbackExecutor.execute(() -> execute(event));
+            } catch (RuntimeException error) {
+                log.warn("股票发现本地降级任务提交失败，runKey={}", run.getRunKey(), error);
+            }
         }
         return repository.findById(run.getId()).orElse(run);
     }
