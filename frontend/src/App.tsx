@@ -13,6 +13,7 @@ import { IntakeView } from './features/intake/IntakeView';
 import { IndustryChainView } from './features/industry-chain/IndustryChainView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
 import { MajorEventView } from './features/major-events/MajorEventView';
+import { GlobalExpectationsView } from './features/global-expectations/GlobalExpectationsView';
 import { NewsView } from './features/news/NewsView';
 import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
@@ -265,6 +266,8 @@ export default function App() {
         return 'Evidence Ledger';
       case 'knowledge':
         return '投资认识工作台';
+      case 'globalExpectations':
+        return 'Global Expectations · 全球预期';
       case 'contentStudio':
         return 'Studio';
       case 'agents':
@@ -594,6 +597,7 @@ export default function App() {
       {view === 'knowledge' && (
         <KnowledgeView addToast={addToast} setMessage={setMessage} />
       )}
+      {view === 'globalExpectations' && <GlobalExpectationsView addToast={addToast} />}
       {view === 'contentStudio' && (
         <ContentStudioView
           contentIdeas={contentIdeaPage?.items ?? contentIdeas}

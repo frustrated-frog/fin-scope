@@ -17,7 +17,24 @@ export type View =
   | 'financials'
   | 'strategy'
   | 'majorEvents'
-  | 'industryChain';
+  | 'industryChain'
+  | 'globalExpectations';
+
+export type GlobalExpectationItem = {
+  id: number;
+  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关';
+  question: string;
+  marketUrl: string;
+  probability: number;
+  change24h?: number;
+  volume?: number;
+  openInterest?: number;
+  spread?: number;
+  endDate?: string;
+  observation: string;
+  status: 'WATCHING' | 'SIGNAL' | 'BASELINE';
+  observedAt?: string;
+};
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };
 export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };
