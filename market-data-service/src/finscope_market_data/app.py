@@ -11,6 +11,15 @@ from fastapi.responses import JSONResponse
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.context import build_aligned_context
+from finscope_market_data.discovery.providers import (
+    EastmoneyHotSectorProvider,
+    TonghuashunHotSectorProvider,
+)
+from finscope_market_data.discovery.schemas import DiscoveryRequest
+from finscope_market_data.discovery.service import (
+    DiscoveryBarsSnapshot,
+    StockDiscoveryService,
+)
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
@@ -45,11 +54,26 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
     )
 
 
-def create_app(router: ProviderRouter | None = None) -> FastAPI:
+def create_app(
+    router: ProviderRouter | None = None,
+    discovery: StockDiscoveryService | None = None,
+    settings: Settings | None = None,
+) -> FastAPI:
+    config = settings or Settings()
+
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if application.state.router is None:
             application.state.router = build_router()
+        if application.state.discovery is None:
+            application.state.discovery = StockDiscoveryService(
+                providers=[
+                    EastmoneyHotSectorProvider(),
+                    TonghuashunHotSectorProvider(),
+                ],
+                market=_RouterDiscoveryMarket(application.state.router),
+                universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",
+            )
         try:
             yield
         finally:
@@ -61,6 +85,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.router = router
+    application.state.discovery = discovery
 
     @application.get("/health")
     async def health() -> dict[str, str]:
@@ -133,6 +158,14 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
+        )
+
+    @application.post("/v1/quant/stock-discoveries")
+    async def stock_discovery(request: DiscoveryRequest) -> JSONResponse:
+        result = await application.state.discovery.discover(request)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json")),
         )
 
     @application.get("/v1/stocks/{market}/{code}/quote")
@@ -302,6 +335,24 @@ def _market_for_code(code: str) -> str:
     if code.startswith(("4", "8")):
         return "BJ"
     return "SZ"
+
+
+class _RouterDiscoveryMarket:
+    def __init__(self, router: ProviderRouter) -> None:
+        self.router = router
+
+    async def bars(self, market: str, code: str):
+        envelope = await self.router.fetch(
+            DataCapability.DAILY_BARS,
+            StockSymbol(market=market, code=code),
+            limit=1500,
+        )
+        return DiscoveryBarsSnapshot(
+            bars=envelope.data or [],
+            quality_status=envelope.quality_status.value,
+            stale_age_seconds=envelope.stale_age_seconds,
+            warnings=tuple(envelope.warnings),
+        )
 
 
 app = create_app()

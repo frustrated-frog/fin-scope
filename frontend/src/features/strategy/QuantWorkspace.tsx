@@ -4,9 +4,10 @@ import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
 import { SingleStockForecastPanel } from './SingleStockForecastPanel';
+import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments';
+type Pane = 'discovery' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -39,7 +40,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
 }) {
-  const [pane, setPane] = useState<Pane>('forecast');
+  const [pane, setPane] = useState<Pane>('discovery');
+  const [forecastCode, setForecastCode] = useState<string>();
   const [datasets, setDatasets] = useState<QuantDataset[]>([]);
   const [researchFactors, setResearchFactors] = useState<ResearchFactorDefinition[]>([]);
   const [datasetQuality, setDatasetQuality] = useState<QuantDatasetQuality>();
@@ -163,16 +165,18 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     : undefined;
 
   return <section className="quant-workspace">
-    <header className="quant-hero">
+    {pane !== 'discovery' && <header className="quant-hero">
       <div className="quant-hero-copy"><p className="quant-eyebrow">FinScope Quant · Research protocol</p><h3>把想法压进一条<br/><em>可复现的实验链</em></h3><p>数据快照、因子假设、T+1 执行与结果解读各自留痕。Agent 可以起草，但不会替你确认或偷偷运行。</p></div>
       <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
-    </header>
+    </header>}
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略素材库'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'forecast' ? '20D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'SOURCE' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
+      {([['discovery','股票发现'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略素材库'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'SOURCE' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
     </nav>
 
-    {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} />}
+    {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
+
+    {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
     {pane === 'catalog' && <StrategyCatalogPanel datasets={datasets} addToast={addToast} onDraftCreated={value => { setDraft(value); setPane('laboratory'); }} />}
 

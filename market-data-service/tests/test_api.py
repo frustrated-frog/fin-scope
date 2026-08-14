@@ -24,6 +24,8 @@ from finscope_market_data.models import (
 )
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.snapshot_store import SnapshotStore
+from finscope_market_data.settings import Settings
+from finscope_market_data.discovery.schemas import DiscoveryFunnel, DiscoveryReport
 
 
 class MultiCapabilityProvider:
@@ -156,6 +158,41 @@ def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     return TestClient(create_app(router))
 
 
+def test_default_lifespan_builds_stock_discovery_with_configured_data_dir(
+    tmp_path: Path,
+) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    application = create_app(router=router, settings=Settings(data_dir=tmp_path))
+
+    with TestClient(application) as api:
+        assert api.get("/health").status_code == 200
+        assert application.state.discovery is not None
+
+
+class FakeDiscoveryService:
+    async def discover(self, request):
+        return DiscoveryReport(
+            policy_version=request.policy_version,
+            as_of_date="2026-08-14",
+            source_code="FIXTURE_SECTORS",
+            source_family="FIXTURE",
+            quality_status="FRESH_PRIMARY",
+            retrieved_at="2026-08-14T15:35:00",
+            data_fingerprint="a" * 64,
+            budget=request.budget,
+            sectors=[],
+            candidates=[],
+            deep_evidence=[],
+            final_candidates=[],
+            funnel=DiscoveryFunnel(),
+        )
+
+
 def test_health_and_provider_health_endpoints(tmp_path: Path) -> None:
     api = client(tmp_path, [MultiCapabilityProvider()])
 
@@ -163,6 +200,22 @@ def test_health_and_provider_health_endpoints(tmp_path: Path) -> None:
     providers = api.get("/v1/providers/health").json()
     assert providers[0]["provider_code"] == "FIXTURE"
     assert set(providers[0]["capabilities"]) == {item.value for item in DataCapability}
+
+
+def test_stock_discovery_endpoint_returns_versioned_report(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(create_app(router, discovery=FakeDiscoveryService()))
+
+    response = api.post("/v1/quant/stock-discoveries", json={"budget": 5000})
+
+    assert response.status_code == 200
+    assert response.json()["schema_version"] == "1.0.0"
+    assert response.json()["budget"] == 5000
 
 
 def test_readiness_requires_writable_snapshot_store_and_a_provider(tmp_path: Path) -> None:

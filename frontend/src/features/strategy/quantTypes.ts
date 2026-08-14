@@ -343,3 +343,40 @@ export interface ForecastModelRace {
     brierDeltaVsChampion: number; logLossDeltaVsChampion: number;
     promotionEligible: boolean }>;
 }
+
+export interface StockDiscoveryRun {
+  id: number; businessDate: string; status: string; budget: number;
+  qualityStatus?: string; finalCount: number; completedAt?: string; errorMessage?: string;
+}
+
+export interface StockDiscoverySector {
+  code: string; name: string; category: string; source_rank: number;
+  change_pct?: number; main_net_inflow?: number; leader_stock_name?: string;
+}
+
+export interface StockDiscoveryCandidate {
+  code: string; market: string; name: string; price: number; lot_cost: number;
+  admitted: boolean; rejection_reasons: string[]; sector_names: string[];
+  lightweight_score?: number; lightweight_rank?: number;
+}
+
+export interface StockDiscoveryEvidence {
+  code: string; qualified: boolean; conclusion: string; calibrated_probability: number;
+  probability_lower_bound: number; brier_skill_score: number; locked_accuracy: number;
+  locked_log_loss: number; risk_adjusted_return: number; max_drawdown: number;
+  stability_score: number; health_status: string; deep_score?: number; final_rank?: number;
+  evidence: string[]; risks: string[]; forecast_report?: SingleStockForecast;
+}
+
+export interface StockDiscoveryReport {
+  as_of_date: string; source_family: string; quality_status: string; retrieved_at: string;
+  budget: number; duration_ms: number; warnings: string[];
+  funnel: { constituent_count: number; admitted_count: number; quantified_count: number;
+    deep_review_count: number; final_count: number };
+  sectors: StockDiscoverySector[]; candidates: StockDiscoveryCandidate[];
+  deep_evidence: StockDiscoveryEvidence[]; final_candidates: StockDiscoveryEvidence[];
+}
+
+export type StockDiscoveryLatest =
+  | { status: 'EMPTY' }
+  | { run: StockDiscoveryRun; report: StockDiscoveryReport };
