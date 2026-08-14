@@ -1,109 +1,63 @@
-# Global Expectations Cache Implementation Plan
+# Global Expectations Official Changes and Redis Cache Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为精选 Polymarket 观察命题建立可控的内存快照、自动刷新和价格变化详情。
+**Goal:** 用 Polymarket 官方变化字段与 CLOB 历史替换 JVM 内存采样，并使用项目现有 Redis 保存可跨重启恢复的观察快照。
 
-**Architecture:** RPC 仍只访问 Polymarket Gamma 公共接口。Service 层新增目录与快照缓存，定时刷新后向 REST 层提供当前观察视图；React 页面消费变化窗口和详情数据，不将高频价格写入 SQLite。
+**Architecture:** RPC 层分别封装 Gamma 市场发现和 CLOB 批量历史读取；DAO 层以 `StringRedisTemplate` 保存历史及页面 JSON；Service 层筛选最多 20 个市场、合并官方变化、计算 5 分钟变化并执行分级降级。REST 契约保持不变，前端只修正数据来源文案。
 
-**Tech Stack:** Java 21、Spring Boot Scheduler、JUnit 5、React、TypeScript、Vitest。
+**Tech Stack:** Java 21、Spring Boot 2.7、Spring Data Redis、Jackson、JUnit 5/Mockito、React、TypeScript、Vitest。
 
 ---
 
-### Task 1: 观察命题目录与内存快照
+### Task 1: Gamma 官方变化与 CLOB 历史协议
 
 **Files:**
-- Create: `backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationsCatalog.java`
-- Create: `backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationSnapshotCache.java`
-- Create: `backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationSnapshotCacheTest.java`
+- Modify: `backend/finscope-rpc/src/main/java/com/finscope/rpc/polymarket/PolymarketPublicMarket.java`
+- Modify: `backend/finscope-rpc/src/main/java/com/finscope/rpc/polymarket/PolymarketPublicClient.java`
+- Create: `backend/finscope-rpc/src/main/java/com/finscope/rpc/polymarket/PolymarketPricePoint.java`
+- Test: `backend/finscope-rpc/src/test/java/com/finscope/rpc/polymarket/PolymarketPublicClientTest.java`
 
-- [ ] **Step 1: Write failing snapshot test**
+- [ ] Write failing parser tests for `clobTokenIds`, `oneHourPriceChange`, `oneDayPriceChange`, and batch history.
+- [ ] Run the focused RPC test with JDK 21 and confirm failures are caused by missing fields/history method.
+- [ ] Implement Gamma field parsing plus `POST /batch-prices-history` with `interval=1d`, `fidelity=1`, and at most 20 token IDs.
+- [ ] Run the focused RPC tests and commit `feat: 接入官方概率变化与历史价格`.
 
-```java
-assertEquals(4.0D, cache.changeSince("oil", now, 31, Duration.ofMinutes(5)));
-```
-
-- [ ] **Step 2: Run test and confirm missing cache failure**
-
-Run: `mvn -pl finscope-service -am test -Dtest=GlobalExpectationSnapshotCacheTest`
-
-- [ ] **Step 3: Implement catalog and bounded snapshot cache**
-
-```java
-cache.record("oil", now, 27);
-cache.record("oil", now.plusMinutes(5), 31);
-```
-
-- [ ] **Step 4: Run focused test**
-
-Run: `mvn -pl finscope-service -am test -Dtest=GlobalExpectationSnapshotCacheTest`
-
-### Task 2: 刷新编排和 REST 契约
+### Task 2: Redis global-expectations repository
 
 **Files:**
+- Create: `backend/finscope-domain/src/main/java/com/finscope/domain/globalexpectations/GlobalExpectationHistorySnapshot.java`
+- Create: `backend/finscope-domain/src/main/java/com/finscope/domain/globalexpectations/GlobalExpectationsViewSnapshot.java`
+- Create: `backend/finscope-dao/src/main/java/com/finscope/dao/cache/GlobalExpectationsCacheRepository.java`
+- Create: `backend/finscope-dao/src/main/java/com/finscope/dao/cache/RedisGlobalExpectationsCacheRepository.java`
+- Test: `backend/finscope-dao/src/test/java/com/finscope/dao/cache/RedisGlobalExpectationsCacheRepositoryTest.java`
+
+- [ ] Write failing Redis repository tests covering JSON round-trip, the two key prefixes, 26-hour TTL, and malformed/unavailable Redis reads.
+- [ ] Run the focused DAO test and confirm the repository is missing.
+- [ ] Implement field-injected Redis repository methods for page and token history snapshots; catch Redis/serialization failures and return `Optional.empty()`.
+- [ ] Run the focused DAO tests and commit `feat: 增加全球预期Redis快照`.
+
+### Task 3: Service merge, five-minute calculation, and degradation
+
+**Files:**
+- Delete: `backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationSnapshotCache.java`
+- Delete: `backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationSnapshotCacheTest.java`
 - Modify: `backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationsService.java`
-- Modify: `backend/finscope-domain/src/main/java/com/finscope/domain/globalexpectations/GlobalExpectationItem.java`
-- Modify: `backend/finscope-web/src/main/java/com/finscope/web/controller/GlobalExpectationsController.java`
-- Create: `backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationsServiceTest.java`
+- Modify: `backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationsServiceTest.java`
 
-- [ ] **Step 1: Write failing service test for retained cache and changes**
+- [ ] Write failing service tests proving 1h/24h use Gamma fields, 5m uses the CLOB baseline immediately, CLOB failure uses Redis history as `PARTIAL`, and Gamma failure uses Redis view as `STALE`.
+- [ ] Run the focused service tests and confirm the old in-memory implementation fails the new contract.
+- [ ] Refactor Service to select top 20 before history fetch, merge official data, persist successful Redis snapshots, and remove all mutable in-process history/view state.
+- [ ] Run focused service tests and commit `fix: 改用官方变化与Redis缓存`.
 
-```java
-assertEquals(4.0D, refreshed.get(0).getChange5m());
-```
-
-- [ ] **Step 2: Implement scheduled/manual refresh and retained last success**
-
-```java
-@Scheduled(fixedDelayString = "${finscope.global-expectations.refresh-interval-ms:60000}")
-public void refreshScheduled() { refresh(); }
-```
-
-- [ ] **Step 3: Add `POST /api/global-expectations/refresh` and run focused test**
-
-Run: `mvn -pl finscope-web -am test -Dtest=GlobalExpectationsServiceTest`
-
-### Task 3: 变化窗口与详情界面
+### Task 4: UI wording and regression verification
 
 **Files:**
-- Modify: `frontend/src/shared/types/index.ts`
 - Modify: `frontend/src/features/global-expectations/GlobalExpectationsView.tsx`
 - Modify: `frontend/src/features/global-expectations/GlobalExpectationsView.test.tsx`
-- Modify: `frontend/src/styles.css`
 
-- [ ] **Step 1: Write failing UI test**
-
-```tsx
-expect(await screen.findByText('5m')).toBeInTheDocument();
-expect(screen.getByRole('button', { name: /查看变化详情/ })).toBeInTheDocument();
-```
-
-- [ ] **Step 2: Implement multi-window movement presentation and accessible detail dialog**
-
-```tsx
-<button type="button" onClick={() => setSelected(item)}>查看变化详情</button>
-```
-
-- [ ] **Step 3: Run frontend tests and build**
-
-Run: `npm test -- --run src/features/global-expectations/GlobalExpectationsView.test.tsx && npm run build`
-
-### Task 4: 回归验证与提交
-
-**Files:**
-- Modify: `backend/finscope-web/src/main/resources/application.yml`
-
-- [ ] **Step 1: Add explicit refresh interval configuration**
-
-```yaml
-global-expectations:
-  refresh-interval-ms: 60000
-```
-
-- [ ] **Step 2: Run backend focused cache and service tests with JDK 21**
-
-Run: `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home mvn -pl finscope-web -am test -Dtest=GlobalExpectationSnapshotCacheTest,GlobalExpectationsServiceTest -Dsurefire.failIfNoSpecifiedTests=false`
-
-- [ ] **Step 3: Run complete frontend test suite and production build, then commit and push**
-
-Run: `npm test -- --run && npm run build`
+- [ ] Write a failing UI assertion that the detail chart is labelled `官方价格轨迹` and an unavailable 5m value reads `暂无历史`.
+- [ ] Update only the affected copy while retaining the existing card, modal, filters, and refresh behavior.
+- [ ] Run the focused UI test and commit `fix: 校正全球预期数据来源文案`.
+- [ ] Run JDK 21 backend focused tests, the complete frontend test suite, and the production build.
+- [ ] Check braces, field injection, module placement, git diff, and secrets; then push every new commit to the current branch.
