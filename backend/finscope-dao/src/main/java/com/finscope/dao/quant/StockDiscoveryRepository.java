@@ -56,18 +56,18 @@ public class StockDiscoveryRepository {
         return jdbcTemplate.query("SELECT * FROM stock_discovery_run ORDER BY id DESC LIMIT ?", this::map, bounded);
     }
 
-    public boolean tryMarkRunning(Long id) {
+    public boolean tryMarkRunning(Long id, String attemptToken) {
         LocalDateTime now = LocalDateTime.now();
         int updated = jdbcTemplate.update("UPDATE stock_discovery_run "
-                        + "SET status='RUNNING',started_at=?,completed_at=NULL,error_message=NULL "
+                        + "SET status='RUNNING',started_at=?,completed_at=NULL,error_message=NULL,attempt_token=? "
                         + "WHERE id=? AND (status IN ('CREATED','FAILED') "
                         + "OR (status='RUNNING' AND started_at<?))",
-                TimeUtil.text(now), id, TimeUtil.text(now.minusMinutes(30)));
+                TimeUtil.text(now), attemptToken, id, TimeUtil.text(now.minusMinutes(30)));
         return updated == 1;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void complete(Long id, StockDiscoveryReport report) {
+    public void complete(Long id, String attemptToken, StockDiscoveryReport report) {
         jdbcTemplate.update("DELETE FROM stock_discovery_sector WHERE run_id=?", id);
         jdbcTemplate.update("DELETE FROM stock_discovery_candidate WHERE run_id=?", id);
         persistSectors(id, report.getSectors());
@@ -75,20 +75,21 @@ public class StockDiscoveryRepository {
         StockDiscoveryReport.Funnel funnel = report.getFunnel();
         int updated = jdbcTemplate.update("UPDATE stock_discovery_run SET status='SUCCEEDED',as_of_date=?,source_family=?,"
                         + "quality_status=?,data_fingerprint=?,sector_count=?,constituent_count=?,admitted_count=?,"
-                        + "deep_review_count=?,final_count=?,report_json=?,completed_at=? WHERE id=? AND status='RUNNING'",
+                        + "deep_review_count=?,final_count=?,report_json=?,completed_at=? "
+                        + "WHERE id=? AND status='RUNNING' AND attempt_token=?",
                 report.getAsOfDate(), report.getSourceFamily(), report.getQualityStatus(), report.getDataFingerprint(),
                 report.getSectors().size(), funnel.getConstituentCount(), funnel.getAdmittedCount(),
                 funnel.getDeepReviewCount(), funnel.getFinalCount(), report.getRawJson(),
-                TimeUtil.text(LocalDateTime.now()), id);
+                TimeUtil.text(LocalDateTime.now()), id, attemptToken);
         if (updated != 1) {
             throw new IllegalStateException("股票发现批次状态已变化，拒绝覆盖终态");
         }
     }
 
-    public void fail(Long id, String message) {
+    public void fail(Long id, String attemptToken, String message) {
         jdbcTemplate.update("UPDATE stock_discovery_run SET status='FAILED',error_message=?,completed_at=? "
-                        + "WHERE id=? AND status='RUNNING'",
-                message, TimeUtil.text(LocalDateTime.now()), id);
+                        + "WHERE id=? AND status='RUNNING' AND attempt_token=?",
+                message, TimeUtil.text(LocalDateTime.now()), id, attemptToken);
     }
 
     private void persistSectors(Long runId, List<Map<String, Object>> sectors) {
@@ -114,7 +115,8 @@ public class StockDiscoveryRepository {
         for (Map<String, Object> candidate : report.getCandidates()) {
             String code = text(candidate, "code");
             Map<String, Object> evidence = evidenceByCode.get(code);
-            boolean finalSelected = evidence != null && integer(evidence, "final_rank") > 0;
+            Integer finalRank = integer(evidence, "final_rank");
+            boolean finalSelected = finalRank != null && finalRank > 0;
             Map<String, Object> detail = evidence == null
                     ? Map.of("candidate", candidate)
                     : Map.of("candidate", candidate, "deep_evidence", evidence);
@@ -128,7 +130,7 @@ public class StockDiscoveryRepository {
                     json(candidate.get("rejection_reasons")), json(candidate.get("sector_codes")),
                     json(candidate.get("sector_names")), decimal(candidate, "lightweight_score"),
                     integer(candidate, "lightweight_rank"), decimal(evidence, "deep_score"),
-                    finalSelected ? integer(evidence, "final_rank") : null, text(evidence, "conclusion"),
+                    finalSelected ? finalRank : null, text(evidence, "conclusion"),
                     decimal(evidence, "calibrated_probability"), text(evidence, "health_status"), json(detail));
         }
     }
@@ -140,16 +142,16 @@ public class StockDiscoveryRepository {
         return String.valueOf(source.get(key));
     }
 
-    private double decimal(Map<String, Object> source, String key) {
+    private Double decimal(Map<String, Object> source, String key) {
         if (source == null || !(source.get(key) instanceof Number)) {
-            return 0d;
+            return null;
         }
         return ((Number) source.get(key)).doubleValue();
     }
 
-    private int integer(Map<String, Object> source, String key) {
+    private Integer integer(Map<String, Object> source, String key) {
         if (source == null || !(source.get(key) instanceof Number)) {
-            return 0;
+            return null;
         }
         return ((Number) source.get(key)).intValue();
     }

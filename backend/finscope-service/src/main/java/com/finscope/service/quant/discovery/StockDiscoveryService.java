@@ -43,15 +43,16 @@ public class StockDiscoveryService {
         if (current == null || "SUCCEEDED".equals(current.getStatus())) {
             return;
         }
-        if (!repository.tryMarkRunning(event.getRunId())) {
+        String attemptToken = UUID.randomUUID().toString();
+        if (!repository.tryMarkRunning(event.getRunId(), attemptToken)) {
             return;
         }
         try {
             StockDiscoveryReport report = client.discover(
                     LocalDate.parse(event.getBusinessDate()), event.getBudget(), event.getPolicyVersion());
-            repository.complete(event.getRunId(), report);
+            repository.complete(event.getRunId(), attemptToken, report);
         } catch (RuntimeException error) {
-            repository.fail(event.getRunId(), safe(error));
+            repository.fail(event.getRunId(), attemptToken, safe(error));
             throw error;
         }
     }

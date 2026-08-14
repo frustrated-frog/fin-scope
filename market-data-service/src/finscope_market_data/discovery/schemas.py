@@ -75,7 +75,12 @@ class DiscoveryCandidate(BaseModel):
 class DeepCandidateEvidence(BaseModel):
     code: str
     qualified: bool
-    conclusion: str
+    conclusion: Literal[
+        "ROBUST",
+        "CONDITIONALLY_EFFECTIVE",
+        "NO_CLEAR_ADVANTAGE",
+        "INSUFFICIENT_DATA",
+    ]
     calibrated_probability: float = Field(ge=0, le=1)
     probability_lower_bound: float = Field(ge=0, le=1)
     brier_skill_score: float
@@ -84,7 +89,7 @@ class DeepCandidateEvidence(BaseModel):
     risk_adjusted_return: float
     max_drawdown: float
     stability_score: float = Field(ge=0, le=1)
-    health_status: str
+    health_status: Literal["HEALTHY", "DEGRADED"]
     deep_score: float | None = None
     final_rank: int | None = None
     evidence: list[str] = Field(default_factory=list)
@@ -106,7 +111,12 @@ class DiscoveryReport(BaseModel):
     as_of_date: str
     source_code: str
     source_family: str
-    quality_status: str
+    quality_status: Literal[
+        "FRESH_PRIMARY",
+        "FRESH_FALLBACK",
+        "PARTIAL_FRESH",
+        "STALE_FALLBACK",
+    ]
     retrieved_at: str
     data_fingerprint: str
     budget: float

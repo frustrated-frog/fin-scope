@@ -15,6 +15,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,7 +32,7 @@ class StockDiscoveryServiceTest {
         StockDiscoveryReport report = new StockDiscoveryReport();
         when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(run);
         when(repository.findById(7L)).thenReturn(Optional.of(run));
-        when(repository.tryMarkRunning(7L)).thenReturn(true);
+        when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
         when(publisher.publish(any())).thenReturn(false);
         when(client.discover(LocalDate.of(2026, 8, 14), 6000d, StockDiscoveryService.POLICY_VERSION))
                 .thenReturn(report);
@@ -38,8 +40,8 @@ class StockDiscoveryServiceTest {
 
         service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
 
-        verify(repository).tryMarkRunning(7L);
-        verify(repository).complete(7L, report);
+        verify(repository).tryMarkRunning(eq(7L), anyString());
+        verify(repository).complete(eq(7L), anyString(), eq(report));
     }
 
     @Test
@@ -65,7 +67,7 @@ class StockDiscoveryServiceTest {
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
         StockDiscoveryRun run = run("FAILED");
         when(repository.findById(7L)).thenReturn(Optional.of(run));
-        when(repository.tryMarkRunning(7L)).thenReturn(true);
+        when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
         when(client.discover(any(), any(Double.class), any())).thenThrow(new IllegalStateException("provider timeout"));
         StockDiscoveryService service = service(repository, publisher, client);
         StockDiscoveryRequestedEvent event = new StockDiscoveryRequestedEvent();
@@ -75,7 +77,7 @@ class StockDiscoveryServiceTest {
         event.setPolicyVersion(StockDiscoveryService.POLICY_VERSION);
 
         assertThrows(IllegalStateException.class, () -> service.execute(event));
-        verify(repository).fail(7L, "provider timeout");
+        verify(repository).fail(eq(7L), anyString(), eq("provider timeout"));
     }
 
     @Test
@@ -85,7 +87,7 @@ class StockDiscoveryServiceTest {
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
         StockDiscoveryRun run = run("RUNNING");
         when(repository.findById(7L)).thenReturn(Optional.of(run));
-        when(repository.tryMarkRunning(7L)).thenReturn(false);
+        when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(false);
         StockDiscoveryService service = service(repository, publisher, client);
         StockDiscoveryRequestedEvent event = new StockDiscoveryRequestedEvent();
         event.setRunId(7L);
@@ -96,8 +98,8 @@ class StockDiscoveryServiceTest {
         service.execute(event);
 
         verify(client, never()).discover(any(), any(Double.class), any());
-        verify(repository, never()).complete(any(), any());
-        verify(repository, never()).fail(any(), any());
+        verify(repository, never()).complete(any(), anyString(), any());
+        verify(repository, never()).fail(any(), anyString(), anyString());
     }
 
     private StockDiscoveryService service(StockDiscoveryRepository repository,

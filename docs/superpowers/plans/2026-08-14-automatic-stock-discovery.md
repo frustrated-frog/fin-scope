@@ -6,7 +6,7 @@
 
 **Architecture:** The existing Python market-data service owns provider parsing, admission rules, factor computation, batch ranking, and deep forecasting. Java owns schedule/Kafka orchestration, idempotent state, transactional persistence, and REST views. React reads the latest completed snapshot and renders the complete evidence trail without requiring a manual refresh.
 
-**Tech Stack:** Python 3.11+ / FastAPI / httpx / NumPy / AkShare, Java 21 / Spring Boot 2.7 / Kafka / Redis / SQLite, React / TypeScript / Vite / Vitest.
+**Tech Stack:** Python 3.11+ / FastAPI / httpx / NumPy / AkShare, Java 21 / Spring Boot 2.7 / Kafka / SQLite, React / TypeScript / Vite / Vitest. Redis 保持项目既有可选中间件，不作为本功能正确性的依赖。
 
 ---
 
@@ -104,9 +104,29 @@
 - Modify: `market-data-service/README.md`
 - Modify: `项目开发规范与代码评审清单.md` only if the feature exposes a missing reusable checklist item; otherwise leave unchanged.
 
-- [ ] Run Python, backend, and frontend focused suites followed by full build commands.
+- [x] Run Python, backend, and frontend focused suites followed by full build commands.
 - [ ] Start the Python and Java services and execute one deterministic/manual internal recovery run to verify persistence and reads; do not add a normal UI refresh button.
 - [ ] Inspect the rendered tab at desktop and narrow widths, checking overflow, hierarchy, source labels, and empty/error states.
-- [ ] Review every changed Java `if`/`for`, Spring dependency, and type location against `项目开发规范与代码评审清单.md`.
-- [ ] Remove unused code and temporary diagnostics.
+- [x] Review every changed Java `if`/`for`, Spring dependency, and type location against `项目开发规范与代码评审清单.md`.
+- [x] Remove unused code and temporary diagnostics.
 - [ ] Commit with `docs: 补充自动股票发现运行说明` and push.
+
+### Final verification record (2026-08-14)
+
+- Python full suite: `131 passed, 1 warning`; the warning is Starlette TestClient's upstream deprecation notice.
+- Frontend full suite: `72` test files and `404` tests passed; production build succeeded. Vite still reports the pre-existing large main-chunk warning.
+- Java feature-focused DAO/RPC/Service/Web tests passed on JDK 21, and `finscope-web -am -DskipTests package` is used as the final compile/package gate.
+- Full Java reactor reaches the service module but is not green because the unchanged `RadarHotspotProductionPipelineTest` on `origin/main` has two pre-existing null-injection errors. The stock-discovery suites themselves are green.
+- Browser desktop empty-state inspection was completed. A live external-provider recovery run is intentionally left unchecked because it would write to the user's real local SQLite database; provider behavior is covered with deterministic contract and fallback tests.
+
+### Post-review production hardening
+
+- Short/empty QFQ histories are candidate-level rejections and can no longer abort or pollute the batch.
+- Only a current `UP` decision that also passes qualification/model-health gates can enter the final list; `DOWN` and `ABSTAIN` are excluded.
+- Kafka/local-fallback duplicate execution is protected by an atomic SQLite claim and per-attempt fencing token; terminal writes must match both `RUNNING` and the current token, while stale claims can safely recover after 30 minutes.
+- The Tonghuashun hot ranking now uses an actually available Eastmoney industry-constituent contract instead of the absent `stock_board_cons_ths` API.
+- The latest successful hot-sector universe is saved locally and used as an auditable fallback if both online rankings are unavailable; snapshots older than four days are rejected and reported as stale fallback rather than fresh data.
+- Market-data quality, stale age and warnings are preserved into discovery admission. A stock must contain a bar for the requested business date, which also excludes suspended/stale names; reads are bounded to 1,500 QFQ bars per candidate for the 24 GB Mac target.
+- Python request fields and Java response relationships are strictly validated, including ISO dates, policy versions, hexadecimal fingerprints, funnel counts, candidate membership and unique final ranks.
+- Final admission additionally requires positive cost-adjusted excess return over same-stock buy-and-hold and no worse Sharpe ratio; an `UP` probability without economic advantage is not enough.
+- The result page is now the true first screen; a final candidate can be carried directly into the existing single-stock full-research ledger.

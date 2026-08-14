@@ -94,33 +94,37 @@ class TonghuashunHotSectorProvider:
 
     source_code = "AKSHARE_TONGHUASHUN_SECTOR_FLOW"
     source_family = "TONGHUASHUN"
+    constituent_source_family = "EASTMONEY"
 
     def sectors(self, limit: int) -> list[DiscoverySector]:
         import akshare as ak
 
-        frame = ak.stock_board_industry_summary_ths()
         retrieved_at = datetime.now().isoformat()
         result: list[DiscoverySector] = []
-        ordered = frame.sort_values("净流入", ascending=False).head(limit)
-        for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
-            name = str(row.get("板块", "")).strip()
-            if not name:
-                continue
-            result.append(
-                DiscoverySector(
-                    code=name,
-                    name=name,
-                    category="INDUSTRY",
-                    source_code=self.source_code,
-                    source_family=self.source_family,
-                    period="1D",
-                    source_rank=rank,
-                    change_pct=_number(row.get("涨跌幅")),
-                    main_net_inflow=_number(row.get("净流入")),
-                    leader_stock_name=_text(row.get("领涨股")),
-                    retrieved_at=retrieved_at,
+        for category, frame in (
+            ("INDUSTRY", ak.stock_board_industry_summary_ths()),
+            ("CONCEPT", ak.stock_board_concept_summary_ths()),
+        ):
+            ordered = frame.sort_values("净流入", ascending=False).head(limit)
+            for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
+                name = str(row.get("板块", "")).strip()
+                if not name:
+                    continue
+                result.append(
+                    DiscoverySector(
+                        code=name,
+                        name=name,
+                        category=category,
+                        source_code=self.source_code,
+                        source_family=self.source_family,
+                        period="1D",
+                        source_rank=rank,
+                        change_pct=_number(row.get("涨跌幅")),
+                        main_net_inflow=_number(row.get("净流入")),
+                        leader_stock_name=_text(row.get("领涨股")),
+                        retrieved_at=retrieved_at,
+                    )
                 )
-            )
         if not result:
             raise RuntimeError("同花顺热门行业榜单为空")
         return result
@@ -130,7 +134,11 @@ class TonghuashunHotSectorProvider:
 
         # 同花顺公开热榜负责发现热点，成分关系使用 AkShare 中稳定的
         # 东方财富行业板块契约补全，避免依赖不存在的 stock_board_cons_ths。
-        frame = ak.stock_board_industry_cons_em(symbol=sector.name)
+        frame = (
+            ak.stock_board_industry_cons_em(symbol=sector.name)
+            if sector.category == "INDUSTRY"
+            else ak.stock_board_concept_cons_em(symbol=sector.name)
+        )
         result: list[tuple[str, str, str]] = []
         for _, row in frame.iterrows():
             code = str(row.get("代码", row.get("code", ""))).strip().zfill(6)

@@ -57,7 +57,10 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
 def create_app(
     router: ProviderRouter | None = None,
     discovery: StockDiscoveryService | None = None,
+    settings: Settings | None = None,
 ) -> FastAPI:
+    config = settings or Settings()
+
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if application.state.router is None:

@@ -119,7 +119,13 @@ class StockDiscoveryService:
             as_of_date=as_of,
             source_code=provider.source_code,
             source_family=provider.source_family,
-            quality_status="FRESH_PRIMARY" if not warnings else "FRESH_FALLBACK",
+            quality_status=(
+                "STALE_FALLBACK"
+                if isinstance(provider, SnapshotHotSectorProvider)
+                else "FRESH_PRIMARY"
+                if not warnings
+                else "FRESH_FALLBACK"
+            ),
             retrieved_at=datetime.now().isoformat(),
             data_fingerprint=fingerprint,
             budget=request.budget,
@@ -153,6 +159,14 @@ class StockDiscoveryService:
                 if sectors:
                     members = await self._members(provider, sectors, warnings)
                     if members:
+                        constituent_family = getattr(
+                            provider, "constituent_source_family", provider.source_family
+                        )
+                        if constituent_family != provider.source_family:
+                            warnings.append(
+                                f"{provider.source_family} 提供热门榜单，"
+                                f"{constituent_family} 提供板块成分关系"
+                            )
                         self._save_universe_snapshot(sectors, provider, members, warnings)
                         return sectors, provider, members, warnings
                     warnings.append(
@@ -177,6 +191,7 @@ class StockDiscoveryService:
         if self.universe_snapshot_path is None:
             return
         payload = {
+            "snapshot_at": datetime.now().isoformat(),
             "source_code": provider.source_code,
             "source_family": provider.source_family,
             "sectors": [item.model_dump(mode="json") for item in sectors],
@@ -210,6 +225,10 @@ class StockDiscoveryService:
             payload = json.loads(
                 self.universe_snapshot_path.read_text(encoding="utf-8")
             )
+            snapshot_at = datetime.fromisoformat(str(payload["snapshot_at"]))
+            if (datetime.now() - snapshot_at).total_seconds() > 4 * 24 * 60 * 60:
+                warnings.append("本地热门板块快照已超过 4 天有效期，拒绝继续使用")
+                return None
             sectors = [DiscoverySector.model_validate(item) for item in payload["sectors"]]
             members = {
                 code: (value[0], value[1], set(value[2]), set(value[3]))
@@ -306,8 +325,8 @@ class StockDiscoveryService:
             if bars and request.business_date:
                 latest = date.fromisoformat(bars[-1].trade_date)
                 expected = date.fromisoformat(request.business_date)
-                if (expected - latest).days > 4:
-                    reasons.append("STALE_MARKET_DATA")
+                if latest != expected:
+                    reasons.append("STALE_OR_SUSPENDED_MARKET_DATA")
             price = float(bars[-1].close) if bars else 0.01
             lot_cost = price * 100 + max(5.0, price * 100 * 0.0003)
             if lot_cost > request.budget:
@@ -380,7 +399,8 @@ def _forecast(
     )
     qualification = report.qualification
     metrics = qualification.locked_test.calibrated_metrics if qualification else None
-    performance = report.performance.strategy if report.performance else None
+    performance_report = report.performance
+    performance = performance_report.strategy if performance_report else None
     stability = report.parameter_stability
     interval = report.probability_interval
     qualified = bool(
@@ -389,6 +409,10 @@ def _forecast(
         and qualification
         and qualification.status in {"QUALIFIED", "CONDITIONAL"}
         and report.up_probability is not None
+        and performance_report is not None
+        and performance_report.excess_return > 0
+        and performance_report.strategy.sharpe_ratio
+        >= performance_report.benchmark.sharpe_ratio
     )
     conclusion = (
         "ROBUST"

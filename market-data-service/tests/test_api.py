@@ -24,6 +24,7 @@ from finscope_market_data.models import (
 )
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.snapshot_store import SnapshotStore
+from finscope_market_data.settings import Settings
 from finscope_market_data.discovery.schemas import DiscoveryFunnel, DiscoveryReport
 
 
@@ -155,6 +156,22 @@ def client(tmp_path: Path, providers: list[Any]) -> TestClient:
         max_retries=0,
     )
     return TestClient(create_app(router))
+
+
+def test_default_lifespan_builds_stock_discovery_with_configured_data_dir(
+    tmp_path: Path,
+) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    application = create_app(router=router, settings=Settings(data_dir=tmp_path))
+
+    with TestClient(application) as api:
+        assert api.get("/health").status_code == 200
+        assert application.state.discovery is not None
 
 
 class FakeDiscoveryService:

@@ -49,6 +49,24 @@ def test_discovery_request_rejects_contract_drift(payload: dict[str, object]) ->
         DiscoveryRequest.model_validate(payload)
 
 
+def test_deep_evidence_rejects_unknown_health_and_conclusion_states() -> None:
+    with pytest.raises(ValidationError):
+        DeepCandidateEvidence(
+            code="000001",
+            qualified=True,
+            conclusion="MAYBE",
+            calibrated_probability=0.6,
+            probability_lower_bound=0.5,
+            brier_skill_score=0.1,
+            locked_accuracy=0.55,
+            locked_log_loss=0.65,
+            risk_adjusted_return=0.3,
+            max_drawdown=-0.1,
+            stability_score=0.7,
+            health_status="UNKNOWN",
+        )
+
+
 def candidate(code: str, price: float, momentum: float, risk: float = 0.1) -> DiscoveryCandidate:
     return DiscoveryCandidate(
         code=code,

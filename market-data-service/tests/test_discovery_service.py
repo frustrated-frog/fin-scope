@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -201,6 +202,29 @@ async def test_service_uses_last_successful_universe_snapshot_when_sources_are_d
 
 
 @pytest.mark.asyncio
+async def test_service_rejects_expired_universe_snapshot(tmp_path) -> None:
+    snapshot = tmp_path / "stock-discovery-universe.json"
+    first = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=FakeMarket(),
+        universe_snapshot_path=snapshot,
+    )
+    await first._universe(5)
+    payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    payload["snapshot_at"] = (datetime.now() - timedelta(days=5)).isoformat()
+    snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+    service = StockDiscoveryService(
+        providers=[BrokenProvider()],
+        market=FakeMarket(),
+        universe_snapshot_path=snapshot,
+    )
+
+    with pytest.raises(RuntimeError, match="所有热门板块"):
+        await service._universe(5)
+
+
+@pytest.mark.asyncio
 async def test_service_never_uses_bars_after_requested_business_date() -> None:
     service = StockDiscoveryService(
         providers=[FakeProvider()],
@@ -309,6 +333,63 @@ def test_deep_forecast_rejects_non_up_decisions(monkeypatch, decision: str) -> N
     monkeypatch.setattr(
         "finscope_market_data.discovery.service.build_forecast",
         lambda *args, **kwargs: Value(decision),
+    )
+    candidate = DiscoveryCandidate(
+        code="000001",
+        market="SZ",
+        name="样本",
+        price=10,
+        lot_cost=1005,
+        budget_eligible=True,
+        admitted=True,
+    )
+
+    result = _forecast(candidate, [], DiscoveryRequest())
+
+    assert result["qualified"] is False
+    assert result["health_status"] == "DEGRADED"
+
+
+def test_deep_forecast_rejects_up_signal_without_cost_adjusted_advantage(
+    monkeypatch,
+) -> None:
+    class Summary:
+        sharpe_ratio = 0.2
+        max_drawdown = -0.1
+
+    class Benchmark:
+        sharpe_ratio = 0.3
+
+    class Performance:
+        strategy = Summary()
+        benchmark = Benchmark()
+        excess_return = -0.01
+
+    class Qualification:
+        status = "QUALIFIED"
+
+        class LockedTest:
+            calibrated_metrics = None
+
+        locked_test = LockedTest()
+
+    class Value:
+        status = "CONDITIONAL"
+        decision = "UP"
+        up_probability = 0.65
+        probability_interval = None
+        performance = Performance()
+        parameter_stability = None
+        warnings = []
+        decision_reason = "概率向上但成本后没有相对优势"
+        qualification = Qualification()
+
+        def model_dump(self, **kwargs):
+            return {"decision": self.decision}
+
+    monkeypatch.setattr(
+        "finscope_market_data.discovery.service.build_forecast",
+        lambda *args, **kwargs: Value(),
     )
     candidate = DiscoveryCandidate(
         code="000001",

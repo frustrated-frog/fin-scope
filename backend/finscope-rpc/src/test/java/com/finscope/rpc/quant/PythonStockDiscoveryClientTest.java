@@ -77,6 +77,11 @@ class PythonStockDiscoveryClientTest {
                 "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
     }
 
+    @Test
+    void rejectsFinalCandidateThatDidNotPassTheDeepGate() {
+        assertContractRejected(payload().replace("\"qualified\":true", "\"qualified\":false"));
+    }
+
     private void assertContractRejected(String responseBody) {
         FinanceHttpClient http = new FinanceHttpClient() {
             @Override
@@ -105,8 +110,14 @@ class PythonStockDiscoveryClientTest {
                 + "\"period\":\"5D\",\"source_rank\":1,\"retrieved_at\":\"2026-08-14T15:35:00\"}],"
                 + "\"candidates\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
                 + "\"deep_evidence\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
-                + "\"final_candidates\":[{\"code\":\"000001\",\"final_rank\":1},"
-                + "{\"code\":\"600001\",\"final_rank\":2}],"
+                + "\"final_candidates\":[{\"code\":\"000001\",\"final_rank\":1,"
+                + "\"qualified\":true,\"health_status\":\"HEALTHY\",\"conclusion\":\"ROBUST\","
+                + "\"calibrated_probability\":0.64,\"probability_lower_bound\":0.55,"
+                + "\"evidence\":[\"locked test\"],\"risks\":[],\"forecast_report\":{}},{"
+                + "\"code\":\"600001\",\"final_rank\":2,\"qualified\":true,"
+                + "\"health_status\":\"HEALTHY\",\"conclusion\":\"CONDITIONALLY_EFFECTIVE\","
+                + "\"calibrated_probability\":0.61,\"probability_lower_bound\":0.53,"
+                + "\"evidence\":[\"locked test\"],\"risks\":[],\"forecast_report\":{}}],"
                 + "\"funnel\":{\"constituent_count\":88,\"admitted_count\":2,"
                 + "\"quantified_count\":2,\"deep_review_count\":2,\"final_count\":2},"
                 + "\"warnings\":[],\"duration_ms\":12000}";

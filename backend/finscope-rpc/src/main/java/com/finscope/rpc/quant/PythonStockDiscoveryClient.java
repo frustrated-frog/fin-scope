@@ -80,7 +80,9 @@ public class PythonStockDiscoveryClient {
                 || report.getFunnel().getFinalCount() < 0 || report.getFunnel().getFinalCount() > 5
                 || report.getFunnel().getDeepReviewCount() < report.getFunnel().getFinalCount()
                 || report.getFunnel().getAdmittedCount() < report.getFunnel().getDeepReviewCount()
-                || report.getFunnel().getQuantifiedCount() != report.getFunnel().getAdmittedCount()) {
+                || report.getFunnel().getQuantifiedCount() != report.getFunnel().getAdmittedCount()
+                || report.getFunnel().getAdmittedCount() > report.getCandidates().size()
+                || report.getCandidates().size() > report.getFunnel().getConstituentCount()) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现缺少必需字段或漏斗计数无效", false, null);
         }
         try {
@@ -100,7 +102,16 @@ public class PythonStockDiscoveryClient {
             String code = text(selected.get("code"));
             int rank = integer(selected.get("final_rank"));
             if (!candidateCodes.contains(code) || !deepCodes.contains(code)
-                    || rank < 1 || rank > expectedCount || !ranks.add(rank)) {
+                    || rank < 1 || rank > expectedCount || !ranks.add(rank)
+                    || !Boolean.TRUE.equals(selected.get("qualified"))
+                    || !"HEALTHY".equals(text(selected.get("health_status")))
+                    || !("ROBUST".equals(text(selected.get("conclusion")))
+                    || "CONDITIONALLY_EFFECTIVE".equals(text(selected.get("conclusion"))))
+                    || !(selected.get("calibrated_probability") instanceof Number)
+                    || !(selected.get("probability_lower_bound") instanceof Number)
+                    || !(selected.get("evidence") instanceof java.util.List)
+                    || !(selected.get("risks") instanceof java.util.List)
+                    || !(selected.get("forecast_report") instanceof Map)) {
                 throw contract("SCHEMA_DRIFT", "Python 股票发现候选关系或最终排名无效", false, null);
             }
         }
