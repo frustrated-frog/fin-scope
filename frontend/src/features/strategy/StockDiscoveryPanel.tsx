@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest } from './quantTypes';
+import { StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -51,6 +51,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
 }) {
   const [latest, setLatest] = useState<StockDiscoveryLatest>();
   const [runningStatus, setRunningStatus] = useState('EMPTY');
+  const [statusDetail, setStatusDetail] = useState<StockDiscoveryStatus>();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -59,10 +60,10 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
       try {
         const [value, status] = await Promise.all([
           api<StockDiscoveryLatest>('/api/quant/stock-discoveries/latest'),
-          api<{ status: string }>('/api/quant/stock-discoveries/status')
+          api<StockDiscoveryStatus>('/api/quant/stock-discoveries/status')
         ]);
         if (!cancelled) {
-          setLatest(value); setRunningStatus(status.status); setFailed(false);
+          setLatest(value); setRunningStatus(status.status); setStatusDetail(status); setFailed(false);
           setMessage(value && 'report' in value ? `股票发现已同步至 ${value.report.as_of_date}` : '等待首份自动股票发现结果');
         }
       } catch (error) {
@@ -79,7 +80,15 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
   const candidates = useMemo(() => new Map(report?.candidates.map(item => [item.code, item]) ?? []), [report]);
 
   if (!report) {
-    return <section className="stock-discovery discovery-empty-state"><span>AUTOMATED MARKET SCAN</span><h3>{failed ? '暂时无法读取发现结果' : '第一份收盘研究正在路上'}</h3><p>系统会在交易日收盘后自动读取热门板块、校验一手资金约束、量化全部候选，并只保留通过严格门禁的前五名。你不需要点击运行。</p><div><i data-status={runningStatus} /><b>{runningStatus === 'RUNNING' ? '后台正在深度预测' : '每天 15:30 自动执行，启动时自动补跑'}</b></div></section>;
+    const businessFailed = statusDetail?.businessStatus === 'FAILED';
+    const delivered = statusDetail?.deliveryStatus === 'DELIVERED';
+    return <section className="stock-discovery discovery-empty-state" data-failed={businessFailed || undefined}>
+      <span>AUTOMATED MARKET SCAN</span>
+      <h3>{failed ? '暂时无法读取发现结果' : businessFailed ? (delivered ? '任务已送达，业务计算失败' : '任务等待重新投递') : '第一份收盘研究正在路上'}</h3>
+      <p>{businessFailed ? statusDetail?.errorMessage ?? '股票发现业务计算暂未完成' : '系统会在交易日收盘后自动读取热门板块、校验一手资金约束、量化全部候选，并只保留通过严格门禁的前五名。你不需要点击运行。'}</p>
+      <div><i data-status={runningStatus} /><b>{runningStatus === 'RUNNING' ? '后台正在深度预测' : businessFailed && statusDetail?.retryPending ? '系统会自动重试；热点雷达不受本次失败影响' : '每天 15:30 自动执行，启动时自动补跑'}</b></div>
+      {businessFailed && statusDetail?.nextScheduledAt ? <small>下次自动调度：{statusDetail.nextScheduledAt}</small> : null}
+    </section>;
   }
 
   return <section className="stock-discovery">

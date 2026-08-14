@@ -380,3 +380,14 @@ export interface StockDiscoveryReport {
 export type StockDiscoveryLatest =
   | { status: 'EMPTY' }
   | { run: StockDiscoveryRun; report: StockDiscoveryReport };
+
+export interface StockDiscoveryStatus {
+  status: string;
+  businessStatus: string;
+  deliveryStatus: 'PENDING' | 'DELIVERED';
+  retryPending: boolean;
+  runId?: number;
+  businessDate?: string;
+  errorMessage?: string;
+  nextScheduledAt: string;
+}

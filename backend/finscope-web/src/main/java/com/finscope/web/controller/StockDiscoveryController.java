@@ -18,6 +18,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,10 +51,23 @@ public class StockDiscoveryController {
     public ApiResponse<Map<String, Object>> status() {
         StockDiscoveryRun run = service.history(1).stream().findFirst().orElse(null);
         String nextScheduledAt = nextScheduledAt();
-        return ApiResponses.success(run == null
-                ? Map.of("status", "EMPTY", "nextScheduledAt", nextScheduledAt)
-                : Map.of("status", run.getStatus(), "runId", run.getId(),
-                "businessDate", run.getBusinessDate(), "nextScheduledAt", nextScheduledAt));
+        if (run == null) {
+            return ApiResponses.success(Map.of("status", "EMPTY", "businessStatus", "EMPTY",
+                    "deliveryStatus", "PENDING", "retryPending", false,
+                    "nextScheduledAt", nextScheduledAt));
+        }
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        result.put("status", run.getStatus());
+        result.put("businessStatus", run.getStatus());
+        result.put("deliveryStatus", run.getStartedAt() == null ? "PENDING" : "DELIVERED");
+        result.put("retryPending", "FAILED".equals(run.getStatus()));
+        result.put("runId", run.getId());
+        result.put("businessDate", run.getBusinessDate());
+        result.put("nextScheduledAt", nextScheduledAt);
+        if (run.getErrorMessage() != null && !run.getErrorMessage().trim().isEmpty()) {
+            result.put("errorMessage", run.getErrorMessage());
+        }
+        return ApiResponses.success(result);
     }
 
     private Object view(StockDiscoveryRun run) {

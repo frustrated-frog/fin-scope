@@ -34,3 +34,23 @@ test('presents the latest automatic selection without a manual refresh action', 
   await userEvent.click(screen.getByRole('button', { name: '进入单股完整研究' }));
   expect(onOpenResearch).toHaveBeenCalledWith('600001');
 });
+
+test('shows delivered transport separately from a failed business calculation', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === '/api/quant/stock-discoveries/status') {
+      return apiResponse({
+        status: 'FAILED', businessStatus: 'FAILED', deliveryStatus: 'DELIVERED',
+        retryPending: true, errorMessage: '所有热门板块数据源不可用',
+        nextScheduledAt: '2026-08-17T15:30:00+08:00'
+      });
+    }
+    return apiResponse({ status: 'EMPTY' });
+  }));
+
+  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByText('任务已送达，业务计算失败')).toBeInTheDocument();
+  expect(screen.getByText('所有热门板块数据源不可用')).toBeInTheDocument();
+  expect(screen.getByText(/系统会自动重试/)).toBeInTheDocument();
+  expect(screen.getByText(/下次自动调度：2026-08-17T15:30:00\+08:00/)).toBeInTheDocument();
+});
