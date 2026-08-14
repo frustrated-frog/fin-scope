@@ -68,12 +68,16 @@ class StockDiscoveryService:
         network_concurrency: int = 6,
         deep_concurrency: int = 2,
         universe_snapshot_path: str | Path | None = None,
+        provider_attempts: int = 2,
+        provider_retry_delay_seconds: float = 0.2,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
         self.forecast_builder = forecast_builder or _forecast
         self.network_concurrency = network_concurrency
         self.deep_concurrency = deep_concurrency
+        self.provider_attempts = max(1, provider_attempts)
+        self.provider_retry_delay_seconds = max(0.0, provider_retry_delay_seconds)
         self.universe_snapshot_path = (
             Path(universe_snapshot_path) if universe_snapshot_path else None
         )
@@ -153,33 +157,43 @@ class StockDiscoveryService:
         list[str],
     ]:
         warnings: list[str] = []
+        diagnostics: list[str] = []
         for provider in self.providers:
-            try:
-                sectors = await asyncio.to_thread(provider.sectors, limit)
-                if sectors:
+            for attempt in range(1, self.provider_attempts + 1):
+                try:
+                    sectors = await asyncio.to_thread(provider.sectors, limit)
+                    if not sectors:
+                        raise RuntimeError("热门板块榜单为空")
                     members = await self._members(provider, sectors, warnings)
-                    if members:
-                        constituent_family = getattr(
-                            provider, "constituent_source_family", provider.source_family
-                        )
-                        if constituent_family != provider.source_family:
-                            warnings.append(
-                                f"{provider.source_family} 提供热门榜单，"
-                                f"{constituent_family} 提供板块成分关系"
-                            )
-                        self._save_universe_snapshot(sectors, provider, members, warnings)
-                        return sectors, provider, members, warnings
-                    warnings.append(
-                        f"{provider.source_family} 板块成分为空，已切换备用源"
+                    if not members:
+                        raise RuntimeError("板块成分为空")
+                    constituent_family = getattr(
+                        provider, "constituent_source_family", provider.source_family
                     )
-            except Exception as error:
-                warnings.append(
-                    f"{provider.source_family} 热门板块不可用：{_safe(error)}"
-                )
+                    if constituent_family != provider.source_family:
+                        warnings.append(
+                            f"{provider.source_family} 提供热门榜单，"
+                            f"{constituent_family} 提供板块成分关系"
+                        )
+                    self._save_universe_snapshot(sectors, provider, members, warnings)
+                    return sectors, provider, members, warnings
+                except Exception as error:
+                    detail = (
+                        f"{provider.source_family}[{attempt}/{self.provider_attempts}] "
+                        f"{_safe(error)}"
+                    )
+                    diagnostics.append(detail)
+                    warnings.append(
+                        f"{provider.source_family} 热门板块第{attempt}/"
+                        f"{self.provider_attempts}次获取失败：{_safe(error)}"
+                    )
+                    if attempt < self.provider_attempts:
+                        await asyncio.sleep(self.provider_retry_delay_seconds)
         snapshot = self._load_universe_snapshot(warnings)
         if snapshot is not None:
             return snapshot
-        raise RuntimeError("所有热门板块或成分股数据源均不可用")
+        reason = "；".join(diagnostics)
+        raise RuntimeError(f"所有热门板块或成分股数据源均不可用：{reason}")
 
     def _save_universe_snapshot(
         self,

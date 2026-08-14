@@ -45,6 +45,22 @@ class BrokenProvider(FakeProvider):
         raise RuntimeError("upstream unavailable")
 
 
+class FlakyProvider(FakeProvider):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def sectors(self, limit: int):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("temporary disconnect")
+        return super().sectors(limit)
+
+
+class BrokenSecondaryProvider(BrokenProvider):
+    source_code = "SECONDARY_HOT_SECTORS"
+    source_family = "SECONDARY"
+
+
 class BrokenConstituentProvider(FakeProvider):
     source_family = "BROKEN_MEMBERS"
 
@@ -104,6 +120,43 @@ class StaleMarket(FakeMarket):
             stale_age_seconds=5 * 24 * 60 * 60,
             warnings=("在线源失败，命中旧快照",),
         )
+
+
+@pytest.mark.asyncio
+async def test_universe_retries_the_same_provider_before_switching_source() -> None:
+    provider = FlakyProvider()
+    service = StockDiscoveryService(
+        providers=[provider],
+        market=FakeMarket(),
+        provider_attempts=2,
+        provider_retry_delay_seconds=0,
+    )
+
+    sectors, selected, members, warnings = await service._universe(5)
+
+    assert provider.calls == 2
+    assert selected.source_family == "FAKE"
+    assert len(sectors) == 1
+    assert len(members) == 2
+    assert any("第1/2次" in warning for warning in warnings)
+
+
+@pytest.mark.asyncio
+async def test_universe_failure_reports_each_provider_and_attempt() -> None:
+    service = StockDiscoveryService(
+        providers=[BrokenProvider(), BrokenSecondaryProvider()],
+        market=FakeMarket(),
+        provider_attempts=2,
+        provider_retry_delay_seconds=0,
+    )
+
+    with pytest.raises(RuntimeError) as captured:
+        await service._universe(5)
+
+    message = str(captured.value)
+    assert "FAKE[2/2]" in message
+    assert "SECONDARY[2/2]" in message
+    assert "upstream unavailable" in message
 
 
 @pytest.mark.asyncio

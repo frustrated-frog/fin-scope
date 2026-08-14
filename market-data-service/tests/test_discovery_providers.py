@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
+from finscope_market_data.discovery.providers import (
+    SinaHotSectorProvider,
+    TonghuashunHotSectorProvider,
+)
 from finscope_market_data.discovery.schemas import DiscoverySector
 
 
@@ -46,3 +49,27 @@ def test_tonghuashun_fallback_uses_its_real_industry_flow_contract(monkeypatch) 
     assert [(item.category, item.name, item.period) for item in values] == [
         ("INDUSTRY", "机器人", "1D")
     ]
+
+
+def test_sina_fallback_ranks_industries_and_preserves_source(monkeypatch) -> None:
+    fake_akshare = SimpleNamespace(
+        stock_sector_spot=lambda indicator: pd.DataFrame(
+            [
+                {"label": "new_jrhy", "板块": "金融", "涨跌幅": 1.1, "总成交额": 10},
+                {"label": "new_jqsb", "板块": "机器人", "涨跌幅": 2.3, "总成交额": 20},
+            ]
+        ),
+        stock_sector_detail=lambda sector: pd.DataFrame(
+            [{"code": "600001", "name": "样本股份"}]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+    provider = SinaHotSectorProvider()
+
+    sectors = provider.sectors(1)
+    members = provider.constituents(sectors[0])
+
+    assert [(item.name, item.period, item.source_family) for item in sectors] == [
+        ("机器人", "1D", "SINA")
+    ]
+    assert members == [("600001", "SH", "样本股份")]

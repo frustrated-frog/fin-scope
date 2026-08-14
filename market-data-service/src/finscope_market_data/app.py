@@ -13,6 +13,7 @@ from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.discovery.providers import (
     EastmoneyHotSectorProvider,
+    SinaHotSectorProvider,
     TonghuashunHotSectorProvider,
 )
 from finscope_market_data.discovery.schemas import DiscoveryRequest
@@ -70,6 +71,7 @@ def create_app(
                 providers=[
                     EastmoneyHotSectorProvider(),
                     TonghuashunHotSectorProvider(),
+                    SinaHotSectorProvider(),
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
                 universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",

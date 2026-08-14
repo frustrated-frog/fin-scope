@@ -141,11 +141,60 @@ class TonghuashunHotSectorProvider:
             code = str(row.get("代码", row.get("code", ""))).strip().zfill(6)
             name = str(row.get("名称", row.get("name", ""))).strip()
             if len(code) == 6 and code.isdigit() and name:
-                result.append(
-                    (code, "SH" if code.startswith(("5", "6", "9")) else "SZ", name)
-                )
+                market = "SH" if code.startswith(("5", "6", "9")) else "SZ"
+                result.append((code, market, name))
         return result
 
+
+class SinaHotSectorProvider:
+    """新浪行业涨幅榜；仅在资金流榜不可用时提供独立网络兜底。"""
+
+    source_code = "AKSHARE_SINA_SECTOR_SPOT"
+    source_family = "SINA"
+
+    def sectors(self, limit: int) -> list[DiscoverySector]:
+        import akshare as ak
+
+        frame = ak.stock_sector_spot(indicator="新浪行业")
+        ordered = frame.sort_values("涨跌幅", ascending=False).head(limit)
+        retrieved_at = datetime.now().isoformat()
+        result: list[DiscoverySector] = []
+        for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
+            code = str(row.get("label", "")).strip()
+            name = str(row.get("板块", "")).strip()
+            if not code or not name:
+                continue
+            result.append(
+                DiscoverySector(
+                    code=code,
+                    name=name,
+                    category="INDUSTRY",
+                    source_code=self.source_code,
+                    source_family=self.source_family,
+                    period="1D",
+                    source_rank=rank,
+                    change_pct=_number(row.get("涨跌幅")),
+                    leader_stock_name=_text(row.get("股票名称")),
+                    retrieved_at=retrieved_at,
+                )
+            )
+        if not result:
+            raise RuntimeError("新浪热门行业榜单为空")
+        return result
+
+    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
+        import akshare as ak
+
+        frame = ak.stock_sector_detail(sector=sector.code)
+        result: list[tuple[str, str, str]] = []
+        for _, row in frame.iterrows():
+            code = str(row.get("code", row.get("symbol", ""))).strip()
+            code = code.removeprefix("sh").removeprefix("sz").zfill(6)
+            name = str(row.get("name", row.get("名称", ""))).strip()
+            if len(code) == 6 and code.isdigit() and name:
+                market = "SH" if code.startswith(("5", "6", "9")) else "SZ"
+                result.append((code, market, name))
+        return result
 
 def _number(value: object) -> float | None:
     try:
