@@ -79,7 +79,7 @@ Web 模块提供两个命名的 `ConcurrentKafkaListenerContainerFactory`。它�
 ## 2026-08-14 验证结论
 
 - Python 全量回归：134 项通过，仅1项第三方库弃用提示。
-- Java 全 reactor 回归：156 项通过，0 失败、0 错误、1 跳过。
+- Java 全 reactor 回归通过；其中 Web 模块 156 项、0 失败、0 错误、1 跳过，上游各模块测试也全部通过。
 - React 全量回归：405 项通过；TypeScript 与 Vite 生产构建通过。
 - 运行中 broker 确认存在独立的股票发现与热点 topic；检查时热点消费组 lag 为 0，股票消费组因旧进程中的失败批次 lag 为 1，证明热点消费未被股票失败阻断。
 - DLT 在新版本的消费重试耗尽时按需创建；单元测试已确认两个 recoverer 分别路由到 `finscope.quant.stock-discovery.requested.dlt` 和 `finscope.radar.interpretation.requested.dlt`。
