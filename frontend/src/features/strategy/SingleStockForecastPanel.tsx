@@ -122,8 +122,8 @@ function QualificationSection({ qualification, probabilityInterval }: { qualific
   </section>;
 }
 
-export function SingleStockForecastPanel({ addToast, setMessage }: {
-  addToast: Toast; setMessage: (message: string) => void;
+export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: {
+  addToast: Toast; setMessage: (message: string) => void; initialCode?: string;
 }) {
   const [code, setCode] = useState('');
   const [horizon, setHorizon] = useState<ForecastHorizon>(5);
@@ -131,6 +131,10 @@ export function SingleStockForecastPanel({ addToast, setMessage }: {
   const [selected, setSelected] = useState<SingleStockForecastRun>();
   const [busy, setBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(true);
+
+  useEffect(() => {
+    if (initialCode && /^\d{6}$/.test(initialCode)) setCode(initialCode);
+  }, [initialCode]);
 
   useEffect(() => {
     let active = true;

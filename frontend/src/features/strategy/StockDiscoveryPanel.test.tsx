@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 
 test('presents the latest automatic selection without a manual refresh action', async () => {
+  const onOpenResearch = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path === '/api/quant/stock-discoveries/status') {
@@ -23,10 +25,12 @@ test('presents the latest automatic selection without a manual refresh action', 
     });
   }));
 
-  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} onOpenResearch={onOpenResearch} />);
 
   expect(await screen.findByRole('heading', { name: /样本股份/ })).toBeInTheDocument();
   expect(screen.getByText('64.0%')).toBeInTheDocument();
   expect(screen.getByText('锁定样本优于基准')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /刷新|运行|选股/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '进入单股完整研究' }));
+  expect(onOpenResearch).toHaveBeenCalledWith('600001');
 });

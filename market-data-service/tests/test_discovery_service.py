@@ -4,8 +4,16 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from finscope_market_data.discovery.schemas import DiscoveryRequest, DiscoverySector
-from finscope_market_data.discovery.service import StockDiscoveryService
+from finscope_market_data.discovery.schemas import (
+    DiscoveryCandidate,
+    DiscoveryRequest,
+    DiscoverySector,
+)
+from finscope_market_data.discovery.service import (
+    DiscoveryBarsSnapshot,
+    StockDiscoveryService,
+    _forecast,
+)
 from finscope_market_data.models import DailyBar, StockSymbol
 
 
@@ -61,6 +69,40 @@ class FakeMarket:
             )
             for index in range(800)
         ]
+
+
+class ShortHistoryMarket:
+    async def bars(self, market: str, code: str):
+        symbol = StockSymbol(market=market, code=code)
+        return [
+            DailyBar(
+                symbol=symbol,
+                trade_date="2026-08-14",
+                open=10,
+                high=10.2,
+                low=9.8,
+                close=10,
+                volume=100_000,
+                amount=1_000_000,
+                adjustment="QFQ",
+            )
+        ]
+
+
+class EmptyMarket:
+    async def bars(self, market: str, code: str):
+        return []
+
+
+class StaleMarket(FakeMarket):
+    async def bars(self, market: str, code: str):
+        bars = await super().bars(market, code)
+        return DiscoveryBarsSnapshot(
+            bars=bars,
+            quality_status="STALE_FALLBACK",
+            stale_age_seconds=5 * 24 * 60 * 60,
+            warnings=("在线源失败，命中旧快照",),
+        )
 
 
 @pytest.mark.asyncio
@@ -122,6 +164,43 @@ async def test_service_falls_back_when_primary_sector_members_are_unavailable() 
 
 
 @pytest.mark.asyncio
+async def test_service_uses_last_successful_universe_snapshot_when_sources_are_down(
+    tmp_path,
+) -> None:
+    snapshot = tmp_path / "stock-discovery-universe.json"
+    builder = lambda candidate, bars, request: {
+        "qualified": False,
+        "conclusion": "NO_CLEAR_ADVANTAGE",
+        "calibrated_probability": 0.5,
+        "probability_lower_bound": 0.4,
+        "brier_skill_score": 0,
+        "locked_accuracy": 0.5,
+        "locked_log_loss": 0.7,
+        "risk_adjusted_return": 0,
+        "max_drawdown": -0.1,
+        "stability_score": 0.5,
+        "health_status": "DEGRADED",
+    }
+    await StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=FakeMarket(),
+        forecast_builder=builder,
+        universe_snapshot_path=snapshot,
+    ).discover(DiscoveryRequest(budget=6000))
+
+    report = await StockDiscoveryService(
+        providers=[BrokenProvider()],
+        market=FakeMarket(),
+        forecast_builder=builder,
+        universe_snapshot_path=snapshot,
+    ).discover(DiscoveryRequest(budget=6000))
+
+    assert report.source_family == "FAKE"
+    assert report.funnel.constituent_count == 2
+    assert any("本地热门板块快照" in warning for warning in report.warnings)
+
+
+@pytest.mark.asyncio
 async def test_service_never_uses_bars_after_requested_business_date() -> None:
     service = StockDiscoveryService(
         providers=[FakeProvider()],
@@ -147,3 +226,101 @@ async def test_service_never_uses_bars_after_requested_business_date() -> None:
 
     assert report.as_of_date == "2025-02-28"
     assert report.funnel.admitted_count == 1
+
+
+@pytest.mark.asyncio
+async def test_short_history_is_rejected_without_aborting_the_batch() -> None:
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=ShortHistoryMarket(),
+    )
+
+    report = await service.discover(
+        DiscoveryRequest(business_date="2026-08-14", budget=6000)
+    )
+
+    candidate = next(item for item in report.candidates if item.code == "000001")
+    assert candidate.admitted is False
+    assert candidate.factors == {}
+    assert "INSUFFICIENT_QFQ_HISTORY" in candidate.rejection_reasons
+    assert report.funnel.final_count == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_market_data_is_rejected_instead_of_faking_a_low_price() -> None:
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=EmptyMarket(),
+    )
+
+    report = await service.discover(
+        DiscoveryRequest(business_date="2026-08-14", budget=6000)
+    )
+
+    candidate = next(item for item in report.candidates if item.code == "000001")
+    assert candidate.admitted is False
+    assert candidate.budget_eligible is False
+    assert "MARKET_DATA_UNAVAILABLE" in candidate.rejection_reasons
+    assert report.funnel.admitted_count == 0
+
+
+@pytest.mark.asyncio
+async def test_excessively_stale_snapshot_is_rejected_and_traced() -> None:
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=StaleMarket(),
+    )
+
+    report = await service.discover(DiscoveryRequest(budget=6000))
+
+    candidate = next(item for item in report.candidates if item.code == "000001")
+    assert candidate.admitted is False
+    assert "STALE_MARKET_DATA" in candidate.rejection_reasons
+    assert any("在线源失败" in warning for warning in report.warnings)
+
+
+@pytest.mark.parametrize("decision", ["DOWN", "ABSTAIN"])
+def test_deep_forecast_rejects_non_up_decisions(monkeypatch, decision: str) -> None:
+    class Value:
+        status = "ROBUST"
+        up_probability = 0.72
+        probability_interval = None
+        performance = None
+        parameter_stability = None
+        warnings = []
+        decision_reason = "当前方向不满足上涨门禁"
+
+        class Qualification:
+            status = "QUALIFIED"
+
+            class LockedTest:
+                calibrated_metrics = None
+
+            locked_test = LockedTest()
+
+        qualification = Qualification()
+
+        def __init__(self, current_decision: str):
+            self.decision = current_decision
+
+        def model_dump(self, **kwargs):
+            return {"decision": self.decision}
+
+    monkeypatch.setattr(
+        "finscope_market_data.discovery.service.build_forecast",
+        lambda *args, **kwargs: Value(decision),
+    )
+    candidate = DiscoveryCandidate(
+        code="000001",
+        market="SZ",
+        name="样本",
+        price=10,
+        lot_cost=1005,
+        budget_eligible=True,
+        admitted=True,
+    )
+
+    result = _forecast(candidate, [], DiscoveryRequest())
+
+    assert result["qualified"] is False
+    assert result["health_status"] == "DEGRADED"

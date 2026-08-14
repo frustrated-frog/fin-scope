@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 import hashlib
 import json
 import math
+from pathlib import Path
 import time
 from typing import Awaitable, Callable, Protocol, Sequence
 
@@ -26,7 +28,29 @@ from finscope_market_data.models import DailyBar
 
 
 class DiscoveryMarket(Protocol):
-    async def bars(self, market: str, code: str) -> Sequence[DailyBar]: ...
+    async def bars(
+        self, market: str, code: str
+    ) -> Sequence[DailyBar] | DiscoveryBarsSnapshot: ...
+
+
+@dataclass(frozen=True)
+class DiscoveryBarsSnapshot:
+    bars: Sequence[DailyBar]
+    quality_status: str
+    stale_age_seconds: int | None = None
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SnapshotHotSectorProvider:
+    source_code: str
+    source_family: str
+
+    def sectors(self, limit: int) -> list[DiscoverySector]:
+        raise RuntimeError("snapshot provider does not fetch online sectors")
+
+    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
+        raise RuntimeError("snapshot provider does not fetch online constituents")
 
 
 ForecastBuilder = Callable[
@@ -43,12 +67,16 @@ class StockDiscoveryService:
         forecast_builder: ForecastBuilder | None = None,
         network_concurrency: int = 6,
         deep_concurrency: int = 2,
+        universe_snapshot_path: str | Path | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
         self.forecast_builder = forecast_builder or _forecast
         self.network_concurrency = network_concurrency
         self.deep_concurrency = deep_concurrency
+        self.universe_snapshot_path = (
+            Path(universe_snapshot_path) if universe_snapshot_path else None
+        )
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
@@ -77,7 +105,10 @@ class StockDiscoveryService:
         )
         fingerprint_payload = {
             "as_of": as_of,
-            "sectors": [item.model_dump(mode="json") for item in sectors],
+            "sectors": [
+                item.model_dump(mode="json", exclude={"retrieved_at"})
+                for item in sectors
+            ],
             "candidates": [item.model_dump(mode="json") for item in ordered_candidates],
         }
         fingerprint = hashlib.sha256(
@@ -122,6 +153,7 @@ class StockDiscoveryService:
                 if sectors:
                     members = await self._members(provider, sectors, warnings)
                     if members:
+                        self._save_universe_snapshot(sectors, provider, members, warnings)
                         return sectors, provider, members, warnings
                     warnings.append(
                         f"{provider.source_family} 板块成分为空，已切换备用源"
@@ -130,7 +162,70 @@ class StockDiscoveryService:
                 warnings.append(
                     f"{provider.source_family} 热门板块不可用：{_safe(error)}"
                 )
+        snapshot = self._load_universe_snapshot(warnings)
+        if snapshot is not None:
+            return snapshot
         raise RuntimeError("所有热门板块或成分股数据源均不可用")
+
+    def _save_universe_snapshot(
+        self,
+        sectors: Sequence[DiscoverySector],
+        provider: HotSectorProvider,
+        members: dict[str, tuple[str, str, set[str], set[str]]],
+        warnings: list[str],
+    ) -> None:
+        if self.universe_snapshot_path is None:
+            return
+        payload = {
+            "source_code": provider.source_code,
+            "source_family": provider.source_family,
+            "sectors": [item.model_dump(mode="json") for item in sectors],
+            "members": {
+                code: [market, name, sorted(sector_codes), sorted(sector_names)]
+                for code, (market, name, sector_codes, sector_names) in members.items()
+            },
+        }
+        try:
+            self.universe_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.universe_snapshot_path.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                encoding="utf-8",
+            )
+            temporary.replace(self.universe_snapshot_path)
+        except OSError as error:
+            warnings.append(f"热门板块快照保存失败：{_safe(error)}")
+
+    def _load_universe_snapshot(
+        self, warnings: list[str]
+    ) -> tuple[
+        list[DiscoverySector],
+        HotSectorProvider,
+        dict[str, tuple[str, str, set[str], set[str]]],
+        list[str],
+    ] | None:
+        if self.universe_snapshot_path is None or not self.universe_snapshot_path.exists():
+            return None
+        try:
+            payload = json.loads(
+                self.universe_snapshot_path.read_text(encoding="utf-8")
+            )
+            sectors = [DiscoverySector.model_validate(item) for item in payload["sectors"]]
+            members = {
+                code: (value[0], value[1], set(value[2]), set(value[3]))
+                for code, value in payload["members"].items()
+            }
+            provider = SnapshotHotSectorProvider(
+                source_code=str(payload["source_code"]),
+                source_family=str(payload["source_family"]),
+            )
+            if not sectors or not members:
+                return None
+            warnings.append("在线热门板块源均不可用，已使用最近一次本地热门板块快照")
+            return sectors, provider, members, warnings
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            warnings.append(f"本地热门板块快照不可用：{_safe(error)}")
+            return None
 
     async def _members(
         self,
@@ -179,7 +274,22 @@ class StockDiscoveryService:
             if not reasons:
                 try:
                     async with semaphore:
-                        bars = await self.market.bars(market, code)
+                        market_result = await self.market.bars(market, code)
+                    if isinstance(market_result, DiscoveryBarsSnapshot):
+                        bars = market_result.bars
+                        warnings.extend(
+                            f"{code} 行情说明：{item}"
+                            for item in market_result.warnings
+                        )
+                        if market_result.quality_status == "UNAVAILABLE":
+                            reasons.append("MARKET_DATA_UNAVAILABLE")
+                        if (
+                            market_result.stale_age_seconds is not None
+                            and market_result.stale_age_seconds > 4 * 24 * 60 * 60
+                        ):
+                            reasons.append("STALE_MARKET_DATA")
+                    else:
+                        bars = market_result
                     if request.business_date:
                         bars = tuple(
                             item
@@ -191,6 +301,13 @@ class StockDiscoveryService:
                     reasons.append("MARKET_DATA_UNAVAILABLE")
             if bars and (len(bars) < 750 or any(item.adjustment != "QFQ" for item in bars)):
                 reasons.append("INSUFFICIENT_QFQ_HISTORY")
+            if not bars and "MARKET_DATA_UNAVAILABLE" not in reasons:
+                reasons.append("MARKET_DATA_UNAVAILABLE")
+            if bars and request.business_date:
+                latest = date.fromisoformat(bars[-1].trade_date)
+                expected = date.fromisoformat(request.business_date)
+                if (expected - latest).days > 4:
+                    reasons.append("STALE_MARKET_DATA")
             price = float(bars[-1].close) if bars else 0.01
             lot_cost = price * 100 + max(5.0, price * 100 * 0.0003)
             if lot_cost > request.budget:
@@ -206,12 +323,12 @@ class StockDiscoveryService:
                 name=name,
                 price=price,
                 lot_cost=lot_cost,
-                budget_eligible="OVER_BUDGET" not in reasons,
+                budget_eligible=bool(bars) and "OVER_BUDGET" not in reasons,
                 admitted=not reasons,
                 rejection_reasons=reasons,
                 sector_codes=sorted(sector_codes),
                 sector_names=sorted(sector_names),
-                factors=_factors(bars) if bars else {},
+                factors=_factors(bars) if len(bars) >= 61 else {},
             )
             return candidate
 
@@ -268,6 +385,7 @@ def _forecast(
     interval = report.probability_interval
     qualified = bool(
         report.status in {"ROBUST", "CONDITIONAL"}
+        and report.decision == "UP"
         and qualification
         and qualification.status in {"QUALIFIED", "CONDITIONAL"}
         and report.up_probability is not None

@@ -13,8 +13,10 @@ import javax.annotation.Resource;
 import java.net.URI;
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class PythonStockDiscoveryClient {
@@ -69,13 +71,64 @@ public class PythonStockDiscoveryClient {
         if (report == null || !"1.0.0".equals(report.getSchemaVersion())
                 || !policyVersion.equals(report.getPolicyVersion()) || report.getAsOfDate() == null
                 || report.getSourceFamily() == null || report.getQualityStatus() == null
-                || report.getDataFingerprint() == null || report.getDataFingerprint().length() != 64
+                || report.getDataFingerprint() == null
+                || !report.getDataFingerprint().matches("[0-9a-f]{64}")
                 || report.getFunnel() == null || report.getFinalCandidates() == null
+                || report.getCandidates() == null || report.getDeepEvidence() == null
                 || report.getFinalCandidates().size() != report.getFunnel().getFinalCount()
+                || report.getDeepEvidence().size() != report.getFunnel().getDeepReviewCount()
                 || report.getFunnel().getFinalCount() < 0 || report.getFunnel().getFinalCount() > 5
                 || report.getFunnel().getDeepReviewCount() < report.getFunnel().getFinalCount()
-                || report.getFunnel().getAdmittedCount() < report.getFunnel().getDeepReviewCount()) {
+                || report.getFunnel().getAdmittedCount() < report.getFunnel().getDeepReviewCount()
+                || report.getFunnel().getQuantifiedCount() != report.getFunnel().getAdmittedCount()) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现缺少必需字段或漏斗计数无效", false, null);
+        }
+        try {
+            LocalDate.parse(report.getAsOfDate());
+        } catch (RuntimeException error) {
+            throw contract("SCHEMA_DRIFT", "Python 股票发现业务日期格式无效", false, error);
+        }
+        validateCandidateRelations(report);
+    }
+
+    private void validateCandidateRelations(StockDiscoveryReport report) {
+        Set<String> candidateCodes = codes(report.getCandidates());
+        Set<String> deepCodes = codes(report.getDeepEvidence());
+        Set<Integer> ranks = new HashSet<Integer>();
+        int expectedCount = report.getFinalCandidates().size();
+        for (Map<String, Object> selected : report.getFinalCandidates()) {
+            String code = text(selected.get("code"));
+            int rank = integer(selected.get("final_rank"));
+            if (!candidateCodes.contains(code) || !deepCodes.contains(code)
+                    || rank < 1 || rank > expectedCount || !ranks.add(rank)) {
+                throw contract("SCHEMA_DRIFT", "Python 股票发现候选关系或最终排名无效", false, null);
+            }
+        }
+    }
+
+    private Set<String> codes(Iterable<Map<String, Object>> values) {
+        Set<String> result = new HashSet<String>();
+        for (Map<String, Object> value : values) {
+            String code = text(value.get("code"));
+            if (code.isEmpty() || !result.add(code)) {
+                throw contract("SCHEMA_DRIFT", "Python 股票发现候选代码缺失或重复", false, null);
+            }
+        }
+        return result;
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private int integer(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(text(value));
+        } catch (NumberFormatException error) {
+            return -1;
         }
     }
 

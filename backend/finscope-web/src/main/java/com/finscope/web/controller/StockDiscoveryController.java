@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -45,10 +49,11 @@ public class StockDiscoveryController {
     @GetMapping("/status")
     public ApiResponse<Map<String, Object>> status() {
         StockDiscoveryRun run = service.history(1).stream().findFirst().orElse(null);
+        String nextScheduledAt = nextScheduledAt();
         return ApiResponses.success(run == null
-                ? Collections.<String, Object>singletonMap("status", "EMPTY")
+                ? Map.of("status", "EMPTY", "nextScheduledAt", nextScheduledAt)
                 : Map.of("status", run.getStatus(), "runId", run.getId(),
-                "businessDate", run.getBusinessDate()));
+                "businessDate", run.getBusinessDate(), "nextScheduledAt", nextScheduledAt));
     }
 
     private Object view(StockDiscoveryRun run) {
@@ -61,5 +66,19 @@ public class StockDiscoveryController {
         } catch (Exception error) {
             throw new IllegalStateException("股票发现报告无法读取", error);
         }
+    }
+
+    private String nextScheduledAt() {
+        ZoneId zone = ZoneId.of("Asia/Shanghai");
+        ZonedDateTime now = ZonedDateTime.now(zone);
+        ZonedDateTime next = now.toLocalDate().atTime(LocalTime.of(15, 30)).atZone(zone);
+        if (!next.isAfter(now)) {
+            next = next.plusDays(1);
+        }
+        while (next.getDayOfWeek() == DayOfWeek.SATURDAY
+                || next.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            next = next.plusDays(1);
+        }
+        return next.toOffsetDateTime().toString();
     }
 }

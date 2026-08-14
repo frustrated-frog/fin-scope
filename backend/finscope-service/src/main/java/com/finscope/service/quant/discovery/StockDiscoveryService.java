@@ -28,7 +28,7 @@ public class StockDiscoveryService {
         String runKey = businessDate + ":" + POLICY_VERSION;
         StockDiscoveryRun run = repository.createIfAbsent(
                 runKey, businessDate, 6000d, POLICY_VERSION, triggerType);
-        if (!"CREATED".equals(run.getStatus()) && !"FAILED".equals(run.getStatus())) {
+        if ("SUCCEEDED".equals(run.getStatus())) {
             return run;
         }
         StockDiscoveryRequestedEvent event = event(run);
@@ -43,7 +43,9 @@ public class StockDiscoveryService {
         if (current == null || "SUCCEEDED".equals(current.getStatus())) {
             return;
         }
-        repository.markRunning(event.getRunId());
+        if (!repository.tryMarkRunning(event.getRunId())) {
+            return;
+        }
         try {
             StockDiscoveryReport report = client.discover(
                     LocalDate.parse(event.getBusinessDate()), event.getBudget(), event.getPolicyVersion());

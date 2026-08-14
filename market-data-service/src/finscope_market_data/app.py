@@ -16,7 +16,10 @@ from finscope_market_data.discovery.providers import (
     TonghuashunHotSectorProvider,
 )
 from finscope_market_data.discovery.schemas import DiscoveryRequest
-from finscope_market_data.discovery.service import StockDiscoveryService
+from finscope_market_data.discovery.service import (
+    DiscoveryBarsSnapshot,
+    StockDiscoveryService,
+)
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
@@ -66,6 +69,7 @@ def create_app(
                     EastmoneyHotSectorProvider(),
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
+                universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",
             )
         try:
             yield
@@ -338,9 +342,14 @@ class _RouterDiscoveryMarket:
         envelope = await self.router.fetch(
             DataCapability.DAILY_BARS,
             StockSymbol(market=market, code=code),
-            limit=5000,
+            limit=1500,
         )
-        return envelope.data or []
+        return DiscoveryBarsSnapshot(
+            bars=envelope.data or [],
+            quality_status=envelope.quality_status.value,
+            stale_age_seconds=envelope.stale_age_seconds,
+            warnings=tuple(envelope.warnings),
+        )
 
 
 app = create_app()

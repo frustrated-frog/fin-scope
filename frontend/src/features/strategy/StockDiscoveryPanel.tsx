@@ -20,7 +20,11 @@ function money(value?: number) {
   return `¥${value.toFixed(0)}`;
 }
 
-function CandidateCard({ evidence, candidate }: { evidence: StockDiscoveryEvidence; candidate?: StockDiscoveryCandidate }) {
+function CandidateCard({ evidence, candidate, onOpenResearch }: {
+  evidence: StockDiscoveryEvidence;
+  candidate?: StockDiscoveryCandidate;
+  onOpenResearch: (code: string) => void;
+}) {
   return <article className="discovery-candidate" data-health={evidence.health_status}>
     <div className="discovery-rank"><span>#{String(evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
     <div className="discovery-candidate-main">
@@ -34,13 +38,17 @@ function CandidateCard({ evidence, candidate }: { evidence: StockDiscoveryEviden
         <div><dt>最大回撤</dt><dd>{pct(evidence.max_drawdown)}</dd></div>
         <div><dt>一手资金</dt><dd>{money(candidate?.lot_cost)}</dd></div>
       </dl>
-      <footer><div>{(candidate?.sector_names ?? []).map(name => <span key={name}>{name}</span>)}</div><small>现价 {candidate ? `¥${candidate.price.toFixed(2)}` : '—'}</small></footer>
+      <footer><div>{(candidate?.sector_names ?? []).map(name => <span key={name}>{name}</span>)}</div><div className="discovery-candidate-actions"><small>现价 {candidate ? `¥${candidate.price.toFixed(2)}` : '—'}</small><button type="button" onClick={() => onOpenResearch(evidence.code)}>进入单股完整研究</button></div></footer>
       {(evidence.evidence.length > 0 || evidence.risks.length > 0) && <details><summary>查看入选证据与风险边界</summary><div className="discovery-evidence"><section><b>为什么进入前五</b>{evidence.evidence.map(item => <p key={item}>{item}</p>)}</section><section><b>必须同时看到</b>{evidence.risks.map(item => <p key={item}>{item}</p>)}</section></div></details>}
     </div>
   </article>;
 }
 
-export function StockDiscoveryPanel({ addToast, setMessage }: { addToast: Toast; setMessage: (message: string) => void }) {
+export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
+  addToast: Toast;
+  setMessage: (message: string) => void;
+  onOpenResearch?: (code: string) => void;
+}) {
   const [latest, setLatest] = useState<StockDiscoveryLatest>();
   const [runningStatus, setRunningStatus] = useState('EMPTY');
   const [failed, setFailed] = useState(false);
@@ -88,7 +96,7 @@ export function StockDiscoveryPanel({ addToast, setMessage }: { addToast: Toast;
       <main>
         <div className="discovery-section-title"><div><span>FINAL SHORTLIST</span><h4>有优势才出现，最多五只</h4></div><p>{report.final_candidates.length ? `本轮 ${report.final_candidates.length} 只通过最终门禁` : '本轮没有股票通过最终门禁，这也是有效结论'}</p></div>
         <div className="discovery-final-list">{report.final_candidates.length
-          ? report.final_candidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} />)
+          ? report.final_candidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
           : <div className="discovery-no-edge"><strong>宁可空缺，也不凑满前五</strong><p>当前候选在概率质量、样本外证据或稳定性上未形成足够优势。</p></div>}</div>
       </main>
       <aside className="discovery-context">

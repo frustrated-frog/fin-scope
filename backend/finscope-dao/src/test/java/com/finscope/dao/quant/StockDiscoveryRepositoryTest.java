@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StockDiscoveryRepositoryTest {
@@ -46,7 +47,8 @@ class StockDiscoveryRepositoryTest {
                 "2026-08-14:stock-discovery-v1", LocalDate.of(2026, 8, 14), 6000d,
                 "stock-discovery-v1", "RECOVERY");
 
-        repository.markRunning(first.getId());
+        assertTrue(repository.tryMarkRunning(first.getId()));
+        assertFalse(repository.tryMarkRunning(first.getId()));
         StockDiscoveryReport report = report();
         repository.complete(first.getId(), report);
 

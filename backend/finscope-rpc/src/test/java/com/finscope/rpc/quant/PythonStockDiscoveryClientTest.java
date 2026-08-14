@@ -69,6 +69,32 @@ class PythonStockDiscoveryClientTest {
                 .discover(LocalDate.of(2026, 8, 14), 6000d, "stock-discovery-v1"));
     }
 
+    @Test
+    void rejectsMalformedDatesAndNonHexFingerprints() {
+        assertContractRejected(payload().replace("2026-08-14", "2026-8-14"));
+        assertContractRejected(payload().replace(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
+    }
+
+    private void assertContractRejected(String responseBody) {
+        FinanceHttpClient http = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String request,
+                                                Map<String, String> headers, int requestTimeoutMs) {
+                return new FinanceHttpResponse(200, responseBody, Instant.now(), "hash");
+            }
+        };
+        assertThrows(ProviderContractException.class, () -> new PythonStockDiscoveryClient(
+                "http://127.0.0.1:8000", http, 900_000)
+                .discover(LocalDate.of(2026, 8, 14), 6000d, "stock-discovery-v1"));
+    }
+
     private String payload() {
         return "{\"schema_version\":\"1.0.0\",\"policy_version\":\"stock-discovery-v1\","
                 + "\"as_of_date\":\"2026-08-14\",\"source_code\":\"EM\",\"source_family\":\"EASTMONEY\","
@@ -77,9 +103,12 @@ class PythonStockDiscoveryClientTest {
                 + "\"budget\":6000,\"sectors\":[{\"code\":\"BK1\",\"name\":\"机器人\","
                 + "\"category\":\"CONCEPT\",\"source_code\":\"EM\",\"source_family\":\"EASTMONEY\","
                 + "\"period\":\"5D\",\"source_rank\":1,\"retrieved_at\":\"2026-08-14T15:35:00\"}],"
-                + "\"candidates\":[],\"deep_evidence\":[],\"final_candidates\":[{\"code\":\"000001\"},"
-                + "{\"code\":\"600001\"}],\"funnel\":{\"constituent_count\":88,\"admitted_count\":20,"
-                + "\"quantified_count\":20,\"deep_review_count\":15,\"final_count\":2},"
+                + "\"candidates\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
+                + "\"deep_evidence\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
+                + "\"final_candidates\":[{\"code\":\"000001\",\"final_rank\":1},"
+                + "{\"code\":\"600001\",\"final_rank\":2}],"
+                + "\"funnel\":{\"constituent_count\":88,\"admitted_count\":2,"
+                + "\"quantified_count\":2,\"deep_review_count\":2,\"final_count\":2},"
                 + "\"warnings\":[],\"duration_ms\":12000}";
     }
 }

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _to_camel(value: str) -> str:
@@ -11,7 +12,11 @@ def _to_camel(value: str) -> str:
 
 
 class DiscoveryRequest(BaseModel):
-    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="forbid",
+    )
 
     business_date: str | None = None
     budget: float = Field(default=6000.0, gt=0)
@@ -19,7 +24,21 @@ class DiscoveryRequest(BaseModel):
     deep_limit: int = Field(default=15, ge=5, le=30)
     final_limit: int = Field(default=5, ge=1, le=5)
     horizon_days: Literal[1, 5, 20] = 5
-    policy_version: str = "stock-discovery-v1"
+    policy_version: str = Field(
+        default="stock-discovery-v1",
+        min_length=1,
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$",
+    )
+
+    @field_validator("business_date")
+    @classmethod
+    def validate_business_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = date.fromisoformat(value)
+        if parsed.isoformat() != value:
+            raise ValueError("business_date must use YYYY-MM-DD")
+        return value
 
 
 class DiscoverySector(BaseModel):

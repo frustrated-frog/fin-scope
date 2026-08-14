@@ -56,9 +56,14 @@ public class StockDiscoveryRepository {
         return jdbcTemplate.query("SELECT * FROM stock_discovery_run ORDER BY id DESC LIMIT ?", this::map, bounded);
     }
 
-    public void markRunning(Long id) {
-        jdbcTemplate.update("UPDATE stock_discovery_run SET status='RUNNING',started_at=?,error_message=NULL WHERE id=?",
-                TimeUtil.text(LocalDateTime.now()), id);
+    public boolean tryMarkRunning(Long id) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = jdbcTemplate.update("UPDATE stock_discovery_run "
+                        + "SET status='RUNNING',started_at=?,completed_at=NULL,error_message=NULL "
+                        + "WHERE id=? AND (status IN ('CREATED','FAILED') "
+                        + "OR (status='RUNNING' AND started_at<?))",
+                TimeUtil.text(now), id, TimeUtil.text(now.minusMinutes(30)));
+        return updated == 1;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -68,17 +73,21 @@ public class StockDiscoveryRepository {
         persistSectors(id, report.getSectors());
         persistCandidates(id, report);
         StockDiscoveryReport.Funnel funnel = report.getFunnel();
-        jdbcTemplate.update("UPDATE stock_discovery_run SET status='SUCCEEDED',as_of_date=?,source_family=?,"
+        int updated = jdbcTemplate.update("UPDATE stock_discovery_run SET status='SUCCEEDED',as_of_date=?,source_family=?,"
                         + "quality_status=?,data_fingerprint=?,sector_count=?,constituent_count=?,admitted_count=?,"
-                        + "deep_review_count=?,final_count=?,report_json=?,completed_at=? WHERE id=?",
+                        + "deep_review_count=?,final_count=?,report_json=?,completed_at=? WHERE id=? AND status='RUNNING'",
                 report.getAsOfDate(), report.getSourceFamily(), report.getQualityStatus(), report.getDataFingerprint(),
                 report.getSectors().size(), funnel.getConstituentCount(), funnel.getAdmittedCount(),
                 funnel.getDeepReviewCount(), funnel.getFinalCount(), report.getRawJson(),
                 TimeUtil.text(LocalDateTime.now()), id);
+        if (updated != 1) {
+            throw new IllegalStateException("股票发现批次状态已变化，拒绝覆盖终态");
+        }
     }
 
     public void fail(Long id, String message) {
-        jdbcTemplate.update("UPDATE stock_discovery_run SET status='FAILED',error_message=?,completed_at=? WHERE id=?",
+        jdbcTemplate.update("UPDATE stock_discovery_run SET status='FAILED',error_message=?,completed_at=? "
+                        + "WHERE id=? AND status='RUNNING'",
                 message, TimeUtil.text(LocalDateTime.now()), id);
     }
 

@@ -30,6 +30,7 @@ class StockDiscoveryServiceTest {
         StockDiscoveryReport report = new StockDiscoveryReport();
         when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(run);
         when(repository.findById(7L)).thenReturn(Optional.of(run));
+        when(repository.tryMarkRunning(7L)).thenReturn(true);
         when(publisher.publish(any())).thenReturn(false);
         when(client.discover(LocalDate.of(2026, 8, 14), 6000d, StockDiscoveryService.POLICY_VERSION))
                 .thenReturn(report);
@@ -37,7 +38,7 @@ class StockDiscoveryServiceTest {
 
         service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
 
-        verify(repository).markRunning(7L);
+        verify(repository).tryMarkRunning(7L);
         verify(repository).complete(7L, report);
     }
 
@@ -62,8 +63,9 @@ class StockDiscoveryServiceTest {
         StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
         StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
-        StockDiscoveryRun run = run("RUNNING");
+        StockDiscoveryRun run = run("FAILED");
         when(repository.findById(7L)).thenReturn(Optional.of(run));
+        when(repository.tryMarkRunning(7L)).thenReturn(true);
         when(client.discover(any(), any(Double.class), any())).thenThrow(new IllegalStateException("provider timeout"));
         StockDiscoveryService service = service(repository, publisher, client);
         StockDiscoveryRequestedEvent event = new StockDiscoveryRequestedEvent();
@@ -74,6 +76,28 @@ class StockDiscoveryServiceTest {
 
         assertThrows(IllegalStateException.class, () -> service.execute(event));
         verify(repository).fail(7L, "provider timeout");
+    }
+
+    @Test
+    void ignoresDuplicateExecutionWhenTheRunWasAlreadyClaimed() {
+        StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
+        StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
+        PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
+        StockDiscoveryRun run = run("RUNNING");
+        when(repository.findById(7L)).thenReturn(Optional.of(run));
+        when(repository.tryMarkRunning(7L)).thenReturn(false);
+        StockDiscoveryService service = service(repository, publisher, client);
+        StockDiscoveryRequestedEvent event = new StockDiscoveryRequestedEvent();
+        event.setRunId(7L);
+        event.setBusinessDate("2026-08-14");
+        event.setBudget(6000d);
+        event.setPolicyVersion(StockDiscoveryService.POLICY_VERSION);
+
+        service.execute(event);
+
+        verify(client, never()).discover(any(), any(Double.class), any());
+        verify(repository, never()).complete(any(), any());
+        verify(repository, never()).fail(any(), any());
     }
 
     private StockDiscoveryService service(StockDiscoveryRepository repository,

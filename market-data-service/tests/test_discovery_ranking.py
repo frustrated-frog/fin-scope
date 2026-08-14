@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from finscope_market_data.discovery.ranking import (
     rank_deep_candidates,
     rank_lightweight_candidates,
@@ -30,6 +33,20 @@ def test_discovery_request_accepts_java_camel_case_contract() -> None:
     assert request.final_limit == 3
     assert request.horizon_days == 1
     assert request.policy_version == "stock-discovery-v2"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"businessDate": "2026-8-1"},
+        {"businessDate": "not-a-date"},
+        {"policyVersion": ""},
+        {"unexpected": True},
+    ],
+)
+def test_discovery_request_rejects_contract_drift(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        DiscoveryRequest.model_validate(payload)
 
 
 def candidate(code: str, price: float, momentum: float, risk: float = 0.1) -> DiscoveryCandidate:

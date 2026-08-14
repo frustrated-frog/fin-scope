@@ -128,11 +128,9 @@ class TonghuashunHotSectorProvider:
     def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
         import akshare as ak
 
-        # 同花顺行业成分接口不稳定，使用公开板块页的统一成分接口。
-        function = getattr(ak, "stock_board_cons_ths", None)
-        if function is None:
-            raise RuntimeError("当前 AkShare 不提供同花顺板块成分接口")
-        frame = function(symbol=sector.name)
+        # 同花顺公开热榜负责发现热点，成分关系使用 AkShare 中稳定的
+        # 东方财富行业板块契约补全，避免依赖不存在的 stock_board_cons_ths。
+        frame = ak.stock_board_industry_cons_em(symbol=sector.name)
         result: list[tuple[str, str, str]] = []
         for _, row in frame.iterrows():
             code = str(row.get("代码", row.get("code", ""))).strip().zfill(6)
