@@ -67,8 +67,8 @@ public class PolymarketPublicClient {
         if (!prices.isBlank()) {
             try {
                 JsonNode values = OBJECT_MAPPER.readTree(prices);
-                if (values.isArray() && values.size() > 0 && values.get(0).canConvertToDouble()) {
-                    return (int) Math.round(values.get(0).asDouble() * 100);
+                if (values.isArray() && values.size() > 0) {
+                    return (int) Math.round(Double.parseDouble(values.get(0).asText()) * 100);
                 }
             } catch (Exception ignored) {
                 return null;
