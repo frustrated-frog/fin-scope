@@ -107,6 +107,40 @@ class EquityPoint(ForecastModel):
     invested: bool
 
 
+class AuditEngineMetrics(ForecastModel):
+    engine: str
+    trade_count: int = Field(ge=0)
+    total_return: float
+    max_drawdown: float = Field(ge=0)
+    sharpe_ratio: float
+    total_cost: float = Field(ge=0)
+
+
+class AuditMismatch(ForecastModel):
+    category: Literal["TRADE_COUNT", "ENTRY_DATE", "EXIT_DATE", "RETURN", "COST"]
+    trade_index: int | None = Field(default=None, ge=1)
+    primary_value: str | float | int | None = None
+    shadow_value: str | float | int | None = None
+    detail: str
+
+
+class BacktestAudit(ForecastModel):
+    status: Literal["PASS", "WARNING", "UNAVAILABLE"]
+    mode: Literal["SHADOW"] = "SHADOW"
+    primary_engine: AuditEngineMetrics
+    shadow_engine: AuditEngineMetrics | None = None
+    trade_count_agreement: bool
+    entry_date_agreement_rate: float = Field(ge=0, le=1)
+    exit_date_agreement_rate: float = Field(ge=0, le=1)
+    return_delta: float = Field(ge=0)
+    max_drawdown_delta: float = Field(ge=0)
+    sharpe_delta: float = Field(ge=0)
+    cost_delta: float = Field(ge=0)
+    duration_ms: int = Field(ge=0)
+    mismatches: list[AuditMismatch] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class AnnualPerformance(ForecastModel):
     year: int
     strategy_return: float
@@ -320,7 +354,7 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v6"
+    report_schema_version: str = "single-stock-research-v7"
     model_version: str = "competition-pending-v5"
     instrument_code: str
     as_of_date: str
@@ -352,6 +386,7 @@ class SingleStockForecastResult(ForecastModel):
     in_sample: EvaluationSlice | None = None
     out_of_sample: EvaluationSlice | None = None
     parameter_stability: ParameterStability | None = None
+    backtest_audit: BacktestAudit | None = None
     recent_observations: list[ForecastObservation] = Field(default_factory=list)
     qualification: ModelQualification | None = None
     selective_validation: SelectiveValidation | None = None

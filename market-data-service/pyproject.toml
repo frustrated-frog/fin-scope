@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "FinScope A-share market data acquisition service"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "backtesting==0.6.6",
     "fastapi>=0.116,<1",
     "httpx>=0.28,<1",
     "numpy>=2,<3",

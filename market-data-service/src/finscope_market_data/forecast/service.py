@@ -70,7 +70,7 @@ COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
 MODEL_VERSION = "competition-shadow-race-v6"
-REPORT_VERSION = "single-stock-research-v6"
+REPORT_VERSION = "single-stock-research-v7"
 
 
 def build_forecast(
