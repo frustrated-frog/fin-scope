@@ -378,6 +378,7 @@ export interface StockDiscoverySector {
 export interface StockDiscoveryCandidate {
   code: string; market: string; name: string; price: number; lot_cost: number;
   admitted: boolean; rejection_reasons: string[]; sector_names: string[];
+  factors?: Record<string, number>;
   lightweight_score?: number; lightweight_rank?: number;
 }
 

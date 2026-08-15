@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
 import './BacktestAuditPanel.css';
+import {
+  CandidateFactorMatrix,
+  DiscoveryFunnel,
+  RiskReturnMap
+} from './StockDiscoveryVisuals';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -79,6 +84,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
   const report = latest && 'report' in latest ? latest.report : undefined;
   const run = latest && 'run' in latest ? latest.run : undefined;
   const candidates = useMemo(() => new Map(report?.candidates.map(item => [item.code, item]) ?? []), [report]);
+  const finalCodes = useMemo(() => new Set(report?.final_candidates.map(item => item.code) ?? []), [report]);
 
   if (!report) {
     const businessFailed = statusDetail?.businessStatus === 'FAILED';
@@ -98,8 +104,11 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
       <aside><i data-status={runningStatus} /><small>{runningStatus === 'RUNNING' ? '新批次计算中' : 'LATEST VERIFIED CLOSE'}</small><strong>{report.as_of_date}</strong><span>{report.source_family} · {report.quality_status === 'FRESH_PRIMARY' ? '主数据源新鲜' : '备用源结果'}</span></aside>
     </header>
 
-    <div className="discovery-funnel" aria-label="股票发现筛选漏斗">
-      {[['板块成分', report.funnel.constituent_count], ['资金与质量门禁', report.funnel.admitted_count], ['轻量量化', report.funnel.quantified_count], ['深度预测', report.funnel.deep_review_count], ['最终入选', report.funnel.final_count]].map(([label, value], index) => <div key={String(label)}><span>0{index + 1}</span><strong>{value}</strong><small>{label}</small></div>)}
+    <DiscoveryFunnel funnel={report.funnel} />
+
+    <div className="discovery-analysis-grid">
+      <RiskReturnMap evidence={report.deep_evidence} candidates={report.candidates} finalCodes={finalCodes} />
+      <CandidateFactorMatrix evidence={report.final_candidates} candidates={report.candidates} />
     </div>
 
     <div className="discovery-layout">
