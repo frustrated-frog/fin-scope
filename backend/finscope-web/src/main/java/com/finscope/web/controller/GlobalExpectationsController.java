@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.globalexpectations.GlobalExpectationItem;
+import com.finscope.domain.globalexpectations.GlobalExpectationsFeed;
 import com.finscope.service.globalexpectations.GlobalExpectationsService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,11 @@ public class GlobalExpectationsController {
     @GetMapping
     public ApiResponse<List<GlobalExpectationItem>> list() {
         return ApiResponses.success(globalExpectationsService.list());
+    }
+
+    @GetMapping("/feed")
+    public ApiResponse<GlobalExpectationsFeed> feed() {
+        return ApiResponses.success(globalExpectationsService.feed());
     }
 
     @PostMapping("/refresh")

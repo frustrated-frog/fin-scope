@@ -7,6 +7,10 @@ import java.util.List;
 @Data
 public class GlobalExpectationItem {
     private Long id;
+    private String marketId;
+    private String eventId;
+    private String eventTitle;
+    private String eventSlug;
     private String theme;
     private String question;
     private String marketUrl;
@@ -17,6 +21,11 @@ public class GlobalExpectationItem {
     private Double volume;
     private Double volume24h;
     private Double openInterest;
+    private Integer rank;
+    private Integer previousRank;
+    private Integer rankChange;
+    private Integer signalScore;
+    private List<String> signalReasons;
     private Integer spread;
     private String endDate;
     private String observation;

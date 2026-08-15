@@ -1,6 +1,7 @@
 package com.finscope.dao.cache;
 
 import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
+import com.finscope.domain.globalexpectations.GlobalExpectationInterpretation;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 
 import java.util.Optional;
@@ -13,4 +14,11 @@ public interface GlobalExpectationsCacheRepository {
     Optional<GlobalExpectationsViewSnapshot> getView();
 
     void putView(GlobalExpectationsViewSnapshot snapshot);
+
+    default Optional<GlobalExpectationInterpretation> getInterpretation(String groupId) {
+        return Optional.empty();
+    }
+
+    default void putInterpretation(String groupId, GlobalExpectationInterpretation interpretation) {
+    }
 }

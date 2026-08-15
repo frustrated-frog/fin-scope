@@ -93,6 +93,10 @@ public class PolymarketPublicClient {
             }
             PolymarketPublicMarket market = new PolymarketPublicMarket();
             market.setMarketId(text(item, "id"));
+            JsonNode event = firstEvent(item);
+            market.setEventId(text(event, "id"));
+            market.setEventTitle(text(event, "title"));
+            market.setEventSlug(text(event, "slug"));
             market.setQuestion(question);
             market.setMarketUrl("https://polymarket.com/event/" + slug);
             market.setYesTokenId(readFirstArrayValue(item, "clobTokenIds"));
@@ -106,6 +110,14 @@ public class PolymarketPublicClient {
             markets.add(market);
         }
         return markets;
+    }
+
+    private static JsonNode firstEvent(JsonNode item) {
+        JsonNode events = item.get("events");
+        if (events != null && events.isArray() && !events.isEmpty()) {
+            return events.get(0);
+        }
+        return OBJECT_MAPPER.createObjectNode();
     }
 
     static Map<String, List<PolymarketPricePoint>> parseBatchHistory(String body) throws Exception {

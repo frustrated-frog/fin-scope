@@ -22,6 +22,10 @@ export type View =
 
 export type GlobalExpectationItem = {
   id: number;
+  marketId?: string;
+  eventId?: string;
+  eventTitle?: string;
+  eventSlug?: string;
   theme: '政治' | '财务' | '地缘冲突' | '科技' | '经济' | '数据状态';
   question: string;
   marketUrl: string;
@@ -32,6 +36,11 @@ export type GlobalExpectationItem = {
   volume?: number;
   volume24h?: number;
   openInterest?: number;
+  rank?: number;
+  previousRank?: number;
+  rankChange?: number;
+  signalScore?: number;
+  signalReasons?: string[];
   spread?: number;
   endDate?: string;
   observation: string;
@@ -40,6 +49,36 @@ export type GlobalExpectationItem = {
   observedAt?: string;
   lastRefreshAt?: string;
   priceHistory?: Array<{ observedAt: string; probability: number }>;
+};
+
+export type GlobalExpectationInterpretation = {
+  status: 'NOT_REQUESTED' | 'QUEUED' | 'READY' | 'FAILED' | 'UNAVAILABLE';
+  happened?: string;
+  meaning?: string;
+  relatedVariables?: string;
+  nextObservation?: string;
+  failureMessage?: string;
+};
+
+export type GlobalExpectationEventGroup = {
+  id: string;
+  title: string;
+  themes: string[];
+  status: 'WATCHING' | 'SIGNAL';
+  signalScore: number;
+  signalReasons: string[];
+  volume24h?: number;
+  markets: GlobalExpectationItem[];
+  radarMatches: Array<{ eventId: number; title: string; summary?: string; matchScore: number }>;
+  interpretation: GlobalExpectationInterpretation;
+};
+
+export type GlobalExpectationsFeed = {
+  marketCount: number;
+  eventCount: number;
+  signalCount: number;
+  generatedAt: string;
+  groups: GlobalExpectationEventGroup[];
 };
 
 export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };

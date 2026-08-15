@@ -3,8 +3,10 @@ package com.finscope.service.globalexpectations;
 import com.finscope.dao.cache.GlobalExpectationsCacheRepository;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistoryPoint;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
+import com.finscope.domain.globalexpectations.GlobalExpectationEventGroup;
 import com.finscope.domain.globalexpectations.GlobalExpectationItem;
 import com.finscope.domain.globalexpectations.GlobalExpectationPricePoint;
+import com.finscope.domain.globalexpectations.GlobalExpectationsFeed;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 import com.finscope.rpc.polymarket.PolymarketPricePoint;
 import com.finscope.rpc.polymarket.PolymarketPublicClient;
@@ -42,6 +44,14 @@ public class GlobalExpectationsService {
     private GlobalExpectationsCatalog catalog;
     @Resource
     private GlobalExpectationsCacheRepository cacheRepository;
+    @Resource
+    private GlobalExpectationSignalDetector signalDetector;
+    @Resource
+    private GlobalExpectationEventAggregator eventAggregator;
+    @Resource
+    private GlobalExpectationRadarMatcher radarMatcher;
+    @Resource
+    private GlobalExpectationEnhancementService enhancementService;
 
     public List<GlobalExpectationItem> list() {
         Optional<GlobalExpectationsViewSnapshot> cached = cacheRepository.getView();
@@ -49,6 +59,32 @@ public class GlobalExpectationsService {
             return cached.get().getItems();
         }
         return refresh();
+    }
+
+    public GlobalExpectationsFeed feed() {
+        Optional<GlobalExpectationsViewSnapshot> cached = cacheRepository.getView();
+        if (cached.isEmpty() || cached.get().getItems() == null || cached.get().getItems().isEmpty()) {
+            refresh();
+            cached = cacheRepository.getView();
+        }
+        List<GlobalExpectationItem> items = cached.isPresent() && cached.get().getItems() != null
+                ? cached.get().getItems() : baseline();
+        List<GlobalExpectationEventGroup> groups = cached.isPresent() && cached.get().getGroups() != null
+                ? cached.get().getGroups() : eventAggregator.aggregate(items);
+        if (radarMatcher != null) {
+            radarMatcher.attachRecent(groups);
+        }
+        if (enhancementService != null) {
+            enhancementService.attachCached(groups);
+        }
+        GlobalExpectationsFeed feed = new GlobalExpectationsFeed();
+        feed.setMarketCount(items.size());
+        feed.setEventCount(groups.size());
+        feed.setSignalCount((int) groups.stream().filter(group -> "SIGNAL".equals(group.getStatus())).count());
+        feed.setGeneratedAt(cached.isPresent() ? TIME_FORMATTER.format(
+                Instant.ofEpochSecond(cached.get().getFetchedAt())) : "等待刷新");
+        feed.setGroups(groups);
+        return feed;
     }
 
     @Scheduled(fixedDelayString = "${finscope.global-expectations.refresh-interval-ms:60000}",
@@ -59,6 +95,9 @@ public class GlobalExpectationsService {
 
     public synchronized List<GlobalExpectationItem> refresh() {
         Instant observedAt = Instant.now();
+        List<GlobalExpectationItem> previous = cacheRepository.getView()
+                .map(GlobalExpectationsViewSnapshot::getItems)
+                .orElseGet(List::of);
         try {
             List<MatchedMarket> markets = select();
             if (markets.isEmpty()) {
@@ -69,10 +108,19 @@ public class GlobalExpectationsService {
             if (items.isEmpty()) {
                 return staleOrUnavailable();
             }
+            signalDetector.enrich(items, previous);
+            List<GlobalExpectationEventGroup> groups = eventAggregator.aggregate(items);
+            if (radarMatcher != null) {
+                radarMatcher.attachRecent(groups);
+            }
             GlobalExpectationsViewSnapshot snapshot = new GlobalExpectationsViewSnapshot();
             snapshot.setFetchedAt(observedAt.getEpochSecond());
             snapshot.setItems(items);
+            snapshot.setGroups(groups);
             cacheRepository.putView(snapshot);
+            if (enhancementService != null) {
+                enhancementService.request(groups);
+            }
             return items;
         } catch (Exception error) {
             log.warn("Polymarket 市场刷新失败，尝试读取 Redis 快照: error={}", error.getMessage());
@@ -170,6 +218,10 @@ public class GlobalExpectationsService {
                                        boolean complete, Instant observedAt) {
         GlobalExpectationItem item = new GlobalExpectationItem();
         item.setId(id);
+        item.setMarketId(market.getMarketId());
+        item.setEventId(market.getEventId());
+        item.setEventTitle(market.getEventTitle());
+        item.setEventSlug(market.getEventSlug());
         item.setTheme(definition.getTheme());
         item.setQuestion(market.getQuestion());
         item.setMarketUrl(market.getMarketUrl());
@@ -182,7 +234,9 @@ public class GlobalExpectationsService {
         item.setOpenInterest(market.getOpenInterest());
         item.setEndDate(market.getEndDate());
         item.setObservation(definition.getObservation());
-        item.setStatus(hasSignal(item) ? "SIGNAL" : "WATCHING");
+        item.setStatus("WATCHING");
+        item.setSignalScore(0);
+        item.setSignalReasons(List.of());
         item.setDataStatus(complete && history != null ? "LIVE" : "PARTIAL");
         item.setObservedAt(TIME_FORMATTER.format(observedAt));
         item.setLastRefreshAt(TIME_FORMATTER.format(observedAt));
@@ -226,11 +280,6 @@ public class GlobalExpectationsService {
         return result;
     }
 
-    private boolean hasSignal(GlobalExpectationItem item) {
-        return item.getChange5m() != null && Math.abs(item.getChange5m()) >= 3D
-                || item.getChange1h() != null && Math.abs(item.getChange1h()) >= 5D;
-    }
-
     private List<GlobalExpectationItem> staleOrUnavailable() {
         Optional<GlobalExpectationsViewSnapshot> cached = cacheRepository.getView();
         if (cached.isEmpty() || cached.get().getItems() == null || cached.get().getItems().isEmpty()) {
@@ -254,6 +303,8 @@ public class GlobalExpectationsService {
         item.setProbability(0);
         item.setObservation("公共数据恢复后会自动建立观察列表。");
         item.setStatus("BASELINE");
+        item.setSignalScore(0);
+        item.setSignalReasons(List.of());
         item.setDataStatus("UNAVAILABLE");
         item.setObservedAt("等待刷新");
         item.setLastRefreshAt("—");

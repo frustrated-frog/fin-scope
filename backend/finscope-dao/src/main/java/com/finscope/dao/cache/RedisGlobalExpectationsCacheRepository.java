@@ -2,6 +2,7 @@ package com.finscope.dao.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
+import com.finscope.domain.globalexpectations.GlobalExpectationInterpretation;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,7 @@ public class RedisGlobalExpectationsCacheRepository implements GlobalExpectation
     private static final Logger log = LoggerFactory.getLogger(RedisGlobalExpectationsCacheRepository.class);
     private static final String VIEW_KEY = "finscope:global-expectations:view";
     private static final String HISTORY_PREFIX = "finscope:global-expectations:history:";
+    private static final String INTERPRETATION_PREFIX = "finscope:global-expectations:interpretation:";
     private static final long TTL_MS = TimeUnit.HOURS.toMillis(26L);
 
     @Autowired
@@ -58,6 +60,22 @@ public class RedisGlobalExpectationsCacheRepository implements GlobalExpectation
             return;
         }
         write(VIEW_KEY, snapshot);
+    }
+
+    @Override
+    public Optional<GlobalExpectationInterpretation> getInterpretation(String groupId) {
+        if (!enabled || groupId == null || groupId.isBlank()) {
+            return Optional.empty();
+        }
+        return read(INTERPRETATION_PREFIX + groupId, GlobalExpectationInterpretation.class);
+    }
+
+    @Override
+    public void putInterpretation(String groupId, GlobalExpectationInterpretation interpretation) {
+        if (!enabled || groupId == null || groupId.isBlank() || interpretation == null) {
+            return;
+        }
+        write(INTERPRETATION_PREFIX + groupId, interpretation);
     }
 
     private <T> Optional<T> read(String key, Class<T> valueType) {

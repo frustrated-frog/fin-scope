@@ -5,6 +5,9 @@ import lombok.Data;
 @Data
 public class PolymarketPublicMarket {
     private String marketId;
+    private String eventId;
+    private String eventTitle;
+    private String eventSlug;
     private String question;
     private String marketUrl;
     private String yesTokenId;

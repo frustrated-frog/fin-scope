@@ -8,4 +8,5 @@ import java.util.List;
 public class GlobalExpectationsViewSnapshot {
     private long fetchedAt;
     private List<GlobalExpectationItem> items;
+    private List<GlobalExpectationEventGroup> groups;
 }

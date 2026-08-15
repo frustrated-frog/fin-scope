@@ -4,6 +4,7 @@ import com.finscope.dao.cache.GlobalExpectationsCacheRepository;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistoryPoint;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
 import com.finscope.domain.globalexpectations.GlobalExpectationItem;
+import com.finscope.domain.globalexpectations.GlobalExpectationsFeed;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 import com.finscope.rpc.polymarket.PolymarketPricePoint;
 import com.finscope.rpc.polymarket.PolymarketPublicClient;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalExpectationsServiceTest {
     @Test
@@ -133,11 +135,43 @@ class GlobalExpectationsServiceTest {
         assertEquals("STALE", retained.get(0).getDataStatus());
     }
 
+    @Test
+    void storesDeterministicEventFeedFromThePreviousAndCurrentSnapshots() {
+        FakeCache cache = new FakeCache();
+        GlobalExpectationItem previous = new GlobalExpectationItem();
+        previous.setMarketId("oil-100");
+        previous.setTheme("政治");
+        previous.setMarketUrl("https://polymarket.com/event/oil-100");
+        previous.setProbability(47);
+        previous.setVolume24h(90000D);
+        previous.setRank(7);
+        cache.view = new GlobalExpectationsViewSnapshot();
+        cache.view.setItems(List.of(previous));
+        PolymarketPublicMarket current = market();
+        current.setEventId("energy-event");
+        current.setEventTitle("年度油价判断");
+        current.setYesProbability(54);
+        current.setOneHourPriceChange(0.07D);
+        current.setVolume24h(150000D);
+
+        GlobalExpectationsService service = service(client(List.of(current), List.of()), cache);
+        service.refresh();
+        GlobalExpectationsFeed feed = service.feed();
+
+        assertEquals(1, feed.getMarketCount());
+        assertEquals(1, feed.getEventCount());
+        assertEquals(1, feed.getSignalCount());
+        assertEquals("年度油价判断", feed.getGroups().get(0).getTitle());
+        assertTrue(feed.getGroups().get(0).getSignalReasons().contains("突破50%分歧线"));
+    }
+
     private GlobalExpectationsService service(PolymarketPublicClient client, FakeCache cache) {
         GlobalExpectationsService service = new GlobalExpectationsService();
         ReflectionTestUtils.setField(service, "polymarketPublicClient", client);
         ReflectionTestUtils.setField(service, "catalog", new GlobalExpectationsCatalog());
         ReflectionTestUtils.setField(service, "cacheRepository", cache);
+        ReflectionTestUtils.setField(service, "signalDetector", new GlobalExpectationSignalDetector());
+        ReflectionTestUtils.setField(service, "eventAggregator", new GlobalExpectationEventAggregator());
         return service;
     }
 

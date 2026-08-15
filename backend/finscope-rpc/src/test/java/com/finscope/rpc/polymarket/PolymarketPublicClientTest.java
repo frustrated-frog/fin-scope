@@ -48,7 +48,9 @@ class PolymarketPublicClientTest {
                 + "\"clobTokenIds\":\"[\\\"yes-token\\\",\\\"no-token\\\"]\","
                 + "\"oneHourPriceChange\":0.024,\"oneDayPriceChange\":-0.071,"
                 + "\"volumeNum\":856000,\"volume24hr\":128000,\"liquidityNum\":291000,"
-                + "\"endDate\":\"2026-12-31T12:00:00Z\"}]";
+                + "\"endDate\":\"2026-12-31T12:00:00Z\","
+                + "\"events\":[{\"id\":\"fed-september\",\"title\":\"September Fed decision\","
+                + "\"slug\":\"september-fed-decision\"}]}]";
 
         List<PolymarketPublicMarket> markets = PolymarketPublicClient.parseActiveMarkets(response);
 
@@ -59,6 +61,9 @@ class PolymarketPublicClientTest {
         assertEquals(0.024D, markets.get(0).getOneHourPriceChange());
         assertEquals(-0.071D, markets.get(0).getOneDayPriceChange());
         assertEquals(128000D, markets.get(0).getVolume24h());
+        assertEquals("fed-september", markets.get(0).getEventId());
+        assertEquals("September Fed decision", markets.get(0).getEventTitle());
+        assertEquals("september-fed-decision", markets.get(0).getEventSlug());
         assertEquals("https://polymarket.com/event/oil-100", markets.get(0).getMarketUrl());
     }
 

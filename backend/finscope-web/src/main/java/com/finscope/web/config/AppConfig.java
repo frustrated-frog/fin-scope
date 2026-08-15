@@ -341,6 +341,17 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "globalExpectationExecutor")
+    public Executor globalExpectationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("global-expectation-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(10);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "financialInterpretationExecutor")
     public Executor financialInterpretationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

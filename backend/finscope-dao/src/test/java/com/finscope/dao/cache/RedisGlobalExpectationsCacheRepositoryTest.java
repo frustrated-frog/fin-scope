@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistoryPoint;
 import com.finscope.domain.globalexpectations.GlobalExpectationHistorySnapshot;
 import com.finscope.domain.globalexpectations.GlobalExpectationItem;
+import com.finscope.domain.globalexpectations.GlobalExpectationInterpretation;
 import com.finscope.domain.globalexpectations.GlobalExpectationsViewSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,10 +51,13 @@ class RedisGlobalExpectationsCacheRepositoryTest {
 
         repository.putHistory(history());
         repository.putView(view());
+        repository.putInterpretation("event:fed", interpretation());
 
         verify(valueOperations).set(eq("finscope:global-expectations:history:yes-token"),
                 anyString(), eq(93600000L), eq(TimeUnit.MILLISECONDS));
         verify(valueOperations).set(eq("finscope:global-expectations:view"),
+                anyString(), eq(93600000L), eq(TimeUnit.MILLISECONDS));
+        verify(valueOperations).set(eq("finscope:global-expectations:interpretation:event:fed"),
                 anyString(), eq(93600000L), eq(TimeUnit.MILLISECONDS));
     }
 
@@ -64,14 +68,18 @@ class RedisGlobalExpectationsCacheRepositoryTest {
                 .thenReturn(objectMapper.writeValueAsString(history()));
         when(valueOperations.get("finscope:global-expectations:view"))
                 .thenReturn(objectMapper.writeValueAsString(view()));
+        when(valueOperations.get("finscope:global-expectations:interpretation:event:fed"))
+                .thenReturn(objectMapper.writeValueAsString(interpretation()));
 
         Optional<GlobalExpectationHistorySnapshot> history = repository.getHistory("yes-token");
         Optional<GlobalExpectationsViewSnapshot> view = repository.getView();
+        Optional<GlobalExpectationInterpretation> interpretation = repository.getInterpretation("event:fed");
 
         assertTrue(history.isPresent());
         assertEquals(27.0D, history.get().getPoints().get(0).getProbability());
         assertTrue(view.isPresent());
         assertEquals(31, view.get().getItems().get(0).getProbability());
+        assertEquals("READY", interpretation.orElseThrow().getStatus());
     }
 
     @Test
@@ -101,5 +109,12 @@ class RedisGlobalExpectationsCacheRepositoryTest {
         snapshot.setFetchedAt(1786748400L);
         snapshot.setItems(List.of(item));
         return snapshot;
+    }
+
+    private GlobalExpectationInterpretation interpretation() {
+        GlobalExpectationInterpretation interpretation = new GlobalExpectationInterpretation();
+        interpretation.setStatus("READY");
+        interpretation.setHappened("概率快速上升");
+        return interpretation;
     }
 }
