@@ -117,7 +117,10 @@ class AuditEngineMetrics(ForecastModel):
 
 
 class AuditMismatch(ForecastModel):
-    category: Literal["TRADE_COUNT", "ENTRY_DATE", "EXIT_DATE", "RETURN", "COST"]
+    category: Literal[
+        "TRADE_COUNT", "ENTRY_DATE", "EXIT_DATE", "RETURN", "COST",
+        "MAX_DRAWDOWN", "SHARPE",
+    ]
     trade_index: int | None = Field(default=None, ge=1)
     primary_value: str | float | int | None = None
     shadow_value: str | float | int | None = None
