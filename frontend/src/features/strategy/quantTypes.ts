@@ -202,6 +202,23 @@ export interface SingleStockForecastPerformance {
     probability: number; netReturn: number; cost: number; holdingDays: number }>;
 }
 
+export interface ForecastAuditEngineMetrics {
+  engine: string; tradeCount: number; totalReturn: number; maxDrawdown: number;
+  sharpeRatio: number; totalCost: number;
+}
+
+export interface ForecastBacktestAudit {
+  status: 'PASS' | 'WARNING' | 'UNAVAILABLE'; mode: 'SHADOW';
+  primaryEngine: ForecastAuditEngineMetrics; shadowEngine?: ForecastAuditEngineMetrics;
+  tradeCountAgreement: boolean; entryDateAgreementRate: number;
+  exitDateAgreementRate: number; returnDelta: number; maxDrawdownDelta: number;
+  sharpeDelta: number; costDelta: number; durationMs: number;
+  mismatches: Array<{ category: 'TRADE_COUNT' | 'ENTRY_DATE' | 'EXIT_DATE' | 'RETURN'
+    | 'COST' | 'MAX_DRAWDOWN' | 'SHARPE'; tradeIndex?: number;
+    primaryValue?: string | number; shadowValue?: string | number; detail: string }>;
+  limitations: string[];
+}
+
 export interface ForecastConfidenceInterval {
   status: 'AVAILABLE' | 'UNAVAILABLE'; lower?: number; upper?: number;
   confidenceLevel: number; method: string; validIterations: number;
@@ -274,9 +291,13 @@ export interface SingleStockForecast {
   outOfSample?: { sampleCount: number; accuracy: number; brierScore: number;
     baselineBrierScore?: number; evidenceRole: string };
   parameterStability?: { positiveExcessRatio: number; worstExcessReturn: number;
-    worstSharpeRatio: number; scenarios: Array<{ holdingDays: number; threshold: number;
+    worstSharpeRatio: number; neighborMeanExcessReturn?: number;
+    neighborMedianExcessReturn?: number; outperformBenchmarkRatio?: number;
+    surfaceVariance?: number; robustRegionSize?: number; scenarioCount?: number;
+    scenarios: Array<{ holdingDays: number; threshold: number;
       primary: boolean; annualizedReturn: number; excessReturn: number; sharpeRatio: number;
       maxDrawdown: number; tradeCount: number }> };
+  backtestAudit?: ForecastBacktestAudit;
   qualification?: ForecastQualification;
   selectiveValidation?: { lowerThreshold: number; upperThreshold: number;
     sampleCount: number; coveredCount: number; coverage: number;
@@ -365,6 +386,8 @@ export interface StockDiscoveryEvidence {
   probability_lower_bound: number; brier_skill_score: number; locked_accuracy: number;
   locked_log_loss: number; risk_adjusted_return: number; max_drawdown: number;
   stability_score: number; health_status: string; deep_score?: number; final_rank?: number;
+  backtest_audit_status?: 'PASS' | 'WARNING' | 'UNAVAILABLE';
+  backtest_entry_date_agreement_rate?: number; backtest_return_delta?: number;
   evidence: string[]; risks: string[]; forecast_report?: SingleStockForecast;
 }
 

@@ -55,10 +55,20 @@ const report = {
     strategyReturn: .22, benchmarkReturn: .28, excessReturn: -.06, sharpeRatio: .8,
     maxDrawdown: .12, tradeCount: 8, holdingTimeRatio: .51 }],
   parameterStability: { positiveExcessRatio: .4, worstExcessReturn: -.12,
-    worstSharpeRatio: .1, scenarios: [
+    worstSharpeRatio: .1, neighborMeanExcessReturn: .03, neighborMedianExcessReturn: .02,
+    outperformBenchmarkRatio: .6, surfaceVariance: .001, robustRegionSize: 3, scenarioCount: 5,
+    scenarios: [
       { holdingDays: 20, threshold: .6, primary: true, annualizedReturn: .08,
         excessReturn: -.08, sharpeRatio: .38, maxDrawdown: .24, tradeCount: 18 }
     ] },
+  backtestAudit: { status: 'PASS', mode: 'SHADOW', tradeCountAgreement: true,
+    entryDateAgreementRate: 1, exitDateAgreementRate: 1, returnDelta: .0002,
+    maxDrawdownDelta: .0001, sharpeDelta: .01, costDelta: .0001, durationMs: 18,
+    primaryEngine: { engine: 'FIN_SCOPE', tradeCount: 18, totalReturn: .32,
+      maxDrawdown: .24, sharpeRatio: .38, totalCost: .025 },
+    shadowEngine: { engine: 'BACKTESTING_PY', tradeCount: 18, totalReturn: .3198,
+      maxDrawdown: .2401, sharpeRatio: .37, totalCost: .0251 },
+    mismatches: [], limitations: ['影子验证不参与本期方向决策'] },
   qualification: { status: 'CONDITIONAL', reason: '区间仍跨越无优势边界',
     trial: { trialId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       featureVersion: 'price-volume-7-v1', labelVersion: 'net-return-positive-20d-v1',

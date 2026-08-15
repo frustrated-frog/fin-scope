@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
+import './BacktestAuditPanel.css';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -28,7 +29,7 @@ function CandidateCard({ evidence, candidate, onOpenResearch }: {
   return <article className="discovery-candidate" data-health={evidence.health_status}>
     <div className="discovery-rank"><span>#{String(evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
     <div className="discovery-candidate-main">
-      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}</h4></div><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b></header>
+      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}</h4></div><div className="discovery-verdicts"><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
       <div className="discovery-probability"><div><span>未来 5 日上涨概率</span><strong>{pct(evidence.calibrated_probability)}</strong></div><i aria-hidden="true"><b style={{ width: pct(evidence.calibrated_probability) }} /></i><small>保守下界 {pct(evidence.probability_lower_bound)} · 不是确定性收益承诺</small></div>
       <dl>
         <div><dt>锁定样本准确率</dt><dd>{pct(evidence.locked_accuracy)}</dd></div>

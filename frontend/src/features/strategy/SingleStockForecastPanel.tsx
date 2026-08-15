@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import { ForecastConfidenceInterval, ForecastQualification, SingleStockForecast, SingleStockForecastRun } from './quantTypes';
 import { ForecastOutcomeHealth } from './ForecastOutcomeHealth';
 import { ForecastModelRace } from './ForecastModelRace';
+import { BacktestAuditPanel } from './BacktestAuditPanel';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -245,6 +246,8 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
             </div>
           </section>}
 
+          {report.backtestAudit && <BacktestAuditPanel audit={report.backtestAudit} />}
+
           <section className="forecast-paper-section">
             <SectionHead eyebrow="FACTOR NOTEBOOK" title="因子知识与当前解释" aside="贡献解释模型，不证明因果" />
             <div className="forecast-factor-list">{report.factorExplanations.map(item => <article key={item.code} data-direction={item.contribution >= 0 ? 'positive' : 'negative'}><header><span>{item.category} · {item.code}</span><b>{item.direction}</b></header><h5>{item.name}</h5><p>{item.economicMeaning}</p><dl><div><dt>当前值</dt><dd>{number(item.currentValue, 4)}</dd></div><div><dt>历史位置</dt><dd>{percent(item.historicalPercentile)}</dd></div><div><dt>模型贡献</dt><dd>{item.contribution >= 0 ? '+' : ''}{number(item.contribution, 3)}</dd></div></dl><details><summary>公式与边界</summary><p>{item.formula} · {item.window}</p><p>{item.boundary}</p></details></article>)}</div>
@@ -257,6 +260,7 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
 
           {report.parameterStability && <section className="forecast-paper-section">
             <SectionHead eyebrow="NEIGHBORHOOD TEST" title="相邻参数稳定性" aside={`${percent(report.parameterStability.positiveExcessRatio)} 邻域取得正超额`} />
+            <div className="forecast-robustness-strip"><article><span>邻域超额均值</span><strong>{signedPercent(report.parameterStability.neighborMeanExcessReturn)}</strong></article><article><span>邻域超额中位数</span><strong>{signedPercent(report.parameterStability.neighborMedianExcessReturn)}</strong></article><article><span>跑赢同股基准</span><strong>{percent(report.parameterStability.outperformBenchmarkRatio ?? report.parameterStability.positiveExcessRatio)}</strong></article><article><span>稳健区域</span><strong>{report.parameterStability.robustRegionSize ?? '—'} / {report.parameterStability.scenarioCount ?? report.parameterStability.scenarios.length}</strong></article></div>
             <div className="forecast-table-wrap"><table aria-label="相邻参数稳定性"><thead><tr><th>方案</th><th>阈值</th><th>持有</th><th>年化收益</th><th>同股超额</th><th>Sharpe</th><th>最大回撤</th><th>交易</th></tr></thead><tbody>{report.parameterStability.scenarios.map(item => <tr key={`${item.holdingDays}-${item.threshold}`} data-primary={item.primary}><td>{item.primary ? '主方案' : '相邻方案'}</td><td>{percent(item.threshold)}</td><td>{item.holdingDays} 日</td><td>{signedPercent(item.annualizedReturn)}</td><td>{signedPercent(item.excessReturn)}</td><td>{number(item.sharpeRatio)}</td><td>{percent(item.maxDrawdown)}</td><td>{item.tradeCount}</td></tr>)}</tbody></table></div>
           </section>}
 
