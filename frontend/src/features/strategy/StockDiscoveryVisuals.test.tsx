@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import {
   CandidateFactorMatrix,
@@ -60,6 +60,18 @@ test('compares final candidates using six explainable factor columns', () => {
   expect(screen.getAllByText('强').length).toBeGreaterThan(0);
   expect(screen.getAllByText('弱').length).toBeGreaterThan(0);
   expect(screen.getByText('+12.0%')).toBeInTheDocument();
+
+  const leadingRow = screen.getByText('样本股份').closest('tr');
+  expect(leadingRow).not.toBeNull();
+  expect(within(leadingRow!).getAllByRole('cell')[5]).toHaveAttribute('data-level', '强');
+});
+
+test('does not turn missing historical factors into real zero values', () => {
+  render(<CandidateFactorMatrix evidence={[evidence[0]]}
+    candidates={[{ ...candidates[0], factors: undefined }]} />);
+
+  expect(screen.getAllByText('无数据')).toHaveLength(6);
+  expect(screen.getAllByText('—')).toHaveLength(6);
 });
 
 test('keeps visual explanations honest when no candidates are available', () => {
@@ -69,4 +81,3 @@ test('keeps visual explanations honest when no candidates are available', () => 
   expect(screen.getByText('本批没有可绘制的深度候选。')).toBeInTheDocument();
   expect(screen.getByText('没有最终候选，因此不生成因子对比。')).toBeInTheDocument();
 });
-

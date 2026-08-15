@@ -80,7 +80,7 @@ const factorColumns = [
   { key: 'trend_consistency', label: '趋势一致', risk: false, format: pct },
   { key: 'liquidity', label: '流动性', risk: false, format: (value: number) => value.toFixed(2) },
   { key: 'volatility_20', label: '20日波动', risk: true, format: pct },
-  { key: 'drawdown_60', label: '60日回撤', risk: true, format: signedPct }
+  { key: 'drawdown_60', label: '60日回撤', risk: false, format: signedPct }
 ] as const;
 
 function median(values: number[]) {
@@ -108,11 +108,16 @@ export function CandidateFactorMatrix({ evidence, candidates }: {
   const candidateByCode = new Map(candidates.map(item => [item.code, item]));
   const rows = evidence.map(item => ({ evidence: item, candidate: candidateByCode.get(item.code) }));
   return <section className="discovery-visual-card candidate-factor-matrix">
-    <header><div><span>RELATIVE FACTOR TAPE</span><h4>最终候选因子对比</h4></div><small>当前前五内部相对强弱 · 风险列已反向</small></header>
+    <header><div><span>RELATIVE FACTOR TAPE</span><h4>最终候选因子对比</h4></div><small>当前前五内部相对强弱 · 波动率越低越优</small></header>
     <div><table aria-label="最终候选因子对比"><thead><tr><th>候选</th>{factorColumns.map(item => <th key={item.key}>{item.label}</th>)}</tr></thead>
       <tbody>{rows.map(({ evidence: item, candidate }) => <tr key={item.code}><th><b>#{item.final_rank ?? '—'}</b><span>{candidate?.name ?? item.code}</span><small>{item.code}</small></th>{factorColumns.map(factor => {
-        const value = candidate?.factors?.[factor.key] ?? 0;
-        const values = rows.map(row => row.candidate?.factors?.[factor.key] ?? 0);
+        const value = candidate?.factors?.[factor.key];
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return <td key={factor.key} data-level="无数据"><strong>无数据</strong><small>—</small></td>;
+        }
+        const values = rows
+          .map(row => row.candidate?.factors?.[factor.key])
+          .filter((item): item is number => typeof item === 'number' && Number.isFinite(item));
         const level = relativeLevel(value, values, factor.risk);
         return <td key={factor.key} data-level={level}><strong>{level}</strong><small>{factor.format(value)}</small></td>;
       })}</tr>)}</tbody>
@@ -120,4 +125,3 @@ export function CandidateFactorMatrix({ evidence, candidates }: {
     <footer>“强/中/弱”只表示本批最终候选之间的相对位置，不代表跨批次绝对评分。</footer>
   </section>;
 }
-
