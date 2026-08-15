@@ -177,6 +177,8 @@ def build_forecast(
         ordered,
         signal_events,
         round_trip_cost=COST_RATE,
+        audit_start_date=performance.equity_curve[0].trade_date,
+        audit_end_date=performance.equity_curve[-1].trade_date,
     )
     backtest_audit = audit_backtests(performance, shadow_backtest)
     stability = analyze_stability(

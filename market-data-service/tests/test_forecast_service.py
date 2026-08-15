@@ -195,7 +195,10 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.parameter_stability.surface_variance >= 0
     assert result.parameter_stability.robust_region_size >= 0
     assert result.backtest_audit is not None
-    assert result.backtest_audit.status in {"PASS", "WARNING", "UNAVAILABLE"}
+    assert result.backtest_audit.status == "PASS"
+    assert result.backtest_audit.trade_count_agreement is True
+    assert result.backtest_audit.entry_date_agreement_rate == 1.0
+    assert result.backtest_audit.exit_date_agreement_rate == 1.0
     assert result.backtest_audit.mode == "SHADOW"
     assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
     assert result.decision in {"UP", "DOWN", "ABSTAIN"}

@@ -5,6 +5,7 @@ import math
 import time
 from typing import Sequence
 
+import numpy as np
 import pandas as pd
 from backtesting import Backtest, Strategy
 
@@ -63,7 +64,7 @@ def build_signal_events(
         sample = samples_by_date.get(observation.signal_date)
         if sample is None or observation.probability < threshold:
             continue
-        if next_available_date and sample.entry_date < next_available_date:
+        if next_available_date and sample.signal_date < next_available_date:
             continue
         events.append(
             SignalEvent(
@@ -84,6 +85,8 @@ def run_shadow_backtest(
     events: Sequence[SignalEvent],
     *,
     round_trip_cost: float,
+    audit_start_date: str | None = None,
+    audit_end_date: str | None = None,
 ) -> ShadowBacktestResult:
     started = time.perf_counter()
     if not 0 <= round_trip_cost < 1:
@@ -117,12 +120,17 @@ def run_shadow_backtest(
         )
         stats = backtest.run()
         trades = _trades(stats, events)
+        total_return, max_drawdown, sharpe_ratio = _normalized_metrics(
+            stats,
+            audit_start_date=audit_start_date,
+            audit_end_date=audit_end_date,
+        )
         return ShadowBacktestResult(
             available=True,
             trade_count=len(trades),
-            total_return=_finite(float(stats["Return [%]"]) / 100.0),
-            max_drawdown=abs(_finite(float(stats["Max. Drawdown [%]"]) / 100.0)),
-            sharpe_ratio=_finite(float(stats["Sharpe Ratio"])),
+            total_return=total_return,
+            max_drawdown=max_drawdown,
+            sharpe_ratio=sharpe_ratio,
             total_cost=_total_cost(stats),
             trades=trades,
             duration_ms=_elapsed_ms(started),
@@ -210,6 +218,37 @@ def _total_cost(stats) -> float:
     if "Commission" not in table:
         return 0.0
     return _finite(float(table["Commission"].sum()) / INITIAL_CASH)
+
+
+def _normalized_metrics(
+    stats,
+    *,
+    audit_start_date: str | None,
+    audit_end_date: str | None,
+) -> tuple[float, float, float]:
+    curve = stats["_equity_curve"]["Equity"]
+    if audit_start_date is not None:
+        curve = curve.loc[pd.Timestamp(audit_start_date) :]
+    if audit_end_date is not None:
+        curve = curve.loc[: pd.Timestamp(audit_end_date)]
+    values = curve.to_numpy(dtype=np.float64)
+    if len(values) == 0 or values[0] <= 0:
+        raise ValueError("影子回测审计区间缺少有效净值")
+    daily = np.diff(values) / values[:-1]
+    total_return = values[-1] / values[0] - 1.0
+    drawdowns = 1.0 - values / np.maximum.accumulate(values)
+    max_drawdown = float(np.max(drawdowns)) if len(drawdowns) else 0.0
+    volatility = float(np.std(daily, ddof=1)) if len(daily) > 1 else 0.0
+    sharpe_ratio = (
+        float(np.mean(daily) / volatility * math.sqrt(242.0))
+        if volatility > 1e-12
+        else 0.0
+    )
+    return (
+        _finite(total_return),
+        _finite(max_drawdown),
+        _finite(sharpe_ratio),
+    )
 
 
 def _elapsed_ms(started: float) -> int:

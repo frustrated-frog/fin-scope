@@ -74,6 +74,28 @@ def test_signal_events_apply_threshold_and_remove_overlapping_positions() -> Non
     assert events[0].target_position == 1.0
 
 
+def test_signal_events_only_reenter_after_the_previous_exit_is_executed() -> None:
+    history = bars()
+    first = sample(history, 3)
+    signal_before_exit = sample(history, 8)
+    signal_on_exit = sample(history, 9)
+
+    events = build_signal_events(
+        [first, signal_before_exit, signal_on_exit],
+        [
+            observation(first, 0.7),
+            observation(signal_before_exit, 0.8),
+            observation(signal_on_exit, 0.75),
+        ],
+        threshold=0.60,
+    )
+
+    assert [item.signal_date for item in events] == [
+        first.signal_date,
+        signal_on_exit.signal_date,
+    ]
+
+
 def test_shadow_backtest_uses_next_open_and_fixed_exit_open() -> None:
     history = bars()
     candidate = sample(history, 3)
