@@ -43,7 +43,15 @@ test('turns funnel counts into stage retention without hiding zero stages', () =
 test('plots every deep candidate and highlights the final shortlist', () => {
   const { container } = render(<RiskReturnMap evidence={evidence} candidates={candidates} finalCodes={new Set(['600001'])} />);
 
-  expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();
+  const chart = screen.getByRole('img', { name: /深度候选风险收益分布/ });
+  expect(chart).toBeInTheDocument();
+  expect(chart).toHaveAttribute('viewBox', '0 0 600 430');
+  expect(container.querySelectorAll('[data-axis="x"]')).toHaveLength(5);
+  expect(container.querySelectorAll('[data-axis="y"]')).toHaveLength(5);
+  expect(screen.getByText('0.0%')).toBeInTheDocument();
+  const firstYTick = container.querySelector('[data-axis="y"] text');
+  const yAxisLabel = container.querySelector('.risk-axis-label[transform]');
+  expect(Number(firstYTick?.getAttribute('x')) - Number(yAxisLabel?.getAttribute('x'))).toBeGreaterThan(60);
   expect(container.querySelectorAll('circle')).toHaveLength(2);
   expect(screen.getByText('样本股份')).toBeInTheDocument();
   expect(screen.getByText('全部深度候选 2 只')).toBeInTheDocument();

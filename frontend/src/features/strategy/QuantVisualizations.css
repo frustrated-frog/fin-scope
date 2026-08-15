@@ -7,4 +7,5 @@
 @media(max-width:760px){.discovery-visual-card>header{align-items:flex-start;flex-direction:column}.risk-return-map svg{height:235px}.risk-return-map>footer{align-items:flex-start;flex-wrap:wrap}.risk-return-map>footer p{width:100%;margin-left:0}.discovery-funnel-visual{grid-template-columns:repeat(5,minmax(120px,1fr))}}
 .discovery-analysis-grid{display:grid;grid-template-columns:minmax(320px,.85fr) minmax(520px,1.15fr);gap:15px}
 @media(max-width:1120px){.discovery-analysis-grid{grid-template-columns:1fr}}
+.risk-return-map .risk-grid line{stroke:color-mix(in srgb,var(--line) 72%,transparent);stroke-width:1;vector-effect:non-scaling-stroke}.risk-return-map .risk-axis-tick{fill:var(--muted);font:600 16px ui-monospace,monospace}.risk-return-map .risk-axis-label{font-size:20px;letter-spacing:.03em}.risk-return-map .risk-point-label{font-size:16px}
 @media(prefers-reduced-motion:reduce){.factor-contribution-chart *,.equity-drawdown-chart *,.parameter-stability-map *,.discovery-visual-card *{transition-duration:.01ms!important}}

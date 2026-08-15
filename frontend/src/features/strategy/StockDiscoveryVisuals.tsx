@@ -37,6 +37,11 @@ function extent(values: number[]) {
   return [minimum - padding, maximum + padding] as const;
 }
 
+function axisTicks(minimum: number, maximum: number, count = 5) {
+  return Array.from({ length: count }, (_, index) =>
+    minimum + (maximum - minimum) * index / (count - 1));
+}
+
 export function RiskReturnMap({ evidence, candidates, finalCodes }: {
   evidence: StockDiscoveryEvidence[];
   candidates: StockDiscoveryCandidate[];
@@ -48,14 +53,28 @@ export function RiskReturnMap({ evidence, candidates, finalCodes }: {
   const candidateByCode = new Map(candidates.map(item => [item.code, item]));
   const drawdowns = evidence.map(item => Math.abs(item.max_drawdown));
   const sharpes = evidence.map(item => item.risk_adjusted_return);
-  const [xMin, xMax] = extent(drawdowns);
+  const xMin = 0;
+  const xMax = Math.max(.01, ...drawdowns) * 1.1;
   const [yMin, yMax] = extent(sharpes);
-  const x = (value: number) => 46 + (value - xMin) / Math.max(.0001, xMax - xMin) * 636;
-  const y = (value: number) => 224 - (value - yMin) / Math.max(.0001, yMax - yMin) * 190;
+  const plot = { left: 95, right: 570, top: 26, bottom: 365 } as const;
+  const x = (value: number) => plot.left + (value - xMin) / Math.max(.0001, xMax - xMin) * (plot.right - plot.left);
+  const y = (value: number) => plot.bottom - (value - yMin) / Math.max(.0001, yMax - yMin) * (plot.bottom - plot.top);
+  const xTicks = axisTicks(xMin, xMax);
+  const yTicks = axisTicks(yMin, yMax);
   return <section className="discovery-visual-card risk-return-map">
     <header><div><span>RISK / RETURN FIELD</span><h4>深度候选风险收益分布</h4></div><p><b>全部深度候选 {evidence.length} 只</b><strong>最终入选 {finalCodes.size} 只</strong></p></header>
-    <svg viewBox="0 0 720 270" role="img" aria-label={`深度候选风险收益分布，共 ${evidence.length} 只，横轴为最大回撤绝对值，纵轴为风险调整收益，气泡大小为上涨概率`}>
-      <path d="M46 34V224H682M46 81.5H682M46 129H682M46 176.5H682" />
+    <svg viewBox="0 0 600 430" role="img" aria-label={`深度候选风险收益分布，共 ${evidence.length} 只，横轴为最大回撤绝对值，纵轴为风险调整收益，气泡大小为上涨概率`}>
+      <g className="risk-grid" aria-hidden="true">
+        {yTicks.map(value => <g key={`y-${value}`} data-axis="y">
+          <line x1={plot.left} x2={plot.right} y1={y(value)} y2={y(value)} />
+          <text className="risk-axis-tick" x={plot.left - 13} y={y(value) + 4} textAnchor="end">{value.toFixed(2)}</text>
+        </g>)}
+        {xTicks.map(value => <g key={`x-${value}`} data-axis="x">
+          <line x1={x(value)} x2={x(value)} y1={plot.top} y2={plot.bottom} />
+          <text className="risk-axis-tick" x={x(value)} y={plot.bottom + 24} textAnchor="middle">{pct(value)}</text>
+        </g>)}
+      </g>
+      <path d={`M${plot.left} ${plot.top}V${plot.bottom}H${plot.right}`} />
       {evidence.map(item => {
         const isFinal = finalCodes.has(item.code);
         const name = candidateByCode.get(item.code)?.name ?? item.code;
@@ -64,11 +83,11 @@ export function RiskReturnMap({ evidence, candidates, finalCodes }: {
         return <g key={item.code} data-final={isFinal || undefined}>
           <circle cx={cx} cy={cy} r={5 + item.calibrated_probability * 8} />
           <title>{`${name}：上涨概率 ${pct(item.calibrated_probability)}，最大回撤 ${pct(Math.abs(item.max_drawdown))}，风险调整收益 ${item.risk_adjusted_return.toFixed(2)}`}</title>
-          {isFinal && <text x={Math.min(635, cx + 12)} y={Math.max(24, cy - 10)}>{name}</text>}
+          {isFinal && <text className="risk-point-label" x={Math.min(500, cx + 14)} y={Math.max(24, cy - 12)}>{name}</text>}
         </g>;
       })}
-      <text className="risk-axis-label" x="364" y="262">最大回撤绝对值 →</text>
-      <text className="risk-axis-label" x="10" y="129" transform="rotate(-90 10 129)">风险调整收益 →</text>
+      <text className="risk-axis-label" x={(plot.left + plot.right) / 2} y="423">最大回撤绝对值 →</text>
+      <text className="risk-axis-label" x="12" y={(plot.top + plot.bottom) / 2} transform={`rotate(-90 12 ${(plot.top + plot.bottom) / 2})`}>风险调整收益 →</text>
     </svg>
     <footer><span><i />深度候选</span><span><i />最终入选</span><p>越靠上代表风险调整收益越高，越靠左代表历史最大回撤越小。</p></footer>
   </section>;
