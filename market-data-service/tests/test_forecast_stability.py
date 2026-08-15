@@ -32,6 +32,10 @@ def test_stability_reuses_the_selected_model_and_context_feature_set() -> None:
     )
 
     assert len(report.scenarios) == 5
+    assert report.scenario_count == 5
+    assert 0 <= report.outperform_benchmark_ratio <= 1
+    assert report.surface_variance >= 0
+    assert report.robust_region_size <= report.scenario_count
 
 
 def test_stability_computes_each_holding_period_only_once(monkeypatch) -> None:

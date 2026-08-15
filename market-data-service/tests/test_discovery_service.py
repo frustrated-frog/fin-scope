@@ -458,3 +458,45 @@ def test_deep_forecast_rejects_up_signal_without_cost_adjusted_advantage(
 
     assert result["qualified"] is False
     assert result["health_status"] == "DEGRADED"
+
+
+def test_deep_forecast_reuses_shared_backtest_audit_summary(monkeypatch) -> None:
+    class Audit:
+        status = "PASS"
+        entry_date_agreement_rate = 1.0
+        return_delta = 0.0002
+
+    class Value:
+        status = "NO_CLEAR_EDGE"
+        decision = "ABSTAIN"
+        up_probability = 0.55
+        probability_interval = None
+        performance = None
+        parameter_stability = None
+        backtest_audit = Audit()
+        warnings = []
+        decision_reason = "样本外优势不足"
+        qualification = None
+
+        def model_dump(self, **kwargs):
+            return {"backtestAudit": {"status": "PASS"}}
+
+    monkeypatch.setattr(
+        "finscope_market_data.discovery.service.build_forecast",
+        lambda *args, **kwargs: Value(),
+    )
+    candidate = DiscoveryCandidate(
+        code="000001",
+        market="SZ",
+        name="样本",
+        price=10,
+        lot_cost=1005,
+        budget_eligible=True,
+        admitted=True,
+    )
+
+    result = _forecast(candidate, [], DiscoveryRequest())
+
+    assert result["backtest_audit_status"] == "PASS"
+    assert result["backtest_entry_date_agreement_rate"] == 1.0
+    assert result["backtest_return_delta"] == 0.0002

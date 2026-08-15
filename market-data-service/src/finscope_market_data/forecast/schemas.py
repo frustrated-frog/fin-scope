@@ -182,6 +182,12 @@ class ParameterStability(ForecastModel):
     positive_excess_ratio: float
     worst_excess_return: float
     worst_sharpe_ratio: float
+    neighbor_mean_excess_return: float
+    neighbor_median_excess_return: float
+    outperform_benchmark_ratio: float = Field(ge=0, le=1)
+    surface_variance: float = Field(ge=0)
+    robust_region_size: int = Field(ge=0)
+    scenario_count: int = Field(ge=1)
 
 
 class ForecastObservation(ForecastModel):

@@ -416,6 +416,7 @@ def _forecast(
     performance_report = report.performance
     performance = performance_report.strategy if performance_report else None
     stability = report.parameter_stability
+    backtest_audit = getattr(report, "backtest_audit", None)
     interval = report.probability_interval
     qualified = bool(
         report.status in {"ROBUST", "CONDITIONAL"}
@@ -448,6 +449,11 @@ def _forecast(
         "risk_adjusted_return": performance.sharpe_ratio if performance else -1.0,
         "max_drawdown": performance.max_drawdown if performance else -1.0,
         "stability_score": stability.positive_excess_ratio if stability else 0.0,
+        "backtest_audit_status": backtest_audit.status if backtest_audit else None,
+        "backtest_entry_date_agreement_rate": (
+            backtest_audit.entry_date_agreement_rate if backtest_audit else None
+        ),
+        "backtest_return_delta": backtest_audit.return_delta if backtest_audit else None,
         "health_status": "HEALTHY" if qualified else "DEGRADED",
         "evidence": [report.decision_reason],
         "risks": list(report.warnings[:3]),

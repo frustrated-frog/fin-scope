@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import statistics
 from typing import Sequence
 
 from finscope_market_data.forecast.context import AlignedForecastContext
@@ -53,6 +54,12 @@ class StabilityReport:
     positive_excess_ratio: float
     worst_excess_return: float
     worst_sharpe_ratio: float
+    neighbor_mean_excess_return: float
+    neighbor_median_excess_return: float
+    outperform_benchmark_ratio: float
+    surface_variance: float
+    robust_region_size: int
+    scenario_count: int
 
 
 def analyze_stability(
@@ -120,10 +127,20 @@ def analyze_stability(
                 trade_count=report.trade_count,
             )
         )
+    excess_returns = [item.excess_return for item in results]
+    robust_region_size = sum(
+        item.excess_return > 0 and item.sharpe_ratio > 0 for item in results
+    )
     return StabilityReport(
         scenarios=tuple(results),
-        positive_excess_ratio=sum(item.excess_return > 0 for item in results)
-        / len(results),
-        worst_excess_return=min(item.excess_return for item in results),
+        positive_excess_ratio=sum(item > 0 for item in excess_returns) / len(results),
+        worst_excess_return=min(excess_returns),
         worst_sharpe_ratio=min(item.sharpe_ratio for item in results),
+        neighbor_mean_excess_return=statistics.fmean(excess_returns),
+        neighbor_median_excess_return=statistics.median(excess_returns),
+        outperform_benchmark_ratio=sum(item > 0 for item in excess_returns)
+        / len(results),
+        surface_variance=statistics.pvariance(excess_returns),
+        robust_region_size=robust_region_size,
+        scenario_count=len(results),
     )

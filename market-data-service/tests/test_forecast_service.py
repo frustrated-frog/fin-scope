@@ -141,7 +141,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v6"
+    assert result.report_schema_version == "single-stock-research-v7"
     assert result.model_version.startswith("competition-")
     assert result.model_version.endswith("-v6")
     assert result.raw_probability is not None
@@ -190,12 +190,53 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.in_sample is not None
     assert result.out_of_sample is not None
     assert len(result.parameter_stability.scenarios) == 5
+    assert result.parameter_stability.scenario_count == 5
+    assert 0 <= result.parameter_stability.outperform_benchmark_ratio <= 1
+    assert result.parameter_stability.surface_variance >= 0
+    assert result.parameter_stability.robust_region_size >= 0
+    assert result.backtest_audit is not None
+    assert result.backtest_audit.status in {"PASS", "WARNING", "UNAVAILABLE"}
+    assert result.backtest_audit.mode == "SHADOW"
     assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
     assert result.decision in {"UP", "DOWN", "ABSTAIN"}
     assert result.selective_validation is not None
     assert 0 <= result.selective_validation.coverage <= 1
     assert result.qualification.split_audit.label_horizon_days == 5
     assert result.qualification.split_audit.independent_stride_days == 5
+
+
+def test_forecast_survives_shadow_backtest_failure(monkeypatch) -> None:
+    from finscope_market_data.forecast.backtesting_adapter import ShadowBacktestResult
+    import finscope_market_data.forecast.service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        "run_shadow_backtest",
+        lambda *args, **kwargs: ShadowBacktestResult(
+            available=False,
+            trade_count=0,
+            total_return=0.0,
+            max_drawdown=0.0,
+            sharpe_ratio=0.0,
+            total_cost=0.0,
+            trades=(),
+            duration_ms=1,
+            error="影子回测引擎执行失败",
+        ),
+    )
+
+    result = build_forecast(
+        bars(1600),
+        instrument_code="600519.SH",
+        source_code="PYTDX",
+        source_family="TDX",
+        quality_status="FRESH_FALLBACK",
+        warnings=[],
+    )
+
+    assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
+    assert result.backtest_audit is not None
+    assert result.backtest_audit.status == "UNAVAILABLE"
 
 
 def test_forecast_keeps_each_horizon_trial_identity_independent() -> None:

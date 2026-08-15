@@ -11,6 +11,11 @@ from finscope_market_data.forecast.bootstrap import (
     bootstrap_interval,
     paired_annualized_excess,
 )
+from finscope_market_data.forecast.backtest_audit import audit_backtests
+from finscope_market_data.forecast.backtesting_adapter import (
+    build_signal_events,
+    run_shadow_backtest,
+)
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.factor_catalog import FACTORS
 from finscope_market_data.forecast.context import AlignedForecastContext
@@ -163,6 +168,17 @@ def build_forecast(
         holding_days=horizon_days,
         round_trip_cost=COST_RATE,
     )
+    signal_events = build_signal_events(
+        samples,
+        validation.observations,
+        threshold=PRIMARY_THRESHOLD,
+    )
+    shadow_backtest = run_shadow_backtest(
+        ordered,
+        signal_events,
+        round_trip_cost=COST_RATE,
+    )
+    backtest_audit = audit_backtests(performance, shadow_backtest)
     stability = analyze_stability(
         ordered,
         COST_RATE,
@@ -237,6 +253,7 @@ def build_forecast(
             evidence_role="扩展窗口滚动验证，决定最终结论",
         ),
         parameter_stability=ParameterStability.model_validate(asdict(stability)),
+        backtest_audit=backtest_audit,
         recent_observations=_recent(validation.observations),
         qualification=_qualification_report(
             qualification,

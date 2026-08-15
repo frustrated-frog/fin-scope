@@ -89,6 +89,9 @@ class DeepCandidateEvidence(BaseModel):
     risk_adjusted_return: float
     max_drawdown: float
     stability_score: float = Field(ge=0, le=1)
+    backtest_audit_status: Literal["PASS", "WARNING", "UNAVAILABLE"] | None = None
+    backtest_entry_date_agreement_rate: float | None = Field(default=None, ge=0, le=1)
+    backtest_return_delta: float | None = Field(default=None, ge=0)
     health_status: Literal["HEALTHY", "DEGRADED"]
     deep_score: float | None = None
     final_rank: int | None = None
