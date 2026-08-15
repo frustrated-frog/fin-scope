@@ -18,9 +18,7 @@ public final class DragonTigerData {
     private final List<String> warnings;
 
     @JsonCreator
-    public DragonTigerData(
-            @JsonProperty("records") List<DragonTigerRecord> records,
-            @JsonProperty("warnings") List<String> warnings) {
+    public DragonTigerData(@JsonProperty("records") List<DragonTigerRecord> records, @JsonProperty("warnings") List<String> warnings) {
         this.records = immutable(records);
         this.warnings = immutable(warnings);
     }
