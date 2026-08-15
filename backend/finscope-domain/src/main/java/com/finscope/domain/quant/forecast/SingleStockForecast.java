@@ -42,6 +42,7 @@ public class SingleStockForecast {
     private EvaluationSlice inSample;
     private EvaluationSlice outOfSample;
     private ParameterStability parameterStability;
+    private BacktestAudit backtestAudit;
     private List<Observation> recentObservations = new ArrayList<Observation>();
     private ModelQualification qualification;
     private SelectiveValidation selectiveValidation;
@@ -197,6 +198,49 @@ public class SingleStockForecast {
         private double positiveExcessRatio;
         private double worstExcessReturn;
         private double worstSharpeRatio;
+        private double neighborMeanExcessReturn;
+        private double neighborMedianExcessReturn;
+        private double outperformBenchmarkRatio;
+        private double surfaceVariance;
+        private int robustRegionSize;
+        private int scenarioCount;
+    }
+
+    @Data
+    public static class AuditEngineMetrics {
+        private String engine;
+        private int tradeCount;
+        private double totalReturn;
+        private double maxDrawdown;
+        private double sharpeRatio;
+        private double totalCost;
+    }
+
+    @Data
+    public static class AuditMismatch {
+        private String category;
+        private Integer tradeIndex;
+        private Object primaryValue;
+        private Object shadowValue;
+        private String detail;
+    }
+
+    @Data
+    public static class BacktestAudit {
+        private String status;
+        private String mode;
+        private AuditEngineMetrics primaryEngine;
+        private AuditEngineMetrics shadowEngine;
+        private boolean tradeCountAgreement;
+        private double entryDateAgreementRate;
+        private double exitDateAgreementRate;
+        private double returnDelta;
+        private double maxDrawdownDelta;
+        private double sharpeDelta;
+        private double costDelta;
+        private int durationMs;
+        private List<AuditMismatch> mismatches = new ArrayList<AuditMismatch>();
+        private List<String> limitations = new ArrayList<String>();
     }
 
     @Data

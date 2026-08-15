@@ -33,9 +33,14 @@ public class PythonSingleStockForecastClient {
     private static final Set<String> REPORT_SCHEMA_VERSIONS = new HashSet<String>(Arrays.asList(
             "single-stock-research-v2", "single-stock-research-v3",
             "single-stock-research-v4", "single-stock-research-v5",
-            "single-stock-research-v6"));
+            "single-stock-research-v6", "single-stock-research-v7"));
     private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
             "CHAMPION", "CHALLENGER", "BASELINE"));
+    private static final Set<String> AUDIT_STATUSES = new HashSet<String>(Arrays.asList(
+            "PASS", "WARNING", "UNAVAILABLE"));
+    private static final Set<String> AUDIT_MISMATCH_CATEGORIES = new HashSet<String>(Arrays.asList(
+            "TRADE_COUNT", "ENTRY_DATE", "EXIT_DATE", "RETURN", "COST",
+            "MAX_DRAWDOWN", "SHARPE"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -124,6 +129,88 @@ public class PythonSingleStockForecastClient {
         }
         if ("single-stock-research-v6".equals(result.getReportSchemaVersion())) {
             validateVersionSix(result);
+        }
+        if ("single-stock-research-v7".equals(result.getReportSchemaVersion())) {
+            validateVersionSeven(result);
+        }
+    }
+
+    private void validateVersionSeven(SingleStockForecast result) {
+        validateVersionSix(result);
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            return;
+        }
+        SingleStockForecast.BacktestAudit audit = result.getBacktestAudit();
+        validateVersionSevenStability(result.getParameterStability());
+        if (audit == null || !AUDIT_STATUSES.contains(audit.getStatus())
+                || !"SHADOW".equals(audit.getMode()) || audit.getPrimaryEngine() == null
+                || audit.getDurationMs() < 0 || audit.getMismatches() == null
+                || audit.getLimitations() == null || audit.getLimitations().isEmpty()
+                || !finiteNonNegative(audit.getReturnDelta())
+                || !finiteNonNegative(audit.getMaxDrawdownDelta())
+                || !finiteNonNegative(audit.getSharpeDelta())
+                || !finiteNonNegative(audit.getCostDelta())) {
+            throw contract("SCHEMA_DRIFT", "Python v7 影子回测审计缺少必需证据", false);
+        }
+        probability(audit.getEntryDateAgreementRate());
+        probability(audit.getExitDateAgreementRate());
+        validateAuditEngine(audit.getPrimaryEngine());
+        if ("UNAVAILABLE".equals(audit.getStatus())) {
+            if (audit.getShadowEngine() != null) {
+                throw contract("SCHEMA_DRIFT", "Python v7 不可用审计不应包含影子指标", false);
+            }
+            return;
+        }
+        if (audit.getShadowEngine() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v7 可用审计缺少影子引擎指标", false);
+        }
+        validateAuditEngine(audit.getShadowEngine());
+        if ("PASS".equals(audit.getStatus())
+                && (!audit.isTradeCountAgreement() || !audit.getMismatches().isEmpty())) {
+            throw contract("SCHEMA_DRIFT", "Python v7 通过状态与差分证据矛盾", false);
+        }
+        if ("WARNING".equals(audit.getStatus()) && audit.getMismatches().isEmpty()) {
+            throw contract("SCHEMA_DRIFT", "Python v7 告警状态缺少差分证据", false);
+        }
+        for (SingleStockForecast.AuditMismatch mismatch : audit.getMismatches()) {
+            if (mismatch == null || !AUDIT_MISMATCH_CATEGORIES.contains(mismatch.getCategory())
+                    || mismatch.getDetail() == null
+                    || mismatch.getTradeIndex() != null && mismatch.getTradeIndex() < 1) {
+                throw contract("SCHEMA_DRIFT", "Python v7 逐笔差分证据无效", false);
+            }
+        }
+    }
+
+    private void validateVersionSevenStability(SingleStockForecast.ParameterStability stability) {
+        if (stability == null || stability.getScenarios() == null
+                || stability.getScenarioCount() < 1
+                || stability.getScenarioCount() != stability.getScenarios().size()
+                || stability.getRobustRegionSize() < 0
+                || stability.getRobustRegionSize() > stability.getScenarioCount()
+                || !finite(stability.getNeighborMeanExcessReturn())
+                || !finite(stability.getNeighborMedianExcessReturn())
+                || !finiteNonNegative(stability.getSurfaceVariance())) {
+            throw contract("SCHEMA_DRIFT", "Python v7 参数鲁棒性证据无效", false);
+        }
+        probability(stability.getPositiveExcessRatio());
+        probability(stability.getOutperformBenchmarkRatio());
+        for (SingleStockForecast.StabilityScenario scenario : stability.getScenarios()) {
+            if (scenario == null || scenario.getHoldingDays() < 1 || scenario.getTradeCount() < 0
+                    || !finite(scenario.getAnnualizedReturn())
+                    || !finite(scenario.getExcessReturn()) || !finite(scenario.getSharpeRatio())
+                    || !finiteNonNegative(scenario.getMaxDrawdown())) {
+                throw contract("SCHEMA_DRIFT", "Python v7 参数场景证据无效", false);
+            }
+            probability(scenario.getThreshold());
+        }
+    }
+
+    private void validateAuditEngine(SingleStockForecast.AuditEngineMetrics metrics) {
+        if (metrics.getEngine() == null || metrics.getTradeCount() < 0
+                || !finite(metrics.getTotalReturn()) || !finite(metrics.getSharpeRatio())
+                || !finiteNonNegative(metrics.getMaxDrawdown())
+                || !finiteNonNegative(metrics.getTotalCost())) {
+            throw contract("SCHEMA_DRIFT", "Python v7 回测引擎指标无效", false);
         }
     }
 

@@ -184,6 +184,36 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsAndValidatesVersionSevenBacktestAudit() {
+        SingleStockForecast result = clientReturning(v7Payload()).forecast("600519", 5);
+
+        assertEquals("PASS", result.getBacktestAudit().getStatus());
+        assertEquals("SHADOW", result.getBacktestAudit().getMode());
+        assertEquals("BACKTESTING_PY", result.getBacktestAudit().getShadowEngine().getEngine());
+        assertEquals(1d, result.getBacktestAudit().getEntryDateAgreementRate(), .000001d);
+        assertEquals(5, result.getParameterStability().getScenarioCount());
+        assertEquals(4, result.getParameterStability().getRobustRegionSize());
+    }
+
+    @Test
+    void rejectsVersionSevenInvalidAgreementOrMissingShadowEvidence() {
+        PythonSingleStockForecastClient invalidAgreement = clientReturning(
+                v7Payload().replace("\"entryDateAgreementRate\":1.0",
+                        "\"entryDateAgreementRate\":1.2"));
+        PythonSingleStockForecastClient missingShadow = clientReturning(
+                v7Payload().replace("\"shadowEngine\":" + auditEngine("BACKTESTING_PY") + ",", ""));
+        PythonSingleStockForecastClient invalidRobustness = clientReturning(
+                v7Payload().replace("\"scenarioCount\":5", "\"scenarioCount\":0"));
+
+        assertThrows(ProviderContractException.class,
+                () -> invalidAgreement.forecast("600519", 5));
+        assertThrows(ProviderContractException.class,
+                () -> missingShadow.forecast("600519", 5));
+        assertThrows(ProviderContractException.class,
+                () -> invalidRobustness.forecast("600519", 5));
+    }
+
+    @Test
     void rejectsUnknownForecastSchemaVersion() {
         PythonSingleStockForecastClient client = clientReturning(
                 v5Payload().replace("single-stock-research-v5", "single-stock-research-v6"));
@@ -315,6 +345,36 @@ class PythonSingleStockForecastClientTest {
                                 "\"brierScore\":0.22,\"logLoss\":0.64,\"baselineBrierScore\":0.24," +
                                 "\"reason\":\"最优\"}]",
                         "\"candidates\":[" + champion + "," + challenger + "," + regime + "," + baseline + "]");
+    }
+
+    private static String v7Payload() {
+        String audit = "{\"status\":\"PASS\",\"mode\":\"SHADOW\"," +
+                "\"primaryEngine\":" + auditEngine("FIN_SCOPE") + "," +
+                "\"shadowEngine\":" + auditEngine("BACKTESTING_PY") + "," +
+                "\"tradeCountAgreement\":true,\"entryDateAgreementRate\":1.0," +
+                "\"exitDateAgreementRate\":1.0,\"returnDelta\":0.0001," +
+                "\"maxDrawdownDelta\":0.0002,\"sharpeDelta\":0.001," +
+                "\"costDelta\":0.0,\"durationMs\":12,\"mismatches\":[]," +
+                "\"limitations\":[\"影子验证不参与方向决策\"]}";
+        String scenario = "{\"holdingDays\":5,\"threshold\":0.6," +
+                "\"primary\":true,\"annualizedReturn\":0.12,\"excessReturn\":0.04," +
+                "\"sharpeRatio\":0.9,\"maxDrawdown\":0.08,\"tradeCount\":2}";
+        String stability = "{\"scenarios\":[" + scenario + "," + scenario + "," +
+                scenario + "," + scenario + "," + scenario + "]," +
+                "\"positiveExcessRatio\":0.8,\"worstExcessReturn\":-0.01," +
+                "\"worstSharpeRatio\":0.2,\"neighborMeanExcessReturn\":0.03," +
+                "\"neighborMedianExcessReturn\":0.03,\"outperformBenchmarkRatio\":0.8," +
+                "\"surfaceVariance\":0.001,\"robustRegionSize\":4,\"scenarioCount\":5}";
+        return v6Payload()
+                .replace("single-stock-research-v6", "single-stock-research-v7")
+                .replace("\"warnings\":[]}", "\"parameterStability\":" + stability +
+                        ",\"backtestAudit\":" + audit + ",\"warnings\":[]}");
+    }
+
+    private static String auditEngine(String code) {
+        return "{\"engine\":\"" + code + "\",\"tradeCount\":2," +
+                "\"totalReturn\":0.12,\"maxDrawdown\":0.08," +
+                "\"sharpeRatio\":0.9,\"totalCost\":0.003}";
     }
 
     private static String slice(String startDate, String endDate) {

@@ -78,4 +78,24 @@ class SingleStockForecastContractTest {
         assertNull(value.getQualification());
         assertNull(value.getRawProbability());
     }
+
+    @Test
+    void exposesVersionSevenShadowBacktestAudit() {
+        SingleStockForecast value = new SingleStockForecast();
+        SingleStockForecast.BacktestAudit audit = new SingleStockForecast.BacktestAudit();
+        audit.setStatus("PASS");
+        audit.setMode("SHADOW");
+        audit.setEntryDateAgreementRate(1d);
+        SingleStockForecast.AuditEngineMetrics primary =
+                new SingleStockForecast.AuditEngineMetrics();
+        primary.setEngine("FIN_SCOPE");
+        primary.setTradeCount(3);
+        audit.setPrimaryEngine(primary);
+        value.setBacktestAudit(audit);
+
+        assertEquals("PASS", value.getBacktestAudit().getStatus());
+        assertEquals("FIN_SCOPE", value.getBacktestAudit().getPrimaryEngine().getEngine());
+        assertEquals(3, value.getBacktestAudit().getPrimaryEngine().getTradeCount());
+        assertEquals(1d, value.getBacktestAudit().getEntryDateAgreementRate(), .000001d);
+    }
 }
