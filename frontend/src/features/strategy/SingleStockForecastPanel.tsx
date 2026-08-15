@@ -1,9 +1,14 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { ForecastConfidenceInterval, ForecastQualification, SingleStockForecast, SingleStockForecastRun } from './quantTypes';
 import { ForecastOutcomeHealth } from './ForecastOutcomeHealth';
 import { ForecastModelRace } from './ForecastModelRace';
 import { BacktestAuditPanel } from './BacktestAuditPanel';
+import {
+  EquityDrawdownChart,
+  FactorContributionChart,
+  ParameterStabilityMap
+} from './SingleStockQuantVisuals';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -37,30 +42,6 @@ const money = (value?: number) => value == null ? '—' : `¥${value.toLocaleStr
 const interval = (value?: ForecastConfidenceInterval, format: (item?: number) => string = number) =>
   value?.status === 'AVAILABLE' && value.lower != null && value.upper != null
     ? `${format(value.lower)} — ${format(value.upper)}` : '区间不可用';
-
-function curvePoints(values: number[], width = 720, height = 190) {
-  if (!values.length) return '';
-  const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(max - min, .0001);
-  return values.map((value, index) => `${index / Math.max(1, values.length - 1) * width},${height - (value - min) / span * height}`).join(' ');
-}
-
-function EquityChart({ report }: { report: SingleStockForecast }) {
-  const sampled = useMemo(() => {
-    const step = Math.max(1, Math.ceil(report.equityCurve.length / 240));
-    return report.equityCurve.filter((_, index) => index % step === 0 || index === report.equityCurve.length - 1);
-  }, [report.equityCurve]);
-  if (sampled.length < 2) return <p className="forecast-no-chart">净值序列不足，暂不绘制收益曲线。</p>;
-  const strategy = curvePoints(sampled.map(item => item.strategyNav));
-  const benchmark = curvePoints(sampled.map(item => item.benchmarkNav));
-  return <div className="forecast-equity-chart">
-    <div className="forecast-chart-legend"><span data-series="strategy">概率策略</span><span data-series="benchmark">同股买入并持有</span><small>{sampled[0].tradeDate} — {sampled[sampled.length - 1].tradeDate}</small></div>
-    <svg viewBox="0 0 720 190" role="img" aria-label={`概率策略累计收益 ${signedPercent(report.performance?.strategy.totalReturn)}，同股买入并持有累计收益 ${signedPercent(report.performance?.benchmark.totalReturn)}`} preserveAspectRatio="none">
-      <path d="M0 47.5H720M0 95H720M0 142.5H720" />
-      <polyline data-series="benchmark" points={benchmark} />
-      <polyline data-series="strategy" points={strategy} />
-    </svg>
-  </div>;
-}
 
 function SectionHead({ eyebrow, title, aside }: { eyebrow: string; title: string; aside?: string }) {
   return <header className="forecast-section-head"><div><span>{eyebrow}</span><h4>{title}</h4></div>{aside && <small>{aside}</small>}</header>;
@@ -232,7 +213,12 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
 
           {report.performance && <section className="forecast-paper-section forecast-performance">
             <SectionHead eyebrow="PERFORMANCE / SAME STOCK" title="策略与同股买入并持有" aside={`入场阈值 ${percent(report.strategyPolicy.signalThreshold)} · 持有 ${report.strategyPolicy.holdingDays} 日`} />
-            <EquityChart report={report} />
+            <EquityDrawdownChart points={report.equityCurve}
+              strategyReturn={report.performance.strategy.totalReturn}
+              benchmarkReturn={report.performance.benchmark.totalReturn}
+              maxDrawdown={report.performance.strategy.maxDrawdown}
+              drawdownStart={report.performance.strategy.maxDrawdownStartDate}
+              drawdownTrough={report.performance.strategy.maxDrawdownTroughDate} />
             <div className="forecast-scoreline"><article><span>策略累计收益</span><strong>{signedPercent(report.performance.strategy.totalReturn)}</strong></article><article><span>同股买入并持有</span><strong>{signedPercent(report.performance.benchmark.totalReturn)}</strong></article><article data-negative={report.performance.excessReturn < 0}><span>策略超额收益</span><strong>{signedPercent(report.performance.excessReturn)}</strong></article></div>
             <div className="forecast-metric-grid">
               <article><span>策略最大回撤</span><strong>{percent(report.performance.strategy.maxDrawdown)}</strong><small>{report.performance.strategy.maxDrawdownStartDate} → {report.performance.strategy.maxDrawdownTroughDate}</small></article>
@@ -250,6 +236,7 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
 
           <section className="forecast-paper-section">
             <SectionHead eyebrow="FACTOR NOTEBOOK" title="因子知识与当前解释" aside="贡献解释模型，不证明因果" />
+            <FactorContributionChart factors={report.factorExplanations} />
             <div className="forecast-factor-list">{report.factorExplanations.map(item => <article key={item.code} data-direction={item.contribution >= 0 ? 'positive' : 'negative'}><header><span>{item.category} · {item.code}</span><b>{item.direction}</b></header><h5>{item.name}</h5><p>{item.economicMeaning}</p><dl><div><dt>当前值</dt><dd>{number(item.currentValue, 4)}</dd></div><div><dt>历史位置</dt><dd>{percent(item.historicalPercentile)}</dd></div><div><dt>模型贡献</dt><dd>{item.contribution >= 0 ? '+' : ''}{number(item.contribution, 3)}</dd></div></dl><details><summary>公式与边界</summary><p>{item.formula} · {item.window}</p><p>{item.boundary}</p></details></article>)}</div>
           </section>
 
@@ -261,6 +248,7 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
           {report.parameterStability && <section className="forecast-paper-section">
             <SectionHead eyebrow="NEIGHBORHOOD TEST" title="相邻参数稳定性" aside={`${percent(report.parameterStability.positiveExcessRatio)} 邻域取得正超额`} />
             <div className="forecast-robustness-strip"><article><span>邻域超额均值</span><strong>{signedPercent(report.parameterStability.neighborMeanExcessReturn)}</strong></article><article><span>邻域超额中位数</span><strong>{signedPercent(report.parameterStability.neighborMedianExcessReturn)}</strong></article><article><span>跑赢同股基准</span><strong>{percent(report.parameterStability.outperformBenchmarkRatio ?? report.parameterStability.positiveExcessRatio)}</strong></article><article><span>稳健区域</span><strong>{report.parameterStability.robustRegionSize ?? '—'} / {report.parameterStability.scenarioCount ?? report.parameterStability.scenarios.length}</strong></article></div>
+            <ParameterStabilityMap stability={report.parameterStability} />
             <div className="forecast-table-wrap"><table aria-label="相邻参数稳定性"><thead><tr><th>方案</th><th>阈值</th><th>持有</th><th>年化收益</th><th>同股超额</th><th>Sharpe</th><th>最大回撤</th><th>交易</th></tr></thead><tbody>{report.parameterStability.scenarios.map(item => <tr key={`${item.holdingDays}-${item.threshold}`} data-primary={item.primary}><td>{item.primary ? '主方案' : '相邻方案'}</td><td>{percent(item.threshold)}</td><td>{item.holdingDays} 日</td><td>{signedPercent(item.annualizedReturn)}</td><td>{signedPercent(item.excessReturn)}</td><td>{number(item.sharpeRatio)}</td><td>{percent(item.maxDrawdown)}</td><td>{item.tradeCount}</td></tr>)}</tbody></table></div>
           </section>}
 

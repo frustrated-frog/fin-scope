@@ -201,9 +201,12 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getAllByText('同股买入并持有').length).toBeGreaterThan(0);
   expect(screen.getByText('最大回撤持续时间')).toBeInTheDocument();
   expect(screen.getByText('持仓时间占比')).toBeInTheDocument();
-  expect(screen.getByText('20 日动量')).toBeInTheDocument();
+  expect(screen.getAllByText('20 日动量').length).toBeGreaterThan(0);
   expect(screen.getByText('样本内 / 样本外')).toBeInTheDocument();
   expect(screen.getByText('相邻参数稳定性')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /因子贡献坐标轴/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /收益与水下回撤联动图/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /参数稳定性面板/ })).toBeInTheDocument();
   expect(screen.getByText('分年度表现')).toBeInTheDocument();
   expect(screen.getByText('标的自身趋势阶段')).toBeInTheDocument();
   expect(screen.getByText('我的持仓快照')).toBeInTheDocument();
