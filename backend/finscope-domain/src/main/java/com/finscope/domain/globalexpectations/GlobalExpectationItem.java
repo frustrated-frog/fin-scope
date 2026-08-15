@@ -15,6 +15,7 @@ public class GlobalExpectationItem {
     private Double change1h;
     private Double change24h;
     private Double volume;
+    private Double volume24h;
     private Double openInterest;
     private Integer spread;
     private String endDate;

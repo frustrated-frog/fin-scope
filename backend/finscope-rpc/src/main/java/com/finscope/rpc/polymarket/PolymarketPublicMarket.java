@@ -12,6 +12,7 @@ public class PolymarketPublicMarket {
     private Double oneHourPriceChange;
     private Double oneDayPriceChange;
     private Double volume;
+    private Double volume24h;
     private Double openInterest;
     private String endDate;
 }

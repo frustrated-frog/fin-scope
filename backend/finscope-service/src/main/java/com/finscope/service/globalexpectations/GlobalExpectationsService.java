@@ -30,7 +30,7 @@ import java.util.Optional;
 @Service
 public class GlobalExpectationsService {
     private static final Logger log = LoggerFactory.getLogger(GlobalExpectationsService.class);
-    private static final int MAX_MARKETS = 20;
+    private static final int MARKETS_PER_CATEGORY = 10;
     private static final int MAX_DISPLAY_POINTS = 96;
     private static final long FIVE_MINUTES_SECONDS = 300L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -60,7 +60,7 @@ public class GlobalExpectationsService {
     public synchronized List<GlobalExpectationItem> refresh() {
         Instant observedAt = Instant.now();
         try {
-            List<MatchedMarket> markets = select(polymarketPublicClient.fetchActiveMarkets());
+            List<MatchedMarket> markets = select();
             if (markets.isEmpty()) {
                 return staleOrUnavailable();
             }
@@ -80,20 +80,23 @@ public class GlobalExpectationsService {
         }
     }
 
-    private List<MatchedMarket> select(List<PolymarketPublicMarket> markets) {
+    private List<MatchedMarket> select() throws Exception {
         List<MatchedMarket> selected = new ArrayList<MatchedMarket>();
-        for (PolymarketPublicMarket market : markets) {
-            GlobalExpectationsCatalog.Definition definition = catalog.match(
-                    market.getQuestion() + " " + market.getMarketUrl());
-            if (definition == null || market.getYesProbability() == null) {
-                continue;
+        for (GlobalExpectationsCatalog.Definition definition : catalog.definitions()) {
+            List<PolymarketPublicMarket> markets = polymarketPublicClient.fetchTopMarketsByCategory(
+                    definition.getCategorySlug(), MARKETS_PER_CATEGORY);
+            List<PolymarketPublicMarket> ranked = new ArrayList<PolymarketPublicMarket>();
+            for (PolymarketPublicMarket market : markets) {
+                if (market.getYesProbability() == null || market.getVolume24h() == null) {
+                    continue;
+                }
+                ranked.add(market);
             }
-            selected.add(new MatchedMarket(definition, market));
-        }
-        selected.sort(Comparator.comparing(item -> item.getMarket().getVolume(),
-                Comparator.nullsLast(Comparator.reverseOrder())));
-        if (selected.size() > MAX_MARKETS) {
-            return new ArrayList<MatchedMarket>(selected.subList(0, MAX_MARKETS));
+            ranked.sort(Comparator.comparing(PolymarketPublicMarket::getVolume24h).reversed());
+            int categorySize = Math.min(MARKETS_PER_CATEGORY, ranked.size());
+            for (int index = 0; index < categorySize; index++) {
+                selected.add(new MatchedMarket(definition, ranked.get(index)));
+            }
         }
         return selected;
     }
@@ -175,6 +178,7 @@ public class GlobalExpectationsService {
         item.setChange1h(toPercentagePoints(market.getOneHourPriceChange()));
         item.setChange24h(toPercentagePoints(market.getOneDayPriceChange()));
         item.setVolume(market.getVolume());
+        item.setVolume24h(market.getVolume24h());
         item.setOpenInterest(market.getOpenInterest());
         item.setEndDate(market.getEndDate());
         item.setObservation(definition.getObservation());

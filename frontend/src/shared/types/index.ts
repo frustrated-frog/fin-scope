@@ -22,7 +22,7 @@ export type View =
 
 export type GlobalExpectationItem = {
   id: number;
-  theme: '中美关系' | '科技供应链' | '能源资源' | '全球宏观' | '中国相关' | '全球地缘' | '数据状态';
+  theme: '政治' | '财务' | '地缘冲突' | '科技' | '经济' | '数据状态';
   question: string;
   marketUrl: string;
   probability: number;
@@ -30,6 +30,7 @@ export type GlobalExpectationItem = {
   change1h?: number;
   change24h?: number;
   volume?: number;
+  volume24h?: number;
   openInterest?: number;
   spread?: number;
   endDate?: string;

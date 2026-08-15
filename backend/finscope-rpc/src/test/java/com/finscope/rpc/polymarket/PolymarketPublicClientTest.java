@@ -15,28 +15,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PolymarketPublicClientTest {
     @Test
-    void fetchesTwoVolumeOrderedPagesInsteadOfAssumingGammaAcceptsFiveHundredItems() throws Exception {
+    void resolvesOfficialTagAndFetchesCategoryTopTenByDailyVolume() throws Exception {
         List<URI> requested = new ArrayList<URI>();
         FinanceHttpClient httpClient = new FinanceHttpClient() {
             @Override
             public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
                 requested.add(uri);
-                String id = uri.getQuery().contains("offset=0") ? "market-1" : "market-2";
-                String body = "[{\"id\":\"" + id + "\",\"question\":\"Will oil rise?\","
-                        + "\"slug\":\"" + id + "\",\"outcomePrices\":\"[\\\"0.31\\\",\\\"0.69\\\"]\"}]";
+                String body = uri.getPath().startsWith("/tags/slug/")
+                        ? "{\"id\":\"2\",\"slug\":\"politics\"}"
+                        : "[{\"id\":\"market-1\",\"question\":\"Will the bill pass?\","
+                        + "\"slug\":\"market-1\",\"outcomePrices\":\"[\\\"0.31\\\",\\\"0.69\\\"]\"}]";
                 return new FinanceHttpResponse(200, body, Instant.now(), "hash");
             }
         };
         PolymarketPublicClient client = new PolymarketPublicClient();
         ReflectionTestUtils.setField(client, "financeHttpClient", httpClient);
 
-        List<PolymarketPublicMarket> markets = client.fetchActiveMarkets();
+        List<PolymarketPublicMarket> markets = client.fetchTopMarketsByCategory("politics", 10);
 
-        assertEquals(2, markets.size());
+        assertEquals(1, markets.size());
         assertEquals(2, requested.size());
-        assertEquals("closed=false&limit=100&offset=0&order=volumeNum&ascending=false&locale=zh",
-                requested.get(0).getQuery());
-        assertEquals("closed=false&limit=100&offset=100&order=volumeNum&ascending=false&locale=zh",
+        assertEquals("/tags/slug/politics", requested.get(0).getPath());
+        assertEquals("active=true&closed=false&tag_id=2&related_tags=true&limit=10"
+                        + "&order=volume24hr&ascending=false&locale=zh",
                 requested.get(1).getQuery());
     }
 
@@ -46,7 +47,8 @@ class PolymarketPublicClientTest {
                 + "\"slug\":\"oil-100\",\"outcomePrices\":\"[\\\"0.31\\\",\\\"0.69\\\"]\","
                 + "\"clobTokenIds\":\"[\\\"yes-token\\\",\\\"no-token\\\"]\","
                 + "\"oneHourPriceChange\":0.024,\"oneDayPriceChange\":-0.071,"
-                + "\"volumeNum\":856000,\"liquidityNum\":291000,\"endDate\":\"2026-12-31T12:00:00Z\"}]";
+                + "\"volumeNum\":856000,\"volume24hr\":128000,\"liquidityNum\":291000,"
+                + "\"endDate\":\"2026-12-31T12:00:00Z\"}]";
 
         List<PolymarketPublicMarket> markets = PolymarketPublicClient.parseActiveMarkets(response);
 
@@ -56,7 +58,36 @@ class PolymarketPublicClientTest {
         assertEquals("yes-token", markets.get(0).getYesTokenId());
         assertEquals(0.024D, markets.get(0).getOneHourPriceChange());
         assertEquals(-0.071D, markets.get(0).getOneDayPriceChange());
+        assertEquals(128000D, markets.get(0).getVolume24h());
         assertEquals("https://polymarket.com/event/oil-100", markets.get(0).getMarketUrl());
+    }
+
+    @Test
+    void splitsLargeHistoryRequestsIntoBatchesOfTwenty() throws Exception {
+        List<String> requestBodies = new ArrayList<String>();
+        FinanceHttpClient httpClient = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                                Map<String, String> headers) {
+                requestBodies.add(body);
+                return new FinanceHttpResponse(200, "{\"history\":{}}", Instant.now(), "hash");
+            }
+        };
+        PolymarketPublicClient client = new PolymarketPublicClient();
+        ReflectionTestUtils.setField(client, "financeHttpClient", httpClient);
+        List<String> tokenIds = new ArrayList<String>();
+        for (int index = 0; index < 50; index++) {
+            tokenIds.add("token-" + index);
+        }
+
+        client.fetchPriceHistory(tokenIds);
+
+        assertEquals(3, requestBodies.size());
     }
 
     @Test

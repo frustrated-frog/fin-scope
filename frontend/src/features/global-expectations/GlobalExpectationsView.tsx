@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { GlobalExpectationItem } from '../../shared/types';
 
+const EXPECTATION_THEMES = ['全部', '政治', '财务', '地缘冲突', '科技', '经济'];
+
 export function GlobalExpectationsView({ addToast }: { addToast: (message: string, type?: 'success' | 'error' | 'info') => void }) {
   const [items, setItems] = useState<GlobalExpectationItem[]>([]);
   const [theme, setTheme] = useState('全部');
@@ -26,8 +28,12 @@ export function GlobalExpectationsView({ addToast }: { addToast: (message: strin
     const timer = window.setInterval(() => { void load(); }, 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const themes = ['全部', ...new Set(items.map((item) => item.theme))];
-  const visibleItems = useMemo(() => items.filter((item) => (theme === '全部' || item.theme === theme) && (!signalsOnly || item.status === 'SIGNAL')), [items, theme, signalsOnly]);
+  const visibleItems = useMemo(() => {
+    const themedItems = theme === '全部'
+      ? [...new Map(items.map((item) => [item.marketUrl, item])).values()]
+      : items.filter((item) => item.theme === theme);
+    return themedItems.filter((item) => !signalsOnly || item.status === 'SIGNAL');
+  }, [items, theme, signalsOnly]);
   const signalCount = items.filter((item) => item.status === 'SIGNAL').length;
 
   return <section className="expectations-workspace">
@@ -35,8 +41,8 @@ export function GlobalExpectationsView({ addToast }: { addToast: (message: strin
       <div><p className="eyebrow">GLOBAL EXPECTATION MONITOR</p><h3>全球预期 <span>· 观察海外市场正在重新定价什么</span></h3><p>这是一组待核验的外部认知变化，不构成股票评分或交易建议。</p></div>
       <dl><div><dt>监控覆盖</dt><dd>{items.length}</dd></div><div><dt>预期异动</dt><dd>{signalCount}</dd></div><div><dt>刷新状态</dt><dd>{loading ? '更新中' : '已就绪'}</dd></div></dl>
     </header>
-    <div className="expectations-toolbar"><div role="group" aria-label="主题过滤">{themes.map((item) => <button className={theme === item ? 'active' : ''} type="button" key={item} onClick={() => setTheme(item)}>{item}</button>)}</div><label><input type="checkbox" checked={signalsOnly} onChange={(event) => setSignalsOnly(event.target.checked)} />只看异动</label><button type="button" onClick={() => void load(true)} disabled={loading}>{loading ? '刷新中…' : '刷新快照'}</button></div>
-    {visibleItems.length === 0 ? <div className="expectations-empty"><strong>正在获取观察池</strong><p>官方市场快照到达后，会在这里显示 5m / 1h / 24h 的认知变化。</p></div> : <div className="expectations-grid">{visibleItems.map((item) => <article className={`expectation-card ${item.status === 'SIGNAL' ? 'is-signal' : ''}`} key={item.id}><header><span>{item.theme}</span><small>{item.dataStatus === 'STALE' ? '缓存数据' : item.dataStatus === 'PARTIAL' ? '历史缓存' : item.status === 'SIGNAL' ? '待核验' : '持续观察'} · {item.observedAt}</small></header><h4>{item.question}</h4><div className="probability-row"><strong>{item.probability}¢</strong><span>YES 概率</span><b className={movementClass(item.change5m ?? item.change1h ?? item.change24h)}>{formatMovement(item.change5m ?? item.change1h ?? item.change24h)} / {item.change5m != null ? '5m' : item.change1h != null ? '1h' : '24h'}</b></div><div className="probability-track" aria-label={`YES 概率 ${item.probability}%`}><i style={{ width: `${item.probability}%` }} /></div><div className="movement-strip" aria-label="变化窗口"><span>5m <b className={movementClass(item.change5m)}>{formatMovement(item.change5m)}</b></span><span>1h <b className={movementClass(item.change1h)}>{formatMovement(item.change1h)}</b></span><span>24h <b className={movementClass(item.change24h)}>{formatMovement(item.change24h)}</b></span></div><dl className="market-quality"><div><dt>成交</dt><dd>{formatMoney(item.volume)}</dd></div><div><dt>OI</dt><dd>{formatMoney(item.openInterest)}</dd></div><div><dt>价差</dt><dd>{item.spread ?? '—'}¢</dd></div><div><dt>到期</dt><dd>{item.endDate || '—'}</dd></div></dl><footer><p>{item.observation}</p><div><button type="button" onClick={() => setSelected(item)}>查看变化详情</button><a href={item.marketUrl} target="_blank" rel="noreferrer">查看原市场 ↗</a></div></footer></article>)}</div>}
+    <div className="expectations-toolbar"><div role="group" aria-label="主题过滤">{EXPECTATION_THEMES.map((item) => <button className={theme === item ? 'active' : ''} type="button" key={item} onClick={() => setTheme(item)}>{item}</button>)}</div><label><input type="checkbox" checked={signalsOnly} onChange={(event) => setSignalsOnly(event.target.checked)} />只看异动</label><button type="button" onClick={() => void load(true)} disabled={loading}>{loading ? '刷新中…' : '刷新快照'}</button></div>
+    {visibleItems.length === 0 ? <div className="expectations-empty"><strong>正在获取观察池</strong><p>官方市场快照到达后，会在这里显示 5m / 1h / 24h 的认知变化。</p></div> : <div className="expectations-grid">{visibleItems.map((item) => <article className={`expectation-card ${item.status === 'SIGNAL' ? 'is-signal' : ''}`} key={item.id}><header><span>{item.theme}</span><small>{item.dataStatus === 'STALE' ? '缓存数据' : item.dataStatus === 'PARTIAL' ? '历史缓存' : item.status === 'SIGNAL' ? '待核验' : '持续观察'} · {item.observedAt}</small></header><h4>{item.question}</h4><div className="probability-row"><strong>{item.probability}¢</strong><span>YES 概率</span><b className={movementClass(item.change5m ?? item.change1h ?? item.change24h)}>{formatMovement(item.change5m ?? item.change1h ?? item.change24h)} / {item.change5m != null ? '5m' : item.change1h != null ? '1h' : '24h'}</b></div><div className="probability-track" aria-label={`YES 概率 ${item.probability}%`}><i style={{ width: `${item.probability}%` }} /></div><div className="movement-strip" aria-label="变化窗口"><span>5m <b className={movementClass(item.change5m)}>{formatMovement(item.change5m)}</b></span><span>1h <b className={movementClass(item.change1h)}>{formatMovement(item.change1h)}</b></span><span>24h <b className={movementClass(item.change24h)}>{formatMovement(item.change24h)}</b></span></div><dl className="market-quality"><div><dt>24h 成交</dt><dd>{formatMoney(item.volume24h ?? item.volume)}</dd></div><div><dt>OI</dt><dd>{formatMoney(item.openInterest)}</dd></div><div><dt>价差</dt><dd>{item.spread ?? '—'}¢</dd></div><div><dt>到期</dt><dd>{item.endDate || '—'}</dd></div></dl><footer><p>{item.observation}</p><div><button type="button" onClick={() => setSelected(item)}>查看变化详情</button><a href={item.marketUrl} target="_blank" rel="noreferrer">查看原市场 ↗</a></div></footer></article>)}</div>}
     {selected && <ExpectationDetail item={selected} onClose={() => setSelected(null)} />}
   </section>;
 }
