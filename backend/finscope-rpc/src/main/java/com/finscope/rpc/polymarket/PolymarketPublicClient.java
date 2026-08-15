@@ -19,7 +19,7 @@ import java.util.Map;
 public class PolymarketPublicClient {
     private static final String ACTIVE_MARKETS_URL =
             "https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=%d"
-                    + "&order=volumeNum&ascending=false";
+                    + "&order=volumeNum&ascending=false&locale=zh";
     private static final int ACTIVE_MARKET_PAGE_SIZE = 100;
     private static final int ACTIVE_MARKET_PAGES = 2;
     private static final URI BATCH_HISTORY_URI = URI.create("https://clob.polymarket.com/batch-prices-history");

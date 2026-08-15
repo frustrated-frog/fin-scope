@@ -40,6 +40,21 @@ class GlobalExpectationsServiceTest {
     }
 
     @Test
+    void keepsChineseQuestionWhileMatchingThemeFromEnglishMarketSlug() {
+        PolymarketPublicMarket market = market();
+        market.setQuestion("今年油价会超过100美元吗？");
+        FakeCache cache = new FakeCache();
+        GlobalExpectationsService service = service(client(List.of(market),
+                history(Instant.now().minusSeconds(360).getEpochSecond(), 0.27D)), cache);
+
+        List<GlobalExpectationItem> refreshed = service.refresh();
+
+        assertEquals(1, refreshed.size());
+        assertEquals("能源资源", refreshed.get(0).getTheme());
+        assertEquals("今年油价会超过100美元吗？", refreshed.get(0).getQuestion());
+    }
+
+    @Test
     void usesRedisHistoryAsPartialWhenClobHistoryFails() {
         FakeCache cache = new FakeCache();
         cache.history = cachedHistory(Instant.now().minusSeconds(360).getEpochSecond(), 27.0D);

@@ -4,7 +4,7 @@
 
 **Goal:** 让全球预期监控使用 Polymarket 官方中文市场标题。
 
-**Architecture:** 仅修改 `finscope-rpc` 中 Gamma 市场列表请求的 locale 参数，现有 DTO、业务筛选、Redis 缓存和前端展示链路保持不变。通过客户端 URI 契约测试覆盖两个分页请求。
+**Architecture:** 在 `finscope-rpc` 的 Gamma 市场列表请求中增加 locale 参数，并让服务层使用保留英文的市场 URL slug 辅助现有主题筛选。现有 DTO、Redis 缓存和前端展示链路保持不变；客户端 URI 测试覆盖两个分页请求，服务测试覆盖中文展示与英文 slug 分类兼容性。
 
 **Tech Stack:** Java 21、Spring Boot 2.7、JUnit 5、Maven
 
@@ -15,6 +15,8 @@
 **Files:**
 - Modify: `backend/finscope-rpc/src/test/java/com/finscope/rpc/polymarket/PolymarketPublicClientTest.java`
 - Modify: `backend/finscope-rpc/src/main/java/com/finscope/rpc/polymarket/PolymarketPublicClient.java`
+- Modify: `backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationsServiceTest.java`
+- Modify: `backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationsService.java`
 
 - [ ] **Step 1: 写入失败测试**
 
@@ -50,20 +52,24 @@ private static final String ACTIVE_MARKETS_URL =
 
 - [ ] **Step 4: 验证相关测试与模块测试**
 
+先增加服务测试：将测试市场标题设为 `今年油价会超过100美元吗？`，市场 URL 保持 `https://polymarket.com/event/oil-100`，断言主题为 `能源资源` 且输出标题仍为中文。随后让 `GlobalExpectationsService.select()` 传给目录的匹配文本同时包含 `question` 和 `marketUrl`。
+
 运行：
 
 ```bash
 cd backend && JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.12/libexec/openjdk.jdk/Contents/Home \
-  mvn -pl finscope-rpc test
+  mvn -pl finscope-service -am test
 ```
 
-预期：`finscope-rpc` 全部测试通过。
+预期：`finscope-rpc` 与 `finscope-service` 及其依赖模块全部测试通过。
 
 - [ ] **Step 5: 提交并推送当前分支**
 
 ```bash
 git add backend/finscope-rpc/src/main/java/com/finscope/rpc/polymarket/PolymarketPublicClient.java \
-  backend/finscope-rpc/src/test/java/com/finscope/rpc/polymarket/PolymarketPublicClientTest.java
+  backend/finscope-rpc/src/test/java/com/finscope/rpc/polymarket/PolymarketPublicClientTest.java \
+  backend/finscope-service/src/main/java/com/finscope/service/globalexpectations/GlobalExpectationsService.java \
+  backend/finscope-service/src/test/java/com/finscope/service/globalexpectations/GlobalExpectationsServiceTest.java
 git commit -m "fix: 改用官方中文市场标题"
 git push origin codex/global-expectations-monitor
 ```

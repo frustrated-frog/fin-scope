@@ -83,7 +83,8 @@ public class GlobalExpectationsService {
     private List<MatchedMarket> select(List<PolymarketPublicMarket> markets) {
         List<MatchedMarket> selected = new ArrayList<MatchedMarket>();
         for (PolymarketPublicMarket market : markets) {
-            GlobalExpectationsCatalog.Definition definition = catalog.match(market.getQuestion());
+            GlobalExpectationsCatalog.Definition definition = catalog.match(
+                    market.getQuestion() + " " + market.getMarketUrl());
             if (definition == null || market.getYesProbability() == null) {
                 continue;
             }

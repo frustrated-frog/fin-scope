@@ -34,9 +34,9 @@ class PolymarketPublicClientTest {
 
         assertEquals(2, markets.size());
         assertEquals(2, requested.size());
-        assertEquals("closed=false&limit=100&offset=0&order=volumeNum&ascending=false",
+        assertEquals("closed=false&limit=100&offset=0&order=volumeNum&ascending=false&locale=zh",
                 requested.get(0).getQuery());
-        assertEquals("closed=false&limit=100&offset=100&order=volumeNum&ascending=false",
+        assertEquals("closed=false&limit=100&offset=100&order=volumeNum&ascending=false&locale=zh",
                 requested.get(1).getQuery());
     }
 
