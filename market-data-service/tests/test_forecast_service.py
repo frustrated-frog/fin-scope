@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from finscope_market_data.forecast.features import ForecastSample
+from finscope_market_data.forecast.features import ForecastSample, build_samples
 from finscope_market_data.forecast.service import _comparable_observations, build_forecast
 from finscope_market_data.forecast.context import build_aligned_context
+from finscope_market_data.forecast.panel import train_panel_artifact
 from finscope_market_data.forecast.walk_forward import validate_walk_forward
 from finscope_market_data.models import DailyBar, StockSymbol
 
@@ -99,6 +100,42 @@ def test_forecast_returns_structured_insufficient_state() -> None:
     assert result.bar_count == 400
     assert result.up_probability is None
     assert "不足" in result.conclusion
+    assert result.panel_model.status == "NOT_AVAILABLE"
+
+
+def test_forecast_consumes_published_panel_artifact_without_live_sector_dependency() -> None:
+    history = bars(900)
+    panel_samples = {
+        f"{600000 + index}.SH": build_samples(
+            [item.model_copy(update={"symbol": StockSymbol(market="SH", code=f"{600000 + index}")}) for item in history],
+            transaction_cost_rate=0.0015,
+            horizon_days=5,
+        )
+        for index in range(20)
+    }
+    artifact = train_panel_artifact(
+        panel_samples,
+        horizon_days=5,
+        published_at="2026-08-17T10:00:00",
+    )
+
+    result = build_forecast(
+        history,
+        instrument_code="600000.SH",
+        source_code="CACHE",
+        source_family="LOCAL",
+        quality_status="FRESH_PRIMARY",
+        warnings=[],
+        panel_artifact=artifact,
+        panel_now=datetime(2026, 8, 17, 12, 0, 0),
+    )
+
+    assert result.panel_model.status in {"BLENDED", "SHADOW"}
+    assert result.panel_model.mode == "PANEL_CORE"
+    assert result.panel_model.universe_size == 20
+    assert result.panel_model.individual_probability is not None
+    assert result.panel_model.panel_probability is not None
+    assert result.up_probability == result.panel_model.final_probability
 
 
 def test_forecast_refuses_probability_when_locked_qualification_is_too_small() -> None:

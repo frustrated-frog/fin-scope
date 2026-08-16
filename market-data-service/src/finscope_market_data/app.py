@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.discovery.providers import (
     EastmoneyHotSectorProvider,
@@ -61,6 +62,7 @@ def create_app(
     settings: Settings | None = None,
 ) -> FastAPI:
     config = settings or Settings()
+    panel_store = PanelArtifactStore(config.data_dir / "quant")
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -75,6 +77,7 @@ def create_app(
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
                 universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",
+                panel_store=panel_store,
             )
         try:
             yield
@@ -156,6 +159,7 @@ def create_app(
             warnings=context_warnings,
             horizon_days=request.horizon_days,
             context=context,
+            panel_artifact=panel_store.load(request.horizon_days),
         )
         return JSONResponse(
             status_code=200,

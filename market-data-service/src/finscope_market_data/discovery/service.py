@@ -8,7 +8,7 @@ import json
 import math
 from pathlib import Path
 import time
-from typing import Awaitable, Callable, Protocol, Sequence
+from typing import Awaitable, Callable, Mapping, Protocol, Sequence
 
 from finscope_market_data.discovery.providers import HotSectorProvider
 from finscope_market_data.discovery.ranking import (
@@ -24,6 +24,12 @@ from finscope_market_data.discovery.schemas import (
     DiscoverySector,
 )
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.features import build_samples
+from finscope_market_data.forecast.panel import (
+    PanelArtifact,
+    PanelArtifactStore,
+    train_panel_artifact,
+)
 from finscope_market_data.models import DailyBar
 
 
@@ -70,6 +76,7 @@ class StockDiscoveryService:
         universe_snapshot_path: str | Path | None = None,
         provider_attempts: int = 2,
         provider_retry_delay_seconds: float = 0.2,
+        panel_store: PanelArtifactStore | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
@@ -81,6 +88,8 @@ class StockDiscoveryService:
         self.universe_snapshot_path = (
             Path(universe_snapshot_path) if universe_snapshot_path else None
         )
+        self.panel_store = panel_store
+        self._uses_default_forecast_builder = forecast_builder is None
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
@@ -88,12 +97,23 @@ class StockDiscoveryService:
             request.sector_limit
         )
         candidates, bars_by_code = await self._admit(members, request, warnings)
+        panel_artifact = self._train_panel_artifact(
+            bars_by_code,
+            request.horizon_days,
+            warnings,
+        )
         lightweight = rank_lightweight_candidates(candidates)
         by_code = {item.code: item for item in candidates}
         for ranked in lightweight:
             by_code[ranked.code] = ranked
         deep_targets = lightweight[: request.deep_limit]
-        deep = await self._deep(deep_targets, bars_by_code, request, warnings)
+        deep = await self._deep(
+            deep_targets,
+            bars_by_code,
+            request,
+            warnings,
+            panel_artifact,
+        )
         final = rank_deep_candidates(deep, request.final_limit)
         as_of = max(
             (bars[-1].trade_date for bars in bars_by_code.values() if bars),
@@ -376,18 +396,28 @@ class StockDiscoveryService:
         bars_by_code: dict[str, Sequence[DailyBar]],
         request: DiscoveryRequest,
         warnings: list[str],
+        panel_artifact: PanelArtifact | None = None,
     ) -> list[DeepCandidateEvidence]:
         semaphore = asyncio.Semaphore(self.deep_concurrency)
 
         async def evaluate(candidate: DiscoveryCandidate):
             try:
                 async with semaphore:
-                    payload = await asyncio.to_thread(
-                        self.forecast_builder,
-                        candidate,
-                        bars_by_code[candidate.code],
-                        request,
-                    )
+                    if self._uses_default_forecast_builder:
+                        payload = await asyncio.to_thread(
+                            _forecast,
+                            candidate,
+                            bars_by_code[candidate.code],
+                            request,
+                            panel_artifact,
+                        )
+                    else:
+                        payload = await asyncio.to_thread(
+                            self.forecast_builder,
+                            candidate,
+                            bars_by_code[candidate.code],
+                            request,
+                        )
                 return DeepCandidateEvidence(code=candidate.code, **payload)
             except Exception as error:
                 warnings.append(f"{candidate.code} 深度预测失败：{_safe(error)}")
@@ -396,11 +426,45 @@ class StockDiscoveryService:
         values = await asyncio.gather(*(evaluate(item) for item in candidates))
         return [item for item in values if item is not None]
 
+    def _train_panel_artifact(
+        self,
+        bars_by_code: Mapping[str, Sequence[DailyBar]],
+        horizon_days: int,
+        warnings: list[str],
+    ) -> PanelArtifact | None:
+        existing = self.panel_store.load(horizon_days) if self.panel_store else None
+        if self.panel_store is None:
+            return existing
+        histories = [
+            (code, bars)
+            for code, bars in sorted(bars_by_code.items())
+            if len(bars) >= 750
+        ][:300]
+        try:
+            samples_by_code = {
+                f"{code}.{bars[0].symbol.market}": build_samples(
+                    bars,
+                    transaction_cost_rate=0.0015,
+                    horizon_days=horizon_days,
+                )
+                for code, bars in histories
+            }
+            artifact = train_panel_artifact(
+                samples_by_code,
+                horizon_days=horizon_days,
+            )
+            self.panel_store.save(artifact)
+            return artifact
+        except (OSError, TypeError, ValueError) as error:
+            warnings.append(f"联合模型未更新，继续使用个股模型或上一版产物：{_safe(error)}")
+            return existing
+
 
 def _forecast(
     candidate: DiscoveryCandidate,
     bars: Sequence[DailyBar],
     request: DiscoveryRequest,
+    panel_artifact: PanelArtifact | None = None,
 ) -> dict[str, object]:
     report = build_forecast(
         bars,
@@ -410,6 +474,7 @@ def _forecast(
         quality_status="FRESH_PRIMARY",
         warnings=[],
         horizon_days=request.horizon_days,
+        panel_artifact=panel_artifact,
     )
     qualification = report.qualification
     metrics = qualification.locked_test.calibrated_metrics if qualification else None

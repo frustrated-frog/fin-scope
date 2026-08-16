@@ -334,6 +334,31 @@ class QlibReference(ForecastModel):
     runtime_dependency: bool = False
 
 
+class PanelModelReport(ForecastModel):
+    status: Literal["NOT_AVAILABLE", "SHADOW", "BLENDED"] = "NOT_AVAILABLE"
+    mode: Literal["UNAVAILABLE", "PANEL_CORE", "PANEL_FULL"] = "UNAVAILABLE"
+    artifact_version: str | None = None
+    published_at: str | None = None
+    artifact_age_days: int | None = None
+    universe_size: int = 0
+    sample_count: int = 0
+    feature_coverage: float = Field(default=0.0, ge=0, le=1)
+    feature_distance: float | None = None
+    drift_status: Literal["UNAVAILABLE", "HEALTHY", "WATCH", "REJECTED"] = "UNAVAILABLE"
+    individual_probability: float | None = Field(default=None, ge=0, le=1)
+    panel_probability: float | None = Field(default=None, ge=0, le=1)
+    final_probability: float | None = Field(default=None, ge=0, le=1)
+    blend_weight: float = Field(default=0.0, ge=0, le=0.45)
+    target_locked_sample_count: int = 0
+    locked_brier_delta: float | None = None
+    locked_log_loss_delta: float | None = None
+    panel_brier_score: float | None = None
+    panel_log_loss: float | None = None
+    panel_ece: float | None = None
+    fallback_reason: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+
+
 class QualificationIntervals(ForecastModel):
     brier_skill_score: ConfidenceInterval
     accuracy: ConfidenceInterval
@@ -403,4 +428,5 @@ class SingleStockForecastResult(ForecastModel):
     model_competition: ModelCompetitionReport | None = None
     leakage_audit: LeakageAudit | None = None
     qlib_reference: QlibReference = Field(default_factory=QlibReference)
+    panel_model: PanelModelReport = Field(default_factory=PanelModelReport)
     warnings: list[str] = Field(default_factory=list)

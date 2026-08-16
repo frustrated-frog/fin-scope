@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import asdict
+from datetime import datetime
 import hashlib
 import math
 import statistics
@@ -43,6 +44,7 @@ from finscope_market_data.forecast.schemas import (
     ModelCandidate,
     ModelCompetitionReport,
     ModelQualification as ModelQualificationSchema,
+    PanelModelReport,
     ParameterStability,
     PerformanceReport,
     ProbabilityMetricSet,
@@ -62,6 +64,7 @@ from finscope_market_data.forecast.qualification import (
     qualify_model,
     selective_metrics,
 )
+from finscope_market_data.forecast.panel import PanelArtifact, assess_panel_model
 from finscope_market_data.forecast.stability import StabilityReport, analyze_stability
 from finscope_market_data.forecast.walk_forward import (
     WalkForwardObservation,
@@ -88,6 +91,8 @@ def build_forecast(
     warnings: list[str],
     horizon_days: int = DEFAULT_HORIZON,
     context: AlignedForecastContext | None = None,
+    panel_artifact: PanelArtifact | None = None,
+    panel_now: datetime | None = None,
 ) -> SingleStockForecastResult:
     if horizon_days not in (1, 5, 20):
         raise ValueError("单股预测只支持 1、5、20 日周期")
@@ -132,6 +137,9 @@ def build_forecast(
             decision="ABSTAIN",
             decision_reason="历史数据不足，拒绝输出方向判断。",
             labeled_sample_count=len(samples),
+            panel_model=PanelModelReport(
+                fallback_reason="历史数据不足，未运行联合模型比较"
+            ),
             warnings=[*warnings, "需要更长历史覆盖才能进行滚动样本外验证"],
         )
 
@@ -157,7 +165,23 @@ def build_forecast(
         )
         for code, candidate in candidate_qualifications.items()
     }
-    raw_probability, probability = candidate_probabilities[selected_model]
+    raw_probability, individual_probability = candidate_probabilities[selected_model]
+    probability = individual_probability
+    panel_model = PanelModelReport(
+        fallback_reason="本地尚无通过门禁的联合模型产物"
+    )
+    if panel_artifact is not None:
+        assessment = assess_panel_model(
+            panel_artifact,
+            instrument_code=instrument_code,
+            current_features=features,
+            individual_probability=individual_probability,
+            individual_brier_score=qualification.locked_test.calibrated_metrics.brier_score,
+            individual_log_loss=qualification.locked_test.calibrated_metrics.log_loss,
+            now=panel_now,
+        )
+        panel_model = PanelModelReport.model_validate(asdict(assessment))
+        probability = assessment.final_probability
     comparable = _comparable_observations(validation.observations, raw_probability)
     lower, expected, upper = _distribution(comparable)
     performance = simulate_strategy(
@@ -279,6 +303,7 @@ def build_forecast(
                 for item in competition.candidates
             ],
         ),
+        panel_model=panel_model,
         warnings=[
             *warnings,
             "收益基于滚动原始概率、前复权日线、固定规则和固定交易成本模拟，不代表校准后概率策略或真实成交回放",
@@ -290,6 +315,11 @@ def build_forecast(
             ),
             "主概率经过独立校准区 Platt 校准；锁定测试从未参与模型或校准器拟合",
             "方向判断允许弃权；覆盖后命中率必须与覆盖率同时阅读",
+            *(
+                [f"联合模型未参与最终概率：{panel_model.fallback_reason}"]
+                if panel_model.status == "SHADOW" and panel_model.fallback_reason
+                else []
+            ),
         ],
     )
 

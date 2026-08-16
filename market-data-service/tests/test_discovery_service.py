@@ -16,6 +16,7 @@ from finscope_market_data.discovery.service import (
     _forecast,
 )
 from finscope_market_data.models import DailyBar, StockSymbol
+from finscope_market_data.forecast.panel import PanelArtifactStore
 
 
 class FakeProvider:
@@ -86,6 +87,36 @@ class FakeMarket:
             )
             for index in range(800)
         ]
+
+
+@pytest.mark.asyncio
+async def test_discovery_publishes_bounded_panel_artifact_from_cached_histories(
+    tmp_path,
+) -> None:
+    store = PanelArtifactStore(tmp_path / "quant")
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=FakeMarket(),
+        panel_store=store,
+    )
+    base = await FakeMarket().bars("SH", "600000")
+    histories = {
+        f"{600000 + index}": [
+            item.model_copy(update={
+                "symbol": StockSymbol(market="SH", code=f"{600000 + index}")
+            })
+            for item in base
+        ]
+        for index in range(20)
+    }
+    warnings: list[str] = []
+
+    artifact = service._train_panel_artifact(histories, 5, warnings)
+
+    assert artifact is not None
+    assert artifact.universe_size == 20
+    assert store.load(5) is not None
+    assert warnings == []
 
 
 class ShortHistoryMarket:

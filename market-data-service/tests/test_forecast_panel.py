@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+import json
+import math
+
+from finscope_market_data.forecast.features import ForecastSample
+from finscope_market_data.forecast.panel import (
+    PanelArtifactStore,
+    assess_panel_model,
+    train_panel_artifact,
+)
+
+
+def _samples(code_index: int, count: int = 260) -> list[ForecastSample]:
+    first = datetime(2018, 1, 1)
+    values: list[ForecastSample] = []
+    for index in range(count):
+        signal = first + timedelta(days=index)
+        feature = math.sin((index + code_index) / 11.0)
+        values.append(ForecastSample(
+            signal_date=signal.date().isoformat(),
+            entry_date=(signal + timedelta(days=1)).date().isoformat(),
+            exit_date=(signal + timedelta(days=6)).date().isoformat(),
+            features=(feature, code_index / 10.0, math.cos(index / 17.0)),
+            net_return=0.02 if feature + (code_index % 2) * 0.1 > 0 else -0.015,
+        ))
+    return values
+
+
+def test_panel_training_uses_date_level_purged_split() -> None:
+    artifact = train_panel_artifact(
+        {f"{600000 + index}.SH": _samples(index) for index in range(24)},
+        horizon_days=5,
+        minimum_instruments=20,
+        minimum_samples=3000,
+        published_at="2026-08-17T10:00:00",
+    )
+
+    assert artifact.universe_size == 24
+    assert artifact.sample_count >= 3000
+    assert artifact.development_last_exit_date < artifact.calibration_start_date
+    assert artifact.calibration_end_date < artifact.locked_start_date
+    assert artifact.locked_metrics.sample_count > 0
+    assert artifact.feature_codes == ("TARGET_0", "TARGET_1", "TARGET_2")
+    assert len(artifact.target_metrics) == 24
+
+
+def test_panel_store_is_atomic_and_keeps_last_valid_artifact(tmp_path) -> None:
+    store = PanelArtifactStore(tmp_path)
+    artifact = train_panel_artifact(
+        {f"{600000 + index}.SH": _samples(index) for index in range(20)},
+        horizon_days=5,
+        minimum_instruments=20,
+        minimum_samples=3000,
+        published_at="2026-08-17T10:00:00",
+    )
+
+    store.save(artifact)
+    loaded = store.load(5)
+    assert loaded is not None
+    assert loaded.data_fingerprint == artifact.data_fingerprint
+
+    path = tmp_path / "panel-model-5.json"
+    path.write_text("{broken", encoding="utf-8")
+    assert store.load(5) is None
+
+
+def test_panel_assessment_rejects_stale_artifact_without_breaking_baseline() -> None:
+    artifact = train_panel_artifact(
+        {f"{600000 + index}.SH": _samples(index) for index in range(20)},
+        horizon_days=5,
+        minimum_instruments=20,
+        minimum_samples=3000,
+        published_at="2025-01-01T00:00:00",
+    )
+    target = artifact.target_metrics["600000.SH"]
+    assessment = assess_panel_model(
+        artifact,
+        instrument_code="600000.SH",
+        current_features=(0.2, 0.0, 0.1),
+        individual_probability=0.61,
+        individual_brier_score=target.brier_score + 0.02,
+        individual_log_loss=target.log_loss + 0.02,
+        now=datetime(2026, 8, 17),
+    )
+
+    assert assessment.drift_status == "REJECTED"
+    assert assessment.blend_weight == 0
+    assert assessment.final_probability == 0.61
+    assert assessment.fallback_reason is not None
+
+
+def test_panel_assessment_only_blends_when_target_locked_metrics_improve() -> None:
+    artifact = train_panel_artifact(
+        {f"{600000 + index}.SH": _samples(index) for index in range(20)},
+        horizon_days=5,
+        minimum_instruments=20,
+        minimum_samples=3000,
+        published_at="2026-08-17T10:00:00",
+    )
+    target = artifact.target_metrics["600000.SH"]
+    assessment = assess_panel_model(
+        artifact,
+        instrument_code="600000.SH",
+        current_features=(0.2, 0.0, 0.1),
+        individual_probability=0.55,
+        individual_brier_score=target.brier_score + 0.02,
+        individual_log_loss=target.log_loss + 0.02,
+        now=datetime(2026, 8, 17, 11, 0, 0),
+    )
+
+    assert assessment.mode == "PANEL_CORE"
+    assert assessment.drift_status in {"HEALTHY", "WATCH"}
+    assert 0 < assessment.blend_weight <= 0.45
+    assert assessment.final_probability != assessment.individual_probability
+    assert assessment.locked_brier_delta <= -0.005
+
+
+def test_panel_artifact_json_has_no_non_finite_values() -> None:
+    artifact = train_panel_artifact(
+        {f"{600000 + index}.SH": _samples(index) for index in range(20)},
+        horizon_days=5,
+        minimum_instruments=20,
+        minimum_samples=3000,
+        published_at="2026-08-17T10:00:00",
+    )
+
+    payload = json.dumps(artifact.to_dict(), allow_nan=False)
+    assert "NaN" not in payload
