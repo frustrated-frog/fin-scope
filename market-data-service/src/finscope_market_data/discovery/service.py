@@ -24,12 +24,17 @@ from finscope_market_data.discovery.schemas import (
     DiscoverySector,
 )
 from finscope_market_data.forecast.service import build_forecast
-from finscope_market_data.forecast.features import build_samples
+from finscope_market_data.forecast.features import (
+    FEATURE_CODES,
+    build_samples,
+    current_features,
+)
 from finscope_market_data.forecast.panel import (
     PanelArtifact,
     PanelArtifactStore,
     train_panel_artifact,
 )
+from finscope_market_data.forecast.panel_features import augment_cross_sectional_features
 from finscope_market_data.models import DailyBar
 
 
@@ -432,7 +437,12 @@ class StockDiscoveryService:
         horizon_days: int,
         warnings: list[str],
     ) -> PanelArtifact | None:
-        existing = self.panel_store.load(horizon_days) if self.panel_store else None
+        existing = (
+            self.panel_store.load(horizon_days, mode="PANEL_FULL")
+            or self.panel_store.load(horizon_days, mode="PANEL_CORE")
+            if self.panel_store
+            else None
+        )
         if self.panel_store is None:
             return existing
         histories = [
@@ -449,12 +459,28 @@ class StockDiscoveryService:
                 )
                 for code, bars in histories
             }
-            artifact = train_panel_artifact(
+            core = train_panel_artifact(
                 samples_by_code,
                 horizon_days=horizon_days,
             )
-            self.panel_store.save(artifact)
-            return artifact
+            self.panel_store.save(core)
+            current_by_code = {
+                f"{code}.{bars[0].symbol.market}": current_features(bars)
+                for code, bars in histories
+            }
+            augmented, augmented_current, cross_codes = augment_cross_sectional_features(
+                samples_by_code,
+                current_by_code,
+            )
+            full = train_panel_artifact(
+                augmented,
+                horizon_days=horizon_days,
+                mode="PANEL_FULL",
+                feature_codes=(*FEATURE_CODES, *cross_codes),
+                current_features_by_code=augmented_current,
+            )
+            self.panel_store.save(full)
+            return full
         except (OSError, TypeError, ValueError) as error:
             warnings.append(f"联合模型未更新，继续使用个股模型或上一版产物：{_safe(error)}")
             return existing

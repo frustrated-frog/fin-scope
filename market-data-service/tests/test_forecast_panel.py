@@ -10,6 +10,7 @@ from finscope_market_data.forecast.panel import (
     assess_panel_model,
     train_panel_artifact,
 )
+from finscope_market_data.forecast.panel_features import augment_cross_sectional_features
 
 
 def _samples(code_index: int, count: int = 260) -> list[ForecastSample]:
@@ -128,3 +129,45 @@ def test_panel_artifact_json_has_no_non_finite_values() -> None:
 
     payload = json.dumps(artifact.to_dict(), allow_nan=False)
     assert "NaN" not in payload
+
+
+def test_cross_sectional_features_are_date_local_and_available_for_current_pool() -> None:
+    source = {f"{600000 + index}.SH": _samples(index, 120) for index in range(20)}
+    current = {code: values[-1].features for code, values in source.items()}
+
+    augmented, current_augmented, codes = augment_cross_sectional_features(
+        source,
+        current,
+        minimum_cross_section=20,
+    )
+
+    assert len(codes) == 8
+    assert all(len(item.features) == 11 for values in augmented.values() for item in values)
+    assert all(len(values) == 11 for values in current_augmented.values())
+    ranks = [current_augmented[code][3] for code in sorted(current_augmented)]
+    assert min(ranks) == 0
+    assert max(ranks) == 1
+    assert all(0 <= value <= 1 for values in current_augmented.values() for value in values[-8:])
+
+
+def test_store_keeps_full_and_core_artifacts_separate(tmp_path) -> None:
+    source = {f"{600000 + index}.SH": _samples(index) for index in range(20)}
+    current = {code: values[-1].features for code, values in source.items()}
+    augmented, current_augmented, codes = augment_cross_sectional_features(source, current)
+    store = PanelArtifactStore(tmp_path)
+    core = train_panel_artifact(source, horizon_days=5, published_at="2026-08-17T10:00:00")
+    full = train_panel_artifact(
+        augmented,
+        horizon_days=5,
+        published_at="2026-08-17T10:00:00",
+        mode="PANEL_FULL",
+        feature_codes=("TARGET_0", "TARGET_1", "TARGET_2", *codes),
+        current_features_by_code=current_augmented,
+    )
+
+    store.save(core)
+    store.save(full)
+
+    assert store.load(5, mode="PANEL_CORE").mode == "PANEL_CORE"
+    assert store.load(5, mode="PANEL_FULL").mode == "PANEL_FULL"
+    assert len(store.load(5, mode="PANEL_FULL").current_features_by_code) == 20

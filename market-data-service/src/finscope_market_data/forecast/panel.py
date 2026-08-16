@@ -51,6 +51,7 @@ class PanelArtifact:
     calibration: CalibrationResult
     locked_metrics: ProbabilityMetrics
     target_metrics: dict[str, PanelTargetMetrics]
+    current_features_by_code: dict[str, tuple[float, ...]]
     data_fingerprint: str
 
     def model(self) -> RegularizedLogisticModel:
@@ -94,6 +95,12 @@ class PanelArtifact:
             calibration=calibration,
             locked_metrics=locked_metrics,
             target_metrics=target_metrics,
+            current_features_by_code={
+                str(code): tuple(float(item) for item in values)
+                for code, values in dict(
+                    payload.get("current_features_by_code", {})
+                ).items()
+            },
             data_fingerprint=str(payload["data_fingerprint"]),
         )
         _validate_artifact(artifact)
@@ -133,7 +140,7 @@ class PanelArtifactStore:
     def save(self, artifact: PanelArtifact) -> None:
         _validate_artifact(artifact)
         self.directory.mkdir(parents=True, exist_ok=True)
-        destination = self._path(artifact.horizon_days)
+        destination = self._path(artifact.horizon_days, artifact.mode)
         temporary = destination.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(
@@ -146,8 +153,13 @@ class PanelArtifactStore:
         )
         temporary.replace(destination)
 
-    def load(self, horizon_days: int) -> PanelArtifact | None:
-        path = self._path(horizon_days)
+    def load(
+        self,
+        horizon_days: int,
+        *,
+        mode: str = "PANEL_CORE",
+    ) -> PanelArtifact | None:
+        path = self._path(horizon_days, mode)
         if not path.exists():
             return None
         try:
@@ -155,8 +167,9 @@ class PanelArtifactStore:
         except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
             return None
 
-    def _path(self, horizon_days: int) -> Path:
-        return self.directory / f"panel-model-{horizon_days}.json"
+    def _path(self, horizon_days: int, mode: str = "PANEL_CORE") -> Path:
+        suffix = "-full" if mode == "PANEL_FULL" else ""
+        return self.directory / f"panel-model-{horizon_days}{suffix}.json"
 
 
 def train_panel_artifact(
@@ -166,11 +179,19 @@ def train_panel_artifact(
     minimum_instruments: int = 20,
     minimum_samples: int = 3000,
     published_at: str | None = None,
+    mode: str = "PANEL_CORE",
+    feature_codes: Sequence[str] | None = None,
+    current_features_by_code: Mapping[str, Sequence[float]] | None = None,
 ) -> PanelArtifact:
-    usable = {
+    bounded = {
         code: tuple(sorted(values, key=lambda item: item.signal_date)[-1500:])
         for code, values in sorted(samples_by_code.items())
         if values
+    }
+    stride = min(5, horizon_days) if sum(map(len, bounded.values())) > 60_000 else 1
+    usable = {
+        code: values[::stride]
+        for code, values in bounded.items()
     }
     if len(usable) < minimum_instruments:
         raise ValueError(f"面板训练至少需要 {minimum_instruments} 只股票")
@@ -251,13 +272,17 @@ def train_panel_artifact(
     }
     artifact = PanelArtifact(
         schema_version=PANEL_SCHEMA_VERSION,
-        mode="PANEL_CORE",
+        mode=mode,
         horizon_days=horizon_days,
         published_at=published_at or datetime.now().isoformat(),
         trained_through=max(item.exit_date for item in development_rows),
         universe_size=len(usable),
         sample_count=total_samples,
-        feature_codes=tuple(f"TARGET_{index}" for index in range(dimensions_count)),
+        feature_codes=(
+            tuple(feature_codes)
+            if feature_codes is not None
+            else tuple(f"TARGET_{index}" for index in range(dimensions_count))
+        ),
         development_last_exit_date=max(item.exit_date for item in development_rows),
         calibration_start_date=calibration_start,
         calibration_end_date=all_dates[calibration_end - 1],
@@ -268,6 +293,10 @@ def train_panel_artifact(
         calibration=calibration,
         locked_metrics=locked_metrics,
         target_metrics=target_metrics,
+        current_features_by_code={
+            code: tuple(float(item) for item in values)
+            for code, values in sorted((current_features_by_code or {}).items())
+        },
         data_fingerprint=hashlib.sha256(
             json.dumps(fingerprint_payload, sort_keys=True).encode()
         ).hexdigest(),
@@ -288,16 +317,21 @@ def assess_panel_model(
 ) -> PanelAssessment:
     current_time = now or datetime.now()
     age = max(0, (current_time - datetime.fromisoformat(artifact.published_at)).days)
-    finite_count = sum(math.isfinite(float(value)) for value in current_features)
+    inference_features = (
+        artifact.current_features_by_code.get(instrument_code, tuple(current_features))
+        if artifact.mode == "PANEL_FULL"
+        else tuple(current_features)
+    )
+    finite_count = sum(math.isfinite(float(value)) for value in inference_features)
     coverage = finite_count / max(1, len(artifact.feature_codes))
     panel_probability = individual_probability
     distance = math.inf
     fallback: str | None = None
-    if len(current_features) == len(artifact.feature_codes) and coverage == 1.0:
+    if len(inference_features) == len(artifact.feature_codes) and coverage == 1.0:
         model = artifact.model()
-        normalized = model.normalized(current_features)
+        normalized = model.normalized(inference_features)
         distance = sum(abs(value) for value in normalized) / len(normalized)
-        panel_probability = artifact.calibration.calibrate(model.predict(current_features))
+        panel_probability = artifact.calibration.calibrate(model.predict(inference_features))
     else:
         fallback = "当前特征维度或覆盖率与面板产物不一致"
     target = artifact.target_metrics.get(instrument_code)
@@ -390,6 +424,12 @@ def _validate_artifact(artifact: PanelArtifact) -> None:
     )
     if any(not math.isfinite(value) for value in numeric):
         raise ValueError("面板模型包含非有限数值")
+    if any(
+        len(values) != dimensions
+        or any(not math.isfinite(value) for value in values)
+        for values in artifact.current_features_by_code.values()
+    ):
+        raise ValueError("面板模型当前截面特征无效")
 
 
 def _bounded(value: float) -> float:
