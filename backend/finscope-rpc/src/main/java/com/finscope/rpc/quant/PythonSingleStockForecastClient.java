@@ -33,7 +33,8 @@ public class PythonSingleStockForecastClient {
     private static final Set<String> REPORT_SCHEMA_VERSIONS = new HashSet<String>(Arrays.asList(
             "single-stock-research-v2", "single-stock-research-v3",
             "single-stock-research-v4", "single-stock-research-v5",
-            "single-stock-research-v6", "single-stock-research-v7"));
+            "single-stock-research-v6", "single-stock-research-v7",
+            "single-stock-research-v8"));
     private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
             "CHAMPION", "CHALLENGER", "BASELINE"));
     private static final Set<String> AUDIT_STATUSES = new HashSet<String>(Arrays.asList(
@@ -41,6 +42,12 @@ public class PythonSingleStockForecastClient {
     private static final Set<String> AUDIT_MISMATCH_CATEGORIES = new HashSet<String>(Arrays.asList(
             "TRADE_COUNT", "ENTRY_DATE", "EXIT_DATE", "RETURN", "COST",
             "MAX_DRAWDOWN", "SHARPE"));
+    private static final Set<String> PANEL_STATUSES = new HashSet<String>(Arrays.asList(
+            "NOT_AVAILABLE", "SHADOW", "BLENDED"));
+    private static final Set<String> PANEL_MODES = new HashSet<String>(Arrays.asList(
+            "UNAVAILABLE", "PANEL_CORE", "PANEL_FULL"));
+    private static final Set<String> PANEL_DRIFT_STATUSES = new HashSet<String>(Arrays.asList(
+            "UNAVAILABLE", "HEALTHY", "WATCH", "REJECTED"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -132,6 +139,63 @@ public class PythonSingleStockForecastClient {
         }
         if ("single-stock-research-v7".equals(result.getReportSchemaVersion())) {
             validateVersionSeven(result);
+        }
+        if ("single-stock-research-v8".equals(result.getReportSchemaVersion())) {
+            validateVersionEight(result);
+        }
+    }
+
+    private void validateVersionEight(SingleStockForecast result) {
+        validateVersionSeven(result);
+        SingleStockForecast.PanelModel panel = result.getPanelModel();
+        if (panel == null || !PANEL_STATUSES.contains(panel.getStatus())
+                || !PANEL_MODES.contains(panel.getMode())
+                || !PANEL_DRIFT_STATUSES.contains(panel.getDriftStatus())
+                || panel.getUniverseSize() < 0 || panel.getSampleCount() < 0
+                || panel.getTargetLockedSampleCount() < 0
+                || !finiteNonNegative(panel.getBlendWeight()) || panel.getBlendWeight() > 0.45d
+                || panel.getEvidence() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v8 联合模型审计缺少必需证据", false);
+        }
+        probability(panel.getFeatureCoverage());
+        probability(panel.getIndividualProbability());
+        probability(panel.getPanelProbability());
+        probability(panel.getFinalProbability());
+        if ("NOT_AVAILABLE".equals(panel.getStatus())) {
+            if (!"UNAVAILABLE".equals(panel.getMode())
+                    || !"UNAVAILABLE".equals(panel.getDriftStatus())
+                    || panel.getBlendWeight() != 0d) {
+                throw contract("SCHEMA_DRIFT", "Python v8 不可用联合模型状态矛盾", false);
+            }
+            return;
+        }
+        if (panel.getArtifactVersion() == null || panel.getPublishedAt() == null
+                || panel.getArtifactAgeDays() == null || panel.getArtifactAgeDays() < 0
+                || panel.getUniverseSize() < 20 || panel.getSampleCount() < 3000
+                || !finiteNonNegative(panel.getFeatureDistance())
+                || !finiteNonNegative(panel.getPanelBrierScore())
+                || !finiteNonNegative(panel.getPanelLogLoss())
+                || !finiteNonNegative(panel.getPanelEce())
+                || panel.getIndividualProbability() == null
+                || panel.getPanelProbability() == null || panel.getFinalProbability() == null
+                || panel.getEvidence().isEmpty()) {
+            throw contract("SCHEMA_DRIFT", "Python v8 联合模型产物证据无效", false);
+        }
+        if (result.getUpProbability() == null
+                || Math.abs(result.getUpProbability() - panel.getFinalProbability()) > 0.0000001d) {
+            throw contract("SCHEMA_DRIFT", "Python v8 最终概率与联合模型证据不一致", false);
+        }
+        if ("BLENDED".equals(panel.getStatus())) {
+            double expected = (1d - panel.getBlendWeight()) * panel.getIndividualProbability()
+                    + panel.getBlendWeight() * panel.getPanelProbability();
+            if (panel.getBlendWeight() <= 0d || "REJECTED".equals(panel.getDriftStatus())
+                    || Math.abs(expected - panel.getFinalProbability()) > 0.0000001d) {
+                throw contract("SCHEMA_DRIFT", "Python v8 联合概率合成关系无效", false);
+            }
+        } else if (panel.getBlendWeight() != 0d
+                || Math.abs(panel.getIndividualProbability() - panel.getFinalProbability())
+                > 0.0000001d) {
+            throw contract("SCHEMA_DRIFT", "Python v8 影子模型不应改变最终概率", false);
         }
     }
 
@@ -462,6 +526,10 @@ public class PythonSingleStockForecastClient {
     }
 
     private boolean finiteNonNegative(double value) {
+        return finite(value) && value >= 0d;
+    }
+
+    private boolean finiteNonNegative(Double value) {
         return finite(value) && value >= 0d;
     }
 

@@ -214,6 +214,25 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsAndValidatesVersionEightPanelModelEvidence() {
+        SingleStockForecast result = clientReturning(v8Payload()).forecast("600519", 5);
+
+        assertEquals("SHADOW", result.getPanelModel().getStatus());
+        assertEquals("PANEL_CORE", result.getPanelModel().getMode());
+        assertEquals(20, result.getPanelModel().getUniverseSize());
+        assertEquals(0d, result.getPanelModel().getBlendWeight(), .000001d);
+    }
+
+    @Test
+    void rejectsVersionEightWhenShadowModelChangesFinalProbability() {
+        PythonSingleStockForecastClient client = clientReturning(
+                v8Payload().replace("\"finalProbability\":0.61",
+                        "\"finalProbability\":0.62"));
+
+        assertThrows(ProviderContractException.class, () -> client.forecast("600519", 5));
+    }
+
+    @Test
     void rejectsUnknownForecastSchemaVersion() {
         PythonSingleStockForecastClient client = clientReturning(
                 v5Payload().replace("single-stock-research-v5", "single-stock-research-v6"));
@@ -369,6 +388,25 @@ class PythonSingleStockForecastClientTest {
                 .replace("single-stock-research-v6", "single-stock-research-v7")
                 .replace("\"warnings\":[]}", "\"parameterStability\":" + stability +
                         ",\"backtestAudit\":" + audit + ",\"warnings\":[]}");
+    }
+
+    private static String v8Payload() {
+        String panel = "{\"status\":\"SHADOW\",\"mode\":\"PANEL_CORE\"," +
+                "\"artifactVersion\":\"abcdef123456\"," +
+                "\"publishedAt\":\"2026-08-17T10:00:00\",\"artifactAgeDays\":0," +
+                "\"universeSize\":20,\"sampleCount\":12000,\"featureCoverage\":1.0," +
+                "\"featureDistance\":1.2,\"driftStatus\":\"HEALTHY\"," +
+                "\"individualProbability\":0.61,\"panelProbability\":0.58," +
+                "\"finalProbability\":0.61,\"blendWeight\":0.0," +
+                "\"targetLockedSampleCount\":15,\"lockedBrierDelta\":0.01," +
+                "\"lockedLogLossDelta\":0.01,\"panelBrierScore\":0.22," +
+                "\"panelLogLoss\":0.64,\"panelEce\":0.08," +
+                "\"fallbackReason\":\"未优于个股冠军\"," +
+                "\"evidence\":[\"日期级前向切分\"]}";
+        return v7Payload()
+                .replace("single-stock-research-v7", "single-stock-research-v8")
+                .replace("\"warnings\":[]}",
+                        "\"panelModel\":" + panel + ",\"warnings\":[]}");
     }
 
     private static String auditEngine(String code) {

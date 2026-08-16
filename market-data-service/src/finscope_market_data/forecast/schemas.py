@@ -388,7 +388,7 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v7"
+    report_schema_version: str = "single-stock-research-v8"
     model_version: str = "competition-pending-v5"
     instrument_code: str
     as_of_date: str

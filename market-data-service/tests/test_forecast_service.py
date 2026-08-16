@@ -178,7 +178,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v7"
+    assert result.report_schema_version == "single-stock-research-v8"
     assert result.model_version.startswith("competition-")
     assert result.model_version.endswith("-v6")
     assert result.raw_probability is not None

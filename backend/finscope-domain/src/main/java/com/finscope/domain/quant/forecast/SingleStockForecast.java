@@ -50,6 +50,7 @@ public class SingleStockForecast {
     private ModelCompetition modelCompetition;
     private LeakageAudit leakageAudit;
     private QlibReference qlibReference;
+    private PanelModel panelModel;
     private List<String> warnings = new ArrayList<String>();
 
     @Data
@@ -390,6 +391,32 @@ public class SingleStockForecast {
         private String status;
         private String role;
         private boolean runtimeDependency;
+    }
+
+    @Data
+    public static class PanelModel {
+        private String status;
+        private String mode;
+        private String artifactVersion;
+        private String publishedAt;
+        private Integer artifactAgeDays;
+        private int universeSize;
+        private int sampleCount;
+        private double featureCoverage;
+        private Double featureDistance;
+        private String driftStatus;
+        private Double individualProbability;
+        private Double panelProbability;
+        private Double finalProbability;
+        private double blendWeight;
+        private int targetLockedSampleCount;
+        private Double lockedBrierDelta;
+        private Double lockedLogLossDelta;
+        private Double panelBrierScore;
+        private Double panelLogLoss;
+        private Double panelEce;
+        private String fallbackReason;
+        private List<String> evidence = new ArrayList<String>();
     }
 
     @Data
