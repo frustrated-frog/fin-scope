@@ -3,8 +3,31 @@ import { expect, test } from 'vitest';
 import {
   CandidateFactorMatrix,
   DiscoveryFunnel,
+  PanelCoverageMatrix,
   RiskReturnMap
 } from './StockDiscoveryVisuals';
+
+test('shows panel coverage and probability deltas for every deep candidate', () => {
+  const withPanel = evidence.map((item, index) => ({ ...item, forecast_report: {
+    panelModel: {
+      status: index === 0 ? 'BLENDED' as const : 'SHADOW' as const,
+      mode: 'PANEL_CORE' as const, artifactVersion: 'abcdef123456', artifactAgeDays: 0,
+      universeSize: 128, sampleCount: 48000, featureCoverage: 1,
+      featureDistance: 1.2, driftStatus: 'HEALTHY' as const,
+      individualProbability: item.calibrated_probability - .02,
+      panelProbability: item.calibrated_probability + .03,
+      finalProbability: item.calibrated_probability, blendWeight: index === 0 ? .4 : 0,
+      targetLockedSampleCount: 20, evidence: []
+    }
+  } })) as typeof evidence;
+
+  render(<PanelCoverageMatrix evidence={withPanel} candidates={candidates} />);
+
+  expect(screen.getByRole('table', { name: '深度候选联合模型覆盖' })).toBeInTheDocument();
+  expect(screen.getByText('联合生效 1')).toBeInTheDocument();
+  expect(screen.getByText('影子观察 1')).toBeInTheDocument();
+  expect(screen.getAllByText('+2.0%')).toHaveLength(2);
+});
 
 const candidates = [
   { code: '600001', market: 'SH', name: '样本股份', price: 12.3, lot_cost: 1230,

@@ -28,7 +28,7 @@ test('presents the latest automatic selection without a manual refresh action', 
   render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} onOpenResearch={onOpenResearch} />);
 
   expect(await screen.findByRole('heading', { name: /样本股份/ })).toBeInTheDocument();
-  expect(screen.getByText('64.0%')).toBeInTheDocument();
+  expect(screen.getAllByText('64.0%').length).toBeGreaterThanOrEqual(1);
   expect(screen.getByText('锁定样本优于基准')).toBeInTheDocument();
   expect(screen.getByText('双引擎一致')).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();

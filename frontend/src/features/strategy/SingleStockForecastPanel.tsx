@@ -7,6 +7,7 @@ import { BacktestAuditPanel } from './BacktestAuditPanel';
 import {
   EquityDrawdownChart,
   FactorContributionChart,
+  PanelProbabilityWorkbench,
   ParameterStabilityMap
 } from './SingleStockQuantVisuals';
 
@@ -195,6 +196,11 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
           </section>
 
           <ForecastOutcomeHealth run={selected} />
+
+          {report.panelModel && <section className="forecast-paper-section forecast-panel-model">
+            <SectionHead eyebrow="POOLED LEARNING / TARGET SHRINKAGE" title="有限股票池联合学习" aside="板块接口失败不阻断单股预测" />
+            <PanelProbabilityWorkbench panel={report.panelModel} />
+          </section>}
 
           {report.qualification
             ? <QualificationSection qualification={report.qualification} probabilityInterval={report.probabilityInterval} />

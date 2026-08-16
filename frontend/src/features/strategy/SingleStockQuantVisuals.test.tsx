@@ -3,8 +3,30 @@ import { expect, test } from 'vitest';
 import {
   EquityDrawdownChart,
   FactorContributionChart,
+  PanelProbabilityWorkbench,
   ParameterStabilityMap
 } from './SingleStockQuantVisuals';
+
+test('explains pooled probability blending and drift gates as an evidence chain', () => {
+  render(<PanelProbabilityWorkbench panel={{
+    status: 'BLENDED', mode: 'PANEL_CORE', artifactVersion: 'abcdef123456',
+    publishedAt: '2026-08-17T10:00:00', artifactAgeDays: 0,
+    universeSize: 128, sampleCount: 48620, featureCoverage: 1,
+    featureDistance: 1.24, driftStatus: 'HEALTHY', individualProbability: .58,
+    panelProbability: .64, finalProbability: .607, blendWeight: .45,
+    targetLockedSampleCount: 26, lockedBrierDelta: -.012,
+    lockedLogLossDelta: -.018, panelBrierScore: .218, panelLogLoss: .631,
+    panelEce: .047, evidence: ['日期级前向切分']
+  }} />);
+
+  expect(screen.getByRole('img', { name: /联合概率合成路径/ })).toBeInTheDocument();
+  expect(screen.getByText('个股冠军')).toBeInTheDocument();
+  expect(screen.getByText('有限池联合模型')).toBeInTheDocument();
+  expect(screen.getByText('收缩权重 45.0%')).toBeInTheDocument();
+  expect(screen.getAllByText('60.7%')).toHaveLength(2);
+  expect(screen.getByText(/128 只/)).toBeInTheDocument();
+  expect(screen.getByText('漂移健康')).toBeInTheDocument();
+});
 
 test('shows factor contribution around a zero axis with signed evidence', () => {
   render(<FactorContributionChart factors={[
@@ -60,4 +82,3 @@ test('renders sparse parameter evidence without inventing missing combinations',
   expect(screen.getByText('+4.0%')).toBeInTheDocument();
   expect(screen.getByText('-1.0%')).toBeInTheDocument();
 });
-

@@ -254,6 +254,19 @@ export interface ForecastQualification {
     sharpeRatio: ForecastConfidenceInterval };
 }
 
+export interface ForecastPanelModel {
+  status: 'NOT_AVAILABLE' | 'SHADOW' | 'BLENDED';
+  mode: 'UNAVAILABLE' | 'PANEL_CORE' | 'PANEL_FULL';
+  artifactVersion?: string; publishedAt?: string; artifactAgeDays?: number;
+  universeSize: number; sampleCount: number; featureCoverage: number;
+  featureDistance?: number; driftStatus: 'UNAVAILABLE' | 'HEALTHY' | 'WATCH' | 'REJECTED';
+  individualProbability?: number; panelProbability?: number; finalProbability?: number;
+  blendWeight: number; targetLockedSampleCount: number;
+  lockedBrierDelta?: number; lockedLogLossDelta?: number;
+  panelBrierScore?: number; panelLogLoss?: number; panelEce?: number;
+  fallbackReason?: string; evidence: string[];
+}
+
 export interface SingleStockForecast {
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
@@ -320,6 +333,7 @@ export interface SingleStockForecast {
       lockedMetrics?: ForecastProbabilityMetrics }> };
   leakageAudit?: { status: string; checkedSampleCount: number; checks: string[] };
   qlibReference?: { status: string; role: string; runtimeDependency: boolean };
+  panelModel?: ForecastPanelModel;
   warnings: string[];
 }
 

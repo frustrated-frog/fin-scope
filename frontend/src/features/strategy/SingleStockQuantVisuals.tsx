@@ -5,9 +5,43 @@ import './QuantVisualizations.css';
 type Factor = SingleStockForecast['factorExplanations'][number];
 type EquityPoint = SingleStockForecast['equityCurve'][number];
 type Stability = NonNullable<SingleStockForecast['parameterStability']>;
+type PanelModel = NonNullable<SingleStockForecast['panelModel']>;
 
 const pct = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`;
 const signedPct = (value: number) => `${value >= 0 ? '+' : ''}${pct(value)}`;
+
+export function PanelProbabilityWorkbench({ panel }: { panel: PanelModel }) {
+  if (panel.status === 'NOT_AVAILABLE') {
+    return <div className="panel-probability-unavailable" role="status">
+      <span>PANEL MODEL / SAFE FALLBACK</span><strong>本次保持个股冠军模型</strong>
+      <p>{panel.fallbackReason || '本地尚无通过门禁的有限股票池模型产物。'}</p>
+    </div>;
+  }
+  const stages = [
+    { code: '01', label: '个股冠军', value: panel.individualProbability, note: '目标股票独立训练与校准' },
+    { code: '02', label: '有限池联合模型', value: panel.panelProbability, note: `${panel.universeSize} 只 · ${panel.sampleCount.toLocaleString()} 样本` },
+    { code: '03', label: '证据收缩', value: panel.finalProbability, note: `收缩权重 ${pct(panel.blendWeight)}` },
+    { code: '04', label: '最终可用概率', value: panel.finalProbability, note: panel.status === 'BLENDED' ? '联合证据已参与' : '影子观察，未改写个股概率' }
+  ];
+  const driftLabel = panel.driftStatus === 'HEALTHY' ? '漂移健康'
+    : panel.driftStatus === 'WATCH' ? '漂移观察' : '漂移拒绝';
+  return <div className="panel-probability-workbench" data-status={panel.status}>
+    <header><div><span>PROBABILITY STACK / AUDITED</span><h5>联合概率合成台</h5></div><p><b>{panel.mode === 'PANEL_FULL' ? '完整模型' : '核心降级模型'}</b><strong>{panel.status === 'BLENDED' ? '已参与最终概率' : '仅作影子对照'}</strong></p></header>
+    <div className="panel-probability-path" role="img" aria-label={`联合概率合成路径，${stages.map(item => `${item.label} ${item.value == null ? '不可用' : pct(item.value)}`).join('，')}`}>
+      {stages.map((item, index) => <article key={item.code} data-active={index === stages.length - 1 || undefined}>
+        <span>{item.code}</span><div><small>{item.label}</small><strong>{item.value == null ? '—' : pct(item.value)}</strong><p>{item.note}</p></div>{index < stages.length - 1 && <i aria-hidden="true">→</i>}
+      </article>)}
+    </div>
+    <div className="panel-drift-tape">
+      <article data-state={panel.driftStatus}><span>运行门禁</span><strong>{driftLabel}</strong><small>距离 {panel.featureDistance?.toFixed(2) ?? '—'}σ</small></article>
+      <article><span>特征覆盖</span><strong>{pct(panel.featureCoverage)}</strong><small>{panel.mode === 'PANEL_CORE' ? '不依赖实时板块' : '含板块截面'}</small></article>
+      <article><span>面板 Brier / ECE</span><strong>{panel.panelBrierScore?.toFixed(3) ?? '—'} / {panel.panelEce == null ? '—' : pct(panel.panelEce)}</strong><small>Log Loss {panel.panelLogLoss?.toFixed(3) ?? '—'}</small></article>
+      <article><span>目标锁定比较</span><strong>{panel.lockedBrierDelta == null ? '—' : `${panel.lockedBrierDelta >= 0 ? '+' : ''}${panel.lockedBrierDelta.toFixed(3)}`}</strong><small>{panel.targetLockedSampleCount} 个锚点 · 越低越好</small></article>
+      <article><span>产物身份</span><strong>{panel.artifactAgeDays ?? '—'} 天</strong><small>{panel.artifactVersion || '—'}</small></article>
+    </div>
+    <footer><p>{panel.fallbackReason || '面板模型在目标锁定区通过比较，并按证据量向个股冠军审慎收缩。'}</p><span>{panel.evidence.join(' · ')}</span></footer>
+  </div>;
+}
 
 export function FactorContributionChart({ factors }: { factors: Factor[] }) {
   if (!factors.length) {

@@ -5,6 +5,7 @@ import './BacktestAuditPanel.css';
 import {
   CandidateFactorMatrix,
   DiscoveryFunnel,
+  PanelCoverageMatrix,
   RiskReturnMap
 } from './StockDiscoveryVisuals';
 
@@ -110,6 +111,8 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
       <RiskReturnMap evidence={report.deep_evidence} candidates={report.candidates} finalCodes={finalCodes} />
       <CandidateFactorMatrix evidence={report.final_candidates} candidates={report.candidates} />
     </div>
+
+    <PanelCoverageMatrix evidence={report.deep_evidence} candidates={report.candidates} />
 
     <div className="discovery-layout">
       <main>

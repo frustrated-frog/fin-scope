@@ -30,6 +30,32 @@ export function DiscoveryFunnel({ funnel }: { funnel: StockDiscoveryReport['funn
   </div>;
 }
 
+export function PanelCoverageMatrix({ evidence, candidates }: {
+  evidence: StockDiscoveryEvidence[];
+  candidates: StockDiscoveryCandidate[];
+}) {
+  if (!evidence.length) {
+    return <p className="quant-visual-empty discovery-visual-empty">本批没有深度候选，联合模型覆盖不可用。</p>;
+  }
+  const candidateByCode = new Map(candidates.map(item => [item.code, item]));
+  const rows = evidence.map(item => ({ item, panel: item.forecast_report?.panelModel }));
+  const blended = rows.filter(({ panel }) => panel?.status === 'BLENDED').length;
+  const shadow = rows.filter(({ panel }) => panel?.status === 'SHADOW').length;
+  const unavailable = rows.length - blended - shadow;
+  return <section className="discovery-visual-card panel-coverage-matrix">
+    <header><div><span>PANEL COVERAGE / SAME ARTIFACT</span><h4>联合模型覆盖与概率增量</h4></div><p><b>联合生效 {blended}</b><strong>影子观察 {shadow}</strong><em>回退 {unavailable}</em></p></header>
+    <div><table aria-label="深度候选联合模型覆盖"><thead><tr><th>深度候选</th><th>运行模式</th><th>个股概率</th><th>联合概率</th><th>最终概率</th><th>概率增量</th><th>漂移 / 覆盖</th></tr></thead><tbody>
+      {rows.map(({ item, panel }) => {
+        const candidate = candidateByCode.get(item.code);
+        const delta = panel?.finalProbability != null && panel.individualProbability != null
+          ? panel.finalProbability - panel.individualProbability : undefined;
+        return <tr key={item.code} data-status={panel?.status ?? 'NOT_AVAILABLE'}><th><strong>{candidate?.name ?? item.code}</strong><small>{item.code}</small></th><td><b>{panel?.status === 'BLENDED' ? '联合生效' : panel?.status === 'SHADOW' ? '影子观察' : '个股回退'}</b><small>{panel?.mode === 'PANEL_CORE' ? '核心模型' : panel?.mode === 'PANEL_FULL' ? '完整模型' : '无产物'}</small></td><td>{panel?.individualProbability == null ? '—' : pct(panel.individualProbability)}</td><td>{panel?.panelProbability == null ? '—' : pct(panel.panelProbability)}</td><td><strong>{panel?.finalProbability == null ? pct(item.calibrated_probability) : pct(panel.finalProbability)}</strong></td><td data-positive={delta != null && delta > 0 || undefined}>{delta == null ? '—' : signedPct(delta)}</td><td><b>{panel?.driftStatus ?? 'UNAVAILABLE'}</b><small>{panel ? `${pct(panel.featureCoverage)} · ${panel.featureDistance?.toFixed(2) ?? '—'}σ` : '保持个股模型'}</small></td></tr>;
+      })}
+    </tbody></table></div>
+    <footer>概率增量只表示联合模型对个股冠军的审慎修正；影子模型不会改变最终概率。</footer>
+  </section>;
+}
+
 function extent(values: number[]) {
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
