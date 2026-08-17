@@ -26,4 +26,3 @@ class TradingScopePolicy:
         if normalized.startswith(("000", "001", "002", "003", "300", "301")):
             return TradingScopeDecision(True, "SZ")
         return TradingScopeDecision(False, None, "UNSUPPORTED_SECURITY_SCOPE")
-

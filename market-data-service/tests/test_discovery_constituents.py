@@ -100,4 +100,3 @@ def test_complete_constituent_snapshot_expires_after_thirty_days(tmp_path) -> No
         tmp_path / "constituents.json", now=lambda: now + timedelta(days=31)
     )
     assert expired.load(_sector(expected=1)) is None
-

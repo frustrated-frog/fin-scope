@@ -25,4 +25,3 @@ def test_trading_scope_rejects_unknown_security_prefix() -> None:
     assert decision.allowed is False
     assert decision.market is None
     assert decision.reason == "UNSUPPORTED_SECURITY_SCOPE"
-

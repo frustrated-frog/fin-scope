@@ -75,8 +75,7 @@
 - Modify only files revealed by verification defects.
 
 - [ ] Run all Python tests and a real read-only Tonghuashun ranking/constituent sample.
-- [ ] Run Java 21 full reactor tests.
-- [ ] Run all frontend tests and production build.
-- [ ] Run `git diff --check`, inspect source placement/injection/braces against the review checklist, and confirm the worktree is clean.
-- [ ] Commit any verification-only correction separately and push the branch.
-
+- [x] Run Java 21 full reactor tests.
+- [x] Run all frontend tests and production build.
+- [x] Run `git diff --check`, inspect source placement/injection/braces against the review checklist, and confirm the worktree is clean.
+- [x] Commit any verification-only correction separately and push the branch.
