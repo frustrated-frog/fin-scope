@@ -15,13 +15,14 @@ from finscope_market_data.discovery.service import (
     StockDiscoveryService,
     _forecast,
 )
+from finscope_market_data.discovery.constituents import ConstituentBatch
 from finscope_market_data.models import DailyBar, StockSymbol
 from finscope_market_data.forecast.panel import PanelArtifactStore
 
 
 class FakeProvider:
     source_code = "FAKE_HOT_SECTORS"
-    source_family = "FAKE"
+    source_family = "TONGHUASHUN"
 
     def sectors(self, limit: int):
         return [
@@ -59,14 +60,47 @@ class FlakyProvider(FakeProvider):
 
 class BrokenSecondaryProvider(BrokenProvider):
     source_code = "SECONDARY_HOT_SECTORS"
-    source_family = "SECONDARY"
+    source_family = "TONGHUASHUN"
 
 
 class BrokenConstituentProvider(FakeProvider):
-    source_family = "BROKEN_MEMBERS"
-
     def constituents(self, sector: DiscoverySector):
         raise RuntimeError("constituent contract drift")
+
+
+class ForeignRankingProvider(FakeProvider):
+    source_family = "EASTMONEY"
+
+
+class BatchConstituentProvider:
+    def __init__(self, source_family: str, quality_status: str, values):
+        self.source_family = source_family
+        self.quality_status = quality_status
+        self.values = tuple(values)
+
+    def constituents(self, sector: DiscoverySector):
+        expected = max(1, sector.expected_constituent_count)
+        return ConstituentBatch(
+            sector_code=sector.code,
+            sector_name=sector.name,
+            source_family=self.source_family,
+            values=self.values,
+            expected_count=expected,
+            retrieved_count=len(self.values),
+            quality_status=self.quality_status,
+            coverage=min(1.0, len(self.values) / expected),
+            retrieved_at="2026-08-17T15:30:00",
+            warning="部分成分" if self.quality_status == "PARTIAL" else "",
+        )
+
+
+class ScopeProvider(FakeProvider):
+    def constituents(self, sector: DiscoverySector):
+        return [
+            ("600584", "SH", "长电科技"),
+            ("688380", "SH", "中微半导"),
+            ("920012", "BJ", "创达新材"),
+        ]
 
 
 class FakeMarket:
@@ -87,6 +121,72 @@ class FakeMarket:
             )
             for index in range(800)
         ]
+
+
+class RecordingMarket(FakeMarket):
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def bars(self, market: str, code: str):
+        self.calls.append((market, code))
+        return await super().bars(market, code)
+
+
+@pytest.mark.asyncio
+async def test_universe_rejects_non_tonghuashun_ranking_authority() -> None:
+    service = StockDiscoveryService(
+        providers=[ForeignRankingProvider()],
+        market=FakeMarket(),
+        provider_attempts=1,
+    )
+
+    with pytest.raises(RuntimeError, match="同花顺"):
+        await service._universe(5)
+
+
+@pytest.mark.asyncio
+async def test_partial_tonghuashun_members_require_complete_supplement() -> None:
+    sector_provider = FakeProvider()
+    direct = BatchConstituentProvider(
+        "TONGHUASHUN", "PARTIAL", [("000001", "SZ", "样本一")]
+    )
+    supplement = BatchConstituentProvider(
+        "EASTMONEY",
+        "COMPLETE",
+        [("000001", "SZ", "样本一"), ("000002", "SZ", "样本二")],
+    )
+    service = StockDiscoveryService(
+        providers=[sector_provider],
+        constituent_providers=[direct, supplement],
+        market=FakeMarket(),
+        provider_attempts=1,
+    )
+
+    universe = await service._universe(5)
+
+    assert len(universe.members) == 2
+    assert universe.sectors[0].constituent_quality_status == "SUPPLEMENTED_COMPLETE"
+    assert universe.sectors[0].constituent_source_family == "EASTMONEY"
+    assert any("部分成分" in item for item in universe.warnings)
+
+
+@pytest.mark.asyncio
+async def test_star_and_beijing_members_never_request_market_data() -> None:
+    market = RecordingMarket()
+    service = StockDiscoveryService(
+        providers=[ScopeProvider()],
+        market=market,
+        provider_attempts=1,
+    )
+
+    report = await service.discover(DiscoveryRequest(budget=6000))
+
+    assert [item.code for item in report.candidates] == ["600584"]
+    assert market.calls == [("SH", "600584")]
+    assert report.funnel.raw_constituent_count == 3
+    assert report.funnel.scope_excluded_count == 2
+    assert report.funnel.star_market_excluded_count == 1
+    assert report.funnel.beijing_market_excluded_count == 1
 
 
 @pytest.mark.asyncio
@@ -163,13 +263,13 @@ async def test_universe_retries_the_same_provider_before_switching_source() -> N
         provider_retry_delay_seconds=0,
     )
 
-    sectors, selected, members, warnings = await service._universe(5)
+    universe = await service._universe(5)
 
     assert provider.calls == 2
-    assert selected.source_family == "FAKE"
-    assert len(sectors) == 1
-    assert len(members) == 2
-    assert any("第1/2次" in warning for warning in warnings)
+    assert universe.provider.source_family == "TONGHUASHUN"
+    assert len(universe.sectors) == 1
+    assert len(universe.members) == 2
+    assert any("第1/2次" in warning for warning in universe.warnings)
 
 
 @pytest.mark.asyncio
@@ -185,8 +285,7 @@ async def test_universe_failure_reports_each_provider_and_attempt() -> None:
         await service._universe(5)
 
     message = str(captured.value)
-    assert "FAKE[2/2]" in message
-    assert "SECONDARY[2/2]" in message
+    assert "TONGHUASHUN[2/2]" in message
     assert "upstream unavailable" in message
 
 
@@ -212,7 +311,7 @@ async def test_service_falls_back_and_rejects_st_candidate() -> None:
 
     report = await service.discover(DiscoveryRequest(budget=6000))
 
-    assert report.source_family == "FAKE"
+    assert report.source_family == "TONGHUASHUN"
     assert report.funnel.constituent_count == 2
     assert report.funnel.admitted_count == 1
     assert report.final_candidates[0].code == "000001"
@@ -243,7 +342,7 @@ async def test_service_falls_back_when_primary_sector_members_are_unavailable() 
 
     report = await service.discover(DiscoveryRequest(budget=6000))
 
-    assert report.source_family == "FAKE"
+    assert report.source_family == "TONGHUASHUN"
     assert report.funnel.constituent_count == 2
     assert any("constituent contract drift" in warning for warning in report.warnings)
 
@@ -280,9 +379,9 @@ async def test_service_uses_last_successful_universe_snapshot_when_sources_are_d
         universe_snapshot_path=snapshot,
     ).discover(DiscoveryRequest(budget=6000))
 
-    assert report.source_family == "FAKE"
+    assert report.source_family == "TONGHUASHUN"
     assert report.funnel.constituent_count == 2
-    assert any("本地热门板块快照" in warning for warning in report.warnings)
+    assert any("同花顺热门板块快照" in warning for warning in report.warnings)
 
 
 @pytest.mark.asyncio
@@ -304,7 +403,7 @@ async def test_service_rejects_expired_universe_snapshot(tmp_path) -> None:
         universe_snapshot_path=snapshot,
     )
 
-    with pytest.raises(RuntimeError, match="所有热门板块"):
+    with pytest.raises(RuntimeError, match="同花顺热门板块"):
         await service._universe(5)
 
 

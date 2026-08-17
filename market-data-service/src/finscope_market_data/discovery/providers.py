@@ -12,158 +12,31 @@ class HotSectorProvider(Protocol):
 
     def sectors(self, limit: int) -> list[DiscoverySector]: ...
 
-    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]: ...
-
-
-class EastmoneyHotSectorProvider:
-    source_code = "AKSHARE_EASTMONEY_SECTOR_FLOW"
-    source_family = "EASTMONEY"
-
-    def sectors(self, limit: int) -> list[DiscoverySector]:
-        import akshare as ak
-
-        retrieved_at = datetime.now().isoformat()
-        values: list[DiscoverySector] = []
-        for category, sector_type in (
-            ("INDUSTRY", "行业资金流"),
-            ("CONCEPT", "概念资金流"),
-        ):
-            frame = ak.stock_sector_fund_flow_rank(
-                indicator="5日", sector_type=sector_type
-            )
-            code_map = self._code_map(ak, category)
-            for rank, (_, row) in enumerate(frame.head(limit).iterrows(), start=1):
-                name = str(row.get("名称", "")).strip()
-                if not name:
-                    continue
-                values.append(
-                    DiscoverySector(
-                        code=code_map.get(name, name),
-                        name=name,
-                        category=category,
-                        source_code=self.source_code,
-                        source_family=self.source_family,
-                        source_rank=rank,
-                        change_pct=_number(row.get("5日涨跌幅")),
-                        main_net_inflow=_number(row.get("5日主力净流入-净额")),
-                        main_net_inflow_ratio=_number(
-                            row.get("5日主力净流入-净占比")
-                        ),
-                        leader_stock_name=_text(row.get("5日主力净流入最大股")),
-                        retrieved_at=retrieved_at,
-                    )
-                )
-        if not values:
-            raise RuntimeError("东方财富热门板块榜单为空")
-        return values
-
-    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
-        import akshare as ak
-
-        frame = (
-            ak.stock_board_industry_cons_em(symbol=sector.name)
-            if sector.category == "INDUSTRY"
-            else ak.stock_board_concept_cons_em(symbol=sector.name)
-        )
-        result: list[tuple[str, str, str]] = []
-        for _, row in frame.iterrows():
-            code = str(row.get("代码", "")).strip().zfill(6)
-            name = str(row.get("名称", "")).strip()
-            if len(code) != 6 or not code.isdigit() or not name:
-                continue
-            market = "SH" if code.startswith(("5", "6", "9")) else "SZ"
-            result.append((code, market, name))
-        return result
-
-    def _code_map(self, ak: object, category: str) -> dict[str, str]:
-        frame = (
-            ak.stock_board_industry_name_em()
-            if category == "INDUSTRY"
-            else ak.stock_board_concept_name_em()
-        )
-        return {
-            str(row.get("板块名称", "")).strip(): str(
-                row.get("板块代码", "")
-            ).strip()
-            for _, row in frame.iterrows()
-        }
-
 
 class TonghuashunHotSectorProvider:
-    """同花顺公开行业热榜；契约漂移时由服务自动切换东方财富。"""
+    """The sole production authority for the hot-sector ranking."""
 
     source_code = "AKSHARE_TONGHUASHUN_SECTOR_FLOW"
     source_family = "TONGHUASHUN"
-    constituent_source_family = "EASTMONEY"
 
     def sectors(self, limit: int) -> list[DiscoverySector]:
         import akshare as ak
 
         retrieved_at = datetime.now().isoformat()
-        result: list[DiscoverySector] = []
+        code_frame = ak.stock_board_industry_name_ths()
+        code_map = {
+            str(row.get("name", "")).strip(): str(row.get("code", "")).strip()
+            for _, row in code_frame.iterrows()
+        }
         frame = ak.stock_board_industry_summary_ths()
         ordered = frame.sort_values("净流入", ascending=False).head(limit)
-        for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
-            name = str(row.get("板块", "")).strip()
-            if not name:
-                continue
-            result.append(
-                DiscoverySector(
-                    code=name,
-                    name=name,
-                    category="INDUSTRY",
-                    source_code=self.source_code,
-                    source_family=self.source_family,
-                    period="1D",
-                    source_rank=rank,
-                    change_pct=_number(row.get("涨跌幅")),
-                    main_net_inflow=_number(row.get("净流入")),
-                    leader_stock_name=_text(row.get("领涨股")),
-                    retrieved_at=retrieved_at,
-                )
-            )
-        if not result:
-            raise RuntimeError("同花顺热门行业榜单为空")
-        return result
-
-    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
-        import akshare as ak
-
-        # 同花顺公开热榜负责发现热点，成分关系使用 AkShare 中稳定的
-        # 东方财富行业板块契约补全，避免依赖不存在的 stock_board_cons_ths。
-        frame = (
-            ak.stock_board_industry_cons_em(symbol=sector.name)
-            if sector.category == "INDUSTRY"
-            else ak.stock_board_concept_cons_em(symbol=sector.name)
-        )
-        result: list[tuple[str, str, str]] = []
-        for _, row in frame.iterrows():
-            code = str(row.get("代码", row.get("code", ""))).strip().zfill(6)
-            name = str(row.get("名称", row.get("name", ""))).strip()
-            if len(code) == 6 and code.isdigit() and name:
-                market = "SH" if code.startswith(("5", "6", "9")) else "SZ"
-                result.append((code, market, name))
-        return result
-
-
-class SinaHotSectorProvider:
-    """新浪行业涨幅榜；仅在资金流榜不可用时提供独立网络兜底。"""
-
-    source_code = "AKSHARE_SINA_SECTOR_SPOT"
-    source_family = "SINA"
-
-    def sectors(self, limit: int) -> list[DiscoverySector]:
-        import akshare as ak
-
-        frame = ak.stock_sector_spot(indicator="新浪行业")
-        ordered = frame.sort_values("涨跌幅", ascending=False).head(limit)
-        retrieved_at = datetime.now().isoformat()
         result: list[DiscoverySector] = []
         for rank, (_, row) in enumerate(ordered.iterrows(), start=1):
-            code = str(row.get("label", "")).strip()
             name = str(row.get("板块", "")).strip()
-            if not code or not name:
+            code = code_map.get(name, "")
+            if not name or not code:
                 continue
+            expected = _integer(row.get("上涨家数")) + _integer(row.get("下跌家数"))
             result.append(
                 DiscoverySector(
                     code=code,
@@ -174,27 +47,16 @@ class SinaHotSectorProvider:
                     period="1D",
                     source_rank=rank,
                     change_pct=_number(row.get("涨跌幅")),
-                    leader_stock_name=_text(row.get("股票名称")),
+                    main_net_inflow=_number(row.get("净流入")),
+                    leader_stock_name=_text(row.get("领涨股")),
+                    expected_constituent_count=expected,
                     retrieved_at=retrieved_at,
                 )
             )
         if not result:
-            raise RuntimeError("新浪热门行业榜单为空")
+            raise RuntimeError("同花顺热门行业榜单为空或缺少行业代码")
         return result
 
-    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
-        import akshare as ak
-
-        frame = ak.stock_sector_detail(sector=sector.code)
-        result: list[tuple[str, str, str]] = []
-        for _, row in frame.iterrows():
-            code = str(row.get("code", row.get("symbol", ""))).strip()
-            code = code.removeprefix("sh").removeprefix("sz").zfill(6)
-            name = str(row.get("name", row.get("名称", ""))).strip()
-            if len(code) == 6 and code.isdigit() and name:
-                market = "SH" if code.startswith(("5", "6", "9")) else "SZ"
-                result.append((code, market, name))
-        return result
 
 def _number(value: object) -> float | None:
     try:
@@ -202,6 +64,11 @@ def _number(value: object) -> float | None:
         return number if number == number else None
     except (TypeError, ValueError):
         return None
+
+
+def _integer(value: object) -> int:
+    number = _number(value)
+    return max(0, int(number)) if number is not None else 0
 
 
 def _text(value: object) -> str | None:

@@ -11,6 +11,11 @@ import time
 from typing import Awaitable, Callable, Mapping, Protocol, Sequence
 
 from finscope_market_data.discovery.providers import HotSectorProvider
+from finscope_market_data.discovery.constituents import (
+    ConstituentBatch,
+    ConstituentSnapshotStore,
+)
+from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.ranking import (
     rank_deep_candidates,
     rank_lightweight_candidates,
@@ -60,8 +65,17 @@ class SnapshotHotSectorProvider:
     def sectors(self, limit: int) -> list[DiscoverySector]:
         raise RuntimeError("snapshot provider does not fetch online sectors")
 
-    def constituents(self, sector: DiscoverySector) -> list[tuple[str, str, str]]:
-        raise RuntimeError("snapshot provider does not fetch online constituents")
+
+@dataclass(frozen=True)
+class DiscoveryUniverse:
+    sectors: list[DiscoverySector]
+    provider: HotSectorProvider
+    members: dict[str, tuple[str, str, set[str], set[str]]]
+    warnings: list[str]
+    raw_constituent_count: int
+    scope_exclusions: Mapping[str, int]
+    constituent_sources: tuple[str, ...]
+    constituent_quality_status: str
 
 
 ForecastBuilder = Callable[
@@ -82,6 +96,9 @@ class StockDiscoveryService:
         provider_attempts: int = 2,
         provider_retry_delay_seconds: float = 0.2,
         panel_store: PanelArtifactStore | None = None,
+        constituent_providers: Sequence[object] | None = None,
+        constituent_snapshot_path: str | Path | None = None,
+        trading_scope: TradingScopePolicy | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
@@ -94,13 +111,21 @@ class StockDiscoveryService:
             Path(universe_snapshot_path) if universe_snapshot_path else None
         )
         self.panel_store = panel_store
+        self.constituent_providers = tuple(constituent_providers or providers)
+        self.constituent_snapshots = (
+            ConstituentSnapshotStore(constituent_snapshot_path)
+            if constituent_snapshot_path else None
+        )
+        self.trading_scope = trading_scope or TradingScopePolicy()
         self._uses_default_forecast_builder = forecast_builder is None
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
-        sectors, provider, members, warnings = await self._universe(
-            request.sector_limit
-        )
+        universe = await self._universe(request.sector_limit)
+        sectors = universe.sectors
+        provider = universe.provider
+        members = universe.members
+        warnings = universe.warnings
         candidates, bars_by_code = await self._admit(members, request, warnings)
         panel_artifact = self._train_panel_artifact(
             bars_by_code,
@@ -148,21 +173,28 @@ class StockDiscoveryService:
             as_of_date=as_of,
             source_code=provider.source_code,
             source_family=provider.source_family,
-            quality_status=(
-                "STALE_FALLBACK"
-                if isinstance(provider, SnapshotHotSectorProvider)
-                else "FRESH_PRIMARY"
-                if not warnings
-                else "FRESH_FALLBACK"
-            ),
+            quality_status=self._quality_status(universe),
             retrieved_at=datetime.now().isoformat(),
             data_fingerprint=fingerprint,
             budget=request.budget,
+            constituent_source_families=list(universe.constituent_sources),
+            constituent_quality_status=universe.constituent_quality_status,
             sectors=sectors,
             candidates=ordered_candidates,
             deep_evidence=deep,
             final_candidates=final,
             funnel=DiscoveryFunnel(
+                raw_constituent_count=universe.raw_constituent_count,
+                scope_excluded_count=sum(universe.scope_exclusions.values()),
+                star_market_excluded_count=universe.scope_exclusions.get(
+                    "NO_STAR_MARKET_PERMISSION", 0
+                ),
+                beijing_market_excluded_count=universe.scope_exclusions.get(
+                    "NO_BEIJING_MARKET_PERMISSION", 0
+                ),
+                unsupported_scope_excluded_count=universe.scope_exclusions.get(
+                    "UNSUPPORTED_SECURITY_SCOPE", 0
+                ),
                 constituent_count=len(members),
                 admitted_count=sum(item.admitted for item in candidates),
                 quantified_count=len(lightweight),
@@ -173,35 +205,27 @@ class StockDiscoveryService:
             duration_ms=round((time.monotonic() - started) * 1000),
         )
 
-    async def _universe(
-        self, limit: int
-    ) -> tuple[
-        list[DiscoverySector],
-        HotSectorProvider,
-        dict[str, tuple[str, str, set[str], set[str]]],
-        list[str],
-    ]:
+    async def _universe(self, limit: int) -> DiscoveryUniverse:
         warnings: list[str] = []
         diagnostics: list[str] = []
         for provider in self.providers:
+            if provider.source_family != "TONGHUASHUN":
+                detail = f"{provider.source_family} 不是允许的同花顺热门排名源"
+                diagnostics.append(detail)
+                warnings.append(detail)
+                continue
             for attempt in range(1, self.provider_attempts + 1):
                 try:
                     sectors = await asyncio.to_thread(provider.sectors, limit)
                     if not sectors:
                         raise RuntimeError("热门板块榜单为空")
-                    members = await self._members(provider, sectors, warnings)
-                    if not members:
+                    if any(item.source_family != "TONGHUASHUN" for item in sectors):
+                        raise RuntimeError("热门板块响应混入非同花顺来源")
+                    universe = await self._members(provider, sectors, warnings)
+                    if not universe.members:
                         raise RuntimeError("板块成分为空")
-                    constituent_family = getattr(
-                        provider, "constituent_source_family", provider.source_family
-                    )
-                    if constituent_family != provider.source_family:
-                        warnings.append(
-                            f"{provider.source_family} 提供热门榜单，"
-                            f"{constituent_family} 提供板块成分关系"
-                        )
-                    self._save_universe_snapshot(sectors, provider, members, warnings)
-                    return sectors, provider, members, warnings
+                    self._save_universe_snapshot(universe)
+                    return universe
                 except Exception as error:
                     detail = (
                         f"{provider.source_family}[{attempt}/{self.provider_attempts}] "
@@ -218,26 +242,28 @@ class StockDiscoveryService:
         if snapshot is not None:
             return snapshot
         reason = "；".join(diagnostics)
-        raise RuntimeError(f"所有热门板块或成分股数据源均不可用：{reason}")
+        raise RuntimeError(f"同花顺热门板块或完整成分股不可用：{reason}")
 
     def _save_universe_snapshot(
         self,
-        sectors: Sequence[DiscoverySector],
-        provider: HotSectorProvider,
-        members: dict[str, tuple[str, str, set[str], set[str]]],
-        warnings: list[str],
+        universe: DiscoveryUniverse,
     ) -> None:
         if self.universe_snapshot_path is None:
             return
         payload = {
             "snapshot_at": datetime.now().isoformat(),
-            "source_code": provider.source_code,
-            "source_family": provider.source_family,
-            "sectors": [item.model_dump(mode="json") for item in sectors],
+            "source_code": universe.provider.source_code,
+            "source_family": universe.provider.source_family,
+            "sectors": [item.model_dump(mode="json") for item in universe.sectors],
             "members": {
                 code: [market, name, sorted(sector_codes), sorted(sector_names)]
-                for code, (market, name, sector_codes, sector_names) in members.items()
+                for code, (market, name, sector_codes, sector_names)
+                in universe.members.items()
             },
+            "raw_constituent_count": universe.raw_constituent_count,
+            "scope_exclusions": dict(universe.scope_exclusions),
+            "constituent_sources": list(universe.constituent_sources),
+            "constituent_quality_status": universe.constituent_quality_status,
         }
         try:
             self.universe_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,22 +274,20 @@ class StockDiscoveryService:
             )
             temporary.replace(self.universe_snapshot_path)
         except OSError as error:
-            warnings.append(f"热门板块快照保存失败：{_safe(error)}")
+            universe.warnings.append(f"热门板块快照保存失败：{_safe(error)}")
 
     def _load_universe_snapshot(
         self, warnings: list[str]
-    ) -> tuple[
-        list[DiscoverySector],
-        HotSectorProvider,
-        dict[str, tuple[str, str, set[str], set[str]]],
-        list[str],
-    ] | None:
+    ) -> DiscoveryUniverse | None:
         if self.universe_snapshot_path is None or not self.universe_snapshot_path.exists():
             return None
         try:
             payload = json.loads(
                 self.universe_snapshot_path.read_text(encoding="utf-8")
             )
+            if str(payload.get("source_family")) != "TONGHUASHUN":
+                warnings.append("本地热门板块快照不是同花顺来源，拒绝使用")
+                return None
             snapshot_at = datetime.fromisoformat(str(payload["snapshot_at"]))
             if (datetime.now() - snapshot_at).total_seconds() > 4 * 24 * 60 * 60:
                 warnings.append("本地热门板块快照已超过 4 天有效期，拒绝继续使用")
@@ -279,8 +303,24 @@ class StockDiscoveryService:
             )
             if not sectors or not members:
                 return None
-            warnings.append("在线热门板块源均不可用，已使用最近一次本地热门板块快照")
-            return sectors, provider, members, warnings
+            warnings.append("在线同花顺热榜不可用，已使用最近一次同花顺热门板块快照")
+            return DiscoveryUniverse(
+                sectors=sectors,
+                provider=provider,
+                members=members,
+                warnings=warnings,
+                raw_constituent_count=int(
+                    payload.get("raw_constituent_count", len(members))
+                ),
+                scope_exclusions={
+                    str(key): int(value)
+                    for key, value in payload.get("scope_exclusions", {}).items()
+                },
+                constituent_sources=tuple(payload.get("constituent_sources", [])),
+                constituent_quality_status=str(
+                    payload.get("constituent_quality_status", "CACHED_COMPLETE")
+                ),
+            )
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             warnings.append(f"本地热门板块快照不可用：{_safe(error)}")
             return None
@@ -290,29 +330,146 @@ class StockDiscoveryService:
         provider: HotSectorProvider,
         sectors: Sequence[DiscoverySector],
         warnings: list[str],
-    ) -> dict[str, tuple[str, str, set[str], set[str]]]:
+    ) -> DiscoveryUniverse:
         semaphore = asyncio.Semaphore(self.network_concurrency)
 
         async def fetch(sector: DiscoverySector):
             async with semaphore:
-                try:
-                    return sector, await asyncio.to_thread(provider.constituents, sector)
-                except Exception as error:
-                    warnings.append(f"{sector.name} 成分股不可用：{_safe(error)}")
-                    return sector, []
+                return await self._resolve_sector(sector, warnings)
 
-        result: dict[str, tuple[str, str, set[str], set[str]]] = {}
-        for sector, values in await asyncio.gather(*(fetch(item) for item in sectors)):
+        raw: dict[str, tuple[str, str, set[str], set[str]]] = {}
+        resolved_sectors: list[DiscoverySector] = []
+        sources: set[str] = set()
+        for sector, batch in await asyncio.gather(*(fetch(item) for item in sectors)):
+            resolved_sectors.append(sector)
+            if batch is None:
+                continue
+            sources.add(batch.source_family)
+            values = batch.values
             for code, market, name in values:
-                if market not in {"SH", "SZ"}:
-                    continue
-                current = result.get(code)
+                current = raw.get(code)
                 if current is None:
                     current = (market, name, set(), set())
-                    result[code] = current
+                    raw[code] = current
                 current[2].add(sector.code)
                 current[3].add(sector.name)
-        return result
+        result: dict[str, tuple[str, str, set[str], set[str]]] = {}
+        exclusions: dict[str, int] = {}
+        for code, value in raw.items():
+            decision = self.trading_scope.classify(code)
+            if not decision.allowed or decision.market is None:
+                reason = decision.reason or "UNSUPPORTED_SECURITY_SCOPE"
+                exclusions[reason] = exclusions.get(reason, 0) + 1
+                continue
+            result[code] = (decision.market, value[1], value[2], value[3])
+        statuses = {item.constituent_quality_status for item in resolved_sectors}
+        quality = (
+            "PARTIAL" if "PARTIAL" in statuses
+            else "CACHED_COMPLETE" if "CACHED_COMPLETE" in statuses
+            else "MIXED_COMPLETE" if "SUPPLEMENTED_COMPLETE" in statuses
+            else "COMPLETE"
+        )
+        return DiscoveryUniverse(
+            sectors=resolved_sectors,
+            provider=provider,
+            members=result,
+            warnings=warnings,
+            raw_constituent_count=len(raw),
+            scope_exclusions=exclusions,
+            constituent_sources=tuple(sorted(sources)),
+            constituent_quality_status=quality,
+        )
+
+    async def _resolve_sector(
+        self, sector: DiscoverySector, warnings: list[str]
+    ) -> tuple[DiscoverySector, ConstituentBatch | None]:
+        providers = self.constituent_providers
+        first_batch: ConstituentBatch | None = None
+        if providers:
+            first_batch = await self._fetch_constituent_batch(
+                providers[0], sector, warnings
+            )
+            if first_batch is not None and first_batch.quality_status == "COMPLETE":
+                self._save_constituents(sector, first_batch, warnings)
+                return self._resolved_sector(sector, first_batch, "COMPLETE"), first_batch
+        cached = self.constituent_snapshots.load(sector) if self.constituent_snapshots else None
+        if cached is not None:
+            return self._resolved_sector(sector, cached, "CACHED_COMPLETE"), cached
+        for current in providers[1:]:
+            batch = await self._fetch_constituent_batch(current, sector, warnings)
+            if batch is not None and batch.quality_status == "COMPLETE":
+                self._save_constituents(sector, batch, warnings)
+                return (
+                    self._resolved_sector(sector, batch, "SUPPLEMENTED_COMPLETE"),
+                    batch,
+                )
+        partial = first_batch
+        warnings.append(f"{sector.name} 未取得完整成分，已跳过该板块")
+        return self._resolved_sector(sector, partial, "PARTIAL"), None
+
+    async def _fetch_constituent_batch(
+        self, current: object, sector: DiscoverySector, warnings: list[str]
+    ) -> ConstituentBatch | None:
+        try:
+            values = await asyncio.to_thread(current.constituents, sector)
+            if isinstance(values, ConstituentBatch):
+                if values.quality_status == "PARTIAL" and values.warning:
+                    warnings.append(f"{sector.name}：{values.warning}")
+                return values
+            normalized = tuple(values)
+            return ConstituentBatch(
+                sector_code=sector.code,
+                sector_name=sector.name,
+                source_family=str(getattr(current, "source_family", "UNKNOWN")),
+                values=normalized,
+                expected_count=sector.expected_constituent_count or len(normalized),
+                retrieved_count=len(normalized),
+                quality_status="COMPLETE" if normalized else "PARTIAL",
+                coverage=1.0 if normalized else 0.0,
+                retrieved_at=datetime.now().isoformat(),
+                warning="" if normalized else "成分股为空",
+            )
+        except Exception as error:
+            warnings.append(
+                f"{sector.name} 成分来源 {getattr(current, 'source_family', 'UNKNOWN')} "
+                f"不可用：{_safe(error)}"
+            )
+            return None
+
+    def _save_constituents(
+        self,
+        sector: DiscoverySector,
+        batch: ConstituentBatch,
+        warnings: list[str],
+    ) -> None:
+        if self.constituent_snapshots is None:
+            return
+        try:
+            self.constituent_snapshots.save(sector, batch)
+        except OSError as error:
+            warnings.append(f"{sector.name} 完整成分快照保存失败：{_safe(error)}")
+
+    def _resolved_sector(
+        self,
+        sector: DiscoverySector,
+        batch: ConstituentBatch | None,
+        status: str,
+    ) -> DiscoverySector:
+        return sector.model_copy(update={
+            "resolved_constituent_count": batch.retrieved_count if batch else 0,
+            "constituent_source_family": batch.source_family if batch else None,
+            "constituent_quality_status": status,
+            "constituent_coverage": batch.coverage if batch else 0.0,
+        })
+
+    def _quality_status(self, universe: DiscoveryUniverse) -> str:
+        if isinstance(universe.provider, SnapshotHotSectorProvider):
+            return "STALE_FALLBACK"
+        if universe.constituent_quality_status == "PARTIAL":
+            return "PARTIAL_FRESH"
+        if universe.constituent_quality_status != "COMPLETE":
+            return "FRESH_FALLBACK"
+        return "FRESH_PRIMARY"
 
     async def _admit(
         self,

@@ -108,6 +108,11 @@ class DeepCandidateEvidence(BaseModel):
 
 
 class DiscoveryFunnel(BaseModel):
+    raw_constituent_count: int = 0
+    scope_excluded_count: int = 0
+    star_market_excluded_count: int = 0
+    beijing_market_excluded_count: int = 0
+    unsupported_scope_excluded_count: int = 0
     constituent_count: int = 0
     admitted_count: int = 0
     quantified_count: int = 0
@@ -130,6 +135,10 @@ class DiscoveryReport(BaseModel):
     retrieved_at: str
     data_fingerprint: str
     budget: float
+    constituent_source_families: list[str] = Field(default_factory=list)
+    constituent_quality_status: Literal[
+        "COMPLETE", "MIXED_COMPLETE", "CACHED_COMPLETE", "PARTIAL"
+    ] = "COMPLETE"
     sectors: list[DiscoverySector]
     candidates: list[DiscoveryCandidate]
     deep_evidence: list[DeepCandidateEvidence]

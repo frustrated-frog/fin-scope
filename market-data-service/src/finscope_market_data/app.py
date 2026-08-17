@@ -12,11 +12,12 @@ from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.context import build_aligned_context
-from finscope_market_data.discovery.providers import (
-    EastmoneyHotSectorProvider,
-    SinaHotSectorProvider,
-    TonghuashunHotSectorProvider,
+from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
+from finscope_market_data.discovery.constituents import (
+    EastmoneyConstituentProvider,
+    TonghuashunConstituentProvider,
 )
+from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.schemas import DiscoveryRequest
 from finscope_market_data.discovery.service import (
     DiscoveryBarsSnapshot,
@@ -71,12 +72,17 @@ def create_app(
         if application.state.discovery is None:
             application.state.discovery = StockDiscoveryService(
                 providers=[
-                    EastmoneyHotSectorProvider(),
                     TonghuashunHotSectorProvider(),
-                    SinaHotSectorProvider(),
+                ],
+                constituent_providers=[
+                    TonghuashunConstituentProvider(),
+                    EastmoneyConstituentProvider(),
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
                 universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",
+                constituent_snapshot_path=(
+                    config.data_dir / "stock-discovery-constituents.json"
+                ),
                 panel_store=panel_store,
             )
         try:
@@ -150,6 +156,9 @@ def create_app(
         if context.market_coverage < 0.95:
             context_warnings.append("沪深300上下文覆盖不足，相关特征已按中性值降级")
         context_warnings.append("第一批未启用行业代理指数，行业因子按中性值降级")
+        scope = TradingScopePolicy().classify(request.code)
+        if scope.reason == "NO_STAR_MARKET_PERMISSION":
+            context_warnings.append("该标的属于科创板，当前账户不可交易，本报告仅供研究")
         result = build_forecast(
             envelope.data,
             instrument_code=f"{request.code}.{market}",

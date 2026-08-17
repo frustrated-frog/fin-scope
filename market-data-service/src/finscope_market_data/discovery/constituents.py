@@ -97,6 +97,41 @@ class TonghuashunConstituentProvider:
             return response.read().decode("gbk", errors="replace"), response.geturl()
 
 
+class EastmoneyConstituentProvider:
+    """Supplemental constituent relation; never participates in hot-sector ranking."""
+
+    source_family = "EASTMONEY"
+
+    def constituents(self, sector: DiscoverySector) -> ConstituentBatch:
+        import akshare as ak
+
+        frame = ak.stock_board_industry_cons_em(symbol=sector.name)
+        values: dict[str, ConstituentValue] = {}
+        for _, row in frame.iterrows():
+            code = str(row.get("代码", "")).strip().zfill(6)
+            name = str(row.get("名称", "")).strip()
+            if len(code) == 6 and code.isdigit() and name:
+                values[code] = (code, _source_market(code), name)
+        expected = max(0, sector.expected_constituent_count)
+        coverage = min(1.0, len(values) / expected) if expected else 0.0
+        complete = bool(values) and (not expected or coverage >= 0.95)
+        return ConstituentBatch(
+            sector_code=sector.code,
+            sector_name=sector.name,
+            source_family=self.source_family,
+            values=tuple(values.values()),
+            expected_count=expected,
+            retrieved_count=len(values),
+            quality_status="COMPLETE" if complete else "PARTIAL",
+            coverage=coverage,
+            retrieved_at=datetime.now().isoformat(),
+            warning=(
+                "" if complete
+                else f"东方财富成分覆盖不足：{len(values)}/{expected or '未知'}"
+            ),
+        )
+
+
 class ConstituentSnapshotStore:
     def __init__(
         self,
@@ -200,4 +235,3 @@ def _source_market(code: str) -> str:
     if code.startswith(("5", "6", "9")):
         return "SH"
     return "SZ"
-
