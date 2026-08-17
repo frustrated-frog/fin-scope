@@ -27,6 +27,21 @@ function money(value?: number) {
   return `¥${value.toFixed(0)}`;
 }
 
+function constituentSource(value?: string) {
+  if (value === 'TONGHUASHUN') return '同花顺成分';
+  if (value === 'EASTMONEY') return '东方财富补全';
+  if (value === 'LOCAL_SNAPSHOT') return '完整缓存';
+  return value ?? '来源待确认';
+}
+
+function constituentQuality(value?: string) {
+  if (value === 'COMPLETE') return '完整直取';
+  if (value === 'CACHED_COMPLETE') return '完整缓存';
+  if (value === 'SUPPLEMENTED_COMPLETE' || value === 'MIXED_COMPLETE') return '完整补全';
+  if (value === 'PARTIAL') return '部分板块已跳过';
+  return '质量待确认';
+}
+
 function CandidateCard({ evidence, candidate, onOpenResearch }: {
   evidence: StockDiscoveryEvidence;
   candidate?: StockDiscoveryCandidate;
@@ -107,6 +122,12 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
 
     <DiscoveryFunnel funnel={report.funnel} />
 
+    <section className="discovery-provenance" aria-label="股票发现数据来源与交易范围">
+      <article><span>RANKING AUTHORITY</span><strong>同花顺唯一热榜</strong><small><b>净流入降序</b> · 行业板块</small></article>
+      <article><span>CONSTITUENT EVIDENCE</span><strong>{(report.constituent_source_families ?? []).map(constituentSource).join(' + ') || '来源待确认'}</strong><small>{constituentQuality(report.constituent_quality_status)}</small></article>
+      <article><span>ACCOUNT SCOPE</span><strong>权限范围剔除 {report.funnel.scope_excluded_count ?? 0} 只</strong><small>科创板 {report.funnel.star_market_excluded_count ?? 0} · 北交所 {report.funnel.beijing_market_excluded_count ?? 0}</small></article>
+    </section>
+
     <div className="discovery-analysis-grid">
       <RiskReturnMap evidence={report.deep_evidence} candidates={report.candidates} finalCodes={finalCodes} />
       <CandidateFactorMatrix evidence={report.final_candidates} candidates={report.candidates} />
@@ -122,7 +143,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
           : <div className="discovery-no-edge"><strong>宁可空缺，也不凑满前五</strong><p>当前候选在概率质量、样本外证据或稳定性上未形成足够优势。</p></div>}</div>
       </main>
       <aside className="discovery-context">
-        <section><header><span>HOT SECTORS</span><b>外部热榜 · 非内部猜测</b></header>{report.sectors.map(sector => <div className="discovery-sector" key={`${sector.category}-${sector.code}`}><i>{String(sector.source_rank).padStart(2, '0')}</i><p><strong>{sector.name}</strong><small>{sector.category === 'INDUSTRY' ? '行业' : '概念'}{sector.leader_stock_name ? ` · 领涨 ${sector.leader_stock_name}` : ''}</small></p><b>{sector.change_pct == null ? money(sector.main_net_inflow) : `${sector.change_pct > 0 ? '+' : ''}${sector.change_pct.toFixed(2)}%`}</b></div>)}</section>
+        <section><header><span>HOT SECTORS</span><b>同花顺 · 净流入降序</b></header>{report.sectors.map(sector => <div className="discovery-sector" key={`${sector.category}-${sector.code}`}><i>{String(sector.source_rank).padStart(2, '0')}</i><p><strong>{sector.name}</strong><small>{constituentSource(sector.constituent_source_family)} · {constituentQuality(sector.constituent_quality_status)}</small><em>成分覆盖 {sector.resolved_constituent_count ?? '—'} / {sector.expected_constituent_count ?? '—'}</em></p><div><b>{money(sector.main_net_inflow)}</b>{sector.change_pct != null && <small>{sector.change_pct > 0 ? '+' : ''}{sector.change_pct.toFixed(2)}%</small>}</div></div>)}</section>
         <section className="discovery-run-note"><span>RUN DISCIPLINE</span><dl><div><dt>预算上限</dt><dd>¥{report.budget.toLocaleString()}</dd></div><div><dt>深度预测耗时</dt><dd>{(report.duration_ms / 1000).toFixed(1)}s</dd></div><div><dt>候选基准</dt><dd>同股买入持有</dd></div><div><dt>批次编号</dt><dd>#{run?.id ?? '—'}</dd></div></dl><p>排名用于研究优先级，不构成交易建议。概率会在未来到期后持续以真实结果校准。</p></section>
         {report.warnings.length > 0 && <section className="discovery-warnings"><span>DATA NOTES</span>{report.warnings.slice(0, 5).map(item => <p key={item}>{item}</p>)}</section>}
       </aside>

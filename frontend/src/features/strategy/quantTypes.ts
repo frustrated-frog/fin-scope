@@ -387,6 +387,9 @@ export interface StockDiscoveryRun {
 export interface StockDiscoverySector {
   code: string; name: string; category: string; source_rank: number;
   change_pct?: number; main_net_inflow?: number; leader_stock_name?: string;
+  expected_constituent_count?: number; resolved_constituent_count?: number;
+  constituent_source_family?: string; constituent_quality_status?: string;
+  constituent_coverage?: number;
 }
 
 export interface StockDiscoveryCandidate {
@@ -409,7 +412,10 @@ export interface StockDiscoveryEvidence {
 export interface StockDiscoveryReport {
   as_of_date: string; source_family: string; quality_status: string; retrieved_at: string;
   budget: number; duration_ms: number; warnings: string[];
-  funnel: { constituent_count: number; admitted_count: number; quantified_count: number;
+  constituent_source_families?: string[]; constituent_quality_status?: string;
+  funnel: { raw_constituent_count?: number; scope_excluded_count?: number;
+    star_market_excluded_count?: number; beijing_market_excluded_count?: number;
+    unsupported_scope_excluded_count?: number; constituent_count: number; admitted_count: number; quantified_count: number;
     deep_review_count: number; final_count: number };
   sectors: StockDiscoverySector[]; candidates: StockDiscoveryCandidate[];
   deep_evidence: StockDiscoveryEvidence[]; final_candidates: StockDiscoveryEvidence[];
