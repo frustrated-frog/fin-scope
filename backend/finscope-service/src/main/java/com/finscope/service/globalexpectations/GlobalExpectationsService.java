@@ -51,6 +51,8 @@ public class GlobalExpectationsService {
     @Resource
     private GlobalExpectationRadarMatcher radarMatcher;
     @Resource
+    private GlobalExpectationGapAnalyzer gapAnalyzer;
+    @Resource
     private GlobalExpectationEnhancementService enhancementService;
 
     public List<GlobalExpectationItem> list() {
@@ -73,6 +75,9 @@ public class GlobalExpectationsService {
                 ? cached.get().getGroups() : eventAggregator.aggregate(items);
         if (radarMatcher != null) {
             radarMatcher.attachRecent(groups);
+        }
+        if (gapAnalyzer != null) {
+            gapAnalyzer.analyze(groups);
         }
         if (enhancementService != null) {
             enhancementService.attachCached(groups);
@@ -112,6 +117,9 @@ public class GlobalExpectationsService {
             List<GlobalExpectationEventGroup> groups = eventAggregator.aggregate(items);
             if (radarMatcher != null) {
                 radarMatcher.attachRecent(groups);
+            }
+            if (gapAnalyzer != null) {
+                gapAnalyzer.analyze(groups);
             }
             GlobalExpectationsViewSnapshot snapshot = new GlobalExpectationsViewSnapshot();
             snapshot.setFetchedAt(observedAt.getEpochSecond());
