@@ -25,7 +25,7 @@ class DiscoveryRequest(BaseModel):
     final_limit: int = Field(default=5, ge=1, le=5)
     horizon_days: Literal[1, 5, 20] = 5
     policy_version: str = Field(
-        default="stock-discovery-v1",
+        default="stock-discovery-v2",
         min_length=1,
         pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$",
     )

@@ -71,10 +71,15 @@ public class PythonStockDiscoveryClient {
         if (report == null || !"1.0.0".equals(report.getSchemaVersion())
                 || !policyVersion.equals(report.getPolicyVersion()) || report.getAsOfDate() == null
                 || report.getSourceFamily() == null || report.getQualityStatus() == null
+                || !"TONGHUASHUN".equals(report.getSourceFamily())
                 || report.getDataFingerprint() == null
                 || !report.getDataFingerprint().matches("[0-9a-f]{64}")
                 || report.getFunnel() == null || report.getFinalCandidates() == null
                 || report.getCandidates() == null || report.getDeepEvidence() == null
+                || report.getSectors() == null || report.getSectors().isEmpty()
+                || report.getConstituentSourceFamilies() == null
+                || report.getConstituentSourceFamilies().isEmpty()
+                || !allowedConstituentQuality(report.getConstituentQualityStatus())
                 || report.getFinalCandidates().size() != report.getFunnel().getFinalCount()
                 || report.getDeepEvidence().size() != report.getFunnel().getDeepReviewCount()
                 || report.getFunnel().getFinalCount() < 0 || report.getFunnel().getFinalCount() > 5
@@ -82,7 +87,13 @@ public class PythonStockDiscoveryClient {
                 || report.getFunnel().getAdmittedCount() < report.getFunnel().getDeepReviewCount()
                 || report.getFunnel().getQuantifiedCount() != report.getFunnel().getAdmittedCount()
                 || report.getFunnel().getAdmittedCount() > report.getCandidates().size()
-                || report.getCandidates().size() != report.getFunnel().getConstituentCount()) {
+                || report.getCandidates().size() != report.getFunnel().getConstituentCount()
+                || report.getFunnel().getRawConstituentCount()
+                != report.getFunnel().getConstituentCount() + report.getFunnel().getScopeExcludedCount()
+                || report.getFunnel().getScopeExcludedCount()
+                != report.getFunnel().getStarMarketExcludedCount()
+                + report.getFunnel().getBeijingMarketExcludedCount()
+                + report.getFunnel().getUnsupportedScopeExcludedCount()) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现缺少必需字段或漏斗计数无效", false, null);
         }
         try {
@@ -90,7 +101,32 @@ public class PythonStockDiscoveryClient {
         } catch (RuntimeException error) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现业务日期格式无效", false, error);
         }
+        validateSectors(report.getSectors());
         validateCandidateRelations(report);
+    }
+
+    private boolean allowedConstituentQuality(String value) {
+        return "COMPLETE".equals(value) || "MIXED_COMPLETE".equals(value)
+                || "CACHED_COMPLETE".equals(value) || "PARTIAL".equals(value);
+    }
+
+    private void validateSectors(Iterable<Map<String, Object>> sectors) {
+        Set<Integer> ranks = new HashSet<Integer>();
+        for (Map<String, Object> sector : sectors) {
+            int expected = integer(sector.get("expected_constituent_count"));
+            int resolved = integer(sector.get("resolved_constituent_count"));
+            int rank = integer(sector.get("source_rank"));
+            double coverage = decimal(sector.get("constituent_coverage"));
+            String quality = text(sector.get("constituent_quality_status"));
+            if (!"TONGHUASHUN".equals(text(sector.get("source_family")))
+                    || !"INDUSTRY".equals(text(sector.get("category")))
+                    || rank < 1 || !ranks.add(rank)
+                    || expected < 0 || resolved < 0 || coverage < 0d || coverage > 1d
+                    || !("COMPLETE".equals(quality) || "CACHED_COMPLETE".equals(quality)
+                    || "SUPPLEMENTED_COMPLETE".equals(quality) || "PARTIAL".equals(quality))) {
+                throw contract("SCHEMA_DRIFT", "Python 股票发现板块来源或成分证据无效", false, null);
+            }
+        }
     }
 
     private void validateCandidateRelations(StockDiscoveryReport report) {
@@ -122,11 +158,27 @@ public class PythonStockDiscoveryClient {
         Set<String> result = new HashSet<String>();
         for (Map<String, Object> value : values) {
             String code = text(value.get("code"));
-            if (code.isEmpty() || !result.add(code)) {
+            if (code.isEmpty() || excludedTradingScope(code) || !result.add(code)) {
                 throw contract("SCHEMA_DRIFT", "Python 股票发现候选代码缺失或重复", false, null);
             }
         }
         return result;
+    }
+
+    private boolean excludedTradingScope(String code) {
+        return code.startsWith("688") || code.startsWith("689") || code.startsWith("4")
+                || code.startsWith("8") || code.startsWith("92");
+    }
+
+    private double decimal(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        try {
+            return Double.parseDouble(text(value));
+        } catch (NumberFormatException error) {
+            return -1d;
+        }
     }
 
     private String text(Object value) {
