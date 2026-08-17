@@ -35,6 +35,7 @@ public class GlobalExpectationInterpretationAgent {
             String raw = llmChatClient.complete(systemPrompt(), input, TIMEOUT_MS, MAX_OUTPUT_TOKENS);
             GlobalExpectationInterpretation result = parse(raw);
             result.setStatus("READY");
+            result.setSource("AI");
             trace(group, result, null, started);
             return result;
         } catch (Exception error) {
@@ -54,6 +55,7 @@ public class GlobalExpectationInterpretationAgent {
         result.setMeaning(required(root, "meaning"));
         result.setRelatedVariables(required(root, "relatedVariables"));
         result.setNextObservation(required(root, "nextObservation"));
+        result.setUncertainty(required(root, "uncertainty"));
         return result;
     }
 
@@ -84,7 +86,8 @@ public class GlobalExpectationInterpretationAgent {
     private String systemPrompt() {
         return "你是全球预期监控的短解读组件。只能使用输入中的概率、成交量、排名变化和本地 Radar 匹配，"
                 + "不得补充外部事实，不得给出买卖建议。输出纯 JSON，且只包含 happened、meaning、"
-                + "relatedVariables、nextObservation 四个简短字符串字段。事实和推演必须明确区分。";
+                + "relatedVariables、nextObservation、uncertainty 五个简短字符串字段。事实和推演必须明确区分，"
+                + "uncertainty 必须说明预测市场价格和标题匹配的边界。";
     }
 
     private void trace(GlobalExpectationEventGroup group, GlobalExpectationInterpretation result,

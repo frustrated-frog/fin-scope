@@ -13,16 +13,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class GlobalExpectationInterpretationAgentTest {
     @Test
-    void returnsFourBoundedFieldsFromAConfiguredModel() {
+    void returnsFiveBoundedFieldsFromAConfiguredModel() {
         GlobalExpectationInterpretationAgent agent = agent(true,
                 "{\"happened\":\"概率快速上升\",\"meaning\":\"市场分歧扩大\","
-                        + "\"relatedVariables\":\"利率与通胀\",\"nextObservation\":\"关注正式决议\"}");
+                        + "\"relatedVariables\":\"利率与通胀\",\"nextObservation\":\"关注正式决议\","
+                        + "\"uncertainty\":\"预测市场价格不等于事实概率\"}");
 
         GlobalExpectationInterpretation result = agent.interpret(group());
 
         assertEquals("READY", result.getStatus());
         assertEquals("概率快速上升", result.getHappened());
         assertEquals("关注正式决议", result.getNextObservation());
+        assertEquals("预测市场价格不等于事实概率", result.getUncertainty());
+        assertEquals("AI", result.getSource());
     }
 
     @Test

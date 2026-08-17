@@ -53,6 +53,8 @@ public class GlobalExpectationsService {
     @Resource
     private GlobalExpectationGapAnalyzer gapAnalyzer;
     @Resource
+    private GlobalExpectationRuleInterpreter ruleInterpreter;
+    @Resource
     private GlobalExpectationEnhancementService enhancementService;
 
     public List<GlobalExpectationItem> list() {
@@ -78,6 +80,9 @@ public class GlobalExpectationsService {
         }
         if (gapAnalyzer != null) {
             gapAnalyzer.analyze(groups);
+        }
+        if (ruleInterpreter != null) {
+            ruleInterpreter.interpret(groups);
         }
         if (enhancementService != null) {
             enhancementService.attachCached(groups);
@@ -120,6 +125,9 @@ public class GlobalExpectationsService {
             }
             if (gapAnalyzer != null) {
                 gapAnalyzer.analyze(groups);
+            }
+            if (ruleInterpreter != null) {
+                ruleInterpreter.interpret(groups);
             }
             GlobalExpectationsViewSnapshot snapshot = new GlobalExpectationsViewSnapshot();
             snapshot.setFetchedAt(observedAt.getEpochSecond());

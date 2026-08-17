@@ -164,6 +164,7 @@ class GlobalExpectationsServiceTest {
         assertEquals("年度油价判断", feed.getGroups().get(0).getTitle());
         assertTrue(feed.getGroups().get(0).getSignalReasons().contains("突破50%分歧线"));
         assertEquals("INSUFFICIENT_DATA", feed.getGroups().get(0).getExpectationRealityState());
+        assertFalse(feed.getGroups().get(0).getInterpretation().getHappened().isBlank());
     }
 
     private GlobalExpectationsService service(PolymarketPublicClient client, FakeCache cache) {
@@ -174,6 +175,7 @@ class GlobalExpectationsServiceTest {
         ReflectionTestUtils.setField(service, "signalDetector", new GlobalExpectationSignalDetector());
         ReflectionTestUtils.setField(service, "eventAggregator", new GlobalExpectationEventAggregator());
         ReflectionTestUtils.setField(service, "gapAnalyzer", new GlobalExpectationGapAnalyzer());
+        ReflectionTestUtils.setField(service, "ruleInterpreter", new GlobalExpectationRuleInterpreter());
         return service;
     }
 

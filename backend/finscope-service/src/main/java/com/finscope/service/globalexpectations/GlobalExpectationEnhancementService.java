@@ -16,7 +16,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 
-/** 将强异动提交给独立执行器；解释缓存与监控快照互不依赖。 */
+/** 分批增强全部观察卡片；规则快读始终作为可见回退。 */
 @Service
 public class GlobalExpectationEnhancementService {
     private static final int MAX_GROUPS_PER_REFRESH = 5;
@@ -35,9 +35,6 @@ public class GlobalExpectationEnhancementService {
             if (requested >= MAX_GROUPS_PER_REFRESH) {
                 break;
             }
-            if (!"SIGNAL".equals(group.getStatus())) {
-                continue;
-            }
             String fingerprint = fingerprint(group);
             Optional<GlobalExpectationInterpretation> cached = cacheRepository.getInterpretation(group.getId());
             if (cached.isPresent() && fingerprint.equals(cached.get().getFingerprint())) {
@@ -48,7 +45,7 @@ public class GlobalExpectationEnhancementService {
             if (!inFlight.add(taskKey)) {
                 continue;
             }
-            GlobalExpectationInterpretation queued = new GlobalExpectationInterpretation();
+            GlobalExpectationInterpretation queued = copy(group.getInterpretation());
             queued.setStatus("QUEUED");
             queued.setFingerprint(fingerprint);
             cacheRepository.putInterpretation(group.getId(), queued);
@@ -58,7 +55,7 @@ public class GlobalExpectationEnhancementService {
                 requested++;
             } catch (RuntimeException error) {
                 inFlight.remove(taskKey);
-                GlobalExpectationInterpretation failed = new GlobalExpectationInterpretation();
+                GlobalExpectationInterpretation failed = copy(queued);
                 failed.setStatus("FAILED");
                 failed.setFingerprint(fingerprint);
                 failed.setFailureMessage("AI 解读任务繁忙，请稍后刷新");
@@ -80,8 +77,10 @@ public class GlobalExpectationEnhancementService {
     private void complete(GlobalExpectationEventGroup group, String fingerprint, String taskKey) {
         try {
             GlobalExpectationInterpretation result = agent.interpret(group);
+            mergeMissing(result, group.getInterpretation());
             result.setFingerprint(fingerprint);
             cacheRepository.putInterpretation(group.getId(), result);
+            group.setInterpretation(result);
         } finally {
             inFlight.remove(taskKey);
         }
@@ -90,10 +89,10 @@ public class GlobalExpectationEnhancementService {
     private String fingerprint(GlobalExpectationEventGroup group) {
         StringBuilder source = new StringBuilder();
         source.append(group.getId()).append('|').append(group.getTitle()).append('|')
-                .append(group.getSignalScore()).append('|').append(group.getSignalReasons());
+                .append(group.getExpectationRealityState()).append('|').append(group.getSignalReasons())
+                .append('|').append(group.getThemes());
         for (GlobalExpectationItem market : safe(group.getMarkets())) {
-            source.append('|').append(market.getMarketId()).append(':').append(market.getProbability())
-                    .append(':').append(market.getVolume24h()).append(':').append(market.getRank())
+            source.append('|').append(market.getMarketId()).append(':').append(probabilityBucket(market.getProbability()))
                     .append(':').append(market.getSignalReasons());
         }
         for (GlobalExpectationRadarMatch match : safe(group.getRadarMatches())) {
@@ -114,5 +113,52 @@ public class GlobalExpectationEnhancementService {
 
     private <T> List<T> safe(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private int probabilityBucket(Integer probability) {
+        return probability == null ? -1 : Math.floorDiv(probability, 5);
+    }
+
+    private GlobalExpectationInterpretation copy(GlobalExpectationInterpretation source) {
+        GlobalExpectationInterpretation target = new GlobalExpectationInterpretation();
+        if (source == null) {
+            target.setSource("RULE");
+            return target;
+        }
+        target.setSource(source.getSource());
+        target.setHappened(source.getHappened());
+        target.setMeaning(source.getMeaning());
+        target.setRelatedVariables(source.getRelatedVariables());
+        target.setNextObservation(source.getNextObservation());
+        target.setUncertainty(source.getUncertainty());
+        return target;
+    }
+
+    private void mergeMissing(GlobalExpectationInterpretation result, GlobalExpectationInterpretation fallback) {
+        if (fallback == null) {
+            return;
+        }
+        if (blank(result.getHappened())) {
+            result.setHappened(fallback.getHappened());
+        }
+        if (blank(result.getMeaning())) {
+            result.setMeaning(fallback.getMeaning());
+        }
+        if (blank(result.getRelatedVariables())) {
+            result.setRelatedVariables(fallback.getRelatedVariables());
+        }
+        if (blank(result.getNextObservation())) {
+            result.setNextObservation(fallback.getNextObservation());
+        }
+        if (blank(result.getUncertainty())) {
+            result.setUncertainty(fallback.getUncertainty());
+        }
+        if (blank(result.getSource()) || !"READY".equals(result.getStatus())) {
+            result.setSource(fallback.getSource());
+        }
+    }
+
+    private boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 }
