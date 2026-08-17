@@ -47,7 +47,7 @@ class TonghuashunHotSectorProvider:
                     period="1D",
                     source_rank=rank,
                     change_pct=_number(row.get("涨跌幅")),
-                    main_net_inflow=_number(row.get("净流入")),
+                    main_net_inflow=_yuan_from_yi(row.get("净流入")),
                     leader_stock_name=_text(row.get("领涨股")),
                     expected_constituent_count=expected,
                     retrieved_at=retrieved_at,
@@ -69,6 +69,11 @@ def _number(value: object) -> float | None:
 def _integer(value: object) -> int:
     number = _number(value)
     return max(0, int(number)) if number is not None else 0
+
+
+def _yuan_from_yi(value: object) -> float | None:
+    number = _number(value)
+    return number * 100_000_000 if number is not None else None
 
 
 def _text(value: object) -> str | None:

@@ -26,6 +26,7 @@ def test_tonghuashun_ranking_preserves_its_codes_and_expected_member_count(
 
     assert values[0].code == "881121"
     assert values[0].expected_constituent_count == 20
+    assert values[0].main_net_inflow == 2_000_000_000
 
 
 def test_tonghuashun_fallback_uses_its_real_industry_flow_contract(monkeypatch) -> None:
