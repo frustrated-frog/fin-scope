@@ -8,7 +8,7 @@ beforeEach(() => {
     { id: 1, marketId: 'policy-yes', eventId: 'policy-event', eventTitle: '美国科技政策预期', theme: '政治', question: '美国是否会在今年进一步扩大 AI 芯片出口限制？', marketUrl: 'https://polymarket.com/politics', probability: 62, change1h: 6.2, change24h: 9.4, volume: 1284000, volume24h: 386000, openInterest: 482000, spread: 2, rank: 1, previousRank: 4, rankChange: 3, signalScore: 82, signalReasons: ['1小时概率显著上升', '分类成交排名快速上升'], endDate: '2026-12-31', observation: '观察正式政策文件。', status: 'SIGNAL', dataStatus: 'LIVE', observedAt: '刚刚', lastRefreshAt: '刚刚', priceHistory: [{ observedAt: '09:00', probability: 58 }, { observedAt: '09:05', probability: 62 }] },
     { id: 2, marketId: 'spx-high', eventId: 'policy-event', eventTitle: '美国科技政策预期', theme: '财务', question: '标普500指数年底会创新高吗？', marketUrl: 'https://polymarket.com/finance', probability: 51, volume: 985000, volume24h: 245000, rank: 2, signalScore: 0, signalReasons: [], observation: '观察资产价格与正式披露。', status: 'WATCHING', dataStatus: 'LIVE', observedAt: '刚刚', priceHistory: [] }
   ];
-  const feed = { marketCount: 2, eventCount: 1, signalCount: 1, generatedAt: '刚刚', groups: [{ id: 'event:policy-event', title: '美国科技政策预期', themes: ['政治', '财务'], status: 'SIGNAL', signalScore: 82, signalReasons: ['1小时概率显著上升', '分类成交排名快速上升'], volume24h: 631000, markets: items, radarMatches: [{ eventId: 7, title: '美国讨论扩大先进芯片出口限制', summary: '监管部门正在讨论新的限制范围。', matchScore: 72 }], interpretation: { status: 'READY', happened: '概率和成交排名同步上升。', meaning: '市场对政策收紧的预期明显增强。', relatedVariables: '先进芯片、出口管制与供应链。', nextObservation: '关注正式政策文件。' } }] };
+  const feed = { marketCount: 2, eventCount: 1, signalCount: 1, generatedAt: '刚刚', groups: [{ id: 'event:policy-event', title: '美国科技政策预期', themes: ['政治', '财务'], status: 'SIGNAL', signalScore: 82, signalReasons: ['1小时概率显著上升', '分类成交排名快速上升'], volume24h: 631000, realityDataStatus: 'READY', expectationScore: 82, realityScore: 70, expectationRealityState: 'EXPECTATION_LEADING', gapReasons: ['预测市场先动，现实新闻仍在跟随'], newsCount1h: 4, newsCount24h: 11, independentSourceCount: 3, markets: items, radarMatches: [{ eventId: 7, title: '美国讨论扩大先进芯片出口限制', summary: '监管部门正在讨论新的限制范围。', matchScore: 72, newsCount1h: 4, newsCountPrevious1h: 1, newsCount24h: 11, independentSourceCount: 3, lastSeenAt: '2026-08-17T15:42:00' }], interpretation: { status: 'READY', source: 'AI', happened: '概率和成交排名同步上升。', meaning: '市场对政策收紧的预期明显增强。', relatedVariables: '先进芯片、出口管制与供应链。', nextObservation: '关注正式政策文件。', uncertainty: '预测市场定价不等于客观事实。' } }] };
   vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL) => Promise.resolve({
     ok: true,
     status: 200,
@@ -26,6 +26,22 @@ test('defaults to a deterministic event signal feed with optional local and AI e
   expect(screen.getByText('美国讨论扩大先进芯片出口限制')).toBeInTheDocument();
   expect(screen.getByText('市场对政策收紧的预期明显增强。')).toBeInTheDocument();
   expect(screen.getByText('2 个预测选项')).toBeInTheDocument();
+  expect(screen.getAllByText('预期先行').length).toBeGreaterThan(0);
+  expect(screen.getByText('市场预期')).toBeInTheDocument();
+  expect(screen.getByText('现实信息')).toBeInTheDocument();
+  expect(screen.getByText('AI 增强')).toBeInTheDocument();
+  expect(screen.getByText('近 1 小时')).toBeInTheDocument();
+  expect(screen.getByText('预测市场定价不等于客观事实。')).toBeInTheDocument();
+});
+
+test('filters the event stream by expectation reality state', async () => {
+  render(<GlobalExpectationsView addToast={vi.fn()} />);
+
+  await screen.findByRole('heading', { name: '美国科技政策预期' });
+  fireEvent.click(screen.getByRole('button', { name: '现实先行' }));
+
+  expect(screen.queryByRole('heading', { name: '美国科技政策预期' })).not.toBeInTheDocument();
+  expect(screen.getByText('当前筛选下暂无事件')).toBeInTheDocument();
 });
 
 test('opens a detail view with multiple observation windows', async () => {

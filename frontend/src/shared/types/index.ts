@@ -52,13 +52,17 @@ export type GlobalExpectationItem = {
 };
 
 export type GlobalExpectationInterpretation = {
-  status: 'NOT_REQUESTED' | 'QUEUED' | 'READY' | 'FAILED' | 'UNAVAILABLE';
+  status: 'RULE' | 'NOT_REQUESTED' | 'QUEUED' | 'READY' | 'FAILED' | 'UNAVAILABLE';
+  source?: 'RULE' | 'AI';
   happened?: string;
   meaning?: string;
   relatedVariables?: string;
   nextObservation?: string;
+  uncertainty?: string;
   failureMessage?: string;
 };
+
+export type ExpectationRealityState = 'EXPECTATION_LEADING' | 'REALITY_LEADING' | 'DUAL_ACCELERATING' | 'QUIET' | 'INSUFFICIENT_DATA';
 
 export type GlobalExpectationEventGroup = {
   id: string;
@@ -68,8 +72,16 @@ export type GlobalExpectationEventGroup = {
   signalScore: number;
   signalReasons: string[];
   volume24h?: number;
+  realityDataStatus?: 'READY' | 'FAILED';
+  expectationScore?: number;
+  realityScore?: number;
+  expectationRealityState?: ExpectationRealityState;
+  gapReasons?: string[];
+  newsCount1h?: number;
+  newsCount24h?: number;
+  independentSourceCount?: number;
   markets: GlobalExpectationItem[];
-  radarMatches: Array<{ eventId: number; title: string; summary?: string; matchScore: number }>;
+  radarMatches: Array<{ eventId: number; title: string; summary?: string; matchScore: number; newsCount1h?: number; newsCountPrevious1h?: number; newsCount24h?: number; independentSourceCount?: number; lastSeenAt?: string }>;
   interpretation: GlobalExpectationInterpretation;
 };
 
