@@ -53,6 +53,13 @@ class DiscoverySector(BaseModel):
     main_net_inflow: float | None = None
     main_net_inflow_ratio: float | None = None
     leader_stock_name: str | None = None
+    expected_constituent_count: int = Field(default=0, ge=0)
+    resolved_constituent_count: int = Field(default=0, ge=0)
+    constituent_source_family: str | None = None
+    constituent_quality_status: Literal[
+        "UNRESOLVED", "COMPLETE", "CACHED_COMPLETE", "SUPPLEMENTED_COMPLETE", "PARTIAL"
+    ] = "UNRESOLVED"
+    constituent_coverage: float = Field(default=0.0, ge=0, le=1)
     retrieved_at: str
 
 
