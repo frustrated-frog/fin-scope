@@ -109,8 +109,8 @@ public class QuantStrategyService {
                 new BusinessException(BizErrorCode.STRATEGY_DRAFT_NOT_FOUND));
     }
     @Transactional
-    public void recordDraftFailure(Long id, String issue) {
-        repository.markDraftFailed(id, issue);
+    public void recordDraftBuildFailure(Long id, String issue) {
+        repository.markDraftBuildFailed(id, issue);
     }
     public QuantStrategyVersion getVersion(Long id) {
         return repository.findVersion(id).orElseThrow(() ->

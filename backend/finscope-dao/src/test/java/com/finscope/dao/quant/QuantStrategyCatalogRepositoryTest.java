@@ -21,13 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class QuantStrategyCatalogRepositoryTest {
     private QuantStrategyCatalogRepository repository;
     private JdbcTemplate jdbc;
+    private DatabaseInitializer initializer;
 
     @BeforeEach
     void setUp() throws Exception {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + Files.createTempDirectory("quant-catalog-repo").resolve("finance.db"));
         jdbc = new JdbcTemplate(dataSource);
-        DatabaseInitializer initializer = new DatabaseInitializer();
+        initializer = new DatabaseInitializer();
         ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(initializer, "dataRoot", Files.createTempDirectory("quant-catalog-root").toString());
         initializer.afterPropertiesSet();
@@ -95,6 +96,27 @@ class QuantStrategyCatalogRepositoryTest {
                 .orElseThrow(AssertionError::new));
         assertFalse(repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidateId, 3L, "sha-two")
                 .isPresent());
+    }
+
+    @Test
+    void migratesLegacyOriginsToTheCandidatesCurrentSourceCommit() throws Exception {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        repository.saveSource(source("sha-current", now));
+        repository.upsertCandidates("AWESOME_SYSTEMATIC_TRADING", "sha-current",
+                Collections.singletonList(candidate("value", "价值策略", "ADAPTABLE")), now);
+        Long candidateId = repository.findCandidates(null, null).get(0).getId();
+        insertDataset(3L, "数据集 A", now);
+        insertVersion(21L, 3L, "策略 A", now);
+        repository.saveOrigin(candidateId, 11L, now);
+        repository.linkVersionForDraft(11L, 21L);
+
+        assertFalse(repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                candidateId, 3L, "sha-current").isPresent());
+
+        initializer.afterPropertiesSet();
+
+        assertEquals(Long.valueOf(21L), repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                candidateId, 3L, "sha-current").orElseThrow(AssertionError::new));
     }
 
     private void insertDataset(Long id, String name, LocalDateTime now) {

@@ -6,12 +6,14 @@ import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
 import com.finscope.domain.quant.backtest.BacktestResult;
+import com.finscope.domain.quant.backtest.EquityPoint;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.experiment.QuantExperiment;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -108,6 +110,18 @@ class QuantStrategyEvidenceScorerTest {
     }
 
     @Test
+    void distinguishesBuildInterruptionFromProtocolFailure() {
+        QuantStrategyDraft draft = new QuantStrategyDraft();
+        draft.setStatus("BUILD_FAILED");
+        draft.setValidationIssues(Collections.singletonList("数据库暂时不可用"));
+
+        QuantStrategyAcademyCard card = scorer.failedDraft(candidate(), realDataset(), draft);
+
+        assertTrue(card.getEvidenceSummary().contains("不代表策略协议失败"));
+        assertTrue(card.getLimitations().contains("数据库暂时不可用"));
+    }
+
+    @Test
     void doesNotPromoteAHighScoreWithoutThreeCalendarYears() {
         QuantExperiment experiment = succeeded(0.18, 0.09, 0.19, 1.15, 0.94, 48, 2.3,
                 Collections.<AnnualPerformance>emptyList(), Collections.<String>emptyList());
@@ -115,7 +129,19 @@ class QuantStrategyEvidenceScorerTest {
         QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
 
         assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
-        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("至少 3 个年度")));
+        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("实际覆盖至少 3 年")));
+    }
+
+    @Test
+    void doesNotTreatThreePartialCalendarYearsAsThreeYearsOfEvidence() {
+        QuantExperiment experiment = succeeded(0.18, 0.09, 0.19, 1.15, 0.94, 48, 2.3,
+                years(0.05, 0.03, 0.08), Collections.<String>emptyList());
+        experiment.getResult().setEquityCurve(curve(LocalDate.of(2024, 12, 1), LocalDate.of(2026, 1, 31)));
+
+        QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
+
+        assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
+        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("不能只跨过 3 个自然年份")));
     }
 
     @Test
@@ -167,12 +193,24 @@ class QuantStrategyEvidenceScorerTest {
         result.setMetrics(metrics);
         result.setAnnualPerformance(years);
         result.setWarnings(warnings);
+        if (!years.isEmpty()) {
+            result.setEquityCurve(curve(LocalDate.of(years.get(0).getYear(), 1, 1),
+                    LocalDate.of(years.get(years.size() - 1).getYear(), 12, 31)));
+        }
         QuantExperiment value = new QuantExperiment();
         value.setId(19L);
         value.setStatus("SUCCEEDED");
         value.setDataKind("REAL");
         value.setResult(result);
         return value;
+    }
+
+    private java.util.List<EquityPoint> curve(LocalDate start, LocalDate end) {
+        EquityPoint first = new EquityPoint();
+        first.setTradeDate(start);
+        EquityPoint last = new EquityPoint();
+        last.setTradeDate(end);
+        return Arrays.asList(first, last);
     }
 
     private java.util.List<AnnualPerformance> years(double... excessReturns) {

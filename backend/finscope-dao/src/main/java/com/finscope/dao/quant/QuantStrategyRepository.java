@@ -58,8 +58,8 @@ public class QuantStrategyRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
-    public void markDraftFailed(Long id, String issue) {
-        jdbcTemplate.update("UPDATE quant_strategy_draft SET status='FAILED',validation_issues=? WHERE id=?",
+    public void markDraftBuildFailed(Long id, String issue) {
+        jdbcTemplate.update("UPDATE quant_strategy_draft SET status='BUILD_FAILED',validation_issues=? WHERE id=?",
                 issue, id);
     }
 

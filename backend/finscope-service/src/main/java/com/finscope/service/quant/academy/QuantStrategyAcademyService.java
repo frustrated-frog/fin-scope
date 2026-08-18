@@ -100,7 +100,7 @@ public class QuantStrategyAcademyService {
         }
         QuantStrategyDraft draft = strategies.getDraft(draftId.get());
         QuantDataset dataset = selectedDataset == null ? datasets.get(draft.getDatasetId()) : selectedDataset;
-        if ("FAILED".equals(draft.getStatus())) {
+        if ("FAILED".equals(draft.getStatus()) || "BUILD_FAILED".equals(draft.getStatus())) {
             return scorer.failedDraft(candidate, dataset, draft);
         }
         return scorer.score(candidate, dataset, null);
@@ -137,7 +137,7 @@ public class QuantStrategyAcademyService {
         } catch (RuntimeException ex) {
             String message = safeMessage(ex);
             if (draftId != null && item.getStrategyVersionId() == null) {
-                strategies.recordDraftFailure(draftId, message);
+                strategies.recordDraftBuildFailure(draftId, message);
             }
             item.setStatus(QuantStrategyAcademyBuildItemStatus.FAILED);
             item.setMessage(message);

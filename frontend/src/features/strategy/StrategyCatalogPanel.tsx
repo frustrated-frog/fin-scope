@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '../../shared/api/client';
 import {
   QuantDataset,
@@ -52,14 +52,19 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
   const [busy, setBusy] = useState<'load' | 'sync' | 'build' | undefined>('load');
   const [sourceMissing, setSourceMissing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
+  const loadSequence = useRef(0);
 
   async function load(showError = false) {
+    const requestSequence = ++loadSequence.current;
     setBusy(current => current === 'build' || current === 'sync' ? current : 'load');
     const [cardResult, sourceResult] = await Promise.allSettled([
       api<QuantStrategyAcademyCard[]>(datasetId === '' ? '/api/quant/academy/cards'
         : `/api/quant/academy/cards?datasetId=${datasetId}`),
       api<QuantStrategyCatalogSource>('/api/quant/catalog/source')
     ]);
+    if (requestSequence !== loadSequence.current) {
+      return;
+    }
     if (cardResult.status === 'fulfilled') {
       setCards(cardResult.value);
       setLoadError(undefined);
@@ -103,7 +108,7 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
       void load();
     }, 3500);
     return () => window.clearInterval(timer);
-  }, [cards]);
+  }, [cards, datasetId]);
 
   const realDatasets = datasets.filter(item => item.status === 'READY' && item.dataKind === 'REAL');
   const selected = cards.find(item => item.candidateId === selectedId) ?? cards[0];

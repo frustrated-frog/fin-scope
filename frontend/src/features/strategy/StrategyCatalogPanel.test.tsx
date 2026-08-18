@@ -122,3 +122,34 @@ test('keeps source recovery available when the strategy directory has not been s
   expect(await screen.findByText('先同步公开策略目录')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '同步公开目录' })).toBeInTheDocument();
 });
+
+test('keeps the newest dataset cards when an older request finishes late', async () => {
+  let resolveOlder: ((response: Response) => void) | undefined;
+  const olderResponse = new Promise<Response>(resolve => {
+    resolveOlder = resolve;
+  });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/quant/academy/cards?datasetId=3') {
+      return olderResponse;
+    }
+    if (path === '/api/quant/academy/cards?datasetId=5') {
+      return apiResponse([{ ...cards[0], candidateId: 15, title: '数据集 B 策略', datasetId: 5, datasetName: '数据集 B' }]);
+    }
+    if (path === '/api/quant/catalog/source') {
+      return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY' });
+    }
+    return apiResponse([]);
+  }));
+  const user = userEvent.setup();
+
+  render(<StrategyCatalogPanel datasets={[datasets[0],
+    { id: 5, name: '数据集 B', market: 'A_SHARE', dataKind: 'REAL', status: 'READY' }]} addToast={vi.fn()} />);
+  await user.selectOptions(screen.getByRole('combobox', { name: '验证数据' }), '5');
+
+  expect(await screen.findByRole('button', { name: /数据集 B 策略/ })).toBeInTheDocument();
+  resolveOlder?.(apiResponse([{ ...cards[0], title: '迟到的数据集 A 策略' }]));
+
+  await waitFor(() => expect(screen.queryByRole('button', { name: /迟到的数据集 A 策略/ })).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: /数据集 B 策略/ })).toBeInTheDocument();
+});

@@ -6,6 +6,7 @@ import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
 import com.finscope.domain.quant.backtest.BacktestResult;
+import com.finscope.domain.quant.backtest.EquityPoint;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.experiment.QuantExperiment;
@@ -51,7 +52,11 @@ public class QuantStrategyEvidenceScorer {
     public QuantStrategyAcademyCard failedDraft(QuantStrategyCandidate candidate, QuantDataset dataset,
                                                    QuantStrategyDraft draft) {
         QuantStrategyAcademyCard card = baseCard(candidate, dataset, null);
-        learningCase(card, "本地策略协议未通过，保留失败原因供学习");
+        if ("BUILD_FAILED".equals(draft.getStatus())) {
+            learningCase(card, "本地版本构建中断，可以重试；这不代表策略协议失败");
+        } else {
+            learningCase(card, "本地策略协议未通过，保留失败原因供学习");
+        }
         if (draft.getValidationIssues() == null || draft.getValidationIssues().isEmpty()) {
             card.getLimitations().add("策略草案未通过本地协议");
         } else {
@@ -122,7 +127,7 @@ public class QuantStrategyEvidenceScorer {
         card.setEvidenceScore(score);
         card.getLimitations().addAll(warnings);
         card.getLimitations().add("本地历史回测不等同于实盘或未来收益证明");
-        boolean applicationEligible = applicationEligible(card, years.size(), metrics.getTradeCount(), warnings);
+        boolean applicationEligible = applicationEligible(card, result, years.size(), metrics.getTradeCount(), warnings);
         if (score >= APPLICATION_SCORE && applicationEligible) {
             card.setEvidenceLevel(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE);
             card.setShelf(QuantStrategyAcademyShelf.APPLICATION_CANDIDATE);
@@ -137,11 +142,11 @@ public class QuantStrategyEvidenceScorer {
         }
     }
 
-    private boolean applicationEligible(QuantStrategyAcademyCard card, int yearCount, int tradeCount,
+    private boolean applicationEligible(QuantStrategyAcademyCard card, BacktestResult result, int yearCount, int tradeCount,
                                             List<String> warnings) {
         boolean eligible = true;
-        if (yearCount < 3) {
-            card.getLimitations().add("应用候选至少 3 个年度，当前样本覆盖不足");
+        if (yearCount < 3 || !hasThreeYearCoverage(result)) {
+            card.getLimitations().add("应用候选需要实际覆盖至少 3 年，不能只跨过 3 个自然年份");
             eligible = false;
         }
         if (tradeCount < 20) {
@@ -153,6 +158,16 @@ public class QuantStrategyEvidenceScorer {
             eligible = false;
         }
         return eligible;
+    }
+
+    private boolean hasThreeYearCoverage(BacktestResult result) {
+        List<EquityPoint> curve = result.getEquityCurve();
+        if (curve == null || curve.size() < 2 || curve.get(0).getTradeDate() == null
+                || curve.get(curve.size() - 1).getTradeDate() == null) {
+            return false;
+        }
+        return !curve.get(curve.size() - 1).getTradeDate()
+                .isBefore(curve.get(0).getTradeDate().plusYears(3).minusDays(1));
     }
 
     private void addCoverage(QuantStrategyAcademyCard card, int yearCount, int tradeCount) {

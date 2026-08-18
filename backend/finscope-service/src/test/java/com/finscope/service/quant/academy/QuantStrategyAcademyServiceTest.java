@@ -146,7 +146,7 @@ class QuantStrategyAcademyServiceTest {
         QuantStrategyAcademyBuildResult result = fixture.service.build(3L);
 
         assertEquals(1, result.getFailedCount());
-        verify(fixture.strategies).recordDraftFailure(101L, "策略版本确认失败");
+        verify(fixture.strategies).recordDraftBuildFailure(101L, "策略版本确认失败");
     }
 
     @Test

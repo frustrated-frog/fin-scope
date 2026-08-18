@@ -1262,6 +1262,10 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_candidate_origin_candidate "
                 + "ON quant_strategy_candidate_origin(candidate_id,draft_id DESC)");
         ensureColumn("quant_strategy_candidate_origin", "source_commit_sha", "TEXT");
+        jdbcTemplate.update("UPDATE quant_strategy_candidate_origin SET source_commit_sha=("
+                + "SELECT c.source_commit_sha FROM quant_strategy_candidate c "
+                + "WHERE c.id=quant_strategy_candidate_origin.candidate_id) "
+                + "WHERE source_commit_sha IS NULL");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,strategy_version_id INTEGER NOT NULL,request_fingerprint TEXT NOT NULL,"
                 + "dataset_fingerprint TEXT NOT NULL,engine_version TEXT NOT NULL,status TEXT NOT NULL,error_message TEXT,"
