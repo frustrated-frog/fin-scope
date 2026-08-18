@@ -1,6 +1,8 @@
 package com.finscope.service.quant.academy;
 
 import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
+import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.quant.QuantExperimentRepository;
 import com.finscope.dao.quant.QuantStrategyCatalogRepository;
@@ -25,6 +27,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -50,7 +53,7 @@ class QuantStrategyAcademyServiceTest {
             } else {
                 QuantStrategyDraft draft = new QuantStrategyDraft();
                 draft.setId(100L + index);
-                draft.setStatus("VALIDATED");
+                draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
                 when(fixture.drafts.generate(candidate.getId(), 3L)).thenReturn(draft);
                 QuantStrategyVersion version = new QuantStrategyVersion();
                 version.setId(200L + index);
@@ -113,7 +116,7 @@ class QuantStrategyAcademyServiceTest {
                 .thenReturn(Optional.<Long>empty());
         QuantStrategyDraft draft = new QuantStrategyDraft();
         draft.setId(101L);
-        draft.setStatus("VALIDATED");
+        draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         when(fixture.drafts.generate(candidate.getId(), 3L)).thenReturn(draft);
         QuantStrategyVersion version = new QuantStrategyVersion();
         version.setId(201L);
@@ -138,7 +141,7 @@ class QuantStrategyAcademyServiceTest {
                 .thenReturn(Optional.<Long>empty());
         QuantStrategyDraft draft = new QuantStrategyDraft();
         draft.setId(101L);
-        draft.setStatus("VALIDATED");
+        draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         when(fixture.drafts.generate(candidate.getId(), 3L)).thenReturn(draft);
         when(fixture.strategies.confirm(101L)).thenThrow(new BusinessException(
                 com.finscope.common.exception.ErrorCode.BUSINESS_CONFLICT, "策略版本确认失败"));
@@ -187,7 +190,7 @@ class QuantStrategyAcademyServiceTest {
                 .thenReturn(Optional.of(11L));
         QuantStrategyDraft failed = new QuantStrategyDraft();
         failed.setId(11L);
-        failed.setStatus("FAILED");
+        failed.setStatus(QuantStrategyDraftStatus.FAILED);
         failed.setValidationIssues(Collections.singletonList("换手周期不受支持"));
         when(fixture.strategies.getDraft(11L)).thenReturn(failed);
         QuantStrategyAcademyCard scored = new QuantStrategyAcademyCard();
@@ -199,6 +202,35 @@ class QuantStrategyAcademyServiceTest {
 
         assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, cards.get(0).getEvidenceLevel());
         verify(fixture.scorer).failedDraft(candidate, fixture.dataset, failed);
+    }
+
+    @Test
+    void showsLegacyEvidenceWithoutReusingItAsAnApplicationCandidate() {
+        Fixture fixture = fixture();
+        QuantStrategyCandidate candidate = candidates(1).get(0);
+        when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.<Long>empty());
+        when(fixture.catalog.findLatestLegacyVersionIdByCandidateAndDataset(candidate.getId(), 3L))
+                .thenReturn(Optional.of(21L));
+        QuantStrategyVersion version = new QuantStrategyVersion();
+        version.setId(21L);
+        version.setDatasetId(3L);
+        when(fixture.strategies.getVersion(21L)).thenReturn(version);
+        QuantExperiment experiment = new QuantExperiment();
+        experiment.setId(31L);
+        experiment.setStatus("SUCCEEDED");
+        when(fixture.experimentRepository.findLatestByStrategyVersion(21L)).thenReturn(Optional.of(experiment));
+        QuantStrategyAcademyCard scored = new QuantStrategyAcademyCard();
+        scored.setShelf(QuantStrategyAcademyShelf.APPLICATION_CANDIDATE);
+        scored.setEvidenceSummary("本地历史证据相对完整");
+        when(fixture.scorer.score(candidate, fixture.dataset, experiment)).thenReturn(scored);
+
+        QuantStrategyAcademyCard card = fixture.service.cards(3L).get(0);
+
+        assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
+        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("来源提交")));
+        verify(fixture.drafts, never()).generate(anyLong(), anyLong());
     }
 
     private Fixture fixture() {

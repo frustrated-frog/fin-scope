@@ -1,5 +1,7 @@
 package com.finscope.domain.quant.strategy;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +30,7 @@ public class QuantStrategyDraft {
     /**
      * 当前状态。
      */
-    private String status;
+    private QuantStrategyDraftStatus status;
     /**
      * 模型名称。
      */
@@ -59,8 +61,8 @@ public class QuantStrategyDraft {
     public void setRawResponse(String rawResponse) { this.rawResponse = rawResponse; }
     public String getNormalizedSpec() { return normalizedSpec; }
     public void setNormalizedSpec(String normalizedSpec) { this.normalizedSpec = normalizedSpec; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public QuantStrategyDraftStatus getStatus() { return status; }
+    public void setStatus(QuantStrategyDraftStatus status) { this.status = status; }
     public String getModel() { return model; }
     public void setModel(String model) { this.model = model; }
     public String getValidatedDatasetFingerprint() { return validatedDatasetFingerprint; }

@@ -1,5 +1,6 @@
 package com.finscope.dao.quant;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
@@ -24,7 +25,8 @@ public class QuantStrategyRepository {
         QuantStrategyDraft value = new QuantStrategyDraft();
         value.setId(rs.getLong("id")); value.setDatasetId(rs.getLong("dataset_id"));
         value.setPrompt(rs.getString("prompt")); value.setRawResponse(rs.getString("raw_response"));
-        value.setNormalizedSpec(rs.getString("normalized_spec")); value.setStatus(rs.getString("status"));
+        value.setNormalizedSpec(rs.getString("normalized_spec"));
+        value.setStatus(QuantStrategyDraftStatus.valueOf(rs.getString("status")));
         value.setModel(rs.getString("model")); value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at"));
         value.setValidatedDatasetFingerprint(rs.getString("validated_dataset_fingerprint"));
         String issues = rs.getString("validation_issues");
@@ -46,7 +48,7 @@ public class QuantStrategyRepository {
             PreparedStatement ps = connection.prepareStatement("INSERT INTO quant_strategy_draft(dataset_id,prompt,raw_response,"
                     + "normalized_spec,status,model,validation_issues,validated_dataset_fingerprint,created_at) VALUES(?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, value.getDatasetId()); ps.setString(2, value.getPrompt()); ps.setString(3, value.getRawResponse());
-            ps.setString(4, value.getNormalizedSpec()); ps.setString(5, value.getStatus()); ps.setString(6, value.getModel());
+            ps.setString(4, value.getNormalizedSpec()); ps.setString(5, value.getStatus().name()); ps.setString(6, value.getModel());
             ps.setString(7, String.join("\n", value.getValidationIssues())); ps.setString(8, value.getValidatedDatasetFingerprint());
             ps.setString(9, TimeUtil.text(now)); return ps;
         }, keys);
@@ -59,8 +61,8 @@ public class QuantStrategyRepository {
     }
 
     public void markDraftBuildFailed(Long id, String issue) {
-        jdbcTemplate.update("UPDATE quant_strategy_draft SET status='BUILD_FAILED',validation_issues=? WHERE id=?",
-                issue, id);
+        jdbcTemplate.update("UPDATE quant_strategy_draft SET status=?,validation_issues=? WHERE id=?",
+                QuantStrategyDraftStatus.BUILD_FAILED.name(), issue, id);
     }
 
     public QuantStrategyVersion saveVersion(QuantStrategyVersion value) {

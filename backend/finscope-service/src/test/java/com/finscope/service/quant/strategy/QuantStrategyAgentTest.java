@@ -1,5 +1,6 @@
 package com.finscope.service.quant.strategy;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.quant.factor.FactorRegistry;
@@ -37,7 +38,7 @@ class QuantStrategyAgentTest {
         QuantStrategyDraft draft = agent.generate(7L, "使用资金行为因子",
                 java.util.Collections.singleton("MAIN_FLOW_SHARE"));
 
-        assertEquals("VALIDATED", draft.getStatus());
+        assertEquals(QuantStrategyDraftStatus.VALIDATED, draft.getStatus());
         org.junit.jupiter.api.Assertions.assertTrue(system.get().contains("MAIN_FLOW_SHARE(HIGH)"));
     }
 
@@ -56,7 +57,7 @@ class QuantStrategyAgentTest {
         QuantStrategyDraft draft = new QuantStrategyAgent(llm, registry,
                 new QuantStrategySpecValidator(registry)).generate(1L, "偏好质量和中期动量");
 
-        assertEquals("VALIDATED", draft.getStatus());
+        assertEquals(QuantStrategyDraftStatus.VALIDATED, draft.getStatus());
         assertEquals("质量动量", draft.getSpec().getName());
         assertEquals("test-model", draft.getModel());
     }
@@ -66,7 +67,7 @@ class QuantStrategyAgentTest {
         FactorRegistry registry = new FactorRegistry();
         QuantStrategyDraft draft = new QuantStrategyAgent(client(null), registry, new QuantStrategySpecValidator(registry))
                 .generate(1L, "任意策略");
-        assertEquals("FAILED", draft.getStatus());
+        assertEquals(QuantStrategyDraftStatus.FAILED, draft.getStatus());
         assertEquals("策略 Agent 尚未配置", draft.getValidationIssues().get(0));
     }
 
@@ -92,7 +93,7 @@ class QuantStrategyAgentTest {
         QuantStrategyDraft draft = new QuantStrategyAgent(llm, registry,
                 new QuantStrategySpecValidator(registry)).generate(1L, "质量价值");
 
-        assertEquals("VALIDATED", draft.getStatus());
+        assertEquals(QuantStrategyDraftStatus.VALIDATED, draft.getStatus());
         assertEquals(2, calls.get());
         assertEquals("EP", draft.getSpec().getFactors().get(0).getCode());
     }
@@ -114,7 +115,7 @@ class QuantStrategyAgentTest {
         FactorRegistry registry = new FactorRegistry();
         QuantStrategyDraft draft = new QuantStrategyAgent(llm, registry, new QuantStrategySpecValidator(registry))
                 .generate(1L, "只使用价量因子", false);
-        assertEquals("VALIDATED", draft.getStatus());
+        assertEquals(QuantStrategyDraftStatus.VALIDATED, draft.getStatus());
         org.junit.jupiter.api.Assertions.assertFalse(system.get().contains("ROE("));
         org.junit.jupiter.api.Assertions.assertTrue(system.get().contains("MOMENTUM_20D("));
     }

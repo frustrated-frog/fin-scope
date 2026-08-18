@@ -99,7 +99,7 @@ class QuantStrategyCatalogRepositoryTest {
     }
 
     @Test
-    void migratesLegacyOriginsToTheCandidatesCurrentSourceCommit() throws Exception {
+    void migratesLegacyOriginsAsUnknownWithoutClaimingTheCurrentSourceCommit() throws Exception {
         LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
         repository.saveSource(source("sha-current", now));
         repository.upsertCandidates("AWESOME_SYSTEMATIC_TRADING", "sha-current",
@@ -107,7 +107,8 @@ class QuantStrategyCatalogRepositoryTest {
         Long candidateId = repository.findCandidates(null, null).get(0).getId();
         insertDataset(3L, "数据集 A", now);
         insertVersion(21L, 3L, "策略 A", now);
-        repository.saveOrigin(candidateId, 11L, now);
+        jdbc.update("INSERT INTO quant_strategy_candidate_origin(candidate_id,draft_id,created_at) VALUES(?,?,?)",
+                candidateId, 11L, now.toString());
         repository.linkVersionForDraft(11L, 21L);
 
         assertFalse(repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
@@ -115,8 +116,10 @@ class QuantStrategyCatalogRepositoryTest {
 
         initializer.afterPropertiesSet();
 
-        assertEquals(Long.valueOf(21L), repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
-                candidateId, 3L, "sha-current").orElseThrow(AssertionError::new));
+        assertFalse(repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                candidateId, 3L, "sha-current").isPresent());
+        assertEquals(Long.valueOf(21L), repository.findLatestLegacyVersionIdByCandidateAndDataset(
+                candidateId, 3L).orElseThrow(AssertionError::new));
     }
 
     private void insertDataset(Long id, String name, LocalDateTime now) {

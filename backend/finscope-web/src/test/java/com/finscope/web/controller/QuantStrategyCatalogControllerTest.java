@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
 import com.finscope.domain.quant.catalog.QuantStrategyCatalogSource;
 import com.finscope.domain.quant.catalog.QuantStrategyCatalogSyncResult;
@@ -65,7 +66,7 @@ class QuantStrategyCatalogControllerTest {
         when(catalog.source()).thenReturn(Optional.of(source));
         QuantStrategyCandidate candidate = new QuantStrategyCandidate(); candidate.setId(7L); candidate.setTitle("价值策略");
         when(catalog.find(7L)).thenReturn(Optional.of(candidate));
-        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus("VALIDATED");
+        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         when(drafts.generate(7L, 3L)).thenReturn(draft);
 
         mvc.perform(get("/api/quant/catalog/source"))

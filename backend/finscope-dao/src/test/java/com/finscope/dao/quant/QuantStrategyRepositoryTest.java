@@ -1,5 +1,6 @@
 package com.finscope.dao.quant;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.dao.config.DatabaseInitializer;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
@@ -36,7 +37,7 @@ class QuantStrategyRepositoryTest {
     void persistsValidatedDraftAndImmutableVersion() {
         QuantStrategyDraft draft = new QuantStrategyDraft();
         draft.setDatasetId(1L); draft.setPrompt("质量动量"); draft.setRawResponse("{}");
-        draft.setNormalizedSpec("{\"name\":\"质量动量\"}"); draft.setStatus("VALIDATED"); draft.setModel("test");
+        draft.setNormalizedSpec("{\"name\":\"质量动量\"}"); draft.setStatus(QuantStrategyDraftStatus.VALIDATED); draft.setModel("test");
         QuantStrategySpec spec = new QuantStrategySpec(); spec.setName("质量动量"); draft.setSpec(spec);
         QuantStrategyDraft saved = repository.saveDraft(draft);
         QuantStrategyVersion version = new QuantStrategyVersion();
@@ -45,7 +46,8 @@ class QuantStrategyRepositoryTest {
         version.setDatasetFingerprint("dataset-sha"); version.setEngineVersion("quant-java-v1"); version.setSource("AGENT");
         QuantStrategyVersion persisted = repository.saveVersion(version);
 
-        assertEquals("VALIDATED", repository.findDraft(saved.getId()).orElseThrow(AssertionError::new).getStatus());
+        assertEquals(QuantStrategyDraftStatus.VALIDATED,
+                repository.findDraft(saved.getId()).orElseThrow(AssertionError::new).getStatus());
         assertEquals("质量动量", saved.getSpec().getName());
         assertEquals("strategy-sha", repository.findVersion(persisted.getId()).orElseThrow(AssertionError::new).getStrategyFingerprint());
     }

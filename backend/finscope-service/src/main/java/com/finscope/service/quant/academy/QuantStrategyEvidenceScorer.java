@@ -2,6 +2,7 @@ package com.finscope.service.quant.academy;
 
 import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
 import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
@@ -52,7 +53,7 @@ public class QuantStrategyEvidenceScorer {
     public QuantStrategyAcademyCard failedDraft(QuantStrategyCandidate candidate, QuantDataset dataset,
                                                    QuantStrategyDraft draft) {
         QuantStrategyAcademyCard card = baseCard(candidate, dataset, null);
-        if ("BUILD_FAILED".equals(draft.getStatus())) {
+        if (QuantStrategyDraftStatus.BUILD_FAILED.equals(draft.getStatus())) {
             learningCase(card, "本地版本构建中断，可以重试；这不代表策略协议失败");
         } else {
             learningCase(card, "本地策略协议未通过，保留失败原因供学习");

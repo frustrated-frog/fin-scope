@@ -2,6 +2,7 @@ package com.finscope.service.quant.academy;
 
 import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
 import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
@@ -99,7 +100,7 @@ class QuantStrategyEvidenceScorerTest {
     @Test
     void preservesFailedDraftValidationIssuesAsLearningEvidence() {
         QuantStrategyDraft draft = new QuantStrategyDraft();
-        draft.setStatus("FAILED");
+        draft.setStatus(QuantStrategyDraftStatus.FAILED);
         draft.setValidationIssues(Collections.singletonList("换手周期不受支持"));
 
         QuantStrategyAcademyCard card = scorer.failedDraft(candidate(), realDataset(), draft);
@@ -112,7 +113,7 @@ class QuantStrategyEvidenceScorerTest {
     @Test
     void distinguishesBuildInterruptionFromProtocolFailure() {
         QuantStrategyDraft draft = new QuantStrategyDraft();
-        draft.setStatus("BUILD_FAILED");
+        draft.setStatus(QuantStrategyDraftStatus.BUILD_FAILED);
         draft.setValidationIssues(Collections.singletonList("数据库暂时不可用"));
 
         QuantStrategyAcademyCard card = scorer.failedDraft(candidate(), realDataset(), draft);

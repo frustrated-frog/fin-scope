@@ -3,6 +3,7 @@ package com.finscope.service.quant.strategy;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategySpec;
@@ -74,7 +75,7 @@ public class QuantStrategyAgent {
     private QuantStrategyDraft failedDraft(Long datasetId, String prompt, String raw, String issue) {
         QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setDatasetId(datasetId); draft.setPrompt(prompt);
         if (raw != null && raw.length() > 12000) raw = raw.substring(0, 12000);
-        draft.setRawResponse(raw); draft.setStatus("FAILED"); draft.setModel(llm.modelName());
+        draft.setRawResponse(raw); draft.setStatus(QuantStrategyDraftStatus.FAILED); draft.setModel(llm.modelName());
         draft.setValidationIssues(java.util.Collections.singletonList(issue)); draft.setCreatedAt(LocalDateTime.now());
         return draft;
     }
@@ -86,7 +87,7 @@ public class QuantStrategyAgent {
         QuantStrategyDraft draft = new QuantStrategyDraft();
         draft.setDatasetId(datasetId); draft.setPrompt(prompt); draft.setRawResponse(raw);
         draft.setSpec(spec); draft.setNormalizedSpec(mapper.writeValueAsString(spec));
-        draft.setStatus("VALIDATED"); draft.setModel(llm.modelName()); draft.setCreatedAt(LocalDateTime.now());
+        draft.setStatus(QuantStrategyDraftStatus.VALIDATED); draft.setModel(llm.modelName()); draft.setCreatedAt(LocalDateTime.now());
         return draft;
     }
 

@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.data.QuantDataSyncRun;
 import com.finscope.domain.quant.experiment.QuantExperiment;
@@ -90,7 +91,7 @@ class QuantPlatformControllerTest {
 
     @Test
     void keepsDraftConfirmationAndExperimentExecutionSeparate() throws Exception {
-        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus("VALIDATED");
+        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         when(strategies.generateDraft(anyLong(), anyString())).thenReturn(draft);
         QuantStrategyVersion version = new QuantStrategyVersion(); version.setId(12L); version.setName("质量价值");
         when(strategies.confirm(11L)).thenReturn(version);

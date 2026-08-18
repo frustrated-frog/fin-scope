@@ -153,3 +153,32 @@ test('keeps the newest dataset cards when an older request finishes late', async
   await waitFor(() => expect(screen.queryByRole('button', { name: /迟到的数据集 A 策略/ })).not.toBeInTheDocument());
   expect(screen.getByRole('button', { name: /数据集 B 策略/ })).toBeInTheDocument();
 });
+
+test('locks the dataset while an academy build is in flight', async () => {
+  let resolveBuild: ((response: Response) => void) | undefined;
+  const buildResponse = new Promise<Response>(resolve => {
+    resolveBuild = resolve;
+  });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/quant/academy/build') {
+      return buildResponse;
+    }
+    if (path.startsWith('/api/quant/academy/cards')) {
+      return apiResponse([]);
+    }
+    if (path === '/api/quant/catalog/source') {
+      return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY' });
+    }
+    return apiResponse([]);
+  }));
+  const user = userEvent.setup();
+
+  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} />);
+  await user.click(await screen.findByRole('button', { name: '自动构建本期学院' }));
+
+  expect(screen.getByRole('combobox', { name: '验证数据' })).toBeDisabled();
+  resolveBuild?.(apiResponse({ scannedCount: 0, draftCreatedCount: 0, versionConfirmedCount: 0,
+    experimentStartedCount: 0, reusedCount: 0, failedCount: 0, items: [] }));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: '验证数据' })).not.toBeDisabled());
+});

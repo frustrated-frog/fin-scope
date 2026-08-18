@@ -1,5 +1,6 @@
 package com.finscope.service.quant.strategy;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.quant.QuantStrategyRepository;
 import com.finscope.dao.quant.QuantStrategyCatalogRepository;
@@ -30,7 +31,7 @@ class QuantStrategyServiceTest {
         QuantDatasetService datasets = mock(QuantDatasetService.class);
         QuantStrategyDraft draft = new QuantStrategyDraft();
         QuantStrategySpec spec = QuantStrategySpecValidatorTest.validSpec();
-        draft.setId(7L); draft.setDatasetId(1L); draft.setStatus("VALIDATED"); draft.setValidatedDatasetFingerprint("dataset-sha");
+        draft.setId(7L); draft.setDatasetId(1L); draft.setStatus(QuantStrategyDraftStatus.VALIDATED); draft.setValidatedDatasetFingerprint("dataset-sha");
         spec.setStartDate(java.time.LocalDate.of(2024,1,1)); spec.setEndDate(java.time.LocalDate.of(2024,12,31));
         draft.setNormalizedSpec(new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).writeValueAsString(spec));
         when(repository.findDraft(7L)).thenReturn(Optional.of(draft)); when(repository.nextVersion(spec.getName())).thenReturn(1);
@@ -56,7 +57,7 @@ class QuantStrategyServiceTest {
         QuantDatasetService datasets = mock(QuantDatasetService.class);
         QuantStrategyDraft draft = new QuantStrategyDraft();
         QuantStrategySpec spec = QuantStrategySpecValidatorTest.validSpec();
-        draft.setId(7L); draft.setDatasetId(1L); draft.setStatus("VALIDATED");
+        draft.setId(7L); draft.setDatasetId(1L); draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         draft.setValidatedDatasetFingerprint("dataset-sha"); spec.setStartDate(java.time.LocalDate.of(2024,1,1)); spec.setEndDate(java.time.LocalDate.of(2024,12,31));
         draft.setNormalizedSpec(new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).writeValueAsString(spec));
         when(repository.findDraft(7L)).thenReturn(Optional.of(draft));

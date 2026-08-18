@@ -1,5 +1,6 @@
 package com.finscope.service.quant.catalog;
 
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.quant.QuantStrategyCatalogRepository;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
@@ -24,7 +25,7 @@ class QuantStrategyCandidateDraftServiceTest {
         QuantStrategyCatalogRepository repository = mock(QuantStrategyCatalogRepository.class);
         QuantStrategyService strategies = mock(QuantStrategyService.class);
         when(repository.findById(7L)).thenReturn(Optional.of(candidate("ADAPTABLE")));
-        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus("VALIDATED");
+        QuantStrategyDraft draft = new QuantStrategyDraft(); draft.setId(11L); draft.setStatus(QuantStrategyDraftStatus.VALIDATED);
         when(strategies.generateDraft(org.mockito.ArgumentMatchers.eq(3L), contains("来源标题：价值（账面价值）因素")))
                 .thenReturn(draft);
         QuantStrategyCandidateDraftService service = new QuantStrategyCandidateDraftService(repository, strategies);

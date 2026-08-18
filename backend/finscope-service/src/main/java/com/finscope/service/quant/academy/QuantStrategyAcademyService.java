@@ -1,6 +1,8 @@
 package com.finscope.service.quant.academy;
 
 import com.finscope.common.enums.quant.QuantStrategyAcademyBuildItemStatus;
+import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantExperimentRepository;
@@ -46,10 +48,16 @@ public class QuantStrategyAcademyService {
         List<QuantStrategyAcademyCard> cards = new ArrayList<QuantStrategyAcademyCard>();
         List<QuantStrategyCandidate> candidates = catalogRepository.findCandidates("ADAPTABLE", null);
         for (QuantStrategyCandidate candidate : candidates) {
+            boolean legacyOrigin = false;
             Optional<Long> versionId = selectedDataset == null
                     ? catalogRepository.findLatestVersionIdByCandidateAndSourceCommit(candidate.getId(), candidate.getSourceCommitSha())
                     : catalogRepository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(),
                             selectedDataset.getId(), candidate.getSourceCommitSha());
+            if (versionId.isEmpty() && selectedDataset != null) {
+                versionId = catalogRepository.findLatestLegacyVersionIdByCandidateAndDataset(candidate.getId(),
+                        selectedDataset.getId());
+                legacyOrigin = versionId.isPresent();
+            }
             if (versionId.isEmpty()) {
                 cards.add(cardWithoutVersion(candidate, selectedDataset));
                 continue;
@@ -59,6 +67,9 @@ public class QuantStrategyAcademyService {
             QuantExperiment experiment = experimentRepository.findLatestByStrategyVersion(version.getId()).orElse(null);
             QuantStrategyAcademyCard card = scorer.score(candidate, dataset, experiment);
             card.setStrategyVersionId(version.getId());
+            if (legacyOrigin) {
+                markLegacyOrigin(card);
+            }
             cards.add(card);
         }
         return cards;
@@ -95,15 +106,38 @@ public class QuantStrategyAcademyService {
                 ? catalogRepository.findLatestDraftIdByCandidateAndSourceCommit(candidate.getId(), candidate.getSourceCommitSha())
                 : catalogRepository.findLatestDraftIdByCandidateAndDatasetAndSourceCommit(candidate.getId(),
                         selectedDataset.getId(), candidate.getSourceCommitSha());
+        boolean legacyOrigin = false;
+        if (draftId.isEmpty() && selectedDataset != null) {
+            draftId = catalogRepository.findLatestLegacyDraftIdByCandidateAndDataset(candidate.getId(),
+                    selectedDataset.getId());
+            legacyOrigin = draftId.isPresent();
+        }
         if (draftId.isEmpty()) {
             return scorer.score(candidate, selectedDataset, null);
         }
         QuantStrategyDraft draft = strategies.getDraft(draftId.get());
         QuantDataset dataset = selectedDataset == null ? datasets.get(draft.getDatasetId()) : selectedDataset;
-        if ("FAILED".equals(draft.getStatus()) || "BUILD_FAILED".equals(draft.getStatus())) {
-            return scorer.failedDraft(candidate, dataset, draft);
+        if (QuantStrategyDraftStatus.FAILED.equals(draft.getStatus())
+                || QuantStrategyDraftStatus.BUILD_FAILED.equals(draft.getStatus())) {
+            QuantStrategyAcademyCard card = scorer.failedDraft(candidate, dataset, draft);
+            if (legacyOrigin) {
+                markLegacyOrigin(card);
+            }
+            return card;
         }
-        return scorer.score(candidate, dataset, null);
+        QuantStrategyAcademyCard card = scorer.score(candidate, dataset, null);
+        if (legacyOrigin) {
+            markLegacyOrigin(card);
+        }
+        return card;
+    }
+
+    private void markLegacyOrigin(QuantStrategyAcademyCard card) {
+        if (QuantStrategyAcademyShelf.APPLICATION_CANDIDATE.equals(card.getShelf())) {
+            card.setShelf(QuantStrategyAcademyShelf.OBSERVATION);
+            card.setEvidenceSummary("历史实验可供参考，但来源提交未知，不能进入应用候选");
+        }
+        card.getLimitations().add("此记录来自升级前的历史关联，无法确认对应的公开来源提交；仅展示，不会复用");
     }
 
     private void buildCandidate(QuantStrategyCandidate candidate, Long datasetId,
@@ -122,7 +156,7 @@ public class QuantStrategyAcademyService {
             }
             QuantStrategyDraft draft = drafts.generate(candidate.getId(), datasetId);
             draftId = draft.getId();
-            if (!"VALIDATED".equals(draft.getStatus())) {
+            if (!QuantStrategyDraftStatus.VALIDATED.equals(draft.getStatus())) {
                 item.setStatus(QuantStrategyAcademyBuildItemStatus.FAILED);
                 item.setMessage(draft.getValidationIssues().isEmpty() ? "策略草案未通过协议"
                         : String.join("；", draft.getValidationIssues()));

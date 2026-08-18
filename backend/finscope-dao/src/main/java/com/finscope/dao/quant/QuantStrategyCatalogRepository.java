@@ -17,6 +17,7 @@ import java.util.Optional;
 
 @Repository
 public class QuantStrategyCatalogRepository {
+    public static final String LEGACY_UNKNOWN_SOURCE_COMMIT = "LEGACY_UNKNOWN";
     @Resource private JdbcTemplate jdbcTemplate;
 
     public void saveSource(QuantStrategyCatalogSource source) {
@@ -75,7 +76,7 @@ public class QuantStrategyCatalogRepository {
     public int countActive() { return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quant_strategy_candidate WHERE archived=0", Integer.class); }
 
     public void saveOrigin(Long candidateId, Long draftId, LocalDateTime now) {
-        saveOrigin(candidateId, draftId, null, now);
+        saveOrigin(candidateId, draftId, LEGACY_UNKNOWN_SOURCE_COMMIT, now);
     }
 
     public void saveOrigin(Long candidateId, Long draftId, String sourceCommitSha, LocalDateTime now) {
@@ -126,6 +127,16 @@ public class QuantStrategyCatalogRepository {
         return first(jdbcTemplate.query("SELECT draft_id FROM quant_strategy_candidate_origin "
                         + "WHERE candidate_id=? AND source_commit_sha=? ORDER BY draft_id DESC LIMIT 1",
                 (rs, row) -> rs.getLong(1), candidateId, sourceCommitSha));
+    }
+
+    public Optional<Long> findLatestLegacyVersionIdByCandidateAndDataset(Long candidateId, Long datasetId) {
+        return findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidateId, datasetId,
+                LEGACY_UNKNOWN_SOURCE_COMMIT);
+    }
+
+    public Optional<Long> findLatestLegacyDraftIdByCandidateAndDataset(Long candidateId, Long datasetId) {
+        return findLatestDraftIdByCandidateAndDatasetAndSourceCommit(candidateId, datasetId,
+                LEGACY_UNKNOWN_SOURCE_COMMIT);
     }
 
     private QuantStrategyCatalogSource source(ResultSet rs) throws SQLException {

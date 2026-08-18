@@ -3,6 +3,7 @@ package com.finscope.service.quant.strategy;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.finscope.common.enums.quant.QuantStrategyDraftStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantStrategyRepository;
@@ -47,19 +48,19 @@ public class QuantStrategyService {
         java.util.Set<String> availableFactors = datasets.availableFactorCodes(datasetId);
         QuantStrategyDraft draft = agent.generate(datasetId, prompt, availableFactors, dataset.getStartDate(), dataset.getEndDate());
         draft.setValidatedDatasetFingerprint(dataset.getFingerprint());
-        if ("VALIDATED".equals(draft.getStatus())) {
+        if (QuantStrategyDraftStatus.VALIDATED.equals(draft.getStatus())) {
             if (draft.getSpec().getStartDate() == null && draft.getSpec().getEndDate() == null) {
                 draft.getSpec().setStartDate(dataset.getStartDate()); draft.getSpec().setEndDate(dataset.getEndDate());
             }
             if (draft.getSpec().getStartDate().isBefore(dataset.getStartDate()) || draft.getSpec().getEndDate().isAfter(dataset.getEndDate())) {
-                draft.setStatus("FAILED"); draft.setValidationIssues(java.util.Collections.singletonList("回测日期必须位于数据集区间内"));
+                draft.setStatus(QuantStrategyDraftStatus.FAILED); draft.setValidationIssues(java.util.Collections.singletonList("回测日期必须位于数据集区间内"));
             }
             try { draft.setNormalizedSpec(mapper.writeValueAsString(draft.getSpec())); }
             catch (Exception ex) { throw new BusinessException(BizErrorCode.STRATEGY_DATE_LOCK_FAILED, ex); }
         }
-        if ("VALIDATED".equals(draft.getStatus()) && draft.getSpec().getFactors().stream()
+        if (QuantStrategyDraftStatus.VALIDATED.equals(draft.getStatus()) && draft.getSpec().getFactors().stream()
                 .anyMatch(item -> !availableFactors.contains(item.getCode()))) {
-            draft.setStatus("FAILED");
+            draft.setStatus(QuantStrategyDraftStatus.FAILED);
             draft.setValidationIssues(java.util.Collections.singletonList("策略使用了当前数据集覆盖不足的因子"));
         }
         return repository.saveDraft(draft);
@@ -69,7 +70,7 @@ public class QuantStrategyService {
     public QuantStrategyVersion confirm(Long draftId) {
         QuantStrategyDraft draft = repository.findDraft(draftId).orElseThrow(() ->
                 new BusinessException(BizErrorCode.STRATEGY_DRAFT_NOT_FOUND));
-        if (!"VALIDATED".equals(draft.getStatus())) {
+        if (!QuantStrategyDraftStatus.VALIDATED.equals(draft.getStatus())) {
             throw new BusinessException(BizErrorCode.STRATEGY_DRAFT_MUST_PASS_VALIDATION);
         }
         try {

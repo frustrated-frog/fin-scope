@@ -53,13 +53,16 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
   const [sourceMissing, setSourceMissing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const loadSequence = useRef(0);
+  const datasetIdRef = useRef<number | ''>(datasetId);
+  datasetIdRef.current = datasetId;
 
   async function load(showError = false) {
     const requestSequence = ++loadSequence.current;
+    const requestedDatasetId = datasetIdRef.current;
     setBusy(current => current === 'build' || current === 'sync' ? current : 'load');
     const [cardResult, sourceResult] = await Promise.allSettled([
-      api<QuantStrategyAcademyCard[]>(datasetId === '' ? '/api/quant/academy/cards'
-        : `/api/quant/academy/cards?datasetId=${datasetId}`),
+      api<QuantStrategyAcademyCard[]>(requestedDatasetId === '' ? '/api/quant/academy/cards'
+        : `/api/quant/academy/cards?datasetId=${requestedDatasetId}`),
       api<QuantStrategyCatalogSource>('/api/quant/catalog/source')
     ]);
     if (requestSequence !== loadSequence.current) {
@@ -161,7 +164,9 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
       <div className="strategy-academy-build">
         <label>
           <span>验证数据</span>
-          <select aria-label="验证数据" value={datasetId} onChange={event => setDatasetId(event.target.value ? Number(event.target.value) : '')}>
+          <select aria-label="验证数据" value={datasetId}
+            disabled={busy === 'build' || busy === 'sync'}
+            onChange={event => setDatasetId(event.target.value ? Number(event.target.value) : '')}>
             <option value="">选择真实研究数据集</option>
             {realDatasets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
