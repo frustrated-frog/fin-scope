@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
+import pytest
 
 from finscope_market_data.app import create_app
 from finscope_market_data.health import ProviderHealthRegistry
@@ -172,6 +174,28 @@ def test_default_lifespan_builds_stock_discovery_with_configured_data_dir(
     with TestClient(application) as api:
         assert api.get("/health").status_code == 200
         assert application.state.discovery is not None
+        provider = application.state.discovery.constituent_providers[0]
+        assert provider.page_acquirer is not None
+        assert provider.page_acquirer.enabled is True
+        assert provider.page_acquirer.session_timeout_seconds == 15
+        assert provider.page_acquirer.browser_timeout_seconds == 20
+        assert provider.page_acquirer.idle_timeout_seconds == 300
+
+
+def test_scrapling_settings_have_bounded_defaults() -> None:
+    settings = Settings()
+
+    assert settings.scrapling_enabled is True
+    assert settings.scrapling_session_timeout_seconds == 15
+    assert settings.scrapling_browser_timeout_seconds == 20
+    assert settings.scrapling_browser_max_concurrency == 1
+    assert settings.scrapling_idle_timeout_seconds == 300
+
+    with pytest.raises(ValidationError):
+        Settings(scrapling_browser_max_concurrency=0)
+
+    with pytest.raises(ValidationError):
+        Settings(scrapling_browser_timeout_seconds=61)
 
 
 class FakeDiscoveryService:
@@ -191,6 +215,30 @@ class FakeDiscoveryService:
             final_candidates=[],
             funnel=DiscoveryFunnel(),
         )
+
+
+class CloseRecordingDiscovery(FakeDiscoveryService):
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_lifespan_closes_custom_discovery_service(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    discovery = CloseRecordingDiscovery()
+    application = create_app(router=router, discovery=discovery)
+
+    with TestClient(application) as api:
+        assert api.get("/health").status_code == 200
+
+    assert discovery.closed is True
 
 
 def test_health_and_provider_health_endpoints(tmp_path: Path) -> None:

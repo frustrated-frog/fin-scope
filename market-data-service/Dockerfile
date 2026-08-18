@@ -11,8 +11,8 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --extra ecosystem
+RUN uv run scrapling install
 
 EXPOSE 8000
 
 CMD ["uv", "run", "uvicorn", "finscope_market_data.app:app", "--host", "0.0.0.0", "--port", "8000"]
-

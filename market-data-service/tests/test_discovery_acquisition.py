@@ -230,6 +230,7 @@ def test_browser_timeout_becomes_diagnostic_and_close_is_idempotent() -> None:
     )
 
     result = acquirer.fetch(URL, assess=_assess)
+    assert browser.closed is True
     acquirer.close()
     acquirer.close()
 
@@ -239,7 +240,6 @@ def test_browser_timeout_becomes_diagnostic_and_close_is_idempotent() -> None:
     assert "TimeoutError" in result.attempts[-1].error
     assert "secret-cookie" not in result.attempts[-1].error
     assert session.closed is True
-    assert browser.closed is True
 
 
 def test_browser_recovery_never_exceeds_configured_concurrency() -> None:
@@ -274,6 +274,24 @@ def test_acquirer_rejects_urls_outside_public_tonghuashun_host() -> None:
 
     with pytest.raises(ValueError, match="q.10jqka.com.cn"):
         acquirer.fetch("https://example.com/private", assess=_assess)
+
+
+def test_disabled_recovery_returns_direct_failure_without_scrapling() -> None:
+    session_factory = RecordingFactory(RecordingFetcher([]))
+    browser_factory = RecordingFactory(RecordingFetcher([]))
+    acquirer = TonghuashunPageAcquirer(
+        direct_loader=lambda url: ("<html>empty</html>", url),
+        session_factory=session_factory,
+        browser_factory=browser_factory,
+        enabled=False,
+    )
+
+    result = acquirer.fetch(URL, assess=_assess)
+
+    assert result.accepted is False
+    assert result.mode is AcquisitionMode.DIRECT_HTTP
+    assert session_factory.calls == 0
+    assert browser_factory.calls == 0
 
 
 def test_idle_http_session_is_closed_and_recreated() -> None:

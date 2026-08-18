@@ -13,6 +13,7 @@ from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
+from finscope_market_data.discovery.acquisition import TonghuashunPageAcquirer
 from finscope_market_data.discovery.constituents import (
     EastmoneyConstituentProvider,
     TonghuashunConstituentProvider,
@@ -70,12 +71,23 @@ def create_app(
         if application.state.router is None:
             application.state.router = build_router()
         if application.state.discovery is None:
+            page_acquirer = TonghuashunPageAcquirer(
+                enabled=config.scrapling_enabled,
+                session_timeout_seconds=config.scrapling_session_timeout_seconds,
+                browser_timeout_seconds=config.scrapling_browser_timeout_seconds,
+                browser_max_concurrency=(
+                    config.scrapling_browser_max_concurrency
+                ),
+                idle_timeout_seconds=config.scrapling_idle_timeout_seconds,
+            )
             application.state.discovery = StockDiscoveryService(
                 providers=[
                     TonghuashunHotSectorProvider(),
                 ],
                 constituent_providers=[
-                    TonghuashunConstituentProvider(),
+                    TonghuashunConstituentProvider(
+                        page_acquirer=page_acquirer
+                    ),
                     EastmoneyConstituentProvider(),
                 ],
                 market=_RouterDiscoveryMarket(application.state.router),
@@ -88,6 +100,9 @@ def create_app(
         try:
             yield
         finally:
+            close_discovery = getattr(application.state.discovery, "close", None)
+            if callable(close_discovery):
+                await asyncio.to_thread(close_discovery)
             await application.state.router.aclose()
 
     application = FastAPI(

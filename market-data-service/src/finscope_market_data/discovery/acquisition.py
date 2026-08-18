@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Any, Protocol
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 PageAssessment = Callable[[str, str], str]
@@ -111,9 +112,9 @@ class ScraplingBrowserFetcher:
 class TonghuashunPageAcquirer:
     def __init__(
         self,
-        direct_loader: PageLoader,
-        session_factory: ManagedPageFetcherFactory,
-        browser_factory: ManagedPageFetcherFactory,
+        direct_loader: PageLoader | None = None,
+        session_factory: ManagedPageFetcherFactory | None = None,
+        browser_factory: ManagedPageFetcherFactory | None = None,
         enabled: bool = True,
         session_timeout_seconds: float = 15.0,
         browser_timeout_seconds: float = 20.0,
@@ -121,9 +122,9 @@ class TonghuashunPageAcquirer:
         idle_timeout_seconds: float = 300.0,
         now: Callable[[], float] | None = None,
     ) -> None:
-        self.direct_loader = direct_loader
-        self.session_factory = session_factory
-        self.browser_factory = browser_factory
+        self.direct_loader = direct_loader or self._load_direct_page
+        self.session_factory = session_factory or ScraplingSessionFetcher
+        self.browser_factory = browser_factory or ScraplingBrowserFetcher
         self.enabled = enabled
         self.session_timeout_seconds = session_timeout_seconds
         self.browser_timeout_seconds = browser_timeout_seconds
@@ -261,6 +262,13 @@ class TonghuashunPageAcquirer:
             failure_reason = assess(html, final_url)
         except Exception as error:
             failure_reason = type(error).__name__
+            with self._browser_lock:
+                if self._browser is not None:
+                    try:
+                        self._browser.close()
+                    finally:
+                        self._browser = None
+                        self._browser_last_used = None
         attempts.append(
             AcquisitionAttempt(
                 mode=AcquisitionMode.BROWSER,
@@ -297,6 +305,19 @@ class TonghuashunPageAcquirer:
         parsed = urlparse(url)
         if parsed.scheme != "https" or parsed.hostname != "q.10jqka.com.cn":
             raise ValueError("只允许采集 https://q.10jqka.com.cn 公共页面")
+
+    def _load_direct_page(self, url: str) -> tuple[str, str]:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 Chrome/139.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(request, timeout=self.session_timeout_seconds) as response:
+            return response.read().decode("gbk", errors="replace"), response.geturl()
 
 
 def _scrapling_response(response: Any) -> tuple[str, str]:
