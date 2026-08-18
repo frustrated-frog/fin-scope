@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketDataGatewaySectorCatalogTest {
@@ -86,13 +87,14 @@ class MarketDataGatewaySectorCatalogTest {
     }
 
     @Test
-    void independentSinaFallbackRefreshesQuotesWhilePreservingBkCodesAndCoverage() {
-        FakeSectorProvider eastmoney = new FakeSectorProvider("EASTMONEY_SECTOR", "EASTMONEY", 10);
-        eastmoney.entries = entries(5);
-        MarketDataGateway initial = gateway(eastmoney);
+    void rejectsLegacyNonThsCodesInsteadOfMixingThemIntoTheLastGoodCatalog() {
+        FakeSectorProvider tonghuashun = new FakeSectorProvider(
+                "PYTHON_TONGHUASHUN_SECTOR", "TONGHUASHUN", 10);
+        tonghuashun.entries = entries(5);
+        MarketDataGateway initial = gateway(tonghuashun);
         initial.fetchSectorCatalog(SectorCategory.INDUSTRY, true);
 
-        eastmoney.failure = new ProviderContractException("TIMEOUT", "upstream timeout", false);
+        tonghuashun.failure = new ProviderContractException("TIMEOUT", "upstream timeout", false);
         FakeSectorProvider sina = new FakeSectorProvider("SINA_SECTOR", "SINA", 20);
         SectorMarketEntry refreshed = new SectorMarketEntry();
         refreshed.setCode("SINA:new_blhy");
@@ -106,17 +108,14 @@ class MarketDataGatewaySectorCatalogTest {
         independent.setChangePct(8.8d);
         sina.entries = java.util.Arrays.asList(refreshed, independent);
 
-        SectorCatalogGatewayResult result = gateway(eastmoney, sina)
+        SectorCatalogGatewayResult result = gateway(tonghuashun, sina)
                 .fetchSectorCatalog(SectorCategory.INDUSTRY, true);
 
-        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, result.getQualityStatus());
-        assertEquals("SINA_SECTOR", result.getSourceCode());
-        assertEquals(6, result.getSnapshot().getEntries().size());
-        assertEquals("BK0001", result.getSnapshot().getEntries().get(0).getCode());
-        assertEquals(9.9d, result.getSnapshot().getEntries().get(0).getChangePct());
-        assertEquals("SINA:new_unknown", result.getSnapshot().getEntries().get(1).getCode());
-        assertTrue(result.getWarning().contains("BK 编码"));
-        assertTrue(result.getWarning().contains("保留 4 条"));
+        assertEquals(MarketDataQualityStatus.STALE_FALLBACK, result.getQualityStatus());
+        assertEquals("PYTHON_TONGHUASHUN_SECTOR", result.getSourceCode());
+        assertEquals(5, result.getSnapshot().getEntries().size());
+        assertEquals("881001", result.getSnapshot().getEntries().get(0).getCode());
+        assertFalse(result.getWarning().contains("BK 编码"));
     }
 
     private MarketDataGateway gateway(SectorMarketProvider provider) {
@@ -136,7 +135,7 @@ class MarketDataGatewaySectorCatalogTest {
         List<SectorMarketEntry> values = new ArrayList<SectorMarketEntry>();
         for (int index = 1; index <= count; index++) {
             SectorMarketEntry entry = new SectorMarketEntry();
-            entry.setCode(String.format("BK%04d", index));
+            entry.setCode(String.format("881%03d", index));
             entry.setName("板块" + index);
             entry.setCategory(SectorCategory.INDUSTRY);
             entry.setChangePct((double) index);

@@ -51,6 +51,10 @@ public class Quote {
      */
     private Double turnover;
     /**
+     * 板块主力净流入，单位为元；股票、基金行情为空。
+     */
+    private Double mainNetInflow;
+    /**
      * 成交量。
      */
     private Double volume;

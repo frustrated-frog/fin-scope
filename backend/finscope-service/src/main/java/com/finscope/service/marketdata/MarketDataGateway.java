@@ -551,52 +551,16 @@ public class MarketDataGateway {
                     "EMPTY_SECTOR_CATALOG", "板块目录为空", true);
         }
         List<SectorMarketEntry> incoming = result.getData().getEntries();
-        boolean requiresBkMapping = false;
-        for (SectorMarketEntry entry : incoming) {
-            if (entry != null && entry.getCode() != null && !entry.getCode().matches("BK\\d{4}")) {
-                requiresBkMapping = true;
-                break;
-            }
-        }
-        Map<String, SectorMarketEntry> previousByName = new LinkedHashMap<String, SectorMarketEntry>();
-        if (lastGood.isPresent()) {
-            for (SectorMarketEntry entry : lastGood.get().getEntries()) {
-                if (entry != null && entry.getName() != null) {
-                    previousByName.put(normalizedSectorName(entry.getName()), entry);
-                }
-            }
-        }
         Map<String, SectorMarketEntry> validByCode = new LinkedHashMap<String, SectorMarketEntry>();
-        int mapped = 0;
-        int unmatched = 0;
         for (SectorMarketEntry entry : incoming) {
-            if (entry != null && requiresBkMapping && entry.getName() != null) {
-                SectorMarketEntry previous = previousByName.get(normalizedSectorName(entry.getName()));
-                if (previous != null && previous.getCode() != null
-                        && previous.getCode().matches("BK\\d{4}")) {
-                    entry.setCode(previous.getCode());
-                    mapped++;
-                } else {
-                    unmatched++;
-                }
-            }
             if (entry != null && entry.getCode() != null
-                    && (entry.getCode().matches("BK\\d{4}")
-                    || (requiresBkMapping && entry.getCode().matches("SINA:[A-Za-z0-9_]+")))
+                    && entry.getCode().matches("\\d{6}")
                     && entry.getName() != null && !entry.getName().trim().isEmpty()
                     && (entry.getCategory() == null || entry.getCategory() == category)) {
-                if (entry.getCategory() == null) entry.setCategory(category);
-                validByCode.put(entry.getCode(), entry);
-            }
-        }
-        int retained = 0;
-        if (requiresBkMapping && lastGood.isPresent()) {
-            for (SectorMarketEntry previous : lastGood.get().getEntries()) {
-                if (previous != null && previous.getCode() != null
-                        && !validByCode.containsKey(previous.getCode())) {
-                    validByCode.put(previous.getCode(), previous);
-                    retained++;
+                if (entry.getCategory() == null) {
+                    entry.setCategory(category);
                 }
+                validByCode.put(entry.getCode(), entry);
             }
         }
         List<SectorMarketEntry> valid = new ArrayList<SectorMarketEntry>(validByCode.values());
@@ -614,18 +578,10 @@ public class MarketDataGateway {
         }
         SectorMarketSnapshot original = result.getData();
         List<String> warnings = new ArrayList<String>(result.getWarnings());
-        if (requiresBkMapping) {
-            warnings.add("新浪板块行情已按名称映射 " + mapped + " 条 BK 编码，新增 "
-                    + unmatched + " 条独立在线板块，保留 " + retained + " 条最近成功目录。");
-        }
         SectorMarketSnapshot normalized = new SectorMarketSnapshot(category, original.getProviderCode(),
                 original.getRetrievedAt(), original.getPayloadFingerprint(), valid, warnings);
         return ProviderResult.of(normalized, result.getRetrievedAt(), result.getPayloadHash(),
                 warnings);
-    }
-
-    private String normalizedSectorName(String name) {
-        return name == null ? "" : name.replaceAll("\\s+", "").trim().toLowerCase(Locale.ROOT);
     }
 
     private String sectorScopeKey(SectorCategory category) {

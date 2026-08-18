@@ -9,15 +9,16 @@ import com.finscope.dao.attribution.AttributionRepository;
 import com.finscope.domain.instrument.DailyBarPoint;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
+import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.quote.PythonDailyBarClient;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -38,7 +39,6 @@ import com.finscope.common.exception.BizErrorCode;
 public class WatchlistService {
 
     private static final Pattern SIX_DIGIT_CODE = Pattern.compile("\\d{6}");
-    private static final Pattern SECTOR_CODE = Pattern.compile("BK\\d{4}", Pattern.CASE_INSENSITIVE);
 
     @Resource
     private InstrumentRepository instrumentRepository;
@@ -50,6 +50,8 @@ public class WatchlistService {
     private AttributionRepository attributionRepository;
     @Resource
     private PythonDailyBarClient dailyBarClient;
+    @Resource
+    private SectorMarketService sectorMarketService;
 
     /**
      * 兼容旧调用方的普通自选入口。板块必须通过独立关注接口添加。
@@ -68,7 +70,7 @@ public class WatchlistService {
         if (!"STOCK".equals(normalizedType) && !"FUND".equals(normalizedType)) {
             throw new BusinessException(BizErrorCode.WATCHLIST_TYPE_INVALID);
         }
-        return addInternal(normalizedCode, normalizedType, groupName, false);
+        return addInternal(normalizedCode, normalizedType, groupName, false, null);
     }
 
     /** 幂等关注板块；历史 SECTOR 自选会被直接复用。 */
@@ -80,15 +82,17 @@ public class WatchlistService {
         if (existing.isPresent()) {
             return existing.get();
         }
-        return addInternal(normalizedCode, "SECTOR", null, true);
+        SectorMarketEntry sector = sectorMarketService.findByCode(normalizedCode, false)
+                .orElseThrow(() -> new BusinessException(BizErrorCode.WATCHED_SECTOR_NOT_FOUND));
+        return addInternal(normalizedCode, "SECTOR", null, true, sector.getName());
     }
 
     private WatchlistItem addInternal(String normalizedCode, String normalizedType,
-                                      String groupName, boolean idempotent) {
+                                      String groupName, boolean idempotent, String resolvedName) {
         validateRequiredCode(normalizedCode);
         validateCode(normalizedCode, normalizedType);
 
-        Instrument instrument = findOrCreateInstrument(normalizedCode, normalizedType);
+        Instrument instrument = findOrCreateInstrument(normalizedCode, normalizedType, resolvedName);
 
         if (watchlistRepository.existsByInstrumentId(instrument.getId())) {
             if (idempotent) {
@@ -106,7 +110,9 @@ public class WatchlistService {
         try {
             saved = watchlistRepository.save(item);
         } catch (DataIntegrityViolationException error) {
-            if (!idempotent) throw error;
+            if (!idempotent) {
+                throw error;
+            }
             return watchlistRepository.findByCodeAndType(normalizedCode, normalizedType)
                     .orElseThrow(() -> error);
         }
@@ -135,7 +141,8 @@ public class WatchlistService {
     }
 
     public List<WatchlistItemView> listFollowedSectorsWithQuotes(boolean forceRefresh) {
-        return listWithQuotes(watchlistRepository.findByTypes(Collections.singletonList("SECTOR")), forceRefresh);
+        return listSectorsWithQuotes(
+                watchlistRepository.findByTypes(Collections.singletonList("SECTOR")), forceRefresh);
     }
 
     public WatchlistItemView followedSectorWithQuote(String code) {
@@ -144,7 +151,7 @@ public class WatchlistService {
         validateCode(normalizedCode, "SECTOR");
         WatchlistItem item = watchlistRepository.findByCodeAndType(normalizedCode, "SECTOR")
                 .orElseThrow(() -> new BusinessException(BizErrorCode.WATCHED_SECTOR_NOT_FOUND));
-        return listWithQuotes(Collections.singletonList(item), false).get(0);
+        return listSectorsWithQuotes(Collections.singletonList(item), false).get(0);
     }
 
     public void unfollowSector(String code) {
@@ -203,6 +210,46 @@ public class WatchlistService {
         return views;
     }
 
+    private List<WatchlistItemView> listSectorsWithQuotes(List<WatchlistItem> items, boolean forceRefresh) {
+        if (items.isEmpty()) {
+            return new ArrayList<WatchlistItemView>();
+        }
+        List<String> codes = items.stream().map(WatchlistItem::getCode).collect(java.util.stream.Collectors.toList());
+        Map<String, SectorMarketEntry> sectors = sectorMarketService.findByCodes(codes, forceRefresh);
+        Map<String, AttributionRepository.AttributionSummaryView> summaryByKey =
+                attributionRepository.findLatestCompletedSummaryViews();
+        List<WatchlistItemView> views = new ArrayList<WatchlistItemView>();
+        for (WatchlistItem item : items) {
+            SectorMarketEntry sector = sectors.get(item.getCode());
+            views.add(new WatchlistItemView(item, sectorQuote(item, sector),
+                    summaryByKey.get(quoteKey(item.getType(), item.getCode()))));
+        }
+        return views;
+    }
+
+    private Quote sectorQuote(WatchlistItem item, SectorMarketEntry sector) {
+        Quote quote = new Quote();
+        quote.setInstrumentCode(item.getCode());
+        quote.setName(item.getName());
+        quote.setSourceCode("PYTHON_TONGHUASHUN_SECTOR");
+        quote.setRetrievedAt(LocalDateTime.now());
+        if (sector == null) {
+            quote.setValid(false);
+            quote.setNote("同花顺板块目录暂不可用");
+            return quote;
+        }
+        quote.setName(sector.getName());
+        quote.setChangePct(sector.getChangePct());
+        quote.setMainNetInflow(sector.getMainNetInflow());
+        quote.setQuoteTime(sector.getQuoteTime());
+        quote.setAsOf(sector.getQuoteTime());
+        quote.setValid(sector.getChangePct() != null || sector.getMainNetInflow() != null);
+        if (!quote.isValid()) {
+            quote.setNote("同花顺概念目录暂不提供每日资金行情");
+        }
+        return quote;
+    }
+
     public void remove(Long id) {
         removeInvestment(id);
     }
@@ -236,24 +283,26 @@ public class WatchlistService {
         return item;
     }
 
-    private Instrument createInstrument(String code, String type) {
+    private Instrument createInstrument(String code, String type, String resolvedName) {
         Instrument instrument = new Instrument();
         instrument.setCode(code);
         instrument.setType(type);
-        instrument.setName(resolveName(code, type));
+        instrument.setName(StringUtils.isNotBlank(resolvedName) ? resolvedName : resolveName(code, type));
         instrument.setMarket(guessMarket(code, type));
         instrument.setAliases(code);
         return instrumentRepository.save(instrument);
     }
 
-    private Instrument findOrCreateInstrument(String code, String type) {
+    private Instrument findOrCreateInstrument(String code, String type, String resolvedName) {
         String market = guessMarket(code, type);
         Optional<Instrument> existing = market == null
                 ? instrumentRepository.findByCodeAndType(code, type)
                 : instrumentRepository.findByCodeTypeAndMarket(code, type, market);
-        if (existing.isPresent()) return existing.get();
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         try {
-            return createInstrument(code, type);
+            return createInstrument(code, type, resolvedName);
         } catch (DataIntegrityViolationException error) {
             return (market == null
                     ? instrumentRepository.findByCodeAndType(code, type)
@@ -290,7 +339,9 @@ public class WatchlistService {
         if (code.startsWith("4") || code.startsWith("8") || code.startsWith("92")) {
             return "BJ";
         }
-        if (code.startsWith("9")) return "SH";
+        if (code.startsWith("9")) {
+            return "SH";
+        }
         return null;
     }
 
@@ -307,9 +358,9 @@ public class WatchlistService {
     }
 
     private void validateCode(String code, String type) {
-        boolean valid = "SECTOR".equals(type) ? SECTOR_CODE.matcher(code).matches() : SIX_DIGIT_CODE.matcher(code).matches();
+        boolean valid = SIX_DIGIT_CODE.matcher(code).matches();
         if (!valid) {
-            String example = "SECTOR".equals(type) ? "BK0477" : "600519";
+            String example = "SECTOR".equals(type) ? "881121" : "600519";
             throw new BusinessException(BizErrorCode.INSTRUMENT_CODE_FORMAT_INVALID, example);
         }
     }
