@@ -163,6 +163,33 @@ export interface QuantStrategyCatalogSyncResult {
   sourceCode: string; commitSha: string; importedCount: number; activeCount: number; syncedAt: string;
 }
 
+export type QuantStrategyEvidenceLevel =
+  | 'RESEARCH_REPLICATION' | 'HISTORICAL_EVIDENCE' | 'FORWARD_OBSERVING' | 'LEARNING_CASE';
+
+export type QuantStrategyAcademyShelf =
+  | 'APPLICATION_CANDIDATE' | 'OBSERVATION' | 'VALIDATING' | 'LEARNING' | 'LEARNING_CASE';
+
+export interface QuantStrategyAcademyCard {
+  candidateId: number; title: string; paperUrl?: string; implementationUrl?: string;
+  adaptationNote?: string; mappedFactors: string[]; datasetId?: number; datasetName?: string;
+  strategyVersionId?: number; experimentId?: number; experimentStatus?: string;
+  evidenceLevel: QuantStrategyEvidenceLevel; shelf: QuantStrategyAcademyShelf; evidenceScore: number;
+  evidenceSummary: string; earningLogic: string; rationale: string; suitableRegime: string; invalidationRisk: string;
+  dimensions: Array<{ code: string; label: string; score: number; maxScore: number; explanation: string }>;
+  metrics?: { annualizedReturn: number; excessReturn: number; maxDrawdown: number; sharpeRatio: number;
+    calmarRatio: number; turnover: number; tradeCount: number; yearCount: number; positiveExcessYearRatio: number };
+  annualEvidence: Array<{ year: number; portfolioReturn: number; benchmarkReturn: number;
+    excessReturn: number; maxDrawdown: number }>;
+  limitations: string[];
+}
+
+export interface QuantStrategyAcademyBuildResult {
+  scannedCount: number; draftCreatedCount: number; versionConfirmedCount: number;
+  experimentStartedCount: number; reusedCount: number; failedCount: number;
+  items: Array<{ candidateId: number; title: string; status: string; message: string;
+    strategyVersionId?: number; experimentId?: number }>;
+}
+
 export interface BacktestMetrics {
   totalReturn: number; annualizedReturn: number; annualizedVolatility: number; maxDrawdown: number;
   sharpeRatio: number; calmarRatio: number; winRate: number; turnover: number; tradeCount: number;

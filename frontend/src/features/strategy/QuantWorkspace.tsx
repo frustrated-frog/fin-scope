@@ -171,14 +171,14 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </header>}
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['discovery','股票发现'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略素材库'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'SOURCE' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
+      {([['discovery','股票发现'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略学院'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'LEARN' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
     </nav>
 
     {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
-    {pane === 'catalog' && <StrategyCatalogPanel datasets={datasets} addToast={addToast} onDraftCreated={value => { setDraft(value); setPane('laboratory'); }} />}
+    {pane === 'catalog' && <StrategyCatalogPanel datasets={datasets} addToast={addToast} />}
 
     {pane === 'laboratory' && <div className="quant-lab-grid">
       <aside className="quant-dataset-panel quant-panel"><div className="quant-panel-title"><span>01 / DATASET</span><h4>研究样本</h4></div>

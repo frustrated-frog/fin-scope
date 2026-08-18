@@ -4,51 +4,117 @@ import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
 
-const datasets = [{ id: 3, name: 'A股真实研究集', market: 'A_SHARE', dataKind: 'REAL' as const, status: 'READY' }];
-const candidates = [
-  { id: 7, title: '价值（账面价值）因素', assetClass: 'EQUITY', sourceCommitSha: 'abc123456789', reportedSharpe: .526, reportedVolatility: .119, rebalanceCadence: '月度', implementationUrl: 'https://example.com/code', paperUrl: 'https://example.com/paper', compatibilityStatus: 'ADAPTABLE', adaptationNote: '使用披露时点 BP 形成 A 股版本', mappedFactors: ['BP'], missingFactors: [], archived: false },
-  { id: 8, title: '股票内部的ROA效应', assetClass: 'EQUITY', sourceCommitSha: 'abc123456789', reportedSharpe: .155, reportedVolatility: .087, rebalanceCadence: '月度', compatibilityStatus: 'NEEDS_FACTOR', adaptationNote: '需要新增 ROA 因子', mappedFactors: [], missingFactors: ['ROA'], archived: false },
-  { id: 9, title: '空头利息效应--多空版本', assetClass: 'EQUITY', sourceCommitSha: 'abc123456789', rebalanceCadence: '月度', compatibilityStatus: 'UNSUPPORTED', adaptationNote: '当前引擎不支持多空', mappedFactors: [], missingFactors: [], archived: false }
+const datasets = [
+  { id: 3, name: 'A股真实研究集', market: 'A_SHARE', dataKind: 'REAL' as const, status: 'READY' },
+  { id: 4, name: '虚拟学习样本', market: 'A_SHARE', dataKind: 'LEARNING_SAMPLE' as const, status: 'READY' }
 ];
 
-test('filters candidates and hands an adaptable source into the existing draft flow', async () => {
-  const requests: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input); requests.push(`${init?.method ?? 'GET'} ${path}`);
-    if (path === '/api/quant/catalog/source') return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', repositoryUrl: 'https://github.com/paperswithbacktest/awesome-systematic-trading', branch: 'main', commitSha: 'abc123456789', status: 'READY', lastSyncedAt: '2026-08-01T09:00:00' });
-    if (path === '/api/quant/catalog/candidates') return apiResponse(candidates);
-    if (path === '/api/quant/catalog/candidates/7/drafts') return apiResponse({ id: 11, datasetId: 3, status: 'VALIDATED', validationIssues: [] });
-    return apiResponse({});
+const cards = [
+  {
+    candidateId: 7, title: '质量价值策略', datasetId: 3, datasetName: 'A股真实研究集',
+    strategyVersionId: 21, experimentId: 31, experimentStatus: 'SUCCEEDED',
+    evidenceLevel: 'HISTORICAL_EVIDENCE', shelf: 'APPLICATION_CANDIDATE', evidenceScore: 86,
+    evidenceSummary: '本地历史证据相对完整，可进入影子组合继续观察',
+    earningLogic: '利用“ROE、BP”在股票之间形成的相对差异',
+    rationale: '规则只使用当时可获得的数据，对候选股票排序并低频等权持有',
+    suitableRegime: '更适合流动性正常、横截面差异能够持续体现的市场阶段',
+    invalidationRisk: '因子拥挤、市场风格切换或交易成本上升可能使策略失效',
+    mappedFactors: ['ROE', 'BP'], adaptationNote: '使用披露时点质量与价值因子形成 A 股多头版本',
+    paperUrl: 'https://example.com/paper', implementationUrl: 'https://example.com/code',
+    metrics: { annualizedReturn: .16, excessReturn: .07, maxDrawdown: .21, sharpeRatio: 1.08,
+      calmarRatio: .76, turnover: 2.4, tradeCount: 48, yearCount: 4, positiveExcessYearRatio: .75 },
+    dimensions: [
+      { code: 'COVERAGE', label: '样本覆盖', score: 20, maxScore: 20, explanation: '4 个年度 · 48 笔成交' },
+      { code: 'BENCHMARK', label: '基准比较', score: 25, maxScore: 25, explanation: '年化收益与等权基准进行同口径比较' }
+    ],
+    annualEvidence: [{ year: 2025, portfolioReturn: .15, benchmarkReturn: .08, excessReturn: .07, maxDrawdown: .18 }],
+    limitations: ['本地历史回测不等同于实盘或未来收益证明']
+  },
+  {
+    candidateId: 8, title: '低波动策略', evidenceLevel: 'HISTORICAL_EVIDENCE', shelf: 'OBSERVATION',
+    evidenceScore: 62, evidenceSummary: '已有本地历史证据，但仍需观察稳定性与风险', mappedFactors: ['VOLATILITY_20D'],
+    dimensions: [], annualEvidence: [], limitations: [], earningLogic: '利用低波动差异', rationale: '低频排序',
+    suitableRegime: '震荡市场', invalidationRisk: '风格切换'
+  },
+  {
+    candidateId: 9, title: '短期反转策略', evidenceLevel: 'LEARNING_CASE', shelf: 'LEARNING_CASE',
+    evidenceScore: 38, evidenceSummary: '历史实验已完成，但综合证据偏弱，保留为学习案例', mappedFactors: ['REVERSAL_5D'],
+    dimensions: [], annualEvidence: [], limitations: ['交易成本吞噬收益'], earningLogic: '利用短期反转',
+    rationale: '低频排序', suitableRegime: '过度反应阶段', invalidationRisk: '趋势延续'
+  }
+];
+
+test('presents evidence staircase, three shelves, and a beginner-first dossier', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/quant/academy/cards') {
+      return apiResponse(cards);
+    }
+    if (path === '/api/quant/catalog/source') {
+      return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY', lastSyncedAt: '2026-08-19T09:00:00' });
+    }
+    return apiResponse([]);
   }));
-  const onDraftCreated = vi.fn();
-  const user = userEvent.setup();
 
-  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} onDraftCreated={onDraftCreated} />);
+  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} />);
 
-  expect(await screen.findByRole('button', { name: /价值（账面价值）因素/ })).toBeInTheDocument();
-  expect(screen.getByText('abc12345')).toBeInTheDocument();
-  await user.click(screen.getAllByRole('button', { name: /缺少因子/ })[0]);
-  expect(screen.getAllByText('股票内部的ROA效应')).toHaveLength(2);
-  expect(screen.queryByRole('button', { name: /价值（账面价值）因素/ })).not.toBeInTheDocument();
-  await user.click(screen.getAllByRole('button', { name: /可适配/ })[0]);
-  await user.click(screen.getByRole('button', { name: /价值（账面价值）因素/ }));
-  expect(screen.getByText('来源记录，不代表本地验证结果')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '生成本地策略草案' }));
-
-  await waitFor(() => expect(onDraftCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 11 })));
-  expect(requests).toContain('POST /api/quant/catalog/candidates/7/drafts');
+  expect(await screen.findByRole('heading', { name: '自动策略学院' })).toBeInTheDocument();
+  expect(screen.getByText('公开研究复现')).toBeInTheDocument();
+  expect(screen.getByText('本地历史验证')).toBeInTheDocument();
+  expect(screen.getByText('前向观察')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '应用候选' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '当前观察' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '学习案例' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /质量价值策略/ })).toBeInTheDocument();
+  expect(screen.getByText('它赚的是什么钱？')).toBeInTheDocument();
+  expect(screen.getByText('利用“ROE、BP”在股票之间形成的相对差异')).toBeInTheDocument();
+  expect(screen.getAllByText('86')).toHaveLength(2);
+  expect(screen.getByRole('link', { name: '查看公开研究' })).toHaveAttribute('href', 'https://example.com/paper');
 });
 
-test('keeps unsupported candidates visible but prevents draft generation', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    if (String(input) === '/api/quant/catalog/source') return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY', lastSyncedAt: '2026-08-01T09:00:00' });
-    return apiResponse(candidates);
+test('builds a bounded academy only from the selected real dataset', async () => {
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    requests.push({ path, init });
+    if (path === '/api/quant/academy/cards') {
+      return apiResponse([]);
+    }
+    if (path === '/api/quant/catalog/source') {
+      return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY', lastSyncedAt: '2026-08-19T09:00:00' });
+    }
+    if (path === '/api/quant/academy/build') {
+      return apiResponse({ scannedCount: 6, draftCreatedCount: 5, versionConfirmedCount: 5,
+        experimentStartedCount: 5, reusedCount: 1, failedCount: 0, items: [] });
+    }
+    return apiResponse([]);
   }));
+  const addToast = vi.fn();
   const user = userEvent.setup();
-  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} onDraftCreated={vi.fn()} />);
 
-  await user.click((await screen.findAllByRole('button', { name: /暂不支持/ }))[0]);
+  render(<StrategyCatalogPanel datasets={datasets} addToast={addToast} />);
 
-  expect(screen.getByRole('button', { name: '当前引擎不可生成' })).toBeDisabled();
-  expect(screen.getByText('当前引擎不支持多空')).toBeInTheDocument();
+  const build = await screen.findByRole('button', { name: '自动构建本期学院' });
+  expect(screen.queryByRole('option', { name: '虚拟学习样本' })).not.toBeInTheDocument();
+  await user.click(build);
+
+  await waitFor(() => expect(requests.some(request => request.path === '/api/quant/academy/build'
+    && request.init?.method === 'POST' && request.init.body === JSON.stringify({ datasetId: 3 }))).toBe(true));
+  expect(addToast).toHaveBeenCalledWith('已启动 5 个历史验证，复用 1 个已有结果', 'success');
+});
+
+test('keeps source recovery available when the strategy directory has not been synchronized', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === '/api/quant/academy/cards') {
+      return apiResponse([]);
+    }
+    return new Response(JSON.stringify({ code: 'RESOURCE_NOT_FOUND', message: '策略素材库尚未同步' }), {
+      status: 404, headers: { 'Content-Type': 'application/json' }
+    });
+  }));
+
+  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} />);
+
+  expect(await screen.findByText('先同步公开策略目录')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '同步公开目录' })).toBeInTheDocument();
 });
