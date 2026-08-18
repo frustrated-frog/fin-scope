@@ -27,6 +27,10 @@ import com.finscope.service.quant.catalog.QuantStrategyCandidateDraftService;
 import com.finscope.service.quant.catalog.QuantStrategyCatalogService;
 import com.finscope.web.request.quant.CreateCatalogStrategyDraftRequest;
 import com.finscope.common.exception.BizErrorCode;
+import com.finscope.domain.quant.academy.QuantStrategyAcademyBuildResult;
+import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
+import com.finscope.service.quant.academy.QuantStrategyAcademyService;
+import com.finscope.web.request.quant.BuildStrategyAcademyRequest;
 
 @RestController
 @RequestMapping("/api/quant")
@@ -44,6 +48,23 @@ public class QuantController {
     private QuantStrategyCatalogService quantStrategyCatalogService;
     @Resource
     private QuantStrategyCandidateDraftService quantStrategyCandidateDraftService;
+    @Resource
+    private QuantStrategyAcademyService quantStrategyAcademyService;
+
+    @GetMapping("/academy/cards")
+    public ApiResponse<List<QuantStrategyAcademyCard>> academyCards() {
+        return ApiResponses.success(quantStrategyAcademyService.cards());
+    }
+
+    @PostMapping("/academy/build")
+    public ResponseEntity<ApiResponse<QuantStrategyAcademyBuildResult>> buildAcademy(
+            @RequestBody BuildStrategyAcademyRequest request) {
+        if (request == null || request.getDatasetId() == null) {
+            throw new BusinessException(BizErrorCode.DATASET_REQUIRED);
+        }
+        return ResponseEntity.accepted().body(ApiResponses.success(
+                quantStrategyAcademyService.build(request.getDatasetId())));
+    }
 
     /**
      * 同步策略素材库。

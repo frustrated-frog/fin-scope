@@ -93,6 +93,12 @@ public class QuantStrategyCatalogRepository {
                 (rs, row) -> rs.getLong(1), draftId));
     }
 
+    public Optional<Long> findLatestVersionIdByCandidate(Long candidateId) {
+        return first(jdbcTemplate.query("SELECT version_id FROM quant_strategy_candidate_origin "
+                        + "WHERE candidate_id=? AND version_id IS NOT NULL ORDER BY draft_id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), candidateId));
+    }
+
     private QuantStrategyCatalogSource source(ResultSet rs) throws SQLException {
         QuantStrategyCatalogSource value = new QuantStrategyCatalogSource();
         value.setCode(rs.getString("code")); value.setRepositoryUrl(rs.getString("repository_url"));

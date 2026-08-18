@@ -62,6 +62,14 @@ public class QuantExperimentRepository {
                 (rs, rowNum) -> rs.getString(1), id); if (!interpretation.isEmpty()) value.setInterpretation(interpretation.get(0));
         return Optional.of(value);
     }
+    public Optional<QuantExperiment> findLatestByStrategyVersion(Long strategyVersionId) {
+        List<QuantExperiment> values = jdbcTemplate.query("SELECT * FROM quant_experiment WHERE strategy_version_id=? "
+                + "ORDER BY id DESC LIMIT 1", mapper, strategyVersionId);
+        if (values.isEmpty()) {
+            return Optional.empty();
+        }
+        return findById(values.get(0).getId());
+    }
     public List<QuantExperiment> findAll() { return jdbcTemplate.query("SELECT * FROM quant_experiment ORDER BY id DESC", mapper); }
     public boolean markRunning(Long id) { return jdbcTemplate.update("UPDATE quant_experiment SET status='RUNNING',started_at=? WHERE id=? AND status='QUEUED'",
             TimeUtil.text(LocalDateTime.now()), id) == 1; }
