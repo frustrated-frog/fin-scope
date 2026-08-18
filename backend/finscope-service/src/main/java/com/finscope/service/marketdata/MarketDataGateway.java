@@ -492,10 +492,13 @@ public class MarketDataGateway {
                 failures.add("行情请求总预算已耗尽");
                 break;
             }
+            Optional<SectorMarketSnapshot> coverageBaseline = stored
+                    .filter(snapshot -> provider.providerFamily().equalsIgnoreCase(snapshot.getProviderFamily()))
+                    .flatMap(codec::decodeSectorCatalog);
             try {
                 ProviderResult<SectorMarketSnapshot> fetched = executeProvider(
                         provider, capability, requestDeadline,
-                        () -> validateSectorCatalog(provider.fetchResult(category), category, lastGood));
+                        () -> validateSectorCatalog(provider.fetchResult(category), category, coverageBaseline));
                 SectorMarketSnapshot fresh = fetched.getData();
                 boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
                 MarketDataQualityStatus status = fallback

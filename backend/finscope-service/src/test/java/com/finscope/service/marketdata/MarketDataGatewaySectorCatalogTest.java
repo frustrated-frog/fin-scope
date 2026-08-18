@@ -71,6 +71,28 @@ class MarketDataGatewaySectorCatalogTest {
     }
 
     @Test
+    void sourceFamilyCutoverEstablishesANewCoverageBaseline() {
+        FakeSectorProvider legacy = new FakeSectorProvider("SINA_SECTOR_CATALOG", "SINA", 10);
+        legacy.entries = entries(149);
+        assertEquals(149, gateway(legacy).fetchSectorCatalog(SectorCategory.INDUSTRY, true)
+                .getSnapshot().getEntries().size());
+
+        FakeSectorProvider tonghuashun = new FakeSectorProvider(
+                "PYTHON_TONGHUASHUN_SECTOR", "TONGHUASHUN", 10);
+        tonghuashun.entries = entries(90);
+
+        SectorCatalogGatewayResult switched = gateway(tonghuashun)
+                .fetchSectorCatalog(SectorCategory.INDUSTRY, true);
+
+        assertEquals(MarketDataQualityStatus.FRESH_PRIMARY, switched.getQualityStatus());
+        assertEquals("PYTHON_TONGHUASHUN_SECTOR", switched.getSourceCode());
+        assertEquals(90, switched.getSnapshot().getEntries().size());
+        assertEquals("TONGHUASHUN", snapshots.find(
+                MarketDataCapability.SECTOR_CATALOG, "SECTOR_CATALOG:INDUSTRY")
+                .get().getProviderFamily());
+    }
+
+    @Test
     void persistedCatalogRemainsAvailableAfterGatewayRestart() {
         FakeSectorProvider provider = new FakeSectorProvider("EASTMONEY_SECTOR", 10);
         provider.entries = entries(5);
