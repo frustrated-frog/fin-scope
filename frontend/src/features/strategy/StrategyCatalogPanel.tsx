@@ -22,7 +22,7 @@ const shelves: Array<{ id: 'application' | 'validating' | 'observation' | 'learn
   description: string; accepts: QuantStrategyAcademyShelf[] }> = [
   { id: 'application', title: '应用候选', eyebrow: 'EVIDENCE ≥ 70', description: '历史证据相对完整，下一步仍是影子观察。', accepts: ['APPLICATION_CANDIDATE'] },
   { id: 'validating', title: '验证队列', eyebrow: 'EVIDENCE PENDING', description: '实验正在运行，当前没有历史证据分。', accepts: ['VALIDATING'] },
-  { id: 'observation', title: '当前观察', eyebrow: 'EVIDENCE 55–69', description: '已经值得跟踪，但暂不急着形成应用判断。', accepts: ['OBSERVATION'] },
+  { id: 'observation', title: '当前观察', eyebrow: 'EVIDENCE 55+ / GATES PENDING', description: '分数已有参考价值，但至少一项应用硬门槛尚未满足。', accepts: ['OBSERVATION'] },
   { id: 'learning', title: '学习案例', eyebrow: 'LEARN FROM THE EDGE', description: '保留弱结果与失败原因，比隐藏它们更有价值。', accepts: ['LEARNING_CASE'] }
 ];
 
@@ -172,7 +172,7 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
           </select>
         </label>
         <button type="button" aria-label="自动构建本期学院" onClick={build}
-          disabled={datasetId === '' || busy === 'build' || sourceMissing}>
+          disabled={datasetId === '' || busy === 'build' || busy === 'sync' || sourceMissing}>
           <span>{busy === 'build' ? '正在建立验证队列…' : '自动构建本期学院'}</span>
           <small>最多 6 个候选 · 自动隔离失败</small>
         </button>
@@ -189,12 +189,12 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
 
     {sourceMissing && <section className="strategy-academy-source-empty">
       <div><span>SOURCE REQUIRED</span><h4>先同步公开策略目录</h4><p>系统只读取论文、来源实现与策略标题，不下载或执行外部代码。</p></div>
-      <button type="button" onClick={sync} disabled={busy === 'sync'}>{busy === 'sync' ? '正在同步…' : '同步公开目录'}</button>
+      <button type="button" onClick={sync} disabled={busy === 'sync' || busy === 'build'}>{busy === 'sync' ? '正在同步…' : '同步公开目录'}</button>
     </section>}
 
     {source && <div className="strategy-academy-source-line">
       <span>公开来源已冻结至 <code>{source.commitSha.slice(0, 8)}</code></span>
-      <button type="button" onClick={sync} disabled={busy === 'sync'}>{busy === 'sync' ? '正在校对…' : '更新来源目录'}</button>
+      <button type="button" onClick={sync} disabled={busy === 'sync' || busy === 'build'}>{busy === 'sync' ? '正在校对…' : '更新来源目录'}</button>
     </div>}
 
     {loadError && <section className="strategy-academy-error" role="alert"><strong>学院卡片读取失败</strong><span>{loadError}</span><button type="button" onClick={() => load(true)}>重新读取</button></section>}

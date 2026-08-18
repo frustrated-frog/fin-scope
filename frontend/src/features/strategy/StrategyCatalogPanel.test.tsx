@@ -65,6 +65,7 @@ test('presents evidence staircase, three shelves, and a beginner-first dossier',
   expect(await screen.findByRole('heading', { name: '应用候选' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '验证队列' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '当前观察' })).toBeInTheDocument();
+  expect(screen.getByText('EVIDENCE 55+ / GATES PENDING')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '学习案例' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /质量价值策略/ })).toBeInTheDocument();
   expect(screen.getByText('它赚的是什么钱？')).toBeInTheDocument();
@@ -178,7 +179,37 @@ test('locks the dataset while an academy build is in flight', async () => {
   await user.click(await screen.findByRole('button', { name: '自动构建本期学院' }));
 
   expect(screen.getByRole('combobox', { name: '验证数据' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '更新来源目录' })).toBeDisabled();
   resolveBuild?.(apiResponse({ scannedCount: 0, draftCreatedCount: 0, versionConfirmedCount: 0,
     experimentStartedCount: 0, reusedCount: 0, failedCount: 0, items: [] }));
   await waitFor(() => expect(screen.getByRole('combobox', { name: '验证数据' })).not.toBeDisabled());
+});
+
+test('keeps catalog sync and academy build mutually exclusive', async () => {
+  let resolveSync: ((response: Response) => void) | undefined;
+  const syncResponse = new Promise<Response>(resolve => {
+    resolveSync = resolve;
+  });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/quant/catalog/sync') {
+      return syncResponse;
+    }
+    if (path.startsWith('/api/quant/academy/cards')) {
+      return apiResponse([]);
+    }
+    if (path === '/api/quant/catalog/source') {
+      return apiResponse({ code: 'AWESOME_SYSTEMATIC_TRADING', commitSha: 'abc123456789', status: 'READY' });
+    }
+    return apiResponse([]);
+  }));
+  const user = userEvent.setup();
+
+  render(<StrategyCatalogPanel datasets={datasets} addToast={vi.fn()} />);
+  await user.click(await screen.findByRole('button', { name: '更新来源目录' }));
+
+  expect(screen.getByRole('button', { name: '自动构建本期学院' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: '验证数据' })).toBeDisabled();
+  resolveSync?.(apiResponse({ importedCount: 0, archivedCount: 0, scannedCount: 0 }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '自动构建本期学院' })).not.toBeDisabled());
 });
