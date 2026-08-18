@@ -52,8 +52,9 @@ public class QuantController {
     private QuantStrategyAcademyService quantStrategyAcademyService;
 
     @GetMapping("/academy/cards")
-    public ApiResponse<List<QuantStrategyAcademyCard>> academyCards() {
-        return ApiResponses.success(quantStrategyAcademyService.cards());
+    public ApiResponse<List<QuantStrategyAcademyCard>> academyCards(
+            @RequestParam(value = "datasetId", required = false) Long datasetId) {
+        return ApiResponses.success(quantStrategyAcademyService.cards(datasetId));
     }
 
     @PostMapping("/academy/build")

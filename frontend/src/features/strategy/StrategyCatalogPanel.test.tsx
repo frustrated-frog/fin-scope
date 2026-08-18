@@ -47,7 +47,7 @@ const cards = [
 test('presents evidence staircase, three shelves, and a beginner-first dossier', async () => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
-    if (path === '/api/quant/academy/cards') {
+    if (path.startsWith('/api/quant/academy/cards')) {
       return apiResponse(cards);
     }
     if (path === '/api/quant/catalog/source') {
@@ -63,12 +63,15 @@ test('presents evidence staircase, three shelves, and a beginner-first dossier',
   expect(screen.getByText('本地历史验证')).toBeInTheDocument();
   expect(screen.getByText('前向观察')).toBeInTheDocument();
   expect(await screen.findByRole('heading', { name: '应用候选' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '验证队列' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '当前观察' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '学习案例' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /质量价值策略/ })).toBeInTheDocument();
   expect(screen.getByText('它赚的是什么钱？')).toBeInTheDocument();
   expect(screen.getByText('利用“ROE、BP”在股票之间形成的相对差异')).toBeInTheDocument();
   expect(screen.getAllByText('86')).toHaveLength(2);
+  expect(screen.getByRole('table', { name: '逐年历史证据' })).toBeInTheDocument();
+  expect(screen.getByText('2025')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '查看公开研究' })).toHaveAttribute('href', 'https://example.com/paper');
 });
 
@@ -77,7 +80,7 @@ test('builds a bounded academy only from the selected real dataset', async () =>
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     requests.push({ path, init });
-    if (path === '/api/quant/academy/cards') {
+    if (path.startsWith('/api/quant/academy/cards')) {
       return apiResponse([]);
     }
     if (path === '/api/quant/catalog/source') {
@@ -96,6 +99,7 @@ test('builds a bounded academy only from the selected real dataset', async () =>
 
   const build = await screen.findByRole('button', { name: '自动构建本期学院' });
   expect(screen.queryByRole('option', { name: '虚拟学习样本' })).not.toBeInTheDocument();
+  expect(requests.some(request => request.path === '/api/quant/academy/cards?datasetId=3')).toBe(true);
   await user.click(build);
 
   await waitFor(() => expect(requests.some(request => request.path === '/api/quant/academy/build'
@@ -105,7 +109,7 @@ test('builds a bounded academy only from the selected real dataset', async () =>
 
 test('keeps source recovery available when the strategy directory has not been synchronized', async () => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    if (String(input) === '/api/quant/academy/cards') {
+    if (String(input).startsWith('/api/quant/academy/cards')) {
       return apiResponse([]);
     }
     return new Response(JSON.stringify({ code: 'RESOURCE_NOT_FOUND', message: '策略素材库尚未同步' }), {

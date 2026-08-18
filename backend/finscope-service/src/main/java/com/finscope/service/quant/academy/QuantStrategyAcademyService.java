@@ -1,5 +1,6 @@
 package com.finscope.service.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyAcademyBuildItemStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.quant.QuantExperimentRepository;
@@ -37,12 +38,20 @@ public class QuantStrategyAcademyService {
     @Resource private QuantStrategyEvidenceScorer scorer;
 
     public List<QuantStrategyAcademyCard> cards() {
+        return cards(null);
+    }
+
+    public List<QuantStrategyAcademyCard> cards(Long datasetId) {
+        QuantDataset selectedDataset = datasetId == null ? null : academyDataset(datasetId);
         List<QuantStrategyAcademyCard> cards = new ArrayList<QuantStrategyAcademyCard>();
         List<QuantStrategyCandidate> candidates = catalogRepository.findCandidates("ADAPTABLE", null);
         for (QuantStrategyCandidate candidate : candidates) {
-            Optional<Long> versionId = catalogRepository.findLatestVersionIdByCandidate(candidate.getId());
+            Optional<Long> versionId = selectedDataset == null
+                    ? catalogRepository.findLatestVersionIdByCandidateAndSourceCommit(candidate.getId(), candidate.getSourceCommitSha())
+                    : catalogRepository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(),
+                            selectedDataset.getId(), candidate.getSourceCommitSha());
             if (versionId.isEmpty()) {
-                cards.add(scorer.score(candidate, null, null));
+                cards.add(cardWithoutVersion(candidate, selectedDataset));
                 continue;
             }
             QuantStrategyVersion version = strategies.getVersion(versionId.get());
@@ -55,17 +64,11 @@ public class QuantStrategyAcademyService {
         return cards;
     }
 
-    public QuantStrategyAcademyBuildResult build(Long datasetId) {
+    public synchronized QuantStrategyAcademyBuildResult build(Long datasetId) {
         if (datasetId == null) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "数据集不能为空");
         }
-        QuantDataset dataset = datasets.get(datasetId);
-        if (!"READY".equals(dataset.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "策略学院只能使用已通过质量门禁的数据集");
-        }
-        if (!"REAL".equals(dataset.getDataKind())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略学院只能使用真实研究数据集");
-        }
+        QuantDataset dataset = academyDataset(datasetId);
         List<QuantStrategyCandidate> all = catalogRepository.findCandidates("ADAPTABLE", null);
         List<QuantStrategyCandidate> selected = all.subList(0, Math.min(BUILD_LIMIT, all.size()));
         QuantStrategyAcademyBuildResult result = new QuantStrategyAcademyBuildResult();
@@ -76,22 +79,51 @@ public class QuantStrategyAcademyService {
         return result;
     }
 
+    private QuantDataset academyDataset(Long datasetId) {
+        QuantDataset dataset = datasets.get(datasetId);
+        if (!"READY".equals(dataset.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "策略学院只能使用已通过质量门禁的数据集");
+        }
+        if (!"REAL".equals(dataset.getDataKind())) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "策略学院只能使用真实研究数据集");
+        }
+        return dataset;
+    }
+
+    private QuantStrategyAcademyCard cardWithoutVersion(QuantStrategyCandidate candidate, QuantDataset selectedDataset) {
+        Optional<Long> draftId = selectedDataset == null
+                ? catalogRepository.findLatestDraftIdByCandidateAndSourceCommit(candidate.getId(), candidate.getSourceCommitSha())
+                : catalogRepository.findLatestDraftIdByCandidateAndDatasetAndSourceCommit(candidate.getId(),
+                        selectedDataset.getId(), candidate.getSourceCommitSha());
+        if (draftId.isEmpty()) {
+            return scorer.score(candidate, selectedDataset, null);
+        }
+        QuantStrategyDraft draft = strategies.getDraft(draftId.get());
+        QuantDataset dataset = selectedDataset == null ? datasets.get(draft.getDatasetId()) : selectedDataset;
+        if ("FAILED".equals(draft.getStatus())) {
+            return scorer.failedDraft(candidate, dataset, draft);
+        }
+        return scorer.score(candidate, dataset, null);
+    }
+
     private void buildCandidate(QuantStrategyCandidate candidate, Long datasetId,
                                     QuantStrategyAcademyBuildResult result) {
         QuantStrategyAcademyBuildResult.BuildItem item = new QuantStrategyAcademyBuildResult.BuildItem();
         item.setCandidateId(candidate.getId());
         item.setTitle(candidate.getTitle());
         result.getItems().add(item);
+        Long draftId = null;
         try {
-            Optional<Long> existingVersionId = catalogRepository.findLatestVersionIdByCandidateAndDataset(
-                    candidate.getId(), datasetId);
+            Optional<Long> existingVersionId = catalogRepository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                    candidate.getId(), datasetId, candidate.getSourceCommitSha());
             if (existingVersionId.isPresent()) {
                 reuseOrRun(existingVersionId.get(), item, result);
                 return;
             }
             QuantStrategyDraft draft = drafts.generate(candidate.getId(), datasetId);
+            draftId = draft.getId();
             if (!"VALIDATED".equals(draft.getStatus())) {
-                item.setStatus("FAILED");
+                item.setStatus(QuantStrategyAcademyBuildItemStatus.FAILED);
                 item.setMessage(draft.getValidationIssues().isEmpty() ? "策略草案未通过协议"
                         : String.join("；", draft.getValidationIssues()));
                 result.setFailedCount(result.getFailedCount() + 1);
@@ -103,8 +135,12 @@ public class QuantStrategyAcademyService {
             result.setVersionConfirmedCount(result.getVersionConfirmedCount() + 1);
             startExperiment(version.getId(), item, result);
         } catch (RuntimeException ex) {
-            item.setStatus("FAILED");
-            item.setMessage(safeMessage(ex));
+            String message = safeMessage(ex);
+            if (draftId != null && item.getStrategyVersionId() == null) {
+                strategies.recordDraftFailure(draftId, message);
+            }
+            item.setStatus(QuantStrategyAcademyBuildItemStatus.FAILED);
+            item.setMessage(message);
             result.setFailedCount(result.getFailedCount() + 1);
             log.warn("策略学院候选构建失败 candidateId={} errorType={}", candidate.getId(),
                     ex.getClass().getSimpleName());
@@ -118,7 +154,7 @@ public class QuantStrategyAcademyService {
         if (latest.isPresent() && ("QUEUED".equals(latest.get().getStatus())
                 || "RUNNING".equals(latest.get().getStatus()) || "SUCCEEDED".equals(latest.get().getStatus()))) {
             item.setExperimentId(latest.get().getId());
-            item.setStatus("REUSED");
+            item.setStatus(QuantStrategyAcademyBuildItemStatus.REUSED);
             item.setMessage("复用已有策略版本与实验记录");
             result.setReusedCount(result.getReusedCount() + 1);
             return;
@@ -130,7 +166,7 @@ public class QuantStrategyAcademyService {
                                      QuantStrategyAcademyBuildResult result) {
         QuantExperiment experiment = experiments.create(versionId);
         item.setExperimentId(experiment.getId());
-        item.setStatus("STARTED");
+        item.setStatus(QuantStrategyAcademyBuildItemStatus.STARTED);
         item.setMessage("已进入本地历史验证队列");
         result.setExperimentStartedCount(result.getExperimentStartedCount() + 1);
     }

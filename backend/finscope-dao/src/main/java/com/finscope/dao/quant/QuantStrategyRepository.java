@@ -58,6 +58,11 @@ public class QuantStrategyRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public void markDraftFailed(Long id, String issue) {
+        jdbcTemplate.update("UPDATE quant_strategy_draft SET status='FAILED',validation_issues=? WHERE id=?",
+                issue, id);
+    }
+
     public QuantStrategyVersion saveVersion(QuantStrategyVersion value) {
         LocalDateTime now = LocalDateTime.now(); KeyHolder keys = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {

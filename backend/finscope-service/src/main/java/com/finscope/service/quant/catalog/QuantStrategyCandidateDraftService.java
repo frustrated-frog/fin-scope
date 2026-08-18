@@ -33,7 +33,7 @@ public class QuantStrategyCandidateDraftService {
             throw new BusinessException(BizErrorCode.BACKTEST_ENGINE_UNSUPPORTED_CANDIDATE);
         }
         QuantStrategyDraft draft = strategies.generateDraft(datasetId, prompt(candidate));
-        repository.saveOrigin(candidateId, draft.getId(), LocalDateTime.now());
+        repository.saveOrigin(candidateId, draft.getId(), candidate.getSourceCommitSha(), LocalDateTime.now());
         return draft;
     }
 

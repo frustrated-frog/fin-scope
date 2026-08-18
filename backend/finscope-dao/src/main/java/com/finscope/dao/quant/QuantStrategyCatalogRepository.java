@@ -75,8 +75,12 @@ public class QuantStrategyCatalogRepository {
     public int countActive() { return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quant_strategy_candidate WHERE archived=0", Integer.class); }
 
     public void saveOrigin(Long candidateId, Long draftId, LocalDateTime now) {
-        jdbcTemplate.update("INSERT INTO quant_strategy_candidate_origin(candidate_id,draft_id,created_at) VALUES(?,?,?)",
-                candidateId, draftId, now.toString());
+        saveOrigin(candidateId, draftId, null, now);
+    }
+
+    public void saveOrigin(Long candidateId, Long draftId, String sourceCommitSha, LocalDateTime now) {
+        jdbcTemplate.update("INSERT INTO quant_strategy_candidate_origin(candidate_id,draft_id,source_commit_sha,created_at) "
+                        + "VALUES(?,?,?,?)", candidateId, draftId, sourceCommitSha, now.toString());
     }
 
     public void linkVersionForDraft(Long draftId, Long versionId) {
@@ -93,17 +97,35 @@ public class QuantStrategyCatalogRepository {
                 (rs, row) -> rs.getLong(1), draftId));
     }
 
-    public Optional<Long> findLatestVersionIdByCandidate(Long candidateId) {
+    public Optional<Long> findLatestVersionIdByCandidateAndSourceCommit(Long candidateId, String sourceCommitSha) {
         return first(jdbcTemplate.query("SELECT version_id FROM quant_strategy_candidate_origin "
-                        + "WHERE candidate_id=? AND version_id IS NOT NULL ORDER BY draft_id DESC LIMIT 1",
-                (rs, row) -> rs.getLong(1), candidateId));
+                        + "WHERE candidate_id=? AND source_commit_sha=? AND version_id IS NOT NULL "
+                        + "ORDER BY draft_id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), candidateId, sourceCommitSha));
     }
 
-    public Optional<Long> findLatestVersionIdByCandidateAndDataset(Long candidateId, Long datasetId) {
+    public Optional<Long> findLatestVersionIdByCandidateAndDatasetAndSourceCommit(Long candidateId, Long datasetId,
+                                                                                     String sourceCommitSha) {
         return first(jdbcTemplate.query("SELECT o.version_id FROM quant_strategy_candidate_origin o "
                         + "JOIN quant_strategy_version v ON v.id=o.version_id "
-                        + "WHERE o.candidate_id=? AND v.dataset_id=? ORDER BY o.draft_id DESC LIMIT 1",
-                (rs, row) -> rs.getLong(1), candidateId, datasetId));
+                        + "WHERE o.candidate_id=? AND v.dataset_id=? AND o.source_commit_sha=? "
+                        + "ORDER BY o.draft_id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), candidateId, datasetId, sourceCommitSha));
+    }
+
+    public Optional<Long> findLatestDraftIdByCandidateAndDatasetAndSourceCommit(Long candidateId, Long datasetId,
+                                                                                   String sourceCommitSha) {
+        return first(jdbcTemplate.query("SELECT o.draft_id FROM quant_strategy_candidate_origin o "
+                        + "JOIN quant_strategy_draft d ON d.id=o.draft_id "
+                        + "WHERE o.candidate_id=? AND d.dataset_id=? AND o.source_commit_sha=? "
+                        + "ORDER BY o.draft_id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), candidateId, datasetId, sourceCommitSha));
+    }
+
+    public Optional<Long> findLatestDraftIdByCandidateAndSourceCommit(Long candidateId, String sourceCommitSha) {
+        return first(jdbcTemplate.query("SELECT draft_id FROM quant_strategy_candidate_origin "
+                        + "WHERE candidate_id=? AND source_commit_sha=? ORDER BY draft_id DESC LIMIT 1",
+                (rs, row) -> rs.getLong(1), candidateId, sourceCommitSha));
     }
 
     private QuantStrategyCatalogSource source(ResultSet rs) throws SQLException {

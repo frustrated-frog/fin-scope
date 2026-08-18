@@ -1261,6 +1261,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(candidate_id) REFERENCES quant_strategy_candidate(id) ON DELETE RESTRICT)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_candidate_origin_candidate "
                 + "ON quant_strategy_candidate_origin(candidate_id,draft_id DESC)");
+        ensureColumn("quant_strategy_candidate_origin", "source_commit_sha", "TEXT");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,strategy_version_id INTEGER NOT NULL,request_fingerprint TEXT NOT NULL,"
                 + "dataset_fingerprint TEXT NOT NULL,engine_version TEXT NOT NULL,status TEXT NOT NULL,error_message TEXT,"

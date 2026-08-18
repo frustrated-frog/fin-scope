@@ -82,16 +82,19 @@ class QuantStrategyCatalogRepositoryTest {
         insertDataset(4L, "数据集 B", now);
         insertVersion(21L, 3L, "策略 A", now);
         insertVersion(22L, 4L, "策略 B", now);
-        repository.saveOrigin(candidateId, 11L, now);
+        repository.saveOrigin(candidateId, 11L, "sha-one", now);
         repository.linkVersionForDraft(11L, 21L);
-        repository.saveOrigin(candidateId, 12L, now.plusMinutes(1));
+        repository.saveOrigin(candidateId, 12L, "sha-two", now.plusMinutes(1));
         repository.linkVersionForDraft(12L, 22L);
 
-        assertEquals(Long.valueOf(21L), repository.findLatestVersionIdByCandidateAndDataset(candidateId, 3L)
+        assertEquals(Long.valueOf(21L), repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                        candidateId, 3L, "sha-one")
                 .orElseThrow(AssertionError::new));
-        assertEquals(Long.valueOf(22L), repository.findLatestVersionIdByCandidateAndDataset(candidateId, 4L)
+        assertEquals(Long.valueOf(22L), repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(
+                        candidateId, 4L, "sha-two")
                 .orElseThrow(AssertionError::new));
-        assertFalse(repository.findLatestVersionIdByCandidateAndDataset(candidateId, 5L).isPresent());
+        assertFalse(repository.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidateId, 3L, "sha-two")
+                .isPresent());
     }
 
     private void insertDataset(Long id, String name, LocalDateTime now) {

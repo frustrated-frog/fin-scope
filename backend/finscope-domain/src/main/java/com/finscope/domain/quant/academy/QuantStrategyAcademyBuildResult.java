@@ -1,5 +1,6 @@
 package com.finscope.domain.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyAcademyBuildItemStatus;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class QuantStrategyAcademyBuildResult {
     public static class BuildItem {
         private Long candidateId;
         private String title;
-        private String status;
+        private QuantStrategyAcademyBuildItemStatus status;
         private String message;
         private Long strategyVersionId;
         private Long experimentId;

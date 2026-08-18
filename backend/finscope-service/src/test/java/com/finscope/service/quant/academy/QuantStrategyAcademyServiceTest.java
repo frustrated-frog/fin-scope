@@ -1,5 +1,6 @@
 package com.finscope.service.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.quant.QuantExperimentRepository;
 import com.finscope.dao.quant.QuantStrategyCatalogRepository;
@@ -38,7 +39,8 @@ class QuantStrategyAcademyServiceTest {
         Fixture fixture = fixture();
         List<QuantStrategyCandidate> candidates = candidates(7);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(candidates);
-        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(anyLong(), org.mockito.ArgumentMatchers.eq(3L)))
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(anyLong(),
+                org.mockito.ArgumentMatchers.eq(3L), org.mockito.ArgumentMatchers.eq("source-sha")))
                 .thenReturn(Optional.<Long>empty());
         for (int index = 0; index < 6; index++) {
             QuantStrategyCandidate candidate = candidates.get(index);
@@ -77,7 +79,8 @@ class QuantStrategyAcademyServiceTest {
         Fixture fixture = fixture();
         QuantStrategyCandidate candidate = candidates(1).get(0);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
-        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(candidate.getId(), 3L)).thenReturn(Optional.of(21L));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.of(21L));
         QuantExperiment running = new QuantExperiment();
         running.setId(31L);
         running.setStatus("RUNNING");
@@ -106,7 +109,7 @@ class QuantStrategyAcademyServiceTest {
         Fixture fixture = fixture();
         QuantStrategyCandidate candidate = candidates(1).get(0);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
-        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(candidate.getId(), 3L))
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
                 .thenReturn(Optional.<Long>empty());
         QuantStrategyDraft draft = new QuantStrategyDraft();
         draft.setId(101L);
@@ -127,11 +130,32 @@ class QuantStrategyAcademyServiceTest {
     }
 
     @Test
+    void recordsAValidatedDraftWhenVersionConfirmationFails() {
+        Fixture fixture = fixture();
+        QuantStrategyCandidate candidate = candidates(1).get(0);
+        when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.<Long>empty());
+        QuantStrategyDraft draft = new QuantStrategyDraft();
+        draft.setId(101L);
+        draft.setStatus("VALIDATED");
+        when(fixture.drafts.generate(candidate.getId(), 3L)).thenReturn(draft);
+        when(fixture.strategies.confirm(101L)).thenThrow(new BusinessException(
+                com.finscope.common.exception.ErrorCode.BUSINESS_CONFLICT, "策略版本确认失败"));
+
+        QuantStrategyAcademyBuildResult result = fixture.service.build(3L);
+
+        assertEquals(1, result.getFailedCount());
+        verify(fixture.strategies).recordDraftFailure(101L, "策略版本确认失败");
+    }
+
+    @Test
     void aggregatesLatestRealExperimentIntoAcademyCard() {
         Fixture fixture = fixture();
         QuantStrategyCandidate candidate = candidates(1).get(0);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
-        when(fixture.catalog.findLatestVersionIdByCandidate(candidate.getId())).thenReturn(Optional.of(21L));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.of(21L));
         QuantStrategyVersion version = new QuantStrategyVersion();
         version.setId(21L);
         version.setDatasetId(3L);
@@ -142,14 +166,39 @@ class QuantStrategyAcademyServiceTest {
         when(fixture.experimentRepository.findLatestByStrategyVersion(21L)).thenReturn(Optional.of(experiment));
         QuantStrategyAcademyCard scored = new QuantStrategyAcademyCard();
         scored.setCandidateId(candidate.getId());
-        scored.setEvidenceLevel("RESEARCH_REPLICATION");
+        scored.setEvidenceLevel(QuantStrategyEvidenceLevel.RESEARCH_REPLICATION);
         when(fixture.scorer.score(candidate, fixture.dataset, experiment)).thenReturn(scored);
 
-        List<QuantStrategyAcademyCard> cards = fixture.service.cards();
+        List<QuantStrategyAcademyCard> cards = fixture.service.cards(3L);
 
         assertEquals(1, cards.size());
         assertEquals(Long.valueOf(21L), cards.get(0).getStrategyVersionId());
         verify(fixture.scorer).score(candidate, fixture.dataset, experiment);
+    }
+
+    @Test
+    void keepsAFailedDraftVisibleForTheSelectedDataset() {
+        Fixture fixture = fixture();
+        QuantStrategyCandidate candidate = candidates(1).get(0);
+        when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.<Long>empty());
+        when(fixture.catalog.findLatestDraftIdByCandidateAndDatasetAndSourceCommit(candidate.getId(), 3L, "source-sha"))
+                .thenReturn(Optional.of(11L));
+        QuantStrategyDraft failed = new QuantStrategyDraft();
+        failed.setId(11L);
+        failed.setStatus("FAILED");
+        failed.setValidationIssues(Collections.singletonList("换手周期不受支持"));
+        when(fixture.strategies.getDraft(11L)).thenReturn(failed);
+        QuantStrategyAcademyCard scored = new QuantStrategyAcademyCard();
+        scored.setCandidateId(candidate.getId());
+        scored.setEvidenceLevel(QuantStrategyEvidenceLevel.LEARNING_CASE);
+        when(fixture.scorer.failedDraft(candidate, fixture.dataset, failed)).thenReturn(scored);
+
+        List<QuantStrategyAcademyCard> cards = fixture.service.cards(3L);
+
+        assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, cards.get(0).getEvidenceLevel());
+        verify(fixture.scorer).failedDraft(candidate, fixture.dataset, failed);
     }
 
     private Fixture fixture() {
@@ -185,6 +234,7 @@ class QuantStrategyAcademyServiceTest {
             value.setId((long) index + 1);
             value.setTitle("公开策略 " + (index + 1));
             value.setCompatibilityStatus("ADAPTABLE");
+            value.setSourceCommitSha("source-sha");
             value.setMappedFactors(Collections.singletonList("BP"));
             values.add(value);
         }

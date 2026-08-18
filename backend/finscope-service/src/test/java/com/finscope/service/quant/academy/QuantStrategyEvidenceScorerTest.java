@@ -1,5 +1,7 @@
 package com.finscope.service.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
+import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
@@ -7,6 +9,7 @@ import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.experiment.QuantExperiment;
+import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -26,8 +29,8 @@ class QuantStrategyEvidenceScorerTest {
 
         QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
 
-        assertEquals("HISTORICAL_EVIDENCE", card.getEvidenceLevel());
-        assertEquals("APPLICATION_CANDIDATE", card.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE, card.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.APPLICATION_CANDIDATE, card.getShelf());
         assertEquals(100, card.getEvidenceScore());
         assertEquals(5, card.getDimensions().size());
         assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("不等同于实盘")));
@@ -40,8 +43,8 @@ class QuantStrategyEvidenceScorerTest {
 
         QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
 
-        assertEquals("HISTORICAL_EVIDENCE", card.getEvidenceLevel());
-        assertEquals("OBSERVATION", card.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE, card.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
         assertEquals(57, card.getEvidenceScore());
         assertTrue(card.getLimitations().contains("部分交易日股票池覆盖不足"));
     }
@@ -53,8 +56,8 @@ class QuantStrategyEvidenceScorerTest {
 
         QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
 
-        assertEquals("LEARNING_CASE", card.getEvidenceLevel());
-        assertEquals("LEARNING_CASE", card.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, card.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.LEARNING_CASE, card.getShelf());
         assertTrue(card.getEvidenceScore() < 55);
         assertTrue(card.getEvidenceSummary().contains("学习案例"));
     }
@@ -71,10 +74,10 @@ class QuantStrategyEvidenceScorerTest {
                 succeeded(0.20, 0.10, 0.12, 1.3, 1.2, 60, 2.0,
                         years(0.06, 0.07, 0.04), Collections.<String>emptyList()));
 
-        assertEquals("RESEARCH_REPLICATION", pending.getEvidenceLevel());
-        assertEquals("VALIDATING", pending.getShelf());
-        assertEquals("LEARNING_CASE", synthetic.getEvidenceLevel());
-        assertEquals("LEARNING_CASE", synthetic.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.RESEARCH_REPLICATION, pending.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.VALIDATING, pending.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, synthetic.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.LEARNING_CASE, synthetic.getShelf());
         assertTrue(synthetic.getLimitations().stream().anyMatch(value -> value.contains("虚拟学习数据")));
     }
 
@@ -86,9 +89,44 @@ class QuantStrategyEvidenceScorerTest {
 
         QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), failed);
 
-        assertEquals("LEARNING_CASE", card.getEvidenceLevel());
-        assertEquals("LEARNING_CASE", card.getShelf());
+        assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, card.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.LEARNING_CASE, card.getShelf());
         assertTrue(card.getLimitations().contains("回测区间内无可成交标的"));
+    }
+
+    @Test
+    void preservesFailedDraftValidationIssuesAsLearningEvidence() {
+        QuantStrategyDraft draft = new QuantStrategyDraft();
+        draft.setStatus("FAILED");
+        draft.setValidationIssues(Collections.singletonList("换手周期不受支持"));
+
+        QuantStrategyAcademyCard card = scorer.failedDraft(candidate(), realDataset(), draft);
+
+        assertEquals(QuantStrategyEvidenceLevel.LEARNING_CASE, card.getEvidenceLevel());
+        assertEquals(QuantStrategyAcademyShelf.LEARNING_CASE, card.getShelf());
+        assertTrue(card.getLimitations().contains("换手周期不受支持"));
+    }
+
+    @Test
+    void doesNotPromoteAHighScoreWithoutThreeCalendarYears() {
+        QuantExperiment experiment = succeeded(0.18, 0.09, 0.19, 1.15, 0.94, 48, 2.3,
+                Collections.<AnnualPerformance>emptyList(), Collections.<String>emptyList());
+
+        QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
+
+        assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
+        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("至少 3 个年度")));
+    }
+
+    @Test
+    void doesNotPromoteAHighScoreWhenExecutionWarningsRemain() {
+        QuantExperiment experiment = succeeded(0.18, 0.09, 0.19, 1.15, 0.94, 48, 2.3,
+                years(0.05, 0.03, 0.08, 0.02), Collections.singletonList("部分交易日股票池覆盖不足"));
+
+        QuantStrategyAcademyCard card = scorer.score(candidate(), realDataset(), experiment);
+
+        assertEquals(QuantStrategyAcademyShelf.OBSERVATION, card.getShelf());
+        assertTrue(card.getLimitations().stream().anyMatch(value -> value.contains("实验警告")));
     }
 
     private QuantStrategyCandidate candidate() {

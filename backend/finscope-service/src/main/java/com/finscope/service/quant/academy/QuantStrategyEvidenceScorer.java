@@ -1,5 +1,7 @@
 package com.finscope.service.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
+import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.domain.quant.backtest.AnnualPerformance;
 import com.finscope.domain.quant.backtest.BacktestMetrics;
@@ -7,6 +9,7 @@ import com.finscope.domain.quant.backtest.BacktestResult;
 import com.finscope.domain.quant.catalog.QuantStrategyCandidate;
 import com.finscope.domain.quant.data.QuantDataset;
 import com.finscope.domain.quant.experiment.QuantExperiment;
+import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -27,11 +30,11 @@ public class QuantStrategyEvidenceScorer {
             return card;
         }
         if (experiment == null) {
-            replication(card, "等待生成本地策略版本并运行历史实验", "LEARNING");
+            replication(card, "等待生成本地策略版本并运行历史实验", QuantStrategyAcademyShelf.LEARNING_CASE);
             return card;
         }
         if ("QUEUED".equals(experiment.getStatus()) || "RUNNING".equals(experiment.getStatus())) {
-            replication(card, "正在使用冻结数据与确定性引擎运行本地实验", "VALIDATING");
+            replication(card, "正在使用冻结数据与确定性引擎运行本地实验", QuantStrategyAcademyShelf.VALIDATING);
             return card;
         }
         if (!"SUCCEEDED".equals(experiment.getStatus()) || experiment.getResult() == null) {
@@ -42,6 +45,18 @@ public class QuantStrategyEvidenceScorer {
             return card;
         }
         historical(card, experiment.getResult());
+        return card;
+    }
+
+    public QuantStrategyAcademyCard failedDraft(QuantStrategyCandidate candidate, QuantDataset dataset,
+                                                   QuantStrategyDraft draft) {
+        QuantStrategyAcademyCard card = baseCard(candidate, dataset, null);
+        learningCase(card, "本地策略协议未通过，保留失败原因供学习");
+        if (draft.getValidationIssues() == null || draft.getValidationIssues().isEmpty()) {
+            card.getLimitations().add("策略草案未通过本地协议");
+        } else {
+            card.getLimitations().addAll(draft.getValidationIssues());
+        }
         return card;
     }
 
@@ -107,18 +122,37 @@ public class QuantStrategyEvidenceScorer {
         card.setEvidenceScore(score);
         card.getLimitations().addAll(warnings);
         card.getLimitations().add("本地历史回测不等同于实盘或未来收益证明");
-        if (score >= APPLICATION_SCORE) {
-            card.setEvidenceLevel("HISTORICAL_EVIDENCE");
-            card.setShelf("APPLICATION_CANDIDATE");
+        boolean applicationEligible = applicationEligible(card, years.size(), metrics.getTradeCount(), warnings);
+        if (score >= APPLICATION_SCORE && applicationEligible) {
+            card.setEvidenceLevel(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE);
+            card.setShelf(QuantStrategyAcademyShelf.APPLICATION_CANDIDATE);
             card.setEvidenceSummary("本地历史证据相对完整，可进入影子组合继续观察");
         } else if (score >= OBSERVATION_SCORE) {
-            card.setEvidenceLevel("HISTORICAL_EVIDENCE");
-            card.setShelf("OBSERVATION");
+            card.setEvidenceLevel(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE);
+            card.setShelf(QuantStrategyAcademyShelf.OBSERVATION);
             card.setEvidenceSummary("已有本地历史证据，但仍需观察稳定性与风险");
         } else {
             learningCase(card, "历史实验已完成，但综合证据偏弱，保留为学习案例");
             card.setEvidenceScore(score);
         }
+    }
+
+    private boolean applicationEligible(QuantStrategyAcademyCard card, int yearCount, int tradeCount,
+                                            List<String> warnings) {
+        boolean eligible = true;
+        if (yearCount < 3) {
+            card.getLimitations().add("应用候选至少 3 个年度，当前样本覆盖不足");
+            eligible = false;
+        }
+        if (tradeCount < 20) {
+            card.getLimitations().add("应用候选至少需要 20 笔成交记录");
+            eligible = false;
+        }
+        if (!warnings.isEmpty()) {
+            card.getLimitations().add("应用候选不能保留未解释的实验警告");
+            eligible = false;
+        }
+        return eligible;
     }
 
     private void addCoverage(QuantStrategyAcademyCard card, int yearCount, int tradeCount) {
@@ -193,8 +227,8 @@ public class QuantStrategyEvidenceScorer {
         return new QuantStrategyAcademyCard.ScoreDimension(code, label, score, maxScore, explanation);
     }
 
-    private void replication(QuantStrategyAcademyCard card, String summary, String shelf) {
-        card.setEvidenceLevel("RESEARCH_REPLICATION");
+    private void replication(QuantStrategyAcademyCard card, String summary, QuantStrategyAcademyShelf shelf) {
+        card.setEvidenceLevel(QuantStrategyEvidenceLevel.RESEARCH_REPLICATION);
         card.setShelf(shelf);
         card.setEvidenceScore(0);
         card.setEvidenceSummary(summary);
@@ -202,8 +236,8 @@ public class QuantStrategyEvidenceScorer {
     }
 
     private void learningCase(QuantStrategyAcademyCard card, String summary) {
-        card.setEvidenceLevel("LEARNING_CASE");
-        card.setShelf("LEARNING_CASE");
+        card.setEvidenceLevel(QuantStrategyEvidenceLevel.LEARNING_CASE);
+        card.setShelf(QuantStrategyAcademyShelf.LEARNING_CASE);
         card.setEvidenceSummary(summary);
     }
 

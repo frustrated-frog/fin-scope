@@ -167,7 +167,7 @@ export type QuantStrategyEvidenceLevel =
   | 'RESEARCH_REPLICATION' | 'HISTORICAL_EVIDENCE' | 'FORWARD_OBSERVING' | 'LEARNING_CASE';
 
 export type QuantStrategyAcademyShelf =
-  | 'APPLICATION_CANDIDATE' | 'OBSERVATION' | 'VALIDATING' | 'LEARNING' | 'LEARNING_CASE';
+  | 'APPLICATION_CANDIDATE' | 'OBSERVATION' | 'VALIDATING' | 'LEARNING_CASE';
 
 export interface QuantStrategyAcademyCard {
   candidateId: number; title: string; paperUrl?: string; implementationUrl?: string;

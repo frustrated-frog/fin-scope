@@ -18,11 +18,12 @@ const evidenceCopy: Record<string, string> = {
   LEARNING_CASE: '学习案例'
 };
 
-const shelves: Array<{ id: 'application' | 'observation' | 'learning'; title: string; eyebrow: string;
+const shelves: Array<{ id: 'application' | 'validating' | 'observation' | 'learning'; title: string; eyebrow: string;
   description: string; accepts: QuantStrategyAcademyShelf[] }> = [
   { id: 'application', title: '应用候选', eyebrow: 'EVIDENCE ≥ 70', description: '历史证据相对完整，下一步仍是影子观察。', accepts: ['APPLICATION_CANDIDATE'] },
-  { id: 'observation', title: '当前观察', eyebrow: 'EVIDENCE 55–69', description: '已经值得跟踪，但暂不急着形成应用判断。', accepts: ['OBSERVATION', 'VALIDATING'] },
-  { id: 'learning', title: '学习案例', eyebrow: 'LEARN FROM THE EDGE', description: '保留弱结果与失败原因，比隐藏它们更有价值。', accepts: ['LEARNING', 'LEARNING_CASE'] }
+  { id: 'validating', title: '验证队列', eyebrow: 'EVIDENCE PENDING', description: '实验正在运行，当前没有历史证据分。', accepts: ['VALIDATING'] },
+  { id: 'observation', title: '当前观察', eyebrow: 'EVIDENCE 55–69', description: '已经值得跟踪，但暂不急着形成应用判断。', accepts: ['OBSERVATION'] },
+  { id: 'learning', title: '学习案例', eyebrow: 'LEARN FROM THE EDGE', description: '保留弱结果与失败原因，比隐藏它们更有价值。', accepts: ['LEARNING_CASE'] }
 ];
 
 function percent(value?: number, signed = false) {
@@ -55,7 +56,8 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
   async function load(showError = false) {
     setBusy(current => current === 'build' || current === 'sync' ? current : 'load');
     const [cardResult, sourceResult] = await Promise.allSettled([
-      api<QuantStrategyAcademyCard[]>('/api/quant/academy/cards'),
+      api<QuantStrategyAcademyCard[]>(datasetId === '' ? '/api/quant/academy/cards'
+        : `/api/quant/academy/cards?datasetId=${datasetId}`),
       api<QuantStrategyCatalogSource>('/api/quant/catalog/source')
     ]);
     if (cardResult.status === 'fulfilled') {
@@ -84,7 +86,7 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [datasetId]);
 
   useEffect(() => {
     if (datasetId === '') {
@@ -233,6 +235,19 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
         {selected.dimensions.length > 0 && <section className="strategy-academy-dimensions">
           <header><span>EVIDENCE LEDGER</span><h5>这张分数是怎么来的</h5></header>
           {selected.dimensions.map(item => <div key={item.code}><span>{item.label}</span><i><b style={{ width: `${item.maxScore ? item.score / item.maxScore * 100 : 0}%` }} /></i><strong>{item.score}/{item.maxScore}</strong><small>{item.explanation}</small></div>)}
+        </section>}
+
+        {selected.annualEvidence.length > 0 && <section className="strategy-academy-years">
+          <header><span>YEAR-BY-YEAR CHECK</span><h5>收益是否只靠某一年</h5></header>
+          <div role="table" aria-label="逐年历史证据">
+            <div role="row"><b role="columnheader">年度</b><b role="columnheader">策略</b>
+              <b role="columnheader">基准</b><b role="columnheader">超额</b></div>
+            {selected.annualEvidence.map(year => <div role="row" key={year.year}>
+              <strong role="cell">{year.year}</strong><span role="cell">{percent(year.portfolioReturn, true)}</span>
+              <span role="cell">{percent(year.benchmarkReturn, true)}</span>
+              <em role="cell" data-positive={year.excessReturn > 0}>{percent(year.excessReturn, true)}</em>
+            </div>)}
+          </div>
         </section>}
 
         <section className="strategy-academy-provenance">

@@ -104,6 +104,14 @@ public class QuantStrategyService {
     }
 
     public List<QuantStrategyVersion> listVersions() { return repository.findVersions(); }
+    public QuantStrategyDraft getDraft(Long id) {
+        return repository.findDraft(id).orElseThrow(() ->
+                new BusinessException(BizErrorCode.STRATEGY_DRAFT_NOT_FOUND));
+    }
+    @Transactional
+    public void recordDraftFailure(Long id, String issue) {
+        repository.markDraftFailed(id, issue);
+    }
     public QuantStrategyVersion getVersion(Long id) {
         return repository.findVersion(id).orElseThrow(() ->
                 new BusinessException(BizErrorCode.STRATEGY_VERSION_NOT_FOUND));

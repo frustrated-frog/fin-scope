@@ -17982,6 +17982,7 @@ input[type="checkbox"] {
 .strategy-academy-shelf > header h4 { margin: 4px 0 3px; font: 500 20px/1.05 "Iowan Old Style","Palatino Linotype",serif; }
 .strategy-academy-shelf > header p { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.45; }
 .strategy-academy-shelf > header > b { align-self: center; color: var(--muted); font: 500 25px "Iowan Old Style","Palatino Linotype",serif; }
+.strategy-academy-shelf.is-validating > header { background: color-mix(in srgb, var(--academy-blue) 5%, var(--surface)); }
 .strategy-academy-shelf > div { display: grid; }
 .strategy-academy-shelf > div > p { margin: 0; padding: 16px; color: var(--muted); font-size: 9px; }
 .strategy-academy-shelf button {
@@ -18041,6 +18042,16 @@ input[type="checkbox"] {
 .strategy-academy-dimensions > div > i b { display: block; height: 100%; background: var(--academy-blue); }
 .strategy-academy-dimensions > div > strong { font: 700 9px ui-monospace, monospace; text-align: right; }
 .strategy-academy-dimensions > div > small { grid-column: 2 / 4; color: var(--muted); font-size: 7px; }
+.strategy-academy-years { padding: 19px 21px; border-bottom: 1px solid var(--line); }
+.strategy-academy-years > header { margin-bottom: 13px; }
+.strategy-academy-years h5 { margin: 4px 0 0; font-size: 14px; }
+.strategy-academy-years [role="table"] { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; }
+.strategy-academy-years [role="row"] { display: grid; grid-template-columns: 70px repeat(3,minmax(62px,1fr)); align-items: center; min-height: 31px; border-bottom: 1px solid var(--line); }
+.strategy-academy-years [role="row"]:last-child { border-bottom: 0; }
+.strategy-academy-years [role="row"] > * { padding: 7px 9px; font: 8px ui-monospace, monospace; text-align: right; font-style: normal; }
+.strategy-academy-years [role="row"] > *:first-child { text-align: left; }
+.strategy-academy-years [role="columnheader"] { color: var(--muted); background: color-mix(in srgb, var(--academy-blue) 4%, var(--surface)); }
+.strategy-academy-years [role="cell"][data-positive="true"] { color: var(--academy-cyan); }
 .strategy-academy-provenance { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; }
 .strategy-academy-provenance > div { padding: 18px 20px; }
 .strategy-academy-provenance > div + div { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--academy-amber) 4%, var(--surface)); }

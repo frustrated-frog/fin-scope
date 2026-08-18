@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyBuildResult;
 import com.finscope.domain.quant.academy.QuantStrategyAcademyCard;
 import com.finscope.service.quant.academy.QuantStrategyAcademyService;
@@ -39,10 +40,10 @@ class QuantAcademyControllerTest {
         QuantStrategyAcademyCard card = new QuantStrategyAcademyCard();
         card.setCandidateId(7L);
         card.setTitle("质量价值策略");
-        card.setEvidenceLevel("HISTORICAL_EVIDENCE");
-        when(service.cards()).thenReturn(Collections.singletonList(card));
+        card.setEvidenceLevel(QuantStrategyEvidenceLevel.HISTORICAL_EVIDENCE);
+        when(service.cards(3L)).thenReturn(Collections.singletonList(card));
 
-        mockMvc.perform(get("/api/quant/academy/cards"))
+        mockMvc.perform(get("/api/quant/academy/cards").param("datasetId", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].candidateId").value(7))
                 .andExpect(jsonPath("$.data[0].evidenceLevel").value("HISTORICAL_EVIDENCE"));

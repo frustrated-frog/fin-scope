@@ -1,5 +1,7 @@
 package com.finscope.domain.quant.academy;
 
+import com.finscope.common.enums.quant.QuantStrategyAcademyShelf;
+import com.finscope.common.enums.quant.QuantStrategyEvidenceLevel;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -18,8 +20,8 @@ public class QuantStrategyAcademyCard {
     private Long strategyVersionId;
     private Long experimentId;
     private String experimentStatus;
-    private String evidenceLevel;
-    private String shelf;
+    private QuantStrategyEvidenceLevel evidenceLevel;
+    private QuantStrategyAcademyShelf shelf;
     private int evidenceScore;
     private String evidenceSummary;
     private String earningLogic;
