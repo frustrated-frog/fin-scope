@@ -20,6 +20,14 @@ public class SectorMarketEntry {
      */
     private SectorCategory category;
     /**
+     * 上游每日榜单原始名次；目录型条目为空。
+     */
+    private Integer sourceRank;
+    /**
+     * 主力净流入，单位为元；目录型条目为空。
+     */
+    private Double mainNetInflow;
+    /**
      * 最新价格。
      */
     private Double price;

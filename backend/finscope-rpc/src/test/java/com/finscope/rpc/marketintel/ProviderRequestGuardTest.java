@@ -1,7 +1,6 @@
 package com.finscope.rpc.marketintel;
 
 import com.finscope.domain.marketdata.MarketDataCapability;
-import com.finscope.rpc.quote.EastmoneySectorMarketProvider;
 import com.finscope.rpc.quote.SinaStockQuoteAdapter;
 import com.finscope.rpc.provider.ExternalDataProvider;
 import org.junit.jupiter.api.Test;
@@ -69,7 +68,8 @@ class ProviderRequestGuardTest {
         ProviderRequestGuard guard = new ProviderRequestGuard(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 millis -> { }, Duration.ZERO, 0, 3, Duration.ofSeconds(60));
         SinaStockQuoteAdapter sina = new SinaStockQuoteAdapter();
-        EastmoneySectorMarketProvider sector = new EastmoneySectorMarketProvider(null);
+        TestProvider sector = new TestProvider("EASTMONEY_SECTOR", "EASTMONEY",
+                MarketDataCapability.SECTOR_CATALOG);
         TestProvider sectorBackup = new TestProvider("EASTMONEY_SECTOR_BACKUP", "EASTMONEY",
                 MarketDataCapability.SECTOR_CATALOG);
         TestProvider flow = new TestProvider("EASTMONEY_CAPITAL_FLOW", "EASTMONEY",
