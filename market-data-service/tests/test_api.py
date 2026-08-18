@@ -28,6 +28,7 @@ from finscope_market_data.router import ProviderRouter
 from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.settings import Settings
 from finscope_market_data.discovery.schemas import DiscoveryFunnel, DiscoveryReport
+from finscope_market_data.sectors import SectorEntry, SectorEnvelope
 
 
 class MultiCapabilityProvider:
@@ -225,6 +226,25 @@ class CloseRecordingDiscovery(FakeDiscoveryService):
         self.closed = True
 
 
+class FakeSectorService:
+    def fetch(self, category: str) -> SectorEnvelope:
+        return SectorEnvelope(
+            category=category,
+            retrieved_at="2026-08-19T09:45:00",
+            entries=[
+                SectorEntry(
+                    code="881121",
+                    name="半导体",
+                    category="INDUSTRY",
+                    source_rank=1,
+                    change_pct=2.4,
+                    main_net_inflow=1_200_000_000,
+                    leader_stock_name="中芯国际",
+                )
+            ],
+        )
+
+
 def test_lifespan_closes_custom_discovery_service(tmp_path: Path) -> None:
     router = ProviderRouter(
         providers=[MultiCapabilityProvider()],
@@ -264,6 +284,53 @@ def test_stock_discovery_endpoint_returns_versioned_report(tmp_path: Path) -> No
     assert response.status_code == 200
     assert response.json()["schema_version"] == "1.0.0"
     assert response.json()["budget"] == 5000
+
+
+def test_tonghuashun_sector_endpoint_returns_versioned_contract(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(create_app(router, sectors=FakeSectorService()))
+
+    response = api.get("/v1/sectors/INDUSTRY")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "schema_version": "sector-market-v1",
+        "source_code": "AKSHARE_TONGHUASHUN_SECTOR",
+        "source_family": "TONGHUASHUN",
+        "category": "INDUSTRY",
+        "retrieved_at": "2026-08-19T09:45:00",
+        "entries": [
+            {
+                "code": "881121",
+                "name": "半导体",
+                "category": "INDUSTRY",
+                "source_rank": 1,
+                "change_pct": 2.4,
+                "main_net_inflow": 1_200_000_000.0,
+                "leader_stock_name": "中芯国际",
+            }
+        ],
+        "warnings": [],
+    }
+
+
+def test_tonghuashun_sector_endpoint_rejects_unknown_category(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(create_app(router, sectors=FakeSectorService()))
+
+    response = api.get("/v1/sectors/ALL")
+
+    assert response.status_code == 422
 
 
 def test_readiness_requires_writable_snapshot_store_and_a_provider(tmp_path: Path) -> None:

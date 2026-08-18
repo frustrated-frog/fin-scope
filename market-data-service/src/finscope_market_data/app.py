@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
@@ -33,6 +33,7 @@ from finscope_market_data.providers.sina import SinaCapitalFlowProvider, SinaQuo
 from finscope_market_data.providers.tencent import TencentQuoteProvider
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.settings import Settings
+from finscope_market_data.sectors import TonghuashunSectorService
 from finscope_market_data.snapshot_store import SnapshotStore
 
 
@@ -61,6 +62,7 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
 def create_app(
     router: ProviderRouter | None = None,
     discovery: StockDiscoveryService | None = None,
+    sectors: TonghuashunSectorService | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:
     config = settings or Settings()
@@ -97,6 +99,8 @@ def create_app(
                 ),
                 panel_store=panel_store,
             )
+        if application.state.sectors is None:
+            application.state.sectors = TonghuashunSectorService()
         try:
             yield
         finally:
@@ -112,6 +116,7 @@ def create_app(
     )
     application.state.router = router
     application.state.discovery = discovery
+    application.state.sectors = sectors
 
     @application.get("/health")
     async def health() -> dict[str, str]:
@@ -138,6 +143,16 @@ def create_app(
     async def provider_health() -> list[dict[str, Any]]:
         current = _router(application)
         return [item.model_dump(mode="json") for item in current.health.list(current.providers)]
+
+    @application.get("/v1/sectors/{category}")
+    async def sectors_catalog(
+        category: Literal["INDUSTRY", "CONCEPT"],
+    ) -> JSONResponse:
+        result = await asyncio.to_thread(application.state.sectors.fetch, category)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json")),
+        )
 
     @application.post("/v1/quant/single-stock-forecasts")
     async def single_stock_forecast(request: SingleStockForecastRequest) -> JSONResponse:
