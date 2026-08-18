@@ -20,12 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QuantStrategyCatalogRepositoryTest {
     private QuantStrategyCatalogRepository repository;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() throws Exception {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + Files.createTempDirectory("quant-catalog-repo").resolve("finance.db"));
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc = new JdbcTemplate(dataSource);
         DatabaseInitializer initializer = new DatabaseInitializer();
         ReflectionTestUtils.setField(initializer, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(initializer, "dataRoot", Files.createTempDirectory("quant-catalog-root").toString());
@@ -68,6 +69,41 @@ class QuantStrategyCatalogRepositoryTest {
         assertEquals(candidateId, repository.findCandidateIdByDraft(11L).orElseThrow(AssertionError::new));
         assertEquals(Long.valueOf(22L), repository.findVersionIdByDraft(11L).orElseThrow(AssertionError::new));
         assertFalse(repository.findById(candidateId).orElseThrow(AssertionError::new).isArchived());
+    }
+
+    @Test
+    void findsTheLatestVersionOnlyWithinTheRequestedDataset() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        repository.saveSource(source("sha", now));
+        repository.upsertCandidates("AWESOME_SYSTEMATIC_TRADING", "sha",
+                Collections.singletonList(candidate("value", "价值策略", "ADAPTABLE")), now);
+        Long candidateId = repository.findCandidates(null, null).get(0).getId();
+        insertDataset(3L, "数据集 A", now);
+        insertDataset(4L, "数据集 B", now);
+        insertVersion(21L, 3L, "策略 A", now);
+        insertVersion(22L, 4L, "策略 B", now);
+        repository.saveOrigin(candidateId, 11L, now);
+        repository.linkVersionForDraft(11L, 21L);
+        repository.saveOrigin(candidateId, 12L, now.plusMinutes(1));
+        repository.linkVersionForDraft(12L, 22L);
+
+        assertEquals(Long.valueOf(21L), repository.findLatestVersionIdByCandidateAndDataset(candidateId, 3L)
+                .orElseThrow(AssertionError::new));
+        assertEquals(Long.valueOf(22L), repository.findLatestVersionIdByCandidateAndDataset(candidateId, 4L)
+                .orElseThrow(AssertionError::new));
+        assertFalse(repository.findLatestVersionIdByCandidateAndDataset(candidateId, 5L).isPresent());
+    }
+
+    private void insertDataset(Long id, String name, LocalDateTime now) {
+        jdbc.update("INSERT INTO quant_dataset(id,name,market,universe_type,source_type,data_kind,status,created_at,updated_at) "
+                        + "VALUES(?,?,'A_SHARE','CUSTOM','LOCAL','REAL','READY',?,?)",
+                id, name, now.toString(), now.toString());
+    }
+
+    private void insertVersion(Long id, Long datasetId, String name, LocalDateTime now) {
+        jdbc.update("INSERT INTO quant_strategy_version(id,name,dataset_id,version,spec_json,strategy_fingerprint,"
+                        + "dataset_fingerprint,engine_version,source,created_at) VALUES(?,?,?,1,'{}',?,?,?,'AGENT',?)",
+                id, name, datasetId, "strategy-" + id, "dataset-" + datasetId, "engine-v1", now.toString());
     }
 
     private QuantStrategyCatalogSource source(String sha, LocalDateTime time) {

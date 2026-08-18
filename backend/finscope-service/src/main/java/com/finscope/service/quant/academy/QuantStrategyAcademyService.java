@@ -83,7 +83,8 @@ public class QuantStrategyAcademyService {
         item.setTitle(candidate.getTitle());
         result.getItems().add(item);
         try {
-            Optional<Long> existingVersionId = catalogRepository.findLatestVersionIdByCandidate(candidate.getId());
+            Optional<Long> existingVersionId = catalogRepository.findLatestVersionIdByCandidateAndDataset(
+                    candidate.getId(), datasetId);
             if (existingVersionId.isPresent()) {
                 reuseOrRun(existingVersionId.get(), item, result);
                 return;

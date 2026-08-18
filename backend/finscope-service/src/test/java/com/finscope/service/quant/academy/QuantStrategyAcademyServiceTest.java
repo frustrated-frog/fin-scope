@@ -38,7 +38,8 @@ class QuantStrategyAcademyServiceTest {
         Fixture fixture = fixture();
         List<QuantStrategyCandidate> candidates = candidates(7);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(candidates);
-        when(fixture.catalog.findLatestVersionIdByCandidate(anyLong())).thenReturn(Optional.<Long>empty());
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(anyLong(), org.mockito.ArgumentMatchers.eq(3L)))
+                .thenReturn(Optional.<Long>empty());
         for (int index = 0; index < 6; index++) {
             QuantStrategyCandidate candidate = candidates.get(index);
             if (index == 2) {
@@ -76,7 +77,7 @@ class QuantStrategyAcademyServiceTest {
         Fixture fixture = fixture();
         QuantStrategyCandidate candidate = candidates(1).get(0);
         when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
-        when(fixture.catalog.findLatestVersionIdByCandidate(candidate.getId())).thenReturn(Optional.of(21L));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(candidate.getId(), 3L)).thenReturn(Optional.of(21L));
         QuantExperiment running = new QuantExperiment();
         running.setId(31L);
         running.setStatus("RUNNING");
@@ -98,6 +99,31 @@ class QuantStrategyAcademyServiceTest {
         assertThrows(BusinessException.class, () -> fixture.service.build(3L));
 
         verify(fixture.catalog, never()).findCandidates("ADAPTABLE", null);
+    }
+
+    @Test
+    void generatesANewVersionWhenOnlyAnotherDatasetsVersionExists() {
+        Fixture fixture = fixture();
+        QuantStrategyCandidate candidate = candidates(1).get(0);
+        when(fixture.catalog.findCandidates("ADAPTABLE", null)).thenReturn(Collections.singletonList(candidate));
+        when(fixture.catalog.findLatestVersionIdByCandidateAndDataset(candidate.getId(), 3L))
+                .thenReturn(Optional.<Long>empty());
+        QuantStrategyDraft draft = new QuantStrategyDraft();
+        draft.setId(101L);
+        draft.setStatus("VALIDATED");
+        when(fixture.drafts.generate(candidate.getId(), 3L)).thenReturn(draft);
+        QuantStrategyVersion version = new QuantStrategyVersion();
+        version.setId(201L);
+        when(fixture.strategies.confirm(101L)).thenReturn(version);
+        QuantExperiment experiment = new QuantExperiment();
+        experiment.setId(301L);
+        when(fixture.experiments.create(201L)).thenReturn(experiment);
+
+        QuantStrategyAcademyBuildResult result = fixture.service.build(3L);
+
+        assertEquals(1, result.getVersionConfirmedCount());
+        assertEquals(0, result.getReusedCount());
+        verify(fixture.drafts).generate(candidate.getId(), 3L);
     }
 
     @Test

@@ -6,10 +6,11 @@ import com.finscope.domain.quant.experiment.QuantExperiment;
 import com.finscope.domain.quant.factor.FactorDefinition;
 import com.finscope.domain.quant.strategy.QuantStrategyDraft;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
-import com.finscope.service.quant.data.QuantDatasetService;
-import com.finscope.service.quant.data.QuantMarketDataSyncService;
+import com.finscope.service.quant.academy.QuantStrategyAcademyService;
 import com.finscope.service.quant.catalog.QuantStrategyCandidateDraftService;
 import com.finscope.service.quant.catalog.QuantStrategyCatalogService;
+import com.finscope.service.quant.data.QuantDatasetService;
+import com.finscope.service.quant.data.QuantMarketDataSyncService;
 import com.finscope.service.quant.experiment.QuantExperimentService;
 import com.finscope.service.quant.factor.FactorRegistry;
 import com.finscope.service.quant.factor.DatasetFactorAnalysisService;
@@ -50,6 +51,7 @@ class QuantPlatformControllerTest {
     @MockBean private QuantExperimentService experiments;
     @MockBean private QuantStrategyCatalogService catalog;
     @MockBean private QuantStrategyCandidateDraftService catalogDrafts;
+    @MockBean private QuantStrategyAcademyService academy;
 
     @Test
     void listsTheAuditableFactorCatalog() throws Exception {

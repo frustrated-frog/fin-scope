@@ -182,4 +182,3 @@ git push
 - Spec coverage: domain contract, scoring, bounded orchestration, APIs, UI, documentation, and verification each have a task.
 - Placeholder scan: no TBD/TODO or undefined follow-up is required for the first release.
 - Type consistency: `QuantStrategyAcademyCard`, `QuantStrategyAcademyBuildResult`, evidence levels, shelves, and endpoint paths are identical across tasks.
-

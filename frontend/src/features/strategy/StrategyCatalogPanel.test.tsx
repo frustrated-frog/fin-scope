@@ -62,7 +62,7 @@ test('presents evidence staircase, three shelves, and a beginner-first dossier',
   expect(screen.getByText('公开研究复现')).toBeInTheDocument();
   expect(screen.getByText('本地历史验证')).toBeInTheDocument();
   expect(screen.getByText('前向观察')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '应用候选' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '应用候选' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '当前观察' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '学习案例' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /质量价值策略/ })).toBeInTheDocument();
