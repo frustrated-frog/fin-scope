@@ -392,9 +392,6 @@ class StockDiscoveryService:
             if first_batch is not None and first_batch.quality_status == "COMPLETE":
                 self._save_constituents(sector, first_batch, warnings)
                 return self._resolved_sector(sector, first_batch, "COMPLETE"), first_batch
-        cached = self.constituent_snapshots.load(sector) if self.constituent_snapshots else None
-        if cached is not None:
-            return self._resolved_sector(sector, cached, "CACHED_COMPLETE"), cached
         for current in providers[1:]:
             batch = await self._fetch_constituent_batch(current, sector, warnings)
             if batch is not None and batch.quality_status == "COMPLETE":
@@ -403,9 +400,25 @@ class StockDiscoveryService:
                     self._resolved_sector(sector, batch, "SUPPLEMENTED_COMPLETE"),
                     batch,
                 )
+        cached = (
+            self.constituent_snapshots.load(sector)
+            if self.constituent_snapshots else None
+        )
+        if cached is not None:
+            return self._resolved_sector(sector, cached, "CACHED_COMPLETE"), cached
         partial = first_batch
         warnings.append(f"{sector.name} 未取得完整成分，已跳过该板块")
         return self._resolved_sector(sector, partial, "PARTIAL"), None
+
+    def close(self) -> None:
+        for provider in self.constituent_providers:
+            close = getattr(provider, "close", None)
+            if not callable(close):
+                continue
+            try:
+                close()
+            except Exception:
+                continue
 
     async def _fetch_constituent_batch(
         self, current: object, sector: DiscoverySector, warnings: list[str]

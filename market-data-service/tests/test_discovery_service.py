@@ -15,7 +15,10 @@ from finscope_market_data.discovery.service import (
     StockDiscoveryService,
     _forecast,
 )
-from finscope_market_data.discovery.constituents import ConstituentBatch
+from finscope_market_data.discovery.constituents import (
+    ConstituentBatch,
+    ConstituentSnapshotStore,
+)
 from finscope_market_data.models import DailyBar, StockSymbol
 from finscope_market_data.forecast.panel import PanelArtifactStore
 
@@ -94,6 +97,18 @@ class BatchConstituentProvider:
         )
 
 
+class ClosingConstituentProvider(BatchConstituentProvider):
+    def __init__(self, raises: bool = False) -> None:
+        super().__init__("TONGHUASHUN", "PARTIAL", [])
+        self.raises = raises
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+        if self.raises:
+            raise RuntimeError("close failed")
+
+
 class ScopeProvider(FakeProvider):
     def constituents(self, sector: DiscoverySector):
         return [
@@ -168,6 +183,56 @@ async def test_partial_tonghuashun_members_require_complete_supplement() -> None
     assert universe.sectors[0].constituent_quality_status == "SUPPLEMENTED_COMPLETE"
     assert universe.sectors[0].constituent_source_family == "EASTMONEY"
     assert any("部分成分" in item for item in universe.warnings)
+
+
+@pytest.mark.asyncio
+async def test_online_supplement_is_preferred_over_complete_snapshot(tmp_path) -> None:
+    sector_provider = FakeProvider()
+    sector = sector_provider.sectors(1)[0]
+    snapshot_path = tmp_path / "constituents.json"
+    ConstituentSnapshotStore(snapshot_path).save(
+        sector,
+        BatchConstituentProvider(
+            "TONGHUASHUN",
+            "COMPLETE",
+            [("600000", "SH", "旧快照")],
+        ).constituents(sector),
+    )
+    direct = BatchConstituentProvider(
+        "TONGHUASHUN", "PARTIAL", [("000001", "SZ", "样本一")]
+    )
+    supplement = BatchConstituentProvider(
+        "EASTMONEY",
+        "COMPLETE",
+        [("000001", "SZ", "样本一"), ("000002", "SZ", "样本二")],
+    )
+    service = StockDiscoveryService(
+        providers=[sector_provider],
+        constituent_providers=[direct, supplement],
+        constituent_snapshot_path=snapshot_path,
+        market=FakeMarket(),
+        provider_attempts=1,
+    )
+
+    universe = await service._universe(5)
+
+    assert universe.sectors[0].constituent_source_family == "EASTMONEY"
+    assert set(universe.members) == {"000001", "000002"}
+
+
+def test_close_continues_after_one_constituent_provider_fails() -> None:
+    first = ClosingConstituentProvider(raises=True)
+    second = ClosingConstituentProvider()
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        constituent_providers=[first, second],
+        market=FakeMarket(),
+    )
+
+    service.close()
+
+    assert first.closed is True
+    assert second.closed is True
 
 
 @pytest.mark.asyncio
