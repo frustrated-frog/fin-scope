@@ -33,7 +33,7 @@ class QuantStrategyCandidateDraftServiceTest {
 
         assertEquals(Long.valueOf(11L), value.getId());
         verify(repository).saveOrigin(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(11L),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.eq("source-sha"), org.mockito.ArgumentMatchers.any());
         verify(strategies).generateDraft(org.mockito.ArgumentMatchers.eq(3L), contains("来源指标仅作线索"));
         verify(strategies).generateDraft(org.mockito.ArgumentMatchers.eq(3L), contains("BP"));
     }
@@ -55,6 +55,7 @@ class QuantStrategyCandidateDraftServiceTest {
     private QuantStrategyCandidate candidate(String status) {
         QuantStrategyCandidate value = new QuantStrategyCandidate();
         value.setId(7L); value.setTitle("价值（账面价值）因素"); value.setCompatibilityStatus(status);
+        value.setSourceCommitSha("source-sha");
         value.setAdaptationNote("使用披露时点 BP 形成 A 股版本"); value.setMappedFactors(Arrays.asList("BP"));
         value.setPaperUrl("https://example.com/paper"); value.setImplementationUrl("https://example.com/code");
         return value;
