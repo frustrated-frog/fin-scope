@@ -30,7 +30,7 @@
 - Create: `market-data-service/tests/test_discovery_acquisition.py`
 - Create: `market-data-service/src/finscope_market_data/discovery/acquisition.py`
 
-- [ ] **Step 1: 写直连成功与 Session 恢复的失败测试**
+- [x] **Step 1: 写直连成功与 Session 恢复的失败测试**
 
 测试使用记录调用次数的假 `ManagedPageFetcher`，期望 API 为：
 
@@ -51,13 +51,13 @@ assert [item.mode for item in result.attempts] == [
 
 同时断言直连有效时两个 factory 调用次数均为 0；第一次 Session 恢复后，下一页从 Session 开始且复用同一对象。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_acquisition.py -q`
 
 Expected: FAIL，原因是 `finscope_market_data.discovery.acquisition` 尚不存在。
 
-- [ ] **Step 3: 实现最小采集模型与 Direct/Session 升级**
+- [x] **Step 3: 实现最小采集模型与 Direct/Session 升级**
 
 实现以下公开契约：
 
@@ -86,13 +86,13 @@ class AcquisitionResult:
 
 `TonghuashunPageAcquirer.fetch(url, assess)` 先校验 `https://q.10jqka.com.cn`，再调用直连；`assess(html, final_url)` 返回空字符串代表页面有效，否则返回可审计失败原因。只有配置启用且当前结果无效时才创建 Session。
 
-- [ ] **Step 4: 运行测试确认转绿**
+- [x] **Step 4: 运行测试确认转绿**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_acquisition.py -q`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add market-data-service/src/finscope_market_data/discovery/acquisition.py market-data-service/tests/test_discovery_acquisition.py
@@ -106,7 +106,7 @@ git push
 - Modify: `market-data-service/tests/test_discovery_acquisition.py`
 - Modify: `market-data-service/src/finscope_market_data/discovery/acquisition.py`
 
-- [ ] **Step 1: 写 Browser 升级、并发限制和关闭的失败测试**
+- [x] **Step 1: 写 Browser 升级、并发限制和关闭的失败测试**
 
 覆盖以下独立行为：
 
@@ -120,13 +120,13 @@ assert browser.closed is True
 
 另写测试让 Browser 抛出 `TimeoutError`，断言 `AcquisitionResult.accepted` 为 `False`、尝试轨迹含脱敏错误，并且 `close()` 可重复调用。
 
-- [ ] **Step 2: 运行目标测试确认失败原因正确**
+- [x] **Step 2: 运行目标测试确认失败原因正确**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_acquisition.py -q`
 
 Expected: FAIL，原因是 Browser 未升级或资源未关闭。
 
-- [ ] **Step 3: 实现 Browser 升级、信号量和空闲回收**
+- [x] **Step 3: 实现 Browser 升级、信号量和空闲回收**
 
 使用 `threading.BoundedSemaphore(browser_max_concurrency)` 限制 Browser；Session 与 Browser 各自使用互斥锁。每次请求前若距离上次使用超过 `idle_timeout_seconds`，关闭并重新惰性创建对应会话。`close()` 清除引用并安全调用后端的 `close()`。
 
@@ -150,13 +150,13 @@ page = client.fetch(url, timeout=round(timeout_seconds * 1000))
 
 统一用 `page.body.decode(page.encoding or "utf-8", errors="replace")` 和 `str(page.url)` 转换结果；关闭时调用对应 manager 的 `__exit__`。
 
-- [ ] **Step 4: 运行采集器测试确认通过**
+- [x] **Step 4: 运行采集器测试确认通过**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_acquisition.py -q`
 
 Expected: PASS，且无未处理线程或资源警告。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add market-data-service/src/finscope_market_data/discovery/acquisition.py market-data-service/tests/test_discovery_acquisition.py
@@ -170,7 +170,7 @@ git push
 - Modify: `market-data-service/tests/test_discovery_constituents.py`
 - Modify: `market-data-service/src/finscope_market_data/discovery/constituents.py`
 
-- [ ] **Step 1: 写恢复解析、95% 门槛与诊断快照的失败测试**
+- [x] **Step 1: 写恢复解析、95% 门槛与诊断快照的失败测试**
 
 测试用固定 HTML 让 Direct 返回登录页、Session 返回成分表，断言：
 
@@ -187,13 +187,13 @@ assert [item.mode.value for item in result.acquisition_attempts] == [
 
 再让 Browser 返回与直连夹具相同 HTML，断言 `values` 完全相同；保存后读取新版快照断言诊断不丢失；手工写入无诊断字段的 v1 快照并断言可读取。
 
-- [ ] **Step 2: 运行目标测试确认失败**
+- [x] **Step 2: 运行目标测试确认失败**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_constituents.py -q`
 
 Expected: FAIL，原因是适配器未接受 `page_acquirer`、完整性仍要求 100% 或批次缺少诊断字段。
 
-- [ ] **Step 3: 实现适配器接入与诊断持久化**
+- [x] **Step 3: 实现适配器接入与诊断持久化**
 
 `ConstituentBatch` 增加带默认值的字段：
 
@@ -208,13 +208,13 @@ acquisition_duration_ms: int = 0
 
 完整条件改为 `expected > 0 and coverage >= 0.95`。快照把尝试轨迹序列化为字典列表，读取缺失字段时回退为 Direct 默认诊断。
 
-- [ ] **Step 4: 运行成分与既有服务测试**
+- [x] **Step 4: 运行成分与既有服务测试**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_constituents.py tests/test_discovery_service.py -q`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add market-data-service/src/finscope_market_data/discovery/constituents.py market-data-service/tests/test_discovery_constituents.py
@@ -228,29 +228,29 @@ git push
 - Modify: `market-data-service/tests/test_discovery_service.py`
 - Modify: `market-data-service/src/finscope_market_data/discovery/service.py`
 
-- [ ] **Step 1: 写在线补全优先和关闭隔离的失败测试**
+- [x] **Step 1: 写在线补全优先和关闭隔离的失败测试**
 
 先写入可用同花顺快照，再让同花顺主采集返回 `PARTIAL`、东方财富返回 `COMPLETE`，断言最终来源为 `EASTMONEY` 而不是缓存。另用两个可关闭 Provider，其中一个 `close()` 抛错，断言另一个仍被关闭且错误转换为 warning 或安全忽略。
 
-- [ ] **Step 2: 运行目标测试确认失败**
+- [x] **Step 2: 运行目标测试确认失败**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_service.py -q`
 
 Expected: FAIL，当前实现会在尝试东方财富前读取缓存，且没有统一关闭入口。
 
-- [ ] **Step 3: 实现降级顺序与 `close()`**
+- [x] **Step 3: 实现降级顺序与 `close()`**
 
 `_resolve_sector` 顺序调整为：首选同花顺批次、其余在线补全 Provider、完整成分快照、跳过。只有 `COMPLETE` 批次才保存快照。
 
 `StockDiscoveryService.close()` 遍历 `constituent_providers`，对存在且可调用的 `close` 逐一执行；一个 Provider 关闭失败不得阻止后续关闭。
 
-- [ ] **Step 4: 运行服务测试确认通过**
+- [x] **Step 4: 运行服务测试确认通过**
 
 Run: `cd market-data-service && uv run pytest tests/test_discovery_service.py -q`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add market-data-service/src/finscope_market_data/discovery/service.py market-data-service/tests/test_discovery_service.py
@@ -268,17 +268,17 @@ git push
 - Modify: `market-data-service/uv.lock`
 - Modify: `market-data-service/Dockerfile`
 
-- [ ] **Step 1: 写设置边界和 lifespan 关闭的失败测试**
+- [x] **Step 1: 写设置边界和 lifespan 关闭的失败测试**
 
 断言默认设置为启用、Session 15 秒、Browser 20 秒、并发 1、空闲 300 秒；非法 0 并发和越界超时由 Pydantic 拒绝。为自定义 Discovery Stub 提供 `close()` 记录器，离开 `TestClient` 后断言已关闭。
 
-- [ ] **Step 2: 运行目标测试确认失败**
+- [x] **Step 2: 运行目标测试确认失败**
 
 Run: `cd market-data-service && uv run pytest tests/test_api.py -q`
 
 Expected: FAIL，原因是设置和关闭行为不存在。
 
-- [ ] **Step 3: 实现设置、装配和生命周期关闭**
+- [x] **Step 3: 实现设置、装配和生命周期关闭**
 
 `Settings` 增加：
 
@@ -292,7 +292,7 @@ scrapling_idle_timeout_seconds: float = Field(default=300, ge=30, le=3600)
 
 `create_app` 用这些参数创建 `TonghuashunPageAcquirer` 并注入 `TonghuashunConstituentProvider`。lifespan 的 `finally` 先关闭 Discovery，再关闭 Router；自定义 Discovery 不提供 `close` 时兼容跳过。
 
-- [ ] **Step 4: 固定依赖并更新运行镜像**
+- [x] **Step 4: 固定依赖并更新运行镜像**
 
 在 dependencies 加入 `scrapling[fetchers]==0.4.14`，执行：
 
@@ -304,7 +304,7 @@ uv sync --frozen --extra ecosystem --extra dev
 
 Dockerfile 在 `uv sync` 后执行 `uv run scrapling install`，确保 Browser 恢复在容器内可用。
 
-- [ ] **Step 5: 运行 API、采集和锁文件验证**
+- [x] **Step 5: 运行 API、采集和锁文件验证**
 
 Run: `cd market-data-service && uv run pytest tests/test_api.py tests/test_discovery_acquisition.py tests/test_discovery_constituents.py -q`
 
@@ -312,7 +312,7 @@ Run: `cd market-data-service && uv lock --check`
 
 Expected: 两条命令均退出 0。
 
-- [ ] **Step 6: 提交并推送**
+- [x] **Step 6: 提交并推送**
 
 ```bash
 git add market-data-service/pyproject.toml market-data-service/uv.lock market-data-service/Dockerfile market-data-service/src/finscope_market_data/settings.py market-data-service/src/finscope_market_data/app.py market-data-service/tests/test_api.py
@@ -326,7 +326,7 @@ git push
 - Modify: `market-data-service/README.md`
 - Modify: `docs/superpowers/plans/2026-08-19-tonghuashun-scrapling-recovery.md`
 
-- [ ] **Step 1: 更新运行文档**
+- [x] **Step 1: 更新运行文档**
 
 README 写明：
 
@@ -336,23 +336,23 @@ README 写明：
 - 不包含登录、验证码、代理和访问控制绕过。
 - Browser 依赖缺失时会记录诊断并继续东方财富/快照降级。
 
-- [ ] **Step 2: 执行全量市场数据服务测试**
+- [x] **Step 2: 执行全量市场数据服务测试**
 
 Run: `cd market-data-service && uv run pytest -q`
 
 Expected: 所有测试 PASS，0 failures。
 
-- [ ] **Step 3: 执行静态和依赖一致性检查**
+- [x] **Step 3: 执行静态和依赖一致性检查**
 
 Run: `git diff --check && cd market-data-service && uv lock --check && uv run python -m compileall -q src tests`
 
 Expected: 退出 0，无空白错误、锁漂移或语法错误。
 
-- [ ] **Step 4: 对照设计逐项自检**
+- [x] **Step 4: 对照设计逐项自检**
 
 检查以下事实并记录在本计划勾选状态中：直连不初始化 Scrapling、Session/Browser 按序升级、95% 门槛未降低、Browser 并发为 1、资源可关闭、在线补全后才读快照、交易范围过滤测试仍通过、API 契约无变化。
 
-- [ ] **Step 5: 提交并推送**
+- [x] **Step 5: 提交并推送**
 
 ```bash
 git add market-data-service/README.md docs/superpowers/plans/2026-08-19-tonghuashun-scrapling-recovery.md
@@ -368,3 +368,12 @@ git push
 - 依赖安装、容器运行和运维说明映射到 Task 5-6。
 - 不包含 Java API、内容域抓取、登录、验证码、代理或自动协议修复。
 - 类型名和字段名在所有任务中保持一致，无未定义占位符。
+
+## 执行证据
+
+- `cd market-data-service && uv run pytest -q`：188 passed，只有项目既有的 Starlette `httpx` 弃用警告。
+- `cd market-data-service && uv lock --check`：解析 79 个包，锁文件一致。
+- `cd market-data-service && uv run python -m compileall -q src tests`：退出码 0。
+- `docker build -t finscope-market-data:scrapling-test market-data-service`：镜像构建成功，`scrapling install` 完成 Browser 和系统依赖安装。
+- 容器内实例化并关闭 `ScraplingBrowserFetcher`：退出码 0。
+- `git diff --check`：退出码 0。
