@@ -134,7 +134,7 @@ class TonghuashunPageAcquirer:
         self._browser: ManagedPageFetcher | None = None
         self._session_last_used: float | None = None
         self._browser_last_used: float | None = None
-        self._preferred_mode = AcquisitionMode.DIRECT_HTTP
+        self._preferred_modes: dict[str, AcquisitionMode] = {}
         self._session_lock = threading.Lock()
         self._browser_lock = threading.Lock()
         self._browser_slots = threading.BoundedSemaphore(browser_max_concurrency)
@@ -145,14 +145,20 @@ class TonghuashunPageAcquirer:
         assess: PageAssessment,
     ) -> AcquisitionResult:
         self._validate_url(url)
+        scope_key = self._scope_key(url)
         attempts: list[AcquisitionAttempt] = []
-        if self._preferred_mode is AcquisitionMode.BROWSER:
-            return self._fetch_browser(url, assess, attempts)
-        if self._preferred_mode is AcquisitionMode.SESSION_HTTP:
-            session_result = self._fetch_session(url, assess, attempts)
+        preferred_mode = self._preferred_modes.get(
+            scope_key, AcquisitionMode.DIRECT_HTTP
+        )
+        if preferred_mode is AcquisitionMode.BROWSER:
+            return self._fetch_browser(url, assess, attempts, scope_key)
+        if preferred_mode is AcquisitionMode.SESSION_HTTP:
+            session_result = self._fetch_session(
+                url, assess, attempts, scope_key
+            )
             if session_result.accepted or not self.enabled:
                 return session_result
-            return self._fetch_browser(url, assess, attempts)
+            return self._fetch_browser(url, assess, attempts, scope_key)
 
         started = time.monotonic()
         html = ""
@@ -179,16 +185,17 @@ class TonghuashunPageAcquirer:
                 attempts=tuple(attempts),
                 failure_reason=failure_reason,
             )
-        session_result = self._fetch_session(url, assess, attempts)
+        session_result = self._fetch_session(url, assess, attempts, scope_key)
         if session_result.accepted:
             return session_result
-        return self._fetch_browser(url, assess, attempts)
+        return self._fetch_browser(url, assess, attempts, scope_key)
 
     def _fetch_session(
         self,
         url: str,
         assess: PageAssessment,
         attempts: list[AcquisitionAttempt],
+        scope_key: str,
     ) -> AcquisitionResult:
         html = ""
         final_url = url
@@ -222,7 +229,7 @@ class TonghuashunPageAcquirer:
             )
         )
         if not failure_reason:
-            self._preferred_mode = AcquisitionMode.SESSION_HTTP
+            self._preferred_modes[scope_key] = AcquisitionMode.SESSION_HTTP
         return AcquisitionResult(
             html=html,
             final_url=final_url,
@@ -237,6 +244,7 @@ class TonghuashunPageAcquirer:
         url: str,
         assess: PageAssessment,
         attempts: list[AcquisitionAttempt],
+        scope_key: str,
     ) -> AcquisitionResult:
         html = ""
         final_url = url
@@ -266,6 +274,8 @@ class TonghuashunPageAcquirer:
                 if self._browser is not None:
                     try:
                         self._browser.close()
+                    except Exception:
+                        pass
                     finally:
                         self._browser = None
                         self._browser_last_used = None
@@ -278,7 +288,7 @@ class TonghuashunPageAcquirer:
             )
         )
         if not failure_reason:
-            self._preferred_mode = AcquisitionMode.BROWSER
+            self._preferred_modes[scope_key] = AcquisitionMode.BROWSER
         return AcquisitionResult(
             html=html,
             final_url=final_url,
@@ -291,20 +301,34 @@ class TonghuashunPageAcquirer:
     def close(self) -> None:
         with self._session_lock:
             if self._session is not None:
-                self._session.close()
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
                 self._session = None
                 self._session_last_used = None
         with self._browser_lock:
             if self._browser is not None:
-                self._browser.close()
+                try:
+                    self._browser.close()
+                except Exception:
+                    pass
                 self._browser = None
                 self._browser_last_used = None
-        self._preferred_mode = AcquisitionMode.DIRECT_HTTP
+        self._preferred_modes.clear()
 
     def _validate_url(self, url: str) -> None:
         parsed = urlparse(url)
         if parsed.scheme != "https" or parsed.hostname != "q.10jqka.com.cn":
             raise ValueError("只允许采集 https://q.10jqka.com.cn 公共页面")
+
+    def _scope_key(self, url: str) -> str:
+        parts = [part for part in urlparse(url).path.split("/") if part]
+        try:
+            code_index = parts.index("code")
+            return parts[code_index + 1]
+        except (ValueError, IndexError):
+            return url
 
     def _load_direct_page(self, url: str) -> tuple[str, str]:
         request = Request(

@@ -163,6 +163,26 @@ def test_snapshot_preserves_recovery_diagnostics(tmp_path) -> None:
     assert store.load(_sector(expected=1)) == batch
 
 
+def test_browser_recovery_with_low_coverage_remains_partial() -> None:
+    html = _page([("600584", "长电科技")], 1, 1)
+    acquirer = TonghuashunPageAcquirer(
+        direct_loader=lambda url: ("<html>empty</html>", url),
+        session_factory=lambda: StaticFetcher(
+            [("<html>empty</html>", url_for_sector())]
+        ),
+        browser_factory=lambda: StaticFetcher([(html, url_for_sector())]),
+    )
+
+    batch = TonghuashunConstituentProvider(
+        page_acquirer=acquirer
+    ).constituents(_sector(expected=2))
+
+    assert batch.acquisition_mode == "BROWSER"
+    assert batch.recovery_used is True
+    assert batch.quality_status == "PARTIAL"
+    assert batch.coverage == 0.5
+
+
 def test_version_one_snapshot_without_diagnostics_remains_readable(tmp_path) -> None:
     path = tmp_path / "constituents.json"
     path.write_text(

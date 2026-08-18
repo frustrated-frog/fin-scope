@@ -45,6 +45,18 @@ class RaisingFetcher(RecordingFetcher):
         raise self.error
 
 
+class CloseRaisingFetcher(RecordingFetcher):
+    def close(self) -> None:
+        self.closed = True
+        raise RuntimeError("close failed")
+
+
+class FailingBrowser(CloseRaisingFetcher):
+    def fetch(self, url: str, timeout_seconds: float) -> tuple[str, str]:
+        self.calls.append((url, timeout_seconds))
+        raise TimeoutError("browser failed")
+
+
 class ConcurrentFetcher(RecordingFetcher):
     def __init__(self, response: tuple[str, str]) -> None:
         super().__init__([])
@@ -371,3 +383,54 @@ def test_direct_and_session_exceptions_continue_to_browser_recovery() -> None:
         "TimeoutError",
         "ConnectionError",
     ]
+
+
+def test_close_releases_browser_when_session_close_fails() -> None:
+    session = CloseRaisingFetcher([("<html>empty</html>", URL)])
+    browser = RecordingFetcher([("<tr class='stock-row'>ok</tr>", URL)])
+    acquirer = TonghuashunPageAcquirer(
+        direct_loader=lambda url: ("<html>empty</html>", url),
+        session_factory=RecordingFactory(session),
+        browser_factory=RecordingFactory(browser),
+    )
+    acquirer.fetch(URL, assess=_assess)
+
+    acquirer.close()
+
+    assert session.closed is True
+    assert browser.closed is True
+
+
+def test_recovery_preference_is_scoped_to_one_sector() -> None:
+    another_url = "https://q.10jqka.com.cn/thshy/detail/code/881122/"
+    direct_responses = {
+        URL: ("<html>login</html>", "https://q.10jqka.com.cn/account/login/"),
+        another_url: ("<tr class='stock-row'>direct</tr>", another_url),
+    }
+    session = RecordingFetcher([("<tr class='stock-row'>session</tr>", URL)])
+    acquirer = TonghuashunPageAcquirer(
+        direct_loader=lambda url: direct_responses[url],
+        session_factory=RecordingFactory(session),
+        browser_factory=RecordingFactory(RecordingFetcher([])),
+    )
+
+    recovered = acquirer.fetch(URL, assess=_assess)
+    direct = acquirer.fetch(another_url, assess=_assess)
+
+    assert recovered.mode is AcquisitionMode.SESSION_HTTP
+    assert direct.mode is AcquisitionMode.DIRECT_HTTP
+
+
+def test_browser_fetch_and_close_failures_still_return_diagnostics() -> None:
+    browser = FailingBrowser([])
+    acquirer = TonghuashunPageAcquirer(
+        direct_loader=lambda url: ("<html>empty</html>", url),
+        session_factory=lambda: RecordingFetcher([("<html>empty</html>", URL)]),
+        browser_factory=lambda: browser,
+    )
+
+    result = acquirer.fetch(URL, assess=_assess)
+
+    assert result.accepted is False
+    assert result.attempts[-1].error == "TimeoutError"
+    assert browser.closed is True
