@@ -14,6 +14,7 @@ public final class FollowedSectorResponse extends MarketDataQualityResponse {
     private Double changePct;
     private Double changeAmount;
     private Double turnover;
+    private Double mainNetInflow;
     private boolean quoteValid;
     private String quoteNote;
     private String quoteDate;
@@ -47,6 +48,7 @@ public final class FollowedSectorResponse extends MarketDataQualityResponse {
         response.changePct = quote.getChangePct();
         response.changeAmount = quote.getChangeAmount();
         response.turnover = quote.getTurnover();
+        response.mainNetInflow = quote.getMainNetInflow();
         response.quoteValid = quote.isValid();
         response.quoteNote = quote.getNote();
         response.quoteDate = quote.getQuoteTime() == null ? null : quote.getQuoteTime().toLocalDate().toString();
@@ -60,6 +62,7 @@ public final class FollowedSectorResponse extends MarketDataQualityResponse {
     public Double getChangePct() { return changePct; }
     public Double getChangeAmount() { return changeAmount; }
     public Double getTurnover() { return turnover; }
+    public Double getMainNetInflow() { return mainNetInflow; }
     public boolean isQuoteValid() { return quoteValid; }
     public String getQuoteNote() { return quoteNote; }
     public String getQuoteDate() { return quoteDate; }

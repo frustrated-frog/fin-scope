@@ -9,6 +9,8 @@ public final class SectorMarketEntryResponse {
     private String code;
     private String name;
     private String category;
+    private Integer sourceRank;
+    private Double mainNetInflow;
     private Double price;
     private Double changeAmount;
     private Double changePct;
@@ -23,6 +25,8 @@ public final class SectorMarketEntryResponse {
         response.code = value.getCode();
         response.name = value.getName();
         response.category = value.getCategory() == null ? null : value.getCategory().name();
+        response.sourceRank = value.getSourceRank();
+        response.mainNetInflow = value.getMainNetInflow();
         response.price = value.getPrice();
         response.changeAmount = value.getChangeAmount();
         response.changePct = value.getChangePct();
@@ -37,6 +41,8 @@ public final class SectorMarketEntryResponse {
     public String getCode() { return code; }
     public String getName() { return name; }
     public String getCategory() { return category; }
+    public Integer getSourceRank() { return sourceRank; }
+    public Double getMainNetInflow() { return mainNetInflow; }
     public Double getPrice() { return price; }
     public Double getChangeAmount() { return changeAmount; }
     public Double getChangePct() { return changePct; }

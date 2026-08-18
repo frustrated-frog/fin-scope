@@ -44,7 +44,7 @@ class SectorMarketControllerTest {
         SectorMarketEntry entry = entry();
         when(sectorMarketService.overview(SectorCategory.INDUSTRY, 5, false)).thenReturn(
                 new SectorMarketOverview(SectorCategory.INDUSTRY, MarketDataQualityStatus.FRESH_PRIMARY,
-                        "EASTMONEY_SECTOR", LocalDateTime.of(2026, 7, 14, 9, 59),
+                        "PYTHON_TONGHUASHUN_SECTOR", LocalDateTime.of(2026, 7, 14, 9, 59),
                         LocalDateTime.of(2026, 7, 14, 10, 0), null, null, "refresh-overview",
                         Collections.singletonList(entry), Collections.<SectorMarketEntry>emptyList()));
 
@@ -52,9 +52,11 @@ class SectorMarketControllerTest {
                         .param("category", "INDUSTRY").param("limit", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.qualityStatus").value("FRESH_PRIMARY"))
-                .andExpect(jsonPath("$.data.sourceCode").value("EASTMONEY_SECTOR"))
+                .andExpect(jsonPath("$.data.sourceCode").value("PYTHON_TONGHUASHUN_SECTOR"))
                 .andExpect(jsonPath("$.data.refreshId").value("refresh-overview"))
-                .andExpect(jsonPath("$.data.leaders[0].code").value("BK1036"))
+                .andExpect(jsonPath("$.data.leaders[0].code").value("881121"))
+                .andExpect(jsonPath("$.data.leaders[0].sourceRank").value(1))
+                .andExpect(jsonPath("$.data.leaders[0].mainNetInflow").value(1200000000D))
                 .andExpect(jsonPath("$.data.leaders[0].leaderStockName").value("中芯国际"));
     }
 
@@ -78,38 +80,41 @@ class SectorMarketControllerTest {
     void followsAndUnfollowsSectorIdempotently() throws Exception {
         WatchlistItem item = sectorItem();
         Quote quote = new Quote();
-        quote.setInstrumentCode("BK1036");
-        quote.setPrice(1234.5);
+        quote.setInstrumentCode("881121");
         quote.setChangePct(2.6);
+        quote.setMainNetInflow(1_200_000_000D);
         quote.setValid(true);
         quote.setQualityStatus(MarketDataQualityStatus.FRESH_FALLBACK);
-        quote.setSourceCode("EASTMONEY_SECTOR_QUOTE");
+        quote.setSourceCode("PYTHON_TONGHUASHUN_SECTOR");
         quote.setWarning("已自动切换备用数据源");
         quote.setRefreshId("r-sector");
-        when(watchlistService.followSector("BK1036")).thenReturn(item);
-        when(watchlistService.followedSectorWithQuote("BK1036"))
+        when(watchlistService.followSector("881121")).thenReturn(item);
+        when(watchlistService.followedSectorWithQuote("881121"))
                 .thenReturn(new WatchlistItemView(item, quote, null));
 
-        mockMvc.perform(put("/api/sector-market/follows/BK1036"))
+        mockMvc.perform(put("/api/sector-market/follows/881121"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.code").value("BK1036"))
+                .andExpect(jsonPath("$.data.code").value("881121"))
+                .andExpect(jsonPath("$.data.mainNetInflow").value(1200000000D))
                 .andExpect(jsonPath("$.data.quoteValid").value(true))
                 .andExpect(jsonPath("$.data.qualityStatus").value("FRESH_FALLBACK"))
-                .andExpect(jsonPath("$.data.sourceCode").value("EASTMONEY_SECTOR_QUOTE"))
+                .andExpect(jsonPath("$.data.sourceCode").value("PYTHON_TONGHUASHUN_SECTOR"))
                 .andExpect(jsonPath("$.data.refreshId").value("r-sector"));
-        mockMvc.perform(delete("/api/sector-market/follows/bk1036"))
+        mockMvc.perform(delete("/api/sector-market/follows/881121"))
                 .andExpect(status().isNoContent());
 
-        verify(watchlistService).unfollowSector("bk1036");
+        verify(watchlistService).unfollowSector("881121");
     }
 
     private SectorMarketEntry entry() {
         SectorMarketEntry value = new SectorMarketEntry();
-        value.setCode("BK1036");
+        value.setCode("881121");
         value.setName("半导体");
         value.setCategory(SectorCategory.INDUSTRY);
         value.setPrice(1234.5);
         value.setChangePct(2.6);
+        value.setSourceRank(1);
+        value.setMainNetInflow(1_200_000_000D);
         value.setLeaderStockName("中芯国际");
         return value;
     }
@@ -118,7 +123,7 @@ class SectorMarketControllerTest {
         WatchlistItem value = new WatchlistItem();
         value.setId(3L);
         value.setInstrumentId(8L);
-        value.setCode("BK1036");
+        value.setCode("881121");
         value.setName("半导体");
         value.setType("SECTOR");
         return value;

@@ -25,6 +25,7 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
     private Double changePct;
     private Double changeAmount;
     private Double turnover;
+    private Double mainNetInflow;
     private Double open;
     private Double high;
     private Double low;
@@ -64,6 +65,7 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
             response.changePct = quote.getChangePct();
             response.changeAmount = quote.getChangeAmount();
             response.turnover = quote.getTurnover();
+            response.mainNetInflow = quote.getMainNetInflow();
             response.open = quote.getOpen();
             response.high = quote.getHigh();
             response.low = quote.getLow();
@@ -123,6 +125,10 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
 
     public Double getTurnover() {
         return turnover;
+    }
+
+    public Double getMainNetInflow() {
+        return mainNetInflow;
     }
 
     public Double getOpen() {

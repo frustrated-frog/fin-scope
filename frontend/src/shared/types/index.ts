@@ -1004,6 +1004,8 @@ export type SectorMarketEntry = {
   code: string;
   name: string;
   category: SectorCategory;
+  sourceRank?: number;
+  mainNetInflow?: number;
   price?: number;
   changeAmount?: number;
   changePct?: number;
@@ -1034,6 +1036,7 @@ export type FollowedSector = MarketDataQuality & {
   changePct?: number;
   changeAmount?: number;
   turnover?: number;
+  mainNetInflow?: number;
   quoteValid: boolean;
   quoteNote?: string;
   quoteDate?: string;

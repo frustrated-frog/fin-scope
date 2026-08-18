@@ -47,6 +47,14 @@ export function formatTurnover(value?: number) {
   return value.toFixed(0);
 }
 
+export function formatNetFlow(value?: number) {
+  if (value === undefined || value === null) return '--';
+  const sign = value > 0 ? '+' : '';
+  if (Math.abs(value) >= 1e8) return `${sign}${(value / 1e8).toFixed(2)}亿`;
+  if (Math.abs(value) >= 1e4) return `${sign}${(value / 1e4).toFixed(0)}万`;
+  return `${sign}${value.toFixed(0)}`;
+}
+
 export function changeClass(value?: number) {
   if (value === undefined || value === null || value === 0) return 'watchlist-flat';
   return value > 0 ? 'watchlist-up' : 'watchlist-down';

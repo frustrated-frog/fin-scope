@@ -9,7 +9,7 @@ import {
   SectorMarketOverview,
   SectorMarketSearchResult
 } from '../../shared/types';
-import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
+import { changeClass, formatNetFlow, formatPct } from './watchlistFormatters';
 import { DataQualityNotice } from './DataQualityNotice';
 import { aggregateMarketDataQuality } from './marketDataQuality';
 
@@ -97,13 +97,12 @@ export function SectorMarketPanel({
       <div className={`sector-rank-column sector-rank-${tone}`}>
         <div className="sector-rank-head">
           <span>{title}</span>
-          <small>涨跌幅 · 成交额</small>
+          <small>涨跌幅 · 主力净流入</small>
         </div>
         {items.length ? (
           <ol className="sector-rank-list">
             {items.map((item, index) => {
               const isFollowed = followedCodes.has(item.code);
-              const canFollow = item.code.startsWith('BK');
               return (
                 <li key={item.code}>
                   <span className="sector-rank-index">{String(index + 1).padStart(2, '0')}</span>
@@ -113,14 +112,14 @@ export function SectorMarketPanel({
                   </div>
                   <div className="sector-rank-quote">
                     <strong className={changeClass(item.changePct)}>{formatPct(item.changePct)}</strong>
-                    <span>{formatTurnover(item.turnover) || '--'}</span>
+                    <span>{formatNetFlow(item.mainNetInflow)}</span>
                   </div>
                   <button
                     className={`sector-follow-button${isFollowed ? ' is-followed' : ''}`}
                     type="button"
                     aria-label={`${isFollowed ? '取消关注' : '关注'}-${item.name}`}
-                    title={!canFollow ? '备用源板块暂不支持关注' : isFollowed ? '取消关注' : '关注板块'}
-                    disabled={!canFollow || pendingCode === item.code}
+                    title={isFollowed ? '取消关注' : '关注板块'}
+                    disabled={pendingCode === item.code}
                     onClick={() => toggleFollow(item.code, isFollowed)}
                   >
                     <span aria-hidden="true">{isFollowed ? '★' : '☆'}</span>
@@ -145,7 +144,7 @@ export function SectorMarketPanel({
         <div>
           <span className="sector-market-kicker">MARKET STRUCTURE</span>
           <h3 id="sector-market-title">板块行情</h3>
-          <p>从全市场强弱结构中发现方向，把值得持续跟踪的板块留在这里。</p>
+          <p>用同花顺每日行业资金榜发现方向，并从完整行业、概念目录持续跟踪。</p>
         </div>
         <div className="sector-category-tabs" aria-label="板块分类">
           {(['INDUSTRY', 'CONCEPT'] as SectorCategory[]).map((value) => (
@@ -165,8 +164,8 @@ export function SectorMarketPanel({
       <div className="sector-market-scan">
         <div className="sector-market-scan-head">
           <div>
-            <strong>全市场扫描</strong>
-            <span>{categoryLabel(category)}板块 · 同一行情快照</span>
+            <strong>{category === 'INDUSTRY' ? '同花顺每日行业热榜' : '同花顺概念目录'}</strong>
+            <span>{category === 'INDUSTRY' ? '按主力净流入排序 · 每日快照' : '第一期用于搜索与关注'}</span>
           </div>
           {overview.data.qualityStatus === 'STALE_FALLBACK' && <span className="sector-quality is-stale">旧数据</span>}
           {overview.phase === 'refreshing' && <span className="sector-quality">更新中</span>}
@@ -181,10 +180,14 @@ export function SectorMarketPanel({
             <DataQualityNotice quality={overview.phase === 'ready' ? overviewQuality : undefined} />
             {overview.warning && overviewQuality.status === 'FRESH_PRIMARY'
               && <p className="sector-quality-warning">{overview.warning}</p>}
-            <div className="sector-rank-grid">
-              {renderRanking('领涨方向', 'leader', overview.data.leaders)}
-              {renderRanking('承压方向', 'laggard', overview.data.laggards)}
-            </div>
+            {category === 'INDUSTRY' ? (
+              <div className="sector-rank-grid">
+                {renderRanking('资金流入', 'leader', overview.data.leaders)}
+                {renderRanking('资金流出', 'laggard', overview.data.laggards)}
+              </div>
+            ) : (
+              <p className="sector-empty-copy">概念板块已接入同花顺完整目录，可在下方搜索并关注；第一期不虚构概念资金排名。</p>
+            )}
           </>
         )}
       </div>
@@ -199,7 +202,7 @@ export function SectorMarketPanel({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索板块名称或 BK 代码"
+              placeholder="搜索同花顺板块名称或代码"
               aria-label="搜索板块"
             />
             {searchPhase === 'loading' && <span className="sector-search-state">搜索中…</span>}
@@ -211,15 +214,13 @@ export function SectorMarketPanel({
                   <p>未找到匹配板块</p>
                 ) : searchResult?.items.map((item) => {
                   const isFollowed = followedCodes.has(item.code);
-                  const canFollow = item.code.startsWith('BK');
                   return (
                     <div className="sector-search-item" role="option" aria-selected={isFollowed} key={item.code}>
                       <span><strong>{item.name}</strong><small>{categoryLabel(item.category)} · {item.code}</small></span>
                       <em className={changeClass(item.changePct)}>{formatPct(item.changePct)}</em>
                       <button
                         type="button"
-                        disabled={!canFollow || pendingCode === item.code}
-                        title={canFollow ? undefined : '备用源板块暂不支持关注'}
+                        disabled={pendingCode === item.code}
                         onClick={() => toggleFollow(item.code, isFollowed)}
                       >{isFollowed ? '取消关注' : '关注'}</button>
                     </div>
@@ -252,9 +253,8 @@ export function SectorMarketPanel({
                 </div>
                 {sector.quoteValid ? (
                   <div className="sector-follow-quote">
-                    <strong>{formatPrice(sector.price)}</strong>
-                    <span className={changeClass(sector.changePct)}>{formatPct(sector.changePct)}</span>
-                    <small>成交额 {formatTurnover(sector.turnover) || '--'}</small>
+                    <strong className={changeClass(sector.changePct)}>{formatPct(sector.changePct)}</strong>
+                    <small>主力净流入 {formatNetFlow(sector.mainNetInflow)}</small>
                   </div>
                 ) : <p className="sector-card-note">{sector.quoteNote || '暂无行情'}</p>}
                 {sector.attributionSummary && sector.attributionReportId && (
