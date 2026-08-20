@@ -16,7 +16,8 @@ const navGroups: Array<{
       { id: 'article', label: 'Article', hint: '文章研究', code: 'AR' },
       { id: 'briefs', label: 'Briefs', hint: '每日简报', code: 'BR' },
       { id: 'research', label: 'Research', hint: '研究运行', code: 'RE' },
-      { id: 'news', label: 'News Wire', hint: '实时资讯', code: 'NW' }
+      { id: 'news', label: 'News Wire', hint: '实时资讯', code: 'NW' },
+      { id: 'investmentObservation', label: '投资观察', hint: '个人研究池', code: 'IO' }
     ]
   },
   {

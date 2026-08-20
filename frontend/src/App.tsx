@@ -10,6 +10,7 @@ import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { FinancialsView } from './features/financials/FinancialsView';
 import { IntakeView } from './features/intake/IntakeView';
+import { InvestmentObservationView } from './features/investment-observation/InvestmentObservationView';
 import { IndustryChainView } from './features/industry-chain/IndustryChainView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
 import { MajorEventView } from './features/major-events/MajorEventView';
@@ -262,6 +263,8 @@ export default function App() {
         return 'Research';
       case 'news':
         return 'News Wire · 市场资讯';
+      case 'investmentObservation':
+        return 'Investment Observation · 投资观察';
       case 'evidence':
         return 'Evidence Ledger';
       case 'knowledge':
@@ -591,6 +594,16 @@ export default function App() {
             setMessage('研究问题已预填，请补充研究对象后再创建命题');
           }}
           onOpenMajorEvents={() => setView('majorEvents')}
+        />
+      )}
+      {view === 'investmentObservation' && (
+        <InvestmentObservationView
+          setMessage={setMessage}
+          addToast={addToast}
+          onOpenSource={(eventId) => {
+            setDashboardRadarEventId(eventId);
+            setView('news');
+          }}
         />
       )}
       {view === 'evidence' && <EvidenceView evidenceItems={evidenceItems} events={events} onOpenNews={() => setView('news')} />}

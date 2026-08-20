@@ -28,6 +28,19 @@ const dashboardRadarEvent = {
 };
 
 const responses: Record<string, unknown> = {
+  '/api/investment-observations': {
+    focus: [{
+      id: 7, sourceType: 'RADAR_EVENT', sourceId: 10, title: '降准后的流动性传导进入验证期',
+      summary: '政策已落地，下一步观察资金利率与信贷投放。', subjectType: 'EVENT', subjectName: '降准',
+      stage: 'FOCUS', changeType: 'POLICY', score: 76, scoreDimensions: [],
+      whyItMatters: '可能影响流动性、信贷与风险偏好。', uncertainty: '实体融资需求仍待验证。',
+      nextValidation: '观察资金利率与新增信贷。', supportingEvidenceCount: 3, opposingEvidenceCount: 0,
+      independentSourceCount: 3, disposition: 'ACTIVE', revision: 1, evidenceInsufficient: false,
+      sourceAvailable: true, lastChangedAt: '2026-08-20T09:30:00'
+    }],
+    tracking: [], learning: [], archived: [], transitions: [], activeCount: 1, changedTodayCount: 1,
+    waitingValidationCount: 1, archivedCount: 0, refreshedAt: '2026-08-20T10:00:00'
+  },
   '/api/strategy/overview': { holdings: [], targetWeight: 0, currentWeight: 0 },
   '/api/strategy/playbooks': [],
   '/api/strategy/stock-theses': [],
@@ -749,6 +762,16 @@ test('dashboard hotspot opens the research radar workspace', async () => {
   expect(screen.getByText('News Wire · 市场资讯')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '研究雷达' })).toHaveAttribute('aria-pressed', 'true');
   expect(await screen.findByRole('dialog', { name: '央行宣布下调存款准备金率' })).toBeInTheDocument();
+});
+
+test('opens investment observation as an independent top-level workspace', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: '投资观察' }));
+
+  expect(await screen.findByRole('heading', { name: '先看变化，再做判断' })).toBeInTheDocument();
+  expect(screen.getByText('Investment Observation · 投资观察')).toBeInTheDocument();
+  expect(screen.getByText('降准后的流动性传导进入验证期')).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {

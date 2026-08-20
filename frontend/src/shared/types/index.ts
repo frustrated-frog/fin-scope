@@ -7,6 +7,7 @@ export type View =
   | 'briefReader'
   | 'research'
   | 'news'
+  | 'investmentObservation'
   | 'evidence'
   | 'knowledge'
   | 'contentStudio'

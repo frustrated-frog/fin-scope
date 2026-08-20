@@ -18095,3 +18095,191 @@ input[type="checkbox"] {
   .strategy-academy-build button,
   .strategy-academy-shelf button { transition: none; }
 }
+
+/* Investment Observation — a calm evidence notebook between the news wire and an investment conclusion. */
+.investment-observation {
+  --observation-ink: #24312d;
+  --observation-green: #3d705e;
+  --observation-green-soft: color-mix(in srgb, var(--observation-green) 9%, var(--surface));
+  --observation-rust: #a65e3b;
+  display: grid;
+  gap: 18px;
+  padding: 0 24px 42px;
+}
+
+.investment-observation-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 32px;
+  align-items: end;
+  overflow: hidden;
+  min-height: 196px;
+  padding: 38px 42px 34px;
+  border: 1px solid color-mix(in srgb, var(--observation-green) 24%, var(--line));
+  border-radius: 5px 22px 5px 5px;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, #f5f0e6 48%, var(--surface)), var(--surface) 62%),
+    var(--surface);
+  box-shadow: 0 20px 60px rgba(37, 48, 42, .07);
+}
+
+.investment-observation-hero::after {
+  position: absolute;
+  top: -86px;
+  right: 11%;
+  width: 235px;
+  height: 235px;
+  border: 1px solid color-mix(in srgb, var(--observation-green) 15%, transparent);
+  border-radius: 50%;
+  content: "";
+  box-shadow: 0 0 0 28px color-mix(in srgb, var(--observation-green) 3%, transparent),
+    0 0 0 58px color-mix(in srgb, var(--observation-green) 2%, transparent);
+  pointer-events: none;
+}
+
+.investment-observation-hero > div { position: relative; z-index: 1; max-width: 740px; }
+.investment-observation-kicker { margin: 0 0 12px; color: var(--observation-green); font: 750 9px ui-monospace, monospace; letter-spacing: .14em; }
+.investment-observation-hero h3 { margin: 0; color: var(--ink); font: 500 clamp(36px, 4.6vw, 62px)/.98 "Iowan Old Style", "Songti SC", "STSong", serif; letter-spacing: -.045em; }
+.investment-observation-hero p:not(.investment-observation-kicker) { max-width: 640px; margin: 18px 0 0; color: var(--muted); font-size: 13px; line-height: 1.75; }
+.investment-observation-hero > button,
+.investment-observation-empty button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 17px;
+  border: 1px solid var(--observation-green);
+  border-radius: 4px;
+  background: var(--observation-green);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 720;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.investment-observation-hero > button:hover,
+.investment-observation-empty button:hover { box-shadow: 0 8px 22px color-mix(in srgb, var(--observation-green) 24%, transparent); transform: translateY(-1px); }
+.investment-observation-hero > button:disabled,
+.investment-observation-empty button:disabled { cursor: wait; opacity: .65; transform: none; }
+.investment-observation-hero > button span { font-size: 17px; font-weight: 400; }
+
+.investment-observation-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.investment-observation-stats > div { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; min-width: 0; padding: 17px 20px; border-right: 1px solid var(--line); }
+.investment-observation-stats > div:last-child { border-right: 0; }
+.investment-observation-stats span { align-self: end; color: var(--muted); font-size: 9px; font-weight: 720; letter-spacing: .04em; }
+.investment-observation-stats strong { grid-row: 1 / 3; grid-column: 2; color: var(--ink); font: 500 31px/1 "Iowan Old Style", serif; font-variant-numeric: tabular-nums; }
+.investment-observation-stats small { color: var(--faint); font-size: 8px; }
+.investment-observation-warning { margin: -6px 0 0; padding: 10px 13px; border-left: 3px solid var(--observation-rust); background: color-mix(in srgb, var(--observation-rust) 6%, var(--surface)); color: var(--muted); font-size: 10px; }
+
+.investment-observation-focus,
+.investment-observation-queue { border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.investment-observation-focus > header,
+.investment-observation-queue > header { display: flex; gap: 24px; align-items: end; justify-content: space-between; padding: 22px 25px 18px; border-bottom: 1px solid var(--line); }
+.investment-observation-focus > header span,
+.investment-observation-queue > header span { color: var(--observation-green); font: 750 8px ui-monospace, monospace; letter-spacing: .12em; }
+.investment-observation-focus > header h4,
+.investment-observation-queue > header h4 { margin: 5px 0 0; color: var(--ink); font: 500 23px/1.1 "Iowan Old Style", "Songti SC", serif; }
+.investment-observation-focus > header p,
+.investment-observation-queue > header small { margin: 0; color: var(--faint); font-size: 9px; }
+.investment-observation-focus-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.investment-observation-card { min-width: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.investment-observation-card:nth-child(2n) { border-right: 0; }
+.investment-observation-card:nth-last-child(-n + 2) { border-bottom: 0; }
+.investment-observation-card:only-child { border-right: 0; border-bottom: 0; }
+.investment-observation-card > header { display: grid; grid-template-columns: 35px minmax(0, 1fr) auto; gap: 14px; padding: 22px 23px 16px; }
+.investment-observation-index { padding-top: 3px; color: color-mix(in srgb, var(--observation-green) 50%, var(--faint)); font: 500 16px ui-monospace, monospace; }
+.investment-observation-card-title > div { display: flex; gap: 6px; flex-wrap: wrap; }
+.investment-observation-card-title > div span { padding: 3px 6px; border-radius: 3px; background: var(--observation-green-soft); color: var(--observation-green); font-size: 7px; font-weight: 760; }
+.investment-observation-card-title h5 { margin: 9px 0 6px; color: var(--ink); font-size: 15px; line-height: 1.35; }
+.investment-observation-card-title p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.investment-observation-score { display: grid; align-content: start; justify-items: end; min-width: 52px; }
+.investment-observation-score strong { color: var(--observation-green); font: 500 36px/.9 "Iowan Old Style", serif; font-variant-numeric: tabular-nums; }
+.investment-observation-score small { margin-top: 5px; color: var(--faint); font: 7px ui-monospace, monospace; }
+.investment-observation-caveat { margin: 0 23px 14px 72px; padding: 7px 9px; border-left: 2px solid var(--observation-rust); background: color-mix(in srgb, var(--observation-rust) 5%, transparent); color: var(--observation-rust); font-size: 8px; }
+.investment-observation-thesis-grid { display: grid; grid-template-columns: repeat(2, 1fr); margin: 0 23px; border: 1px solid var(--line); }
+.investment-observation-thesis-grid > div { min-height: 94px; padding: 14px; border-right: 1px solid var(--line); }
+.investment-observation-thesis-grid > div:nth-child(2) { border-right: 0; }
+.investment-observation-thesis-grid > .investment-observation-next { grid-column: 1 / -1; min-height: 75px; border-top: 1px solid var(--line); border-right: 0; background: var(--observation-green-soft); }
+.investment-observation-thesis-grid span { color: var(--observation-green); font-size: 8px; font-weight: 780; }
+.investment-observation-thesis-grid p { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.investment-observation-dimensions { display: grid; gap: 8px; padding: 17px 23px 19px; }
+.investment-observation-dimensions > div { display: grid; grid-template-columns: 65px minmax(50px, 1fr) 36px; gap: 8px; align-items: center; }
+.investment-observation-dimensions span { color: var(--muted); font-size: 9px; }
+.investment-observation-dimensions i { height: 3px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.investment-observation-dimensions i b { display: block; height: 100%; border-radius: inherit; background: var(--observation-green); }
+.investment-observation-dimensions strong { color: var(--muted); font: 7px ui-monospace, monospace; text-align: right; }
+.investment-observation-actions { display: flex; align-items: center; gap: 7px; padding: 11px 23px; border-top: 1px solid var(--line); }
+.investment-observation-actions button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--muted); font-size: 9px; }
+.investment-observation-actions button:first-child { border-color: color-mix(in srgb, var(--observation-green) 35%, var(--line)); color: var(--observation-green); }
+.investment-observation-actions button:nth-child(2) { margin-left: auto; }
+.investment-observation-actions button:hover,
+.investment-observation-actions button[data-active="true"] { border-color: var(--observation-green); background: var(--observation-green-soft); color: var(--observation-green); }
+.investment-observation-actions button:last-child:hover { border-color: var(--observation-rust); background: color-mix(in srgb, var(--observation-rust) 5%, transparent); color: var(--observation-rust); }
+
+.investment-observation-queue-list { display: grid; }
+.investment-observation-queue-list > article { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 17px 22px; border-bottom: 1px solid var(--line); }
+.investment-observation-queue-list > article:last-child { border-bottom: 0; }
+.investment-observation-queue-score { display: grid; justify-items: center; padding: 9px 5px; border-right: 1px solid var(--line); }
+.investment-observation-queue-score strong { color: var(--ink); font: 500 25px/1 "Iowan Old Style", serif; }
+.investment-observation-queue-score small { margin-top: 4px; color: var(--faint); font-size: 7px; }
+.investment-observation-queue-list article > div:nth-child(2) > span { color: var(--observation-green); font-size: 7px; font-weight: 760; }
+.investment-observation-queue-list h5 { margin: 5px 0 4px; color: var(--ink); font-size: 12px; }
+.investment-observation-queue-list p { margin: 0; color: var(--muted); font-size: 10px; }
+.investment-observation-queue-list .investment-observation-actions { min-width: 250px; padding: 0; border-top: 0; }
+.investment-observation-queue-empty { margin: 0; padding: 28px; color: var(--muted); font-size: 10px; text-align: center; }
+
+.investment-observation-loading,
+.investment-observation-empty { display: grid; place-items: center; min-height: 300px; padding: 40px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--muted); text-align: center; }
+.investment-observation-empty span { color: var(--observation-green); font: 400 54px/1 serif; }
+.investment-observation-empty h4 { margin: 7px 0 0; color: var(--ink); font: 500 27px "Iowan Old Style", "Songti SC", serif; }
+.investment-observation-empty p { max-width: 520px; margin: 9px 0 20px; font-size: 10px; line-height: 1.7; }
+.investment-observation-footnote { display: flex; gap: 10px; align-items: baseline; padding: 4px 2px; color: var(--faint); font-size: 8px; line-height: 1.6; }
+.investment-observation-footnote > span { flex: 0 0 auto; color: var(--observation-green); font-weight: 760; }
+.investment-observation-footnote time { flex: 0 0 auto; margin-left: auto; font: 7px ui-monospace, monospace; }
+
+@media (max-width: 1050px) {
+  .investment-observation-focus-grid { grid-template-columns: 1fr; }
+  .investment-observation-card { border-right: 0; border-bottom: 1px solid var(--line); }
+  .investment-observation-card:nth-last-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .investment-observation-card:last-child { border-bottom: 0; }
+  .investment-observation-queue-list > article { grid-template-columns: 54px minmax(0, 1fr); }
+  .investment-observation-queue-list .investment-observation-actions { grid-column: 2; min-width: 0; }
+}
+
+@media (max-width: 760px) {
+  .investment-observation { padding: 0 14px 32px; }
+  .investment-observation-hero { grid-template-columns: 1fr; gap: 22px; min-height: 0; padding: 28px 24px; }
+  .investment-observation-hero > button { justify-self: start; }
+  .investment-observation-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .investment-observation-stats > div:nth-child(2) { border-right: 0; }
+  .investment-observation-stats > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .investment-observation-focus > header,
+  .investment-observation-queue > header { align-items: start; flex-direction: column; gap: 8px; }
+  .investment-observation-card > header { grid-template-columns: 26px minmax(0, 1fr); }
+  .investment-observation-card-title h5 { font-size: 16px; }
+  .investment-observation-card-title p,
+  .investment-observation-thesis-grid p { font-size: 11px; }
+  .investment-observation-dimensions span { font-size: 10px; }
+  .investment-observation-actions button { min-height: 32px; font-size: 10px; }
+  .investment-observation-score { grid-column: 2; grid-row: 2; justify-items: start; grid-auto-flow: column; gap: 4px; align-items: end; justify-content: start; }
+  .investment-observation-score strong { font-size: 29px; }
+  .investment-observation-thesis-grid { grid-template-columns: 1fr; }
+  .investment-observation-thesis-grid > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .investment-observation-thesis-grid > div:nth-child(2) { border-bottom: 0; }
+  .investment-observation-actions { flex-wrap: wrap; }
+  .investment-observation-actions button:nth-child(2) { margin-left: 0; }
+  .investment-observation-queue-list > article { grid-template-columns: 1fr; }
+  .investment-observation-queue-score { justify-items: start; border-right: 0; border-bottom: 1px solid var(--line); }
+  .investment-observation-queue-list .investment-observation-actions { grid-column: 1; }
+  .investment-observation-footnote { align-items: flex-start; flex-direction: column; }
+  .investment-observation-footnote time { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .investment-observation-hero > button,
+  .investment-observation-empty button { transition: none; }
+}
