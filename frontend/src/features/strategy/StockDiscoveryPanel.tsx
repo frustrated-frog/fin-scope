@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
+import { StockDiscoveryAccuracyReport, StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
 import './BacktestAuditPanel.css';
 import {
   CandidateFactorMatrix,
@@ -8,6 +8,7 @@ import {
   PanelCoverageMatrix,
   RiskReturnMap
 } from './StockDiscoveryVisuals';
+import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -75,6 +76,8 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
   const [runningStatus, setRunningStatus] = useState('EMPTY');
   const [statusDetail, setStatusDetail] = useState<StockDiscoveryStatus>();
   const [failed, setFailed] = useState(false);
+  const [accuracy, setAccuracy] = useState<StockDiscoveryAccuracyReport>();
+  const [accuracyFailed, setAccuracyFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +90,12 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
         if (!cancelled) {
           setLatest(value); setRunningStatus(status.status); setStatusDetail(status); setFailed(false);
           setMessage(value && 'report' in value ? `股票发现已同步至 ${value.report.as_of_date}` : '等待首份自动股票发现结果');
+        }
+        try {
+          const accuracyValue = await api<StockDiscoveryAccuracyReport>('/api/quant/stock-discoveries/accuracy');
+          if (!cancelled) { setAccuracy(accuracyValue); setAccuracyFailed(false); }
+        } catch {
+          if (!cancelled) { setAccuracyFailed(true); }
         }
       } catch (error) {
         if (!cancelled) { setFailed(true); addToast(error instanceof Error ? error.message : '股票发现结果加载失败', 'error'); }
@@ -127,6 +136,10 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
       <article><span>CONSTITUENT EVIDENCE</span><strong>{(report.constituent_source_families ?? []).map(constituentSource).join(' + ') || '来源待确认'}</strong><small>{constituentQuality(report.constituent_quality_status)}</small></article>
       <article><span>ACCOUNT SCOPE</span><strong>权限范围剔除 {report.funnel.scope_excluded_count ?? 0} 只</strong><small>科创板 {report.funnel.star_market_excluded_count ?? 0} · 北交所 {report.funnel.beijing_market_excluded_count ?? 0}</small></article>
     </section>
+
+    {accuracy
+      ? <StockDiscoveryAccuracyPanel report={accuracy} />
+      : <section className="discovery-accuracy-unavailable" data-failed={accuracyFailed || undefined}><span>FORWARD OUTCOME</span><strong>{accuracyFailed ? '真实结果评测暂时不可用' : '正在读取真实预测结果'}</strong><p>{accuracyFailed ? '当天选股结果不受影响；系统会继续独立结算到期样本，下次轮询自动恢复。' : '这里会展示冻结预测到期后的命中率、概率校准和模型赛马。'}</p></section>}
 
     <div className="discovery-analysis-grid">
       <RiskReturnMap evidence={report.deep_evidence} candidates={report.candidates} finalCodes={finalCodes} />

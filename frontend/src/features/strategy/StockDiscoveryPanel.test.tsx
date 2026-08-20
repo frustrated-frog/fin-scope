@@ -11,6 +11,27 @@ test('presents the latest automatic selection without a manual refresh action', 
     if (path === '/api/quant/stock-discoveries/status') {
       return apiResponse({ status: 'SUCCEEDED', runId: 9, businessDate: '2026-08-14' });
     }
+    if (path === '/api/quant/stock-discoveries/accuracy') {
+      return apiResponse({
+        schemaVersion: 'stock-discovery-evaluation-v1', asOfDate: '2026-08-20', horizonDays: 5,
+        status: 'ACCUMULATING', conclusion: '真实样本尚少，继续积累，不提前宣称优势。',
+        maturedRunCount: 1, maturedCandidateCount: 2, maturedFinalCount: 1, pendingCount: 12,
+        probabilityQuality: { sampleCount: 1, brierScore: .21, brierSkillScore: .03, logLoss: .62, accuracy: 1, expectedCalibrationError: .14, baselineProbability: 1 },
+        reliabilityBins: [
+          { lowerBound: 0, upperBound: .2, count: 0 }, { lowerBound: .2, upperBound: .4, count: 0 },
+          { lowerBound: .4, upperBound: .6, count: 0 }, { lowerBound: .6, upperBound: .8, count: 1, meanProbability: .64, observedUpRate: 1, calibrationError: .36 },
+          { lowerBound: .8, upperBound: 1, count: 0 }
+        ],
+        selectionMetrics: [
+          { limit: 1, maturedRunCount: 1, sampleCount: 1, hitRate: 1, averageNetReturn: .04, admittedPoolAverageReturn: .01, averageExcessVsAdmittedPool: .03 },
+          { limit: 3, maturedRunCount: 1, sampleCount: 1, hitRate: 1, averageNetReturn: .04, admittedPoolAverageReturn: .01, averageExcessVsAdmittedPool: .03 },
+          { limit: 5, maturedRunCount: 1, sampleCount: 1, hitRate: 1, averageNetReturn: .04, admittedPoolAverageReturn: .01, averageExcessVsAdmittedPool: .03 }
+        ],
+        windows: [30, 90, 180].map(windowDays => ({ windowDays, maturedRunCount: 1, probabilitySampleCount: 1, finalCount: 1, finalHitRate: 1, finalAverageNetReturn: .04, brierSkillScore: .03 })),
+        sectorPerformance: [], modelRace: { status: 'EVIDENCE_ACCUMULATING', sampleCount: 1, minimumPromotionSamples: 30, conclusion: '继续影子运行。', candidates: [] },
+        recentOutcomes: [{ runId: 9, instrumentCode: '600001.SH', asOfDate: '2026-08-14', finalRank: 1, calibratedProbability: .64, actualNetReturn: .04, actualDirection: 'UP', sectorNames: ['人工智能'] }], warnings: []
+      });
+    }
     return apiResponse({
       run: { id: 9, businessDate: '2026-08-14', status: 'SUCCEEDED', budget: 6000, qualityStatus: 'FRESH_PRIMARY', finalCount: 1 },
       report: {
@@ -40,6 +61,9 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByText('同花顺成分')).toBeInTheDocument();
   expect(screen.getByText('权限范围剔除 31 只')).toBeInTheDocument();
   expect(screen.getByText('成分覆盖 52 / 52')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '真实预测验收台' })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /股票发现真实概率校准图/ })).toBeInTheDocument();
+  expect(screen.getByText('真实样本尚少，继续积累，不提前宣称优势。')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /刷新|运行|选股/ })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '进入单股完整研究' }));
   expect(onOpenResearch).toHaveBeenCalledWith('600001');

@@ -462,3 +462,92 @@ export interface StockDiscoveryStatus {
   errorMessage?: string;
   nextScheduledAt: string;
 }
+
+export interface StockDiscoveryAccuracyReport {
+  schemaVersion: 'stock-discovery-evaluation-v1';
+  asOfDate: string;
+  horizonDays: number;
+  status: 'ACCUMULATING' | 'HEALTHY' | 'WATCH';
+  conclusion: string;
+  maturedRunCount: number;
+  maturedCandidateCount: number;
+  maturedFinalCount: number;
+  pendingCount: number;
+  probabilityQuality: {
+    sampleCount: number;
+    brierScore?: number;
+    brierSkillScore?: number;
+    logLoss?: number;
+    accuracy?: number;
+    expectedCalibrationError?: number;
+    baselineProbability?: number;
+  };
+  reliabilityBins: Array<{
+    lowerBound: number;
+    upperBound: number;
+    count: number;
+    meanProbability?: number;
+    observedUpRate?: number;
+    calibrationError?: number;
+  }>;
+  selectionMetrics: Array<{
+    limit: number;
+    maturedRunCount: number;
+    sampleCount: number;
+    hitRate?: number;
+    averageNetReturn?: number;
+    medianNetReturn?: number;
+    admittedPoolAverageReturn?: number;
+    averageExcessVsAdmittedPool?: number;
+  }>;
+  windows: Array<{
+    windowDays: number;
+    startDate?: string;
+    maturedRunCount: number;
+    probabilitySampleCount: number;
+    finalCount: number;
+    finalHitRate?: number;
+    finalAverageNetReturn?: number;
+    brierSkillScore?: number;
+  }>;
+  sectorPerformance: Array<{
+    sectorName: string;
+    sampleCount: number;
+    hitRate: number;
+    averageNetReturn: number;
+  }>;
+  modelRace: {
+    status: 'EVIDENCE_ACCUMULATING' | 'EVIDENCE_INCOMPLETE' | 'CHAMPION_LEADS'
+      | 'NO_STABLE_EDGE' | 'PROMOTION_REVIEW';
+    sampleCount: number;
+    minimumPromotionSamples: number;
+    championCode?: string;
+    promotionCandidateCode?: string;
+    conclusion: string;
+    candidates: Array<{
+      modelCode: string;
+      modelName: string;
+      role: 'CHAMPION' | 'CHALLENGER' | 'BASELINE';
+      sampleCount: number;
+      brierScore: number;
+      logLoss: number;
+      coveredCount: number;
+      coverage: number;
+      coveredAccuracy?: number;
+      brierDeltaVsChampion: number;
+      logLossDeltaVsChampion: number;
+      promotionEligible: boolean;
+    }>;
+  };
+  recentOutcomes: Array<{
+    runId: number;
+    instrumentCode: string;
+    asOfDate: string;
+    finalRank: number;
+    calibratedProbability?: number;
+    actualNetReturn: number;
+    actualDirection: 'UP' | 'DOWN';
+    sectorNames: string[];
+  }>;
+  warnings: string[];
+}
