@@ -85,6 +85,28 @@ class RadarRepositoryTest {
     }
 
     @Test
+    void observationCandidatesPreferHotspotStrengthAndExcludeExpiredEvents() {
+        RadarEvent strongerChange = event("event:stronger-change");
+        strongerChange.setHotspotScore(88);
+        strongerChange.setConfidenceScore(60);
+        RadarEvent strongerTrust = event("event:stronger-trust");
+        strongerTrust.setHotspotScore(72);
+        strongerTrust.setConfidenceScore(95);
+        RadarEvent expired = event("event:expired-candidate");
+        expired.setStatus("EXPIRED");
+        expired.setHotspotScore(99);
+        repository.saveEvent(strongerChange);
+        repository.saveEvent(strongerTrust);
+        repository.saveEvent(expired);
+
+        List<RadarEvent> candidates = repository.findObservationCandidates(20);
+
+        assertEquals(2, candidates.size());
+        assertEquals("event:stronger-change", candidates.get(0).getEventKey());
+        assertEquals("event:stronger-trust", candidates.get(1).getEventKey());
+    }
+
+    @Test
     void rankedRadarHidesLegacyCategoryDuplicatesWithTheSameTitle() {
         RadarEvent oldCategory = event("UNCLASSIFIED:港股人工智能股走弱兆易创新跌超5:事件:信息");
         oldCategory.setCanonicalTitle("港股人工智能股走弱 兆易创新跌超5%");

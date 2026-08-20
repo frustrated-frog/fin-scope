@@ -182,6 +182,12 @@ public class RadarRepository {
                 eventMapper(), dashboardCategory, normalizeLimit(limit));
     }
 
+    public List<RadarEvent> findObservationCandidates(int limit) {
+        return jdbc.query(deduplicatedEventsSql(" WHERE e.status IN ('ACTIVE','QUIET')",
+                        "e.hotspot_score DESC,e.confidence_score DESC,e.last_seen_at DESC,e.id DESC"),
+                eventMapper(), normalizeLimit(limit));
+    }
+
     public List<RadarEvent> findEventsMissingDashboardCategory(int limit) {
         return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') "
                         + "AND (dashboard_category IS NULL OR dashboard_category='' OR dashboard_category='UNCLASSIFIED') "
