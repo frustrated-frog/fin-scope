@@ -16,10 +16,10 @@ public class InvestmentObservation {
     private Long sourceId;
     private String title;
     private String summary;
-    private InvestmentObservationSubjectType subjectType;
+    private InvestmentObservationSubjectType subjectType = InvestmentObservationSubjectType.EVENT;
     private String subjectName;
     private InvestmentObservationStage stage;
-    private InvestmentObservationChangeType changeType;
+    private InvestmentObservationChangeType changeType = InvestmentObservationChangeType.OTHER;
     private int score;
     private List<InvestmentObservationScoreDimension> scoreDimensions = new ArrayList<InvestmentObservationScoreDimension>();
     private String whyItMatters;
@@ -31,7 +31,7 @@ public class InvestmentObservation {
     private LocalDateTime firstObservedAt;
     private LocalDateTime lastChangedAt;
     private String lastSourceFingerprint;
-    private InvestmentObservationDisposition disposition;
+    private InvestmentObservationDisposition disposition = InvestmentObservationDisposition.ACTIVE;
     private int revision;
     private boolean evidenceInsufficient;
     private boolean sourceAvailable = true;

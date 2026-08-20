@@ -278,6 +278,24 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(event_id) REFERENCES radar_event(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_radar_timeline_event "
                 + "ON radar_event_timeline(event_id,occurred_at DESC,id DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_observation ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,source_type TEXT NOT NULL,source_id INTEGER NOT NULL,"
+                + "title TEXT NOT NULL,summary TEXT,subject_type TEXT NOT NULL,subject_name TEXT,stage TEXT NOT NULL,"
+                + "change_type TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,score_dimensions_json TEXT NOT NULL DEFAULT '[]',"
+                + "why_it_matters TEXT,uncertainty TEXT,next_validation TEXT,supporting_evidence_count INTEGER NOT NULL DEFAULT 0,"
+                + "opposing_evidence_count INTEGER NOT NULL DEFAULT 0,independent_source_count INTEGER NOT NULL DEFAULT 0,"
+                + "first_observed_at TEXT NOT NULL,last_changed_at TEXT NOT NULL,last_source_fingerprint TEXT,"
+                + "user_disposition TEXT NOT NULL DEFAULT 'ACTIVE',evidence_insufficient INTEGER NOT NULL DEFAULT 0,"
+                + "revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+                + "UNIQUE(source_type,source_id))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_investment_observation_workspace "
+                + "ON investment_observation(user_disposition,stage,score DESC,last_changed_at DESC)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_observation_transition ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,observation_id INTEGER NOT NULL,from_stage TEXT,to_stage TEXT NOT NULL,"
+                + "reason TEXT NOT NULL,source_fingerprint TEXT,occurred_at TEXT NOT NULL,"
+                + "FOREIGN KEY(observation_id) REFERENCES investment_observation(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_investment_observation_transition "
+                + "ON investment_observation_transition(observation_id,occurred_at DESC,id DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS radar_event_research_link("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_id INTEGER NOT NULL,research_run_id INTEGER NOT NULL,"
                 + "question_snapshot TEXT,created_at TEXT NOT NULL,UNIQUE(event_id,research_run_id),"
