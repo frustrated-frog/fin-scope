@@ -131,14 +131,15 @@ public class StockDiscoveryRepository {
     @Transactional(rollbackFor = Exception.class)
     public boolean settleCandidate(StockDiscoveryCandidate candidate, LocalDate entryDate, double entryOpen,
                                    LocalDate exitDate, double exitOpen, double actualNetReturn,
-                                   String actualDirection, boolean predictionCorrect,
+                                   String actualDirection, Boolean predictionCorrect,
                                    LocalDateTime settledAt, String sourceCode) {
         int updated = jdbcTemplate.update("UPDATE stock_discovery_candidate SET maturity_status='MATURED',"
                         + "entry_date=?,entry_open=?,exit_date=?,exit_open=?,actual_net_return=?,"
                         + "actual_direction=?,prediction_correct=?,settled_at=?,outcome_source_code=?,outcome_note=NULL "
                         + "WHERE id=? AND maturity_status='PENDING'",
                 entryDate.toString(), entryOpen, exitDate.toString(), exitOpen, actualNetReturn,
-                actualDirection, predictionCorrect ? 1 : 0, TimeUtil.text(settledAt), sourceCode, candidate.getId());
+                actualDirection, predictionCorrect == null ? null : predictionCorrect ? 1 : 0,
+                TimeUtil.text(settledAt), sourceCode, candidate.getId());
         if (updated != 1) {
             return false;
         }

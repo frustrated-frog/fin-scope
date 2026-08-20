@@ -1,5 +1,6 @@
 package com.finscope.service.quant.discovery;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -11,9 +12,12 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
 @Service
+@Slf4j
 public class StockDiscoveryScheduler {
     @Resource
     private StockDiscoveryService service;
+    @Resource
+    private StockDiscoveryOutcomeService outcomeService;
 
     @Scheduled(cron = "${finscope.stock-discovery.cron:0 30 15 * * MON-FRI}", zone = "Asia/Shanghai")
     public void scheduleAfterClose() {
@@ -29,6 +33,16 @@ public class StockDiscoveryScheduler {
         }
         LocalDate date = previousWeekday(candidate);
         service.schedule(date, "RECOVERY");
+    }
+
+    @Scheduled(initialDelay = 45000L,
+            fixedDelayString = "${finscope.stock-discovery.outcome-settlement-delay-ms:3600000}")
+    public void settleMaturedOutcomes() {
+        try {
+            outcomeService.settlePending();
+        } catch (RuntimeException error) {
+            log.warn("股票发现真实结果结算批次失败，下个周期自动重试", error);
+        }
     }
 
     private LocalDate previousWeekday(LocalDate today) {

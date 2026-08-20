@@ -1,6 +1,8 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
+import com.finscope.domain.quant.discovery.StockDiscoveryAccuracyReport;
+import com.finscope.service.quant.discovery.StockDiscoveryOutcomeService;
 import com.finscope.service.quant.discovery.StockDiscoveryService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -29,6 +31,23 @@ class StockDiscoveryControllerTest {
     private MockMvc mvc;
     @MockBean
     private StockDiscoveryService service;
+    @MockBean
+    private StockDiscoveryOutcomeService outcomeService;
+
+    @Test
+    void exposesRealOutcomeAccuracy() throws Exception {
+        StockDiscoveryAccuracyReport report = new StockDiscoveryAccuracyReport();
+        report.setSchemaVersion("stock-discovery-evaluation-v1");
+        report.setStatus("ACCUMULATING");
+        report.setPendingCount(12);
+        when(outcomeService.accuracy()).thenReturn(report);
+
+        mvc.perform(get("/api/quant/stock-discoveries/accuracy"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.schemaVersion").value("stock-discovery-evaluation-v1"))
+                .andExpect(jsonPath("$.data.status").value("ACCUMULATING"))
+                .andExpect(jsonPath("$.data.pendingCount").value(12));
+    }
 
     @Test
     void exposesNextAutomaticScheduleEvenBeforeTheFirstRun() throws Exception {

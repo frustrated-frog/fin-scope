@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
+import com.finscope.domain.quant.discovery.StockDiscoveryAccuracyReport;
+import com.finscope.service.quant.discovery.StockDiscoveryOutcomeService;
 import com.finscope.service.quant.discovery.StockDiscoveryService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +30,8 @@ public class StockDiscoveryController {
     @Resource
     private StockDiscoveryService service;
     @Resource
+    private StockDiscoveryOutcomeService outcomeService;
+    @Resource
     private ObjectMapper json;
 
     @GetMapping("/latest")
@@ -45,6 +49,11 @@ public class StockDiscoveryController {
     @GetMapping("/runs/{id}")
     public ApiResponse<Object> detail(@PathVariable Long id) {
         return ApiResponses.success(view(service.detail(id)));
+    }
+
+    @GetMapping("/accuracy")
+    public ApiResponse<StockDiscoveryAccuracyReport> accuracy() {
+        return ApiResponses.success(outcomeService.accuracy());
     }
 
     @GetMapping("/status")
