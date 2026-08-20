@@ -2,6 +2,9 @@ package com.finscope.domain.quant.discovery;
 
 import lombok.Data;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 @Data
 public class StockDiscoveryCandidate {
     private Long id;
@@ -22,4 +25,17 @@ public class StockDiscoveryCandidate {
     private Double calibratedProbability;
     private String healthStatus;
     private String detailJson;
+    private LocalDate asOfDate;
+    private int horizonDays;
+    private String maturityStatus;
+    private LocalDate entryDate;
+    private LocalDate exitDate;
+    private Double entryOpen;
+    private Double exitOpen;
+    private Double actualNetReturn;
+    private String actualDirection;
+    private Boolean predictionCorrect;
+    private LocalDateTime settledAt;
+    private String outcomeSourceCode;
+    private String outcomeNote;
 }

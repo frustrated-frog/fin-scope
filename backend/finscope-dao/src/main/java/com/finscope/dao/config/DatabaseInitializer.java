@@ -1393,8 +1393,33 @@ public class DatabaseInitializer implements InitializingBean {
                 + "conclusion TEXT,calibrated_probability REAL,health_status TEXT,detail_json TEXT NOT NULL,"
                 + "UNIQUE(run_id,instrument_code),"
                 + "FOREIGN KEY(run_id) REFERENCES stock_discovery_run(id) ON DELETE CASCADE)");
+        ensureColumn("stock_discovery_candidate", "horizon_days", "INTEGER NOT NULL DEFAULT 5");
+        ensureColumn("stock_discovery_candidate", "maturity_status", "TEXT NOT NULL DEFAULT 'NOT_APPLICABLE'");
+        ensureColumn("stock_discovery_candidate", "entry_date", "TEXT");
+        ensureColumn("stock_discovery_candidate", "exit_date", "TEXT");
+        ensureColumn("stock_discovery_candidate", "entry_open", "REAL");
+        ensureColumn("stock_discovery_candidate", "exit_open", "REAL");
+        ensureColumn("stock_discovery_candidate", "actual_net_return", "REAL");
+        ensureColumn("stock_discovery_candidate", "actual_direction", "TEXT");
+        ensureColumn("stock_discovery_candidate", "prediction_correct", "INTEGER");
+        ensureColumn("stock_discovery_candidate", "settled_at", "TEXT");
+        ensureColumn("stock_discovery_candidate", "outcome_source_code", "TEXT");
+        ensureColumn("stock_discovery_candidate", "outcome_note", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_candidate_rank "
                 + "ON stock_discovery_candidate(run_id,final_rank,lightweight_rank)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_candidate_maturity "
+                + "ON stock_discovery_candidate(maturity_status,run_id,id)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_discovery_model_prediction ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,run_id INTEGER NOT NULL,instrument_code TEXT NOT NULL,"
+                + "horizon_days INTEGER NOT NULL,model_code TEXT NOT NULL,model_name TEXT NOT NULL,"
+                + "model_version TEXT NOT NULL,role TEXT NOT NULL,calibrated_probability REAL NOT NULL,"
+                + "shadow_decision TEXT NOT NULL,qualification_status TEXT NOT NULL,"
+                + "maturity_status TEXT NOT NULL DEFAULT 'PENDING',actual_net_return REAL,"
+                + "actual_direction TEXT,prediction_correct INTEGER,settled_at TEXT,"
+                + "UNIQUE(run_id,instrument_code,model_code),"
+                + "FOREIGN KEY(run_id) REFERENCES stock_discovery_run(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_model_maturity "
+                + "ON stock_discovery_model_prediction(maturity_status,run_id,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_learning_card ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_id INTEGER NOT NULL UNIQUE,framework_code TEXT NOT NULL,"
                 + "latest_run_id INTEGER,status TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"

@@ -13,6 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +69,44 @@ class StockDiscoveryRepositoryTest {
                         + "AND lightweight_rank IS NULL AND deep_score IS NULL "
                         + "AND calibrated_probability IS NULL",
                 Integer.class));
+        assertEquals("PENDING", jdbc.queryForObject(
+                "SELECT maturity_status FROM stock_discovery_candidate WHERE instrument_code='600001.SH'",
+                String.class));
+        assertEquals("NOT_APPLICABLE", jdbc.queryForObject(
+                "SELECT maturity_status FROM stock_discovery_candidate WHERE instrument_code='000002.SZ'",
+                String.class));
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM stock_discovery_model_prediction WHERE instrument_code='600001.SH'",
+                Integer.class));
+    }
+
+    @Test
+    void settlesCandidateAndItsFrozenModelPredictionsIdempotently() {
+        StockDiscoveryRun run = repository.createIfAbsent(
+                "2026-08-14:stock-discovery-v1", LocalDate.of(2026, 8, 14), 6000d,
+                "stock-discovery-v1", "SCHEDULED");
+        assertTrue(repository.tryMarkRunning(run.getId(), "attempt-a"));
+        repository.complete(run.getId(), "attempt-a", report());
+
+        com.finscope.domain.quant.discovery.StockDiscoveryCandidate candidate =
+                repository.findPendingCandidates(10).get(0);
+        assertTrue(repository.settleCandidate(candidate, LocalDate.of(2026, 8, 17), 12d,
+                LocalDate.of(2026, 8, 24), 12.8d, 0.064d, "UP", true,
+                LocalDateTime.of(2026, 8, 24, 18, 0), "PYTHON_QFQ_DAILY"));
+        assertFalse(repository.settleCandidate(candidate, LocalDate.of(2026, 8, 17), 12d,
+                LocalDate.of(2026, 8, 24), 12.8d, 0.064d, "UP", true,
+                LocalDateTime.of(2026, 8, 24, 18, 1), "PYTHON_QFQ_DAILY"));
+
+        JdbcTemplate jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbcTemplate");
+        assertEquals("MATURED", jdbc.queryForObject(
+                "SELECT maturity_status FROM stock_discovery_candidate WHERE id=?",
+                String.class, candidate.getId()));
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM stock_discovery_model_prediction "
+                        + "WHERE run_id=? AND maturity_status='MATURED' AND actual_direction='UP'",
+                Integer.class, run.getId()));
+        assertEquals(1, repository.findMaturedCandidates(10).size());
+        assertEquals(2, repository.findMaturedModelPredictions(10).size());
     }
 
     @Test
@@ -114,9 +153,17 @@ class StockDiscoveryRepositoryTest {
                         Map.entry("rejection_reasons", List.of("OVER_BUDGET")),
                         Map.entry("sector_codes", List.of("BK001")),
                         Map.entry("sector_names", List.of("人工智能")))));
-        report.setDeepEvidence(List.of(Map.of(
-                "code", "600001",
-                "conclusion", "ROBUST", "calibrated_probability", 0.63, "health_status", "HEALTHY")));
+        report.setDeepEvidence(List.of(Map.ofEntries(
+                Map.entry("code", "600001"),
+                Map.entry("conclusion", "ROBUST"),
+                Map.entry("calibrated_probability", 0.63),
+                Map.entry("health_status", "HEALTHY"),
+                Map.entry("forecast_report", Map.of(
+                        "modelCompetition", Map.of(
+                                "candidates", List.of(
+                                        model("LOGISTIC", "逻辑回归", "CHAMPION", 0.63, "UP", "QUALIFIED"),
+                                        model("HIST_GRADIENT_BOOSTING", "梯度提升", "CHALLENGER", 0.58,
+                                                "UP", "CONDITIONAL"))))))));
         report.setFinalCandidates(List.of(Map.of(
                 "code", "600001", "deep_score", 0.78, "final_rank", 1,
                 "conclusion", "ROBUST", "calibrated_probability", 0.63, "health_status", "HEALTHY")));
@@ -129,5 +176,17 @@ class StockDiscoveryRepositoryTest {
         report.setFunnel(funnel);
         report.setRawJson("{\"schema_version\":\"1.0.0\"}");
         return report;
+    }
+
+    private Map<String, Object> model(String code, String name, String role, double probability,
+                                      String decision, String qualification) {
+        return Map.of(
+                "code", code,
+                "name", name,
+                "role", role,
+                "modelVersion", "competition-v6",
+                "calibratedProbability", probability,
+                "shadowDecision", decision,
+                "qualificationStatus", qualification);
     }
 }
