@@ -117,6 +117,27 @@ def test_lightweight_ranking_is_deterministic_for_shuffled_input() -> None:
     ]
 
 
+def test_lightweight_ranking_rewards_point_in_time_sector_strength() -> None:
+    strong = candidate("000001", price=10.0, momentum=0.10)
+    weak = candidate("600001", price=10.0, momentum=0.10)
+    strong.factors.update({
+        "relative_momentum_20_sector": 0.08,
+        "sector_breadth_20": 0.8,
+        "sector_flow_rank_quality": 1.0,
+        "cross_activity_rank": 0.9,
+    })
+    weak.factors.update({
+        "relative_momentum_20_sector": -0.08,
+        "sector_breadth_20": 0.2,
+        "sector_flow_rank_quality": 0.0,
+        "cross_activity_rank": 0.1,
+    })
+
+    ranked = rank_lightweight_candidates([weak, strong])
+
+    assert [item.code for item in ranked] == ["000001", "600001"]
+
+
 def test_final_ranking_returns_only_candidates_that_pass_deep_gates() -> None:
     evidence = [
         DeepCandidateEvidence(

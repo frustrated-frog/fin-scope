@@ -14,6 +14,10 @@ POSITIVE_FACTORS = (
     "momentum_60",
     "trend_consistency",
     "liquidity",
+    "relative_momentum_20_sector",
+    "sector_breadth_20",
+    "sector_flow_rank_quality",
+    "cross_activity_rank",
 )
 RISK_FACTORS = (
     "volatility_20",

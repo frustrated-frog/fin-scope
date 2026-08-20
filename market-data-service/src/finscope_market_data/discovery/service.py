@@ -20,6 +20,7 @@ from finscope_market_data.discovery.ranking import (
     rank_deep_candidates,
     rank_lightweight_candidates,
 )
+from finscope_market_data.discovery.context_factors import enrich_context_factors
 from finscope_market_data.discovery.schemas import (
     DeepCandidateEvidence,
     DiscoveryCandidate,
@@ -29,6 +30,7 @@ from finscope_market_data.discovery.schemas import (
     DiscoverySector,
 )
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.features import (
     FEATURE_CODES,
     build_samples,
@@ -126,11 +128,14 @@ class StockDiscoveryService:
         provider = universe.provider
         members = universe.members
         warnings = universe.warnings
+        market_bars = await self._market_context(request, warnings)
         candidates, bars_by_code = await self._admit(members, request, warnings)
+        candidates = enrich_context_factors(candidates, sectors)
         panel_artifact = self._train_panel_artifact(
             bars_by_code,
             request.horizon_days,
             warnings,
+            market_bars,
         )
         lightweight = rank_lightweight_candidates(candidates)
         by_code = {item.code: item for item in candidates}
@@ -143,6 +148,7 @@ class StockDiscoveryService:
             request,
             warnings,
             panel_artifact,
+            market_bars,
         )
         final = rank_deep_candidates(deep, request.final_limit)
         as_of = max(
@@ -204,6 +210,36 @@ class StockDiscoveryService:
             warnings=warnings,
             duration_ms=round((time.monotonic() - started) * 1000),
         )
+
+    async def _market_context(
+        self,
+        request: DiscoveryRequest,
+        warnings: list[str],
+    ) -> Sequence[DailyBar]:
+        try:
+            market_result = await self.market.bars("SH", "000300")
+            bars = (
+                market_result.bars
+                if isinstance(market_result, DiscoveryBarsSnapshot)
+                else market_result
+            )
+            if request.business_date:
+                bars = tuple(
+                    item for item in bars
+                    if item.trade_date <= request.business_date
+                )
+            if not bars:
+                warnings.append("沪深300历史上下文为空，市场因子已按中性值降级")
+                return ()
+            if isinstance(market_result, DiscoveryBarsSnapshot):
+                warnings.extend(
+                    f"沪深300行情说明：{item}"
+                    for item in market_result.warnings
+                )
+            return tuple(bars)
+        except Exception as error:
+            warnings.append(f"沪深300历史上下文不可用，市场因子已降级：{_safe(error)}")
+            return ()
 
     async def _universe(self, limit: int) -> DiscoveryUniverse:
         warnings: list[str] = []
@@ -581,6 +617,7 @@ class StockDiscoveryService:
         request: DiscoveryRequest,
         warnings: list[str],
         panel_artifact: PanelArtifact | None = None,
+        market_bars: Sequence[DailyBar] = (),
     ) -> list[DeepCandidateEvidence]:
         semaphore = asyncio.Semaphore(self.deep_concurrency)
 
@@ -594,6 +631,7 @@ class StockDiscoveryService:
                             bars_by_code[candidate.code],
                             request,
                             panel_artifact,
+                            market_bars,
                         )
                     else:
                         payload = await asyncio.to_thread(
@@ -615,6 +653,7 @@ class StockDiscoveryService:
         bars_by_code: Mapping[str, Sequence[DailyBar]],
         horizon_days: int,
         warnings: list[str],
+        market_bars: Sequence[DailyBar] = (),
     ) -> PanelArtifact | None:
         existing = (
             self.panel_store.load(horizon_days, mode="PANEL_FULL")
@@ -635,6 +674,7 @@ class StockDiscoveryService:
                     bars,
                     transaction_cost_rate=0.0015,
                     horizon_days=horizon_days,
+                    context=build_aligned_context(bars, market_bars=market_bars),
                 )
                 for code, bars in histories
             }
@@ -644,7 +684,10 @@ class StockDiscoveryService:
             )
             self.panel_store.save(core)
             current_by_code = {
-                f"{code}.{bars[0].symbol.market}": current_features(bars)
+                f"{code}.{bars[0].symbol.market}": current_features(
+                    bars,
+                    context=build_aligned_context(bars, market_bars=market_bars),
+                )
                 for code, bars in histories
             }
             augmented, augmented_current, cross_codes = augment_cross_sectional_features(
@@ -670,7 +713,12 @@ def _forecast(
     bars: Sequence[DailyBar],
     request: DiscoveryRequest,
     panel_artifact: PanelArtifact | None = None,
+    market_bars: Sequence[DailyBar] = (),
 ) -> dict[str, object]:
+    context = (
+        build_aligned_context(bars, market_bars=market_bars)
+        if bars else None
+    )
     report = build_forecast(
         bars,
         instrument_code=f"{candidate.code}.{candidate.market}",
@@ -679,6 +727,7 @@ def _forecast(
         quality_status="FRESH_PRIMARY",
         warnings=[],
         horizon_days=request.horizon_days,
+        context=context,
         panel_artifact=panel_artifact,
     )
     qualification = report.qualification
@@ -747,9 +796,11 @@ def _factors(bars: Sequence[DailyBar]) -> dict[str, float]:
         running_high = max(running_high, close)
         max_drawdown = min(max_drawdown, close / running_high - 1.0)
     momentum_20 = closes[-1] / closes[-21] - 1.0
+    momentum_5 = closes[-1] / closes[-6] - 1.0
     momentum_60 = closes[-1] / closes[-61] - 1.0
     return {
         "relative_momentum_20": momentum_20,
+        "momentum_5": momentum_5,
         "momentum_60": momentum_60,
         "trend_consistency": sum(item > 0 for item in recent) / len(recent),
         "liquidity": math.log1p(statistics_mean(amounts[-20:])),

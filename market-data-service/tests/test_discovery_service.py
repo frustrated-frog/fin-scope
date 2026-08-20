@@ -301,11 +301,45 @@ async def test_star_and_beijing_members_never_request_market_data() -> None:
     report = await service.discover(DiscoveryRequest(budget=6000))
 
     assert [item.code for item in report.candidates] == ["600584"]
-    assert market.calls == [("SH", "600584")]
+    assert market.calls == [("SH", "000300"), ("SH", "600584")]
     assert report.funnel.raw_constituent_count == 3
     assert report.funnel.scope_excluded_count == 2
     assert report.funnel.star_market_excluded_count == 1
     assert report.funnel.beijing_market_excluded_count == 1
+
+
+@pytest.mark.asyncio
+async def test_market_context_failure_degrades_without_stopping_discovery() -> None:
+    class ContextFailureMarket(FakeMarket):
+        async def bars(self, market: str, code: str):
+            if code == "000300":
+                raise RuntimeError("index unavailable")
+            return await super().bars(market, code)
+
+    service = StockDiscoveryService(
+        providers=[FakeProvider()],
+        market=ContextFailureMarket(),
+        forecast_builder=lambda candidate, bars, request: {
+            "qualified": False,
+            "conclusion": "NO_CLEAR_ADVANTAGE",
+            "calibrated_probability": 0.5,
+            "probability_lower_bound": 0.4,
+            "brier_skill_score": 0,
+            "locked_accuracy": 0.5,
+            "locked_log_loss": 0.7,
+            "risk_adjusted_return": 0,
+            "max_drawdown": -0.1,
+            "stability_score": 0.5,
+            "health_status": "DEGRADED",
+            "evidence": [],
+            "risks": [],
+        },
+    )
+
+    report = await service.discover(DiscoveryRequest())
+
+    assert report.candidates
+    assert any("沪深300" in item and "降级" in item for item in report.warnings)
 
 
 @pytest.mark.asyncio
