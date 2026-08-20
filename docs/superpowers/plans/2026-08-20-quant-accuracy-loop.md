@@ -55,7 +55,7 @@
 - [ ] 增加候选结算列、模型预测表、唯一约束和待结算索引。
 - [ ] 扩展 Repository 的保存、待结算扫描、条件结算、不可用标记、评测观察查询。
 - [ ] 保证候选与模型结算在短事务内同步，影响行数不为 1 时拒绝覆盖。
-- [ ] 运行 `JAVA_HOME=... mvn -pl finscope-dao -am -Dtest=StockDiscoveryRepositoryTest test` 并提交 `feat: 增加股票发现到期结果账本`。
+- [ ] 运行 `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH mvn -pl finscope-dao -am -Dtest=StockDiscoveryRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test` 并提交 `feat: 增加股票发现到期结果账本`。
 
 ### Task 4: Java 自动结算与 Python 评测适配
 
