@@ -286,6 +286,22 @@ def test_stock_discovery_endpoint_returns_versioned_report(tmp_path: Path) -> No
     assert response.json()["budget"] == 5000
 
 
+def test_stock_discovery_evaluation_endpoint_returns_typed_empty_report(
+    tmp_path: Path,
+) -> None:
+    api = client(tmp_path, [MultiCapabilityProvider()])
+
+    response = api.post(
+        "/v1/quant/stock-discovery-evaluations",
+        json={"asOfDate": "2026-08-20", "observations": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["schema_version"] == "stock-discovery-evaluation-v1"
+    assert response.json()["status"] == "ACCUMULATING"
+    assert response.json()["matured_candidate_count"] == 0
+
+
 def test_tonghuashun_sector_endpoint_returns_versioned_contract(tmp_path: Path) -> None:
     router = ProviderRouter(
         providers=[MultiCapabilityProvider()],

@@ -146,3 +146,170 @@ class DiscoveryReport(BaseModel):
     funnel: DiscoveryFunnel
     warnings: list[str] = Field(default_factory=list)
     duration_ms: int = Field(default=0, ge=0)
+
+
+class DiscoveryOutcomeObservation(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    run_id: int = Field(gt=0)
+    instrument_code: str = Field(pattern=r"^\d{6}\.(SH|SZ)$")
+    as_of_date: str
+    horizon_days: Literal[1, 5, 20] = 5
+    admitted: bool
+    final_rank: int | None = Field(default=None, ge=1, le=5)
+    calibrated_probability: float | None = Field(default=None, ge=0, le=1)
+    actual_net_return: float
+    actual_direction: Literal["UP", "DOWN"]
+    sector_names: list[str] = Field(default_factory=list)
+
+
+class DiscoveryModelObservation(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    run_id: int = Field(gt=0)
+    instrument_code: str = Field(pattern=r"^\d{6}\.(SH|SZ)$")
+    as_of_date: str
+    horizon_days: Literal[1, 5, 20] = 5
+    model_code: str = Field(min_length=1, max_length=64)
+    model_name: str = Field(min_length=1, max_length=128)
+    role: Literal["CHAMPION", "CHALLENGER", "BASELINE"]
+    calibrated_probability: float = Field(ge=0, le=1)
+    shadow_decision: Literal["UP", "DOWN", "ABSTAIN"]
+    qualification_status: Literal[
+        "QUALIFIED", "CONDITIONAL", "FAILED", "INSUFFICIENT_DATA"
+    ]
+    actual_direction: Literal["UP", "DOWN"]
+
+
+class DiscoveryEvaluationRequest(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    as_of_date: str | None = None
+    pending_count: int = Field(default=0, ge=0)
+    observations: list[DiscoveryOutcomeObservation] = Field(default_factory=list)
+    model_observations: list[DiscoveryModelObservation] = Field(default_factory=list)
+
+
+class DiscoveryProbabilityQuality(BaseModel):
+    sample_count: int = 0
+    brier_score: float | None = None
+    brier_skill_score: float | None = None
+    log_loss: float | None = None
+    accuracy: float | None = None
+    expected_calibration_error: float | None = None
+    baseline_probability: float | None = None
+
+
+class DiscoveryReliabilityBin(BaseModel):
+    lower_bound: float
+    upper_bound: float
+    count: int
+    mean_probability: float | None = None
+    observed_up_rate: float | None = None
+    calibration_error: float | None = None
+
+
+class DiscoverySelectionMetric(BaseModel):
+    limit: int
+    matured_run_count: int
+    sample_count: int
+    hit_rate: float | None = None
+    average_net_return: float | None = None
+    median_net_return: float | None = None
+    admitted_pool_average_return: float | None = None
+    average_excess_vs_admitted_pool: float | None = None
+
+
+class DiscoveryWindowMetric(BaseModel):
+    window_days: int
+    start_date: str | None = None
+    matured_run_count: int = 0
+    probability_sample_count: int = 0
+    final_count: int = 0
+    final_hit_rate: float | None = None
+    final_average_net_return: float | None = None
+    brier_skill_score: float | None = None
+
+
+class DiscoverySectorPerformance(BaseModel):
+    sector_name: str
+    sample_count: int
+    hit_rate: float
+    average_net_return: float
+
+
+class DiscoveryModelMetric(BaseModel):
+    model_code: str
+    model_name: str
+    role: Literal["CHAMPION", "CHALLENGER", "BASELINE"]
+    sample_count: int
+    brier_score: float
+    log_loss: float
+    covered_count: int
+    coverage: float
+    covered_accuracy: float | None = None
+    brier_delta_vs_champion: float
+    log_loss_delta_vs_champion: float
+    promotion_eligible: bool
+
+
+class DiscoveryModelRace(BaseModel):
+    status: Literal[
+        "EVIDENCE_ACCUMULATING",
+        "EVIDENCE_INCOMPLETE",
+        "CHAMPION_LEADS",
+        "NO_STABLE_EDGE",
+        "PROMOTION_REVIEW",
+    ] = "EVIDENCE_ACCUMULATING"
+    sample_count: int = 0
+    minimum_promotion_samples: int = 30
+    champion_code: str | None = None
+    promotion_candidate_code: str | None = None
+    conclusion: str
+    candidates: list[DiscoveryModelMetric] = Field(default_factory=list)
+
+
+class DiscoveryRecentOutcome(BaseModel):
+    run_id: int
+    instrument_code: str
+    as_of_date: str
+    final_rank: int
+    calibrated_probability: float | None = None
+    actual_net_return: float
+    actual_direction: Literal["UP", "DOWN"]
+    sector_names: list[str] = Field(default_factory=list)
+
+
+class DiscoveryEvaluationReport(BaseModel):
+    schema_version: str = "stock-discovery-evaluation-v1"
+    as_of_date: str
+    horizon_days: int = 5
+    status: Literal["ACCUMULATING", "HEALTHY", "WATCH"]
+    conclusion: str
+    matured_run_count: int
+    matured_candidate_count: int
+    matured_final_count: int
+    pending_count: int
+    probability_quality: DiscoveryProbabilityQuality
+    reliability_bins: list[DiscoveryReliabilityBin]
+    selection_metrics: list[DiscoverySelectionMetric]
+    windows: list[DiscoveryWindowMetric]
+    sector_performance: list[DiscoverySectorPerformance]
+    model_race: DiscoveryModelRace
+    recent_outcomes: list[DiscoveryRecentOutcome]
+    warnings: list[str] = Field(default_factory=list)

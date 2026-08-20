@@ -19,7 +19,11 @@ from finscope_market_data.discovery.constituents import (
     TonghuashunConstituentProvider,
 )
 from finscope_market_data.discovery.trading_scope import TradingScopePolicy
-from finscope_market_data.discovery.schemas import DiscoveryRequest
+from finscope_market_data.discovery.schemas import (
+    DiscoveryEvaluationRequest,
+    DiscoveryRequest,
+)
+from finscope_market_data.discovery.evaluation import evaluate_discovery_outcomes
 from finscope_market_data.discovery.service import (
     DiscoveryBarsSnapshot,
     StockDiscoveryService,
@@ -208,6 +212,16 @@ def create_app(
     @application.post("/v1/quant/stock-discoveries")
     async def stock_discovery(request: DiscoveryRequest) -> JSONResponse:
         result = await application.state.discovery.discover(request)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json")),
+        )
+
+    @application.post("/v1/quant/stock-discovery-evaluations")
+    async def stock_discovery_evaluation(
+        request: DiscoveryEvaluationRequest,
+    ) -> JSONResponse:
+        result = evaluate_discovery_outcomes(request)
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json")),
