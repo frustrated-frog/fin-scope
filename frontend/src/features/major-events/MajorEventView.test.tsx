@@ -1,3 +1,6 @@
+// @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
+import { readFileSync } from 'node:fs';
+
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -60,9 +63,10 @@ test('presents the archive range and orders events by occurred date', async () =
   render(<MajorEventView addToast={vi.fn()} />);
 
   expect(await screen.findByRole('heading', { name: '市场记忆' })).toBeInTheDocument();
-  expect(screen.getByText('3 条记录')).toBeInTheDocument();
-  expect(screen.getByText('2 个覆盖月份')).toBeInTheDocument();
-  expect(screen.getByText('最近记录 2026.08.22')).toBeInTheDocument();
+  const overview = screen.getByLabelText('档案概览');
+  expect(overview).toHaveTextContent('3 条记录');
+  expect(overview).toHaveTextContent('2 个覆盖月份');
+  expect(overview).toHaveTextContent('最近记录 2026.08.22');
 
   const timeline = screen.getByRole('feed', { name: '大事记时间轴' });
   const entries = within(timeline).getAllByRole('article');
@@ -85,4 +89,11 @@ test('filters the archive through visible source segments', async () => {
   expect(articleFilter).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('heading', { name: 'AI 资本开支进入验证期' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '铜价与库存同步上行' })).not.toBeInTheDocument();
+});
+
+test('keeps the latest archive date inside its summary column', () => {
+  const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+  const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
+
+  expect(styles).toMatch(/\.major-events-stats > div:last-child dd\s*{[^}]*display:\s*grid[^}]*white-space:\s*normal/s);
 });
