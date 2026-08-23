@@ -40,7 +40,10 @@ class EastmoneyProvider:
         )
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
-        return capability in self.capabilities
+        return capability in self.capabilities and not (
+            capability is DataCapability.DAILY_BARS
+            and symbol.is_market_pulse_index
+        )
 
     def priority_for(self, capability: DataCapability) -> int:
         # Fund flow has no richer independent intraday source, so try the direct

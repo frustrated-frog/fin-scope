@@ -82,6 +82,16 @@ class StockSymbol(BaseModel):
     def cache_key(self) -> str:
         return f"{self.market.value}:{self.code}"
 
+    @property
+    def is_market_pulse_index(self) -> bool:
+        return (self.market.value, self.code) in {
+            ("SH", "000001"),
+            ("SZ", "399001"),
+            ("SZ", "399006"),
+            ("SH", "000300"),
+            ("SH", "000852"),
+        }
+
 
 class ProviderAttempt(BaseModel):
     provider_code: str

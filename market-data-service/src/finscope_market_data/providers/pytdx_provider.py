@@ -66,6 +66,10 @@ class PytdxDailyProvider:
         return (
             capability in self.capabilities
             and symbol.market in {Market.SH, Market.SZ}
+            and not (
+                capability is DataCapability.DAILY_BARS
+                and symbol.is_market_pulse_index
+            )
             and (self._api_factory is not None or importlib.util.find_spec("pytdx") is not None)
         )
 

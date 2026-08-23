@@ -121,7 +121,14 @@ class AkshareProvider:
     }
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
-        return capability in self.capabilities and importlib.util.find_spec("akshare") is not None
+        return (
+            capability in self.capabilities
+            and not (
+                capability is DataCapability.DAILY_BARS
+                and symbol.is_market_pulse_index
+            )
+            and importlib.util.find_spec("akshare") is not None
+        )
 
     async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> Any:
         try:

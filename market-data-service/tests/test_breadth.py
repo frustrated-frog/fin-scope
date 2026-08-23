@@ -114,6 +114,7 @@ def test_same_business_date_snapshot_is_used_when_online_sources_fail(tmp_path) 
         limit_up_loader=lambda _: pd.DataFrame(),
         limit_down_loader=lambda _: pd.DataFrame(),
         now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        today_provider=lambda: date(2026, 8, 21),
         snapshot_store=store,
     )
     online.fetch(date(2026, 8, 21))
@@ -127,9 +128,43 @@ def test_same_business_date_snapshot_is_used_when_online_sources_fail(tmp_path) 
         limit_up_loader=lambda _: pd.DataFrame(),
         limit_down_loader=lambda _: pd.DataFrame(),
         now_provider=lambda: datetime(2026, 8, 21, 15, 25),
+        today_provider=lambda: date(2026, 8, 21),
         snapshot_store=store,
     ).fetch(date(2026, 8, 21))
 
     assert fallback.quality_status == "STALE_FALLBACK"
     assert fallback.valid_count == 1
     assert any("快照" in warning for warning in fallback.warnings)
+
+
+def test_closed_business_date_uses_exact_snapshot_without_online_retry(tmp_path) -> None:
+    store = SnapshotStore(tmp_path / "snapshots.db")
+    MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        ),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        today_provider=lambda: date(2026, 8, 21),
+        snapshot_store=store,
+    ).fetch(date(2026, 8, 21))
+    calls = 0
+
+    def fail() -> pd.DataFrame:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("online should not run")
+
+    result = MarketBreadthService(
+        eastmoney_loader=fail,
+        sina_loader=fail,
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 23),
+        snapshot_store=store,
+    ).fetch(date(2026, 8, 21))
+
+    assert calls == 0
+    assert result.quality_status == "FRESH_PRIMARY"

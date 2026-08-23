@@ -33,6 +33,10 @@ from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
+from finscope_market_data.providers.index_daily import (
+    EastmoneyIndexDailyProvider,
+    SinaIndexDailyProvider,
+)
 from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
 from finscope_market_data.providers.sina import SinaCapitalFlowProvider, SinaQuoteProvider
 from finscope_market_data.providers.tencent import TencentQuoteProvider
@@ -47,6 +51,8 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
     config = settings or Settings()
     return ProviderRouter(
         providers=[
+            EastmoneyIndexDailyProvider(),
+            SinaIndexDailyProvider(),
             TencentQuoteProvider(),
             SinaQuoteProvider(),
             SinaCapitalFlowProvider(),

@@ -22,6 +22,7 @@ class MarketBreadthService:
         limit_up_loader: PoolLoader | None = None,
         limit_down_loader: PoolLoader | None = None,
         now_provider: Callable[[], datetime] | None = None,
+        today_provider: Callable[[], date] | None = None,
         snapshot_store: SnapshotStore | None = None,
     ) -> None:
         self._eastmoney_loader = eastmoney_loader or self._load_eastmoney
@@ -29,9 +30,17 @@ class MarketBreadthService:
         self._limit_up_loader = limit_up_loader or self._load_limit_up
         self._limit_down_loader = limit_down_loader or self._load_limit_down
         self._now_provider = now_provider or _shanghai_now
+        self._today_provider = today_provider or (lambda: _shanghai_now().date())
         self._snapshot_store = snapshot_store
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
+        frozen = (
+            None
+            if self._snapshot_store is None or business_date >= self._today_provider()
+            else self._snapshot_store.load_market_breadth(business_date.isoformat())
+        )
+        if frozen is not None:
+            return frozen
         try:
             result = self._fetch_online(business_date)
             if self._snapshot_store is not None:
