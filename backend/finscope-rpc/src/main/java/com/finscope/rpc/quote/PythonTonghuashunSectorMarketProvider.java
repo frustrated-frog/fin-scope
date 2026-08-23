@@ -151,6 +151,10 @@ public class PythonTonghuashunSectorMarketProvider implements SectorMarketProvid
         entry.setMainNetInflow(number(row, "main_net_inflow"));
         entry.setChangePct(number(row, "change_pct"));
         entry.setLeaderStockName(text(row, "leader_stock_name"));
+        entry.setAdvanceCount(integer(row, "advance_count"));
+        entry.setDeclineCount(integer(row, "decline_count"));
+        entry.setFlatCount(integer(row, "flat_count"));
+        entry.setBreadthRatio(number(row, "breadth_ratio"));
         return entry;
     }
 

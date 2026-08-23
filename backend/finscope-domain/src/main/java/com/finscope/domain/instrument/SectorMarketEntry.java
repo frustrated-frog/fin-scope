@@ -51,6 +51,14 @@ public class SectorMarketEntry {
      * 领涨股票名称。
      */
     private String leaderStockName;
+    /** 上涨成分数量。 */
+    private Integer advanceCount;
+    /** 下跌成分数量。 */
+    private Integer declineCount;
+    /** 平盘成分数量。 */
+    private Integer flatCount;
+    /** 上涨成分占有效成分比例。 */
+    private Double breadthRatio;
     /**
      * 领涨股票涨跌幅百分比。
      */

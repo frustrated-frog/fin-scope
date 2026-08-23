@@ -39,6 +39,10 @@ class PythonTonghuashunSectorMarketProviderTest {
         assertEquals(1_200_000_000D, entry.getMainNetInflow());
         assertEquals(2.4D, entry.getChangePct());
         assertEquals("中芯国际", entry.getLeaderStockName());
+        assertEquals(48, entry.getAdvanceCount());
+        assertEquals(12, entry.getDeclineCount());
+        assertEquals(0, entry.getFlatCount());
+        assertEquals(0.8D, entry.getBreadthRatio());
     }
 
     @Test
@@ -78,6 +82,7 @@ class PythonTonghuashunSectorMarketProviderTest {
                 + "\"retrieved_at\":\"2026-08-19T09:45:00\",\"entries\":[{"
                 + "\"code\":\"881121\",\"name\":\"半导体\",\"category\":\"INDUSTRY\","
                 + "\"source_rank\":1,\"change_pct\":2.4,\"main_net_inflow\":1200000000,"
-                + "\"leader_stock_name\":\"中芯国际\"}],\"warnings\":[]}";
+                + "\"leader_stock_name\":\"中芯国际\",\"advance_count\":48,"
+                + "\"decline_count\":12,\"flat_count\":0,\"breadth_ratio\":0.8}],\"warnings\":[]}";
     }
 }
