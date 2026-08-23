@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
@@ -227,20 +227,24 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<'review' | 'structure' | 'history'>('review');
+  const loadRequest = useRef(0);
 
   const load = async (date?: string) => {
+    const requestId = ++loadRequest.current;
     setLoading(true);
     try {
       const [nextWorkspace, nextDates] = await Promise.all([
         api<MarketPulseWorkspace>(date ? `/api/market-pulse/${date}` : '/api/market-pulse/latest'),
         api<string[]>('/api/market-pulse/dates')
       ]);
+      if (requestId !== loadRequest.current) return;
       setWorkspace(nextWorkspace);
       setDates(nextDates);
     } catch (error) {
+      if (requestId !== loadRequest.current) return;
       addToast(error instanceof Error ? error.message : '市场机会加载失败', 'error');
     } finally {
-      setLoading(false);
+      if (requestId === loadRequest.current) setLoading(false);
     }
   };
 

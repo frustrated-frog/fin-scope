@@ -1,9 +1,11 @@
 package com.finscope.service.marketpulse;
 
+import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
+import com.finscope.domain.marketpulse.MarketPulseSectorResult;
 import com.finscope.domain.marketpulse.SectorHistoryItem;
 import com.finscope.domain.marketpulse.SectorHistorySnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
@@ -34,13 +36,25 @@ public class MarketPulseSectorService {
     private SectorRotationScoringService scoringService;
 
     public List<SectorRotationItem> calculate(LocalDate businessDate) {
+        return calculateResult(businessDate).getSectors();
+    }
+
+    public MarketPulseSectorResult calculateResult(LocalDate businessDate) {
         List<SectorMarketEntry> current = currentEntries();
+        MarketPulseSectorResult value = new MarketPulseSectorResult();
         try {
             SectorHistorySnapshot providerHistory = historySource.fetch(businessDate, PROVIDER_HISTORY_WINDOW);
-            return fromProviderHistory(current, providerHistory);
+            value.setSectors(fromProviderHistory(current, providerHistory, businessDate));
+            value.setQualityStatus("FRESH_PRIMARY".equals(providerHistory.getQualityStatus())
+                    && providerHistory.getWarnings().isEmpty()
+                    ? MarketPulseQualityStatus.READY : MarketPulseQualityStatus.PARTIAL);
+            value.setWarnings(new ArrayList<>(providerHistory.getWarnings()));
         } catch (RuntimeException error) {
-            return fromWorkspaceHistory(current, businessDate);
+            value.setSectors(fromWorkspaceHistory(current, businessDate));
+            value.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+            value.getWarnings().add("同花顺行业历史不可用，已回退已有工作区历史：" + message(error));
         }
+        return value;
     }
 
     public double dispersion(List<SectorRotationItem> sectors) {
@@ -70,9 +84,10 @@ public class MarketPulseSectorService {
     }
 
     private List<SectorRotationItem> fromProviderHistory(List<SectorMarketEntry> current,
-                                                         SectorHistorySnapshot history) {
+                                                         SectorHistorySnapshot history,
+                                                         LocalDate businessDate) {
         Map<String, SectorMarketEntry> currentByCode = currentByCode(current);
-        Map<String, Integer> previousFlowRanks = previousFlowRanks();
+        Map<String, Integer> previousFlowRanks = previousFlowRanks(businessDate);
         List<SectorRotationItem> raw = new ArrayList<>();
         for (SectorHistoryItem historyItem : history.getEntries()) {
             raw.add(providerItem(historyItem, currentByCode.get(historyItem.getSectorCode()),
@@ -106,9 +121,9 @@ public class MarketPulseSectorService {
         return current != null && historical != null && Math.abs(current - historical) <= 0.25D;
     }
 
-    private Map<String, Integer> previousFlowRanks() {
+    private Map<String, Integer> previousFlowRanks(LocalDate businessDate) {
         Map<String, Integer> values = new LinkedHashMap<>();
-        for (LocalDate date : repository.findRecentDates(1)) {
+        for (LocalDate date : repository.findRecentDates(1, businessDate.minusDays(1))) {
             MarketPulseWorkspace workspace = repository.findWorkspace(date).orElse(null);
             if (workspace == null) {
                 continue;
@@ -118,6 +133,10 @@ public class MarketPulseSectorService {
             }
         }
         return values;
+    }
+
+    private String message(RuntimeException error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
     private Map<String, SectorMarketEntry> currentByCode(List<SectorMarketEntry> current) {

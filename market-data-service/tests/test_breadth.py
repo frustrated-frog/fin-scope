@@ -168,3 +168,109 @@ def test_closed_business_date_uses_exact_snapshot_without_online_retry(tmp_path)
 
     assert calls == 0
     assert result.quality_status == "FRESH_PRIMARY"
+
+
+def test_missing_closed_business_date_never_uses_current_spot_data(tmp_path) -> None:
+    calls = 0
+
+    def current_spot() -> pd.DataFrame:
+        nonlocal calls
+        calls += 1
+        return pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        )
+
+    service = MarketBreadthService(
+        eastmoney_loader=current_spot,
+        sina_loader=current_spot,
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 24),
+        snapshot_store=SnapshotStore(tmp_path / "snapshots.db"),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-24"}]),
+    )
+
+    try:
+        service.fetch(date(2026, 8, 21))
+        raise AssertionError("closed date without a snapshot must be unavailable")
+    except RuntimeError as error:
+        assert "历史快照" in str(error)
+
+    assert calls == 0
+
+
+def test_weekday_holiday_accepts_the_latest_calendar_trade_date(tmp_path) -> None:
+    service = MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        ),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 10, 5),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-10-02"}]),
+        snapshot_store=SnapshotStore(tmp_path / "snapshots.db"),
+    )
+
+    result = service.fetch(date(2026, 10, 2))
+
+    assert result.business_date == "2026-10-02"
+    assert result.valid_count == 1
+
+
+def test_weekday_holiday_date_never_labels_current_spot_as_that_date(tmp_path) -> None:
+    calls = 0
+
+    def current_spot() -> pd.DataFrame:
+        nonlocal calls
+        calls += 1
+        return pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        )
+
+    service = MarketBreadthService(
+        eastmoney_loader=current_spot,
+        sina_loader=current_spot,
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 10, 5),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-10-02"}]),
+        snapshot_store=SnapshotStore(tmp_path / "snapshots.db"),
+    )
+
+    try:
+        service.fetch(date(2026, 10, 5))
+        raise AssertionError("weekday holiday must not be labeled with current spot")
+    except RuntimeError as error:
+        assert "最近交易日" in str(error)
+
+    assert calls == 0
+
+
+def test_future_business_date_never_uses_current_spot_data(tmp_path) -> None:
+    calls = 0
+
+    def current_spot() -> pd.DataFrame:
+        nonlocal calls
+        calls += 1
+        return pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        )
+
+    service = MarketBreadthService(
+        eastmoney_loader=current_spot,
+        sina_loader=current_spot,
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
+        snapshot_store=SnapshotStore(tmp_path / "snapshots.db"),
+    )
+
+    try:
+        service.fetch(date(2026, 8, 24))
+        raise AssertionError("future date must not use current spot")
+    except RuntimeError as error:
+        assert "最近交易日" in str(error)
+
+    assert calls == 0

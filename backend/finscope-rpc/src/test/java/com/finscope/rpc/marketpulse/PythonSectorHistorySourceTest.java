@@ -51,6 +51,24 @@ class PythonSectorHistorySourceTest {
                 () -> date.fetch(LocalDate.of(2026, 8, 21), 60)).getErrorType());
     }
 
+    @Test
+    void rejectsSourceAndStaleIndustryDrift() {
+        PythonSectorHistorySource sourceCode = source((provider, uri, headers) -> response(
+                payload("sector-history-v1", "2026-08-21")
+                        .replace("AKSHARE_TONGHUASHUN_SECTOR_HISTORY", "UNKNOWN_SOURCE")));
+        PythonSectorHistorySource stale = source((provider, uri, headers) -> response(
+                payload("sector-history-v1", "2026-08-21")
+                        .replace("\"last_trade_date\":\"2026-08-21\"",
+                                "\"last_trade_date\":\"2026-08-20\"")));
+
+        assertEquals("SECTOR_HISTORY_SOURCE_DRIFT", assertThrows(
+                ProviderContractException.class,
+                () -> sourceCode.fetch(LocalDate.of(2026, 8, 21), 60)).getErrorType());
+        assertEquals("SECTOR_HISTORY_STALE_DATA", assertThrows(
+                ProviderContractException.class,
+                () -> stale.fetch(LocalDate.of(2026, 8, 21), 60)).getErrorType());
+    }
+
     private PythonSectorHistorySource source(FinanceHttpClient http) {
         PythonSectorHistorySource value = new PythonSectorHistorySource();
         ReflectionTestUtils.setField(value, "baseUrl", "http://127.0.0.1:8000/");

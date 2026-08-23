@@ -27,6 +27,7 @@ public class PythonSectorHistorySource implements SectorHistorySource {
     private static final String CLIENT_CODE = "PYTHON_SECTOR_HISTORY";
     private static final String SCHEMA_VERSION = "sector-history-v1";
     private static final String SOURCE_FAMILY = "TONGHUASHUN";
+    private static final String SOURCE_CODE = "AKSHARE_TONGHUASHUN_SECTOR_HISTORY";
     private static final Pattern SECTOR_CODE = Pattern.compile("\\d{6}");
     private static final Set<String> QUALITY_VALUES = Set.of("FRESH_PRIMARY", "PARTIAL_FRESH");
     private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -61,6 +62,7 @@ public class PythonSectorHistorySource implements SectorHistorySource {
             throw contract("SECTOR_HISTORY_SCHEMA_DRIFT", "unsupported sector history schema", false);
         }
         if (!SOURCE_FAMILY.equals(text(root, "source_family"))
+                || !SOURCE_CODE.equals(text(root, "source_code"))
                 || !"INDUSTRY".equals(text(root, "category"))) {
             throw contract("SECTOR_HISTORY_SOURCE_DRIFT", "sector history must describe Tonghuashun industries", false);
         }
@@ -78,7 +80,7 @@ public class PythonSectorHistorySource implements SectorHistorySource {
         }
         SectorHistorySnapshot value = new SectorHistorySnapshot();
         value.setBusinessDate(businessDate);
-        value.setSourceCode(requiredText(root, "source_code"));
+        value.setSourceCode(SOURCE_CODE);
         value.setSourceFamily(SOURCE_FAMILY);
         value.setQualityStatus(quality);
         value.setRetrievedAt(LocalDateTime.parse(requiredText(root, "retrieved_at")));
@@ -105,8 +107,8 @@ public class PythonSectorHistorySource implements SectorHistorySource {
                 throw contract("SECTOR_HISTORY_ENTRY_DRIFT", "invalid or duplicate sector code", false);
             }
             LocalDate lastTradeDate = LocalDate.parse(requiredText(row, "last_trade_date"));
-            if (lastTradeDate.isAfter(businessDate)) {
-                throw contract("SECTOR_HISTORY_FUTURE_DATA", "sector history contains future data", false);
+            if (!lastTradeDate.equals(businessDate)) {
+                throw contract("SECTOR_HISTORY_STALE_DATA", "sector history last trade date mismatch", false);
             }
             SectorHistoryItem item = new SectorHistoryItem();
             item.setSectorCode(code);
@@ -127,12 +129,20 @@ public class PythonSectorHistorySource implements SectorHistorySource {
             throw contract("SECTOR_HISTORY_SCHEMA_DRIFT", "covered trade dates must be an array", false);
         }
         List<LocalDate> values = new ArrayList<>();
+        LocalDate previous = null;
         for (JsonNode row : rows) {
             LocalDate value = LocalDate.parse(row.asText());
             if (value.isAfter(maximum)) {
                 throw contract("SECTOR_HISTORY_FUTURE_DATA", "covered trade dates contain future data", false);
             }
+            if (previous != null && !value.isAfter(previous)) {
+                throw contract("SECTOR_HISTORY_DATE_DRIFT", "covered trade dates must be unique and ordered", false);
+            }
             values.add(value);
+            previous = value;
+        }
+        if (values.isEmpty() || !maximum.equals(values.get(values.size() - 1))) {
+            throw contract("SECTOR_HISTORY_STALE_DATA", "covered trade dates do not reach business date", false);
         }
         return values;
     }

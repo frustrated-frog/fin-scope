@@ -197,7 +197,11 @@ def create_app(
     async def market_breadth(
         business_date: date | None = Query(default=None),
     ) -> JSONResponse:
-        requested = business_date or _previous_weekday(date.today())
+        requested = business_date
+        if requested is None:
+            requested = await asyncio.to_thread(
+                application.state.breadth.latest_trade_date
+            )
         result = await asyncio.to_thread(
             application.state.breadth.fetch,
             requested,

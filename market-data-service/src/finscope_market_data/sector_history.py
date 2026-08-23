@@ -132,6 +132,8 @@ class TonghuashunSectorHistoryService:
         bars = _bars(frame, business_date)
         if len(bars) < 2:
             raise RuntimeError("有效交易日少于2日")
+        if bars[-1][0] != business_date:
+            raise RuntimeError(f"最后交易日{bars[-1][0].isoformat()}与请求日期不一致")
         closes = [value for _, value in bars]
         return (
             SectorHistoryEntry(

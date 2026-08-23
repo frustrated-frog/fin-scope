@@ -278,6 +278,9 @@ class FakeSectorService:
 
 
 class FakeBreadthService:
+    def latest_trade_date(self) -> date:
+        return date(2026, 8, 21)
+
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
         return MarketBreadthSnapshot(
             business_date=business_date.isoformat(),
@@ -407,6 +410,23 @@ def test_market_breadth_endpoint_returns_versioned_contract(tmp_path: Path) -> N
     assert response.json()["business_date"] == "2026-08-21"
     assert response.json()["advance_count"] == 3200
     assert response.json()["limit_up_count"] == 68
+
+
+def test_market_breadth_endpoint_defaults_to_latest_actual_trade_date(
+    tmp_path: Path,
+) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(create_app(router, breadth=FakeBreadthService()))
+
+    response = api.get("/v1/markets/CN-A/breadth")
+
+    assert response.status_code == 200
+    assert response.json()["business_date"] == "2026-08-21"
 
 
 def test_tonghuashun_sector_history_endpoint_returns_versioned_contract(

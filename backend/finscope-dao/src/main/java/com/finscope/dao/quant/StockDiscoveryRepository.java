@@ -54,6 +54,13 @@ public class StockDiscoveryRepository {
         return values.stream().findFirst();
     }
 
+    public Optional<StockDiscoveryRun> findLatestSuccessOnOrBefore(LocalDate businessDate) {
+        List<StockDiscoveryRun> values = jdbcTemplate.query(
+                "SELECT * FROM stock_discovery_run WHERE status='SUCCEEDED' AND business_date<=? "
+                        + "ORDER BY business_date DESC,id DESC LIMIT 1", this::map, businessDate.toString());
+        return values.stream().findFirst();
+    }
+
     public List<StockDiscoveryRun> findRecent(int limit) {
         int bounded = Math.max(1, Math.min(limit, 100));
         return jdbcTemplate.query("SELECT * FROM stock_discovery_run ORDER BY id DESC LIMIT ?", this::map, bounded);

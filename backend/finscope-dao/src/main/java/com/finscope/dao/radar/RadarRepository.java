@@ -151,6 +151,13 @@ public class RadarRepository {
                 eventMapper(), TimeUtil.text(since), Math.max(1, Math.min(limit, 500)));
     }
 
+    public List<RadarEvent> findEventsBetween(LocalDateTime since, LocalDateTime before, int limit) {
+        return jdbc.query("SELECT * FROM radar_event WHERE status IN ('ACTIVE','QUIET') "
+                        + "AND COALESCE(last_seen_at,updated_at)>=? AND COALESCE(last_seen_at,updated_at)<? "
+                        + "ORDER BY COALESCE(last_seen_at,updated_at) DESC,id DESC LIMIT ?",
+                eventMapper(), TimeUtil.text(since), TimeUtil.text(before), Math.max(1, Math.min(limit, 500)));
+    }
+
     public List<RadarSignal> findSignalsByEventId(Long eventId) {
         return jdbc.query("SELECT s.* FROM radar_signal s JOIN radar_event_signal l ON l.signal_id=s.id "
                 + "WHERE l.event_id=? ORDER BY COALESCE(s.published_at,s.first_seen_at) DESC", signalMapper(), eventId);

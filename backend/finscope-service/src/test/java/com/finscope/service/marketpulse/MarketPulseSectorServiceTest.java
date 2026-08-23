@@ -4,6 +4,8 @@ import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.marketpulse.SectorHistoryItem;
 import com.finscope.domain.marketpulse.SectorHistorySnapshot;
+import com.finscope.domain.marketpulse.MarketPulseSectorResult;
+import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.domain.marketpulse.SectorRotationItem;
 import com.finscope.rpc.marketpulse.SectorHistorySource;
 import com.finscope.service.instrument.SectorMarketService;
@@ -19,22 +21,26 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class MarketPulseSectorServiceTest {
     private MarketPulseSectorService service;
     private SectorMarketService market;
     private SectorHistorySource history;
+    private MarketPulseRepository repository;
 
     @BeforeEach
     void setUp() {
         service = new MarketPulseSectorService();
         market = mock(SectorMarketService.class);
         history = mock(SectorHistorySource.class);
+        repository = mock(MarketPulseRepository.class);
         ReflectionTestUtils.setField(service, "sectorMarketService", market);
         ReflectionTestUtils.setField(service, "historySource", history);
-        ReflectionTestUtils.setField(service, "repository", mock(com.finscope.dao.marketpulse.MarketPulseRepository.class));
+        ReflectionTestUtils.setField(service, "repository", repository);
         ReflectionTestUtils.setField(service, "scoringService", new SectorRotationScoringService());
     }
 
@@ -58,6 +64,7 @@ class MarketPulseSectorServiceTest {
         assertEquals(4, semiconductor.getPersistenceDays());
         assertNotEquals(25, semiconductor.getRotationScore());
         assertEquals(-2.4D, liquor.getReturn5d());
+        verify(repository).findRecentDates(1, date.minusDays(1));
     }
 
     @Test
@@ -72,6 +79,22 @@ class MarketPulseSectorServiceTest {
         assertEquals("半导体", result.getSectorName());
         assertEquals(3.2D, result.getReturn5d());
         assertEquals(null, result.getMainNetInflow());
+    }
+
+    @Test
+    void propagatesPartialHistoryQualityAndWarnings() {
+        LocalDate date = LocalDate.of(2026, 8, 21);
+        SectorHistorySnapshot snapshot = history(date,
+                item("881121", "半导体", 0.8D, 3.2D, 6.5D, 4));
+        snapshot.setQualityStatus("PARTIAL_FRESH");
+        snapshot.setWarnings(Collections.singletonList("白酒行业历史不可用"));
+        when(market.listEntries(SectorCategory.INDUSTRY, true)).thenReturn(Collections.emptyList());
+        when(history.fetch(date, 60)).thenReturn(snapshot);
+
+        MarketPulseSectorResult result = service.calculateResult(date);
+
+        assertEquals("PARTIAL", result.getQualityStatus().name());
+        assertTrue(result.getWarnings().get(0).contains("白酒"));
     }
 
     private SectorMarketEntry market(String code, String name, double change, double flow,

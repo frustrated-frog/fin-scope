@@ -8,8 +8,10 @@ import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
 import com.finscope.domain.marketpulse.DailyMarketReview;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
+import com.finscope.domain.marketpulse.MarketIndexPerformance;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
+import com.finscope.domain.marketpulse.MarketPulseSectorResult;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
@@ -19,6 +21,7 @@ import com.finscope.domain.radar.RadarEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -26,6 +29,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -75,24 +80,25 @@ class MarketPulseServiceTest {
         regime.setBusinessDate(latestTradingDate);
         regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         when(features.latestBusinessDate()).thenReturn(latestTradingDate);
-        when(sectors.calculate(latestTradingDate)).thenReturn(Collections.emptyList());
+        when(sectors.calculateResult(latestTradingDate)).thenReturn(sectorResult(Collections.emptyList()));
         when(breadthService.calculate(latestTradingDate)).thenReturn(breadth(latestTradingDate));
         when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
         when(features.calculate(latestTradingDate, 0D, 0.6D)).thenReturn(regime);
-        when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.emptyList());
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
         when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
                 .thenReturn(Collections.emptyList());
-        when(discoveryRepository.findLatestSuccess()).thenReturn(Optional.empty());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(latestTradingDate)).thenReturn(Optional.empty());
 
         MarketPulseRefreshResult result = service.refresh();
 
         assertEquals(latestTradingDate, result.getBusinessDate());
-        verify(sectors).calculate(latestTradingDate);
+        verify(sectors).calculateResult(latestTradingDate);
     }
 
     @Test
     void refreshesOneFrozenWorkspaceAndReusesVerifiedDiscoveryCandidates() {
         LocalDate date = LocalDate.of(2026, 8, 21);
+        when(features.latestBusinessDate()).thenReturn(date);
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
         regime.setBusinessDate(date);
         regime.setMarketStage(MarketStage.RANGE_ROTATION);
@@ -103,14 +109,14 @@ class MarketPulseServiceTest {
         StockDiscoveryRun run = new StockDiscoveryRun();
         run.setId(9L);
         MarketPulseCandidate candidate = new MarketPulseCandidate();
-        when(sectors.calculate(date)).thenReturn(Collections.singletonList(sector));
+        when(sectors.calculateResult(date)).thenReturn(sectorResult(Collections.singletonList(sector)));
         when(breadthService.calculate(date)).thenReturn(breadth(date));
         when(sectors.dispersion(Collections.singletonList(sector))).thenReturn(0.02D);
         when(features.calculate(date, 0.02D, 0.6D)).thenReturn(regime);
-        when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.singletonList(event));
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.singletonList(event));
         when(confirmations.confirm(Collections.singletonList(event), Collections.singletonList(sector)))
                 .thenReturn(Collections.singletonList(confirmation));
-        when(discoveryRepository.findLatestSuccess()).thenReturn(Optional.of(run));
+        when(discoveryRepository.findLatestSuccessOnOrBefore(date)).thenReturn(Optional.of(run));
         List<StockDiscoveryCandidate> frozen = Collections.singletonList(new StockDiscoveryCandidate());
         when(discoveryRepository.findCandidatesByRunId(9L)).thenReturn(frozen);
         when(candidates.assemble(run, frozen, Collections.singletonList(sector)))
@@ -128,17 +134,18 @@ class MarketPulseServiceTest {
     @Test
     void keepsZeroCandidatesAsSuccessfulResearchResult() {
         LocalDate date = LocalDate.of(2026, 8, 21);
+        when(features.latestBusinessDate()).thenReturn(date);
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
         regime.setBusinessDate(date);
         regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
-        when(sectors.calculate(date)).thenReturn(Collections.emptyList());
+        when(sectors.calculateResult(date)).thenReturn(sectorResult(Collections.emptyList()));
         when(breadthService.calculate(date)).thenReturn(breadth(date));
         when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
         when(features.calculate(date, 0D, 0.6D)).thenReturn(regime);
-        when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.emptyList());
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
         when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
                 .thenReturn(Collections.emptyList());
-        when(discoveryRepository.findLatestSuccess()).thenReturn(Optional.empty());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(date)).thenReturn(Optional.empty());
 
         MarketPulseRefreshResult result = service.refresh(date);
 
@@ -147,11 +154,60 @@ class MarketPulseServiceTest {
         verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
     }
 
+    @Test
+    void rejectsRefreshingAnOldDateInsteadOfMixingFutureInputsIntoHistory() {
+        when(features.latestBusinessDate()).thenReturn(LocalDate.of(2026, 8, 21));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.refresh(LocalDate.of(2026, 8, 20)));
+    }
+
+    @Test
+    void lowersWorkspaceQualityWhenIndustryHistoryIsPartial() {
+        LocalDate date = LocalDate.of(2026, 8, 21);
+        when(features.latestBusinessDate()).thenReturn(date);
+        MarketPulseSectorResult sectorResult = sectorResult(Collections.emptyList());
+        sectorResult.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        sectorResult.setWarnings(Collections.singletonList("一个行业历史不可用"));
+        when(sectors.calculateResult(date)).thenReturn(sectorResult);
+        MarketBreadthSnapshot breadth = breadth(date);
+        breadth.setIndices(java.util.Arrays.asList(index(), index(), index(), index(), index()));
+        when(breadthService.calculate(date)).thenReturn(breadth);
+        when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
+        MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
+        regime.setQualityStatus(MarketPulseQualityStatus.READY);
+        when(features.calculate(date, 0D, 0.6D)).thenReturn(regime);
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
+                .thenReturn(Collections.emptyList());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(date)).thenReturn(Optional.empty());
+
+        service.refresh(date);
+
+        ArgumentCaptor<MarketPulseWorkspace> captor = ArgumentCaptor.forClass(MarketPulseWorkspace.class);
+        verify(repository).saveWorkspace(captor.capture());
+        assertEquals(MarketPulseQualityStatus.PARTIAL, captor.getValue().getQualityStatus());
+        assertTrue(captor.getValue().getWarnings().contains("一个行业历史不可用"));
+    }
+
     private MarketBreadthSnapshot breadth(LocalDate date) {
         MarketBreadthSnapshot value = new MarketBreadthSnapshot();
         value.setBusinessDate(date);
         value.setQualityStatus("FRESH_PRIMARY");
         value.setAdvanceRatio(0.6D);
+        return value;
+    }
+
+    private MarketPulseSectorResult sectorResult(List<SectorRotationItem> values) {
+        MarketPulseSectorResult result = new MarketPulseSectorResult();
+        result.setSectors(values);
+        result.setQualityStatus(MarketPulseQualityStatus.READY);
+        return result;
+    }
+
+    private MarketIndexPerformance index() {
+        MarketIndexPerformance value = new MarketIndexPerformance();
+        value.setReturn1d(0D);
         return value;
     }
 }

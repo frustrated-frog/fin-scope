@@ -12,6 +12,7 @@ from finscope_market_data.snapshot_store import SnapshotStore
 
 FrameLoader = Callable[[], Any]
 PoolLoader = Callable[[str], Any]
+CalendarLoader = Callable[[], Any]
 
 
 class MarketBreadthService:
@@ -24,6 +25,7 @@ class MarketBreadthService:
         now_provider: Callable[[], datetime] | None = None,
         today_provider: Callable[[], date] | None = None,
         snapshot_store: SnapshotStore | None = None,
+        calendar_loader: CalendarLoader | None = None,
     ) -> None:
         self._eastmoney_loader = eastmoney_loader or self._load_eastmoney
         self._sina_loader = sina_loader or self._load_sina
@@ -32,14 +34,21 @@ class MarketBreadthService:
         self._now_provider = now_provider or _shanghai_now
         self._today_provider = today_provider or (lambda: _shanghai_now().date())
         self._snapshot_store = snapshot_store
+        self._calendar_loader = calendar_loader or self._load_calendar
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
-        frozen = (
-            None
-            if self._snapshot_store is None or business_date >= self._today_provider()
-            else self._snapshot_store.load_market_breadth(business_date.isoformat())
-        )
-        if frozen is not None:
+        today = self._today_provider()
+        frozen = None
+        if self._snapshot_store is not None:
+            frozen = self._snapshot_store.load_market_breadth(business_date.isoformat())
+        latest_trade_date = self.latest_trade_date()
+        if business_date != latest_trade_date:
+            if frozen is not None:
+                return frozen
+            raise RuntimeError(
+                "请求日期不是最近交易日且没有同日期历史快照，禁止使用当前现货回填"
+            )
+        if frozen is not None and latest_trade_date < today:
             return frozen
         try:
             result = self._fetch_online(business_date)
@@ -175,6 +184,26 @@ class MarketBreadthService:
 
         return ak.stock_zt_pool_dtgc_em(date=value)
 
+    @staticmethod
+    def _load_calendar() -> Any:
+        import akshare as ak
+
+        return ak.tool_trade_date_hist_sina()
+
+    def latest_trade_date(self) -> date:
+        frame = self._calendar_loader()
+        if frame is None or not hasattr(frame, "iterrows"):
+            raise RuntimeError("交易日历响应不是表格，禁止使用当前现货回填历史日期")
+        maximum = self._today_provider()
+        values: list[date] = []
+        for _, row in frame.iterrows():
+            value = _date_value(_first(row, "trade_date", "交易日期", "日期"))
+            if value is not None and value <= maximum:
+                values.append(value)
+        if not values:
+            raise RuntimeError("交易日历没有有效日期，禁止使用当前现货回填历史日期")
+        return max(values)
+
 
 def _first(row: Any, *names: str) -> object:
     for name in names:
@@ -191,6 +220,17 @@ def _number(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if number == number else None
+
+
+def _date_value(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value).strip()[:10])
+    except (TypeError, ValueError):
+        return None
 
 
 def _valid_code(value: object) -> bool:

@@ -1,6 +1,7 @@
 package com.finscope.service.marketpulse;
 
 import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
+import com.finscope.common.enums.marketpulse.SectorRotationStage;
 import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.dao.quant.StockDiscoveryRepository;
 import com.finscope.dao.radar.RadarRepository;
@@ -9,6 +10,7 @@ import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketPulseHistoryPoint;
+import com.finscope.domain.marketpulse.MarketPulseSectorResult;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
@@ -51,17 +53,27 @@ public class MarketPulseService {
     private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
-        return refresh(featureService.latestBusinessDate());
+        return refreshLatest(featureService.latestBusinessDate());
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
-        List<SectorRotationItem> sectors = sectorService.calculate(businessDate);
+        LocalDate latestBusinessDate = featureService.latestBusinessDate();
+        if (latestBusinessDate == null || !latestBusinessDate.equals(businessDate)) {
+            throw new IllegalArgumentException("只允许刷新最新有效交易日，历史日期必须读取冻结快照");
+        }
+        return refreshLatest(businessDate);
+    }
+
+    private MarketPulseRefreshResult refreshLatest(LocalDate businessDate) {
+        MarketPulseSectorResult sectorResult = sectorService.calculateResult(businessDate);
+        List<SectorRotationItem> sectors = sectorResult.getSectors();
         MarketBreadthSnapshot breadth = breadthService.calculate(businessDate);
         double dispersion = sectorService.dispersion(sectors);
         MarketRegimeSnapshot regime = featureService.calculate(businessDate, dispersion, breadth.getAdvanceRatio());
-        List<RadarEvent> events = radarRepository.findEventsSince(businessDate.atStartOfDay().minusDays(2), 100);
+        List<RadarEvent> events = radarRepository.findEventsBetween(
+                businessDate.atStartOfDay().minusDays(2), businessDate.plusDays(1).atStartOfDay(), 100);
         List<MarketEventConfirmation> confirmations = confirmationService.confirm(events, sectors);
-        List<MarketPulseCandidate> candidates = candidates(sectors);
+        List<MarketPulseCandidate> candidates = candidates(businessDate, sectors);
 
         MarketPulseWorkspace workspace = new MarketPulseWorkspace();
         workspace.setBusinessDate(businessDate);
@@ -75,11 +87,15 @@ public class MarketPulseService {
         if (!completeBreadth(breadth)) {
             workspace.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         }
+        if (sectorResult.getQualityStatus() != MarketPulseQualityStatus.READY) {
+            workspace.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        }
         workspace.setGeneratedAt(LocalDateTime.now(CHINA_ZONE));
         if (sectors.isEmpty()) {
             workspace.getWarnings().add("行业行情暂不可用，市场状态仅供低置信度参考");
         }
         workspace.getWarnings().addAll(breadth.getWarnings());
+        workspace.getWarnings().addAll(sectorResult.getWarnings());
         if (candidates.isEmpty()) {
             workspace.getWarnings().add("当前没有同时通过行业轮动与模型门禁的研究候选");
         }
@@ -107,8 +123,8 @@ public class MarketPulseService {
         return repository.findRecentDates(Math.max(1, Math.min(limit, 100)), featureService.latestBusinessDate());
     }
 
-    private List<MarketPulseCandidate> candidates(List<SectorRotationItem> sectors) {
-        Optional<StockDiscoveryRun> run = discoveryRepository.findLatestSuccess();
+    private List<MarketPulseCandidate> candidates(LocalDate businessDate, List<SectorRotationItem> sectors) {
+        Optional<StockDiscoveryRun> run = discoveryRepository.findLatestSuccessOnOrBefore(businessDate);
         if (!run.isPresent()) {
             return Collections.emptyList();
         }
@@ -148,6 +164,8 @@ public class MarketPulseService {
             value.setHeadline(workspace.getDailyReview().getHeadline());
         }
         SectorRotationItem leader = workspace.getSectors().stream()
+                .filter(item -> item.getStage() != SectorRotationStage.INSUFFICIENT_DATA)
+                .filter(item -> item.getReturn5d() != null)
                 .max(java.util.Comparator.comparingInt(SectorRotationItem::getRotationScore)).orElse(null);
         if (leader != null) {
             value.setLeadingSectorName(leader.getSectorName());

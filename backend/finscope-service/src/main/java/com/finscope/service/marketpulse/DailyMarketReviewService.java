@@ -14,6 +14,8 @@ import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -209,11 +211,61 @@ public class DailyMarketReviewService {
     }
 
     private String fingerprint(MarketPulseWorkspace workspace) {
-        String regime = workspace.getRegime() == null || workspace.getRegime().getSourceFingerprint() == null
-                ? "NO_REGIME" : workspace.getRegime().getSourceFingerprint();
-        return regime + ":B" + (workspace.getBreadth() == null ? 0 : workspace.getBreadth().getValidCount())
-                + ":S" + safeSectors(workspace.getSectors()).size()
-                + ":E" + (workspace.getEventConfirmations() == null ? 0 : workspace.getEventConfirmations().size());
+        StringBuilder facts = new StringBuilder();
+        append(facts, workspace.getBusinessDate(), workspace.getQualityStatus());
+        MarketRegimeSnapshot regime = workspace.getRegime();
+        if (regime != null) {
+            append(facts, regime.getSourceFingerprint(), regime.getMarketStage(), regime.getTrendState(),
+                    regime.getLiquidityState(), regime.getRiskAppetiteState(), regime.getRotationState(),
+                    regime.getConfidenceScore());
+        }
+        MarketBreadthSnapshot breadth = workspace.getBreadth();
+        if (breadth != null) {
+            append(facts, breadth.getQualityStatus(), breadth.getSourceCode(), breadth.getAdvanceCount(),
+                    breadth.getDeclineCount(), breadth.getFlatCount(), breadth.getValidCount(),
+                    breadth.getAdvanceRatio(), breadth.getTotalAmount(), breadth.getLimitUpCount(),
+                    breadth.getLimitDownCount(), breadth.getMedianChangePct());
+            validIndices(breadth).stream().sorted(Comparator.comparing(MarketIndexPerformance::getName))
+                    .forEach(index -> append(facts, index.getName(), index.getReturn1d(), index.getReturn20d()));
+        }
+        safeSectors(workspace.getSectors()).stream()
+                .sorted(Comparator.comparing(SectorRotationItem::getSectorCode,
+                        Comparator.nullsFirst(String::compareTo)))
+                .forEach(sector -> append(facts, sector.getSectorCode(), sector.getSectorName(),
+                        sector.getReturn1d(), sector.getReturn5d(), sector.getReturn20d(),
+                        sector.getMainNetInflow(), sector.getFlowRank(), sector.getPreviousFlowRank(),
+                        sector.getBreadthRatio(), sector.getPersistenceDays(), sector.getCrowdingScore(),
+                        sector.getRotationScore(), sector.getStage()));
+        List<MarketEventConfirmation> events = workspace.getEventConfirmations() == null
+                ? new ArrayList<>() : workspace.getEventConfirmations();
+        events.stream().sorted(Comparator.comparing(MarketEventConfirmation::getRadarEventId,
+                        Comparator.nullsFirst(Long::compareTo))
+                        .thenComparing(MarketEventConfirmation::getSectorCode,
+                                Comparator.nullsFirst(String::compareTo)))
+                .forEach(event -> append(facts, event.getRadarEventId(), event.getTitle(), event.getSectorCode(),
+                        event.getEventScore(), event.getMarketReactionScore(), event.getConfirmationState()));
+        append(facts, workspace.getCandidates() == null ? 0 : workspace.getCandidates().size());
+        return sha256(facts.toString());
+    }
+
+    private void append(StringBuilder target, Object... values) {
+        for (Object value : values) {
+            target.append(value == null ? "<null>" : value).append('|');
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] bytes = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (Exception error) {
+            throw new IllegalStateException("无法计算市场复盘事实指纹", error);
+        }
     }
 
     private List<MarketIndexPerformance> validIndices(MarketBreadthSnapshot breadth) {

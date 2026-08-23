@@ -20,6 +20,8 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class DailyMarketReviewServiceTest {
     private final DailyMarketReviewService service = new DailyMarketReviewService();
@@ -61,6 +63,24 @@ class DailyMarketReviewServiceTest {
 
         assertTrue(review.getRiskSignals().stream().anyMatch(value -> value.contains("宽度背离")));
         assertTrue(review.getBreadthConclusion().contains("多数个股承压"));
+    }
+
+    @Test
+    void fingerprintsAllFactsAndIgnoresSectorInputOrder() {
+        MarketPulseWorkspace first = workspace(0.62D, 0.006D, 0.81D);
+        SectorRotationItem medicine = sector("创新药", 2.1D, 5.8D, 78, SectorRotationStage.PERSISTENT);
+        SectorRotationItem chip = sector("半导体", -1.4D, -3.2D, 28, SectorRotationStage.WEAK);
+        first.setSectors(Arrays.asList(medicine, chip));
+        MarketPulseWorkspace reordered = workspace(0.62D, 0.006D, 0.81D);
+        reordered.setSectors(Arrays.asList(chip, medicine));
+        MarketPulseWorkspace changed = workspace(0.30D, 0.006D, 0.81D);
+        changed.setSectors(Arrays.asList(medicine, chip));
+
+        String firstFingerprint = service.generate(first).getSourceFingerprint();
+
+        assertEquals(firstFingerprint, service.generate(reordered).getSourceFingerprint());
+        assertNotEquals(firstFingerprint, service.generate(changed).getSourceFingerprint());
+        assertEquals(64, firstFingerprint.length());
     }
 
     private MarketPulseWorkspace workspace(double advanceRatio, double marketReturn, double amountRatio) {

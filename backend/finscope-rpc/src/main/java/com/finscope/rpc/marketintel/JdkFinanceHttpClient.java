@@ -55,7 +55,9 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
             byte[] bytes = MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder();
-            for (byte item : bytes) result.append(String.format("%02x", item));
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
             return result.toString();
         } catch (Exception error) {
             throw new IllegalStateException("无法计算行情响应哈希", error);
