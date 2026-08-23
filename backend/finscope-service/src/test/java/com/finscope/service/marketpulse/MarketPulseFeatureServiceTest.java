@@ -21,6 +21,17 @@ import static org.mockito.Mockito.when;
 
 class MarketPulseFeatureServiceTest {
     @Test
+    void resolvesTheLatestBusinessDateFromTheMarketBatch() {
+        QuantDailyBarSource source = mock(QuantDailyBarSource.class);
+        LocalDate latestTradingDate = LocalDate.of(2026, 8, 21);
+        when(source.fetch("000300.SH", 180)).thenReturn(batch(latestTradingDate));
+        MarketPulseFeatureService service = new MarketPulseFeatureService();
+        ReflectionTestUtils.setField(service, "dailyBarSource", source);
+
+        assertEquals(latestTradingDate, service.latestBusinessDate());
+    }
+
+    @Test
     void calculatesPointInTimeIndexFeaturesWithoutUsingFutureBars() {
         QuantDailyBarSource source = mock(QuantDailyBarSource.class);
         LocalDate businessDate = LocalDate.of(2026, 8, 21);

@@ -60,6 +60,27 @@ class MarketPulseServiceTest {
     }
 
     @Test
+    void refreshesTheLatestTradingDateInsteadOfTheNaturalDate() {
+        LocalDate latestTradingDate = LocalDate.of(2026, 8, 21);
+        MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
+        regime.setBusinessDate(latestTradingDate);
+        regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        when(features.latestBusinessDate()).thenReturn(latestTradingDate);
+        when(sectors.calculate(latestTradingDate)).thenReturn(Collections.emptyList());
+        when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
+        when(features.calculate(latestTradingDate, 0D)).thenReturn(regime);
+        when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.emptyList());
+        when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
+                .thenReturn(Collections.emptyList());
+        when(discoveryRepository.findLatestSuccess()).thenReturn(Optional.empty());
+
+        MarketPulseRefreshResult result = service.refresh();
+
+        assertEquals(latestTradingDate, result.getBusinessDate());
+        verify(sectors).calculate(latestTradingDate);
+    }
+
+    @Test
     void refreshesOneFrozenWorkspaceAndReusesVerifiedDiscoveryCandidates() {
         LocalDate date = LocalDate.of(2026, 8, 21);
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();

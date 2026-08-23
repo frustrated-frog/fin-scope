@@ -11,6 +11,7 @@ import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,6 +26,19 @@ public class MarketPulseFeatureService {
     private QuantDailyBarSource dailyBarSource;
     @Resource
     private MarketRegimeClassifier classifier;
+
+    public LocalDate latestBusinessDate() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        try {
+            QuantDailyBarBatch batch = dailyBarSource.fetch(BENCHMARK_CODE, FETCH_LIMIT);
+            if (batch != null && batch.getAsOfDate() != null && !batch.getAsOfDate().isAfter(today)) {
+                return batch.getAsOfDate();
+            }
+        } catch (RuntimeException ignored) {
+            return previousWeekday(today);
+        }
+        return previousWeekday(today);
+    }
 
     public MarketRegimeSnapshot calculate(LocalDate businessDate, double sectorDispersion) {
         MarketRegimeFeatures features = new MarketRegimeFeatures();
@@ -136,5 +150,13 @@ public class MarketPulseFeatureService {
 
     private boolean positive(BigDecimal value) {
         return value != null && value.signum() > 0;
+    }
+
+    private LocalDate previousWeekday(LocalDate date) {
+        LocalDate value = date;
+        while (value.getDayOfWeek().getValue() > 5) {
+            value = value.minusDays(1);
+        }
+        return value;
     }
 }

@@ -45,7 +45,7 @@ public class MarketPulseService {
     private MarketPulseRepository repository;
 
     public MarketPulseRefreshResult refresh() {
-        return refresh(LocalDate.now(CHINA_ZONE));
+        return refresh(featureService.latestBusinessDate());
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
