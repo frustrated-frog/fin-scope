@@ -121,3 +121,10 @@ Java 通过现有 `QuantDailyBarSource` 获取各指数截至业务日的日线�
 - Controller 与前端验证新增字段和降级展示。
 - 原有 Market Pulse 专项测试、Python 全量测试、前端全量测试和生产构建通过。
 
+## 实现结果
+
+- Python 已提供 `market-breadth-v1`，全 A 主体采用东方财富主源、新浪备用源和同业务日快照三级路径；同花顺行业行情补充行业上涨比例。
+- Python 时间戳固定携带 Asia/Shanghai 偏移，Java RPC 严格校验 schema、业务日期、计数关系和上涨比例。
+- Java 已将五大指数、全市场宽度和行业宽度冻结到 Market Pulse 工作区，并用最新有效交易日约束 latest/dates 查询。
+- React 在原 Market Pulse 页面内增加紧凑宽度面板，没有新增 Tab；缺失字段和部分失败通过质量状态与警告显式呈现。
+- 首期仍不包含 20 日新高/新低、炸板率、个股择时和自动交易。这些指标需先找到稳定且可回放的历史数据口径，再进入分类器。
