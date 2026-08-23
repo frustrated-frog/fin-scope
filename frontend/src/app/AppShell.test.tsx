@@ -31,6 +31,7 @@ test('groups the workspace and exposes one knowledge entry', () => {
   expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Market Intel' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Market Pulse' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Financials' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'News Wire' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '投资观察' })).toBeInTheDocument();

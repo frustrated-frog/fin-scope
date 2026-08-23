@@ -13,6 +13,7 @@ import { IntakeView } from './features/intake/IntakeView';
 import { InvestmentObservationView } from './features/investment-observation/InvestmentObservationView';
 import { IndustryChainView } from './features/industry-chain/IndustryChainView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
+import { MarketPulseView } from './features/market-pulse/MarketPulseView';
 import { MajorEventView } from './features/major-events/MajorEventView';
 import { GlobalExpectationsView } from './features/global-expectations/GlobalExpectationsView';
 import { NewsView } from './features/news/NewsView';
@@ -281,6 +282,8 @@ export default function App() {
         return 'Watchlist';
       case 'marketIntel':
         return 'Market Intel · 资金行为';
+      case 'marketPulse':
+        return 'Market Pulse · 市场机会';
       case 'industryChain':
         return 'Industry Graph · 产业链图谱';
       case 'financials':
@@ -624,6 +627,7 @@ export default function App() {
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
+      {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
         initialStockCode={industryChainStockCode}
         onOpenNewsEvent={(eventId) => { setDashboardRadarEventId(eventId); setView('news'); }} />}

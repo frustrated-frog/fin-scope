@@ -1,5 +1,6 @@
 export type View =
   | 'dashboard'
+  | 'marketPulse'
   | 'sources'
   | 'intake'
   | 'article'

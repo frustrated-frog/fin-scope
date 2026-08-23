@@ -32,6 +32,7 @@ const navGroups: Array<{
   {
     label: '决策',
     items: [
+      { id: 'marketPulse', label: 'Market Pulse', hint: '市场状态与机会', code: 'MP' },
       { id: 'watchlist', label: 'Watchlist', hint: '自选观察', code: 'WA' },
       { id: 'marketIntel', label: 'Market Intel', hint: '资金行为', code: 'MI' },
       { id: 'industryChain', label: 'Industry Graph', hint: '产业图谱', code: 'IC' },
