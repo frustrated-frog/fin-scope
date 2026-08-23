@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime, timedelta
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+CatalogLoader = Callable[[], Any]
+HistoryLoader = Callable[[str, str, str], Any]
+
+
+class SectorHistoryEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    name: str
+    last_trade_date: str
+    coverage_days: int = Field(ge=2)
+    return_1d: float
+    return_5d: float | None = None
+    return_20d: float | None = None
+    positive_days_5: int | None = Field(default=None, ge=0, le=5)
+
+
+class SectorHistoryEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["sector-history-v1"] = "sector-history-v1"
+    source_code: Literal["AKSHARE_TONGHUASHUN_SECTOR_HISTORY"] = (
+        "AKSHARE_TONGHUASHUN_SECTOR_HISTORY"
+    )
+    source_family: Literal["TONGHUASHUN"] = "TONGHUASHUN"
+    category: Literal["INDUSTRY"] = "INDUSTRY"
+    business_date: str
+    quality_status: Literal["FRESH_PRIMARY", "PARTIAL_FRESH"]
+    retrieved_at: str
+    requested_window: int = Field(ge=20, le=120)
+    covered_trade_dates: list[str]
+    entries: list[SectorHistoryEntry]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TonghuashunSectorHistoryService:
+    def __init__(
+        self,
+        catalog_loader: CatalogLoader | None = None,
+        history_loader: HistoryLoader | None = None,
+        now_provider: Callable[[], datetime] | None = None,
+        max_workers: int = 4,
+    ) -> None:
+        self._catalog_loader = catalog_loader or self._load_catalog
+        self._history_loader = history_loader or self._load_history
+        self._now_provider = now_provider or datetime.now
+        self._max_workers = max(1, min(max_workers, 6))
+
+    def fetch(self, business_date: date, window: int = 60) -> SectorHistoryEnvelope:
+        bounded_window = max(20, min(int(window), 120))
+        catalog = self._catalog()
+        start_date = business_date - timedelta(days=bounded_window * 2 + 30)
+        results: dict[int, SectorHistoryEntry] = {}
+        dates: set[str] = set()
+        warnings_by_index: dict[int, str] = {}
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            futures = {
+                executor.submit(
+                    self._entry,
+                    code,
+                    name,
+                    start_date,
+                    business_date,
+                ): (index, code, name)
+                for index, (code, name) in enumerate(catalog)
+            }
+            for future in as_completed(futures):
+                index, code, name = futures[future]
+                try:
+                    entry, trade_dates = future.result()
+                    results[index] = entry
+                    dates.update(trade_dates)
+                except Exception as error:
+                    warnings_by_index[index] = (
+                        f"{name}({code})行业历史不可用: {_message(error)}"
+                    )
+        entries = [results[index] for index in sorted(results)]
+        warnings = [warnings_by_index[index] for index in sorted(warnings_by_index)]
+        if not entries:
+            raise RuntimeError("同花顺没有有效行业历史")
+        return SectorHistoryEnvelope(
+            business_date=business_date.isoformat(),
+            quality_status=(
+                "PARTIAL_FRESH" if warnings else "FRESH_PRIMARY"
+            ),
+            retrieved_at=self._now_provider().isoformat(),
+            requested_window=bounded_window,
+            covered_trade_dates=sorted(dates)[-bounded_window:],
+            entries=entries,
+            warnings=warnings,
+        )
+
+    def _catalog(self) -> list[tuple[str, str]]:
+        frame = self._catalog_loader()
+        if frame is None or not hasattr(frame, "iterrows"):
+            raise RuntimeError("同花顺行业目录响应不是表格")
+        values: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for _, row in frame.iterrows():
+            code = _text(row.get("code"))
+            name = _text(row.get("name"))
+            if not code or not name or code in seen:
+                continue
+            seen.add(code)
+            values.append((code, name))
+        if not values:
+            raise RuntimeError("同花顺行业目录为空")
+        return values
+
+    def _entry(
+        self,
+        code: str,
+        name: str,
+        start_date: date,
+        business_date: date,
+    ) -> tuple[SectorHistoryEntry, list[str]]:
+        frame = self._history_loader(
+            name,
+            start_date.strftime("%Y%m%d"),
+            business_date.strftime("%Y%m%d"),
+        )
+        bars = _bars(frame, business_date)
+        if len(bars) < 2:
+            raise RuntimeError("有效交易日少于2日")
+        closes = [value for _, value in bars]
+        return (
+            SectorHistoryEntry(
+                code=code,
+                name=name,
+                last_trade_date=bars[-1][0].isoformat(),
+                coverage_days=len(bars),
+                return_1d=_return(closes, 1),
+                return_5d=_optional_return(closes, 5),
+                return_20d=_optional_return(closes, 20),
+                positive_days_5=_positive_days(closes, 5),
+            ),
+            [trade_date.isoformat() for trade_date, _ in bars],
+        )
+
+    @staticmethod
+    def _load_catalog() -> Any:
+        import akshare as ak
+
+        return ak.stock_board_industry_name_ths()
+
+    @staticmethod
+    def _load_history(name: str, start_date: str, end_date: str) -> Any:
+        import akshare as ak
+
+        return ak.stock_board_industry_index_ths(
+            symbol=name,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+
+def _bars(frame: Any, maximum_date: date) -> list[tuple[date, float]]:
+    if frame is None or not hasattr(frame, "iterrows"):
+        raise RuntimeError("行业历史响应不是表格")
+    values: dict[date, float] = {}
+    for _, row in frame.iterrows():
+        trade_date = _date(row.get("日期"))
+        close = _number(row.get("收盘价"))
+        if close is None:
+            close = _number(row.get("收盘"))
+        if trade_date is None or trade_date > maximum_date or close is None or close <= 0:
+            continue
+        values[trade_date] = close
+    return sorted(values.items())
+
+
+def _return(closes: list[float], days: int) -> float:
+    return (closes[-1] / closes[-days - 1] - 1.0) * 100.0
+
+
+def _optional_return(closes: list[float], days: int) -> float | None:
+    return _return(closes, days) if len(closes) > days else None
+
+
+def _positive_days(closes: list[float], days: int) -> int | None:
+    if len(closes) <= days:
+        return None
+    return sum(
+        1
+        for index in range(len(closes) - days, len(closes))
+        if closes[index] > closes[index - 1]
+    )
+
+
+def _date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value).strip()[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _number(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number else None
+
+
+def _text(value: object) -> str:
+    text = str(value).strip() if value is not None else ""
+    return "" if not text or text.lower() == "nan" else text
+
+
+def _message(error: Exception) -> str:
+    return str(error).strip() or type(error).__name__

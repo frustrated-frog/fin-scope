@@ -43,6 +43,7 @@ from finscope_market_data.providers.tencent import TencentQuoteProvider
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.settings import Settings
 from finscope_market_data.sectors import TonghuashunSectorService
+from finscope_market_data.sector_history import TonghuashunSectorHistoryService
 from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.breadth import MarketBreadthService
 
@@ -75,6 +76,7 @@ def create_app(
     router: ProviderRouter | None = None,
     discovery: StockDiscoveryService | None = None,
     sectors: TonghuashunSectorService | None = None,
+    sector_history: TonghuashunSectorHistoryService | None = None,
     breadth: MarketBreadthService | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:
@@ -114,6 +116,8 @@ def create_app(
             )
         if application.state.sectors is None:
             application.state.sectors = TonghuashunSectorService()
+        if application.state.sector_history is None:
+            application.state.sector_history = TonghuashunSectorHistoryService()
         if application.state.breadth is None:
             application.state.breadth = MarketBreadthService(
                 snapshot_store=application.state.router.snapshots
@@ -134,6 +138,7 @@ def create_app(
     application.state.router = router
     application.state.discovery = discovery
     application.state.sectors = sectors
+    application.state.sector_history = sector_history
     application.state.breadth = breadth
 
     @application.get("/health")
@@ -167,6 +172,22 @@ def create_app(
         category: Literal["INDUSTRY", "CONCEPT"],
     ) -> JSONResponse:
         result = await asyncio.to_thread(application.state.sectors.fetch, category)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json")),
+        )
+
+    @application.get("/v1/sectors/INDUSTRY/history")
+    async def sector_history(
+        business_date: date | None = Query(default=None),
+        window: int = Query(default=60, ge=20, le=120),
+    ) -> JSONResponse:
+        requested = business_date or _previous_weekday(date.today())
+        result = await asyncio.to_thread(
+            application.state.sector_history.fetch,
+            requested,
+            window,
+        )
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json")),

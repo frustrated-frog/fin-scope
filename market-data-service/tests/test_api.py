@@ -30,6 +30,10 @@ from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.settings import Settings
 from finscope_market_data.discovery.schemas import DiscoveryFunnel, DiscoveryReport
 from finscope_market_data.sectors import SectorEntry, SectorEnvelope
+from finscope_market_data.sector_history import (
+    SectorHistoryEntry,
+    SectorHistoryEnvelope,
+)
 
 
 class MultiCapabilityProvider:
@@ -100,6 +104,29 @@ class MultiCapabilityProvider:
                 ],
             )
         return StockProfile(symbol=symbol, name="贵州茅台", industry="白酒")
+
+
+class FakeSectorHistoryService:
+    def fetch(self, business_date: date, window: int) -> SectorHistoryEnvelope:
+        return SectorHistoryEnvelope(
+            business_date=business_date.isoformat(),
+            quality_status="FRESH_PRIMARY",
+            retrieved_at="2026-08-23T18:00:00",
+            requested_window=window,
+            covered_trade_dates=["2026-08-20", "2026-08-21"],
+            entries=[
+                SectorHistoryEntry(
+                    code="881121",
+                    name="半导体",
+                    last_trade_date="2026-08-21",
+                    coverage_days=60,
+                    return_1d=0.8,
+                    return_5d=3.2,
+                    return_20d=6.5,
+                    positive_days_5=4,
+                )
+            ],
+        )
 
 
 class ForecastDailyBarProvider:
@@ -380,6 +407,29 @@ def test_market_breadth_endpoint_returns_versioned_contract(tmp_path: Path) -> N
     assert response.json()["business_date"] == "2026-08-21"
     assert response.json()["advance_count"] == 3200
     assert response.json()["limit_up_count"] == 68
+
+
+def test_tonghuashun_sector_history_endpoint_returns_versioned_contract(
+    tmp_path: Path,
+) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(
+        create_app(router, sector_history=FakeSectorHistoryService())
+    )
+
+    response = api.get(
+        "/v1/sectors/INDUSTRY/history?business_date=2026-08-21&window=60"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["schema_version"] == "sector-history-v1"
+    assert response.json()["business_date"] == "2026-08-21"
+    assert response.json()["entries"][0]["return_20d"] == 6.5
 
 
 def test_tonghuashun_sector_endpoint_rejects_unknown_category(tmp_path: Path) -> None:
