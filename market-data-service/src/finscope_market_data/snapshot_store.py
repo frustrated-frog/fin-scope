@@ -112,6 +112,46 @@ class SnapshotStore:
             else MarketBreadthSnapshot.model_validate_json(row[0])
         )
 
+    def load_daily_bar_pairs(
+        self,
+        business_date: str,
+    ) -> list[tuple[DailyBar, DailyBar]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                WITH bars AS (
+                    SELECT symbol_key,
+                           json_extract(bar.value, '$.trade_date') AS trade_date,
+                           bar.value AS bar_json
+                    FROM market_data_snapshot,
+                         json_each(payload_json, '$.data') AS bar
+                    WHERE capability=?
+                      AND json_extract(bar.value, '$.trade_date')<=?
+                ), ranked AS (
+                    SELECT symbol_key, trade_date, bar_json,
+                           row_number() OVER (
+                               PARTITION BY symbol_key ORDER BY trade_date DESC
+                           ) AS position
+                    FROM bars
+                )
+                SELECT previous.bar_json, current.bar_json
+                FROM ranked AS current
+                JOIN ranked AS previous
+                  ON previous.symbol_key=current.symbol_key
+                 AND previous.position=2
+                WHERE current.position=1 AND current.trade_date=?
+                ORDER BY current.symbol_key
+                """,
+                (DataCapability.DAILY_BARS.value, business_date, business_date),
+            ).fetchall()
+        return [
+            (
+                DailyBar.model_validate_json(row[0]),
+                DailyBar.model_validate_json(row[1]),
+            )
+            for row in rows
+        ]
+
     def check_ready(self) -> tuple[bool, str]:
         try:
             with self._connect() as connection:

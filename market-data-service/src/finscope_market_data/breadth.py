@@ -45,9 +45,9 @@ class MarketBreadthService:
         if business_date != latest_trade_date:
             if frozen is not None:
                 return frozen
-            raise RuntimeError(
-                "请求日期不是最近交易日且没有同日期历史快照，禁止使用当前现货回填"
-            )
+            if business_date < latest_trade_date:
+                return self._fetch_historical(business_date)
+            raise RuntimeError("请求日期晚于最近交易日，禁止使用当前现货回填")
         if frozen is not None and latest_trade_date < today:
             return frozen
         try:
@@ -74,6 +74,54 @@ class MarketBreadthService:
                     ],
                 }
             )
+
+    def _fetch_historical(self, business_date: date) -> MarketBreadthSnapshot:
+        if self._snapshot_store is None:
+            raise RuntimeError("历史业务日没有同日期历史快照或本地日K样本")
+        pairs = self._snapshot_store.load_daily_bar_pairs(business_date.isoformat())
+        changes = [
+            round((current.close / previous.close - 1.0) * 100.0, 6)
+            for previous, current in pairs
+            if previous.close > 0 and current.close > 0
+        ]
+        if not changes:
+            raise RuntimeError("历史业务日没有同日期历史快照或本地日K样本")
+        warnings = [
+            f"历史市场宽度来自本地日K样本，共 {len(changes)} 只，不代表完整全A"
+        ]
+        limit_up = self._pool_count(
+            self._limit_up_loader,
+            business_date,
+            "涨停池",
+            warnings,
+        )
+        limit_down = self._pool_count(
+            self._limit_down_loader,
+            business_date,
+            "跌停池",
+            warnings,
+        )
+        advance = sum(1 for value in changes if value > 0)
+        decline = sum(1 for value in changes if value < 0)
+        result = MarketBreadthSnapshot(
+            business_date=business_date.isoformat(),
+            source_code="LOCAL_DAILY_BAR_PANEL",
+            source_family="LOCAL_SNAPSHOT",
+            quality_status=QualityStatus.PARTIAL_FRESH,
+            retrieved_at=self._now_provider(),
+            advance_count=advance,
+            decline_count=decline,
+            flat_count=len(changes) - advance - decline,
+            valid_count=len(changes),
+            advance_ratio=advance / len(changes),
+            total_amount=sum(current.amount or 0.0 for _, current in pairs),
+            limit_up_count=limit_up,
+            limit_down_count=limit_down,
+            median_change_pct=statistics.median(changes),
+            warnings=warnings,
+        )
+        self._snapshot_store.save_market_breadth(result)
+        return result
 
     def _fetch_online(self, business_date: date) -> MarketBreadthSnapshot:
         warnings: list[str] = []

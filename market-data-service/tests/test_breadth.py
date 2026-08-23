@@ -5,6 +5,13 @@ from datetime import date, datetime
 import pandas as pd
 
 from finscope_market_data.breadth import MarketBreadthService
+from finscope_market_data.models import (
+    DailyBar,
+    DataCapability,
+    DataEnvelope,
+    QualityStatus,
+    StockSymbol,
+)
 from finscope_market_data.snapshot_store import SnapshotStore
 
 
@@ -197,6 +204,56 @@ def test_missing_closed_business_date_never_uses_current_spot_data(tmp_path) -> 
         assert "历史快照" in str(error)
 
     assert calls == 0
+
+
+def test_closed_business_date_uses_local_daily_bar_panel_with_partial_quality(tmp_path) -> None:
+    store = SnapshotStore(tmp_path / "snapshots.db")
+    values = (("SH", "600001", 10.0, 11.0), ("SZ", "000001", 20.0, 18.0))
+    for market, code, previous, current in values:
+        symbol = StockSymbol(market=market, code=code)
+        bars = [
+            DailyBar(symbol=symbol, trade_date="2026-08-20", open=previous,
+                     high=previous, low=previous, close=previous, volume=100,
+                     amount=100.0, adjustment="QFQ"),
+            DailyBar(symbol=symbol, trade_date="2026-08-21", open=current,
+                     high=current, low=current, close=current, volume=100,
+                     amount=200.0, adjustment="QFQ"),
+        ]
+        store.save(DataEnvelope[list[DailyBar]](
+            capability=DataCapability.DAILY_BARS,
+            symbol=symbol,
+            quality_status=QualityStatus.FRESH_FALLBACK,
+            source_code="FIXTURE",
+            source_family="FIXTURE",
+            retrieved_at=datetime(2026, 8, 22, 12, 0),
+            data=bars,
+        ))
+    calls = 0
+
+    def current_spot() -> pd.DataFrame:
+        nonlocal calls
+        calls += 1
+        return pd.DataFrame()
+
+    result = MarketBreadthService(
+        eastmoney_loader=current_spot,
+        sina_loader=current_spot,
+        limit_up_loader=lambda _: pd.DataFrame([{"代码": "600001"}]),
+        limit_down_loader=lambda _: pd.DataFrame([{"代码": "000001"}]),
+        today_provider=lambda: date(2026, 8, 24),
+        now_provider=lambda: datetime(2026, 8, 24, 12, 0),
+        snapshot_store=store,
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-24"}]),
+    ).fetch(date(2026, 8, 21))
+
+    assert calls == 0
+    assert result.source_code == "LOCAL_DAILY_BAR_PANEL"
+    assert result.quality_status == "PARTIAL_FRESH"
+    assert result.advance_count == 1
+    assert result.decline_count == 1
+    assert result.total_amount == 400.0
+    assert result.median_change_pct == 0.0
+    assert any("2 只" in warning and "不代表完整全A" in warning for warning in result.warnings)
 
 
 def test_weekday_holiday_accepts_the_latest_calendar_trade_date(tmp_path) -> None:
