@@ -85,6 +85,7 @@ public class MarketPulseSectorService {
         value.setSectorName(entry.getName());
         value.setReturn1d(entry.getChangePct());
         value.setMainNetInflow(entry.getMainNetInflow());
+        value.setBreadthRatio(entry.getBreadthRatio());
         value.setFlowRank(entry.getSourceRank() == null ? fallbackRank : entry.getSourceRank());
         List<Double> returns = new ArrayList<>();
         if (entry.getChangePct() != null) {

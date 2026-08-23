@@ -129,6 +129,10 @@ public class MarketRegimeClassifier {
                 features.getAmountRatio5To20() * 100D));
         value.getEvidence().add(String.format("20日最大回撤 %.2f%%，年化波动率 %.2f%%",
                 features.getMaxDrawdown20() * 100D, features.getVolatility20() * 100D));
+        if (features.getMarketBreadth() != null) {
+            value.getEvidence().add(String.format("全市场上涨比例 %.1f%%",
+                    features.getMarketBreadth() * 100D));
+        }
         if (value.getMarketStage() == MarketStage.POST_SELL_OFF_REPAIR) {
             value.setExplanation("急跌后的缩量修复：指数回升但成交额仍低于中期均值");
         } else if (value.getMarketStage() == MarketStage.SELL_OFF) {

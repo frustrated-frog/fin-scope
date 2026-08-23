@@ -51,6 +51,32 @@ class MarketRegimeClassifierTest {
         assertTrue(result.getConfidenceScore() < 50);
     }
 
+    @Test
+    void requiresBroadParticipationBeforeDeclaringHighRiskAppetite() {
+        MarketRegimeFeatures broad = complete();
+        broad.setReturn20d(0.05D);
+        broad.setPriceVsMa20(0.03D);
+        broad.setMarketBreadth(0.63D);
+        MarketRegimeFeatures narrow = complete();
+        narrow.setReturn20d(0.05D);
+        narrow.setPriceVsMa20(0.03D);
+        narrow.setMarketBreadth(0.35D);
+
+        MarketRegimeSnapshot broadResult = classifier.classify(
+                LocalDate.of(2026, 8, 21), broad, "broad",
+                LocalDateTime.of(2026, 8, 21, 16, 0));
+        MarketRegimeSnapshot narrowResult = classifier.classify(
+                LocalDate.of(2026, 8, 21), narrow, "narrow",
+                LocalDateTime.of(2026, 8, 21, 16, 0));
+
+        assertEquals(MarketPulseQualityStatus.READY, broadResult.getQualityStatus());
+        assertEquals(com.finscope.common.enums.marketpulse.MarketRiskAppetiteState.HIGH,
+                broadResult.getRiskAppetiteState());
+        assertEquals(com.finscope.common.enums.marketpulse.MarketRiskAppetiteState.NEUTRAL,
+                narrowResult.getRiskAppetiteState());
+        assertTrue(narrowResult.getEvidence().stream().anyMatch(value -> value.contains("上涨比例")));
+    }
+
     private MarketRegimeFeatures complete() {
         MarketRegimeFeatures value = new MarketRegimeFeatures();
         value.setReturn1d(0.002D);

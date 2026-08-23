@@ -5,6 +5,7 @@ import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.dao.quant.StockDiscoveryRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
+import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
@@ -32,6 +33,8 @@ public class MarketPulseService {
     @Resource
     private MarketPulseFeatureService featureService;
     @Resource
+    private MarketBreadthService breadthService;
+    @Resource
     private MarketPulseSectorService sectorService;
     @Resource
     private RadarRepository radarRepository;
@@ -50,8 +53,9 @@ public class MarketPulseService {
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
         List<SectorRotationItem> sectors = sectorService.calculate(businessDate);
+        MarketBreadthSnapshot breadth = breadthService.calculate(businessDate);
         double dispersion = sectorService.dispersion(sectors);
-        MarketRegimeSnapshot regime = featureService.calculate(businessDate, dispersion);
+        MarketRegimeSnapshot regime = featureService.calculate(businessDate, dispersion, breadth.getAdvanceRatio());
         List<RadarEvent> events = radarRepository.findEventsSince(businessDate.atStartOfDay().minusDays(2), 100);
         List<MarketEventConfirmation> confirmations = confirmationService.confirm(events, sectors);
         List<MarketPulseCandidate> candidates = candidates(sectors);
@@ -59,15 +63,20 @@ public class MarketPulseService {
         MarketPulseWorkspace workspace = new MarketPulseWorkspace();
         workspace.setBusinessDate(businessDate);
         workspace.setRegime(regime);
+        workspace.setBreadth(breadth);
         workspace.setSectors(sectors);
         workspace.setEventConfirmations(confirmations);
         workspace.setCandidates(candidates);
         workspace.setQualityStatus(regime.getQualityStatus() == null
                 ? MarketPulseQualityStatus.PARTIAL : regime.getQualityStatus());
+        if (!completeBreadth(breadth)) {
+            workspace.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        }
         workspace.setGeneratedAt(LocalDateTime.now(CHINA_ZONE));
         if (sectors.isEmpty()) {
             workspace.getWarnings().add("行业行情暂不可用，市场状态仅供低置信度参考");
         }
+        workspace.getWarnings().addAll(breadth.getWarnings());
         if (candidates.isEmpty()) {
             workspace.getWarnings().add("当前没有同时通过行业轮动与模型门禁的研究候选");
         }
@@ -76,7 +85,8 @@ public class MarketPulseService {
     }
 
     public MarketPulseWorkspace latest() {
-        Optional<MarketPulseWorkspace> latest = repository.findLatestWorkspace();
+        LocalDate maximum = featureService.latestBusinessDate();
+        Optional<MarketPulseWorkspace> latest = repository.findLatestWorkspace(maximum);
         if (!latest.isPresent()) {
             return unavailable();
         }
@@ -90,7 +100,7 @@ public class MarketPulseService {
     }
 
     public List<LocalDate> dates(int limit) {
-        return repository.findRecentDates(Math.max(1, Math.min(limit, 100)));
+        return repository.findRecentDates(Math.max(1, Math.min(limit, 100)), featureService.latestBusinessDate());
     }
 
     private List<MarketPulseCandidate> candidates(List<SectorRotationItem> sectors) {
@@ -104,11 +114,17 @@ public class MarketPulseService {
 
     private MarketPulseWorkspace hydrate(MarketPulseWorkspace workspace) {
         List<MarketRegimeSnapshot> recent = new ArrayList<>();
-        for (LocalDate date : repository.findRecentDates(5)) {
+        for (LocalDate date : repository.findRecentDates(5, workspace.getBusinessDate())) {
             repository.findWorkspace(date).map(MarketPulseWorkspace::getRegime).ifPresent(recent::add);
         }
         workspace.setRecentRegimes(recent);
         return workspace;
+    }
+
+    private boolean completeBreadth(MarketBreadthSnapshot breadth) {
+        return breadth != null && breadth.getAdvanceRatio() != null && breadth.getIndices().size() == 5
+                && ("FRESH_PRIMARY".equals(breadth.getQualityStatus())
+                || "FRESH_FALLBACK".equals(breadth.getQualityStatus()));
     }
 
     private MarketPulseWorkspace unavailable() {

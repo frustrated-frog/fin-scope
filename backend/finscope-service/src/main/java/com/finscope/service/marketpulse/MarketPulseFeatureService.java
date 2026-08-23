@@ -41,8 +41,13 @@ public class MarketPulseFeatureService {
     }
 
     public MarketRegimeSnapshot calculate(LocalDate businessDate, double sectorDispersion) {
+        return calculate(businessDate, sectorDispersion, null);
+    }
+
+    public MarketRegimeSnapshot calculate(LocalDate businessDate, double sectorDispersion, Double marketBreadth) {
         MarketRegimeFeatures features = new MarketRegimeFeatures();
         features.setSectorDispersion(sectorDispersion);
+        features.setMarketBreadth(marketBreadth);
         try {
             QuantDailyBarBatch batch = dailyBarSource.fetch(BENCHMARK_CODE, FETCH_LIMIT);
             List<QuantDailyBar> bars = eligibleBars(batch, businessDate);

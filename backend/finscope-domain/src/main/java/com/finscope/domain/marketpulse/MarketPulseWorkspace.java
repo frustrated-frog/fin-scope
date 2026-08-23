@@ -12,6 +12,7 @@ import java.util.List;
 public class MarketPulseWorkspace {
     private LocalDate businessDate;
     private MarketRegimeSnapshot regime;
+    private MarketBreadthSnapshot breadth;
     private List<MarketRegimeSnapshot> recentRegimes = new ArrayList<>();
     private List<SectorRotationItem> sectors = new ArrayList<>();
     private List<MarketEventConfirmation> eventConfirmations = new ArrayList<>();

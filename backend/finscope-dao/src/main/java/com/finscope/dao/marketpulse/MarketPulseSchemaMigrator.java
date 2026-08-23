@@ -23,6 +23,9 @@ public class MarketPulseSchemaMigrator implements InitializingBean {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,business_date TEXT NOT NULL UNIQUE,"
                 + "confidence_score INTEGER NOT NULL,quality_status TEXT NOT NULL,source_fingerprint TEXT NOT NULL,"
                 + "snapshot_json TEXT NOT NULL,calculated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS market_breadth_snapshot ("
+                + "business_date TEXT NOT NULL PRIMARY KEY,quality_status TEXT NOT NULL,"
+                + "source_code TEXT NOT NULL,snapshot_json TEXT NOT NULL,retrieved_at TEXT)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sector_rotation_snapshot ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,business_date TEXT NOT NULL UNIQUE,"
                 + "quality_status TEXT NOT NULL,source_fingerprint TEXT NOT NULL,calculated_at TEXT NOT NULL)");

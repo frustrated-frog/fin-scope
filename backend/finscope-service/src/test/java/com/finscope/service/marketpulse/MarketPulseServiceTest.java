@@ -6,6 +6,7 @@ import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.dao.quant.StockDiscoveryRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
+import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.when;
 class MarketPulseServiceTest {
     private MarketPulseService service;
     private MarketPulseFeatureService features;
+    private MarketBreadthService breadthService;
     private MarketPulseSectorService sectors;
     private RadarRepository radarRepository;
     private MarketEventConfirmationService confirmations;
@@ -44,6 +46,7 @@ class MarketPulseServiceTest {
     void setUp() {
         service = new MarketPulseService();
         features = mock(MarketPulseFeatureService.class);
+        breadthService = mock(MarketBreadthService.class);
         sectors = mock(MarketPulseSectorService.class);
         radarRepository = mock(RadarRepository.class);
         confirmations = mock(MarketEventConfirmationService.class);
@@ -51,6 +54,7 @@ class MarketPulseServiceTest {
         candidates = mock(MarketPulseCandidateService.class);
         repository = mock(MarketPulseRepository.class);
         ReflectionTestUtils.setField(service, "featureService", features);
+        ReflectionTestUtils.setField(service, "breadthService", breadthService);
         ReflectionTestUtils.setField(service, "sectorService", sectors);
         ReflectionTestUtils.setField(service, "radarRepository", radarRepository);
         ReflectionTestUtils.setField(service, "confirmationService", confirmations);
@@ -67,8 +71,9 @@ class MarketPulseServiceTest {
         regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         when(features.latestBusinessDate()).thenReturn(latestTradingDate);
         when(sectors.calculate(latestTradingDate)).thenReturn(Collections.emptyList());
+        when(breadthService.calculate(latestTradingDate)).thenReturn(breadth(latestTradingDate));
         when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
-        when(features.calculate(latestTradingDate, 0D)).thenReturn(regime);
+        when(features.calculate(latestTradingDate, 0D, 0.6D)).thenReturn(regime);
         when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.emptyList());
         when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
                 .thenReturn(Collections.emptyList());
@@ -94,8 +99,9 @@ class MarketPulseServiceTest {
         run.setId(9L);
         MarketPulseCandidate candidate = new MarketPulseCandidate();
         when(sectors.calculate(date)).thenReturn(Collections.singletonList(sector));
+        when(breadthService.calculate(date)).thenReturn(breadth(date));
         when(sectors.dispersion(Collections.singletonList(sector))).thenReturn(0.02D);
-        when(features.calculate(date, 0.02D)).thenReturn(regime);
+        when(features.calculate(date, 0.02D, 0.6D)).thenReturn(regime);
         when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.singletonList(event));
         when(confirmations.confirm(Collections.singletonList(event), Collections.singletonList(sector)))
                 .thenReturn(Collections.singletonList(confirmation));
@@ -120,8 +126,9 @@ class MarketPulseServiceTest {
         regime.setBusinessDate(date);
         regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         when(sectors.calculate(date)).thenReturn(Collections.emptyList());
+        when(breadthService.calculate(date)).thenReturn(breadth(date));
         when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
-        when(features.calculate(date, 0D)).thenReturn(regime);
+        when(features.calculate(date, 0D, 0.6D)).thenReturn(regime);
         when(radarRepository.findEventsSince(any(), anyInt())).thenReturn(Collections.emptyList());
         when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
                 .thenReturn(Collections.emptyList());
@@ -132,5 +139,13 @@ class MarketPulseServiceTest {
         assertEquals("SUCCEEDED", result.getStatus());
         assertEquals(0, result.getCandidateCount());
         verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    private MarketBreadthSnapshot breadth(LocalDate date) {
+        MarketBreadthSnapshot value = new MarketBreadthSnapshot();
+        value.setBusinessDate(date);
+        value.setQualityStatus("FRESH_PRIMARY");
+        value.setAdvanceRatio(0.6D);
+        return value;
     }
 }

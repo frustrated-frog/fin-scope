@@ -32,6 +32,14 @@ public class MarketPulseRepository {
                 date, workspace.getRegime().getConfidenceScore(), workspace.getRegime().getQualityStatus().name(),
                 workspace.getRegime().getSourceFingerprint(), json(workspace.getRegime()),
                 TimeUtil.text(workspace.getRegime().getCalculatedAt()));
+        if (workspace.getBreadth() != null) {
+            jdbcTemplate.update("INSERT INTO market_breadth_snapshot(business_date,quality_status,source_code,"
+                            + "snapshot_json,retrieved_at) VALUES(?,?,?,?,?) ON CONFLICT(business_date) DO UPDATE SET "
+                            + "quality_status=excluded.quality_status,source_code=excluded.source_code,"
+                            + "snapshot_json=excluded.snapshot_json,retrieved_at=excluded.retrieved_at",
+                    date, workspace.getBreadth().getQualityStatus(), workspace.getBreadth().getSourceCode(),
+                    json(workspace.getBreadth()), TimeUtil.text(workspace.getBreadth().getRetrievedAt()));
+        }
         jdbcTemplate.update("INSERT INTO sector_rotation_snapshot(business_date,quality_status,source_fingerprint,"
                         + "calculated_at) VALUES(?,?,?,?) ON CONFLICT(business_date) DO UPDATE SET "
                         + "quality_status=excluded.quality_status,source_fingerprint=excluded.source_fingerprint,"
@@ -66,11 +74,27 @@ public class MarketPulseRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(workspace(values.get(0)));
     }
 
+    public Optional<MarketPulseWorkspace> findLatestWorkspace(LocalDate maximumBusinessDate) {
+        List<String> values = jdbcTemplate.queryForList(
+                "SELECT workspace_json FROM market_opportunity_run WHERE business_date<=? "
+                        + "ORDER BY business_date DESC,id DESC LIMIT 1",
+                String.class, maximumBusinessDate.toString());
+        return values.isEmpty() ? Optional.empty() : Optional.of(workspace(values.get(0)));
+    }
+
     public List<LocalDate> findRecentDates(int limit) {
         int bounded = Math.max(1, Math.min(limit, 100));
         return jdbcTemplate.query("SELECT business_date FROM market_opportunity_run "
                         + "ORDER BY business_date DESC,id DESC LIMIT ?",
                 (rs, rowNum) -> LocalDate.parse(rs.getString("business_date")), bounded);
+    }
+
+    public List<LocalDate> findRecentDates(int limit, LocalDate maximumBusinessDate) {
+        int bounded = Math.max(1, Math.min(limit, 100));
+        return jdbcTemplate.query("SELECT business_date FROM market_opportunity_run WHERE business_date<=? "
+                        + "ORDER BY business_date DESC,id DESC LIMIT ?",
+                (rs, rowNum) -> LocalDate.parse(rs.getString("business_date")),
+                maximumBusinessDate.toString(), bounded);
     }
 
     private String json(Object value) {

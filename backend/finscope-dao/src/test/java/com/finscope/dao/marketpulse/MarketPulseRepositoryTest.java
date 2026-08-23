@@ -70,6 +70,19 @@ class MarketPulseRepositoryTest {
         assertTrue(repository.findLatestWorkspace().isPresent());
     }
 
+    @Test
+    void ignoresSnapshotsAfterTheLatestValidTradingDate() {
+        repository.saveWorkspace(workspace(LocalDate.of(2026, 8, 21), 80));
+        repository.saveWorkspace(workspace(LocalDate.of(2026, 8, 23), 99));
+
+        MarketPulseWorkspace latest = repository.findLatestWorkspace(LocalDate.of(2026, 8, 21))
+                .orElseThrow(AssertionError::new);
+
+        assertEquals(LocalDate.of(2026, 8, 21), latest.getBusinessDate());
+        assertEquals(Arrays.asList(LocalDate.of(2026, 8, 21)),
+                repository.findRecentDates(10, LocalDate.of(2026, 8, 21)));
+    }
+
     private MarketPulseWorkspace workspace(LocalDate businessDate, int confidence) {
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
         regime.setBusinessDate(businessDate);
