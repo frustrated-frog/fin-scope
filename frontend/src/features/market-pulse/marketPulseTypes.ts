@@ -67,9 +67,42 @@ export type MarketPulseCandidate = {
   invalidationConditions?: string[];
 };
 
+export type MarketIndexPerformance = {
+  code: string;
+  name: string;
+  businessDate?: string;
+  close?: number;
+  return1d?: number;
+  return5d?: number;
+  return20d?: number;
+  sourceCode?: string;
+  qualityStatus?: string;
+};
+
+export type MarketBreadth = {
+  businessDate?: string;
+  sourceCode?: string;
+  sourceFamily?: string;
+  qualityStatus?: string;
+  retrievedAt?: string;
+  advanceCount?: number;
+  declineCount?: number;
+  flatCount?: number;
+  validCount?: number;
+  advanceRatio?: number;
+  totalAmount?: number;
+  limitUpCount?: number;
+  limitDownCount?: number;
+  medianChangePct?: number;
+  indices?: MarketIndexPerformance[];
+  interpretation?: string;
+  warnings?: string[];
+};
+
 export type MarketPulseWorkspace = {
   businessDate?: string;
   regime?: MarketRegime;
+  breadth?: MarketBreadth;
   recentRegimes?: MarketRegime[];
   sectors?: SectorRotation[];
   eventConfirmations?: MarketEventConfirmation[];

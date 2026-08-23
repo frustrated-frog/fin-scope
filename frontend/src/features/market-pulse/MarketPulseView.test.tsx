@@ -8,6 +8,20 @@ const workspace = {
   qualityStatus: 'PARTIAL',
   generatedAt: '2026-08-23T18:00:00',
   warnings: ['行业宽度未接入，评分已降低置信度'],
+  breadth: {
+    businessDate: '2026-08-21', sourceCode: 'AKSHARE_EASTMONEY_A_SPOT', sourceFamily: 'EASTMONEY',
+    qualityStatus: 'FRESH_PRIMARY', advanceCount: 3200, declineCount: 1800, flatCount: 100,
+    validCount: 5100, advanceRatio: 3200 / 5100, totalAmount: 2300000000000,
+    limitUpCount: 68, limitDownCount: 4, medianChangePct: 0.7,
+    interpretation: '主要指数与个股宽度共振走强', warnings: [],
+    indices: [
+      { code: '000001.SH', name: '上证指数', businessDate: '2026-08-21', close: 3905.2, return1d: 0.6, return5d: -0.3, return20d: 2.1, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' },
+      { code: '399001.SZ', name: '深证成指', businessDate: '2026-08-21', close: 14094.17, return1d: 0.8, return5d: -0.5, return20d: 3.2, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' },
+      { code: '399006.SZ', name: '创业板指', businessDate: '2026-08-21', close: 3100, return1d: 1.1, return5d: -1.2, return20d: 4.5, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' },
+      { code: '000300.SH', name: '沪深300', businessDate: '2026-08-21', close: 4618.9, return1d: 0.5, return5d: -0.2, return20d: 2.0, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' },
+      { code: '000852.SH', name: '中证1000', businessDate: '2026-08-21', close: 7200, return1d: 0.9, return5d: 0.2, return20d: 5.1, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' }
+    ]
+  },
   regime: {
     businessDate: '2026-08-21',
     trendState: 'RANGE',
@@ -57,6 +71,12 @@ test('renders the decision chain from regime to verified stock candidates', asyn
 
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
   expect(screen.getByText('市场节奏轨')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '市场宽度' })).toBeInTheDocument();
+  expect(screen.getByText('上证指数')).toBeInTheDocument();
+  expect(screen.getByText('中证1000')).toBeInTheDocument();
+  expect(screen.getByText('3,200')).toBeInTheDocument();
+  expect(screen.getByText('2.30 万亿')).toBeInTheDocument();
+  expect(screen.getByText('主要指数与个股宽度共振走强')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '创新药' })).toBeInTheDocument();
   expect(screen.getByText('事件与行情确认')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '示例医药' })).toBeInTheDocument();

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import type { MarketEventConfirmation, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
+import type { MarketBreadth, MarketEventConfirmation, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -46,6 +46,13 @@ function money(value?: number) {
   return `${value >= 0 ? '+' : ''}${(value / 100000000).toFixed(1)} 亿`;
 }
 
+function marketAmount(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${(value / 1_000_000_000_000).toFixed(2)} 万亿`;
+}
+
 function dateText(value?: string | number[]) {
   if (Array.isArray(value)) {
     return `${value[0]}-${String(value[1]).padStart(2, '0')}-${String(value[2]).padStart(2, '0')}`;
@@ -73,6 +80,46 @@ function MarketTape({ regimes }: { regimes: MarketRegime[] }) {
             </article>
           );
         }) : <p className="market-pulse-inline-empty">积累每日快照后，这里会显示行情节奏。</p>}
+      </div>
+    </section>
+  );
+}
+
+function MarketBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
+  const advance = breadth?.advanceCount ?? 0;
+  const decline = breadth?.declineCount ?? 0;
+  const flat = breadth?.flatCount ?? 0;
+  const total = Math.max(1, breadth?.validCount ?? advance + decline + flat);
+  const advanceWidth = advance / total * 100;
+  const flatWidth = flat / total * 100;
+  const declineWidth = Math.max(0, 100 - advanceWidth - flatWidth);
+  return (
+    <section className="market-pulse-breadth" aria-label="市场宽度">
+      <header>
+        <div><span>MARKET INTERNALS</span><h3>市场宽度</h3></div>
+        <p>{breadth?.interpretation ?? '尚未获得全市场涨跌分布。'}</p>
+        <small>{breadth?.businessDate ?? '—'} · {breadth?.sourceFamily ?? '来源不可用'} · {breadth?.qualityStatus ?? 'UNAVAILABLE'}</small>
+      </header>
+      <div className="market-pulse-index-grid">
+        {(breadth?.indices ?? []).map(item => (
+          <article key={item.code}>
+            <span>{item.name}</span><strong>{item.close?.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) ?? '—'}</strong>
+            <dl><div><dt>1日</dt><dd className={(item.return1d ?? 0) < 0 ? 'negative' : 'positive'}>{percent(item.return1d, true)}</dd></div><div><dt>20日</dt><dd>{percent(item.return20d, true)}</dd></div></dl>
+          </article>
+        ))}
+        {!(breadth?.indices ?? []).length && <p className="market-pulse-inline-empty">五大指数截面暂不可用。</p>}
+      </div>
+      <div className="market-pulse-breadth-lower">
+        <div className="market-pulse-distribution">
+          <div className="market-pulse-distribution-labels"><span><b>{advance.toLocaleString('zh-CN')}</b> 上涨</span><span><b>{flat.toLocaleString('zh-CN')}</b> 平盘</span><span><b>{decline.toLocaleString('zh-CN')}</b> 下跌</span></div>
+          <div className="market-pulse-distribution-bar" aria-label={`上涨 ${advance}，平盘 ${flat}，下跌 ${decline}`}><i className="advance" style={{ width: `${advanceWidth}%` }} /><i className="flat" style={{ width: `${flatWidth}%` }} /><i className="decline" style={{ width: `${declineWidth}%` }} /></div>
+          <small>上涨比例 {breadth?.advanceRatio == null ? '—' : percent(breadth.advanceRatio)}</small>
+        </div>
+        <dl className="market-pulse-breadth-stats">
+          <div><dt>两市成交</dt><dd>{marketAmount(breadth?.totalAmount)}</dd></div>
+          <div><dt>涨停 / 跌停</dt><dd>{breadth?.limitUpCount ?? '—'} / {breadth?.limitDownCount ?? '—'}</dd></div>
+          <div><dt>涨跌中位数</dt><dd className={(breadth?.medianChangePct ?? 0) < 0 ? 'negative' : 'positive'}>{percent(breadth?.medianChangePct, true)}</dd></div>
+        </dl>
       </div>
     </section>
   );
@@ -211,6 +258,8 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
       </header>
 
       {(workspace.warnings ?? []).length > 0 && <div className="market-pulse-warning"><strong>数据边界</strong>{workspace.warnings?.join('；')}</div>}
+
+      <MarketBreadthPanel breadth={workspace.breadth} />
 
       <MarketTape regimes={workspace.recentRegimes ?? []} />
 

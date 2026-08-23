@@ -2,6 +2,7 @@ package com.finscope.web.response;
 
 import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
+import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
@@ -16,6 +17,7 @@ import java.util.List;
 public class MarketPulseWorkspaceResponse {
     private String businessDate;
     private MarketRegimeSnapshot regime;
+    private MarketBreadthSnapshot breadth;
     private List<MarketRegimeSnapshot> recentRegimes;
     private List<SectorRotationItem> sectors;
     private List<MarketEventConfirmation> eventConfirmations;
@@ -28,6 +30,7 @@ public class MarketPulseWorkspaceResponse {
         MarketPulseWorkspaceResponse value = new MarketPulseWorkspaceResponse();
         value.setBusinessDate(source.getBusinessDate() == null ? null : source.getBusinessDate().toString());
         value.setRegime(source.getRegime());
+        value.setBreadth(source.getBreadth());
         value.setRecentRegimes(source.getRecentRegimes());
         value.setSectors(source.getSectors());
         value.setEventConfirmations(source.getEventConfirmations());

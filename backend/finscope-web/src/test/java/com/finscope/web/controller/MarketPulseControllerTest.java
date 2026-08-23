@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
+import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.service.marketpulse.MarketPulseService;
 import com.finscope.web.handler.ApiExceptionHandler;
@@ -40,6 +41,14 @@ class MarketPulseControllerTest {
         MarketPulseWorkspace workspace = new MarketPulseWorkspace();
         workspace.setBusinessDate(LocalDate.of(2026, 8, 21));
         workspace.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        MarketBreadthSnapshot breadth = new MarketBreadthSnapshot();
+        breadth.setBusinessDate(LocalDate.of(2026, 8, 21));
+        breadth.setAdvanceCount(3200);
+        breadth.setDeclineCount(1800);
+        breadth.setFlatCount(100);
+        breadth.setValidCount(5100);
+        breadth.setAdvanceRatio(3200D / 5100D);
+        workspace.setBreadth(breadth);
         when(service.latest()).thenReturn(workspace);
         when(service.dates(20)).thenReturn(Arrays.asList(LocalDate.of(2026, 8, 21)));
         MarketPulseRefreshResult refresh = new MarketPulseRefreshResult();
@@ -48,7 +57,8 @@ class MarketPulseControllerTest {
 
         mockMvc.perform(get("/api/market-pulse/latest"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.businessDate").value("2026-08-21"));
+                .andExpect(jsonPath("$.data.businessDate").value("2026-08-21"))
+                .andExpect(jsonPath("$.data.breadth.advanceCount").value(3200));
         mockMvc.perform(get("/api/market-pulse/dates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0]").value("2026-08-21"));
