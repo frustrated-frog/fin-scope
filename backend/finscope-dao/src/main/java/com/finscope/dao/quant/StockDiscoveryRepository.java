@@ -104,6 +104,14 @@ public class StockDiscoveryRepository {
                 this::mapCandidate, bounded);
     }
 
+    public List<StockDiscoveryCandidate> findCandidatesByRunId(Long runId) {
+        return jdbcTemplate.query("SELECT c.*,r.as_of_date AS evaluation_as_of_date "
+                        + "FROM stock_discovery_candidate c JOIN stock_discovery_run r ON r.id=c.run_id "
+                        + "WHERE c.run_id=? ORDER BY CASE WHEN c.final_rank IS NULL THEN 1 ELSE 0 END,"
+                        + "c.final_rank,c.lightweight_rank,c.id",
+                this::mapCandidate, runId);
+    }
+
     public int countPendingCandidates() {
         Integer value = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM stock_discovery_candidate WHERE maturity_status='PENDING'", Integer.class);
