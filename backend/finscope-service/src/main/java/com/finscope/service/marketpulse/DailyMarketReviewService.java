@@ -32,7 +32,7 @@ public class DailyMarketReviewService {
     public DailyMarketReview generate(MarketPulseWorkspace workspace) {
         DailyMarketReview value = new DailyMarketReview();
         value.setBusinessDate(workspace.getBusinessDate());
-        value.setHeadline(headline(workspace.getRegime()));
+        value.setHeadline(headline(workspace));
         value.setIndexOverview(indexOverview(workspace.getBreadth()));
         value.setBreadthConclusion(breadthConclusion(workspace.getBreadth()));
         value.setLeadingSectors(leadingSectors(workspace.getSectors()));
@@ -47,7 +47,31 @@ public class DailyMarketReviewService {
         return value;
     }
 
-    private String headline(MarketRegimeSnapshot regime) {
+    private String headline(MarketPulseWorkspace workspace) {
+        MarketRegimeSnapshot regime = workspace.getRegime();
+        MarketBreadthSnapshot breadth = workspace.getBreadth();
+        List<MarketIndexPerformance> indices = validIndices(breadth);
+        Double averageIndexReturn = indices.isEmpty() ? null : indices.stream()
+                .mapToDouble(MarketIndexPerformance::getReturn1d).average().orElse(0D);
+        Double advanceRatio = breadth == null ? null : breadth.getAdvanceRatio();
+        Double medianChange = breadth == null ? null : breadth.getMedianChangePct();
+        if (averageIndexReturn != null && advanceRatio != null
+                && averageIndexReturn >= 1D && advanceRatio >= 0.70D) {
+            return "指数上行与市场宽度共振，风险偏好明显回升";
+        }
+        if (averageIndexReturn != null && (averageIndexReturn <= -2D
+                || advanceRatio != null && advanceRatio <= 0.30D
+                && medianChange != null && medianChange <= -2D)) {
+            return "指数普遍回撤且多数个股承压，风险偏好快速收缩";
+        }
+        if (averageIndexReturn != null && advanceRatio != null
+                && averageIndexReturn >= 0D && advanceRatio >= 0.65D) {
+            return "个股广泛修复，持续性仍需量能进一步确认";
+        }
+        if (averageIndexReturn != null && advanceRatio != null
+                && averageIndexReturn > 0D && advanceRatio <= 0.48D) {
+            return "指数修复但个股宽度偏弱，结构性分化仍然明显";
+        }
         if (regime == null || regime.getMarketStage() == null) {
             return "关键市场事实不足，暂不形成方向性结论";
         }

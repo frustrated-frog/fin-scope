@@ -108,7 +108,9 @@ public class MarketRegimeClassifier {
                 && snapshot.getLiquidityState() == MarketLiquidityState.SHRINKING) {
             return MarketStage.POST_SELL_OFF_REPAIR;
         }
-        if (features.getReturn1d() <= -0.03D || features.getReturn5d() <= -0.06D) {
+        if (features.getReturn1d() <= -0.03D || features.getReturn5d() <= -0.06D
+                || features.getReturn1d() <= -0.025D && features.getMarketBreadth() != null
+                && features.getMarketBreadth() <= 0.35D) {
             return MarketStage.SELL_OFF;
         }
         if (snapshot.getTrendState() == MarketTrendState.UPTREND

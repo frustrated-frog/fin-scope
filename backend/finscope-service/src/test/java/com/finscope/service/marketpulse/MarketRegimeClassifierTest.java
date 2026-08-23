@@ -77,6 +77,19 @@ class MarketRegimeClassifierTest {
         assertTrue(narrowResult.getEvidence().stream().anyMatch(value -> value.contains("上涨比例")));
     }
 
+    @Test
+    void treatsADeepBroadDeclineAsSellOffBeforeTheIndexReachesThreePercent() {
+        MarketRegimeFeatures features = complete();
+        features.setReturn1d(-0.029D);
+        features.setMarketBreadth(0.25D);
+
+        MarketRegimeSnapshot result = classifier.classify(
+                LocalDate.of(2026, 8, 19), features, "broad-sell-off",
+                LocalDateTime.of(2026, 8, 19, 16, 0));
+
+        assertEquals(MarketStage.SELL_OFF, result.getMarketStage());
+    }
+
     private MarketRegimeFeatures complete() {
         MarketRegimeFeatures value = new MarketRegimeFeatures();
         value.setReturn1d(0.002D);

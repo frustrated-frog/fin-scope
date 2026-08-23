@@ -66,6 +66,27 @@ class DailyMarketReviewServiceTest {
     }
 
     @Test
+    void distinguishesBroadAdvanceSellOffRepairAndNarrowIndexRecovery() {
+        MarketPulseWorkspace broadAdvance = workspace(0.85D, 0.016D, 1.02D);
+        broadAdvance.getBreadth().setMedianChangePct(1.79D);
+        setIndexReturns(broadAdvance, 1.4D, 3.1D, 1.6D);
+        MarketPulseWorkspace sellOff = workspace(0.25D, -0.029D, 1.08D);
+        sellOff.getBreadth().setMedianChangePct(-3.95D);
+        setIndexReturns(sellOff, -2.4D, -6.3D, -2.9D);
+        MarketPulseWorkspace broadRepair = workspace(0.79D, 0.001D, 0.81D);
+        broadRepair.getBreadth().setMedianChangePct(1.57D);
+        setIndexReturns(broadRepair, 0.1D, 1.8D, 0.1D);
+        MarketPulseWorkspace narrowRecovery = workspace(0.45D, 0.006D, 0.82D);
+        narrowRecovery.getBreadth().setMedianChangePct(-0.12D);
+        setIndexReturns(narrowRecovery, 0.0D, 1.4D, 0.6D);
+
+        assertTrue(service.generate(broadAdvance).getHeadline().contains("宽度共振"));
+        assertTrue(service.generate(sellOff).getHeadline().contains("风险偏好快速收缩"));
+        assertTrue(service.generate(broadRepair).getHeadline().contains("个股广泛修复"));
+        assertTrue(service.generate(narrowRecovery).getHeadline().contains("结构性分化"));
+    }
+
+    @Test
     void fingerprintsAllFactsAndIgnoresSectorInputOrder() {
         MarketPulseWorkspace first = workspace(0.62D, 0.006D, 0.81D);
         SectorRotationItem medicine = sector("创新药", 2.1D, 5.8D, 78, SectorRotationStage.PERSISTENT);
@@ -128,6 +149,14 @@ class DailyMarketReviewServiceTest {
         value.setName(name);
         value.setReturn1d(return1d);
         return value;
+    }
+
+    private void setIndexReturns(MarketPulseWorkspace workspace, double shanghai,
+                                 double growth, double benchmark) {
+        workspace.getBreadth().setIndices(Arrays.asList(
+                index("上证指数", shanghai),
+                index("创业板指", growth),
+                index("沪深300", benchmark)));
     }
 
     private SectorRotationItem sector(String name, double return1d, double return5d,
