@@ -23,7 +23,10 @@ const workspace = {
   },
   historyPoints: [
     { businessDate: '2026-08-21', marketStage: 'RANGE_ROTATION', confidenceScore: 72, advanceRatio: 0.63, totalAmount: 2300000000000, medianChangePct: 0.7, leadingSectorName: '创新药', leadingSectorScore: 78, headline: '急跌后缩量修复，反弹持续性仍需量能确认', qualityStatus: 'PARTIAL' },
-    { businessDate: '2026-08-20', marketStage: 'POST_SELL_OFF_REPAIR', confidenceScore: 68, advanceRatio: 0.55, totalAmount: 2100000000000, medianChangePct: 0.3, leadingSectorName: '贵金属', leadingSectorScore: 70, headline: '急跌后进入修复', qualityStatus: 'PARTIAL' }
+    { businessDate: '2026-08-20', marketStage: 'POST_SELL_OFF_REPAIR', confidenceScore: 68, advanceRatio: 0.55, totalAmount: 2100000000000, medianChangePct: 0.3, leadingSectorName: '贵金属', leadingSectorScore: 70, headline: '急跌后进入修复', qualityStatus: 'PARTIAL' },
+    { businessDate: '2026-08-19', marketStage: 'SELL_OFF', confidenceScore: 83, advanceRatio: 0.18, totalAmount: 2500000000000, medianChangePct: -2.1, leadingSectorName: '银行', leadingSectorScore: 66, headline: '风险偏好快速收缩，市场进入集中调整', qualityStatus: 'PARTIAL' },
+    { businessDate: '2026-08-18', marketStage: 'RANGE_ROTATION', confidenceScore: 70, advanceRatio: 0.42, totalAmount: 2200000000000, medianChangePct: -0.2, leadingSectorName: '种植业与林业', leadingSectorScore: 71, headline: '高位分歧加大，防御方向相对占优', qualityStatus: 'PARTIAL' },
+    { businessDate: '2026-08-17', marketStage: 'TREND_EXPANSION', confidenceScore: 80, advanceRatio: 0.72, totalAmount: 2300000000000, medianChangePct: 1.2, leadingSectorName: '半导体', leadingSectorScore: 82, headline: '放量上行，科技主线与市场宽度共振', qualityStatus: 'PARTIAL' }
   ],
   breadth: {
     businessDate: '2026-08-21', sourceCode: 'AKSHARE_EASTMONEY_A_SPOT', sourceFamily: 'EASTMONEY',
@@ -74,6 +77,8 @@ beforeEach(() => {
     const path = String(input);
     const data = path.endsWith('/dates') ? ['2026-08-21']
       : path.endsWith('/refresh') && options?.method === 'POST' ? { status: 'SUCCEEDED' }
+        : path.includes('/backfill?') && options?.method === 'POST' ? { status: 'SUCCEEDED', results: workspace.historyPoints }
+          : path.endsWith('/2026-08-17') ? { ...workspace, businessDate: '2026-08-17', dailyReview: { ...workspace.dailyReview, businessDate: '2026-08-17', headline: '放量上行，科技主线与市场宽度共振' } }
         : workspace;
     return Promise.resolve({
       ok: true,
@@ -126,4 +131,24 @@ test('refreshes and reloads the frozen workspace', async () => {
 
   await waitFor(() => expect(addToast).toHaveBeenCalledWith('市场机会判断已刷新', 'success'));
   expect(fetch).toHaveBeenCalledWith('/api/market-pulse/refresh', expect.objectContaining({ method: 'POST' }));
+});
+
+test('backfills the five requested days and opens one historical review', async () => {
+  const addToast = vi.fn();
+  render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole('tab', { name: '历史演变' }));
+  fireEvent.click(screen.getByRole('button', { name: '补全 8.17–8.21 判断' }));
+
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+    '/api/market-pulse/backfill?startDate=2026-08-17&endDate=2026-08-21',
+    expect.objectContaining({ method: 'POST' })
+  ));
+  expect(screen.getAllByRole('button', { name: '查看当日复盘' })).toHaveLength(5);
+
+  fireEvent.click(screen.getAllByRole('button', { name: '查看当日复盘' })[4]);
+
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/market-pulse/2026-08-17', expect.any(Object)));
+  expect(await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: '今日复盘' })).toHaveAttribute('aria-selected', 'true');
 });

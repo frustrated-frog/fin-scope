@@ -142,3 +142,15 @@ export type MarketPulseWorkspace = {
   warnings?: string[];
   generatedAt?: string;
 };
+
+export type MarketPulseBackfillResult = {
+  startDate?: string;
+  endDate?: string;
+  status: 'SUCCEEDED' | 'PARTIAL' | 'FAILED';
+  results: Array<{
+    businessDate: string;
+    status: string;
+    qualityStatus?: MarketPulseQuality;
+  }>;
+  failures?: Record<string, string>;
+};

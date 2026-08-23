@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
+import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -203,11 +203,22 @@ function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
   );
 }
 
-function HistoryPanel({ points }: { points?: MarketPulseHistoryPoint[] }) {
+function HistoryPanel({ points, backfilling, onBackfill, onSelect }: {
+  points?: MarketPulseHistoryPoint[];
+  backfilling: boolean;
+  onBackfill: () => void;
+  onSelect: (date: string) => void;
+}) {
   return (
     <section className="market-pulse-history">
-      <header><div><span>20D EVOLUTION</span><h3>近 20 日市场演变</h3></div><p>每一行都来自当日冻结快照，不使用后续数据回填当时判断。</p></header>
-      <div className="market-pulse-history-head"><span>日期 / 状态</span><span>当日结论</span><span>市场宽度</span><span>成交额</span><span>领涨行业</span></div>
+      <header>
+        <div><span>20D EVOLUTION</span><h3>近 20 日市场演变</h3></div>
+        <div className="market-pulse-history-actions">
+          <p>每一行都来自当日冻结快照，不使用后续数据回填当时判断。</p>
+          <button type="button" onClick={onBackfill} disabled={backfilling}>{backfilling ? '正在补全五日判断…' : '补全 8.17–8.21 判断'}</button>
+        </div>
+      </header>
+      <div className="market-pulse-history-head"><span>日期 / 状态</span><span>当日结论</span><span>市场宽度</span><span>成交额</span><span>领涨行业</span><span>操作</span></div>
       {points?.length ? points.map(point => (
         <article className="market-pulse-history-row" key={point.businessDate}>
           <div><time>{point.businessDate ?? '—'}</time><strong>{stageLabels[point.marketStage ?? ''] ?? '待判断'}</strong><small>置信度 {point.confidenceScore ?? 0}</small></div>
@@ -215,6 +226,7 @@ function HistoryPanel({ points }: { points?: MarketPulseHistoryPoint[] }) {
           <div className="market-pulse-history-breadth"><strong>{point.advanceRatio == null ? '—' : percent(point.advanceRatio)}</strong><i><b style={{ width: `${Math.max(0, Math.min(100, (point.advanceRatio ?? 0) * 100))}%` }} /></i><small>中位数 {percent(point.medianChangePct, true)}</small></div>
           <strong>{marketAmount(point.totalAmount)}</strong>
           <div><strong>{point.leadingSectorName ?? '—'}</strong><small>{point.leadingSectorScore == null ? '无评分' : `${point.leadingSectorScore} 分`}</small></div>
+          <button type="button" className="market-pulse-history-open" disabled={!point.businessDate} onClick={() => point.businessDate && onSelect(point.businessDate)}>查看当日复盘</button>
         </article>
       )) : <p className="market-pulse-inline-empty">积累每日快照后，这里会显示市场演变。</p>}
     </section>
@@ -226,6 +238,7 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
   const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [view, setView] = useState<'review' | 'structure' | 'history'>('review');
   const loadRequest = useRef(0);
 
@@ -266,6 +279,33 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const backfillPreviousWeek = async () => {
+    setBackfilling(true);
+    setMessage('正在补全 8.17–8.21 市场判断');
+    try {
+      const result = await api<MarketPulseBackfillResult>(
+        '/api/market-pulse/backfill?startDate=2026-08-17&endDate=2026-08-21',
+        { method: 'POST' }
+      );
+      await load();
+      setView('history');
+      const completed = result.results?.length ?? 0;
+      const tone = result.status === 'FAILED' ? 'error' : 'success';
+      addToast(`已补全 ${completed} 个交易日判断`, tone);
+      setMessage(`上一周市场判断已补全 ${completed} 天`);
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '上一周判断补全失败', 'error');
+      setMessage('上一周市场判断补全失败');
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
+  const openHistoricalReview = async (date: string) => {
+    await load(date);
+    setView('review');
   };
 
   const regime = workspace?.regime;
@@ -327,7 +367,7 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
 
       {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} />}
 
-      {view === 'history' && <HistoryPanel points={workspace.historyPoints} />}
+      {view === 'history' && <HistoryPanel points={workspace.historyPoints} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} />}
 
       {view === 'structure' && <>
 
