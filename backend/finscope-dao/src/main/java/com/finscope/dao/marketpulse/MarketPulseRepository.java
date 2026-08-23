@@ -58,6 +58,16 @@ public class MarketPulseRepository {
                         + "status='SUCCEEDED',quality_status=excluded.quality_status,workspace_json=excluded.workspace_json,"
                         + "generated_at=excluded.generated_at", date, workspace.getQualityStatus().name(), json(workspace),
                 TimeUtil.text(workspace.getGeneratedAt()));
+        if (workspace.getDailyReview() != null) {
+            jdbcTemplate.update("INSERT INTO daily_market_review_snapshot(business_date,quality_status,"
+                            + "source_fingerprint,review_json,generated_at) VALUES(?,?,?,?,?) "
+                            + "ON CONFLICT(business_date) DO UPDATE SET quality_status=excluded.quality_status,"
+                            + "source_fingerprint=excluded.source_fingerprint,review_json=excluded.review_json,"
+                            + "generated_at=excluded.generated_at", date,
+                    workspace.getDailyReview().getQualityStatus().name(),
+                    workspace.getDailyReview().getSourceFingerprint(), json(workspace.getDailyReview()),
+                    TimeUtil.text(workspace.getDailyReview().getGeneratedAt()));
+        }
     }
 
     public Optional<MarketPulseWorkspace> findWorkspace(LocalDate businessDate) {
@@ -94,6 +104,14 @@ public class MarketPulseRepository {
         return jdbcTemplate.query("SELECT business_date FROM market_opportunity_run WHERE business_date<=? "
                         + "ORDER BY business_date DESC,id DESC LIMIT ?",
                 (rs, rowNum) -> LocalDate.parse(rs.getString("business_date")),
+                maximumBusinessDate.toString(), bounded);
+    }
+
+    public List<MarketPulseWorkspace> findRecentWorkspaces(int limit, LocalDate maximumBusinessDate) {
+        int bounded = Math.max(1, Math.min(limit, 100));
+        return jdbcTemplate.query("SELECT workspace_json FROM market_opportunity_run WHERE business_date<=? "
+                        + "ORDER BY business_date DESC,id DESC LIMIT ?",
+                (rs, rowNum) -> workspace(rs.getString("workspace_json")),
                 maximumBusinessDate.toString(), bounded);
     }
 

@@ -8,6 +8,7 @@ import com.finscope.domain.marketpulse.MarketEventConfirmation;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
+import com.finscope.domain.marketpulse.MarketPulseHistoryPoint;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
@@ -46,6 +47,8 @@ public class MarketPulseService {
     private MarketPulseCandidateService candidateService;
     @Resource
     private MarketPulseRepository repository;
+    @Resource
+    private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
         return refresh(featureService.latestBusinessDate());
@@ -80,6 +83,7 @@ public class MarketPulseService {
         if (candidates.isEmpty()) {
             workspace.getWarnings().add("当前没有同时通过行业轮动与模型门禁的研究候选");
         }
+        workspace.setDailyReview(reviewService.generate(workspace));
         repository.saveWorkspace(workspace);
         return result(workspace);
     }
@@ -114,11 +118,42 @@ public class MarketPulseService {
 
     private MarketPulseWorkspace hydrate(MarketPulseWorkspace workspace) {
         List<MarketRegimeSnapshot> recent = new ArrayList<>();
-        for (LocalDate date : repository.findRecentDates(5, workspace.getBusinessDate())) {
-            repository.findWorkspace(date).map(MarketPulseWorkspace::getRegime).ifPresent(recent::add);
+        List<MarketPulseHistoryPoint> history = new ArrayList<>();
+        List<MarketPulseWorkspace> recentWorkspaces = repository.findRecentWorkspaces(20, workspace.getBusinessDate());
+        for (MarketPulseWorkspace recentWorkspace : recentWorkspaces) {
+            if (recent.size() < 5 && recentWorkspace.getRegime() != null) {
+                recent.add(recentWorkspace.getRegime());
+            }
+            history.add(historyPoint(recentWorkspace));
         }
         workspace.setRecentRegimes(recent);
+        workspace.setHistoryPoints(history);
         return workspace;
+    }
+
+    private MarketPulseHistoryPoint historyPoint(MarketPulseWorkspace workspace) {
+        MarketPulseHistoryPoint value = new MarketPulseHistoryPoint();
+        value.setBusinessDate(workspace.getBusinessDate());
+        value.setQualityStatus(workspace.getQualityStatus());
+        if (workspace.getRegime() != null) {
+            value.setMarketStage(workspace.getRegime().getMarketStage());
+            value.setConfidenceScore(workspace.getRegime().getConfidenceScore());
+        }
+        if (workspace.getBreadth() != null) {
+            value.setAdvanceRatio(workspace.getBreadth().getAdvanceRatio());
+            value.setTotalAmount(workspace.getBreadth().getTotalAmount());
+            value.setMedianChangePct(workspace.getBreadth().getMedianChangePct());
+        }
+        if (workspace.getDailyReview() != null) {
+            value.setHeadline(workspace.getDailyReview().getHeadline());
+        }
+        SectorRotationItem leader = workspace.getSectors().stream()
+                .max(java.util.Comparator.comparingInt(SectorRotationItem::getRotationScore)).orElse(null);
+        if (leader != null) {
+            value.setLeadingSectorName(leader.getSectorName());
+            value.setLeadingSectorScore(leader.getRotationScore());
+        }
+        return value;
     }
 
     private boolean completeBreadth(MarketBreadthSnapshot breadth) {

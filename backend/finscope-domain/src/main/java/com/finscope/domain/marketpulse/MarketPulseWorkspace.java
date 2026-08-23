@@ -13,7 +13,9 @@ public class MarketPulseWorkspace {
     private LocalDate businessDate;
     private MarketRegimeSnapshot regime;
     private MarketBreadthSnapshot breadth;
+    private DailyMarketReview dailyReview;
     private List<MarketRegimeSnapshot> recentRegimes = new ArrayList<>();
+    private List<MarketPulseHistoryPoint> historyPoints = new ArrayList<>();
     private List<SectorRotationItem> sectors = new ArrayList<>();
     private List<MarketEventConfirmation> eventConfirmations = new ArrayList<>();
     private List<MarketPulseCandidate> candidates = new ArrayList<>();

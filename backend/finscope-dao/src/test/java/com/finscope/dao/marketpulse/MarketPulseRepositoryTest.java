@@ -10,6 +10,7 @@ import com.finscope.common.enums.marketpulse.MarketStage;
 import com.finscope.common.enums.marketpulse.MarketTrendState;
 import com.finscope.common.enums.marketpulse.SectorRotationStage;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
+import com.finscope.domain.marketpulse.DailyMarketReview;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,9 +52,12 @@ class MarketPulseRepositoryTest {
 
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM market_regime_snapshot", Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM daily_market_review_snapshot", Integer.class));
         MarketPulseWorkspace stored = repository.findWorkspace(LocalDate.of(2026, 8, 21))
                 .orElseThrow(AssertionError::new);
         assertEquals(82, stored.getRegime().getConfidenceScore());
+        assertEquals("复盘-82", stored.getDailyReview().getHeadline());
         assertEquals(1, stored.getSectors().size());
     }
 
@@ -68,6 +72,12 @@ class MarketPulseRepositoryTest {
                         LocalDate.of(2026, 8, 20)),
                 repository.findRecentDates(2));
         assertTrue(repository.findLatestWorkspace().isPresent());
+        assertEquals(Arrays.asList(
+                        LocalDate.of(2026, 8, 21),
+                        LocalDate.of(2026, 8, 20)),
+                repository.findRecentWorkspaces(2, LocalDate.of(2026, 8, 21)).stream()
+                        .map(MarketPulseWorkspace::getBusinessDate)
+                        .collect(java.util.stream.Collectors.toList()));
     }
 
     @Test
@@ -110,6 +120,13 @@ class MarketPulseRepositoryTest {
         value.setSectors(Arrays.asList(sector));
         value.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         value.setGeneratedAt(regime.getCalculatedAt());
+        DailyMarketReview review = new DailyMarketReview();
+        review.setBusinessDate(businessDate);
+        review.setHeadline("复盘-" + confidence);
+        review.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        review.setSourceFingerprint(regime.getSourceFingerprint());
+        review.setGeneratedAt(regime.getCalculatedAt());
+        value.setDailyReview(review);
         return value;
     }
 }

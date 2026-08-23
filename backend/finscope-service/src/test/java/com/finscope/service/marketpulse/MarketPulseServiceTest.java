@@ -6,6 +6,7 @@ import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.dao.quant.StockDiscoveryRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
+import com.finscope.domain.marketpulse.DailyMarketReview;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
@@ -41,6 +42,7 @@ class MarketPulseServiceTest {
     private StockDiscoveryRepository discoveryRepository;
     private MarketPulseCandidateService candidates;
     private MarketPulseRepository repository;
+    private DailyMarketReviewService reviewService;
 
     @BeforeEach
     void setUp() {
@@ -53,6 +55,7 @@ class MarketPulseServiceTest {
         discoveryRepository = mock(StockDiscoveryRepository.class);
         candidates = mock(MarketPulseCandidateService.class);
         repository = mock(MarketPulseRepository.class);
+        reviewService = mock(DailyMarketReviewService.class);
         ReflectionTestUtils.setField(service, "featureService", features);
         ReflectionTestUtils.setField(service, "breadthService", breadthService);
         ReflectionTestUtils.setField(service, "sectorService", sectors);
@@ -61,6 +64,8 @@ class MarketPulseServiceTest {
         ReflectionTestUtils.setField(service, "discoveryRepository", discoveryRepository);
         ReflectionTestUtils.setField(service, "candidateService", candidates);
         ReflectionTestUtils.setField(service, "repository", repository);
+        ReflectionTestUtils.setField(service, "reviewService", reviewService);
+        when(reviewService.generate(any(MarketPulseWorkspace.class))).thenReturn(new DailyMarketReview());
     }
 
     @Test
@@ -117,6 +122,7 @@ class MarketPulseServiceTest {
         assertEquals(1, result.getEventConfirmationCount());
         assertEquals(1, result.getCandidateCount());
         verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
+        verify(reviewService).generate(any(MarketPulseWorkspace.class));
     }
 
     @Test

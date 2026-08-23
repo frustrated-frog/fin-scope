@@ -40,6 +40,9 @@ public class MarketPulseSchemaMigrator implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS market_opportunity_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,business_date TEXT NOT NULL UNIQUE,status TEXT NOT NULL,"
                 + "quality_status TEXT NOT NULL,workspace_json TEXT NOT NULL,generated_at TEXT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS daily_market_review_snapshot ("
+                + "business_date TEXT NOT NULL PRIMARY KEY,quality_status TEXT NOT NULL,"
+                + "source_fingerprint TEXT NOT NULL,review_json TEXT NOT NULL,generated_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_market_pulse_date ON market_opportunity_run(business_date DESC)");
     }
 }
