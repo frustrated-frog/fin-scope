@@ -42,6 +42,21 @@ def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
     assert result.median_change_pct == 0
 
 
+def test_default_retrieved_at_contains_timezone_offset() -> None:
+    service = MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(
+            [{"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        ),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+    )
+
+    result = service.fetch(date(2026, 8, 21))
+
+    assert result.retrieved_at.utcoffset() is not None
+
+
 def test_sina_is_used_when_eastmoney_fails() -> None:
     def fail():
         raise RuntimeError("eastmoney unavailable")

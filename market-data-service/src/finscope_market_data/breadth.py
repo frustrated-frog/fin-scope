@@ -4,6 +4,7 @@ import statistics
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from finscope_market_data.models import MarketBreadthSnapshot, QualityStatus
 from finscope_market_data.snapshot_store import SnapshotStore
@@ -27,7 +28,7 @@ class MarketBreadthService:
         self._sina_loader = sina_loader or self._load_sina
         self._limit_up_loader = limit_up_loader or self._load_limit_up
         self._limit_down_loader = limit_down_loader or self._load_limit_down
-        self._now_provider = now_provider or datetime.now
+        self._now_provider = now_provider or _shanghai_now
         self._snapshot_store = snapshot_store
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
@@ -192,3 +193,7 @@ def _valid_code(value: object) -> bool:
 
 def _message(error: Exception) -> str:
     return str(error) or type(error).__name__
+
+
+def _shanghai_now() -> datetime:
+    return datetime.now(ZoneInfo("Asia/Shanghai"))
