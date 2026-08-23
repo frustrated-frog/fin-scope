@@ -20,6 +20,7 @@ from finscope_market_data.models import (
     FinancialStatementType,
     FinancialStatementValue,
     FinancialStatementsData,
+    MarketBreadthSnapshot,
     StockProfile,
     StockQuote,
     StockSymbol,
@@ -240,8 +241,32 @@ class FakeSectorService:
                     change_pct=2.4,
                     main_net_inflow=1_200_000_000,
                     leader_stock_name="中芯国际",
+                    advance_count=48,
+                    decline_count=12,
+                    flat_count=0,
+                    breadth_ratio=0.8,
                 )
             ],
+        )
+
+
+class FakeBreadthService:
+    def fetch(self, business_date: date) -> MarketBreadthSnapshot:
+        return MarketBreadthSnapshot(
+            business_date=business_date.isoformat(),
+            source_code="FIXTURE_BREADTH",
+            source_family="FIXTURE",
+            quality_status="FRESH_PRIMARY",
+            retrieved_at=datetime(2026, 8, 21, 15, 20, tzinfo=UTC),
+            advance_count=3200,
+            decline_count=1800,
+            flat_count=100,
+            valid_count=5100,
+            advance_ratio=3200 / 5100,
+            total_amount=2_300_000_000_000,
+            limit_up_count=68,
+            limit_down_count=4,
+            median_change_pct=0.7,
         )
 
 
@@ -329,10 +354,32 @@ def test_tonghuashun_sector_endpoint_returns_versioned_contract(tmp_path: Path) 
                 "change_pct": 2.4,
                 "main_net_inflow": 1_200_000_000.0,
                 "leader_stock_name": "中芯国际",
+                "advance_count": 48,
+                "decline_count": 12,
+                "flat_count": 0,
+                "breadth_ratio": 0.8,
             }
         ],
         "warnings": [],
     }
+
+
+def test_market_breadth_endpoint_returns_versioned_contract(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    api = TestClient(create_app(router, breadth=FakeBreadthService()))
+
+    response = api.get("/v1/markets/CN-A/breadth?business_date=2026-08-21")
+
+    assert response.status_code == 200
+    assert response.json()["schema_version"] == "market-breadth-v1"
+    assert response.json()["business_date"] == "2026-08-21"
+    assert response.json()["advance_count"] == 3200
+    assert response.json()["limit_up_count"] == 68
 
 
 def test_tonghuashun_sector_endpoint_rejects_unknown_category(tmp_path: Path) -> None:

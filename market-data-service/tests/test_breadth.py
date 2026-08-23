@@ -5,6 +5,7 @@ from datetime import date, datetime
 import pandas as pd
 
 from finscope_market_data.breadth import MarketBreadthService
+from finscope_market_data.snapshot_store import SnapshotStore
 
 
 def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
@@ -87,3 +88,33 @@ def test_limit_pool_failure_keeps_breadth_and_marks_partial_quality() -> None:
     assert result.limit_down_count is None
     assert len(result.warnings) == 2
 
+
+def test_same_business_date_snapshot_is_used_when_online_sources_fail(tmp_path) -> None:
+    store = SnapshotStore(tmp_path / "snapshots.db")
+    online = MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(
+            [{"代码": "600001", "名称": "样本一", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100}]
+        ),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        snapshot_store=store,
+    )
+    online.fetch(date(2026, 8, 21))
+
+    def fail():
+        raise RuntimeError("offline")
+
+    fallback = MarketBreadthService(
+        eastmoney_loader=fail,
+        sina_loader=fail,
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        now_provider=lambda: datetime(2026, 8, 21, 15, 25),
+        snapshot_store=store,
+    ).fetch(date(2026, 8, 21))
+
+    assert fallback.quality_status == "STALE_FALLBACK"
+    assert fallback.valid_count == 1
+    assert any("快照" in warning for warning in fallback.warnings)

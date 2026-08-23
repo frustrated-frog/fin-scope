@@ -21,6 +21,10 @@ class SectorEntry(BaseModel):
     change_pct: float | None = None
     main_net_inflow: float | None = None
     leader_stock_name: str | None = None
+    advance_count: int | None = Field(default=None, ge=0)
+    decline_count: int | None = Field(default=None, ge=0)
+    flat_count: int | None = Field(default=None, ge=0)
+    breadth_ratio: float | None = Field(default=None, ge=0, le=1)
 
 
 class SectorEnvelope(BaseModel):
@@ -90,6 +94,10 @@ class TonghuashunSectorService:
                     change_pct=_number(row.get("涨跌幅")),
                     main_net_inflow=_yuan_from_yi(row.get("净流入")),
                     leader_stock_name=_text(row.get("领涨股")),
+                    advance_count=_integer(row.get("上涨家数")),
+                    decline_count=_integer(row.get("下跌家数")),
+                    flat_count=_integer(row.get("平盘家数")) or 0,
+                    breadth_ratio=_breadth_ratio(row),
                 )
             )
         return entries, warnings
@@ -144,6 +152,21 @@ def _number(value: object) -> float | None:
 def _yuan_from_yi(value: object) -> float | None:
     number = _number(value)
     return number * 100_000_000 if number is not None else None
+
+
+def _integer(value: object) -> int | None:
+    number = _number(value)
+    return max(0, int(number)) if number is not None else None
+
+
+def _breadth_ratio(row: Any) -> float | None:
+    advance = _integer(row.get("上涨家数"))
+    decline = _integer(row.get("下跌家数"))
+    flat = _integer(row.get("平盘家数")) or 0
+    if advance is None or decline is None:
+        return None
+    total = advance + decline + flat
+    return advance / total if total > 0 else None
 
 
 def _text(value: object) -> str:

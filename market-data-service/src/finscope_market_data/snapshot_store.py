@@ -10,6 +10,7 @@ from finscope_market_data.models import (
     DataCapability,
     DataEnvelope,
     FinancialStatementsData,
+    MarketBreadthSnapshot,
     StockProfile,
     StockQuote,
     StockSymbol,
@@ -38,6 +39,15 @@ class SnapshotStore:
                     payload_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (capability, symbol_key)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS market_breadth_snapshot (
+                    business_date TEXT NOT NULL PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -73,6 +83,34 @@ class SnapshotStore:
             return None
         envelope_type = DataEnvelope[PAYLOAD_MODELS[capability]]
         return envelope_type.model_validate_json(row[0])
+
+    def save_market_breadth(self, snapshot: MarketBreadthSnapshot) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO market_breadth_snapshot(business_date, payload_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(business_date) DO UPDATE SET
+                    payload_json=excluded.payload_json,
+                    updated_at=CURRENT_TIMESTAMP
+                """,
+                (snapshot.business_date, snapshot.model_dump_json()),
+            )
+
+    def load_market_breadth(
+        self,
+        business_date: str,
+    ) -> MarketBreadthSnapshot | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM market_breadth_snapshot WHERE business_date=?",
+                (business_date,),
+            ).fetchone()
+        return (
+            None
+            if row is None
+            else MarketBreadthSnapshot.model_validate_json(row[0])
+        )
 
     def check_ready(self) -> tuple[bool, str]:
         try:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import date, timedelta
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
@@ -39,6 +40,7 @@ from finscope_market_data.router import ProviderRouter
 from finscope_market_data.settings import Settings
 from finscope_market_data.sectors import TonghuashunSectorService
 from finscope_market_data.snapshot_store import SnapshotStore
+from finscope_market_data.breadth import MarketBreadthService
 
 
 def build_router(settings: Settings | None = None) -> ProviderRouter:
@@ -67,6 +69,7 @@ def create_app(
     router: ProviderRouter | None = None,
     discovery: StockDiscoveryService | None = None,
     sectors: TonghuashunSectorService | None = None,
+    breadth: MarketBreadthService | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:
     config = settings or Settings()
@@ -105,6 +108,10 @@ def create_app(
             )
         if application.state.sectors is None:
             application.state.sectors = TonghuashunSectorService()
+        if application.state.breadth is None:
+            application.state.breadth = MarketBreadthService(
+                snapshot_store=application.state.router.snapshots
+            )
         try:
             yield
         finally:
@@ -121,6 +128,7 @@ def create_app(
     application.state.router = router
     application.state.discovery = discovery
     application.state.sectors = sectors
+    application.state.breadth = breadth
 
     @application.get("/health")
     async def health() -> dict[str, str]:
@@ -153,6 +161,20 @@ def create_app(
         category: Literal["INDUSTRY", "CONCEPT"],
     ) -> JSONResponse:
         result = await asyncio.to_thread(application.state.sectors.fetch, category)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json")),
+        )
+
+    @application.get("/v1/markets/CN-A/breadth")
+    async def market_breadth(
+        business_date: date | None = Query(default=None),
+    ) -> JSONResponse:
+        requested = business_date or _previous_weekday(date.today())
+        result = await asyncio.to_thread(
+            application.state.breadth.fetch,
+            requested,
+        )
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json")),
@@ -347,6 +369,13 @@ def create_app(
         )
 
     return application
+
+
+def _previous_weekday(value: date) -> date:
+    current = value
+    while current.weekday() > 4:
+        current -= timedelta(days=1)
+    return current
 
 
 async def _fetch(

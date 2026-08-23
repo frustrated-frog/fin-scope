@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Any
 
 from finscope_market_data.models import MarketBreadthSnapshot, QualityStatus
+from finscope_market_data.snapshot_store import SnapshotStore
 
 
 FrameLoader = Callable[[], Any]
@@ -20,14 +21,42 @@ class MarketBreadthService:
         limit_up_loader: PoolLoader | None = None,
         limit_down_loader: PoolLoader | None = None,
         now_provider: Callable[[], datetime] | None = None,
+        snapshot_store: SnapshotStore | None = None,
     ) -> None:
         self._eastmoney_loader = eastmoney_loader or self._load_eastmoney
         self._sina_loader = sina_loader or self._load_sina
         self._limit_up_loader = limit_up_loader or self._load_limit_up
         self._limit_down_loader = limit_down_loader or self._load_limit_down
         self._now_provider = now_provider or datetime.now
+        self._snapshot_store = snapshot_store
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
+        try:
+            result = self._fetch_online(business_date)
+            if self._snapshot_store is not None:
+                self._snapshot_store.save_market_breadth(result)
+            return result
+        except Exception as online_error:
+            cached = (
+                None
+                if self._snapshot_store is None
+                else self._snapshot_store.load_market_breadth(
+                    business_date.isoformat()
+                )
+            )
+            if cached is None:
+                raise
+            return cached.model_copy(
+                update={
+                    "quality_status": QualityStatus.STALE_FALLBACK,
+                    "warnings": [
+                        *cached.warnings,
+                        f"在线全A行情不可用，已返回同业务日快照：{_message(online_error)}",
+                    ],
+                }
+            )
+
+    def _fetch_online(self, business_date: date) -> MarketBreadthSnapshot:
         warnings: list[str] = []
         try:
             rows = self._normalize(self._eastmoney_loader(), "EASTMONEY")

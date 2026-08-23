@@ -15,8 +15,8 @@ def test_industry_catalog_merges_codes_with_daily_money_flow_ranking() -> None:
         ),
         industry_summary=lambda: pd.DataFrame(
             [
-                {"板块": "白酒", "净流入": -3.5, "涨跌幅": -1.1, "领涨股": "贵州茅台"},
-                {"板块": "半导体", "净流入": 12.0, "涨跌幅": 2.4, "领涨股": "中芯国际"},
+                {"板块": "白酒", "净流入": -3.5, "涨跌幅": -1.1, "领涨股": "贵州茅台", "上涨家数": 8, "下跌家数": 22},
+                {"板块": "半导体", "净流入": 12.0, "涨跌幅": 2.4, "领涨股": "中芯国际", "上涨家数": 48, "下跌家数": 12},
             ]
         ),
         concept_names=lambda: pd.DataFrame(),
@@ -30,6 +30,10 @@ def test_industry_catalog_merges_codes_with_daily_money_flow_ranking() -> None:
     assert result.entries[0].main_net_inflow == 1_200_000_000
     assert result.entries[0].change_pct == 2.4
     assert result.entries[0].leader_stock_name == "中芯国际"
+    assert result.entries[0].advance_count == 48
+    assert result.entries[0].decline_count == 12
+    assert result.entries[0].flat_count == 0
+    assert result.entries[0].breadth_ratio == 0.8
     assert result.entries[1].source_rank == 2
     assert result.entries[1].main_net_inflow == -350_000_000
 
@@ -52,6 +56,7 @@ def test_concept_catalog_returns_all_ths_codes_without_fabricated_ranking() -> N
     assert all(item.category == "CONCEPT" for item in result.entries)
     assert all(item.source_rank is None for item in result.entries)
     assert all(item.main_net_inflow is None for item in result.entries)
+    assert all(item.breadth_ratio is None for item in result.entries)
 
 
 def test_sector_catalog_rejects_unknown_category() -> None:
