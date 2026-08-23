@@ -41,6 +41,15 @@ public class MarketPulseSectorService {
 
     public MarketPulseSectorResult calculateResult(LocalDate businessDate) {
         List<SectorMarketEntry> current = currentEntries();
+        return calculateResult(businessDate, current);
+    }
+
+    public MarketPulseSectorResult calculateHistoricalResult(LocalDate businessDate) {
+        return calculateResult(businessDate, new ArrayList<>());
+    }
+
+    private MarketPulseSectorResult calculateResult(LocalDate businessDate,
+                                                     List<SectorMarketEntry> current) {
         MarketPulseSectorResult value = new MarketPulseSectorResult();
         try {
             SectorHistorySnapshot providerHistory = historySource.fetch(businessDate, PROVIDER_HISTORY_WINDOW);

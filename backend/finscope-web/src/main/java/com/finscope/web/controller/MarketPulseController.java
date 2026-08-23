@@ -5,6 +5,7 @@ import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.service.marketpulse.MarketPulseService;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.web.response.MarketPulseWorkspaceResponse;
+import com.finscope.web.response.MarketPulseBackfillResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,5 +45,12 @@ public class MarketPulseController {
     @PostMapping("/refresh")
     public ApiResponse<MarketPulseRefreshResult> refresh() {
         return ApiResponses.success(service.refresh());
+    }
+
+    @PostMapping("/backfill")
+    public ApiResponse<MarketPulseBackfillResponse> backfill(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return ApiResponses.success(MarketPulseBackfillResponse.of(service.backfill(startDate, endDate)));
     }
 }

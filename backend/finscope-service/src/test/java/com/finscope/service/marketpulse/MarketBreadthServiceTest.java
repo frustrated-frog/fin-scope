@@ -64,6 +64,24 @@ class MarketBreadthServiceTest {
         assertTrue(result.getWarnings().stream().anyMatch(value -> value.contains("业务日期不一致")));
     }
 
+    @Test
+    void calculatesHistoricalIndexFromBarsBoundedByTheRequestedDate() {
+        LocalDate latest = LocalDate.of(2026, 8, 21);
+        LocalDate requested = LocalDate.of(2026, 8, 20);
+        MarketBreadthSource breadthSource = mock(MarketBreadthSource.class);
+        QuantDailyBarSource bars = mock(QuantDailyBarSource.class);
+        when(breadthSource.fetch(requested)).thenReturn(breadth(requested, 0.55D));
+        when(bars.fetch(anyString(), anyInt())).thenReturn(batch(latest));
+        MarketBreadthService service = new MarketBreadthService();
+        ReflectionTestUtils.setField(service, "breadthSource", breadthSource);
+        ReflectionTestUtils.setField(service, "dailyBarSource", bars);
+
+        MarketBreadthSnapshot result = service.calculate(requested);
+
+        assertEquals(5, result.getIndices().size());
+        assertEquals(requested, result.getIndices().get(0).getBusinessDate());
+    }
+
     private MarketBreadthSnapshot breadth(LocalDate date, double ratio) {
         MarketBreadthSnapshot value = new MarketBreadthSnapshot();
         value.setBusinessDate(date);

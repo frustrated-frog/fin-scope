@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
+import com.finscope.domain.marketpulse.MarketPulseBackfillResult;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.DailyMarketReview;
@@ -77,5 +78,24 @@ class MarketPulseControllerTest {
         mockMvc.perform(post("/api/market-pulse/refresh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+    }
+
+    @Test
+    void exposesBoundedBackfillContract() throws Exception {
+        MarketPulseBackfillResult result = new MarketPulseBackfillResult();
+        result.setStatus("SUCCEEDED");
+        MarketPulseRefreshResult day = new MarketPulseRefreshResult();
+        day.setBusinessDate(LocalDate.of(2026, 8, 17));
+        day.setStatus("SUCCEEDED");
+        result.setResults(Arrays.asList(day));
+        when(service.backfill(LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 21)))
+                .thenReturn(result);
+
+        mockMvc.perform(post("/api/market-pulse/backfill")
+                        .param("startDate", "2026-08-17")
+                        .param("endDate", "2026-08-21"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.data.results[0].businessDate").value("2026-08-17"));
     }
 }

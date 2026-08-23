@@ -53,7 +53,7 @@ public class MarketBreadthService {
 
     private MarketIndexPerformance index(IndexDefinition definition, LocalDate businessDate) {
         QuantDailyBarBatch batch = dailyBarSource.fetch(definition.code, INDEX_BAR_LIMIT);
-        if (batch == null || batch.getAsOfDate() == null || !businessDate.equals(batch.getAsOfDate())) {
+        if (batch == null || batch.getBars() == null) {
             throw new IllegalStateException("业务日期不一致");
         }
         List<QuantDailyBar> bars = new ArrayList<>();

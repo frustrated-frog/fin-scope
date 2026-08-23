@@ -64,6 +64,30 @@ class MarketPulseFeatureServiceTest {
         assertEquals(MarketStage.INSUFFICIENT_DATA, result.getMarketStage());
     }
 
+    @Test
+    void listsOnlyActualBusinessDatesWithinTheRequestedRange() {
+        QuantDailyBarSource source = mock(QuantDailyBarSource.class);
+        LocalDate latest = LocalDate.of(2026, 8, 21);
+        List<QuantDailyBar> bars = new ArrayList<>();
+        bars.add(bar(LocalDate.of(2026, 8, 14), 100D, 1000D));
+        bars.add(bar(LocalDate.of(2026, 8, 17), 101D, 1000D));
+        bars.add(bar(LocalDate.of(2026, 8, 18), 102D, 1000D));
+        bars.add(bar(LocalDate.of(2026, 8, 19), 103D, 1000D));
+        bars.add(bar(LocalDate.of(2026, 8, 20), 104D, 1000D));
+        bars.add(bar(LocalDate.of(2026, 8, 21), 105D, 1000D));
+        when(source.fetch("000300.SH", 180)).thenReturn(new QuantDailyBarBatch(
+                bars, "TEST", "TEST", "FRESH_PRIMARY", latest, Collections.emptyList()));
+        MarketPulseFeatureService service = new MarketPulseFeatureService();
+        ReflectionTestUtils.setField(service, "dailyBarSource", source);
+
+        List<LocalDate> result = service.businessDates(
+                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 21));
+
+        assertEquals(5, result.size());
+        assertEquals(LocalDate.of(2026, 8, 17), result.get(0));
+        assertEquals(LocalDate.of(2026, 8, 21), result.get(4));
+    }
+
     private QuantDailyBarBatch batch(LocalDate businessDate) {
         List<QuantDailyBar> bars = new ArrayList<>();
         for (int index = 79; index >= 0; index--) {

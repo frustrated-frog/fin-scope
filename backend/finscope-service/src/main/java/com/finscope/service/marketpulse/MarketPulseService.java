@@ -8,6 +8,7 @@ import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.marketpulse.MarketEventConfirmation;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
+import com.finscope.domain.marketpulse.MarketPulseBackfillResult;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketPulseHistoryPoint;
 import com.finscope.domain.marketpulse.MarketPulseSectorResult;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.time.temporal.ChronoUnit;
 
 /** 编排市场状态、行业轮动、事件确认与研究候选，冻结为每日工作台快照。 */
 @Service
@@ -53,7 +55,7 @@ public class MarketPulseService {
     private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
-        return refreshLatest(featureService.latestBusinessDate());
+        return refreshDate(featureService.latestBusinessDate(), false);
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
@@ -61,11 +63,36 @@ public class MarketPulseService {
         if (latestBusinessDate == null || !latestBusinessDate.equals(businessDate)) {
             throw new IllegalArgumentException("只允许刷新最新有效交易日，历史日期必须读取冻结快照");
         }
-        return refreshLatest(businessDate);
+        return refreshDate(businessDate, false);
     }
 
-    private MarketPulseRefreshResult refreshLatest(LocalDate businessDate) {
-        MarketPulseSectorResult sectorResult = sectorService.calculateResult(businessDate);
+    public MarketPulseBackfillResult backfill(LocalDate startDate, LocalDate endDate) {
+        LocalDate latestBusinessDate = featureService.latestBusinessDate();
+        validateBackfillRange(startDate, endDate, latestBusinessDate);
+        MarketPulseBackfillResult value = new MarketPulseBackfillResult();
+        value.setStartDate(startDate);
+        value.setEndDate(endDate);
+        for (LocalDate businessDate : featureService.businessDates(startDate, endDate)) {
+            try {
+                value.getResults().add(refreshDate(businessDate, true));
+            } catch (RuntimeException error) {
+                value.getFailures().put(businessDate.toString(), safe(error));
+            }
+        }
+        if (value.getFailures().isEmpty() && !value.getResults().isEmpty()) {
+            value.setStatus("SUCCEEDED");
+        } else if (value.getResults().isEmpty()) {
+            value.setStatus("FAILED");
+        } else {
+            value.setStatus("PARTIAL");
+        }
+        return value;
+    }
+
+    private MarketPulseRefreshResult refreshDate(LocalDate businessDate, boolean historical) {
+        MarketPulseSectorResult sectorResult = historical
+                ? sectorService.calculateHistoricalResult(businessDate)
+                : sectorService.calculateResult(businessDate);
         List<SectorRotationItem> sectors = sectorResult.getSectors();
         MarketBreadthSnapshot breadth = breadthService.calculate(businessDate);
         double dispersion = sectorService.dispersion(sectors);
@@ -102,6 +129,23 @@ public class MarketPulseService {
         workspace.setDailyReview(reviewService.generate(workspace));
         repository.saveWorkspace(workspace);
         return result(workspace);
+    }
+
+    private void validateBackfillRange(LocalDate startDate, LocalDate endDate,
+                                       LocalDate latestBusinessDate) {
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("回填起止日期无效");
+        }
+        if (latestBusinessDate == null || endDate.isAfter(latestBusinessDate)) {
+            throw new IllegalArgumentException("回填结束日期不能晚于最新有效交易日");
+        }
+        if (ChronoUnit.DAYS.between(startDate, endDate) > 9L) {
+            throw new IllegalArgumentException("单次最多回填十个自然日");
+        }
+    }
+
+    private String safe(RuntimeException error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
     public MarketPulseWorkspace latest() {

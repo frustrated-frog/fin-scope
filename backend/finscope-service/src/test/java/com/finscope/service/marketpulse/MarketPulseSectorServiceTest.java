@@ -97,6 +97,21 @@ class MarketPulseSectorServiceTest {
         assertTrue(result.getWarnings().get(0).contains("白酒"));
     }
 
+    @Test
+    void historicalCalculationNeverCopiesCurrentMoneyFlowIntoThePast() {
+        LocalDate date = LocalDate.of(2026, 8, 20);
+        when(market.listEntries(SectorCategory.INDUSTRY, true)).thenReturn(Collections.singletonList(
+                market("881121", "半导体", 0.8D, 1_200_000_000D, 1, 0.75D)));
+        when(history.fetch(date, 60)).thenReturn(history(date,
+                item("881121", "半导体", 0.8D, 3.2D, 6.5D, 4)));
+
+        SectorRotationItem result = service.calculateHistoricalResult(date).getSectors().get(0);
+
+        assertEquals(null, result.getMainNetInflow());
+        assertEquals(null, result.getBreadthRatio());
+        assertEquals(null, result.getFlowRank());
+    }
+
     private SectorMarketEntry market(String code, String name, double change, double flow,
                                      int rank, double breadth) {
         SectorMarketEntry value = new SectorMarketEntry();

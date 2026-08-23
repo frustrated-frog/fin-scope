@@ -40,6 +40,22 @@ public class MarketPulseFeatureService {
         return previousWeekday(today);
     }
 
+    public List<LocalDate> businessDates(LocalDate startDate, LocalDate endDate) {
+        QuantDailyBarBatch batch = dailyBarSource.fetch(BENCHMARK_CODE, FETCH_LIMIT);
+        List<LocalDate> values = new ArrayList<>();
+        if (batch == null || batch.getBars() == null) {
+            return values;
+        }
+        for (QuantDailyBar bar : batch.getBars()) {
+            LocalDate tradeDate = bar.getTradeDate();
+            if (tradeDate != null && !tradeDate.isBefore(startDate) && !tradeDate.isAfter(endDate)) {
+                values.add(tradeDate);
+            }
+        }
+        values.sort(Comparator.naturalOrder());
+        return values.stream().distinct().collect(java.util.stream.Collectors.toList());
+    }
+
     public MarketRegimeSnapshot calculate(LocalDate businessDate, double sectorDispersion) {
         return calculate(businessDate, sectorDispersion, null);
     }

@@ -10,6 +10,7 @@ import com.finscope.domain.marketpulse.DailyMarketReview;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketIndexPerformance;
 import com.finscope.domain.marketpulse.MarketPulseCandidate;
+import com.finscope.domain.marketpulse.MarketPulseBackfillResult;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketPulseSectorResult;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
@@ -27,12 +28,15 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -190,6 +194,46 @@ class MarketPulseServiceTest {
         assertTrue(captor.getValue().getWarnings().contains("一个行业历史不可用"));
     }
 
+    @Test
+    void backfillsFiveBusinessDatesInOrderAndKeepsTodayRefreshGuarded() {
+        LocalDate start = LocalDate.of(2026, 8, 17);
+        LocalDate end = LocalDate.of(2026, 8, 21);
+        List<LocalDate> dates = Arrays.asList(start, start.plusDays(1), start.plusDays(2),
+                start.plusDays(3), end);
+        when(features.latestBusinessDate()).thenReturn(end);
+        when(features.businessDates(start, end)).thenReturn(dates);
+        when(sectors.calculateHistoricalResult(any(LocalDate.class)))
+                .thenReturn(sectorResult(Collections.emptyList()));
+        when(breadthService.calculate(any(LocalDate.class))).thenAnswer(invocation ->
+                breadth(invocation.getArgument(0)));
+        when(sectors.dispersion(anyList())).thenReturn(0D);
+        when(features.calculate(any(LocalDate.class), anyDouble(), anyDouble()))
+                .thenAnswer(invocation -> regime(invocation.getArgument(0)));
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(confirmations.confirm(anyList(), anyList())).thenReturn(Collections.emptyList());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(any(LocalDate.class))).thenReturn(Optional.empty());
+
+        MarketPulseBackfillResult result = service.backfill(start, end);
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(5, result.getResults().size());
+        assertEquals(start, result.getResults().get(0).getBusinessDate());
+        assertEquals(end, result.getResults().get(4).getBusinessDate());
+        verify(repository, org.mockito.Mockito.times(5)).saveWorkspace(any(MarketPulseWorkspace.class));
+        assertThrows(IllegalArgumentException.class, () -> service.refresh(start));
+    }
+
+    @Test
+    void rejectsBackfillRangesThatCanReachFutureData() {
+        LocalDate latest = LocalDate.of(2026, 8, 21);
+        when(features.latestBusinessDate()).thenReturn(latest);
+
+        assertThrows(IllegalArgumentException.class, () -> service.backfill(
+                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 24)));
+        assertThrows(IllegalArgumentException.class, () -> service.backfill(
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 21)));
+    }
+
     private MarketBreadthSnapshot breadth(LocalDate date) {
         MarketBreadthSnapshot value = new MarketBreadthSnapshot();
         value.setBusinessDate(date);
@@ -203,6 +247,13 @@ class MarketPulseServiceTest {
         result.setSectors(values);
         result.setQualityStatus(MarketPulseQualityStatus.READY);
         return result;
+    }
+
+    private MarketRegimeSnapshot regime(LocalDate date) {
+        MarketRegimeSnapshot value = new MarketRegimeSnapshot();
+        value.setBusinessDate(date);
+        value.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        return value;
     }
 
     private MarketIndexPerformance index() {
