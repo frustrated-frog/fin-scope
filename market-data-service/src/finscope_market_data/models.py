@@ -29,6 +29,28 @@ class QualityStatus(str, Enum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+class MarketBreadthSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["market-breadth-v1"] = "market-breadth-v1"
+    market: Literal["CN-A"] = "CN-A"
+    business_date: str
+    source_code: str
+    source_family: str
+    quality_status: QualityStatus
+    retrieved_at: datetime
+    advance_count: int = Field(ge=0)
+    decline_count: int = Field(ge=0)
+    flat_count: int = Field(ge=0)
+    valid_count: int = Field(ge=1)
+    advance_ratio: float = Field(ge=0, le=1)
+    total_amount: float = Field(ge=0)
+    limit_up_count: int | None = Field(default=None, ge=0)
+    limit_down_count: int | None = Field(default=None, ge=0)
+    median_change_pct: float
+    warnings: list[str] = Field(default_factory=list)
+
+
 class StockSymbol(BaseModel):
     model_config = ConfigDict(frozen=True)
 
