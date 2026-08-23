@@ -8,6 +8,23 @@ const workspace = {
   qualityStatus: 'PARTIAL',
   generatedAt: '2026-08-23T18:00:00',
   warnings: ['行业宽度未接入，评分已降低置信度'],
+  dailyReview: {
+    businessDate: '2026-08-21',
+    headline: '急跌后缩量修复，反弹持续性仍需量能确认',
+    indexOverview: '创业板指领涨（+1.43%），上证指数相对偏弱（+0.04%），指数风格分化明显',
+    breadthConclusion: '上涨比例 63%，上涨扩散较强；涨跌中位数 +0.70%',
+    leadingSectors: ['创新药：5日+5.80%，轮动分78，阶段持续'],
+    weakeningSectors: ['半导体：1日+0.37%，5日-2.10%，阶段弱势'],
+    confirmedEvents: ['创新药：mRNA 肿瘤疫苗临床数据更新（事件82 / 行情78）'],
+    riskSignals: ['量能偏弱：5日/20日平均成交额比仅 0.81'],
+    nextSessionWatchlist: ['两市成交额能否重新放大，并与指数方向形成同向确认'],
+    evidence: ['全A上涨比例 63%，涨跌中位数 +0.70%'],
+    qualityStatus: 'PARTIAL'
+  },
+  historyPoints: [
+    { businessDate: '2026-08-21', marketStage: 'RANGE_ROTATION', confidenceScore: 72, advanceRatio: 0.63, totalAmount: 2300000000000, medianChangePct: 0.7, leadingSectorName: '创新药', leadingSectorScore: 78, headline: '急跌后缩量修复，反弹持续性仍需量能确认', qualityStatus: 'PARTIAL' },
+    { businessDate: '2026-08-20', marketStage: 'POST_SELL_OFF_REPAIR', confidenceScore: 68, advanceRatio: 0.55, totalAmount: 2100000000000, medianChangePct: 0.3, leadingSectorName: '贵金属', leadingSectorScore: 70, headline: '急跌后进入修复', qualityStatus: 'PARTIAL' }
+  ],
   breadth: {
     businessDate: '2026-08-21', sourceCode: 'AKSHARE_EASTMONEY_A_SPOT', sourceFamily: 'EASTMONEY',
     qualityStatus: 'FRESH_PRIMARY', advanceCount: 3200, declineCount: 1800, flatCount: 100,
@@ -70,6 +87,12 @@ test('renders the decision chain from regime to verified stock candidates', asyn
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '急跌后缩量修复，反弹持续性仍需量能确认' })).toBeInTheDocument();
+  expect(screen.getByText(/创业板指领涨/)).toBeInTheDocument();
+  expect(screen.getAllByText(/上涨比例 63%/)).toHaveLength(2);
+
+  fireEvent.click(screen.getByRole('tab', { name: '市场结构' }));
+
   expect(screen.getByText('市场节奏轨')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '市场宽度' })).toBeInTheDocument();
   expect(screen.getByText('上证指数')).toBeInTheDocument();
@@ -82,6 +105,17 @@ test('renders the decision chain from regime to verified stock candidates', asyn
   expect(screen.getByRole('heading', { name: '示例医药' })).toBeInTheDocument();
   expect(screen.getByText('行业持续且股票模型通过稳健性门禁')).toBeInTheDocument();
   expect(screen.getByText(/研究候选不是买入指令/)).toBeInTheDocument();
+});
+
+test('switches from the default daily review to historical evolution', async () => {
+  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  expect(await screen.findByRole('tab', { name: '今日复盘' })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
+
+  expect(screen.getByRole('heading', { name: '近 20 日市场演变' })).toBeInTheDocument();
+  expect(screen.getByText('贵金属')).toBeInTheDocument();
+  expect(screen.getByText('2.10 万亿')).toBeInTheDocument();
 });
 
 test('refreshes and reloads the frozen workspace', async () => {

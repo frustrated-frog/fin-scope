@@ -99,11 +99,42 @@ export type MarketBreadth = {
   warnings?: string[];
 };
 
+export type DailyMarketReview = {
+  businessDate?: string;
+  headline?: string;
+  indexOverview?: string;
+  breadthConclusion?: string;
+  leadingSectors?: string[];
+  weakeningSectors?: string[];
+  confirmedEvents?: string[];
+  riskSignals?: string[];
+  nextSessionWatchlist?: string[];
+  evidence?: string[];
+  qualityStatus?: MarketPulseQuality;
+  sourceFingerprint?: string;
+  generatedAt?: string;
+};
+
+export type MarketPulseHistoryPoint = {
+  businessDate?: string;
+  marketStage?: string;
+  confidenceScore?: number;
+  advanceRatio?: number;
+  totalAmount?: number;
+  medianChangePct?: number;
+  leadingSectorName?: string;
+  leadingSectorScore?: number;
+  headline?: string;
+  qualityStatus?: MarketPulseQuality;
+};
+
 export type MarketPulseWorkspace = {
   businessDate?: string;
   regime?: MarketRegime;
   breadth?: MarketBreadth;
+  dailyReview?: DailyMarketReview;
   recentRegimes?: MarketRegime[];
+  historyPoints?: MarketPulseHistoryPoint[];
   sectors?: SectorRotation[];
   eventConfirmations?: MarketEventConfirmation[];
   candidates?: MarketPulseCandidate[];

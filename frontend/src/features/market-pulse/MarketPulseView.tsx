@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import type { MarketBreadth, MarketEventConfirmation, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
+import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, SectorRotation } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -166,11 +166,67 @@ function EventRow({ item }: { item: MarketEventConfirmation }) {
   );
 }
 
+function ReviewList({ title, items, tone }: { title: string; items?: string[]; tone?: 'risk' | 'watch' }) {
+  return (
+    <section className={`market-pulse-review-list ${tone ? `is-${tone}` : ''}`}>
+      <h4>{title}</h4>
+      {items?.length ? <ul>{items.map(item => <li key={item}>{item}</li>)}</ul> : <p>当前没有形成可验证条目。</p>}
+    </section>
+  );
+}
+
+function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
+  if (!review) {
+    return <section className="market-pulse-review-empty"><strong>今日复盘尚未生成</strong><p>刷新今日判断后，将按冻结行情事实生成复盘结论。</p></section>;
+  }
+  return (
+    <section className="market-pulse-review" aria-label="今日收盘复盘">
+      <header>
+        <div><span>DAILY CLOSE REVIEW</span><h3>{review.headline ?? '今日结论待生成'}</h3></div>
+        <small>{review.qualityStatus ?? 'PARTIAL'} · 规则复盘 · {review.businessDate ?? '—'}</small>
+      </header>
+      <div className="market-pulse-review-overview">
+        <article><span>指数全景</span><p>{review.indexOverview ?? '指数截面不可用。'}</p></article>
+        <article><span>市场内部</span><p>{review.breadthConclusion ?? '市场宽度不可用。'}</p></article>
+      </div>
+      <div className="market-pulse-review-columns">
+        <ReviewList title="获得历史确认的主线" items={review.leadingSectors} />
+        <ReviewList title="退潮与承压方向" items={review.weakeningSectors} />
+        <ReviewList title="事件 × 行情确认" items={review.confirmedEvents} />
+      </div>
+      <div className="market-pulse-review-actions">
+        <ReviewList title="当前风险" items={review.riskSignals} tone="risk" />
+        <ReviewList title="下一交易日验证清单" items={review.nextSessionWatchlist} tone="watch" />
+      </div>
+      <footer><strong>量化证据</strong>{review.evidence?.length ? review.evidence.map(item => <span key={item}>{item}</span>) : <span>当前证据不足</span>}</footer>
+    </section>
+  );
+}
+
+function HistoryPanel({ points }: { points?: MarketPulseHistoryPoint[] }) {
+  return (
+    <section className="market-pulse-history">
+      <header><div><span>20D EVOLUTION</span><h3>近 20 日市场演变</h3></div><p>每一行都来自当日冻结快照，不使用后续数据回填当时判断。</p></header>
+      <div className="market-pulse-history-head"><span>日期 / 状态</span><span>当日结论</span><span>市场宽度</span><span>成交额</span><span>领涨行业</span></div>
+      {points?.length ? points.map(point => (
+        <article className="market-pulse-history-row" key={point.businessDate}>
+          <div><time>{point.businessDate ?? '—'}</time><strong>{stageLabels[point.marketStage ?? ''] ?? '待判断'}</strong><small>置信度 {point.confidenceScore ?? 0}</small></div>
+          <p>{point.headline ?? '该日尚无复盘文案'}</p>
+          <div className="market-pulse-history-breadth"><strong>{point.advanceRatio == null ? '—' : percent(point.advanceRatio)}</strong><i><b style={{ width: `${Math.max(0, Math.min(100, (point.advanceRatio ?? 0) * 100))}%` }} /></i><small>中位数 {percent(point.medianChangePct, true)}</small></div>
+          <strong>{marketAmount(point.totalAmount)}</strong>
+          <div><strong>{point.leadingSectorName ?? '—'}</strong><small>{point.leadingSectorScore == null ? '无评分' : `${point.leadingSectorScore} 分`}</small></div>
+        </article>
+      )) : <p className="market-pulse-inline-empty">积累每日快照后，这里会显示市场演变。</p>}
+    </section>
+  );
+}
+
 export function MarketPulseView({ addToast, setMessage }: ViewProps) {
   const [workspace, setWorkspace] = useState<MarketPulseWorkspace | null>(null);
   const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [view, setView] = useState<'review' | 'structure' | 'history'>('review');
 
   const load = async (date?: string) => {
     setLoading(true);
@@ -259,6 +315,18 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
 
       {(workspace.warnings ?? []).length > 0 && <div className="market-pulse-warning"><strong>数据边界</strong>{workspace.warnings?.join('；')}</div>}
 
+      <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
+        <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日复盘</button>
+        <button type="button" role="tab" aria-selected={view === 'structure'} onClick={() => setView('structure')}>市场结构</button>
+        <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
+      </nav>
+
+      {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} />}
+
+      {view === 'history' && <HistoryPanel points={workspace.historyPoints} />}
+
+      {view === 'structure' && <>
+
       <MarketBreadthPanel breadth={workspace.breadth} />
 
       <MarketTape regimes={workspace.recentRegimes ?? []} />
@@ -289,6 +357,7 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
           </article>
         ))}</div> : <div className="market-pulse-candidate-empty"><strong>今天可以没有股票候选</strong><p>没有标的同时通过行业轮动、模型健康度与稳健性门禁。保留现金和继续观察也是研究结论。</p></div>}
       </section>
+      </>}
 
       <footer className="market-pulse-disclaimer"><span>研究边界</span><p>研究候选不是买入指令。页面用于提高研究优先级，最终决策仍需核验公司基本面、估值、流动性与个人风险承受能力。</p><time>{workspace.generatedAt ? `生成于 ${workspace.generatedAt.replace('T', ' ').slice(0, 16)}` : ''}</time></footer>
     </section>

@@ -18,7 +18,9 @@ public class MarketPulseWorkspaceResponse {
     private String businessDate;
     private MarketRegimeSnapshot regime;
     private MarketBreadthSnapshot breadth;
+    private DailyMarketReviewResponse dailyReview;
     private List<MarketRegimeSnapshot> recentRegimes;
+    private List<MarketPulseHistoryPointResponse> historyPoints;
     private List<SectorRotationItem> sectors;
     private List<MarketEventConfirmation> eventConfirmations;
     private List<MarketPulseCandidate> candidates;
@@ -31,7 +33,11 @@ public class MarketPulseWorkspaceResponse {
         value.setBusinessDate(source.getBusinessDate() == null ? null : source.getBusinessDate().toString());
         value.setRegime(source.getRegime());
         value.setBreadth(source.getBreadth());
+        value.setDailyReview(DailyMarketReviewResponse.of(source.getDailyReview()));
         value.setRecentRegimes(source.getRecentRegimes());
+        value.setHistoryPoints(source.getHistoryPoints().stream()
+                .map(MarketPulseHistoryPointResponse::of)
+                .toList());
         value.setSectors(source.getSectors());
         value.setEventConfirmations(source.getEventConfirmations());
         value.setCandidates(source.getCandidates());

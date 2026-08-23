@@ -4,6 +4,8 @@ import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.domain.marketpulse.MarketPulseRefreshResult;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
+import com.finscope.domain.marketpulse.DailyMarketReview;
+import com.finscope.domain.marketpulse.MarketPulseHistoryPoint;
 import com.finscope.service.marketpulse.MarketPulseService;
 import com.finscope.web.handler.ApiExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +51,14 @@ class MarketPulseControllerTest {
         breadth.setValidCount(5100);
         breadth.setAdvanceRatio(3200D / 5100D);
         workspace.setBreadth(breadth);
+        DailyMarketReview review = new DailyMarketReview();
+        review.setBusinessDate(LocalDate.of(2026, 8, 21));
+        review.setHeadline("急跌后缩量修复，反弹持续性仍需量能确认");
+        workspace.setDailyReview(review);
+        MarketPulseHistoryPoint history = new MarketPulseHistoryPoint();
+        history.setBusinessDate(LocalDate.of(2026, 8, 21));
+        history.setHeadline(review.getHeadline());
+        workspace.setHistoryPoints(Arrays.asList(history));
         when(service.latest()).thenReturn(workspace);
         when(service.dates(20)).thenReturn(Arrays.asList(LocalDate.of(2026, 8, 21)));
         MarketPulseRefreshResult refresh = new MarketPulseRefreshResult();
@@ -58,7 +68,9 @@ class MarketPulseControllerTest {
         mockMvc.perform(get("/api/market-pulse/latest"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.businessDate").value("2026-08-21"))
-                .andExpect(jsonPath("$.data.breadth.advanceCount").value(3200));
+                .andExpect(jsonPath("$.data.breadth.advanceCount").value(3200))
+                .andExpect(jsonPath("$.data.dailyReview.headline").value(review.getHeadline()))
+                .andExpect(jsonPath("$.data.historyPoints[0].businessDate").value("2026-08-21"));
         mockMvc.perform(get("/api/market-pulse/dates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0]").value("2026-08-21"));
