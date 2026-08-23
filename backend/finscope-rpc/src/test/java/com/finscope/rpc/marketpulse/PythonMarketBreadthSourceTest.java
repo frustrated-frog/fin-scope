@@ -5,6 +5,7 @@ import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.time.Instant;
@@ -24,8 +25,7 @@ class PythonMarketBreadthSourceTest {
             requested.set(uri);
             return response(payload("FRESH_FALLBACK", "2026-08-21"));
         };
-        PythonMarketBreadthSource source = new PythonMarketBreadthSource(
-                "http://127.0.0.1:8000/", http);
+        PythonMarketBreadthSource source = source("http://127.0.0.1:8000/", http);
 
         MarketBreadthSnapshot result = source.fetch(LocalDate.of(2026, 8, 21));
 
@@ -64,9 +64,15 @@ class PythonMarketBreadthSourceTest {
     }
 
     private PythonMarketBreadthSource source(String body) {
-        return new PythonMarketBreadthSource(
-                "http://127.0.0.1:8000",
+        return source("http://127.0.0.1:8000",
                 (provider, uri, headers) -> response(body));
+    }
+
+    private PythonMarketBreadthSource source(String baseUrl, FinanceHttpClient http) {
+        PythonMarketBreadthSource source = new PythonMarketBreadthSource();
+        ReflectionTestUtils.setField(source, "baseUrl", baseUrl);
+        ReflectionTestUtils.setField(source, "http", http);
+        return source;
     }
 
     private static FinanceHttpResponse response(String body) {

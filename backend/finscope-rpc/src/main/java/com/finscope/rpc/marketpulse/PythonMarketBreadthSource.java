@@ -6,10 +6,10 @@ import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.net.URI;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -23,21 +23,16 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
     private static final String CLIENT_CODE = "PYTHON_MARKET_BREADTH";
     private static final Set<String> QUALITY_VALUES = Set.of(
             "FRESH_PRIMARY", "FRESH_FALLBACK", "PARTIAL_FRESH", "STALE_FALLBACK");
-    private final String baseUrl;
-    private final FinanceHttpClient http;
+    @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
+    private String baseUrl;
+    @Resource
+    private FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
-
-    @Autowired
-    public PythonMarketBreadthSource(
-            @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl,
-            FinanceHttpClient http) {
-        this.baseUrl = trimTrailingSlash(baseUrl);
-        this.http = http;
-    }
 
     @Override
     public MarketBreadthSnapshot fetch(LocalDate businessDate) {
-        URI uri = URI.create(baseUrl + "/v1/markets/CN-A/breadth?business_date=" + businessDate);
+        URI uri = URI.create(trimTrailingSlash(baseUrl)
+                + "/v1/markets/CN-A/breadth?business_date=" + businessDate);
         try {
             FinanceHttpResponse response = http.get(
                     CLIENT_CODE, uri, Collections.<String, String>emptyMap());
