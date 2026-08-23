@@ -35,6 +35,17 @@ class SectorRotationScoringServiceTest {
         assertTrue(result.getRotationScore() < 40);
     }
 
+    @Test
+    void ranksAvailableReturnHistoryWithoutInventingMissingBreadth() {
+        SectorRotationItem item = sector("医药生物", 2.1D, 4.5D, 0.7D, 2, 3, 55);
+        item.setBreadthRatio(null);
+
+        SectorRotationItem result = service.score(Arrays.asList(item)).get(0);
+
+        assertTrue(result.getRotationScore() >= 40);
+        assertTrue(result.getExplanations().stream().anyMatch(value -> value.contains("行业宽度未接入")));
+    }
+
     private SectorRotationItem sector(String name, double return1d, Double return5d, double breadth,
                                       int flowRank, int persistence, int crowding) {
         SectorRotationItem value = new SectorRotationItem();
