@@ -18388,6 +18388,7 @@ input[type="checkbox"] {
   --mp-green: #27856b;
   --mp-amber: #c28a38;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding: 0 24px 38px;
 }
@@ -18451,7 +18452,7 @@ input[type="checkbox"] {
 .market-pulse-controls button:disabled,
 .market-pulse-empty button:disabled { cursor: wait; opacity: .6; }
 
-.market-pulse-warning { display: flex; gap: 12px; align-items: baseline; border-left: 3px solid var(--mp-amber); background: color-mix(in srgb, var(--mp-amber) 7%, var(--surface)); color: var(--muted); padding: 9px 12px; font-size: 9px; }
+.market-pulse-warning { display: flex; gap: 12px; align-items: baseline; border-left: 3px solid var(--mp-amber); background: color-mix(in srgb, var(--mp-amber) 7%, var(--surface)); color: var(--muted); padding: 9px 12px; overflow-wrap: anywhere; font-size: 9px; }
 .market-pulse-warning strong { flex: 0 0 auto; color: var(--mp-amber); font-size: 8px; letter-spacing: .06em; }
 
 .market-pulse-breadth,
@@ -18591,7 +18592,7 @@ input[type="checkbox"] {
 .market-pulse-empty p { max-width: 520px; margin: 8px 0 18px; font-size: 10px; }
 .market-pulse-empty button { min-height: 40px; border-radius: 4px; padding: 0 17px; font-size: 10px; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1260px) {
   .market-pulse-hero { grid-template-columns: minmax(0, 1fr) 140px; }
   .market-pulse-controls { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
   .market-pulse-index-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
