@@ -58,6 +58,16 @@ public class SectorMarketService {
                 mergeWarnings(result.getWarning(), snapshot.getWarnings()));
     }
 
+    /** 返回完整板块截面，供需要全市场比较的内部研究服务使用。 */
+    public List<SectorMarketEntry> listEntries(SectorCategory category, boolean forceRefresh) {
+        requireCategory(category);
+        SectorCatalogGatewayResult result = gateway.fetchSectorCatalog(category, forceRefresh);
+        if (result.getSnapshot() == null) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<SectorMarketEntry>(result.getSnapshot().getEntries());
+    }
+
     public SectorMarketSearchResult search(String query, SectorCategory category, int limit) {
         String normalized = query == null ? "" : query.trim();
         if (normalized.isEmpty()) {

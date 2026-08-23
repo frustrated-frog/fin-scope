@@ -4,8 +4,10 @@ import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.domain.instrument.SectorCategory;
 import com.finscope.domain.instrument.SectorMarketEntry;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
+import com.finscope.domain.marketpulse.SectorHistoryItem;
+import com.finscope.domain.marketpulse.SectorHistorySnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
-import com.finscope.service.instrument.SectorMarketOverview;
+import com.finscope.rpc.marketpulse.SectorHistorySource;
 import com.finscope.service.instrument.SectorMarketService;
 import org.springframework.stereotype.Service;
 
@@ -16,32 +18,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** 将行业日榜和历史快照转换为可解释的行业轮动序列。 */
+/** 将同花顺全行业当日截面和指定日期历史转换为可解释的行业轮动序列。 */
 @Service
 public class MarketPulseSectorService {
     private static final int HISTORY_LIMIT = 20;
+    private static final int PROVIDER_HISTORY_WINDOW = 60;
 
     @Resource
     private SectorMarketService sectorMarketService;
+    @Resource
+    private SectorHistorySource historySource;
     @Resource
     private MarketPulseRepository repository;
     @Resource
     private SectorRotationScoringService scoringService;
 
     public List<SectorRotationItem> calculate(LocalDate businessDate) {
-        SectorMarketOverview overview = sectorMarketService.overview(SectorCategory.INDUSTRY, 10, true);
-        Map<String, SectorMarketEntry> current = new LinkedHashMap<>();
-        addEntries(current, overview.getLeaders());
-        addEntries(current, overview.getLaggards());
-        List<MarketPulseWorkspace> history = history(businessDate);
-        List<SectorRotationItem> raw = new ArrayList<>();
-        int rank = 1;
-        for (SectorMarketEntry entry : current.values()) {
-            raw.add(item(entry, rank, history));
-            rank++;
+        List<SectorMarketEntry> current = currentEntries();
+        try {
+            SectorHistorySnapshot providerHistory = historySource.fetch(businessDate, PROVIDER_HISTORY_WINDOW);
+            return fromProviderHistory(current, providerHistory);
+        } catch (RuntimeException error) {
+            return fromWorkspaceHistory(current, businessDate);
         }
-        applyExcessReturn(raw);
-        return scoringService.score(raw);
     }
 
     public double dispersion(List<SectorRotationItem> sectors) {
@@ -62,13 +61,87 @@ public class MarketPulseSectorService {
         return Math.sqrt(variance / values.size());
     }
 
-    private void addEntries(Map<String, SectorMarketEntry> target, List<SectorMarketEntry> entries) {
-        for (SectorMarketEntry entry : entries) {
-            target.putIfAbsent(entry.getCode(), entry);
+    private List<SectorMarketEntry> currentEntries() {
+        try {
+            return sectorMarketService.listEntries(SectorCategory.INDUSTRY, true);
+        } catch (RuntimeException error) {
+            return new ArrayList<>();
         }
     }
 
-    private List<MarketPulseWorkspace> history(LocalDate businessDate) {
+    private List<SectorRotationItem> fromProviderHistory(List<SectorMarketEntry> current,
+                                                         SectorHistorySnapshot history) {
+        Map<String, SectorMarketEntry> currentByCode = currentByCode(current);
+        Map<String, Integer> previousFlowRanks = previousFlowRanks();
+        List<SectorRotationItem> raw = new ArrayList<>();
+        for (SectorHistoryItem historyItem : history.getEntries()) {
+            raw.add(providerItem(historyItem, currentByCode.get(historyItem.getSectorCode()),
+                    previousFlowRanks.get(historyItem.getSectorCode())));
+        }
+        applyExcessReturn(raw);
+        return scoringService.score(raw);
+    }
+
+    private SectorRotationItem providerItem(SectorHistoryItem history, SectorMarketEntry current,
+                                            Integer previousFlowRank) {
+        SectorRotationItem value = new SectorRotationItem();
+        value.setSectorCode(history.getSectorCode());
+        value.setSectorName(history.getSectorName());
+        value.setReturn1d(history.getReturn1d());
+        value.setReturn5d(history.getReturn5d());
+        value.setReturn20d(history.getReturn20d());
+        value.setPersistenceDays(history.getPositiveDays5() == null ? 0 : history.getPositiveDays5());
+        if (current != null && sameDailyReturn(current.getChangePct(), history.getReturn1d())) {
+            value.setMainNetInflow(current.getMainNetInflow());
+            value.setBreadthRatio(current.getBreadthRatio());
+            value.setFlowRank(current.getSourceRank());
+            value.setReturn1d(current.getChangePct());
+        }
+        value.setPreviousFlowRank(previousFlowRank);
+        value.setCrowdingScore(crowding(value));
+        return value;
+    }
+
+    private boolean sameDailyReturn(Double current, Double historical) {
+        return current != null && historical != null && Math.abs(current - historical) <= 0.25D;
+    }
+
+    private Map<String, Integer> previousFlowRanks() {
+        Map<String, Integer> values = new LinkedHashMap<>();
+        for (LocalDate date : repository.findRecentDates(1)) {
+            MarketPulseWorkspace workspace = repository.findWorkspace(date).orElse(null);
+            if (workspace == null) {
+                continue;
+            }
+            for (SectorRotationItem previous : workspace.getSectors()) {
+                values.put(previous.getSectorCode(), previous.getFlowRank());
+            }
+        }
+        return values;
+    }
+
+    private Map<String, SectorMarketEntry> currentByCode(List<SectorMarketEntry> current) {
+        Map<String, SectorMarketEntry> values = new LinkedHashMap<>();
+        for (SectorMarketEntry entry : current) {
+            values.putIfAbsent(entry.getCode(), entry);
+        }
+        return values;
+    }
+
+    private List<SectorRotationItem> fromWorkspaceHistory(List<SectorMarketEntry> current,
+                                                          LocalDate businessDate) {
+        List<MarketPulseWorkspace> history = workspaceHistory(businessDate);
+        List<SectorRotationItem> raw = new ArrayList<>();
+        int fallbackRank = 1;
+        for (SectorMarketEntry entry : current) {
+            raw.add(workspaceItem(entry, fallbackRank, history));
+            fallbackRank++;
+        }
+        applyExcessReturn(raw);
+        return scoringService.score(raw);
+    }
+
+    private List<MarketPulseWorkspace> workspaceHistory(LocalDate businessDate) {
         List<MarketPulseWorkspace> values = new ArrayList<>();
         for (LocalDate date : repository.findRecentDates(HISTORY_LIMIT)) {
             if (date.isBefore(businessDate)) {
@@ -78,8 +151,8 @@ public class MarketPulseSectorService {
         return values;
     }
 
-    private SectorRotationItem item(SectorMarketEntry entry, int fallbackRank,
-                                    List<MarketPulseWorkspace> history) {
+    private SectorRotationItem workspaceItem(SectorMarketEntry entry, int fallbackRank,
+                                             List<MarketPulseWorkspace> history) {
         SectorRotationItem value = new SectorRotationItem();
         value.setSectorCode(entry.getCode());
         value.setSectorName(entry.getName());

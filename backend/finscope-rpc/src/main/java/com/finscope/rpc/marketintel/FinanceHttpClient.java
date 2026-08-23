@@ -25,4 +25,9 @@ public interface FinanceHttpClient {
                                     int maxResponseBytes) throws Exception {
         return get(providerCode, uri, headers);
     }
+
+    default FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers,
+                                    int maxResponseBytes, int requestTimeoutMs) throws Exception {
+        return get(providerCode, uri, headers, maxResponseBytes);
+    }
 }

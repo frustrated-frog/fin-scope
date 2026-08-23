@@ -74,6 +74,12 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
     }
 
     @Override
+    public FinanceHttpResponse get(String provider, URI uri, Map<String, String> headers,
+                                   int requestedMaxBytes, int requestTimeoutMs) throws Exception {
+        return execute(provider, AcquisitionRequest.get(uri), headers, requestedMaxBytes, requestTimeoutMs);
+    }
+
+    @Override
     public FinanceHttpResponse postForm(String provider, URI uri, String body,
                                         Map<String, String> headers) throws Exception {
         return execute(provider, AcquisitionRequest.post(uri, body,

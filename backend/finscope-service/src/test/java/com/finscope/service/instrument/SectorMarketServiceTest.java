@@ -42,6 +42,19 @@ class SectorMarketServiceTest {
     }
 
     @Test
+    void exposesTheCompleteIndustrySnapshotForMarketPulse() {
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, true)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY,
+                entry("881001", "甲", 4.0, 100.0),
+                entry("881002", "乙", -3.0, -90.0),
+                entry("881003", "丙", 1.0, 120.0)));
+
+        List<SectorMarketEntry> entries = service.listEntries(SectorCategory.INDUSTRY, true);
+
+        assertEquals(Arrays.asList("881001", "881002", "881003"), codes(entries));
+    }
+
+    @Test
     void preservesGatewayDegradationMetadata() {
         SectorCatalogGatewayResult gatewayResult = new SectorCatalogGatewayResult(
                 snapshot(entry("881001", "甲", 1.0, 100.0)),
