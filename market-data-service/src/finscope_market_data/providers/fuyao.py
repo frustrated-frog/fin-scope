@@ -254,7 +254,7 @@ class FuyaoMarketDataProvider:
         rows: list[dict[str, Any]] = []
         seen_dates: set[Any] = set()
         offset = 0
-        while len(rows) < requested:
+        while offset < 10_000:
             data = await self.api.get_data(
                 "/api/a-share/prices/historical",
                 {

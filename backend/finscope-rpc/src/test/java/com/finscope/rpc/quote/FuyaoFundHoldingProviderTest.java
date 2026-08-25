@@ -74,6 +74,7 @@ class FuyaoFundHoldingProviderTest {
 
         assertTrue(client.uri.getQuery().contains("fund_type=reits"));
         assertTrue(client.uri.getQuery().contains("thscode=508000.SH"));
+        assertEquals(1, client.uris.size());
     }
 
     @Test
@@ -135,9 +136,7 @@ class FuyaoFundHoldingProviderTest {
                                 + "{\"ticker\":\"000001\",\"thscode\":\"000001.OF\","
                                 + "\"asset_type\":\"fund-otc\"},"
                                 + "{\"ticker\":\"110022\",\"thscode\":\"110022.OF\","
-                                + "\"asset_type\":\"fund-otc\"},"
-                                + "{\"ticker\":\"508000\",\"thscode\":\"508000.SH\","
-                                + "\"asset_type\":\"fund-reit\"}]}}",
+                                + "\"asset_type\":\"fund-otc\"}]}}",
                         Instant.parse("2026-08-26T02:00:00Z"), "search-hash");
             }
             return new FinanceHttpResponse(200, body, Instant.parse("2026-08-26T02:00:00Z"), "hash");

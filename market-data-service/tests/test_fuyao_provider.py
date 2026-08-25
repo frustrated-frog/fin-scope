@@ -108,6 +108,7 @@ async def test_fuyao_daily_bars_follow_offset_pagination_until_limit() -> None:
         [
             {"timestamp": 1787673600000, "item": rows[:2]},
             {"timestamp": 1787673600000, "item": rows[2:]},
+            {"timestamp": 1787673600000, "item": []},
         ]
     )
     provider = module.FuyaoMarketDataProvider(api=api)
@@ -115,11 +116,11 @@ async def test_fuyao_daily_bars_follow_offset_pagination_until_limit() -> None:
     bars = await provider.fetch(
         DataCapability.DAILY_BARS,
         StockSymbol(market="SH", code="600519"),
-        limit=3,
+        limit=2,
     )
 
-    assert len(bars) == 3
-    assert [params["offset"] for _, params in api.calls] == [0, 2]
+    assert [bar.close for bar in bars] == [11.5, 12.5]
+    assert [params["offset"] for _, params in api.calls] == [0, 2, 3]
 
 
 @pytest.mark.asyncio

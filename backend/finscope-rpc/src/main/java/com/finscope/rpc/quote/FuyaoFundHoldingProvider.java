@@ -29,6 +29,8 @@ import java.util.regex.Pattern;
 public class FuyaoFundHoldingProvider implements FundHoldingProvider {
     private static final String PROVIDER_CODE = "FUYAO_FUND_HOLDINGS";
     private static final Pattern FUND_CODE = Pattern.compile("^\\d{6}$");
+    private static final Pattern SH_REIT_CODE = Pattern.compile("^508\\d{3}$");
+    private static final Pattern SZ_REIT_CODE = Pattern.compile("^180\\d{3}$");
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     @Autowired
@@ -69,6 +71,12 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
     }
 
     private FundTarget resolveTarget(String fundCode) throws Exception {
+        if (SH_REIT_CODE.matcher(fundCode).matches()) {
+            return new FundTarget("reits", fundCode + ".SH");
+        }
+        if (SZ_REIT_CODE.matcher(fundCode).matches()) {
+            return new FundTarget("reits", fundCode + ".SZ");
+        }
         URI uri = URI.create(trimBaseUrl() + "/api/meta/tickers/search?q="
                 + encode(fundCode) + "&limit=50");
         FinanceHttpResponse response = http.get(
@@ -112,10 +120,6 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
         }
         if ("fund-etf".equals(assetType) || "fund-lof".equals(assetType)) {
             return new FundTarget("exchange", thscode.trim());
-        }
-        if ("fund-reit".equals(assetType) || "fund-reits".equals(assetType)
-                || "reits".equals(assetType)) {
-            return new FundTarget("reits", thscode.trim());
         }
         return null;
     }
