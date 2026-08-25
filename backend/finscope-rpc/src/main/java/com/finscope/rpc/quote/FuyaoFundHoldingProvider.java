@@ -53,10 +53,10 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
             throw new ProviderContractException(
                     "FUYAO_NOT_CONFIGURED", "扶摇基金数据源未配置 API Key", false);
         }
-        FundTarget target = target(normalizedCode);
-        URI uri = URI.create(trimBaseUrl() + "/api/fund/portfolio/holdings?fund_type="
-                + encode(target.fundType) + "&thscode=" + encode(target.thscode));
         try {
+            FundTarget target = resolveTarget(normalizedCode);
+            URI uri = URI.create(trimBaseUrl() + "/api/fund/portfolio/holdings?fund_type="
+                    + encode(target.fundType) + "&thscode=" + encode(target.thscode));
             FinanceHttpResponse response = http.get(
                     PROVIDER_CODE, uri, Collections.singletonMap("X-api-key", apiKey.trim()));
             return parse(normalizedCode, response);
@@ -68,11 +68,63 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
         }
     }
 
-    private FundHoldingDisclosure parse(String fundCode, FinanceHttpResponse response) throws Exception {
+    private FundTarget resolveTarget(String fundCode) throws Exception {
+        URI uri = URI.create(trimBaseUrl() + "/api/meta/tickers/search?q="
+                + encode(fundCode) + "&limit=50");
+        FinanceHttpResponse response = http.get(
+                PROVIDER_CODE, uri, Collections.singletonMap("X-api-key", apiKey.trim()));
+        JsonNode data = responseData(response, "扶摇基金标的检索");
+        JsonNode items = data.get("item");
+        if (items == null || !items.isArray()) {
+            throw drift("扶摇基金标的检索响应缺少 item 数组");
+        }
+        FundTarget fallback = null;
+        for (JsonNode item : items) {
+            if (!fundCode.equals(text(item, "ticker"))) {
+                continue;
+            }
+            FundTarget current = fundTarget(item);
+            if (current == null) {
+                continue;
+            }
+            if ("otc".equals(current.fundType)) {
+                return current;
+            }
+            if (fallback == null) {
+                fallback = current;
+            }
+        }
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new ProviderContractException(
+                "FUYAO_FUND_NOT_FOUND", "扶摇未找到可用的基金标的", false);
+    }
+
+    private FundTarget fundTarget(JsonNode item) {
+        String assetType = text(item, "asset_type");
+        String thscode = text(item, "thscode");
+        if (thscode == null || thscode.trim().isEmpty()) {
+            return null;
+        }
+        if ("fund-otc".equals(assetType)) {
+            return new FundTarget("otc", thscode.trim());
+        }
+        if ("fund-etf".equals(assetType) || "fund-lof".equals(assetType)) {
+            return new FundTarget("exchange", thscode.trim());
+        }
+        if ("fund-reit".equals(assetType) || "fund-reits".equals(assetType)
+                || "reits".equals(assetType)) {
+            return new FundTarget("reits", thscode.trim());
+        }
+        return null;
+    }
+
+    private JsonNode responseData(FinanceHttpResponse response, String label) throws Exception {
         if (response.getStatus() < 200 || response.getStatus() >= 300) {
             boolean retryable = response.getStatus() == 429 || response.getStatus() >= 500;
             throw new ProviderContractException(
-                    "FUYAO_HTTP_" + response.getStatus(), "扶摇基金持仓 HTTP 请求失败", retryable);
+                    "FUYAO_HTTP_" + response.getStatus(), label + " HTTP 请求失败", retryable);
         }
         JsonNode root = json.readTree(response.getBody());
         int code = root.path("code").asInt(Integer.MIN_VALUE);
@@ -81,8 +133,13 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
         }
         JsonNode data = root.get("data");
         if (data == null || !data.isObject()) {
-            throw drift("扶摇基金持仓响应缺少 data");
+            throw drift(label + "响应缺少 data");
         }
+        return data;
+    }
+
+    private FundHoldingDisclosure parse(String fundCode, FinanceHttpResponse response) throws Exception {
+        JsonNode data = responseData(response, "扶摇基金持仓");
         JsonNode items = data.get("item");
         if (items == null || !items.isArray()) {
             throw drift("扶摇基金持仓响应缺少 item 数组");
@@ -183,16 +240,6 @@ public class FuyaoFundHoldingProvider implements FundHoldingProvider {
             return null;
         }
         return Instant.ofEpochMilli(value.asLong()).atZone(SHANGHAI).toLocalDate();
-    }
-
-    private FundTarget target(String code) {
-        if (code.startsWith("5")) {
-            return new FundTarget("exchange", code + ".SH");
-        }
-        if (code.startsWith("1")) {
-            return new FundTarget("exchange", code + ".SZ");
-        }
-        return new FundTarget("otc", code + ".OF");
     }
 
     private String normalizeCode(String fundCode) {

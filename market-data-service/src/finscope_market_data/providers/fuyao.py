@@ -135,10 +135,10 @@ class FuyaoSyncApiClient:
 
 class FuyaoMarketDumpClient:
     _PATHS = {
-        "daily-k": "/dump/market-dumps/daily-k/download-url",
-        "daily-k-10d": "/dump/market-dumps/daily-k-10d/download-url",
+        "daily-k": "/api/dump/market-dumps/daily-k/download-url",
+        "daily-k-10d": "/api/dump/market-dumps/daily-k-10d/download-url",
         "adjustment-factors": (
-            "/dump/market-dumps/adjustment-factors/download-url"
+            "/api/dump/market-dumps/adjustment-factors/download-url"
         ),
     }
 
@@ -250,22 +250,36 @@ class FuyaoMarketDataProvider:
     async def _daily_bars(self, symbol: StockSymbol, limit: int) -> list[DailyBar]:
         end = datetime.now(SHANGHAI)
         start = end - timedelta(days=3652)
-        data = await self.api.get_data(
-            "/api/a-share/prices/historical",
-            {
-                "thscode": _thscode(symbol),
-                "interval": "1d",
-                "start": int(start.timestamp() * 1000),
-                "end": int(end.timestamp() * 1000),
-                "adjust": "forward",
-                "offset": 0,
-            },
-        )
-        items = _items(data, "扶摇历史 K 线")
-        bars = [self._daily_bar(symbol, item) for item in items]
+        requested = min(max(limit, 1), 5000)
+        rows: list[dict[str, Any]] = []
+        seen_dates: set[Any] = set()
+        offset = 0
+        while len(rows) < requested:
+            data = await self.api.get_data(
+                "/api/a-share/prices/historical",
+                {
+                    "thscode": _thscode(symbol),
+                    "interval": "1d",
+                    "start": int(start.timestamp() * 1000),
+                    "end": int(end.timestamp() * 1000),
+                    "adjust": "forward",
+                    "offset": offset,
+                },
+            )
+            items = _items(data, "扶摇历史 K 线")
+            if not items:
+                break
+            new_items = [item for item in items if item.get("date_ms") not in seen_dates]
+            if not new_items:
+                break
+            rows.extend(new_items)
+            seen_dates.update(item.get("date_ms") for item in new_items)
+            offset += len(items)
+        bars = [self._daily_bar(symbol, item) for item in rows]
         if not bars:
             raise ProviderError("EMPTY_DATA", "扶摇历史 K 线为空", True)
-        return bars[-min(max(limit, 1), 5000):]
+        bars.sort(key=lambda bar: bar.trade_date)
+        return bars[-requested:]
 
     async def _financial_statements(
         self,

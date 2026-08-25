@@ -192,6 +192,11 @@ class FakeMarketDumpClient:
         }
 
 
+class FailingCloseMarketDumpClient(FakeMarketDumpClient):
+    async def aclose(self) -> None:
+        raise RuntimeError("dump close failed")
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -283,6 +288,7 @@ def test_market_dump_endpoint_proxies_a_fresh_signed_url(tmp_path: Path) -> None
     assert response.status_code == 200
     assert response.json()["kind"] == "daily-k-10d"
     assert response.json()["expires_in"] == 300
+    assert response.headers["cache-control"] == "no-store, private"
     assert market_dumps.kinds == ["daily-k-10d"]
 
 
@@ -301,6 +307,32 @@ def test_market_dump_endpoint_is_unavailable_without_fuyao_key(tmp_path: Path) -
 
     assert response.status_code == 503
     assert response.json()["detail"]["error_type"] == "PROVIDER_DISABLED"
+
+
+def test_lifespan_closes_router_when_market_dump_close_fails(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    router_closed = False
+    original_close = router.aclose
+
+    async def close_router() -> None:
+        nonlocal router_closed
+        router_closed = True
+        await original_close()
+
+    router.aclose = close_router  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="dump close failed"):
+        with TestClient(
+            create_app(router=router, market_dumps=FailingCloseMarketDumpClient())
+        ):
+            pass
+
+    assert router_closed is True
 
 
 class FakeDiscoveryService:

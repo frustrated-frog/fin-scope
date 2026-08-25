@@ -112,19 +112,6 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        if application.state.market_dumps is None:
-            application.state.market_dumps = FuyaoMarketDumpClient(
-                FuyaoAsyncApiClient(
-                    api_key=config.fuyao_api_key,
-                    base_url=config.fuyao_base_url,
-                    http=ProviderHttpClient(
-                        timeout_seconds=config.fuyao_timeout_seconds,
-                        minimum_interval_seconds=(
-                            config.fuyao_minimum_interval_seconds
-                        ),
-                    ),
-                )
-            )
         if application.state.router is None:
             application.state.router = build_router(config)
         if application.state.discovery is None:
@@ -177,18 +164,43 @@ def create_app(
             application.state.breadth = MarketBreadthService(
                 snapshot_store=application.state.router.snapshots
             )
+        if application.state.market_dumps is None:
+            application.state.market_dumps = FuyaoMarketDumpClient(
+                FuyaoAsyncApiClient(
+                    api_key=config.fuyao_api_key,
+                    base_url=config.fuyao_base_url,
+                    http=ProviderHttpClient(
+                        timeout_seconds=config.fuyao_timeout_seconds,
+                        minimum_interval_seconds=(
+                            config.fuyao_minimum_interval_seconds
+                        ),
+                    ),
+                )
+            )
         try:
             yield
         finally:
+            close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):
-                await asyncio.to_thread(close_discovery)
+                try:
+                    await asyncio.to_thread(close_discovery)
+                except Exception as error:
+                    close_errors.append(error)
             close_market_dumps = getattr(
                 application.state.market_dumps, "aclose", None
             )
             if callable(close_market_dumps):
-                await close_market_dumps()
-            await application.state.router.aclose()
+                try:
+                    await close_market_dumps()
+                except Exception as error:
+                    close_errors.append(error)
+            try:
+                await application.state.router.aclose()
+            except Exception as error:
+                close_errors.append(error)
+            if close_errors:
+                raise close_errors[0]
 
     application = FastAPI(
         title="FinScope Market Data Service",
@@ -243,7 +255,11 @@ def create_app(
                     "retryable": error.retryable,
                 },
             ) from error
-        return JSONResponse(status_code=200, content=jsonable_encoder(result))
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result),
+            headers={"Cache-Control": "no-store, private"},
+        )
 
     @application.get("/v1/sectors/{category}")
     async def sectors_catalog(

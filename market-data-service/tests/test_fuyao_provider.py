@@ -38,6 +38,16 @@ class FakeSyncApiClient:
         return None
 
 
+class SequencedAsyncApiClient:
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = responses
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def get_data(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append((path, params))
+        return self.responses[len(self.calls) - 1]
+
+
 @pytest.mark.asyncio
 async def test_fuyao_daily_bars_map_forward_adjusted_contract() -> None:
     module = _fuyao_module()
@@ -77,6 +87,39 @@ async def test_fuyao_daily_bars_map_forward_adjusted_contract() -> None:
     assert params["thscode"] == "600519.SH"
     assert params["adjust"] == "forward"
     assert params["interval"] == "1d"
+
+
+@pytest.mark.asyncio
+async def test_fuyao_daily_bars_follow_offset_pagination_until_limit() -> None:
+    module = _fuyao_module()
+    rows = [
+        {
+            "date_ms": 1787414400000 + index * 86_400_000,
+            "open_price": 10 + index,
+            "high_price": 11 + index,
+            "low_price": 9 + index,
+            "close_price": 10.5 + index,
+            "volume": 1000 + index,
+            "turnover": 10000 + index,
+        }
+        for index in range(3)
+    ]
+    api = SequencedAsyncApiClient(
+        [
+            {"timestamp": 1787673600000, "item": rows[:2]},
+            {"timestamp": 1787673600000, "item": rows[2:]},
+        ]
+    )
+    provider = module.FuyaoMarketDataProvider(api=api)
+
+    bars = await provider.fetch(
+        DataCapability.DAILY_BARS,
+        StockSymbol(market="SH", code="600519"),
+        limit=3,
+    )
+
+    assert len(bars) == 3
+    assert [params["offset"] for _, params in api.calls] == [0, 2]
 
 
 @pytest.mark.asyncio
@@ -202,7 +245,7 @@ async def test_fuyao_market_dump_returns_fresh_signed_url_without_caching() -> N
     module = _fuyao_module()
     api = FakeAsyncApiClient(
         {
-            "/dump/market-dumps/daily-k-10d/download-url": {
+            "/api/dump/market-dumps/daily-k-10d/download-url": {
                 "download_url": "https://storage.example/daily-k.parquet?signature=short-lived",
                 "expires_in": 300,
             }
@@ -225,7 +268,7 @@ async def test_fuyao_market_dump_rejects_unknown_kind_and_invalid_url() -> None:
     module = _fuyao_module()
     client = module.FuyaoMarketDumpClient(
         FakeAsyncApiClient(
-            {"/dump/market-dumps/daily-k/download-url": {"download_url": "not-a-url"}}
+            {"/api/dump/market-dumps/daily-k/download-url": {"download_url": "not-a-url"}}
         )
     )
 
