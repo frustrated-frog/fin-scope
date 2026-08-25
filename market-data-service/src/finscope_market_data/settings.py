@@ -22,3 +22,7 @@ class Settings(BaseSettings):
     scrapling_browser_timeout_seconds: float = Field(default=20, ge=1, le=60)
     scrapling_browser_max_concurrency: int = Field(default=1, ge=1, le=2)
     scrapling_idle_timeout_seconds: float = Field(default=300, ge=30, le=3600)
+    fuyao_api_key: str = ""
+    fuyao_base_url: str = "https://fuyao.aicubes.cn"
+    fuyao_timeout_seconds: float = Field(default=15, ge=1, le=60)
+    fuyao_minimum_interval_seconds: float = Field(default=0.1, ge=0.05, le=10)

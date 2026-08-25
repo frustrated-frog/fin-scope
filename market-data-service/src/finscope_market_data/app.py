@@ -33,6 +33,13 @@ from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
+from finscope_market_data.providers.fuyao import (
+    FuyaoAsyncApiClient,
+    FuyaoConstituentProvider,
+    FuyaoMarketDataProvider,
+    FuyaoSyncApiClient,
+)
+from finscope_market_data.providers.http import ProviderHttpClient
 from finscope_market_data.providers.index_daily import (
     EastmoneyIndexDailyProvider,
     SinaIndexDailyProvider,
@@ -50,17 +57,34 @@ from finscope_market_data.breadth import MarketBreadthService
 
 def build_router(settings: Settings | None = None) -> ProviderRouter:
     config = settings or Settings()
+    providers: list[Any] = [
+        EastmoneyIndexDailyProvider(),
+        SinaIndexDailyProvider(),
+        TencentQuoteProvider(),
+        SinaQuoteProvider(),
+        SinaCapitalFlowProvider(),
+        AkshareProvider(),
+        PytdxDailyProvider(),
+        EastmoneyProvider(),
+    ]
+    if config.fuyao_api_key.strip():
+        providers.insert(
+            0,
+            FuyaoMarketDataProvider(
+                FuyaoAsyncApiClient(
+                    api_key=config.fuyao_api_key,
+                    base_url=config.fuyao_base_url,
+                    http=ProviderHttpClient(
+                        timeout_seconds=config.fuyao_timeout_seconds,
+                        minimum_interval_seconds=(
+                            config.fuyao_minimum_interval_seconds
+                        ),
+                    ),
+                )
+            ),
+        )
     return ProviderRouter(
-        providers=[
-            EastmoneyIndexDailyProvider(),
-            SinaIndexDailyProvider(),
-            TencentQuoteProvider(),
-            SinaQuoteProvider(),
-            SinaCapitalFlowProvider(),
-            AkshareProvider(),
-            PytdxDailyProvider(),
-            EastmoneyProvider(),
-        ],
+        providers=providers,
         snapshots=SnapshotStore(config.data_dir / "market-data-snapshots.db"),
         health=ProviderHealthRegistry(
             failure_threshold=config.failure_threshold,
@@ -86,7 +110,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if application.state.router is None:
-            application.state.router = build_router()
+            application.state.router = build_router(config)
         if application.state.discovery is None:
             page_acquirer = TonghuashunPageAcquirer(
                 enabled=config.scrapling_enabled,
@@ -97,16 +121,31 @@ def create_app(
                 ),
                 idle_timeout_seconds=config.scrapling_idle_timeout_seconds,
             )
+            constituent_providers: list[object] = []
+            if config.fuyao_api_key.strip():
+                constituent_providers.append(
+                    FuyaoConstituentProvider(
+                        FuyaoSyncApiClient(
+                            api_key=config.fuyao_api_key,
+                            base_url=config.fuyao_base_url,
+                            timeout_seconds=config.fuyao_timeout_seconds,
+                            minimum_interval_seconds=(
+                                config.fuyao_minimum_interval_seconds
+                            ),
+                        )
+                    )
+                )
+            constituent_providers.extend([
+                TonghuashunConstituentProvider(
+                    page_acquirer=page_acquirer
+                ),
+                EastmoneyConstituentProvider(),
+            ])
             application.state.discovery = StockDiscoveryService(
                 providers=[
                     TonghuashunHotSectorProvider(),
                 ],
-                constituent_providers=[
-                    TonghuashunConstituentProvider(
-                        page_acquirer=page_acquirer
-                    ),
-                    EastmoneyConstituentProvider(),
-                ],
+                constituent_providers=constituent_providers,
                 market=_RouterDiscoveryMarket(application.state.router),
                 universe_snapshot_path=config.data_dir / "stock-discovery-universe.json",
                 constituent_snapshot_path=(

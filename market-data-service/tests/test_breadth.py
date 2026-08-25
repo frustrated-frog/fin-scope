@@ -29,6 +29,8 @@ def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
         limit_up_loader=lambda _: pd.DataFrame([{"代码": "600001"}]),
         limit_down_loader=lambda _: pd.DataFrame([{"代码": "000001"}]),
         now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
     )
 
     result = service.fetch(date(2026, 8, 21))
@@ -57,6 +59,8 @@ def test_default_retrieved_at_contains_timezone_offset() -> None:
         sina_loader=lambda: pd.DataFrame(),
         limit_up_loader=lambda _: pd.DataFrame(),
         limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
     )
 
     result = service.fetch(date(2026, 8, 21))
@@ -79,6 +83,8 @@ def test_sina_is_used_when_eastmoney_fails() -> None:
         limit_up_loader=lambda _: pd.DataFrame(),
         limit_down_loader=lambda _: pd.DataFrame(),
         now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
     )
 
     result = service.fetch(date(2026, 8, 21))
@@ -101,6 +107,8 @@ def test_limit_pool_failure_keeps_breadth_and_marks_partial_quality() -> None:
         limit_up_loader=fail_pool,
         limit_down_loader=fail_pool,
         now_provider=lambda: datetime(2026, 8, 21, 15, 20),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
     )
 
     result = service.fetch(date(2026, 8, 21))

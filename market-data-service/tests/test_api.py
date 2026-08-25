@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import pytest
 
-from finscope_market_data.app import create_app
+from finscope_market_data.app import build_router, create_app
 from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import (
     CapitalFlowData,
@@ -225,6 +225,34 @@ def test_scrapling_settings_have_bounded_defaults() -> None:
 
     with pytest.raises(ValidationError):
         Settings(scrapling_browser_timeout_seconds=61)
+
+
+def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: Path) -> None:
+    disabled = build_router(Settings(data_dir=tmp_path / "disabled"))
+    enabled = build_router(
+        Settings(data_dir=tmp_path / "enabled", fuyao_api_key="test-key")
+    )
+
+    assert all(provider.provider_family != "TONGHUASHUN" for provider in disabled.providers)
+    assert enabled.providers[0].provider_code == "FUYAO_TONGHUASHUN_API"
+
+
+def test_fuyao_constituents_precede_html_scraping_when_configured(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    application = create_app(
+        router=router,
+        settings=Settings(data_dir=tmp_path, fuyao_api_key="test-key"),
+    )
+
+    with TestClient(application):
+        providers = application.state.discovery.constituent_providers
+        assert providers[0].source_family == "FUYAO_TONGHUASHUN"
+        assert providers[1].source_family == "TONGHUASHUN"
 
 
 class FakeDiscoveryService:
