@@ -87,6 +87,9 @@ finscope:
     base-url: http://127.0.0.1:8000
     forecast-timeout-ms: 240000
     discovery-timeout-ms: 900000
+  fuyao:
+    base-url: https://fuyao.aicubes.cn
+    api-key: ""
   acquisition:
     browser:
       enabled: false
