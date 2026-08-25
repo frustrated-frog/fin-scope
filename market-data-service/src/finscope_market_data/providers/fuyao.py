@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 import threading
 import time
 from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -130,6 +131,50 @@ class FuyaoSyncApiClient:
 
     def close(self) -> None:
         self.client.close()
+
+
+class FuyaoMarketDumpClient:
+    _PATHS = {
+        "daily-k": "/dump/market-dumps/daily-k/download-url",
+        "daily-k-10d": "/dump/market-dumps/daily-k-10d/download-url",
+        "adjustment-factors": (
+            "/dump/market-dumps/adjustment-factors/download-url"
+        ),
+    }
+
+    def __init__(self, api: FuyaoAsyncApiClient) -> None:
+        self.api = api
+
+    async def download_url(self, kind: str) -> dict[str, Any]:
+        path = self._PATHS.get(kind)
+        if path is None:
+            raise ProviderError(
+                "INVALID_DUMP_KIND",
+                f"不支持的扶摇全市场导出类型：{kind}",
+                False,
+            )
+        data = await self.api.get_data(path, {})
+        download_url = data.get("download_url") or data.get("url")
+        if not isinstance(download_url, str):
+            raise ProviderError(
+                "SCHEMA_DRIFT", "扶摇全市场导出响应缺少下载链接", False
+            )
+        parsed = urlsplit(download_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ProviderError(
+                "SCHEMA_DRIFT", "扶摇全市场导出下载链接无效", False
+            )
+        result: dict[str, Any] = {
+            "kind": kind,
+            "download_url": download_url,
+        }
+        for field in ("expires_in", "expires_at", "expires_at_ms"):
+            if data.get(field) is not None:
+                result[field] = data[field]
+        return result
+
+    async def aclose(self) -> None:
+        await self.api.aclose()
 
 
 class FuyaoMarketDataProvider:

@@ -179,6 +179,19 @@ class EmptyForecastDailyBarProvider(ForecastDailyBarProvider):
         return []
 
 
+class FakeMarketDumpClient:
+    def __init__(self) -> None:
+        self.kinds: list[str] = []
+
+    async def download_url(self, kind: str) -> dict[str, Any]:
+        self.kinds.append(kind)
+        return {
+            "kind": kind,
+            "download_url": "https://storage.example/market.parquet?signature=fresh",
+            "expires_in": 300,
+        }
+
+
 def client(tmp_path: Path, providers: list[Any]) -> TestClient:
     router = ProviderRouter(
         providers=providers,
@@ -253,6 +266,41 @@ def test_fuyao_constituents_precede_html_scraping_when_configured(tmp_path: Path
         providers = application.state.discovery.constituent_providers
         assert providers[0].source_family == "FUYAO_TONGHUASHUN"
         assert providers[1].source_family == "TONGHUASHUN"
+
+
+def test_market_dump_endpoint_proxies_a_fresh_signed_url(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+    market_dumps = FakeMarketDumpClient()
+
+    with TestClient(create_app(router=router, market_dumps=market_dumps)) as api:
+        response = api.get("/v1/market-dumps/daily-k-10d/download-url")
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "daily-k-10d"
+    assert response.json()["expires_in"] == 300
+    assert market_dumps.kinds == ["daily-k-10d"]
+
+
+def test_market_dump_endpoint_is_unavailable_without_fuyao_key(tmp_path: Path) -> None:
+    router = ProviderRouter(
+        providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(),
+        max_retries=0,
+    )
+
+    with TestClient(
+        create_app(router=router, settings=Settings(data_dir=tmp_path))
+    ) as api:
+        response = api.get("/v1/market-dumps/daily-k-10d/download-url")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["error_type"] == "PROVIDER_DISABLED"
 
 
 class FakeDiscoveryService:

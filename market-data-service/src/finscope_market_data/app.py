@@ -36,9 +36,11 @@ from finscope_market_data.providers.eastmoney import EastmoneyProvider
 from finscope_market_data.providers.fuyao import (
     FuyaoAsyncApiClient,
     FuyaoConstituentProvider,
+    FuyaoMarketDumpClient,
     FuyaoMarketDataProvider,
     FuyaoSyncApiClient,
 )
+from finscope_market_data.providers.base import ProviderError
 from finscope_market_data.providers.http import ProviderHttpClient
 from finscope_market_data.providers.index_daily import (
     EastmoneyIndexDailyProvider,
@@ -102,6 +104,7 @@ def create_app(
     sectors: TonghuashunSectorService | None = None,
     sector_history: TonghuashunSectorHistoryService | None = None,
     breadth: MarketBreadthService | None = None,
+    market_dumps: Any | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:
     config = settings or Settings()
@@ -109,6 +112,19 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        if application.state.market_dumps is None:
+            application.state.market_dumps = FuyaoMarketDumpClient(
+                FuyaoAsyncApiClient(
+                    api_key=config.fuyao_api_key,
+                    base_url=config.fuyao_base_url,
+                    http=ProviderHttpClient(
+                        timeout_seconds=config.fuyao_timeout_seconds,
+                        minimum_interval_seconds=(
+                            config.fuyao_minimum_interval_seconds
+                        ),
+                    ),
+                )
+            )
         if application.state.router is None:
             application.state.router = build_router(config)
         if application.state.discovery is None:
@@ -167,6 +183,11 @@ def create_app(
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):
                 await asyncio.to_thread(close_discovery)
+            close_market_dumps = getattr(
+                application.state.market_dumps, "aclose", None
+            )
+            if callable(close_market_dumps):
+                await close_market_dumps()
             await application.state.router.aclose()
 
     application = FastAPI(
@@ -179,6 +200,7 @@ def create_app(
     application.state.sectors = sectors
     application.state.sector_history = sector_history
     application.state.breadth = breadth
+    application.state.market_dumps = market_dumps
 
     @application.get("/health")
     async def health() -> dict[str, str]:
@@ -205,6 +227,23 @@ def create_app(
     async def provider_health() -> list[dict[str, Any]]:
         current = _router(application)
         return [item.model_dump(mode="json") for item in current.health.list(current.providers)]
+
+    @application.get("/v1/market-dumps/{kind}/download-url")
+    async def market_dump_download_url(
+        kind: Literal["daily-k", "daily-k-10d", "adjustment-factors"],
+    ) -> JSONResponse:
+        try:
+            result = await application.state.market_dumps.download_url(kind)
+        except ProviderError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_type": error.error_type,
+                    "message": str(error),
+                    "retryable": error.retryable,
+                },
+            ) from error
+        return JSONResponse(status_code=200, content=jsonable_encoder(result))
 
     @application.get("/v1/sectors/{category}")
     async def sectors_catalog(

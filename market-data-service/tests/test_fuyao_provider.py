@@ -195,3 +195,41 @@ def test_fuyao_response_envelope_rejects_success_without_object_data() -> None:
 
     assert captured.value.error_type == "SCHEMA_DRIFT"
     assert captured.value.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_fuyao_market_dump_returns_fresh_signed_url_without_caching() -> None:
+    module = _fuyao_module()
+    api = FakeAsyncApiClient(
+        {
+            "/dump/market-dumps/daily-k-10d/download-url": {
+                "download_url": "https://storage.example/daily-k.parquet?signature=short-lived",
+                "expires_in": 300,
+            }
+        }
+    )
+    client = module.FuyaoMarketDumpClient(api)
+
+    first = await client.download_url("daily-k-10d")
+    second = await client.download_url("daily-k-10d")
+
+    assert first["kind"] == "daily-k-10d"
+    assert first["download_url"].startswith("https://storage.example/")
+    assert first["expires_in"] == 300
+    assert second == first
+    assert len(api.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_fuyao_market_dump_rejects_unknown_kind_and_invalid_url() -> None:
+    module = _fuyao_module()
+    client = module.FuyaoMarketDumpClient(
+        FakeAsyncApiClient(
+            {"/dump/market-dumps/daily-k/download-url": {"download_url": "not-a-url"}}
+        )
+    )
+
+    with pytest.raises(module.ProviderError, match="不支持的扶摇全市场导出类型"):
+        await client.download_url("unknown")
+    with pytest.raises(module.ProviderError, match="下载链接无效"):
+        await client.download_url("daily-k")

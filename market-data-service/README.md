@@ -14,10 +14,11 @@
 | A 股市场宽度 | 上涨/下跌/平盘家数、上涨比例、成交额、涨跌停家数、涨跌幅中位数 | 东方财富全 A → 新浪全 A → 同业务日快照；同花顺提供行业上涨比例 |
 | 同花顺行业历史 | 全行业 1/5/20 日收益、近 5 日上涨天数、历史覆盖 | 同花顺行业指数；单行业失败时保留其余行业并标记部分可用 |
 | 自动股票发现 | 热门板块、板块成分、预算准入、全候选量化与深度预测 | 同花顺 1 日行业唯一热榜；扶摇成分 API（配置后）→ 同花顺公开页 → 东方财富补全 → 完整快照 |
+| 全市场批量行情 | 10 年未复权日 K、最近 10 个交易日日 K、全量复权因子 Parquet 短时下载链接 | 扶摇（配置后，每次请求即时生成链接且不缓存） |
 
 AkShare 的部分接口底层仍来自东方财富，因此会如实标记为同一 `EASTMONEY` 来源家族，不把它伪装成独立故障域。pytdx 属于独立 TDX TCP 故障域。
 
-配置 `FINSCOPE_MARKET_DATA_FUYAO_API_KEY` 后，扶摇 REST API 会作为前复权日 K、A 股三张财报和同花顺行业成分的首选结构化来源。业务错误按响应体 `code` 判断；认证、参数和契约错误不会重试，限流、数据未就绪及上游故障会进入现有 Provider 降级链。API Key 不写入日志、快照或响应。
+配置 `FINSCOPE_MARKET_DATA_FUYAO_API_KEY` 后，扶摇 REST API 会作为前复权日 K、A 股三张财报和同花顺行业成分的首选结构化来源，并开放全市场 Parquet 下载链接接口。业务错误按响应体 `code` 判断；认证、参数和契约错误不会重试，限流、数据未就绪及上游故障会进入现有 Provider 降级链。API Key 不写入日志、快照或响应；预签名下载链接也不持久化或缓存。
 
 pytdx 不使用其全网节点扫描器，而是在少量候选节点内以 2 秒连接超时有限回退，并缓存本次成功节点，避免单次日 K 请求触发大量探测和异常日志。需要固定内网允许访问的节点时，可设置 `FINSCOPE_MARKET_DATA_TDX_HOST` 和 `FINSCOPE_MARKET_DATA_TDX_PORT`。
 
@@ -49,6 +50,9 @@ uv run uvicorn finscope_market_data.app:app --host 127.0.0.1 --port 8000
 GET /health
 GET /ready
 GET /v1/providers/health
+GET /v1/market-dumps/daily-k-10d/download-url
+GET /v1/market-dumps/daily-k/download-url
+GET /v1/market-dumps/adjustment-factors/download-url
 GET /v1/markets/CN-A/breadth?business_date=2026-08-21
 GET /v1/sectors/INDUSTRY/history?business_date=2026-08-21&window=60
 GET /v1/stocks/SH/600519/quote
