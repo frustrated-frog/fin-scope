@@ -14,11 +14,6 @@ from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
-from finscope_market_data.discovery.acquisition import TonghuashunPageAcquirer
-from finscope_market_data.discovery.constituents import (
-    EastmoneyConstituentProvider,
-    TonghuashunConstituentProvider,
-)
 from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.schemas import (
     DiscoveryEvaluationRequest,
@@ -46,7 +41,7 @@ from finscope_market_data.providers.index_daily import (
     EastmoneyIndexDailyProvider,
     SinaIndexDailyProvider,
 )
-from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
+from finscope_market_data.providers.pytdx_provider import PytdxQuoteProvider
 from finscope_market_data.providers.sina import SinaCapitalFlowProvider, SinaQuoteProvider
 from finscope_market_data.providers.tencent import TencentQuoteProvider
 from finscope_market_data.router import ProviderRouter
@@ -66,7 +61,7 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
         SinaQuoteProvider(),
         SinaCapitalFlowProvider(),
         AkshareProvider(),
-        PytdxDailyProvider(),
+        PytdxQuoteProvider(),
         EastmoneyProvider(),
     ]
     if config.fuyao_api_key.strip():
@@ -115,15 +110,6 @@ def create_app(
         if application.state.router is None:
             application.state.router = build_router(config)
         if application.state.discovery is None:
-            page_acquirer = TonghuashunPageAcquirer(
-                enabled=config.scrapling_enabled,
-                session_timeout_seconds=config.scrapling_session_timeout_seconds,
-                browser_timeout_seconds=config.scrapling_browser_timeout_seconds,
-                browser_max_concurrency=(
-                    config.scrapling_browser_max_concurrency
-                ),
-                idle_timeout_seconds=config.scrapling_idle_timeout_seconds,
-            )
             constituent_providers: list[object] = []
             if config.fuyao_api_key.strip():
                 constituent_providers.append(
@@ -138,12 +124,6 @@ def create_app(
                         )
                     )
                 )
-            constituent_providers.extend([
-                TonghuashunConstituentProvider(
-                    page_acquirer=page_acquirer
-                ),
-                EastmoneyConstituentProvider(),
-            ])
             application.state.discovery = StockDiscoveryService(
                 providers=[
                     TonghuashunHotSectorProvider(),

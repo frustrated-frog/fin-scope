@@ -9,14 +9,15 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FundHoldingProviderRouterTest {
 
     @Test
-    void prefersConfiguredFuyaoProvider() {
+    void usesConfiguredFuyaoProvider() {
         FuyaoFundHoldingProvider fuyao = new StubFuyaoProvider(true, disclosure("fuyao"), null);
-        EastmoneyFundHoldingProvider eastmoney = new StubEastmoneyProvider(disclosure("eastmoney"));
-        FundHoldingProviderRouter router = router(fuyao, eastmoney);
+        FundHoldingProviderRouter router = router(fuyao);
 
         FundHoldingDisclosure result = router.fetch("510300");
 
@@ -24,35 +25,35 @@ class FundHoldingProviderRouterTest {
     }
 
     @Test
-    void fallsBackToEastmoneyWhenFuyaoIsUnavailable() {
+    void propagatesFuyaoFailureWithoutLegacyFallback() {
+        ProviderContractException failure = new ProviderContractException(
+                "FUYAO_5003", "upstream unavailable", true);
         FuyaoFundHoldingProvider fuyao = new StubFuyaoProvider(
                 true,
                 null,
-                new ProviderContractException("FUYAO_5003", "upstream unavailable", true));
-        EastmoneyFundHoldingProvider eastmoney = new StubEastmoneyProvider(disclosure("eastmoney"));
-        FundHoldingProviderRouter router = router(fuyao, eastmoney);
+                failure);
+        FundHoldingProviderRouter router = router(fuyao);
 
-        FundHoldingDisclosure result = router.fetch("510300");
+        ProviderContractException actual = assertThrows(
+                ProviderContractException.class, () -> router.fetch("510300"));
 
-        assertEquals("eastmoney", result.getFundName());
+        assertSame(failure, actual);
     }
 
     @Test
-    void skipsFuyaoWhenApiKeyIsNotConfigured() {
-        FuyaoFundHoldingProvider fuyao = new StubFuyaoProvider(false, disclosure("fuyao"), null);
-        EastmoneyFundHoldingProvider eastmoney = new StubEastmoneyProvider(disclosure("eastmoney"));
-        FundHoldingProviderRouter router = router(fuyao, eastmoney);
+    void propagatesFuyaoConfigurationFailureWithoutLegacyFallback() {
+        ProviderContractException failure = new ProviderContractException(
+                "FUYAO_NOT_CONFIGURED", "missing key", false);
+        FuyaoFundHoldingProvider fuyao = new StubFuyaoProvider(false, null, failure);
+        FundHoldingProviderRouter router = router(fuyao);
 
-        FundHoldingDisclosure result = router.fetch("510300");
-
-        assertEquals("eastmoney", result.getFundName());
+        assertSame(failure, assertThrows(
+                ProviderContractException.class, () -> router.fetch("510300")));
     }
 
-    private FundHoldingProviderRouter router(FuyaoFundHoldingProvider fuyao,
-                                             EastmoneyFundHoldingProvider eastmoney) {
+    private FundHoldingProviderRouter router(FuyaoFundHoldingProvider fuyao) {
         FundHoldingProviderRouter router = new FundHoldingProviderRouter();
         ReflectionTestUtils.setField(router, "fuyao", fuyao);
-        ReflectionTestUtils.setField(router, "eastmoney", eastmoney);
         return router;
     }
 
@@ -87,17 +88,4 @@ class FundHoldingProviderRouterTest {
         }
     }
 
-    private static final class StubEastmoneyProvider extends EastmoneyFundHoldingProvider {
-        private final FundHoldingDisclosure result;
-
-        private StubEastmoneyProvider(FundHoldingDisclosure result) {
-            super(url -> "");
-            this.result = result;
-        }
-
-        @Override
-        public FundHoldingDisclosure fetch(String fundCode) {
-            return result;
-        }
-    }
 }

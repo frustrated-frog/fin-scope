@@ -417,7 +417,6 @@ class FuyaoConstituentProvider:
             coverage=coverage,
             retrieved_at=datetime.now(SHANGHAI).isoformat(),
             warning=warning,
-            acquisition_mode="REST_API",
         )
 
     def close(self) -> None:

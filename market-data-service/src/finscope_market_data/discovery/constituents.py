@@ -2,24 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from html import unescape
 import json
 from pathlib import Path
-import re
 from typing import Callable
-from urllib.request import Request, urlopen
 
-from finscope_market_data.discovery.acquisition import (
-    AcquisitionAttempt,
-    AcquisitionMode,
-    AcquisitionResult,
-    TonghuashunPageAcquirer,
-)
 from finscope_market_data.discovery.schemas import DiscoverySector
 
 
 ConstituentValue = tuple[str, str, str]
-PageLoader = Callable[[str], tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -34,161 +24,6 @@ class ConstituentBatch:
     coverage: float
     retrieved_at: str
     warning: str = ""
-    acquisition_mode: str = "DIRECT_HTTP"
-    recovery_used: bool = False
-    acquisition_attempts: tuple[AcquisitionAttempt, ...] = ()
-    acquisition_duration_ms: int = 0
-
-
-class TonghuashunConstituentProvider:
-    source_family = "TONGHUASHUN"
-
-    def __init__(
-        self,
-        page_loader: PageLoader | None = None,
-        page_acquirer: TonghuashunPageAcquirer | None = None,
-        timeout_seconds: float = 15.0,
-        max_pages: int = 30,
-    ) -> None:
-        self.page_loader = page_loader or self._load_page
-        self.page_acquirer = page_acquirer
-        self.timeout_seconds = timeout_seconds
-        self.max_pages = max(1, max_pages)
-
-    def constituents(self, sector: DiscoverySector) -> ConstituentBatch:
-        base = f"https://q.10jqka.com.cn/thshy/detail/code/{sector.code}/"
-        values: dict[str, ConstituentValue] = {}
-        total_pages = 1
-        warning = ""
-        attempts: list[AcquisitionAttempt] = []
-        acquisition_mode = AcquisitionMode.DIRECT_HTTP
-        for page in range(1, self.max_pages + 1):
-            if page > total_pages:
-                break
-            url = base if page == 1 else f"{base}page/{page}/"
-            result = self._acquire(url)
-            html = result.html
-            final_url = result.final_url
-            attempts.extend(result.attempts)
-            acquisition_mode = result.mode
-            if not result.accepted:
-                if "/account/login" in final_url:
-                    warning = "同花顺公开成分页触发登录限制，仅取得部分成分"
-                elif result.failure_reason:
-                    warning = (
-                        f"同花顺成分页恢复失败（{result.failure_reason}），"
-                        "仅取得部分成分"
-                    )
-                else:
-                    warning = "同花顺成分页为空，仅取得部分成分"
-                break
-            if page == 1:
-                total_pages = min(self.max_pages, _page_count(html))
-            page_values = _parse_values(html)
-            if not page_values:
-                warning = "同花顺成分页为空，仅取得部分成分"
-                break
-            for value in page_values:
-                values[value[0]] = value
-        ordered = tuple(values.values())
-        expected = max(0, sector.expected_constituent_count)
-        coverage = min(1.0, len(ordered) / expected) if expected else 0.0
-        complete = bool(expected) and coverage >= 0.95
-        if not complete and not warning:
-            warning = f"同花顺成分覆盖不足：{len(ordered)}/{expected or '未知'}"
-        return ConstituentBatch(
-            sector_code=sector.code,
-            sector_name=sector.name,
-            source_family=self.source_family,
-            values=ordered,
-            expected_count=expected,
-            retrieved_count=len(ordered),
-            quality_status="COMPLETE" if complete else "PARTIAL",
-            coverage=coverage,
-            retrieved_at=datetime.now().isoformat(),
-            warning=warning,
-            acquisition_mode=acquisition_mode.value,
-            recovery_used=any(
-                item.mode is not AcquisitionMode.DIRECT_HTTP for item in attempts
-            ),
-            acquisition_attempts=tuple(attempts),
-            acquisition_duration_ms=sum(item.duration_ms for item in attempts),
-        )
-
-    def close(self) -> None:
-        if self.page_acquirer is not None:
-            self.page_acquirer.close()
-
-    def _acquire(self, url: str) -> AcquisitionResult:
-        if self.page_acquirer is not None:
-            return self.page_acquirer.fetch(url, assess=_assess_page)
-        started = datetime.now()
-        html, final_url = self.page_loader(url)
-        failure_reason = _assess_page(html, final_url)
-        duration_ms = round((datetime.now() - started).total_seconds() * 1000)
-        return AcquisitionResult(
-            html=html,
-            final_url=final_url,
-            mode=AcquisitionMode.DIRECT_HTTP,
-            accepted=not failure_reason,
-            attempts=(
-                AcquisitionAttempt(
-                    mode=AcquisitionMode.DIRECT_HTTP,
-                    succeeded=not failure_reason,
-                    duration_ms=duration_ms,
-                    error=failure_reason,
-                ),
-            ),
-            failure_reason=failure_reason,
-        )
-
-    def _load_page(self, url: str) -> tuple[str, str]:
-        request = Request(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 Chrome/139.0 Safari/537.36"
-                )
-            },
-        )
-        with urlopen(request, timeout=self.timeout_seconds) as response:
-            return response.read().decode("gbk", errors="replace"), response.geturl()
-
-
-class EastmoneyConstituentProvider:
-    """Supplemental constituent relation; never participates in hot-sector ranking."""
-
-    source_family = "EASTMONEY"
-
-    def constituents(self, sector: DiscoverySector) -> ConstituentBatch:
-        import akshare as ak
-
-        frame = ak.stock_board_industry_cons_em(symbol=sector.name)
-        values: dict[str, ConstituentValue] = {}
-        for _, row in frame.iterrows():
-            code = str(row.get("代码", "")).strip().zfill(6)
-            name = str(row.get("名称", "")).strip()
-            if len(code) == 6 and code.isdigit() and name:
-                values[code] = (code, _source_market(code), name)
-        expected = max(0, sector.expected_constituent_count)
-        coverage = min(1.0, len(values) / expected) if expected else 0.0
-        complete = bool(values) and (not expected or coverage >= 0.95)
-        return ConstituentBatch(
-            sector_code=sector.code,
-            sector_name=sector.name,
-            source_family=self.source_family,
-            values=tuple(values.values()),
-            expected_count=expected,
-            retrieved_count=len(values),
-            quality_status="COMPLETE" if complete else "PARTIAL",
-            coverage=coverage,
-            retrieved_at=datetime.now().isoformat(),
-            warning=(
-                "" if complete
-                else f"东方财富成分覆盖不足：{len(values)}/{expected or '未知'}"
-            ),
-        )
 
 
 class ConstituentSnapshotStore:
@@ -217,18 +52,6 @@ class ConstituentSnapshotStore:
             "coverage": batch.coverage,
             "retrieved_at": batch.retrieved_at,
             "warning": batch.warning,
-            "acquisition_mode": batch.acquisition_mode,
-            "recovery_used": batch.recovery_used,
-            "acquisition_attempts": [
-                {
-                    "mode": attempt.mode.value,
-                    "succeeded": attempt.succeeded,
-                    "duration_ms": attempt.duration_ms,
-                    "error": attempt.error,
-                }
-                for attempt in batch.acquisition_attempts
-            ],
-            "acquisition_duration_ms": batch.acquisition_duration_ms,
             "snapshot_at": self.now().isoformat(),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -261,22 +84,6 @@ class ConstituentSnapshotStore:
                 coverage=float(item["coverage"]),
                 retrieved_at=str(item["retrieved_at"]),
                 warning=str(item.get("warning", "")),
-                acquisition_mode=str(
-                    item.get("acquisition_mode", AcquisitionMode.DIRECT_HTTP.value)
-                ),
-                recovery_used=bool(item.get("recovery_used", False)),
-                acquisition_attempts=tuple(
-                    AcquisitionAttempt(
-                        mode=AcquisitionMode(str(attempt["mode"])),
-                        succeeded=bool(attempt["succeeded"]),
-                        duration_ms=int(attempt["duration_ms"]),
-                        error=str(attempt.get("error", "")),
-                    )
-                    for attempt in item.get("acquisition_attempts", [])
-                ),
-                acquisition_duration_ms=int(
-                    item.get("acquisition_duration_ms", 0)
-                ),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -289,44 +96,3 @@ class ConstituentSnapshotStore:
             return value if isinstance(value, dict) else None
         except (OSError, json.JSONDecodeError):
             return None
-
-
-def _page_count(html: str) -> int:
-    match = re.search(
-        r"class=['\"]page_info['\"][^>]*>\s*\d+\s*/\s*(\d+)", html, re.I
-    )
-    return max(1, int(match.group(1))) if match else 1
-
-
-def _assess_page(html: str, final_url: str) -> str:
-    if "/account/login" in final_url:
-        return "登录重定向"
-    if not _parse_values(html):
-        return "成分表为空"
-    return ""
-
-
-def _parse_values(html: str) -> list[ConstituentValue]:
-    result: list[ConstituentValue] = []
-    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, re.I | re.S):
-        links = re.findall(
-            r"<a\b[^>]*href=['\"][^'\"]*stockpage\.10jqka\.com\.cn/"
-            r"(\d{6})/?['\"][^>]*>(.*?)</a>",
-            row,
-            re.I | re.S,
-        )
-        if len(links) < 2:
-            continue
-        code = links[0][0]
-        name = unescape(re.sub(r"<[^>]+>", "", links[1][1])).strip()
-        if name:
-            result.append((code, _source_market(code), name))
-    return result
-
-
-def _source_market(code: str) -> str:
-    if code.startswith(("4", "8", "92")):
-        return "BJ"
-    if code.startswith(("5", "6", "9")):
-        return "SH"
-    return "SZ"

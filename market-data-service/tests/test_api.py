@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 import pytest
 
 from finscope_market_data.app import build_router, create_app
@@ -216,46 +215,58 @@ def test_default_lifespan_builds_stock_discovery_with_configured_data_dir(
         health=ProviderHealthRegistry(),
         max_retries=0,
     )
-    application = create_app(router=router, settings=Settings(data_dir=tmp_path))
+    application = create_app(
+        router=router,
+        settings=Settings(data_dir=tmp_path, fuyao_api_key=" "),
+    )
 
     with TestClient(application) as api:
         assert api.get("/health").status_code == 200
         assert application.state.discovery is not None
-        provider = application.state.discovery.constituent_providers[0]
-        assert provider.page_acquirer is not None
-        assert provider.page_acquirer.enabled is True
-        assert provider.page_acquirer.session_timeout_seconds == 15
-        assert provider.page_acquirer.browser_timeout_seconds == 20
-        assert provider.page_acquirer.idle_timeout_seconds == 300
-
-
-def test_scrapling_settings_have_bounded_defaults() -> None:
-    settings = Settings()
-
-    assert settings.scrapling_enabled is True
-    assert settings.scrapling_session_timeout_seconds == 15
-    assert settings.scrapling_browser_timeout_seconds == 20
-    assert settings.scrapling_browser_max_concurrency == 1
-    assert settings.scrapling_idle_timeout_seconds == 300
-
-    with pytest.raises(ValidationError):
-        Settings(scrapling_browser_max_concurrency=0)
-
-    with pytest.raises(ValidationError):
-        Settings(scrapling_browser_timeout_seconds=61)
+        assert application.state.discovery.constituent_providers == ()
 
 
 def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: Path) -> None:
-    disabled = build_router(Settings(data_dir=tmp_path / "disabled"))
+    disabled = build_router(
+        Settings(data_dir=tmp_path / "disabled", fuyao_api_key=" ")
+    )
     enabled = build_router(
         Settings(data_dir=tmp_path / "enabled", fuyao_api_key="test-key")
     )
+    stock = StockSymbol(market="SH", code="600519")
 
     assert all(provider.provider_family != "TONGHUASHUN" for provider in disabled.providers)
     assert enabled.providers[0].provider_code == "FUYAO_TONGHUASHUN_API"
+    assert [
+        provider.provider_code
+        for provider in disabled.providers
+        if provider.supports(DataCapability.DAILY_BARS, stock)
+    ] == []
+    assert [
+        provider.provider_code
+        for provider in enabled.providers
+        if provider.supports(DataCapability.DAILY_BARS, stock)
+    ] == ["FUYAO_TONGHUASHUN_API"]
+    assert [
+        provider.provider_code
+        for provider in enabled.providers
+        if provider.supports(DataCapability.FINANCIAL_STATEMENTS, stock)
+    ] == ["FUYAO_TONGHUASHUN_API"]
+    assert any(
+        provider.supports(DataCapability.QUOTE, stock)
+        for provider in enabled.providers
+    )
+    assert any(
+        provider.supports(DataCapability.CAPITAL_FLOW, stock)
+        for provider in enabled.providers
+    )
+    assert any(
+        provider.supports(DataCapability.PROFILE, stock)
+        for provider in enabled.providers
+    )
 
 
-def test_fuyao_constituents_precede_html_scraping_when_configured(tmp_path: Path) -> None:
+def test_fuyao_is_the_only_constituent_provider_when_configured(tmp_path: Path) -> None:
     router = ProviderRouter(
         providers=[MultiCapabilityProvider()],
         snapshots=SnapshotStore(tmp_path / "snapshots.db"),
@@ -269,8 +280,9 @@ def test_fuyao_constituents_precede_html_scraping_when_configured(tmp_path: Path
 
     with TestClient(application):
         providers = application.state.discovery.constituent_providers
-        assert providers[0].source_family == "FUYAO_TONGHUASHUN"
-        assert providers[1].source_family == "TONGHUASHUN"
+        assert [provider.source_family for provider in providers] == [
+            "FUYAO_TONGHUASHUN"
+        ]
 
 
 def test_market_dump_endpoint_proxies_a_fresh_signed_url(tmp_path: Path) -> None:
@@ -301,7 +313,10 @@ def test_market_dump_endpoint_is_unavailable_without_fuyao_key(tmp_path: Path) -
     )
 
     with TestClient(
-        create_app(router=router, settings=Settings(data_dir=tmp_path))
+        create_app(
+            router=router,
+            settings=Settings(data_dir=tmp_path, fuyao_api_key=" "),
+        )
     ) as api:
         response = api.get("/v1/market-dumps/daily-k-10d/download-url")
 

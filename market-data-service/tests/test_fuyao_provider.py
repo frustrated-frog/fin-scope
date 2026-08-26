@@ -206,7 +206,6 @@ def test_fuyao_constituents_map_full_thscode_without_html_paging() -> None:
 
     assert result.quality_status == "COMPLETE"
     assert result.source_family == "FUYAO_TONGHUASHUN"
-    assert result.acquisition_mode == "REST_API"
     assert result.values == (
         ("600584", "SH", "长电科技"),
         ("002156", "SZ", "通富微电"),

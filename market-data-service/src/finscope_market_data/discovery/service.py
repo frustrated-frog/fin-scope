@@ -113,7 +113,9 @@ class StockDiscoveryService:
             Path(universe_snapshot_path) if universe_snapshot_path else None
         )
         self.panel_store = panel_store
-        self.constituent_providers = tuple(constituent_providers or providers)
+        self.constituent_providers = tuple(
+            providers if constituent_providers is None else constituent_providers
+        )
         self.constituent_snapshots = (
             ConstituentSnapshotStore(constituent_snapshot_path)
             if constituent_snapshot_path else None
@@ -462,15 +464,6 @@ class StockDiscoveryService:
         try:
             values = await asyncio.to_thread(current.constituents, sector)
             if isinstance(values, ConstituentBatch):
-                if values.recovery_used:
-                    path = " -> ".join(
-                        attempt.mode.value
-                        for attempt in values.acquisition_attempts
-                    )
-                    warnings.append(
-                        f"{sector.name}：{values.source_family} 成分采集已恢复，"
-                        f"路径 {path}，最终模式 {values.acquisition_mode}"
-                    )
                 if values.quality_status == "PARTIAL" and values.warning:
                     warnings.append(f"{sector.name}：{values.warning}")
                 return values

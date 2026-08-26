@@ -24,7 +24,6 @@ class EastmoneyProvider:
     priority = 30
     capabilities = {
         DataCapability.QUOTE,
-        DataCapability.DAILY_BARS,
         DataCapability.CAPITAL_FLOW,
         DataCapability.PROFILE,
     }
@@ -40,10 +39,7 @@ class EastmoneyProvider:
         )
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
-        return capability in self.capabilities and not (
-            capability is DataCapability.DAILY_BARS
-            and symbol.is_market_pulse_index
-        )
+        return capability in self.capabilities
 
     def priority_for(self, capability: DataCapability) -> int:
         # Fund flow has no richer independent intraday source, so try the direct
@@ -53,8 +49,6 @@ class EastmoneyProvider:
     async def fetch(self, capability: DataCapability, symbol: StockSymbol, **kwargs: Any) -> Any:
         if capability is DataCapability.QUOTE:
             return self.parse_quote(await self._quote(symbol), symbol)
-        if capability is DataCapability.DAILY_BARS:
-            return self.parse_daily_bars(await self._daily_bars(symbol, kwargs.get("limit", 250)), symbol)
         if capability is DataCapability.CAPITAL_FLOW:
             return await self._capital_flow(symbol)
         if capability is DataCapability.PROFILE:

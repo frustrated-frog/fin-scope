@@ -15,7 +15,7 @@ FinScope is a local-first personal investment research information workbench. It
 
 **Backend:** Java 21, Spring Boot 2.7, Maven multi-module, SQLite, Jsoup, Rome RSS
 **Frontend:** React 18, TypeScript (strict), Vite 5, Vitest
-**Market data sidecar:** Python 3.11+, FastAPI, AkShare, pytdx — `market-data-service/`
+**Market data sidecar:** Python 3.11+, FastAPI, Fuyao Tonghuashun API, AkShare, pytdx — `market-data-service/`
 **Cache:** Redis 7 — disposable acceleration cache for research material and hot-query reads; SQLite stays the source of truth, and the app falls back to the live fetch path when Redis is down
 **Storage:** SQLite `finance.db` + Markdown files in the vault (`data/vault/`)
 **AI Extension:** OpenAI-compatible `LlmChatClient`, article interpretation Agent, research planning/decision agents, `agent_run` call traces

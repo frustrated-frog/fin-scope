@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 
-/** 基金持仓数据源路由：优先扶摇，失败或未配置时回退东方财富。 */
+/** 基金持仓统一入口，仅使用扶摇同花顺结构化接口。 */
 @Component
 @Primary
 public class FundHoldingProviderRouter implements FundHoldingProvider {
@@ -14,23 +14,8 @@ public class FundHoldingProviderRouter implements FundHoldingProvider {
     @Resource
     private FuyaoFundHoldingProvider fuyao;
 
-    @Resource
-    private EastmoneyFundHoldingProvider eastmoney;
-
     @Override
     public FundHoldingDisclosure fetch(String fundCode) {
-        if (!fuyao.isConfigured()) {
-            return eastmoney.fetch(fundCode);
-        }
-        try {
-            return fuyao.fetch(fundCode);
-        } catch (RuntimeException primaryError) {
-            try {
-                return eastmoney.fetch(fundCode);
-            } catch (RuntimeException fallbackError) {
-                fallbackError.addSuppressed(primaryError);
-                throw fallbackError;
-            }
-        }
+        return fuyao.fetch(fundCode);
     }
 }

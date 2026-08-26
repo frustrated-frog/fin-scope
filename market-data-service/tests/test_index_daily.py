@@ -10,9 +10,6 @@ from finscope_market_data.providers.index_daily import (
     EastmoneyIndexDailyProvider,
     SinaIndexDailyProvider,
 )
-from finscope_market_data.providers.akshare_provider import AkshareProvider
-from finscope_market_data.providers.eastmoney import EastmoneyProvider
-from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
 
 
 @pytest.mark.asyncio
@@ -71,13 +68,3 @@ async def test_sina_index_provider_is_limited_to_market_pulse_indices() -> None:
     assert not provider.supports(DataCapability.DAILY_BARS, stock)
     result = await provider.fetch(DataCapability.DAILY_BARS, index, limit=30)
     assert result[0].amount == 10
-
-
-def test_stock_daily_providers_do_not_claim_market_pulse_indices() -> None:
-    index = StockSymbol(market="SH", code="000300")
-
-    assert not AkshareProvider().supports(DataCapability.DAILY_BARS, index)
-    assert not EastmoneyProvider().supports(DataCapability.DAILY_BARS, index)
-    assert not PytdxDailyProvider(api_factory=lambda: None).supports(
-        DataCapability.DAILY_BARS, index
-    )

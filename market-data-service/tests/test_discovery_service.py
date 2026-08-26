@@ -5,10 +5,6 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from finscope_market_data.discovery.acquisition import (
-    AcquisitionAttempt,
-    AcquisitionMode,
-)
 from finscope_market_data.discovery.schemas import (
     DiscoveryCandidate,
     DiscoveryRequest,
@@ -111,39 +107,6 @@ class ClosingConstituentProvider(BatchConstituentProvider):
         self.closed = True
         if self.raises:
             raise RuntimeError("close failed")
-
-
-class RecoveredConstituentProvider(BatchConstituentProvider):
-    def __init__(self) -> None:
-        super().__init__(
-            "TONGHUASHUN",
-            "COMPLETE",
-            [("000001", "SZ", "样本一")],
-        )
-
-    def constituents(self, sector: DiscoverySector):
-        batch = super().constituents(sector)
-        return ConstituentBatch(
-            **{
-                **batch.__dict__,
-                "acquisition_mode": "SESSION_HTTP",
-                "recovery_used": True,
-                "acquisition_attempts": (
-                    AcquisitionAttempt(
-                        mode=AcquisitionMode.DIRECT_HTTP,
-                        succeeded=False,
-                        duration_ms=10,
-                        error="登录重定向",
-                    ),
-                    AcquisitionAttempt(
-                        mode=AcquisitionMode.SESSION_HTTP,
-                        succeeded=True,
-                        duration_ms=20,
-                    ),
-                ),
-                "acquisition_duration_ms": 30,
-            }
-        )
 
 
 class ScopeProvider(FakeProvider):
@@ -270,23 +233,6 @@ def test_close_continues_after_one_constituent_provider_fails() -> None:
 
     assert first.closed is True
     assert second.closed is True
-
-
-@pytest.mark.asyncio
-async def test_recovery_path_is_visible_in_discovery_warnings() -> None:
-    service = StockDiscoveryService(
-        providers=[FakeProvider()],
-        constituent_providers=[RecoveredConstituentProvider()],
-        market=FakeMarket(),
-        provider_attempts=1,
-    )
-
-    universe = await service._universe(5)
-
-    assert any(
-        "DIRECT_HTTP -> SESSION_HTTP" in warning
-        for warning in universe.warnings
-    )
 
 
 @pytest.mark.asyncio

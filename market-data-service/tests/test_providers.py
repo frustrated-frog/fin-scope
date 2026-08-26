@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date, timedelta
 from typing import Any
 
 import pytest
 
-from finscope_market_data.models import DataCapability, FinancialStatementType, StockSymbol
+from finscope_market_data.models import DataCapability, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.base import ProviderError
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
-from finscope_market_data.providers.pytdx_provider import PytdxDailyProvider
+from finscope_market_data.providers.pytdx_provider import PytdxQuoteProvider
 from finscope_market_data.providers.http import ProviderHttpClient
 from finscope_market_data.providers.sina import SinaQuoteProvider
 import finscope_market_data.providers.sina as sina_providers
@@ -137,23 +136,8 @@ def test_eastmoney_parser_maps_daily_bars_and_capital_flow() -> None:
     assert flows[0].main_net_inflow_ratio == 12.5
 
 
-def test_akshare_mapping_accepts_chinese_dataframe_columns() -> None:
+def test_akshare_mapping_accepts_chinese_fund_flow_columns() -> None:
     symbol = StockSymbol(market="SZ", code="000001")
-    daily_records = [
-        {
-            "日期": "2026-07-16",
-            "开盘": 11.1,
-            "收盘": 11.23,
-            "最高": 11.3,
-            "最低": 10.98,
-            "成交量": 123456,
-            "成交额": 138000000,
-            "振幅": 2.91,
-            "涨跌幅": 2.09,
-            "涨跌额": 0.23,
-            "换手率": 1.53,
-        }
-    ]
     flow_records = [
         {
             "日期": "2026-07-16",
@@ -167,80 +151,10 @@ def test_akshare_mapping_accepts_chinese_dataframe_columns() -> None:
         }
     ]
 
-    bars = AkshareProvider.map_daily_records(daily_records, symbol)
     flows = AkshareProvider.map_flow_records(flow_records, symbol)
 
-    assert bars[0].close == 11.23
-    assert bars[0].volume == 123456
-    assert bars[0].adjustment == "QFQ"
     assert flows[0].main_net_inflow == 1_000_000
     assert flows[0].small_net_inflow == -800_000
-
-
-def test_akshare_maps_three_financial_statements_with_stable_concepts() -> None:
-    symbol = StockSymbol(market="SH", code="600519")
-    common = {
-        "REPORT_DATE": "2026-06-30 00:00:00",
-        "REPORT_TYPE": "中报",
-        "NOTICE_DATE": "2026-08-20 00:00:00",
-        "CURRENCY": "CNY",
-    }
-
-    result = AkshareProvider.map_financial_records(
-        symbol=symbol,
-        period_end="2026-06-30",
-        report_type="HALF_YEAR",
-        scope="CONSOLIDATED",
-        income_records=[
-            {
-                **common,
-                "TOTAL_OPERATE_INCOME": 1_200_000_000.12,
-                "PARENT_NETPROFIT": 210_000_000,
-                "SALE_EXPENSE": 80_000_000,
-            }
-        ],
-        balance_records=[
-            {
-                **common,
-                "TOTAL_ASSETS": 3_400_000_000,
-                "TOTAL_LIABILITIES": 1_100_000_000,
-                "TOTAL_CURRENT_ASSETS": 1_500_000_000,
-                "TOTAL_CURRENT_LIAB": 620_000_000,
-                "ACCOUNTS_RECE": 220_000_000,
-                "INVENTORY": 180_000_000,
-            }
-        ],
-        cash_flow_records=[
-            {
-                **common,
-                "NETCASH_OPERATE": 180_000_000,
-                "CONSTRUCT_LONG_ASSET": 90_000_000,
-                "END_CCE": 520_000_000,
-            }
-        ],
-    )
-
-    assert result.report.period_end == "2026-06-30"
-    assert result.report.report_type == "HALF_YEAR"
-    assert result.report.published_at is not None
-    assert {item.statement_type for item in result.statements} == {
-        FinancialStatementType.INCOME,
-        FinancialStatementType.BALANCE_SHEET,
-        FinancialStatementType.CASH_FLOW,
-    }
-    values = {
-        value.concept_code: value.value
-        for statement in result.statements
-        for value in statement.values
-    }
-    assert values["REVENUE"] == "1200000000.12"
-    assert values["NET_PROFIT_PARENT"] == "210000000"
-    assert values["ACCOUNTS_RECEIVABLE"] == "220000000"
-    assert values["INVENTORY"] == "180000000"
-    assert values["TOTAL_CURRENT_ASSETS"] == "1500000000"
-    assert values["TOTAL_CURRENT_LIABILITIES"] == "620000000"
-    assert values["OPERATING_CASH_FLOW"] == "180000000"
-    assert values["CAPITAL_EXPENDITURE"] == "90000000"
 
 
 @pytest.mark.asyncio
@@ -258,180 +172,6 @@ async def test_akshare_reports_minute_flow_as_non_retryable_capability_gap() -> 
     assert captured.value.retryable is False
 
 
-@pytest.mark.asyncio
-async def test_akshare_daily_bars_honors_requested_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    import akshare as ak
-
-    class Frame:
-        def to_dict(self, orient: str) -> list[dict[str, Any]]:
-            assert orient == "records"
-            return [
-                {
-                    "日期": f"2026-07-{day:02d}",
-                    "开盘": 10 + day,
-                    "收盘": 10 + day,
-                    "最高": 10 + day,
-                    "最低": 10 + day,
-                    "成交量": 100,
-                }
-                for day in range(1, 6)
-            ]
-
-    monkeypatch.setattr(ak, "stock_zh_a_hist", lambda **kwargs: Frame())
-    provider = AkshareProvider()
-
-    bars = await provider.fetch(
-        capability=DataCapability.DAILY_BARS,
-        symbol=StockSymbol(market="SH", code="600519"),
-        limit=2,
-    )
-
-    assert [bar.trade_date for bar in bars] == ["2026-07-04", "2026-07-05"]
-
-
-def test_pytdx_mapping_provides_independent_daily_bar_fallback() -> None:
-    symbol = StockSymbol(market="SH", code="600519")
-    rows = [
-        {
-            "datetime": "2026-07-16 15:00",
-            "open": 1252.0,
-            "high": 1264.62,
-            "low": 1245.05,
-            "close": 1257.72,
-            "vol": 28422,
-            "amount": 3565850000,
-        }
-    ]
-
-    bars = PytdxDailyProvider.map_rows(rows, symbol)
-
-    assert bars[0].trade_date == "2026-07-16"
-    assert bars[0].close == 1257.72
-    assert bars[0].amount == 3_565_850_000
-
-
-@pytest.mark.asyncio
-async def test_pytdx_paginates_long_history_and_marks_every_bar_qfq() -> None:
-    latest = date(2026, 8, 7)
-    rows = [
-        {
-            "datetime": (latest - timedelta(days=offset)).isoformat() + " 15:00",
-            "open": 10.0,
-            "high": 10.2,
-            "low": 9.8,
-            "close": 10.1,
-            "vol": 100,
-            "amount": 1010,
-        }
-        for offset in reversed(range(805))
-    ]
-
-    class FakeApi:
-        def __init__(self) -> None:
-            self.bar_calls: list[tuple[int, int]] = []
-
-        def connect(self, host: str, port: int, time_out: int) -> bool:
-            return True
-
-        def get_security_bars(
-            self, category: int, market: int, code: str, start: int, count: int
-        ) -> list[dict[str, Any]]:
-            self.bar_calls.append((start, count))
-            if start == 0:
-                return rows[-800:]
-            if start == 800:
-                return rows[:5]
-            return []
-
-        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
-            return []
-
-        def disconnect(self) -> None:
-            pass
-
-    api = FakeApi()
-    provider = PytdxDailyProvider(
-        api_factory=lambda: api,
-        servers=(("working.example", 7709),),
-    )
-
-    bars = await provider.fetch(
-        capability=DataCapability.DAILY_BARS,
-        symbol=StockSymbol(market="SH", code="600519"),
-        limit=805,
-    )
-
-    assert len(bars) == 805
-    assert api.bar_calls == [(0, 800), (800, 5)]
-    assert bars[0].trade_date < bars[-1].trade_date
-    assert {bar.adjustment for bar in bars} == {"QFQ"}
-
-
-@pytest.mark.asyncio
-async def test_pytdx_applies_cash_bonus_and_rights_events_as_qfq() -> None:
-    class FakeApi:
-        def connect(self, host: str, port: int, time_out: int) -> bool:
-            return True
-
-        def get_security_bars(
-            self, category: int, market: int, code: str, start: int, count: int
-        ) -> list[dict[str, Any]]:
-            if start:
-                return []
-            return [
-                {
-                    "datetime": "2024-06-13 15:00",
-                    "open": 98.0,
-                    "high": 101.0,
-                    "low": 97.0,
-                    "close": 100.0,
-                    "vol": 100,
-                    "amount": 10000,
-                },
-                {
-                    "datetime": "2024-06-14 15:00",
-                    "open": 82.0,
-                    "high": 84.0,
-                    "low": 81.0,
-                    "close": 83.0,
-                    "vol": 120,
-                    "amount": 9960,
-                },
-            ]
-
-        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
-            return [
-                {
-                    "year": 2024,
-                    "month": 6,
-                    "day": 14,
-                    "category": 1,
-                    "fenhong": 10.0,
-                    "songzhuangu": 2.0,
-                    "peigu": 0.0,
-                    "peigujia": 0.0,
-                }
-            ]
-
-        def disconnect(self) -> None:
-            pass
-
-    provider = PytdxDailyProvider(
-        api_factory=FakeApi,
-        servers=(("working.example", 7709),),
-    )
-
-    bars = await provider.fetch(
-        capability=DataCapability.DAILY_BARS,
-        symbol=StockSymbol(market="SH", code="600519"),
-        limit=2,
-    )
-
-    assert bars[0].trade_date == "2024-06-13"
-    assert bars[0].close == pytest.approx(82.5)
-    assert bars[0].open == pytest.approx(80.85)
-    assert bars[1].close == 83.0
-    assert {bar.adjustment for bar in bars} == {"QFQ"}
 
 
 def test_pytdx_mapping_provides_independent_realtime_quote_fallback() -> None:
@@ -449,7 +189,7 @@ def test_pytdx_mapping_provides_independent_realtime_quote_fallback() -> None:
         "ask1": 1320.0,
     }
 
-    quote = PytdxDailyProvider.map_quote(row, symbol, observed_date="2026-07-28")
+    quote = PytdxQuoteProvider.map_quote(row, symbol, observed_date="2026-07-28")
 
     assert quote.price == 1320.0
     assert quote.previous_close == 1289.5
@@ -462,11 +202,16 @@ def test_pytdx_mapping_provides_independent_realtime_quote_fallback() -> None:
     assert quote.observed_at.isoformat() == "2026-07-28T15:17:18.006000+08:00"
 
 
-def test_pytdx_prioritizes_quote_fallback_without_changing_qfq_daily_bar_route() -> None:
-    provider = PytdxDailyProvider(api_factory=lambda: None)
+def test_pytdx_only_claims_realtime_quote_capability() -> None:
+    provider = PytdxQuoteProvider(api_factory=lambda: None)
 
     assert provider.priority_for(DataCapability.QUOTE) == 25
-    assert provider.priority_for(DataCapability.DAILY_BARS) == 40
+    assert provider.supports(
+        DataCapability.QUOTE, StockSymbol(market="SH", code="600519")
+    )
+    assert not provider.supports(
+        DataCapability.DAILY_BARS, StockSymbol(market="SH", code="600519")
+    )
 
 
 @pytest.mark.asyncio
@@ -496,7 +241,7 @@ async def test_pytdx_quote_uses_real_fetch_to_select_working_server() -> None:
         apis.append(api)
         return api
 
-    provider = PytdxDailyProvider(
+    provider = PytdxQuoteProvider(
         api_factory=factory,
         servers=(("empty.example", 7709), ("working.example", 7709)),
     )
@@ -510,63 +255,6 @@ async def test_pytdx_quote_uses_real_fetch_to_select_working_server() -> None:
     assert [api.quote_calls for api in apis] == [[(0, "000001")], [(0, "000001")]]
     assert provider._server == ("working.example", 7709)
 
-
-@pytest.mark.asyncio
-async def test_pytdx_uses_bounded_server_fallback_without_global_probe() -> None:
-    class FakeApi:
-        def __init__(self) -> None:
-            self.connect_calls: list[tuple[str, int, int]] = []
-            self.disconnect_calls = 0
-
-        def connect(self, host: str, port: int, time_out: int) -> bool:
-            self.connect_calls.append((host, port, time_out))
-            return host == "working.example"
-
-        def get_security_bars(
-            self,
-            category: int,
-            market: int,
-            code: str,
-            start: int,
-            count: int,
-        ) -> list[dict[str, Any]]:
-            assert (category, market, code, start, count) == (9, 1, "600519", 0, 2)
-            return [
-                {
-                    "datetime": "2026-07-16 15:00",
-                    "open": 1252.0,
-                    "high": 1264.62,
-                    "low": 1245.05,
-                    "close": 1257.72,
-                    "vol": 28422,
-                    "amount": 3565850000,
-                }
-            ]
-
-        def get_xdxr_info(self, market: int, code: str) -> list[dict[str, Any]]:
-            return []
-
-        def disconnect(self) -> None:
-            self.disconnect_calls += 1
-
-    api = FakeApi()
-    provider = PytdxDailyProvider(
-        api_factory=lambda: api,
-        servers=(("unreachable.example", 7709), ("working.example", 7709)),
-    )
-
-    bars = await provider.fetch(
-        capability=DataCapability.DAILY_BARS,
-        symbol=StockSymbol(market="SH", code="600519"),
-        limit=2,
-    )
-
-    assert bars[0].close == 1257.72
-    assert api.connect_calls == [
-        ("unreachable.example", 7709, 2),
-        ("working.example", 7709, 2),
-    ]
-    assert provider._server == ("working.example", 7709)
 
 
 @pytest.mark.asyncio

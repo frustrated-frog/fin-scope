@@ -17,11 +17,6 @@ class Settings(BaseSettings):
     daily_bar_retry_cooldown_seconds: int = Field(default=21600, ge=60, le=86400)
     failure_threshold: int = Field(default=3, ge=1, le=20)
     circuit_open_seconds: int = Field(default=60, ge=1, le=3600)
-    scrapling_enabled: bool = True
-    scrapling_session_timeout_seconds: float = Field(default=15, ge=1, le=60)
-    scrapling_browser_timeout_seconds: float = Field(default=20, ge=1, le=60)
-    scrapling_browser_max_concurrency: int = Field(default=1, ge=1, le=2)
-    scrapling_idle_timeout_seconds: float = Field(default=300, ge=30, le=3600)
     fuyao_api_key: str = ""
     fuyao_base_url: str = "https://fuyao.aicubes.cn"
     fuyao_timeout_seconds: float = Field(default=15, ge=1, le=60)
