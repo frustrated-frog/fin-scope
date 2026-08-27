@@ -89,7 +89,7 @@ finscope:
     discovery-timeout-ms: 900000
   fuyao:
     base-url: https://fuyao.aicubes.cn
-    api-key: ""
+    api-key: "sk-fuyao-NOdc-gla8Sesi2Ea24U2sO-JxCHoLkcS"
   acquisition:
     browser:
       enabled: false
