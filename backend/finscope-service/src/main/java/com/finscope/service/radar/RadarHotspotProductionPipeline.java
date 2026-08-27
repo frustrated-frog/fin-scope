@@ -46,6 +46,8 @@ public class RadarHotspotProductionPipeline {
     @Resource
     private RadarClusteringService clustering;
     @Resource
+    private RadarEventBatchIdentityResolver identityResolver;
+    @Resource
     private RadarPriorityService priority;
     @Resource
     private WatchlistRepository watchlist;
@@ -79,8 +81,9 @@ public class RadarHotspotProductionPipeline {
 
             runs.startStep(run.getId(), "AGGREGATE", now);
             List<RadarClusteringService.ClusterResult> clusters = mergeDuplicateClusters(clustering.cluster(active));
+            RadarEventIdentityResolution identityResolution = identityResolver.resolve(clusters);
             runs.completeStep(run.getId(), "AGGREGATE", "SUCCESS", active.size(), clusters.size(),
-                    "connected-components=true", now);
+                    "connected-components=true," + identityResolution.summary(), now);
 
             runs.startStep(run.getId(), "RANK", now);
             List<WatchlistItem> followed = watchlist.findByTypes(Arrays.asList("STOCK", "FUND"));
@@ -131,10 +134,8 @@ public class RadarHotspotProductionPipeline {
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,
                                      List<WatchlistItem> followed, LocalDateTime now) {
         List<RankedCluster> values = new ArrayList<>();
-        Set<String> claimedLegacyKeys = new HashSet<>();
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
-            reuseSameDayLegacyIdentity(event, claimedLegacyKeys);
             event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
                     previousSnapshot(event, now));
@@ -225,49 +226,6 @@ public class RadarHotspotProductionPipeline {
         event.setFirstSeenAt(firstSeenAt);
         event.setLastSeenAt(lastSeenAt);
         event.setUpdatedAt(lastSeenAt);
-    }
-
-    private void reuseSameDayLegacyIdentity(RadarEvent event, Set<String> claimedLegacyKeys) {
-        String key = event == null ? null : event.getEventKey();
-        if (key == null || repository.findEventByKey(key).isPresent()) {
-            return;
-        }
-        String[] parts = key.split(":");
-        if (parts.length < 4) {
-            return;
-        }
-        if (parts.length > 4) {
-            String dateOnlyKey = parts[0] + ":" + parts[1] + ":" + parts[2] + ":" + parts[3];
-            Optional<RadarEvent> dateOnly = repository.findEventByKey(dateOnlyKey);
-            if (dateOnly.isPresent() && claimedLegacyKeys.add(dateOnlyKey)) {
-                event.setEventKey(dateOnlyKey);
-                return;
-            }
-        }
-        String legacyKey = parts[0] + ":" + parts[1] + ":" + parts[2];
-        Optional<RadarEvent> legacy = repository.findEventByKey(legacyKey);
-        if (legacy.isPresent() && sameDate(legacy.get().getLastSeenAt(), event.getLastSeenAt())
-                && claimedLegacyKeys.add(legacyKey)) {
-            event.setEventKey(legacyKey);
-            return;
-        }
-        String categoryLegacyKey = legacyCategoryKey(event, legacyKey);
-        Optional<RadarEvent> categoryLegacy = repository.findEventByKey(categoryLegacyKey);
-        if (categoryLegacy.isPresent()
-                && sameDate(categoryLegacy.get().getLastSeenAt(), event.getLastSeenAt())
-                && claimedLegacyKeys.add(categoryLegacyKey)) {
-            event.setEventKey(categoryLegacyKey);
-        }
-    }
-
-    private String legacyCategoryKey(RadarEvent event, String legacyKey) {
-        String category = event == null || event.getCategoryCode() == null
-                ? "UNCLASSIFIED" : event.getCategoryCode().trim().toUpperCase(Locale.ROOT);
-        return category + ":" + legacyKey;
-    }
-
-    private boolean sameDate(LocalDateTime left, LocalDateTime right) {
-        return left != null && right != null && left.toLocalDate().equals(right.toLocalDate());
     }
 
     private List<RadarEvent> persist(List<RankedCluster> ranked, LocalDateTime now) {

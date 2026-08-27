@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -153,10 +154,10 @@ class RadarHotspotProductionPipelineTest {
     }
 
     @Test
-    void onlyOneConflictingClusterCanReuseTheSameLegacyEventIdentity() {
+    void preservesNativeIdentityWhenAnotherClusterTriesToReuseItAsLegacyIdentity() {
         NewsFeedService news = mock(NewsFeedService.class);
         RadarRepository repository = mock(RadarRepository.class);
-        RadarClusteringService clustering = new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService()));
+        RadarClusteringService clustering = mock(RadarClusteringService.class);
         RadarPriorityService priority = new RadarPriorityService();
         WatchlistRepository watchlist = mock(WatchlistRepository.class);
         RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
@@ -173,23 +174,30 @@ class RadarHotspotProductionPipelineTest {
         when(runs.startStep(anyLong(), anyString(), eq(now))).thenReturn(new RadarRefreshStep());
         when(runs.completeStep(anyLong(), anyString(), anyString(), anyInt(), anyInt(), anyString(), eq(now)))
                 .thenReturn(new RadarRefreshStep());
-        RadarSignal first = signal(1L, item("A:1", "A", "A", "宁德时代产能提升至100GWh", now.minusMinutes(10)), 1);
-        RadarSignal second = signal(2L, item("B:2", "B", "B", "宁德时代产能提升至200GWh", now.minusMinutes(8)), 1);
+        RadarSignal first = signal(1L, item("A:1", "A", "A", "英伟达发布业绩信息", now.minusMinutes(10)), 1);
+        RadarSignal second = signal(2L, item("B:2", "B", "B", "英伟达发布业绩信息增长5%", now.minusMinutes(8)), 1);
         when(repository.findActiveSignals(now.minusHours(48), 500)).thenReturn(Arrays.asList(first, second));
-        RadarEvent legacy = new RadarEvent(); legacy.setId(10L); legacy.setEventKey("宁德时代:事件:产能");
+        RadarClusteringService.ClusterResult nativeCluster = cluster(first,
+                "英伟达:事件:信息:20260805");
+        RadarClusteringService.ClusterResult detailedCluster = cluster(second,
+                "英伟达:事件:信息:20260805:5%");
+        when(clustering.cluster(any())).thenReturn(Arrays.asList(nativeCluster, detailedCluster));
+        RadarEvent legacy = new RadarEvent(); legacy.setId(10L); legacy.setEventKey("英伟达:事件:信息:20260805");
         legacy.setLastSeenAt(now.minusMinutes(20));
-        when(repository.findEventByKey("宁德时代:事件:产能")).thenReturn(Optional.of(legacy));
+        when(repository.findEventByKey("英伟达:事件:信息:20260805")).thenReturn(Optional.of(legacy));
         when(repository.saveEvent(any(RadarEvent.class))).thenAnswer(invocation -> {
             RadarEvent value = invocation.getArgument(0); value.setId(value.getEventKey().equals(legacy.getEventKey()) ? 10L : 11L); return value;
         });
         when(runs.completeRun(eq(8L), anyInt(), eq(2), eq(2), anyString(), eq(now))).thenReturn(run);
 
-        RadarHotspotProductionPipeline.ProductionResult result = pipeline.run("ALL", "TEST", now);
+        RadarHotspotProductionPipeline.ProductionResult result = assertDoesNotThrow(
+                () -> pipeline.run("ALL", "TEST", now));
 
         Set<String> keys = new HashSet<String>();
         for (RadarEvent event : result.getEvents()) keys.add(event.getEventKey());
         assertEquals(2, keys.size());
-        assertTrue(keys.contains("宁德时代:事件:产能"));
+        assertTrue(keys.contains("英伟达:事件:信息:20260805"));
+        assertTrue(keys.contains("英伟达:事件:信息:20260805:5%"));
     }
 
     private NewsFeedItem item(String id, String provider, String source, String title, LocalDateTime time) {
@@ -235,6 +243,9 @@ class RadarHotspotProductionPipelineTest {
         ReflectionTestUtils.setField(pipeline, "news", news);
         ReflectionTestUtils.setField(pipeline, "repository", repository);
         ReflectionTestUtils.setField(pipeline, "clustering", clustering);
+        RadarEventBatchIdentityResolver identityResolver = new RadarEventBatchIdentityResolver();
+        ReflectionTestUtils.setField(identityResolver, "repository", repository);
+        ReflectionTestUtils.setField(pipeline, "identityResolver", identityResolver);
         ReflectionTestUtils.setField(pipeline, "priority", priority);
         ReflectionTestUtils.setField(pipeline, "watchlist", watchlist);
         ReflectionTestUtils.setField(pipeline, "runs", runs);
