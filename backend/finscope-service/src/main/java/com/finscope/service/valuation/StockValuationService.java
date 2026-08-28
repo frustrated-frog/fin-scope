@@ -10,6 +10,7 @@ import com.finscope.domain.valuation.StockValuationView;
 import com.finscope.rpc.valuation.ExternalCorporateAction;
 import com.finscope.rpc.valuation.ExternalValuationSnapshot;
 import com.finscope.rpc.valuation.PythonValuationDataClient;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -40,12 +41,20 @@ public class StockValuationService {
         Instrument instrument = requireInstrument(instrumentId);
         ExternalValuationSnapshot external = client.fetchValuation(instrument);
         StockValuationSnapshot snapshot = toSnapshot(instrumentId, external);
-        List<ExternalCorporateAction> externalActions = client.fetchCorporateActions(
-                instrument, LocalDate.now().minusYears(5), LocalDate.now());
         repository.saveSnapshot(snapshot);
-        repository.saveCorporateActions(toActions(instrumentId, externalActions));
+        String corporateActionWarning = null;
+        try {
+            List<ExternalCorporateAction> externalActions = client.fetchCorporateActions(
+                    instrument, LocalDate.now().minusYears(5), LocalDate.now());
+            repository.saveCorporateActions(toActions(instrumentId, externalActions));
+        } catch (ProviderContractException error) {
+            corporateActionWarning = error.getMessage();
+        }
         StockValuationView result = assemble(instrument);
         result.getWarnings().addAll(external.getWarnings());
+        if (corporateActionWarning != null) {
+            result.getWarnings().add(corporateActionWarning);
+        }
         return result;
     }
 
