@@ -111,6 +111,53 @@ export type FinancialDocument = {
 
 export type FinancialUnit = 'YUAN' | 'WAN' | 'YI';
 
+export type StockValuationSnapshot = {
+  id?: number;
+  instrumentId: number;
+  observedDate: string;
+  observedAt: string;
+  name?: string;
+  peTtm?: number | string | null;
+  peMrq?: number | string | null;
+  pbMrq?: number | string | null;
+  psTtm?: number | string | null;
+  pcfTtm?: number | string | null;
+  sourceCode: string;
+  qualityStatus: string;
+};
+
+export type ValuationMetricSummary = {
+  metricCode: string;
+  value?: number | string | null;
+  percentile3y?: number | string | null;
+  percentile5y?: number | string | null;
+  sampleCount3y: number;
+  sampleCount5y: number;
+  historyStatus: 'READY' | 'ACCUMULATING';
+};
+
+export type StockCorporateAction = {
+  id?: number;
+  instrumentId: number;
+  exDate: string;
+  eventTypes: string[];
+  dividendPerShare?: number | string | null;
+  perShareBonus?: number | string | null;
+  allotmentRatio?: number | string | null;
+  allotmentPrice?: number | string | null;
+  currency: string;
+  sourceCode: string;
+};
+
+export type StockValuationView = {
+  instrument: FinancialInstrument;
+  latest?: StockValuationSnapshot;
+  metrics: ValuationMetricSummary[];
+  history: StockValuationSnapshot[];
+  corporateActions: StockCorporateAction[];
+  warnings: string[];
+};
+
 export type FinancialInterpretationStatus =
   | 'QUEUED'
   | 'RUNNING'

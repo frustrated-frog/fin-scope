@@ -5,6 +5,7 @@ import { FinancialInterpretationPanel } from './FinancialInterpretationPanel';
 import { FinancialStatementTable } from './FinancialStatementTable';
 import { GlobalCompanySearch } from './GlobalCompanySearch';
 import { ResearchReportAnalysisPanel } from './ResearchReportAnalysisPanel';
+import { ValuationPanel } from './ValuationPanel';
 import {
   defaultReportPeriod,
   formatMetric,
@@ -25,10 +26,11 @@ import {
   FinancialUnit
 } from './financialTypes';
 
-type Tab = 'OVERVIEW' | FinancialStatementType | 'AGENT' | 'RESEARCH' | 'QUALITY' | 'DOCUMENTS';
+type Tab = 'OVERVIEW' | 'VALUATION' | FinancialStatementType | 'AGENT' | 'RESEARCH' | 'QUALITY' | 'DOCUMENTS';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'OVERVIEW', label: '分析总览' },
+  { id: 'VALUATION', label: '估值' },
   { id: 'INCOME', label: '利润表' },
   { id: 'BALANCE_SHEET', label: '资产负债表' },
   { id: 'CASH_FLOW', label: '现金流量表' },
@@ -454,6 +456,7 @@ export function FinancialsView({
           {activeTab === 'OVERVIEW' && (
             <Overview reportView={view} unit={unit} />
           )}
+          {activeTab === 'VALUATION' && <ValuationPanel instrumentId={view.instrument.id} />}
           {activeTab === 'INCOME' && (
             <FinancialStatementTable title={statementLabels.INCOME} items={view.statements.INCOME ?? []} unit={unit} periodMode={periodMode} />
           )}
