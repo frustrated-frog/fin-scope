@@ -241,6 +241,112 @@ def test_fuyao_response_envelope_rejects_success_without_object_data() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fuyao_valuation_snapshot_maps_stable_metrics() -> None:
+    module = _fuyao_module()
+    api = FakeAsyncApiClient(
+        {
+            "/api/a-share/valuations/snapshot": {
+                "timestamp": 1787932800000,
+                "total": 1,
+                "item": [
+                    {
+                        "thscode": "600519.SH",
+                        "ticker": "600519",
+                        "name": "贵州茅台",
+                        "pe_ttm": 21.3567,
+                        "pe_mrq": 20.8841,
+                        "pb_mrq": 7.1532,
+                        "ps_ttm": 10.3284,
+                        "pcf_ttm": 19.7716,
+                    }
+                ],
+            }
+        }
+    )
+    provider = module.FuyaoMarketDataProvider(api=api)
+
+    result = await provider.fetch(
+        DataCapability.VALUATION_SNAPSHOT,
+        StockSymbol(market="SH", code="600519"),
+    )
+
+    assert result.name == "贵州茅台"
+    assert result.pe_ttm == 21.3567
+    assert result.pe_mrq == 20.8841
+    assert result.pb_mrq == 7.1532
+    assert result.ps_ttm == 10.3284
+    assert result.pcf_ttm == 19.7716
+    assert result.observed_at == datetime.fromisoformat(
+        "2026-08-29T00:00:00+08:00"
+    )
+    assert api.calls == [
+        (
+            "/api/a-share/valuations/snapshot",
+            {"thscodes": "600519.SH"},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fuyao_corporate_actions_map_cash_and_stock_events() -> None:
+    module = _fuyao_module()
+    api = FakeAsyncApiClient(
+        {
+            "/api/a-share/corporate-actions/adjustment-factors": {
+                "thscode": "600519.SH",
+                "ticker": "600519",
+                "item": [
+                    {
+                        "ticker": "600519",
+                        "ex_date_ms": 1766073600000,
+                        "dividend_per_share": 23.957,
+                        "per_share_bonus": 0,
+                    },
+                    {
+                        "ticker": "600519",
+                        "ex_date_ms": 1437062400000,
+                        "dividend_per_share": 4.374,
+                        "per_share_bonus": 0.1,
+                        "allotment_ratio": 0.05,
+                        "allotment_price": 12.5,
+                    },
+                ],
+            }
+        }
+    )
+    provider = module.FuyaoMarketDataProvider(api=api)
+
+    result = await provider.fetch(
+        DataCapability.CORPORATE_ACTIONS,
+        StockSymbol(market="SH", code="600519"),
+        from_date="2020-01-01",
+        to_date="2026-08-29",
+    )
+
+    assert result.symbol.code == "600519"
+    assert len(result.items) == 2
+    assert result.items[0].event_types == ["CASH_DIVIDEND"]
+    assert result.items[0].dividend_per_share == 23.957
+    assert result.items[1].event_types == [
+        "CASH_DIVIDEND",
+        "STOCK_DIVIDEND",
+        "RIGHTS_ISSUE",
+    ]
+    assert result.items[1].per_share_bonus == 0.1
+    assert result.items[1].allotment_ratio == 0.05
+    assert api.calls == [
+        (
+            "/api/a-share/corporate-actions/adjustment-factors",
+            {
+                "thscode": "600519.SH",
+                "from": "2020-01-01",
+                "to": "2026-08-29",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_fuyao_market_dump_returns_fresh_signed_url_without_caching() -> None:
     module = _fuyao_module()
     api = FakeAsyncApiClient(

@@ -6,6 +6,7 @@ from typing import Any
 
 from finscope_market_data.models import (
     CapitalFlowData,
+    CorporateActionsData,
     DailyBar,
     DataCapability,
     DataEnvelope,
@@ -14,6 +15,7 @@ from finscope_market_data.models import (
     StockProfile,
     StockQuote,
     StockSymbol,
+    StockValuationSnapshot,
 )
 
 
@@ -23,6 +25,8 @@ PAYLOAD_MODELS: dict[DataCapability, Any] = {
     DataCapability.CAPITAL_FLOW: CapitalFlowData,
     DataCapability.PROFILE: StockProfile,
     DataCapability.FINANCIAL_STATEMENTS: FinancialStatementsData,
+    DataCapability.VALUATION_SNAPSHOT: StockValuationSnapshot,
+    DataCapability.CORPORATE_ACTIONS: CorporateActionsData,
 }
 
 

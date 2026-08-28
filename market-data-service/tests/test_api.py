@@ -12,6 +12,8 @@ from finscope_market_data.health import ProviderHealthRegistry
 from finscope_market_data.models import (
     CapitalFlowData,
     CapitalFlowPoint,
+    CorporateAction,
+    CorporateActionsData,
     DailyBar,
     DataCapability,
     FinancialReportMeta,
@@ -23,6 +25,7 @@ from finscope_market_data.models import (
     StockProfile,
     StockQuote,
     StockSymbol,
+    StockValuationSnapshot,
 )
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.snapshot_store import SnapshotStore
@@ -100,6 +103,28 @@ class MultiCapabilityProvider:
                         statement_type=FinancialStatementType.CASH_FLOW,
                         values=[],
                     ),
+                ],
+            )
+        if capability is DataCapability.VALUATION_SNAPSHOT:
+            return StockValuationSnapshot(
+                symbol=symbol,
+                name="贵州茅台",
+                pe_ttm=21.3,
+                pe_mrq=20.8,
+                pb_mrq=7.1,
+                ps_ttm=10.3,
+                pcf_ttm=19.7,
+                observed_at=observed,
+            )
+        if capability is DataCapability.CORPORATE_ACTIONS:
+            return CorporateActionsData(
+                symbol=symbol,
+                items=[
+                    CorporateAction(
+                        ex_date="2026-06-20",
+                        event_types=["CASH_DIVIDEND"],
+                        dividend_per_share=23.957,
+                    )
                 ],
             )
         return StockProfile(symbol=symbol, name="贵州茅台", industry="白酒")
@@ -252,6 +277,16 @@ def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: 
         for provider in enabled.providers
         if provider.supports(DataCapability.FINANCIAL_STATEMENTS, stock)
     ] == ["FUYAO_TONGHUASHUN_API"]
+    assert [
+        provider.provider_code
+        for provider in enabled.providers
+        if provider.supports(DataCapability.VALUATION_SNAPSHOT, stock)
+    ] == ["FUYAO_TONGHUASHUN_API"]
+    assert [
+        provider.provider_code
+        for provider in enabled.providers
+        if provider.supports(DataCapability.CORPORATE_ACTIONS, stock)
+    ] == ["FUYAO_TONGHUASHUN_API"]
     assert any(
         provider.supports(DataCapability.QUOTE, stock)
         for provider in enabled.providers
@@ -264,6 +299,27 @@ def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: 
         provider.supports(DataCapability.PROFILE, stock)
         for provider in enabled.providers
     )
+
+
+def test_valuation_and_corporate_action_endpoints_return_normalized_data(
+    tmp_path: Path,
+) -> None:
+    with client(tmp_path, [MultiCapabilityProvider()]) as api:
+        valuation = api.get("/v1/stocks/SH/600519/valuation")
+        actions = api.get(
+            "/v1/stocks/SH/600519/corporate-actions"
+            "?from_date=2020-01-01&to_date=2026-08-29"
+        )
+
+    assert valuation.status_code == 200
+    assert valuation.json()["capability"] == "VALUATION_SNAPSHOT"
+    assert valuation.json()["data"]["pe_ttm"] == 21.3
+    assert valuation.json()["data"]["pb_mrq"] == 7.1
+    assert actions.status_code == 200
+    assert actions.json()["capability"] == "CORPORATE_ACTIONS"
+    assert actions.json()["data"]["items"][0]["event_types"] == [
+        "CASH_DIVIDEND"
+    ]
 
 
 def test_fuyao_is_the_only_constituent_provider_when_configured(tmp_path: Path) -> None:

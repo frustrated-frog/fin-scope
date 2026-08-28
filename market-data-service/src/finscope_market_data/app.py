@@ -432,6 +432,35 @@ def create_app(
             )
         )
 
+    @application.get("/v1/stocks/{market}/{code}/valuation")
+    async def valuation(market: str, code: str):
+        return _response(
+            await _fetch(
+                application,
+                DataCapability.VALUATION_SNAPSHOT,
+                market,
+                code,
+            )
+        )
+
+    @application.get("/v1/stocks/{market}/{code}/corporate-actions")
+    async def corporate_actions(
+        market: str,
+        code: str,
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+    ):
+        return _response(
+            await _fetch(
+                application,
+                DataCapability.CORPORATE_ACTIONS,
+                market,
+                code,
+                from_date=from_date,
+                to_date=to_date,
+            )
+        )
+
     @application.get("/v1/stocks/{market}/{code}/overview")
     async def overview(
         market: str,

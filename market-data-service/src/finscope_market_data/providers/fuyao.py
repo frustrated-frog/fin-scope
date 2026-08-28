@@ -14,6 +14,8 @@ import httpx
 from finscope_market_data.discovery.constituents import ConstituentBatch
 from finscope_market_data.discovery.schemas import DiscoverySector
 from finscope_market_data.models import (
+    CorporateAction,
+    CorporateActionsData,
     DailyBar,
     DataCapability,
     FinancialReportMeta,
@@ -21,6 +23,7 @@ from finscope_market_data.models import (
     FinancialStatementType,
     FinancialStatementValue,
     FinancialStatementsData,
+    StockValuationSnapshot,
     StockSymbol,
 )
 from finscope_market_data.providers.base import ProviderError
@@ -182,8 +185,10 @@ class FuyaoMarketDataProvider:
     provider_family = "TONGHUASHUN"
     priority = 5
     capabilities = {
+        DataCapability.CORPORATE_ACTIONS,
         DataCapability.DAILY_BARS,
         DataCapability.FINANCIAL_STATEMENTS,
+        DataCapability.VALUATION_SNAPSHOT,
     }
 
     _INCOME_FIELDS = {
@@ -245,7 +250,82 @@ class FuyaoMarketDataProvider:
             return await self._daily_bars(symbol, int(kwargs.get("limit", 250)))
         if capability is DataCapability.FINANCIAL_STATEMENTS:
             return await self._financial_statements(symbol, **kwargs)
+        if capability is DataCapability.VALUATION_SNAPSHOT:
+            return await self._valuation_snapshot(symbol)
+        if capability is DataCapability.CORPORATE_ACTIONS:
+            return await self._corporate_actions(symbol, **kwargs)
         raise ProviderError("UNSUPPORTED_CAPABILITY", capability.value, False)
+
+    async def _valuation_snapshot(
+        self,
+        symbol: StockSymbol,
+    ) -> StockValuationSnapshot:
+        data = await self.api.get_data(
+            "/api/a-share/valuations/snapshot",
+            {"thscodes": _thscode(symbol)},
+        )
+        item = _single_item(data, "扶摇估值快照")
+        if item is None:
+            raise ProviderError("EMPTY_DATA", "扶摇估值快照为空", True)
+        timestamp = data.get("timestamp")
+        observed_at = (
+            _date_time(timestamp)
+            if timestamp is not None
+            else datetime.now(SHANGHAI)
+        )
+        return StockValuationSnapshot(
+            symbol=symbol,
+            name=str(item["name"]) if item.get("name") is not None else None,
+            pe_ttm=_float(item.get("pe_ttm")),
+            pe_mrq=_float(item.get("pe_mrq")),
+            pb_mrq=_float(item.get("pb_mrq")),
+            ps_ttm=_float(item.get("ps_ttm")),
+            pcf_ttm=_float(item.get("pcf_ttm")),
+            observed_at=observed_at,
+        )
+
+    async def _corporate_actions(
+        self,
+        symbol: StockSymbol,
+        **kwargs: Any,
+    ) -> CorporateActionsData:
+        params: dict[str, Any] = {"thscode": _thscode(symbol)}
+        if kwargs.get("from_date"):
+            params["from"] = str(kwargs["from_date"])
+        if kwargs.get("to_date"):
+            params["to"] = str(kwargs["to_date"])
+        data = await self.api.get_data(
+            "/api/a-share/corporate-actions/adjustment-factors",
+            params,
+        )
+        items = [self._corporate_action(item) for item in _items(
+            data, "扶摇复权事件"
+        )]
+        return CorporateActionsData(symbol=symbol, items=items)
+
+    @staticmethod
+    def _corporate_action(item: dict[str, Any]) -> CorporateAction:
+        dividend = _float(item.get("dividend_per_share")) or 0
+        bonus = _float(item.get("per_share_bonus")) or 0
+        allotment = _float(item.get("allotment_ratio")) or 0
+        event_types: list[str] = []
+        if dividend > 0:
+            event_types.append("CASH_DIVIDEND")
+        if bonus > 0:
+            event_types.append("STOCK_DIVIDEND")
+        if allotment > 0:
+            event_types.append("RIGHTS_ISSUE")
+        if not event_types:
+            event_types.append("UNKNOWN")
+        return CorporateAction(
+            ex_date=_date_time(_required(item, "ex_date_ms")).date().isoformat(),
+            event_types=event_types,
+            dividend_per_share=dividend,
+            per_share_bonus=bonus,
+            allotment_ratio=allotment,
+            allotment_price=_float(item.get("allotment_price")),
+            currency=str(item.get("currency") or "CNY"),
+        )
 
     async def _daily_bars(self, symbol: StockSymbol, limit: int) -> list[DailyBar]:
         end = datetime.now(SHANGHAI)

@@ -19,6 +19,8 @@ class DataCapability(str, Enum):
     CAPITAL_FLOW = "CAPITAL_FLOW"
     PROFILE = "PROFILE"
     FINANCIAL_STATEMENTS = "FINANCIAL_STATEMENTS"
+    VALUATION_SNAPSHOT = "VALUATION_SNAPSHOT"
+    CORPORATE_ACTIONS = "CORPORATE_ACTIONS"
 
 
 class QualityStatus(str, Enum):
@@ -182,6 +184,32 @@ class StockProfile(BaseModel):
     total_shares: float | None = None
     circulating_shares: float | None = None
     fields: dict[str, str | float | None] = Field(default_factory=dict)
+
+
+class StockValuationSnapshot(BaseModel):
+    symbol: StockSymbol
+    name: str | None = None
+    pe_ttm: float | None = None
+    pe_mrq: float | None = None
+    pb_mrq: float | None = None
+    ps_ttm: float | None = None
+    pcf_ttm: float | None = None
+    observed_at: datetime
+
+
+class CorporateAction(BaseModel):
+    ex_date: str
+    event_types: list[str] = Field(default_factory=list)
+    dividend_per_share: float = 0
+    per_share_bonus: float = 0
+    allotment_ratio: float = 0
+    allotment_price: float | None = None
+    currency: str = "CNY"
+
+
+class CorporateActionsData(BaseModel):
+    symbol: StockSymbol
+    items: list[CorporateAction] = Field(default_factory=list)
 
 
 class FinancialStatementType(str, Enum):
