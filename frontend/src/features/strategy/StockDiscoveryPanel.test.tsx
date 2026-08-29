@@ -28,7 +28,13 @@ test('presents the latest automatic selection without a manual refresh action', 
           { limit: 5, maturedRunCount: 1, sampleCount: 1, hitRate: 1, averageNetReturn: .04, admittedPoolAverageReturn: .01, averageExcessVsAdmittedPool: .03 }
         ],
         windows: [30, 90, 180].map(windowDays => ({ windowDays, maturedRunCount: 1, probabilitySampleCount: 1, finalCount: 1, finalHitRate: 1, finalAverageNetReturn: .04, brierSkillScore: .03 })),
-        sectorPerformance: [], modelRace: { status: 'EVIDENCE_ACCUMULATING', sampleCount: 1, minimumPromotionSamples: 30, conclusion: '继续影子运行。', candidates: [] },
+        sectorPerformance: [],
+        rankingChallenger: { status: 'SHADOW_EVALUATING', sampleCount: 42, dateGroupCount: 9,
+          developmentDateCount: 5, validationDateCount: 2, lockedDateCount: 2,
+          pairCount: 116, rankIc: .18, pairwiseAccuracy: .59,
+          topKAverageReturn: .034, topKExcessReturn: .012,
+          method: 'DATE_GROUPED_PAIRWISE_LOGISTIC', conclusion: '排序挑战者继续影子验收。' },
+        modelRace: { status: 'EVIDENCE_ACCUMULATING', sampleCount: 1, minimumPromotionSamples: 30, conclusion: '继续影子运行。', candidates: [] },
         recentOutcomes: [{ runId: 9, instrumentCode: '600001.SH', asOfDate: '2026-08-14', finalRank: 1, calibratedProbability: .64, actualNetReturn: .04, actualDirection: 'UP', sectorNames: ['人工智能'] }], warnings: []
       });
     }
@@ -68,6 +74,8 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(await screen.findByRole('heading', { name: '真实预测验收台' })).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /股票发现真实概率校准图/ })).toBeInTheDocument();
   expect(screen.getByText('真实样本尚少，继续积累，不提前宣称优势。')).toBeInTheDocument();
+  expect(screen.getByText('PAIRWISE 排序挑战者')).toBeInTheDocument();
+  expect(screen.getByText('Rank IC')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /刷新|运行|选股/ })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '进入单股完整研究' }));
   expect(onOpenResearch).toHaveBeenCalledWith('600001');

@@ -52,6 +52,19 @@ function SelectionLedger({ report }: { report: StockDiscoveryAccuracyReport }) {
   </section>;
 }
 
+function RankingChallenger({ report }: { report: StockDiscoveryAccuracyReport }) {
+  const challenger = report.rankingChallenger;
+  if (!challenger) {
+    return null;
+  }
+  return <section className="discovery-ranking-challenger" data-status={challenger.status}>
+    <header><div><span>LEARNING TO RANK / SHADOW</span><h5>PAIRWISE 排序挑战者</h5></div><b>{challenger.status.replace(/_/g, ' ')}</b></header>
+    <p>{challenger.conclusion}</p>
+    <div><article><span>Rank IC</span><strong>{number(challenger.rankIc)}</strong><small>锁定日期内，排序分数与未来收益的秩相关</small></article><article><span>成对准确率</span><strong>{pct(challenger.pairwiseAccuracy)}</strong><small>{challenger.pairCount} 对同日候选，不跨日期硬比较</small></article><article><span>Top-K 相对收益</span><strong data-positive={challenger.topKExcessReturn != null && challenger.topKExcessReturn > 0 || undefined}>{signedPct(challenger.topKExcessReturn)}</strong><small>锁定期 Top-K 相对同日候选池</small></article><article><span>时间切分</span><strong>{challenger.developmentDateCount} / {challenger.validationDateCount} / {challenger.lockedDateCount}</strong><small>开发 / 验证 / 锁定日期组</small></article></div>
+    <footer>{challenger.method} · {challenger.dateGroupCount} 个交易日组 · 仅影子评估，不直接替换正式排序</footer>
+  </section>;
+}
+
 export function StockDiscoveryAccuracyPanel({ report }: { report: StockDiscoveryAccuracyReport }) {
   const quality = report.probabilityQuality;
   const topOne = report.selectionMetrics.find(item => item.limit === 1);
@@ -71,6 +84,8 @@ export function StockDiscoveryAccuracyPanel({ report }: { report: StockDiscovery
     </div>
 
     <div className="discovery-accuracy-main"><CalibrationChart report={report} /><SelectionLedger report={report} /></div>
+
+    <RankingChallenger report={report} />
 
     <section className="discovery-window-strip" aria-label="股票发现分窗口真实表现">
       <header><span>TIME WINDOWS</span><b>不是只看一段好运气</b></header>

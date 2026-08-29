@@ -294,6 +294,30 @@ export interface ForecastPanelModel {
   fallbackReason?: string; evidence: string[];
 }
 
+export interface ForecastReturnDistribution {
+  status: 'AVAILABLE' | 'INSUFFICIENT_DATA';
+  horizonDays: number;
+  p10?: number; p50?: number; p90?: number;
+  rawP10?: number; rawP50?: number; rawP90?: number;
+  conformalRadius?: number; lockedCoverage?: number;
+  meanIntervalWidth?: number; lockedPinballLoss?: number;
+  sampleCount: number; developmentCount: number; calibrationCount: number; lockedCount: number;
+  developmentLastExitDate?: string; calibrationStartDate?: string;
+  calibrationLastExitDate?: string; lockedStartDate?: string;
+  method: string; reason?: string;
+}
+
+export interface ForecastSelectionBiasAudit {
+  status: 'AVAILABLE' | 'INSUFFICIENT_DATA';
+  verdict: 'PASS' | 'CAUTION' | 'HIGH_RISK' | 'NOT_EVALUATED';
+  trialCount: number; returnObservationCount: number;
+  observedSharpe?: number; probabilisticSharpeProbability?: number;
+  deflatedSharpeProbability?: number; expectedMaximumSharpe?: number;
+  probabilityOfBacktestOverfitting?: number; minimumTrackRecordLength?: number;
+  skewness?: number; excessKurtosis?: number; combinationCount: number;
+  method: string; reason?: string;
+}
+
 export interface SingleStockForecast {
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
@@ -302,6 +326,8 @@ export interface SingleStockForecast {
   decisionReason?: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
+  returnDistribution?: ForecastReturnDistribution;
+  selectionBiasAudit?: ForecastSelectionBiasAudit;
   rawProbability?: number; probabilityInterval?: ForecastConfidenceInterval;
   dataFingerprint: string; sourceCode: string; sourceFamily: string; qualityStatus: string;
   lastClose: number;
@@ -519,6 +545,14 @@ export interface StockDiscoveryAccuracyReport {
     hitRate: number;
     averageNetReturn: number;
   }>;
+  rankingChallenger?: {
+    status: 'SHADOW_ACCUMULATING' | 'SHADOW_EVALUATING' | 'PROMOTION_REVIEW';
+    sampleCount: number; dateGroupCount: number;
+    developmentDateCount: number; validationDateCount: number; lockedDateCount: number;
+    pairCount: number; rankIc?: number; pairwiseAccuracy?: number;
+    topKAverageReturn?: number; topKExcessReturn?: number;
+    method: string; conclusion: string;
+  };
   modelRace: {
     status: 'EVIDENCE_ACCUMULATING' | 'EVIDENCE_INCOMPLETE' | 'CHAMPION_LEADS'
       | 'NO_STABLE_EDGE' | 'PROMOTION_REVIEW';

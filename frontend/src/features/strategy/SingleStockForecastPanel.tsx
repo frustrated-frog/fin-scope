@@ -4,6 +4,8 @@ import { ForecastConfidenceInterval, ForecastQualification, SingleStockForecast,
 import { ForecastOutcomeHealth } from './ForecastOutcomeHealth';
 import { ForecastModelRace } from './ForecastModelRace';
 import { BacktestAuditPanel } from './BacktestAuditPanel';
+import { ForecastProfessionalAudit } from './ForecastProfessionalAudit';
+import { ForecastReturnPrism } from './ForecastReturnPrism';
 import {
   EquityDrawdownChart,
   FactorContributionChart,
@@ -191,7 +193,9 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
             <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · {report.horizonDays}D 独立试验 · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>
             <div className="single-forecast-thesis"><div className="single-forecast-probability"><span>{report.qualification ? '校准后上涨概率' : `未来 ${report.horizonDays} 日净收益为正的概率`}</span><strong>{percent(report.upProbability)}</strong>{report.qualification && <><small className="forecast-probability-range">{interval(report.probabilityInterval, percent)}</small><small>原始模型 {percent(report.rawProbability)}</small></>}<small>未来 {report.horizonDays} 个交易日 · 概率不是买卖指令</small></div><div className="single-forecast-verdict"><span>SELECTIVE DECISION</span><div className="forecast-decision-stamp" data-decision={report.decision ?? 'ABSTAIN'}><small>{decisionCopy[report.decision ?? 'ABSTAIN'].code}</small><strong>{decisionCopy[report.decision ?? 'ABSTAIN'].label}</strong></div><p>{report.decisionReason || report.conclusion}</p><small>{report.conclusion}</small>{selected?.sameDataAsPrevious && <small>与上一条记录使用相同数据指纹</small>}</div></div>
             <div className="forecast-probability-tape"><div className="forecast-tape-labels"><span>下行证据</span><b>50% 中线</b><span>上行证据</span></div><div className="forecast-tape-track"><i /><i /><i /><b style={{ left: `${probabilityPosition}%` }} /></div><small style={{ left: `${probabilityPosition}%` }}>{percent(report.upProbability)}</small></div>
-            <div className="forecast-return-band"><div><span>相近信号 P20</span><strong>{signedPercent(report.lowerNetReturn)}</strong></div><div><span>相近信号平均</span><strong>{signedPercent(report.expectedNetReturn)}</strong></div><div><span>相近信号 P80</span><strong>{signedPercent(report.upperNetReturn)}</strong></div></div>
+            {report.returnDistribution
+              ? <ForecastReturnPrism distribution={report.returnDistribution} />
+              : <div className="forecast-return-band"><div><span>相近信号 P20</span><strong>{signedPercent(report.lowerNetReturn)}</strong></div><div><span>相近信号平均</span><strong>{signedPercent(report.expectedNetReturn)}</strong></div><div><span>相近信号 P80</span><strong>{signedPercent(report.upperNetReturn)}</strong></div></div>}
             {report.selectiveValidation && <div className="forecast-selective-strip"><article><span>信号覆盖率</span><strong>{percent(report.selectiveValidation.coverage)}</strong><small>{report.selectiveValidation.coveredCount} / {report.selectiveValidation.sampleCount} 个锁定样本给出方向</small></article><article><span>覆盖后命中率</span><strong>{percent(report.selectiveValidation.coveredAccuracy)}</strong><small>只统计越过 {percent(report.selectiveValidation.lowerThreshold)} / {percent(report.selectiveValidation.upperThreshold)} 阈值的样本</small></article><article><span>弃权率</span><strong>{percent(report.selectiveValidation.abstainRate)}</strong><small>宁可少判断，也不强迫低置信度信号表态</small></article></div>}
           </section>
 
@@ -205,6 +209,8 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
           {report.qualification
             ? <QualificationSection qualification={report.qualification} probabilityInterval={report.probabilityInterval} />
             : <section className="forecast-paper-section forecast-qualification-legacy"><SectionHead eyebrow="MODEL QUALIFICATION" title="预测可信度" /><p>该记录生成时尚未启用锁定资格检验</p><small>仍可查看当时的滚动样本外、同股基准和因子证据，但不能补写未来版本的校准结论。</small></section>}
+
+          {report.selectionBiasAudit && <ForecastProfessionalAudit audit={report.selectionBiasAudit} />}
 
           {(report.context || report.modelCompetition) && <section className="forecast-paper-section forecast-research-console">
             <SectionHead eyebrow="CONTEXT / MODEL RACE" title="市场上下文与模型赛马" aside={`${report.context?.featureCodes.length ?? 0} 个冻结特征`} />

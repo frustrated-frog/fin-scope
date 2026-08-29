@@ -20,6 +20,19 @@ const report = {
     method: 'MOVING_BLOCK_BOOTSTRAP', validIterations: 500,
     limitation: '仅覆盖校准映射的抽样误差，不覆盖模型、突发事件与市场结构变化' },
   expectedNetReturn: 0.018, lowerNetReturn: -0.072, upperNetReturn: 0.096,
+  returnDistribution: { status: 'AVAILABLE', horizonDays: 5, p10: -.061, p50: .014,
+    p90: .083, rawP10: -.052, rawP50: .014, rawP90: .074, conformalRadius: .009,
+    lockedCoverage: .875, meanIntervalWidth: .144, lockedPinballLoss: .021,
+    sampleCount: 2320, developmentCount: 1392, calibrationCount: 464, lockedCount: 464,
+    developmentLastExitDate: '2021-01-08', calibrationStartDate: '2021-01-11',
+    calibrationLastExitDate: '2023-08-08', lockedStartDate: '2023-08-09',
+    method: 'HIST_GRADIENT_BOOSTING_QUANTILE_CONFORMAL' },
+  selectionBiasAudit: { status: 'AVAILABLE', verdict: 'CAUTION', trialCount: 11,
+    returnObservationCount: 24, observedSharpe: .64, probabilisticSharpeProbability: .86,
+    deflatedSharpeProbability: .61, expectedMaximumSharpe: .42,
+    probabilityOfBacktestOverfitting: .38, minimumTrackRecordLength: 31,
+    skewness: .12, excessKurtosis: .41, combinationCount: 20,
+    method: 'PSR_DSR_CSCV' },
   dataFingerprint: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
   sourceCode: 'PYTDX', sourceFamily: 'TDX', qualityStatus: 'FRESH_FALLBACK', lastClose: 1505,
   strategyPolicy: { signalThreshold: .6, holdingDays: 5, entryRule: 'T+1 开盘买入',
@@ -213,6 +226,10 @@ test('runs and presents a complete same-stock benchmark research report', async 
   expect(screen.getByText('校准后上涨概率')).toBeInTheDocument();
   expect(screen.getByText('47.0% — 61.0%')).toBeInTheDocument();
   expect(screen.getByText('原始模型 59.0%')).toBeInTheDocument();
+  expect(screen.getByText('概率—收益棱镜')).toBeInTheDocument();
+  expect(screen.getByText('Conformal 锁定覆盖')).toBeInTheDocument();
+  expect(screen.getByText('Deflated Sharpe')).toBeInTheDocument();
+  expect(screen.getByText('回测过拟合概率')).toBeInTheDocument();
   expect(screen.getByText('预测可信度与概率校准')).toBeInTheDocument();
   expect(screen.getByText('Brier Skill')).toBeInTheDocument();
   expect(screen.getAllByText('Log Loss').length).toBeGreaterThan(0);
