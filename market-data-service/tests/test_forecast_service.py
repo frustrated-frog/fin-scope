@@ -178,10 +178,19 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v9"
+    assert result.report_schema_version == "single-stock-research-v10"
     assert result.model_version.startswith("competition-")
-    assert result.model_version.endswith("-v9")
+    assert result.model_version.endswith("-v10")
     assert result.raw_probability is not None
+    assert result.return_distribution is not None
+    assert result.return_distribution.status == "AVAILABLE"
+    assert result.return_distribution.p10 <= result.return_distribution.p50
+    assert result.return_distribution.p50 <= result.return_distribution.p90
+    assert result.lower_net_return == result.return_distribution.p10
+    assert result.expected_net_return == result.return_distribution.p50
+    assert result.upper_net_return == result.return_distribution.p90
+    assert 0 <= result.return_distribution.locked_coverage <= 1
+    assert result.return_distribution.method == "HISTOGRAM_QUANTILE_CQR_V1"
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
     assert result.qualification.split_audit.development.end_date < result.qualification.split_audit.calibration.start_date
@@ -207,7 +216,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     }
     for candidate in result.model_competition.candidates:
         assert candidate.role in {"CHAMPION", "CHALLENGER", "BASELINE"}
-        assert candidate.model_version.endswith("-v9")
+        assert candidate.model_version.endswith("-v10")
         assert 0 <= candidate.raw_probability <= 1
         assert 0 <= candidate.calibrated_probability <= 1
         assert candidate.shadow_decision in {"UP", "DOWN", "ABSTAIN"}

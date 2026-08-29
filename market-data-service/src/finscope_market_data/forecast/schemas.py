@@ -208,6 +208,31 @@ class ConfidenceInterval(ForecastModel):
     limitation: str | None = None
 
 
+class ReturnDistributionReport(ForecastModel):
+    status: Literal["AVAILABLE", "INSUFFICIENT_DATA"]
+    horizon_days: Literal[1, 5, 20]
+    p10: float | None = None
+    p50: float | None = None
+    p90: float | None = None
+    raw_p10: float | None = None
+    raw_p50: float | None = None
+    raw_p90: float | None = None
+    conformal_radius: float | None = Field(default=None, ge=0)
+    locked_coverage: float | None = Field(default=None, ge=0, le=1)
+    mean_interval_width: float | None = Field(default=None, ge=0)
+    locked_pinball_loss: float | None = Field(default=None, ge=0)
+    sample_count: int = Field(ge=0)
+    development_count: int = Field(ge=0)
+    calibration_count: int = Field(ge=0)
+    locked_count: int = Field(ge=0)
+    development_last_exit_date: str | None = None
+    calibration_start_date: str | None = None
+    calibration_end_date: str | None = None
+    locked_start_date: str | None = None
+    method: str
+    reason: str | None = None
+
+
 class SplitSliceAudit(ForecastModel):
     start_date: str
     end_date: str
@@ -388,8 +413,8 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v9"
-    model_version: str = "competition-pending-v9"
+    report_schema_version: str = "single-stock-research-v10"
+    model_version: str = "competition-pending-v10"
     instrument_code: str
     as_of_date: str
     horizon_days: int = 5
@@ -402,6 +427,7 @@ class SingleStockForecastResult(ForecastModel):
     up_probability: float | None = Field(default=None, ge=0, le=1)
     raw_probability: float | None = Field(default=None, ge=0, le=1)
     probability_interval: ConfidenceInterval | None = None
+    return_distribution: ReturnDistributionReport | None = None
     expected_net_return: float | None = None
     lower_net_return: float | None = None
     upper_net_return: float | None = None

@@ -52,6 +52,7 @@ from finscope_market_data.forecast.schemas import (
     QualificationSplitAudit,
     RegimePerformance,
     ReliabilityBin,
+    ReturnDistributionReport,
     SelectiveValidation,
     SingleStockForecastResult,
     SplitSliceAudit,
@@ -66,6 +67,9 @@ from finscope_market_data.forecast.qualification import (
     selective_metrics,
 )
 from finscope_market_data.forecast.panel import PanelArtifact, assess_panel_model
+from finscope_market_data.forecast.return_distribution import (
+    forecast_return_distribution,
+)
 from finscope_market_data.forecast.stability import StabilityReport, analyze_stability
 from finscope_market_data.forecast.walk_forward import (
     WalkForwardObservation,
@@ -78,8 +82,8 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "competition-shadow-race-v9"
-REPORT_VERSION = "single-stock-research-v9"
+MODEL_VERSION = "competition-shadow-race-v10"
+REPORT_VERSION = "single-stock-research-v10"
 
 
 def build_forecast(
@@ -183,8 +187,18 @@ def build_forecast(
         )
         panel_model = PanelModelReport.model_validate(asdict(assessment))
         probability = assessment.final_probability
-    comparable = _comparable_observations(validation.observations, raw_probability)
-    lower, expected, upper = _distribution(comparable)
+    return_distribution = forecast_return_distribution(
+        samples,
+        current_features=features,
+        horizon_days=horizon_days,
+    )
+    if return_distribution.status == "AVAILABLE":
+        lower = return_distribution.p10
+        expected = return_distribution.p50
+        upper = return_distribution.p90
+    else:
+        comparable = _comparable_observations(validation.observations, raw_probability)
+        lower, expected, upper = _distribution(comparable)
     performance = simulate_strategy(
         ordered,
         samples,
@@ -246,7 +260,7 @@ def build_forecast(
         lower_threshold=threshold_policy.lower_threshold,
         upper_threshold=threshold_policy.upper_threshold,
     )
-    runtime_model_version = f"competition-{selected_model.lower()}-platt-v9"
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v10"
     trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
@@ -261,6 +275,9 @@ def build_forecast(
         probability_interval=_interval(
             probability_interval,
             limitation="仅覆盖校准映射的抽样误差，不覆盖模型、突发事件与市场结构变化",
+        ),
+        return_distribution=ReturnDistributionReport.model_validate(
+            asdict(return_distribution)
         ),
         expected_net_return=expected,
         lower_net_return=lower,
@@ -359,7 +376,7 @@ def _candidate_report(
     return ModelCandidate(
         **asdict(candidate),
         role=role,
-        model_version=f"competition-{candidate.code.lower()}-platt-v9",
+        model_version=f"competition-{candidate.code.lower()}-platt-v10",
         raw_probability=raw_probability,
         calibrated_probability=calibrated_probability,
         shadow_decision=shadow_decision,
