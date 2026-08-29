@@ -25,6 +25,7 @@ const stateLabels: Record<string, string> = {
 type ViewProps = {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
+  onOpenStockDiscovery?: () => void;
 };
 
 function label(value?: string) {
@@ -100,15 +101,6 @@ function MarketBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
         <p>{breadth?.interpretation ?? '尚未获得全市场涨跌分布。'}</p>
         <small>{breadth?.businessDate ?? '—'} · {breadth?.sourceFamily ?? '来源不可用'} · {breadth?.qualityStatus ?? 'UNAVAILABLE'}</small>
       </header>
-      <div className="market-pulse-index-grid">
-        {(breadth?.indices ?? []).map(item => (
-          <article key={item.code}>
-            <span>{item.name}</span><strong>{item.close?.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) ?? '—'}</strong>
-            <dl><div><dt>1日</dt><dd className={(item.return1d ?? 0) < 0 ? 'negative' : 'positive'}>{percent(item.return1d, true)}</dd></div><div><dt>20日</dt><dd>{percent(item.return20d, true)}</dd></div></dl>
-          </article>
-        ))}
-        {!(breadth?.indices ?? []).length && <p className="market-pulse-inline-empty">五大指数截面暂不可用。</p>}
-      </div>
       <div className="market-pulse-breadth-lower">
         <div className="market-pulse-distribution">
           <div className="market-pulse-distribution-labels"><span><b>{advance.toLocaleString('zh-CN')}</b> 上涨</span><span><b>{flat.toLocaleString('zh-CN')}</b> 平盘</span><span><b>{decline.toLocaleString('zh-CN')}</b> 下跌</span></div>
@@ -170,7 +162,7 @@ function ReviewList({ title, items, tone }: { title: string; items?: string[]; t
   return (
     <section className={`market-pulse-review-list ${tone ? `is-${tone}` : ''}`}>
       <h4>{title}</h4>
-      {items?.length ? <ul>{items.map(item => <li key={item}>{item}</li>)}</ul> : <p>当前没有形成可验证条目。</p>}
+      {items?.length ? <ul>{items.map(item => <li key={item}>{item}</li>)}</ul> : <p>当前没有新增变化。</p>}
     </section>
   );
 }
@@ -186,8 +178,7 @@ function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
         <small>{review.qualityStatus ?? 'PARTIAL'} · 规则复盘 · {review.businessDate ?? '—'}</small>
       </header>
       <div className="market-pulse-review-overview">
-        <article><span>指数全景</span><p>{review.indexOverview ?? '指数截面不可用。'}</p></article>
-        <article><span>市场内部</span><p>{review.breadthConclusion ?? '市场宽度不可用。'}</p></article>
+        <article><span>市场内部</span><p>{review.breadthConclusion ?? '市场宽度暂不可用。'}</p></article>
       </div>
       <div className="market-pulse-review-columns">
         <ReviewList title="获得历史确认的主线" items={review.leadingSectors} />
@@ -198,7 +189,6 @@ function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
         <ReviewList title="当前风险" items={review.riskSignals} tone="risk" />
         <ReviewList title="下一交易日验证清单" items={review.nextSessionWatchlist} tone="watch" />
       </div>
-      <footer><strong>量化证据</strong>{review.evidence?.length ? review.evidence.map(item => <span key={item}>{item}</span>) : <span>当前证据不足</span>}</footer>
     </section>
   );
 }
@@ -233,7 +223,7 @@ function HistoryPanel({ points, backfilling, onBackfill, onSelect }: {
   );
 }
 
-export function MarketPulseView({ addToast, setMessage }: ViewProps) {
+export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: ViewProps) {
   const [workspace, setWorkspace] = useState<MarketPulseWorkspace | null>(null);
   const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -310,7 +300,6 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
 
   const regime = workspace?.regime;
   const sectors = useMemo(() => [...(workspace?.sectors ?? [])].sort((a, b) => b.rotationScore - a.rotationScore), [workspace]);
-  const candidates = workspace?.candidates ?? [];
 
   if (loading && !workspace) {
     return <section className="market-pulse-page"><div className="market-pulse-loading" role="status">正在校准市场状态与行业轮动…</div></section>;
@@ -321,7 +310,7 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
       <section className="market-pulse-page">
         <div className="market-pulse-empty">
           <span aria-hidden="true">⌁</span><h3>还没有第一份市场判断</h3>
-          <p>刷新后会冻结指数特征、行业轮动、Radar 事件确认和通过门禁的股票研究候选。</p>
+          <p>刷新后会冻结市场内部结构、行业轮动和 Radar 事件变化。</p>
           <button type="button" onClick={refresh} disabled={refreshing}>刷新今日判断</button>
         </div>
       </section>
@@ -387,19 +376,9 @@ export function MarketPulseView({ addToast, setMessage }: ViewProps) {
         </section>
       </div>
 
-      <section className="market-pulse-candidates">
-        <header>
-          <div><span>VERIFIED RESEARCH QUEUE</span><h3>股票研究候选</h3></div>
-          <p><strong>{candidates.length}</strong> / 5 · 行业轮动与股票模型必须同时通过门禁</p>
-        </header>
-        {candidates.length ? <div className="market-pulse-candidate-grid">{candidates.map((item, index) => (
-          <article key={item.instrumentCode}>
-            <header><span>{String(index + 1).padStart(2, '0')}</span><div><small>{item.instrumentCode} · {item.sectorName}</small><h4>{item.name}</h4></div><strong>{item.calibratedProbability == null ? '—' : `${Math.round(item.calibratedProbability * 100)}%`}<small>校准概率</small></strong></header>
-            <blockquote>{item.whyNow}</blockquote>
-            <div><section><h5>为什么进入研究队列</h5><ul>{(item.reasons ?? []).map(reason => <li key={reason}>{reason}</li>)}</ul></section><section><h5>主要风险</h5><ul>{(item.risks ?? []).map(risk => <li key={risk}>{risk}</li>)}</ul></section></div>
-            <footer><strong>失效条件</strong><span>{(item.invalidationConditions ?? []).join('；') || '尚未定义'}</span></footer>
-          </article>
-        ))}</div> : <div className="market-pulse-candidate-empty"><strong>今天可以没有股票候选</strong><p>没有标的同时通过行业轮动、模型健康度与稳健性门禁。保留现金和继续观察也是研究结论。</p></div>}
+      <section className="market-pulse-discovery-handoff" aria-label="股票发现入口">
+        <div><span>NEXT / STOCK DISCOVERY</span><h3>行业方向已经看清，个股筛选去股票发现</h3><p>Market Pulse 保留市场与行业视角；候选池、模型排序和单股研究继续由现有股票发现页面负责。</p></div>
+        <button type="button" onClick={onOpenStockDiscovery}>进入股票发现</button>
       </section>
       </>}
 

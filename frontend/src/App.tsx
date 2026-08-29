@@ -627,7 +627,7 @@ export default function App() {
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
-      {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage} />}
+      {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage} onOpenStockDiscovery={() => setView('strategy')} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
         initialStockCode={industryChainStockCode}
         onOpenNewsEvent={(eventId) => { setDashboardRadarEventId(eventId); setView('news'); }} />}

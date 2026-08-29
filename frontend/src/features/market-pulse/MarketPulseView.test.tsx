@@ -88,27 +88,32 @@ beforeEach(() => {
   }));
 });
 
-test('renders the decision chain from regime to verified stock candidates', async () => {
-  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
+test('keeps market pulse at sector level and hands stock selection to stock discovery', async () => {
+  const onOpenStockDiscovery = vi.fn();
+  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} onOpenStockDiscovery={onOpenStockDiscovery} />);
 
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '急跌后缩量修复，反弹持续性仍需量能确认' })).toBeInTheDocument();
-  expect(screen.getByText(/创业板指领涨/)).toBeInTheDocument();
-  expect(screen.getAllByText(/上涨比例 63%/)).toHaveLength(2);
+  expect(screen.queryByText('指数全景')).not.toBeInTheDocument();
+  expect(screen.queryByText(/创业板指领涨/)).not.toBeInTheDocument();
+  expect(screen.queryByText('量化证据')).not.toBeInTheDocument();
+  expect(screen.getAllByText(/上涨比例 63%/)).toHaveLength(1);
 
   fireEvent.click(screen.getByRole('tab', { name: '市场结构' }));
 
   expect(screen.getByText('市场节奏轨')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '市场宽度' })).toBeInTheDocument();
-  expect(screen.getByText('上证指数')).toBeInTheDocument();
-  expect(screen.getByText('中证1000')).toBeInTheDocument();
+  expect(screen.queryByText('上证指数')).not.toBeInTheDocument();
+  expect(screen.queryByText('中证1000')).not.toBeInTheDocument();
   expect(screen.getByText('3,200')).toBeInTheDocument();
   expect(screen.getByText('2.30 万亿')).toBeInTheDocument();
   expect(screen.getByText('主要指数与个股宽度共振走强')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '创新药' })).toBeInTheDocument();
   expect(screen.getByText('事件与行情确认')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '示例医药' })).toBeInTheDocument();
-  expect(screen.getByText('行业持续且股票模型通过稳健性门禁')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '示例医药' })).not.toBeInTheDocument();
+  expect(screen.queryByText('股票研究候选')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '进入股票发现' }));
+  expect(onOpenStockDiscovery).toHaveBeenCalledOnce();
   expect(screen.getByText(/研究候选不是买入指令/)).toBeInTheDocument();
 });
 
