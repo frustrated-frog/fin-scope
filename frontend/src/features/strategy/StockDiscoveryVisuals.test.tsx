@@ -9,6 +9,11 @@ import {
 
 test('shows panel coverage and probability deltas for every deep candidate', () => {
   const withPanel = evidence.map((item, index) => ({ ...item, forecast_report: {
+    returnDistribution: { status: 'AVAILABLE' as const, horizonDays: 5,
+      p10: -.04 + index * .01, p50: .02 + index * .01, p90: .08 + index * .01,
+      lockedCoverage: .86, meanIntervalWidth: .12, lockedPinballLoss: .02,
+      sampleCount: 100, developmentCount: 60, calibrationCount: 20, lockedCount: 20,
+      method: 'HIST_GRADIENT_BOOSTING_QUANTILE_CONFORMAL' },
     panelModel: {
       status: index === 0 ? 'BLENDED' as const : 'SHADOW' as const,
       mode: 'PANEL_CORE' as const, artifactVersion: 'abcdef123456', artifactAgeDays: 0,
@@ -27,6 +32,8 @@ test('shows panel coverage and probability deltas for every deep candidate', () 
   expect(screen.getByText('联合生效 1')).toBeInTheDocument();
   expect(screen.getByText('影子观察 1')).toBeInTheDocument();
   expect(screen.getAllByText('+2.0%')).toHaveLength(2);
+  expect(screen.getByText('收益分布 P10 / P50 / P90')).toBeInTheDocument();
+  expect(screen.getByText('-4.0% / +2.0% / +8.0%')).toBeInTheDocument();
 });
 
 const candidates = [

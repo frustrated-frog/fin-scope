@@ -44,12 +44,15 @@ export function PanelCoverageMatrix({ evidence, candidates }: {
   const unavailable = rows.length - blended - shadow;
   return <section className="discovery-visual-card panel-coverage-matrix">
     <header><div><span>PANEL COVERAGE / SAME ARTIFACT</span><h4>联合模型覆盖与概率增量</h4></div><p><b>联合生效 {blended}</b><strong>影子观察 {shadow}</strong><em>回退 {unavailable}</em></p></header>
-    <div><table aria-label="深度候选联合模型覆盖"><thead><tr><th>深度候选</th><th>运行模式</th><th>个股概率</th><th>联合概率</th><th>最终概率</th><th>概率增量</th><th>漂移 / 覆盖</th></tr></thead><tbody>
+    <div><table aria-label="深度候选联合模型覆盖"><thead><tr><th>深度候选</th><th>运行模式</th><th>个股概率</th><th>联合概率</th><th>最终概率</th><th>概率增量</th><th>收益分布 P10 / P50 / P90</th><th>漂移 / 覆盖</th></tr></thead><tbody>
       {rows.map(({ item, panel }) => {
         const candidate = candidateByCode.get(item.code);
+        const distribution = item.forecast_report?.returnDistribution;
         const delta = panel?.finalProbability != null && panel.individualProbability != null
           ? panel.finalProbability - panel.individualProbability : undefined;
-        return <tr key={item.code} data-status={panel?.status ?? 'NOT_AVAILABLE'}><th><strong>{candidate?.name ?? item.code}</strong><small>{item.code}</small></th><td><b>{panel?.status === 'BLENDED' ? '联合生效' : panel?.status === 'SHADOW' ? '影子观察' : '个股回退'}</b><small>{panel?.mode === 'PANEL_CORE' ? '核心模型' : panel?.mode === 'PANEL_FULL' ? '完整模型' : '无产物'}</small></td><td>{panel?.individualProbability == null ? '—' : pct(panel.individualProbability)}</td><td>{panel?.panelProbability == null ? '—' : pct(panel.panelProbability)}</td><td><strong>{panel?.finalProbability == null ? pct(item.calibrated_probability) : pct(panel.finalProbability)}</strong></td><td data-positive={delta != null && delta > 0 || undefined}>{delta == null ? '—' : signedPct(delta)}</td><td><b>{panel?.driftStatus ?? 'UNAVAILABLE'}</b><small>{panel ? `${pct(panel.featureCoverage)} · ${panel.featureDistance?.toFixed(2) ?? '—'}σ` : '保持个股模型'}</small></td></tr>;
+        const distributionAvailable = distribution?.status === 'AVAILABLE'
+          && distribution.p10 != null && distribution.p50 != null && distribution.p90 != null;
+        return <tr key={item.code} data-status={panel?.status ?? 'NOT_AVAILABLE'}><th><strong>{candidate?.name ?? item.code}</strong><small>{item.code}</small></th><td><b>{panel?.status === 'BLENDED' ? '联合生效' : panel?.status === 'SHADOW' ? '影子观察' : '个股回退'}</b><small>{panel?.mode === 'PANEL_CORE' ? '核心模型' : panel?.mode === 'PANEL_FULL' ? '完整模型' : '无产物'}</small></td><td>{panel?.individualProbability == null ? '—' : pct(panel.individualProbability)}</td><td>{panel?.panelProbability == null ? '—' : pct(panel.panelProbability)}</td><td><strong>{panel?.finalProbability == null ? pct(item.calibrated_probability) : pct(panel.finalProbability)}</strong></td><td data-positive={delta != null && delta > 0 || undefined}>{delta == null ? '—' : signedPct(delta)}</td><td className="discovery-return-triplet">{distributionAvailable ? <><strong>{signedPct(distribution.p10!)} / {signedPct(distribution.p50!)} / {signedPct(distribution.p90!)}</strong><small>锁定覆盖 {pct(distribution.lockedCoverage ?? 0)}</small></> : <><strong>积累中</strong><small>{distribution?.reason || '该历史批次尚无 V10 分布证据'}</small></>}</td><td><b>{panel?.driftStatus ?? 'UNAVAILABLE'}</b><small>{panel ? `${pct(panel.featureCoverage)} · ${panel.featureDistance?.toFixed(2) ?? '—'}σ` : '保持个股模型'}</small></td></tr>;
       })}
     </tbody></table></div>
     <footer>概率增量只表示联合模型对个股冠军的审慎修正；影子模型不会改变最终概率。</footer>
