@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from dataclasses import asdict
 from datetime import date, timedelta
 import math
 import statistics
 from typing import Iterable, Sequence
+
+from finscope_market_data.discovery.pairwise_ranker import (
+    PairwiseRankingObservation,
+    evaluate_pairwise_ranker,
+)
 
 from finscope_market_data.discovery.schemas import (
     DiscoveryEvaluationReport,
@@ -14,6 +20,7 @@ from finscope_market_data.discovery.schemas import (
     DiscoveryModelRace,
     DiscoveryOutcomeObservation,
     DiscoveryProbabilityQuality,
+    DiscoveryRankingChallenger,
     DiscoveryRecentOutcome,
     DiscoveryReliabilityBin,
     DiscoverySectorPerformance,
@@ -55,9 +62,34 @@ def evaluate_discovery_outcomes(
         windows=[_window_metric(ordered, as_of, days) for days in (30, 90, 180)],
         sector_performance=_sector_performance(finals),
         model_race=_model_race(request.model_observations),
+        ranking_challenger=DiscoveryRankingChallenger.model_validate(asdict(
+            evaluate_pairwise_ranker(_ranking_observations(ordered), top_k=3)
+        )),
         recent_outcomes=_recent_outcomes(finals),
         warnings=_warnings(quality, matured_runs, finals),
     )
+
+
+def _ranking_observations(
+    values: Sequence[DiscoveryOutcomeObservation],
+) -> list[PairwiseRankingObservation]:
+    return [
+        PairwiseRankingObservation(
+            group_id=f"{item.as_of_date}:{item.run_id}",
+            instrument_code=item.instrument_code,
+            features=(
+                float(item.calibrated_probability or 0.5) - 0.5,
+                (
+                    0.0
+                    if item.final_rank is None
+                    else 1.0 - (item.final_rank - 1) / 5.0
+                ),
+            ),
+            actual_net_return=item.actual_net_return,
+        )
+        for item in values
+        if item.admitted
+    ]
 
 
 def _assert_unique_outcomes(values: Sequence[DiscoveryOutcomeObservation]) -> None:

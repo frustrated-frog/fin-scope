@@ -299,6 +299,26 @@ class DiscoveryRecentOutcome(BaseModel):
     sector_names: list[str] = Field(default_factory=list)
 
 
+class DiscoveryRankingChallenger(BaseModel):
+    status: Literal[
+        "SHADOW_ACCUMULATING", "SHADOW_EVALUATING", "PROMOTION_REVIEW"
+    ]
+    training_date_count: int = Field(ge=0)
+    calibration_date_count: int = Field(ge=0)
+    locked_date_count: int = Field(ge=0)
+    observation_count: int = Field(ge=0)
+    pair_count: int = Field(ge=0)
+    pairwise_accuracy: float | None = Field(default=None, ge=0, le=1)
+    rank_ic: float | None = Field(default=None, ge=-1, le=1)
+    top_k: int = Field(ge=1)
+    top_k_average_return: float | None = None
+    admitted_pool_average_return: float | None = None
+    top_k_excess_return: float | None = None
+    feature_weights: list[float] = Field(default_factory=list)
+    method: str
+    reason: str | None = None
+
+
 class DiscoveryEvaluationReport(BaseModel):
     schema_version: str = "stock-discovery-evaluation-v1"
     as_of_date: str
@@ -315,5 +335,6 @@ class DiscoveryEvaluationReport(BaseModel):
     windows: list[DiscoveryWindowMetric]
     sector_performance: list[DiscoverySectorPerformance]
     model_race: DiscoveryModelRace
+    ranking_challenger: DiscoveryRankingChallenger
     recent_outcomes: list[DiscoveryRecentOutcome]
     warnings: list[str] = Field(default_factory=list)

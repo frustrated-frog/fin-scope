@@ -86,6 +86,33 @@ def test_evaluation_reports_probability_quality_top_k_and_rolling_windows() -> N
     assert last_30.final_count == 3
     assert len(report.reliability_bins) == 5
     assert report.sector_performance[0].sector_name == "半导体"
+    assert report.ranking_challenger.status == "SHADOW_ACCUMULATING"
+
+
+def test_evaluation_runs_date_grouped_pairwise_ranking_challenger() -> None:
+    start = date(2025, 1, 1)
+    observations: list[DiscoveryOutcomeObservation] = []
+    for day in range(60):
+        as_of = (start + timedelta(days=day)).isoformat()
+        for index in range(6):
+            quality = (5 - index) / 5.0
+            observations.append(_outcome(
+                day + 1,
+                f"{100000 + index:06d}",
+                quality * 0.03 - 0.01,
+                rank=index + 1 if index < 5 else None,
+                probability=0.45 + quality * 0.4,
+                as_of_date=as_of,
+            ))
+
+    report = evaluate_discovery_outcomes(
+        DiscoveryEvaluationRequest(observations=observations)
+    )
+
+    assert report.ranking_challenger.status == "PROMOTION_REVIEW"
+    assert report.ranking_challenger.locked_date_count >= 10
+    assert report.ranking_challenger.rank_ic > 0
+    assert report.ranking_challenger.top_k_excess_return > 0
 
 
 def test_model_race_requires_real_paired_evidence_before_review() -> None:
