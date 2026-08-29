@@ -33,8 +33,11 @@ export type SectorRotation = {
   return1d?: number;
   return5d?: number;
   return20d?: number;
+  excessReturn5d?: number;
   mainNetInflow?: number;
   flowRank?: number;
+  previousFlowRank?: number;
+  breadthRatio?: number;
   persistenceDays?: number;
   crowdingScore?: number;
   rotationScore: number;

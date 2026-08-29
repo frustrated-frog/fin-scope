@@ -7,7 +7,7 @@ const workspace = {
   businessDate: '2026-08-21',
   qualityStatus: 'PARTIAL',
   generatedAt: '2026-08-23T18:00:00',
-  warnings: ['行业宽度未接入，评分已降低置信度'],
+  warnings: ['行业宽度未接入，评分已降低置信度', '当前没有同时通过行业轮动与模型门禁的研究候选'],
   dailyReview: {
     businessDate: '2026-08-21',
     headline: '急跌后缩量修复，反弹持续性仍需量能确认',
@@ -16,7 +16,7 @@ const workspace = {
     leadingSectors: ['创新药：5日+5.80%，轮动分78，阶段持续'],
     weakeningSectors: ['半导体：1日+0.37%，5日-2.10%，阶段弱势'],
     confirmedEvents: ['创新药：mRNA 肿瘤疫苗临床数据更新（事件82 / 行情78）'],
-    riskSignals: ['量能偏弱：5日/20日平均成交额比仅 0.81'],
+    riskSignals: ['量能偏弱：5日/20日平均成交额比仅 0.81', '没有股票同时通过行业轮动与模型门禁，研究候选保持为空'],
     nextSessionWatchlist: ['两市成交额能否重新放大，并与指数方向形成同向确认'],
     evidence: ['全A上涨比例 63%，涨跌中位数 +0.70%'],
     qualityStatus: 'PARTIAL'
@@ -97,9 +97,10 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.queryByText('指数全景')).not.toBeInTheDocument();
   expect(screen.queryByText(/创业板指领涨/)).not.toBeInTheDocument();
   expect(screen.queryByText('量化证据')).not.toBeInTheDocument();
+  expect(screen.queryByText(/模型门禁/)).not.toBeInTheDocument();
   expect(screen.getAllByText(/上涨比例 63%/)).toHaveLength(1);
 
-  fireEvent.click(screen.getByRole('tab', { name: '市场结构' }));
+  fireEvent.click(screen.getByRole('tab', { name: '市场宽度' }));
 
   expect(screen.getByText('市场节奏轨')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '市场宽度' })).toBeInTheDocument();
@@ -108,6 +109,10 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.getByText('3,200')).toBeInTheDocument();
   expect(screen.getByText('2.30 万亿')).toBeInTheDocument();
   expect(screen.getByText('主要指数与个股宽度共振走强')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: '行业轮动' }));
+
+  expect(screen.getByRole('heading', { name: '行业机会地图' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '创新药' })).toBeInTheDocument();
   expect(screen.getByText('事件与行情确认')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '示例医药' })).not.toBeInTheDocument();
@@ -120,7 +125,7 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
 test('switches from the default daily review to historical evolution', async () => {
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('tab', { name: '今日复盘' })).toHaveAttribute('aria-selected', 'true');
+  expect(await screen.findByRole('tab', { name: '今日雷达' })).toHaveAttribute('aria-selected', 'true');
   fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
 
   expect(screen.getByRole('heading', { name: '近 20 日市场演变' })).toBeInTheDocument();
@@ -155,5 +160,5 @@ test('backfills the five requested days and opens one historical review', async 
 
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/market-pulse/2026-08-17', expect.any(Object)));
   expect(await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: '今日复盘' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: '今日雷达' })).toHaveAttribute('aria-selected', 'true');
 });

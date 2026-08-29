@@ -15,5 +15,5 @@ test('keeps the market pulse grid inside the workspace width', () => {
   expect(warningRule).toContain('overflow-wrap: anywhere');
   expect(historyRule).toContain('minmax(0, 1fr)');
   expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)\s*{\s*\.market-intel-hero/s);
-  expect(marketPulseStyles).toMatch(/@media\s*\(max-width:\s*1260px\)\s*{\s*\.market-pulse-hero[\s\S]*?\.market-pulse-decision-grid\s*{[^}]*grid-template-columns:\s*1fr/s);
+  expect(marketPulseStyles).toMatch(/@media\s*\(max-width:\s*1260px\)\s*{\s*\.market-pulse-hero[\s\S]*?\.market-pulse-map-layout\s*{[^}]*grid-template-columns:\s*1fr/s);
 });
