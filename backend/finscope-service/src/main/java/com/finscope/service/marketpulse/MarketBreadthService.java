@@ -1,7 +1,9 @@
 package com.finscope.service.marketpulse;
 
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
+import com.finscope.domain.marketpulse.MarketBreadthChangeSummary;
 import com.finscope.domain.marketpulse.MarketIndexPerformance;
+import com.finscope.domain.marketpulse.MarketInternalHistoryPoint;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.rpc.marketpulse.MarketBreadthSource;
 import com.finscope.rpc.quant.QuantDailyBarBatch;
@@ -14,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class MarketBreadthService {
@@ -47,8 +50,105 @@ public class MarketBreadthService {
                 breadth.getWarnings().add(definition.name + "行情不可用：" + safe(error));
             }
         }
+        breadth.setChangeSummary(changeSummary(breadth.getHistory()));
         breadth.setInterpretation(interpretation(breadth));
         return breadth;
+    }
+
+    private MarketBreadthChangeSummary changeSummary(List<MarketInternalHistoryPoint> history) {
+        if (history == null || history.size() < 2) {
+            return null;
+        }
+        MarketInternalHistoryPoint previous = history.get(history.size() - 2);
+        MarketInternalHistoryPoint current = history.get(history.size() - 1);
+        MarketBreadthChangeSummary value = new MarketBreadthChangeSummary();
+        value.setPreviousBusinessDate(previous.getBusinessDate());
+        value.setAdvanceRatioChange(difference(current.getAdvanceRatio(), previous.getAdvanceRatio()));
+        value.setMedianChangePctChange(difference(
+                current.getMedianChangePct(), previous.getMedianChangePct()));
+        value.setMa20RatioChange(difference(current.getMa20Ratio(), previous.getMa20Ratio()));
+        value.setTotalAmountChangeRatio(amountChange(current.getTotalAmount(), previous.getTotalAmount()));
+        value.setNewHighLowBalanceChange(balanceChange(current, previous));
+        value.setNetAdvancesChange(integerDifference(
+                current.getNetAdvances(), previous.getNetAdvances()));
+        value.setHeadline(changeHeadline(value.getAdvanceRatioChange()));
+        appendRatioChange(value.getChanges(), "上涨比例", value.getAdvanceRatioChange());
+        appendRatioChange(value.getChanges(), "MA20 趋势宽度", value.getMa20RatioChange());
+        appendCountChange(value.getChanges(), "20日新高减新低", value.getNewHighLowBalanceChange());
+        appendPercentChange(value.getChanges(), "成交额", value.getTotalAmountChangeRatio());
+        appendCountChange(value.getChanges(), "净上涨家数", value.getNetAdvancesChange());
+        return value;
+    }
+
+    private String changeHeadline(Double advanceRatioChange) {
+        if (advanceRatioChange == null) {
+            return "市场结构变化等待更多相邻交易日数据";
+        }
+        if (advanceRatioChange >= 0.08D) {
+            return "市场参与快速扩散";
+        }
+        if (advanceRatioChange <= -0.08D) {
+            return "市场参与明显收缩";
+        }
+        return "市场结构延续震荡分化";
+    }
+
+    private void appendRatioChange(List<String> changes, String label, Double change) {
+        if (change == null) {
+            return;
+        }
+        String direction = change >= 0D ? "提升" : "回落";
+        changes.add(String.format(Locale.ROOT, "%s%s %.1f 个百分点",
+                label, direction, Math.abs(change) * 100D));
+    }
+
+    private void appendPercentChange(List<String> changes, String label, Double change) {
+        if (change == null) {
+            return;
+        }
+        String direction = change >= 0D ? "放大" : "缩减";
+        changes.add(String.format(Locale.ROOT, "%s%s %.1f%%",
+                label, direction, Math.abs(change) * 100D));
+    }
+
+    private void appendCountChange(List<String> changes, String label, Integer change) {
+        if (change == null) {
+            return;
+        }
+        String direction = change >= 0 ? "改善" : "转弱";
+        changes.add(label + direction + " " + Math.abs(change) + " 家");
+    }
+
+    private Double difference(Double current, Double previous) {
+        if (current == null || previous == null) {
+            return null;
+        }
+        return current - previous;
+    }
+
+    private Double amountChange(Double current, Double previous) {
+        if (current == null || previous == null || previous <= 0D) {
+            return null;
+        }
+        return current / previous - 1D;
+    }
+
+    private Integer balanceChange(MarketInternalHistoryPoint current,
+                                  MarketInternalHistoryPoint previous) {
+        if (current.getNewHigh20Count() == null || current.getNewLow20Count() == null
+                || previous.getNewHigh20Count() == null || previous.getNewLow20Count() == null) {
+            return null;
+        }
+        int currentBalance = current.getNewHigh20Count() - current.getNewLow20Count();
+        int previousBalance = previous.getNewHigh20Count() - previous.getNewLow20Count();
+        return currentBalance - previousBalance;
+    }
+
+    private Integer integerDifference(Integer current, Integer previous) {
+        if (current == null || previous == null) {
+            return null;
+        }
+        return current - previous;
     }
 
     private MarketIndexPerformance index(IndexDefinition definition, LocalDate businessDate) {

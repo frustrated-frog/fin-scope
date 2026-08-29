@@ -1,6 +1,7 @@
 package com.finscope.service.marketpulse;
 
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
+import com.finscope.domain.marketpulse.MarketInternalHistoryPoint;
 import com.finscope.domain.marketpulse.MarketIndexPerformance;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.rpc.marketpulse.MarketBreadthSource;
@@ -82,6 +83,35 @@ class MarketBreadthServiceTest {
         assertEquals(requested, result.getIndices().get(0).getBusinessDate());
     }
 
+    @Test
+    void generatesChangeSummaryFromAdjacentMarketInternalPoints() {
+        LocalDate date = LocalDate.of(2026, 8, 21);
+        MarketBreadthSource breadthSource = mock(MarketBreadthSource.class);
+        QuantDailyBarSource bars = mock(QuantDailyBarSource.class);
+        MarketBreadthSnapshot breadth = breadth(date, 0.63D);
+        breadth.getHistory().add(internal(date.minusDays(1), 0.45D, 0.48D,
+                2_000_000_000_000D, 30, 40, -500));
+        breadth.getHistory().add(internal(date, 0.63D, 0.61D,
+                2_300_000_000_000D, 88, 23, 1400));
+        when(breadthSource.fetch(date)).thenReturn(breadth);
+        when(bars.fetch(anyString(), anyInt())).thenReturn(batch(date));
+        MarketBreadthService service = new MarketBreadthService();
+        ReflectionTestUtils.setField(service, "breadthSource", breadthSource);
+        ReflectionTestUtils.setField(service, "dailyBarSource", bars);
+
+        MarketBreadthSnapshot result = service.calculate(date);
+
+        assertEquals(date.minusDays(1), result.getChangeSummary().getPreviousBusinessDate());
+        assertEquals(0.18D, result.getChangeSummary().getAdvanceRatioChange(), 0.000001D);
+        assertEquals(0.13D, result.getChangeSummary().getMa20RatioChange(), 0.000001D);
+        assertEquals(0.15D, result.getChangeSummary().getTotalAmountChangeRatio(), 0.000001D);
+        assertEquals(75, result.getChangeSummary().getNewHighLowBalanceChange());
+        assertEquals(1900, result.getChangeSummary().getNetAdvancesChange());
+        assertTrue(result.getChangeSummary().getHeadline().contains("扩散"));
+        assertTrue(result.getChangeSummary().getChanges().stream()
+                .anyMatch(value -> value.contains("MA20")));
+    }
+
     private MarketBreadthSnapshot breadth(LocalDate date, double ratio) {
         MarketBreadthSnapshot value = new MarketBreadthSnapshot();
         value.setBusinessDate(date);
@@ -115,5 +145,20 @@ class MarketBreadthServiceTest {
         }
         return new QuantDailyBarBatch(values, "TEST", "TEST", "FRESH_PRIMARY", date,
                 Collections.emptyList());
+    }
+
+    private MarketInternalHistoryPoint internal(LocalDate date, double advanceRatio,
+                                                double ma20Ratio, double totalAmount,
+                                                int high20, int low20, int netAdvances) {
+        MarketInternalHistoryPoint value = new MarketInternalHistoryPoint();
+        value.setBusinessDate(date);
+        value.setAdvanceRatio(advanceRatio);
+        value.setMa20Ratio(ma20Ratio);
+        value.setTotalAmount(totalAmount);
+        value.setMedianChangePct(advanceRatio - 0.5D);
+        value.setNewHigh20Count(high20);
+        value.setNewLow20Count(low20);
+        value.setNetAdvances(netAdvances);
+        return value;
     }
 }

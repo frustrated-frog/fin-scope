@@ -3,6 +3,10 @@ package com.finscope.rpc.marketpulse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
+import com.finscope.domain.marketpulse.MarketInternalHistoryPoint;
+import com.finscope.domain.marketpulse.MarketNewHighLow;
+import com.finscope.domain.marketpulse.MarketReturnDistributionBucket;
+import com.finscope.domain.marketpulse.MarketTrendBreadth;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -46,7 +50,7 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
 
     private MarketBreadthSnapshot parse(FinanceHttpResponse response, LocalDate requested) throws Exception {
         JsonNode root = json.readTree(response.getBody());
-        if (!"market-breadth-v1".equals(text(root, "schema_version"))) {
+        if (!"market-breadth-v2".equals(text(root, "schema_version"))) {
             throw contract("MARKET_BREADTH_SCHEMA_DRIFT", "unsupported market breadth schema", false);
         }
         if (!"CN-A".equals(text(root, "market"))) {
@@ -75,11 +79,131 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
         value.setLimitUpCount(optionalNonNegativeInteger(root, "limit_up_count"));
         value.setLimitDownCount(optionalNonNegativeInteger(root, "limit_down_count"));
         value.setMedianChangePct(requiredNumber(root, "median_change_pct"));
+        value.setReturnDistribution(distribution(root.path("return_distribution"), value.getValidCount()));
+        value.setTrendBreadth(trendBreadth(requiredObject(root, "trend_breadth")));
+        value.setNewHighLow(newHighLow(requiredObject(root, "new_high_low")));
+        value.setNetAdvances(requiredInteger(root, "net_advances"));
+        value.setAdvanceDeclineLine(requiredInteger(root, "advance_decline_line"));
+        value.setHistory(history(root.path("history"), businessDate));
         value.setWarnings(warnings(root.path("warnings")));
         if (value.getAdvanceCount() + value.getDeclineCount() + value.getFlatCount()
                 != value.getValidCount()) {
             throw contract("MARKET_BREADTH_COUNT_MISMATCH", "market breadth counts do not sum to valid count", false);
         }
+        return value;
+    }
+
+    private List<MarketReturnDistributionBucket> distribution(JsonNode rows, int validCount) {
+        if (!rows.isArray() || rows.size() != 7) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT",
+                    "return_distribution must contain seven buckets", false);
+        }
+        List<MarketReturnDistributionBucket> values = new ArrayList<>();
+        int count = 0;
+        for (JsonNode row : rows) {
+            MarketReturnDistributionBucket value = new MarketReturnDistributionBucket();
+            value.setCode(requiredText(row, "code"));
+            value.setLabel(requiredText(row, "label"));
+            value.setLowerBound(optionalNumber(row, "lower_bound"));
+            value.setUpperBound(optionalNumber(row, "upper_bound"));
+            value.setCount(requiredNonNegativeInteger(row, "count"));
+            value.setRatio(requiredRatio(row, "ratio"));
+            count += value.getCount();
+            values.add(value);
+        }
+        if (count != validCount) {
+            throw contract("MARKET_BREADTH_COUNT_MISMATCH",
+                    "return distribution does not sum to valid count", false);
+        }
+        return values;
+    }
+
+    private MarketTrendBreadth trendBreadth(JsonNode node) {
+        MarketTrendBreadth value = new MarketTrendBreadth();
+        value.setMa20Ratio(optionalRatio(node, "ma20_ratio"));
+        value.setMa20ValidCount(requiredNonNegativeInteger(node, "ma20_valid_count"));
+        value.setMa60Ratio(optionalRatio(node, "ma60_ratio"));
+        value.setMa60ValidCount(requiredNonNegativeInteger(node, "ma60_valid_count"));
+        value.setMa120Ratio(optionalRatio(node, "ma120_ratio"));
+        value.setMa120ValidCount(requiredNonNegativeInteger(node, "ma120_valid_count"));
+        value.setMa250Ratio(optionalRatio(node, "ma250_ratio"));
+        value.setMa250ValidCount(requiredNonNegativeInteger(node, "ma250_valid_count"));
+        return value;
+    }
+
+    private MarketNewHighLow newHighLow(JsonNode node) {
+        MarketNewHighLow value = new MarketNewHighLow();
+        value.setHigh20Count(requiredNonNegativeInteger(node, "high20_count"));
+        value.setLow20Count(requiredNonNegativeInteger(node, "low20_count"));
+        value.setValid20Count(requiredNonNegativeInteger(node, "valid20_count"));
+        value.setHigh60Count(requiredNonNegativeInteger(node, "high60_count"));
+        value.setLow60Count(requiredNonNegativeInteger(node, "low60_count"));
+        value.setValid60Count(requiredNonNegativeInteger(node, "valid60_count"));
+        value.setHigh250Count(requiredNonNegativeInteger(node, "high250_count"));
+        value.setLow250Count(requiredNonNegativeInteger(node, "low250_count"));
+        value.setValid250Count(requiredNonNegativeInteger(node, "valid250_count"));
+        validateHighLow(value.getHigh20Count(), value.getLow20Count(), value.getValid20Count(), "20");
+        validateHighLow(value.getHigh60Count(), value.getLow60Count(), value.getValid60Count(), "60");
+        validateHighLow(value.getHigh250Count(), value.getLow250Count(), value.getValid250Count(), "250");
+        return value;
+    }
+
+    private void validateHighLow(int high, int low, int valid, String window) {
+        if (high > valid || low > valid) {
+            throw contract("MARKET_BREADTH_COUNT_MISMATCH",
+                    window + " day high/low count exceeds valid count", false);
+        }
+    }
+
+    private List<MarketInternalHistoryPoint> history(JsonNode rows, LocalDate requested) {
+        if (!rows.isArray()) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", "history must be an array", false);
+        }
+        if (rows.size() > 60) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", "history cannot exceed sixty points", false);
+        }
+        List<MarketInternalHistoryPoint> values = new ArrayList<>();
+        LocalDate previousDate = null;
+        for (JsonNode row : rows) {
+            MarketInternalHistoryPoint value = historyPoint(row);
+            if (value.getBusinessDate().isAfter(requested)
+                    || previousDate != null && !value.getBusinessDate().isAfter(previousDate)) {
+                throw contract("MARKET_BREADTH_DATE_MISMATCH",
+                        "history dates must be ascending and bounded by business date", false);
+            }
+            previousDate = value.getBusinessDate();
+            values.add(value);
+        }
+        return values;
+    }
+
+    private MarketInternalHistoryPoint historyPoint(JsonNode row) {
+        MarketInternalHistoryPoint value = new MarketInternalHistoryPoint();
+        value.setBusinessDate(LocalDate.parse(requiredText(row, "business_date")));
+        value.setAdvanceCount(requiredNonNegativeInteger(row, "advance_count"));
+        value.setDeclineCount(requiredNonNegativeInteger(row, "decline_count"));
+        value.setFlatCount(requiredNonNegativeInteger(row, "flat_count"));
+        value.setValidCount(requiredPositiveInteger(row, "valid_count"));
+        if (value.getAdvanceCount() + value.getDeclineCount() + value.getFlatCount()
+                != value.getValidCount()) {
+            throw contract("MARKET_BREADTH_COUNT_MISMATCH",
+                    "history counts do not sum to valid count", false);
+        }
+        value.setAdvanceRatio(requiredRatio(row, "advance_ratio"));
+        value.setTotalAmount(requiredNonNegativeNumber(row, "total_amount"));
+        value.setMedianChangePct(requiredNumber(row, "median_change_pct"));
+        value.setMa20Ratio(optionalRatio(row, "ma20_ratio"));
+        value.setMa60Ratio(optionalRatio(row, "ma60_ratio"));
+        value.setMa120Ratio(optionalRatio(row, "ma120_ratio"));
+        value.setMa250Ratio(optionalRatio(row, "ma250_ratio"));
+        value.setNewHigh20Count(requiredNonNegativeInteger(row, "new_high20_count"));
+        value.setNewLow20Count(requiredNonNegativeInteger(row, "new_low20_count"));
+        value.setNewHigh60Count(requiredNonNegativeInteger(row, "new_high60_count"));
+        value.setNewLow60Count(requiredNonNegativeInteger(row, "new_low60_count"));
+        value.setNewHigh250Count(requiredNonNegativeInteger(row, "new_high250_count"));
+        value.setNewLow250Count(requiredNonNegativeInteger(row, "new_low250_count"));
+        value.setNetAdvances(requiredInteger(row, "net_advances"));
+        value.setAdvanceDeclineLine(requiredInteger(row, "advance_decline_line"));
         return value;
     }
 
@@ -97,6 +221,14 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
             throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be positive", false);
         }
         return value;
+    }
+
+    private Integer requiredInteger(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || !value.isIntegralNumber()) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be an integer", false);
+        }
+        return value.asInt();
     }
 
     private Integer optionalNonNegativeInteger(JsonNode node, String field) {
@@ -118,6 +250,15 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
         return value;
     }
 
+    private Double optionalRatio(JsonNode node, String field) {
+        Double value = optionalNumber(node, field);
+        if (value != null && (value < 0D || value > 1D)) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT",
+                    field + " must be between zero and one", false);
+        }
+        return value;
+    }
+
     private Double requiredNonNegativeNumber(JsonNode node, String field) {
         double value = requiredNumber(node, field);
         if (value < 0D) {
@@ -132,6 +273,25 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
             throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be numeric", false);
         }
         return value.asDouble();
+    }
+
+    private Double optionalNumber(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be numeric", false);
+        }
+        return value.asDouble();
+    }
+
+    private JsonNode requiredObject(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || !value.isObject()) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be an object", false);
+        }
+        return value;
     }
 
     private List<String> warnings(JsonNode rows) {

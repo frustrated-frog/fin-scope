@@ -23,6 +23,13 @@ public class MarketBreadthSnapshot {
     private Integer limitUpCount;
     private Integer limitDownCount;
     private Double medianChangePct;
+    private List<MarketReturnDistributionBucket> returnDistribution = new ArrayList<>();
+    private MarketTrendBreadth trendBreadth;
+    private MarketNewHighLow newHighLow;
+    private Integer netAdvances;
+    private Integer advanceDeclineLine;
+    private List<MarketInternalHistoryPoint> history = new ArrayList<>();
+    private MarketBreadthChangeSummary changeSummary;
     private List<MarketIndexPerformance> indices = new ArrayList<>();
     private String interpretation;
     private List<String> warnings = new ArrayList<>();
