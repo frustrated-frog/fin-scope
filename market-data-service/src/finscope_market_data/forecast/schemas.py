@@ -233,6 +233,24 @@ class ReturnDistributionReport(ForecastModel):
     reason: str | None = None
 
 
+class SelectionBiasAuditReport(ForecastModel):
+    status: Literal["AVAILABLE", "INSUFFICIENT_DATA"]
+    verdict: Literal["PASS", "CAUTION", "HIGH_RISK", "NOT_EVALUATED"]
+    trial_count: int = Field(ge=1)
+    return_observation_count: int = Field(ge=0)
+    observed_sharpe: float | None = None
+    probabilistic_sharpe_probability: float | None = Field(default=None, ge=0, le=1)
+    deflated_sharpe_probability: float | None = Field(default=None, ge=0, le=1)
+    expected_maximum_sharpe: float | None = None
+    probability_of_backtest_overfitting: float | None = Field(default=None, ge=0, le=1)
+    minimum_track_record_length: int | None = Field(default=None, ge=2)
+    skewness: float | None = None
+    excess_kurtosis: float | None = None
+    combination_count: int = Field(ge=0)
+    method: str
+    reason: str | None = None
+
+
 class SplitSliceAudit(ForecastModel):
     start_date: str
     end_date: str
@@ -428,6 +446,7 @@ class SingleStockForecastResult(ForecastModel):
     raw_probability: float | None = Field(default=None, ge=0, le=1)
     probability_interval: ConfidenceInterval | None = None
     return_distribution: ReturnDistributionReport | None = None
+    selection_bias_audit: SelectionBiasAuditReport | None = None
     expected_net_return: float | None = None
     lower_net_return: float | None = None
     upper_net_return: float | None = None

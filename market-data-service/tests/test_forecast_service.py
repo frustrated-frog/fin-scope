@@ -247,6 +247,12 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.backtest_audit.entry_date_agreement_rate == 1.0
     assert result.backtest_audit.exit_date_agreement_rate == 1.0
     assert result.backtest_audit.mode == "SHADOW"
+    assert result.selection_bias_audit is not None
+    assert result.selection_bias_audit.status == "AVAILABLE"
+    assert result.selection_bias_audit.trial_count >= 10
+    assert 0 <= result.selection_bias_audit.deflated_sharpe_probability <= 1
+    assert 0 <= result.selection_bias_audit.probability_of_backtest_overfitting <= 1
+    assert result.selection_bias_audit.verdict in {"PASS", "CAUTION", "HIGH_RISK"}
     assert result.status in {"ROBUST", "CONDITIONAL", "NO_CLEAR_EDGE"}
     assert result.decision in {"UP", "DOWN", "ABSTAIN"}
     assert result.selective_validation is not None

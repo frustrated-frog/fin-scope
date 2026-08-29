@@ -53,6 +53,7 @@ from finscope_market_data.forecast.schemas import (
     RegimePerformance,
     ReliabilityBin,
     ReturnDistributionReport,
+    SelectionBiasAuditReport,
     SelectiveValidation,
     SingleStockForecastResult,
     SplitSliceAudit,
@@ -70,6 +71,7 @@ from finscope_market_data.forecast.panel import PanelArtifact, assess_panel_mode
 from finscope_market_data.forecast.return_distribution import (
     forecast_return_distribution,
 )
+from finscope_market_data.forecast.selection_bias import audit_selection_bias
 from finscope_market_data.forecast.stability import StabilityReport, analyze_stability
 from finscope_market_data.forecast.walk_forward import (
     WalkForwardObservation,
@@ -229,6 +231,15 @@ def build_forecast(
         primary_samples=samples,
         primary_validation=validation,
     )
+    selection_bias = audit_selection_bias(
+        _selection_trial_returns(
+            samples,
+            candidate_qualifications,
+            selected_model=selected_model,
+        ),
+        evaluated_trial_count=len(competition.candidates) + stability.scenario_count,
+        periods_per_year=252.0 / horizon_days,
+    )
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)
     probability_interval = _probability_interval(
@@ -239,6 +250,9 @@ def build_forecast(
         "校准区或锁定测试区独立锚点不足"
     )
     status, conclusion = _classify(validation, performance, stability, qualification, intervals)
+    if status == "ROBUST" and selection_bias.verdict != "PASS":
+        status = "CONDITIONAL"
+        conclusion = "基础样本外优势成立，但 Deflated Sharpe 或 PBO 未通过稳健门槛，结论降为条件有效。"
     calibration_probabilities = tuple(
         qualification.calibration.calibrate(value)
         for value in qualification.calibration_raw_probabilities
@@ -278,6 +292,9 @@ def build_forecast(
         ),
         return_distribution=ReturnDistributionReport.model_validate(
             asdict(return_distribution)
+        ),
+        selection_bias_audit=SelectionBiasAuditReport.model_validate(
+            asdict(selection_bias)
         ),
         expected_net_return=expected,
         lower_net_return=lower,
@@ -522,6 +539,48 @@ def _daily_returns(report: BacktestReport) -> tuple[list[float], list[float]]:
         strategy.append(current.strategy_nav / previous.strategy_nav - 1.0)
         benchmark.append(current.benchmark_nav / previous.benchmark_nav - 1.0)
     return strategy, benchmark
+
+
+def _selection_trial_returns(
+    samples: Sequence[ForecastSample],
+    qualifications: dict[str, ModelQualification],
+    *,
+    selected_model: str,
+) -> tuple[tuple[float, ...], ...]:
+    by_date = {item.signal_date: item.net_return for item in samples}
+    selected_dates = qualifications[selected_model].locked_test.signal_dates
+    common_dates = tuple(
+        signal_date
+        for signal_date in selected_dates
+        if signal_date in by_date
+        and all(
+            signal_date in qualification.locked_test.signal_dates
+            for qualification in qualifications.values()
+        )
+    )
+    trials: list[tuple[float, ...]] = []
+    for qualification in qualifications.values():
+        probabilities = dict(zip(
+            qualification.locked_test.signal_dates,
+            qualification.locked_test.calibrated_probabilities,
+        ))
+        trials.append(tuple(
+            by_date[signal_date]
+            if probabilities[signal_date] >= PRIMARY_THRESHOLD else 0.0
+            for signal_date in common_dates
+        ))
+    champion = qualifications[selected_model]
+    champion_probabilities = dict(zip(
+        champion.locked_test.signal_dates,
+        champion.locked_test.calibrated_probabilities,
+    ))
+    for threshold in (0.55, 0.65):
+        trials.append(tuple(
+            by_date[signal_date]
+            if champion_probabilities[signal_date] >= threshold else 0.0
+            for signal_date in common_dates
+        ))
+    return tuple(trials)
 
 
 def _sharpe(returns: list[float]) -> float:
