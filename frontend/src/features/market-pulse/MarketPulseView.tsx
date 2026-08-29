@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
-import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime } from './marketPulseTypes';
+import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -128,8 +128,82 @@ function MarketBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
           <div><dt>涨跌中位数</dt><dd className={(breadth?.medianChangePct ?? 0) < 0 ? 'negative' : 'positive'}>{percent(breadth?.medianChangePct, true)}</dd></div>
         </dl>
       </div>
+      <div className="market-pulse-internals-grid">
+        <ReturnDistributionPanel breadth={breadth} />
+        <TrendBreadthPanel breadth={breadth} />
+        <NewHighLowPanel breadth={breadth} />
+      </div>
     </section>
   );
+}
+
+function ReturnDistributionPanel({ breadth }: { breadth?: MarketBreadth }) {
+  const buckets = breadth?.returnDistribution ?? [];
+  const maximum = Math.max(1, ...buckets.map(item => item.count));
+  return (
+    <section className="market-pulse-internal-card market-pulse-return-histogram">
+      <header><div><span>RETURN PROFILE</span><h4>涨跌幅分布</h4></div><small>观察尾部风险与赚钱效应是否同时扩散</small></header>
+      {buckets.length ? <div className="market-pulse-histogram-bars">
+        {buckets.map(item => <div key={item.code} className={item.code.startsWith('UP') ? 'positive' : item.code.startsWith('DOWN') ? 'negative' : 'flat'}>
+          <strong>{item.count.toLocaleString('zh-CN')}</strong>
+          <i aria-label={`${item.label} ${item.count} 家`}><b style={{ height: `${Math.max(4, item.count / maximum * 100)}%` }} /></i>
+          <small>{item.label}</small>
+        </div>)}
+      </div> : <p className="market-pulse-inline-empty">当日涨跌幅分档尚未生成。</p>}
+    </section>
+  );
+}
+
+function TrendBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
+  const trend = breadth?.trendBreadth;
+  const rows = [
+    ['MA20', trend?.ma20Ratio, trend?.ma20ValidCount],
+    ['MA60', trend?.ma60Ratio, trend?.ma60ValidCount],
+    ['MA120', trend?.ma120Ratio, trend?.ma120ValidCount],
+    ['MA250', trend?.ma250Ratio, trend?.ma250ValidCount]
+  ] as const;
+  return (
+    <section className="market-pulse-internal-card market-pulse-trend-breadth">
+      <header><div><span>TREND PARTICIPATION</span><h4>趋势宽度</h4></div><small>站上各周期均线的股票比例</small></header>
+      <div className="market-pulse-trend-list">
+        {rows.map(([labelText, ratio, count]) => <article key={labelText}>
+          <div><strong>{labelText}</strong><small>{count ? `${count.toLocaleString('zh-CN')} 只有效样本` : '样本不足'}</small></div>
+          <span>{ratio == null ? '—' : percent(ratio)}</span>
+          <i><b style={{ width: `${Math.max(0, Math.min(100, (ratio ?? 0) * 100))}%` }} /></i>
+        </article>)}
+      </div>
+    </section>
+  );
+}
+
+function NewHighLowPanel({ breadth }: { breadth?: MarketBreadth }) {
+  const highLow = breadth?.newHighLow;
+  const rows = [
+    ['20 日', highLow?.high20Count, highLow?.low20Count],
+    ['60 日', highLow?.high60Count, highLow?.low60Count],
+    ['250 日', highLow?.high250Count, highLow?.low250Count]
+  ] as const;
+  return (
+    <section className="market-pulse-internal-card market-pulse-high-low">
+      <header><div><span>LEADERSHIP</span><h4>新高 / 新低</h4></div><small>识别强势扩散还是弱势尾部增多</small></header>
+      <div className="market-pulse-high-low-list">
+        {rows.map(([window, high, low]) => <article key={window}>
+          <strong>{window}</strong><span className="positive"><b>{high ?? '—'}</b> 新高</span><span className="negative"><b>{low ?? '—'}</b> 新低</span>
+        </article>)}
+      </div>
+      <dl className="market-pulse-ad-line">
+        <div><dt>净上涨家数</dt><dd className={(breadth?.netAdvances ?? 0) < 0 ? 'negative' : 'positive'}>{signedInteger(breadth?.netAdvances)}</dd></div>
+        <div><dt>A-D Line</dt><dd className={(breadth?.advanceDeclineLine ?? 0) < 0 ? 'negative' : 'positive'}>{signedInteger(breadth?.advanceDeclineLine)}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
+function signedInteger(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${value > 0 ? '+' : ''}${Math.round(value).toLocaleString('zh-CN')}`;
 }
 
 function EventRow({ item }: { item: MarketEventConfirmation }) {
@@ -160,7 +234,7 @@ function ReviewList({ title, items, tone }: { title: string; items?: string[]; t
   );
 }
 
-function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
+function DailyReviewPanel({ review, breadth }: { review?: DailyMarketReview; breadth?: MarketBreadth }) {
   if (!review) {
     return <section className="market-pulse-review-empty"><strong>今日复盘尚未生成</strong><p>刷新今日判断后，将按冻结行情事实生成复盘结论。</p></section>;
   }
@@ -173,6 +247,7 @@ function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
       <div className="market-pulse-review-overview">
         <article><span>市场内部</span><p>{review.breadthConclusion ?? '市场宽度暂不可用。'}</p></article>
       </div>
+      <MarketChangeSummary breadth={breadth} />
       <div className="market-pulse-review-columns">
         <ReviewList title="正在增强" items={marketLevelItems(review.leadingSectors)} />
         <ReviewList title="正在降温" items={marketLevelItems(review.weakeningSectors)} />
@@ -186,8 +261,85 @@ function DailyReviewPanel({ review }: { review?: DailyMarketReview }) {
   );
 }
 
-function HistoryPanel({ points, backfilling, onBackfill, onSelect }: {
+function MarketChangeSummary({ breadth }: { breadth?: MarketBreadth }) {
+  const summary = breadth?.changeSummary;
+  if (!summary) {
+    return null;
+  }
+  return (
+    <section className="market-pulse-change-summary" aria-label="今日结构变化">
+      <header><div><span>DAY-OVER-DAY</span><h4>今日结构变化</h4></div><strong>{summary.headline ?? '结构变化待判断'}</strong><small>对比 {summary.previousBusinessDate ?? '上一交易日'}</small></header>
+      <ul>{summary.changes?.map(item => <li key={item}>{item}</li>)}</ul>
+    </section>
+  );
+}
+
+function pathFor(points: MarketInternalHistoryPoint[], value: (point: MarketInternalHistoryPoint) => number | undefined,
+                 y: (value: number) => number) {
+  const width = 940;
+  return points.reduce((path, point, index) => {
+    const current = value(point);
+    if (current == null || !Number.isFinite(current)) {
+      return path;
+    }
+    const x = points.length === 1 ? width / 2 : index / (points.length - 1) * width;
+    return `${path}${path ? ' L' : 'M'} ${x.toFixed(1)} ${y(current).toFixed(1)}`;
+  }, '');
+}
+
+function symmetricExtent(values: number[]) {
+  return Math.max(1, ...values.map(value => Math.abs(value)));
+}
+
+function MarketInternalsHistory({ points }: { points?: MarketInternalHistoryPoint[] }) {
+  const values = points ?? [];
+  const [selectedIndex, setSelectedIndex] = useState(Math.max(0, values.length - 1));
+  useEffect(() => {
+    setSelectedIndex(Math.max(0, values.length - 1));
+  }, [values.length]);
+  if (!values.length) {
+    return <section className="market-pulse-internals-history"><p className="market-pulse-inline-empty">积累全 A 日 K 后，这里会显示 60 日内部结构轨迹。</p></section>;
+  }
+  const selected = values[Math.min(selectedIndex, values.length - 1)];
+  const balances = values.map(item => (item.newHigh20Count ?? 0) - (item.newLow20Count ?? 0));
+  const adValues = values.map(item => item.advanceDeclineLine ?? 0);
+  const balanceExtent = symmetricExtent(balances);
+  const adExtent = symmetricExtent(adValues);
+  const selectedX = values.length === 1 ? 470 : selectedIndex / (values.length - 1) * 940;
+  return (
+    <section className="market-pulse-internals-history" aria-label="60 日市场内部轨迹">
+      <header><div><span>60D INTERNALS</span><h3>60 日市场内部轨迹</h3></div><p>同轴观察参与度、趋势宽度、新高新低和 A-D Line。</p></header>
+      <div className="market-pulse-internals-legend"><span className="advance">上涨比例</span><span className="ma20">MA20</span><span className="ma60">MA60</span><span className="balance">新高 - 新低</span><span className="ad">A-D Line</span></div>
+      <div className="market-pulse-internals-chart">
+        <svg viewBox="0 0 940 320" role="img" aria-label="市场内部结构 60 日多轨图">
+          <line x1="0" y1="120" x2="940" y2="120" className="divider" />
+          <line x1="0" y1="215" x2="940" y2="215" className="divider" />
+          <line x1="0" y1="167.5" x2="940" y2="167.5" className="zero" />
+          <line x1="0" y1="267.5" x2="940" y2="267.5" className="zero" />
+          <path d={pathFor(values, point => point.advanceRatio, value => 108 - value * 88)} className="advance" />
+          <path d={pathFor(values, point => point.ma20Ratio, value => 108 - value * 88)} className="ma20" />
+          <path d={pathFor(values, point => point.ma60Ratio, value => 108 - value * 88)} className="ma60" />
+          <path d={pathFor(values, point => (point.newHigh20Count ?? 0) - (point.newLow20Count ?? 0), value => 167.5 - value / balanceExtent * 35)} className="balance" />
+          <path d={pathFor(values, point => point.advanceDeclineLine, value => 267.5 - value / adExtent * 35)} className="ad" />
+          <line x1={selectedX} y1="12" x2={selectedX} y2="305" className="selected" />
+        </svg>
+        <input type="range" min="0" max={values.length - 1} value={Math.min(selectedIndex, values.length - 1)} aria-label="选择市场内部轨迹日期" onChange={event => setSelectedIndex(Number(event.target.value))} />
+      </div>
+      <div className="market-pulse-internals-selected">
+        <time>{selected.businessDate ?? '—'}</time>
+        <span><small>上涨比例</small><strong>{percent(selected.advanceRatio)}</strong></span>
+        <span><small>MA20 / MA60</small><strong>{percent(selected.ma20Ratio)} / {percent(selected.ma60Ratio)}</strong></span>
+        <span><small>新高 - 新低</small><strong>{signedInteger((selected.newHigh20Count ?? 0) - (selected.newLow20Count ?? 0))}</strong></span>
+        <span><small>A-D Line</small><strong>{signedInteger(selected.advanceDeclineLine)}</strong></span>
+        <span><small>涨跌中位数</small><strong>{percent(selected.medianChangePct, true)}</strong></span>
+      </div>
+    </section>
+  );
+}
+
+function HistoryPanel({ points, internalPoints, backfilling, onBackfill, onSelect }: {
   points?: MarketPulseHistoryPoint[];
+  internalPoints?: MarketInternalHistoryPoint[];
   backfilling: boolean;
   onBackfill: () => void;
   onSelect: (date: string) => void;
@@ -201,6 +353,7 @@ function HistoryPanel({ points, backfilling, onBackfill, onSelect }: {
           <button type="button" onClick={onBackfill} disabled={backfilling}>{backfilling ? '正在补全五日判断…' : '补全 8.17–8.21 判断'}</button>
         </div>
       </header>
+      <MarketInternalsHistory points={internalPoints} />
       <div className="market-pulse-history-head"><span>日期 / 状态</span><span>当日结论</span><span>市场宽度</span><span>成交额</span><span>领涨行业</span><span>操作</span></div>
       {points?.length ? points.map(point => (
         <article className="market-pulse-history-row" key={point.businessDate}>
@@ -370,9 +523,9 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
 
-      {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} />}
+      {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />}
 
-      {view === 'history' && <HistoryPanel points={workspace.historyPoints} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} />}
+      {view === 'history' && <HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} />}
 
       {view === 'breadth' && <>
 

@@ -82,6 +82,73 @@ export type MarketIndexPerformance = {
   qualityStatus?: string;
 };
 
+export type MarketReturnDistributionBucket = {
+  code: string;
+  label: string;
+  lowerBound?: number;
+  upperBound?: number;
+  count: number;
+  ratio: number;
+};
+
+export type MarketTrendBreadth = {
+  ma20Ratio?: number;
+  ma20ValidCount?: number;
+  ma60Ratio?: number;
+  ma60ValidCount?: number;
+  ma120Ratio?: number;
+  ma120ValidCount?: number;
+  ma250Ratio?: number;
+  ma250ValidCount?: number;
+};
+
+export type MarketNewHighLow = {
+  high20Count?: number;
+  low20Count?: number;
+  valid20Count?: number;
+  high60Count?: number;
+  low60Count?: number;
+  valid60Count?: number;
+  high250Count?: number;
+  low250Count?: number;
+  valid250Count?: number;
+};
+
+export type MarketInternalHistoryPoint = {
+  businessDate?: string;
+  advanceCount?: number;
+  declineCount?: number;
+  flatCount?: number;
+  validCount?: number;
+  advanceRatio?: number;
+  totalAmount?: number;
+  medianChangePct?: number;
+  ma20Ratio?: number;
+  ma60Ratio?: number;
+  ma120Ratio?: number;
+  ma250Ratio?: number;
+  newHigh20Count?: number;
+  newLow20Count?: number;
+  newHigh60Count?: number;
+  newLow60Count?: number;
+  newHigh250Count?: number;
+  newLow250Count?: number;
+  netAdvances?: number;
+  advanceDeclineLine?: number;
+};
+
+export type MarketBreadthChangeSummary = {
+  previousBusinessDate?: string;
+  headline?: string;
+  advanceRatioChange?: number;
+  medianChangePctChange?: number;
+  totalAmountChangeRatio?: number;
+  ma20RatioChange?: number;
+  newHighLowBalanceChange?: number;
+  netAdvancesChange?: number;
+  changes?: string[];
+};
+
 export type MarketBreadth = {
   businessDate?: string;
   sourceCode?: string;
@@ -97,6 +164,13 @@ export type MarketBreadth = {
   limitUpCount?: number;
   limitDownCount?: number;
   medianChangePct?: number;
+  returnDistribution?: MarketReturnDistributionBucket[];
+  trendBreadth?: MarketTrendBreadth;
+  newHighLow?: MarketNewHighLow;
+  netAdvances?: number;
+  advanceDeclineLine?: number;
+  history?: MarketInternalHistoryPoint[];
+  changeSummary?: MarketBreadthChangeSummary;
   indices?: MarketIndexPerformance[];
   interpretation?: string;
   warnings?: string[];

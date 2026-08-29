@@ -33,6 +33,39 @@ const workspace = {
     qualityStatus: 'FRESH_PRIMARY', advanceCount: 3200, declineCount: 1800, flatCount: 100,
     validCount: 5100, advanceRatio: 3200 / 5100, totalAmount: 2300000000000,
     limitUpCount: 68, limitDownCount: 4, medianChangePct: 0.7,
+    returnDistribution: [
+      { code: 'DOWN_7', label: '≤ -7%', count: 80, ratio: 80 / 5100 },
+      { code: 'DOWN_3_7', label: '-7% ~ -3%', count: 420, ratio: 420 / 5100 },
+      { code: 'DOWN_0_3', label: '-3% ~ 0', count: 1300, ratio: 1300 / 5100 },
+      { code: 'FLAT', label: '0', count: 100, ratio: 100 / 5100 },
+      { code: 'UP_0_3', label: '0 ~ 3%', count: 2480, ratio: 2480 / 5100 },
+      { code: 'UP_3_7', label: '3% ~ 7%', count: 320, ratio: 320 / 5100 },
+      { code: 'UP_7', label: '≥ 7%', count: 400, ratio: 400 / 5100 }
+    ],
+    trendBreadth: {
+      ma20Ratio: 0.61, ma20ValidCount: 5080, ma60Ratio: 0.56, ma60ValidCount: 5020,
+      ma120Ratio: 0.51, ma120ValidCount: 4950, ma250Ratio: 0.47, ma250ValidCount: 4800
+    },
+    newHighLow: {
+      high20Count: 88, low20Count: 23, valid20Count: 5080,
+      high60Count: 51, low60Count: 19, valid60Count: 5020,
+      high250Count: 32, low250Count: 14, valid250Count: 4800
+    },
+    netAdvances: 1400,
+    advanceDeclineLine: 8600,
+    history: [
+      { businessDate: '2026-08-17', advanceRatio: 0.72, totalAmount: 2300000000000, medianChangePct: 1.2, ma20Ratio: 0.62, ma60Ratio: 0.58, ma120Ratio: 0.52, ma250Ratio: 0.46, newHigh20Count: 95, newLow20Count: 18, netAdvances: 2100, advanceDeclineLine: 6500 },
+      { businessDate: '2026-08-18', advanceRatio: 0.42, totalAmount: 2200000000000, medianChangePct: -0.2, ma20Ratio: 0.57, ma60Ratio: 0.55, ma120Ratio: 0.51, ma250Ratio: 0.46, newHigh20Count: 54, newLow20Count: 45, netAdvances: -700, advanceDeclineLine: 5800 },
+      { businessDate: '2026-08-19', advanceRatio: 0.18, totalAmount: 2500000000000, medianChangePct: -2.1, ma20Ratio: 0.43, ma60Ratio: 0.49, ma120Ratio: 0.49, ma250Ratio: 0.45, newHigh20Count: 21, newLow20Count: 156, netAdvances: -3200, advanceDeclineLine: 2600 },
+      { businessDate: '2026-08-20', advanceRatio: 0.55, totalAmount: 2100000000000, medianChangePct: 0.3, ma20Ratio: 0.48, ma60Ratio: 0.51, ma120Ratio: 0.49, ma250Ratio: 0.46, newHigh20Count: 30, newLow20Count: 40, netAdvances: 500, advanceDeclineLine: 3100 },
+      { businessDate: '2026-08-21', advanceRatio: 3200 / 5100, totalAmount: 2300000000000, medianChangePct: 0.7, ma20Ratio: 0.61, ma60Ratio: 0.56, ma120Ratio: 0.51, ma250Ratio: 0.47, newHigh20Count: 88, newLow20Count: 23, netAdvances: 1400, advanceDeclineLine: 4500 }
+    ],
+    changeSummary: {
+      previousBusinessDate: '2026-08-20', headline: '市场参与快速扩散', advanceRatioChange: 0.08,
+      medianChangePctChange: 0.4, totalAmountChangeRatio: 0.095, ma20RatioChange: 0.13,
+      newHighLowBalanceChange: 75, netAdvancesChange: 900,
+      changes: ['上涨比例提升 8.0 个百分点', 'MA20 趋势宽度提升 13.0 个百分点', '20日新高减新低改善 75 家', '成交额放大 9.5%']
+    },
     interpretation: '主要指数与个股宽度共振走强', warnings: [],
     indices: [
       { code: '000001.SH', name: '上证指数', businessDate: '2026-08-21', close: 3905.2, return1d: 0.6, return5d: -0.3, return20d: 2.1, sourceCode: 'EASTMONEY_DIRECT', qualityStatus: 'FRESH_PRIMARY' },
@@ -99,6 +132,8 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.queryByText('量化证据')).not.toBeInTheDocument();
   expect(screen.queryByText(/模型门禁/)).not.toBeInTheDocument();
   expect(screen.getAllByText(/上涨比例 63%/)).toHaveLength(1);
+  expect(screen.getByRole('heading', { name: '今日结构变化' })).toBeInTheDocument();
+  expect(screen.getByText('市场参与快速扩散')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('tab', { name: '市场宽度' }));
 
@@ -109,6 +144,10 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.getByText('3,200')).toBeInTheDocument();
   expect(screen.getByText('2.30 万亿')).toBeInTheDocument();
   expect(screen.getByText('主要指数与个股宽度共振走强')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '涨跌幅分布' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '趋势宽度' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '新高 / 新低' })).toBeInTheDocument();
+  expect(screen.getByText('A-D Line')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('tab', { name: '行业轮动' }));
 
@@ -129,6 +168,8 @@ test('switches from the default daily review to historical evolution', async () 
   fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
 
   expect(screen.getByRole('heading', { name: '近 20 日市场演变' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '60 日市场内部轨迹' })).toBeInTheDocument();
+  expect(screen.getByText('60D INTERNALS')).toBeInTheDocument();
   expect(screen.getByText('贵金属')).toBeInTheDocument();
   expect(screen.getByText('2.10 万亿')).toBeInTheDocument();
 });
