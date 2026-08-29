@@ -157,7 +157,11 @@ class FuyaoMarketDumpClient:
                 False,
             )
         data = await self.api.get_data(path, {})
-        download_url = data.get("download_url") or data.get("url")
+        download_url = (
+            data.get("presigned_url")
+            or data.get("download_url")
+            or data.get("url")
+        )
         if not isinstance(download_url, str):
             raise ProviderError(
                 "SCHEMA_DRIFT", "扶摇全市场导出响应缺少下载链接", False
@@ -171,9 +175,18 @@ class FuyaoMarketDumpClient:
             "kind": kind,
             "download_url": download_url,
         }
-        for field in ("expires_in", "expires_at", "expires_at_ms"):
-            if data.get(field) is not None:
-                result[field] = data[field]
+        aliases = {
+            "expires_in": ("expires_in", "expires_in_seconds"),
+            "expires_at": ("expires_at", "presigned_url_expires_at"),
+            "expires_at_ms": ("expires_at_ms",),
+        }
+        for field, source_fields in aliases.items():
+            source_value = next(
+                (data.get(source) for source in source_fields if data.get(source) is not None),
+                None,
+            )
+            if source_value is not None:
+                result[field] = source_value
         return result
 
     async def aclose(self) -> None:

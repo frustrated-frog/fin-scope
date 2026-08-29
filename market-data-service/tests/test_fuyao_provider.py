@@ -352,8 +352,9 @@ async def test_fuyao_market_dump_returns_fresh_signed_url_without_caching() -> N
     api = FakeAsyncApiClient(
         {
             "/api/dump/market-dumps/daily-k-10d/download-url": {
-                "download_url": "https://storage.example/daily-k.parquet?signature=short-lived",
-                "expires_in": 300,
+                "presigned_url": "https://storage.example/daily-k.parquet?signature=short-lived",
+                "presigned_url_expires_at": "2026-08-30T16:00:00+08:00",
+                "expires_in_seconds": 300,
             }
         }
     )
@@ -365,6 +366,7 @@ async def test_fuyao_market_dump_returns_fresh_signed_url_without_caching() -> N
     assert first["kind"] == "daily-k-10d"
     assert first["download_url"].startswith("https://storage.example/")
     assert first["expires_in"] == 300
+    assert first["expires_at"] == "2026-08-30T16:00:00+08:00"
     assert second == first
     assert len(api.calls) == 2
 
