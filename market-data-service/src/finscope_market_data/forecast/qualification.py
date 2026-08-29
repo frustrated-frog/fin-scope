@@ -311,6 +311,42 @@ def selective_metrics(
     )
 
 
+def optimize_selective_thresholds(
+    probabilities: Sequence[float],
+    labels: Sequence[bool],
+    *,
+    minimum_coverage: float = 0.30,
+) -> SelectiveMetrics:
+    """Learn an abstention band on calibration data only.
+
+    Accuracy is optimized first, then coverage. The symmetric search keeps the
+    policy interpretable and prevents a tiny calibration set from overfitting two
+    unrelated cutoffs.
+    """
+    if not 0 < minimum_coverage <= 1:
+        raise ValueError("最小覆盖率必须位于 (0, 1] 区间")
+    candidates = tuple(
+        selective_metrics(
+            probabilities,
+            labels,
+            lower_threshold=round(1.0 - upper, 2),
+            upper_threshold=upper,
+        )
+        for upper in (0.52, 0.54, 0.56, 0.58, 0.60, 0.62, 0.64, 0.66, 0.68, 0.70, 0.72, 0.74, 0.76, 0.78, 0.80)
+    )
+    eligible = [item for item in candidates if item.coverage >= minimum_coverage]
+    if not eligible:
+        return candidates[0]
+    return max(
+        eligible,
+        key=lambda item: (
+            item.covered_accuracy,
+            item.coverage,
+            -item.upper_threshold,
+        ),
+    )
+
+
 def assess_qualification_status(
     *,
     enough_samples: bool,

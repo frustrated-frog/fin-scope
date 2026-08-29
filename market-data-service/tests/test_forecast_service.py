@@ -178,9 +178,9 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v8"
+    assert result.report_schema_version == "single-stock-research-v9"
     assert result.model_version.startswith("competition-")
-    assert result.model_version.endswith("-v6")
+    assert result.model_version.endswith("-v9")
     assert result.raw_probability is not None
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
@@ -199,14 +199,15 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.context.market.coverage == 1.0
     assert result.context.market.regime in {"UPTREND", "DOWNTREND", "RANGE", "HIGH_VOLATILITY"}
     assert result.context.industry.status == "UNAVAILABLE"
-    assert len(result.model_competition.candidates) == 4
+    assert len(result.model_competition.candidates) == 6
     assert sum(item.selected for item in result.model_competition.candidates) == 1
     assert result.model_competition.selected_model in {
-        "LOGISTIC", "BOOSTED_STUMPS", "REGIME_LOGISTIC", "RULE_BASELINE",
+        "LOGISTIC", "BOOSTED_STUMPS", "HISTOGRAM_GB", "REGIME_LOGISTIC",
+        "STACKED", "RULE_BASELINE",
     }
     for candidate in result.model_competition.candidates:
         assert candidate.role in {"CHAMPION", "CHALLENGER", "BASELINE"}
-        assert candidate.model_version.endswith("-v6")
+        assert candidate.model_version.endswith("-v9")
         assert 0 <= candidate.raw_probability <= 1
         assert 0 <= candidate.calibrated_probability <= 1
         assert candidate.shadow_decision in {"UP", "DOWN", "ABSTAIN"}

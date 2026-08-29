@@ -303,7 +303,7 @@ class ModelCandidate(ForecastModel):
     validation_fold_count: int = 1
     brier_std: float = 0.0
     role: Literal["CHAMPION", "CHALLENGER", "BASELINE"] = "CHALLENGER"
-    model_version: str = "competition-pending-v6"
+    model_version: str = "competition-pending-v9"
     raw_probability: float = Field(default=0.5, ge=0, le=1)
     calibrated_probability: float = Field(default=0.5, ge=0, le=1)
     shadow_decision: Literal["UP", "DOWN", "ABSTAIN"] = "ABSTAIN"
@@ -388,8 +388,8 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
-    report_schema_version: str = "single-stock-research-v8"
-    model_version: str = "competition-pending-v5"
+    report_schema_version: str = "single-stock-research-v9"
+    model_version: str = "competition-pending-v9"
     instrument_code: str
     as_of_date: str
     horizon_days: int = 5

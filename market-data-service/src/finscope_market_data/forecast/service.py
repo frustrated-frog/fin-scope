@@ -61,6 +61,7 @@ from finscope_market_data.forecast.schemas import (
 from finscope_market_data.forecast.qualification import (
     ModelQualification,
     evaluate_probability_metrics,
+    optimize_selective_thresholds,
     qualify_model,
     selective_metrics,
 )
@@ -77,8 +78,8 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "competition-shadow-race-v6"
-REPORT_VERSION = "single-stock-research-v8"
+MODEL_VERSION = "competition-shadow-race-v9"
+REPORT_VERSION = "single-stock-research-v9"
 
 
 def build_forecast(
@@ -224,14 +225,28 @@ def build_forecast(
         "校准区或锁定测试区独立锚点不足"
     )
     status, conclusion = _classify(validation, performance, stability, qualification, intervals)
-    decision, decision_reason = _decision(probability, qualification.status)
+    calibration_probabilities = tuple(
+        qualification.calibration.calibrate(value)
+        for value in qualification.calibration_raw_probabilities
+    )
+    threshold_policy = optimize_selective_thresholds(
+        calibration_probabilities,
+        qualification.calibration_labels,
+        minimum_coverage=0.30,
+    )
+    decision, decision_reason = _decision(
+        probability,
+        qualification.status,
+        lower_threshold=threshold_policy.lower_threshold,
+        upper_threshold=threshold_policy.upper_threshold,
+    )
     selective = selective_metrics(
         qualification.locked_test.calibrated_probabilities,
         qualification.locked_test.labels,
-        lower_threshold=1.0 - PRIMARY_THRESHOLD,
-        upper_threshold=PRIMARY_THRESHOLD,
+        lower_threshold=threshold_policy.lower_threshold,
+        upper_threshold=threshold_policy.upper_threshold,
     )
-    runtime_model_version = f"competition-{selected_model.lower()}-platt-v6"
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v9"
     trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
@@ -344,7 +359,7 @@ def _candidate_report(
     return ModelCandidate(
         **asdict(candidate),
         role=role,
-        model_version=f"competition-{candidate.code.lower()}-platt-v6",
+        model_version=f"competition-{candidate.code.lower()}-platt-v9",
         raw_probability=raw_probability,
         calibrated_probability=calibrated_probability,
         shadow_decision=shadow_decision,
@@ -355,13 +370,19 @@ def _candidate_report(
     )
 
 
-def _decision(probability: float, qualification_status: str) -> tuple[str, str]:
+def _decision(
+    probability: float,
+    qualification_status: str,
+    *,
+    lower_threshold: float = 1.0 - PRIMARY_THRESHOLD,
+    upper_threshold: float = PRIMARY_THRESHOLD,
+) -> tuple[str, str]:
     if qualification_status in {"FAILED", "INSUFFICIENT_DATA"}:
         return "ABSTAIN", "模型未通过当前周期的资格门槛，拒绝输出方向。"
-    if probability >= PRIMARY_THRESHOLD:
-        return "UP", "校准上涨概率达到预注册上阈值。"
-    if probability <= 1.0 - PRIMARY_THRESHOLD:
-        return "DOWN", "校准上涨概率低于预注册下阈值。"
+    if probability >= upper_threshold:
+        return "UP", f"校准上涨概率达到校准区学习的上阈值 {upper_threshold:.0%}。"
+    if probability <= lower_threshold:
+        return "DOWN", f"校准上涨概率低于校准区学习的下阈值 {lower_threshold:.0%}。"
     return "ABSTAIN", "概率位于拒绝区间，当前信息不足以形成方向优势。"
 
 

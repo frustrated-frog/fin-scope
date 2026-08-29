@@ -75,6 +75,7 @@ public class PythonStockDiscoveryClient {
                 || report.getDataFingerprint() == null
                 || !report.getDataFingerprint().matches("[0-9a-f]{64}")
                 || report.getFunnel() == null || report.getFinalCandidates() == null
+                || report.getRelativeCandidates() == null
                 || report.getCandidates() == null || report.getDeepEvidence() == null
                 || report.getSectors() == null || report.getSectors().isEmpty()
                 || report.getConstituentSourceFamilies() == null
@@ -103,6 +104,7 @@ public class PythonStockDiscoveryClient {
         }
         validateSectors(report.getSectors());
         validateCandidateRelations(report);
+        validateRelativeCandidates(report);
     }
 
     private boolean allowedConstituentQuality(String value) {
@@ -150,6 +152,28 @@ public class PythonStockDiscoveryClient {
                     || !(selected.get("risks") instanceof java.util.List)
                     || !(selected.get("forecast_report") instanceof Map)) {
                 throw contract("SCHEMA_DRIFT", "Python 股票发现候选关系或最终排名无效", false, null);
+            }
+        }
+    }
+
+    private void validateRelativeCandidates(StockDiscoveryReport report) {
+        Set<String> deepCodes = codes(report.getDeepEvidence());
+        Set<String> rankedCodes = new HashSet<String>();
+        Set<Integer> ranks = new HashSet<Integer>();
+        int expectedCount = Math.min(5, report.getDeepEvidence().size());
+        if (report.getRelativeCandidates().size() != expectedCount) {
+            throw contract("SCHEMA_DRIFT", "Python 股票发现相对研究榜数量无效", false, null);
+        }
+        for (Map<String, Object> selected : report.getRelativeCandidates()) {
+            String code = text(selected.get("code"));
+            int rank = integer(selected.get("relative_rank"));
+            String tier = text(selected.get("research_tier"));
+            if (!rankedCodes.add(code) || !deepCodes.contains(code)
+                    || rank < 1 || rank > expectedCount || !ranks.add(rank)
+                    || !(selected.get("relative_score") instanceof Number)
+                    || !("ACTIONABLE".equals(tier) || "CONDITIONAL".equals(tier)
+                    || "WATCH".equals(tier))) {
+                throw contract("SCHEMA_DRIFT", "Python 股票发现相对研究排名无效", false, null);
             }
         }
     }

@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date, timedelta
 import math
 
+import pytest
+
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.model_competition import (
+    ConstrainedStackingModel,
     RegimeAwareLogisticModel,
     run_model_competition,
 )
@@ -32,9 +35,14 @@ def test_model_competition_selects_only_from_development_validation() -> None:
 
     result = run_model_competition(history, independent_stride_days=5)
 
-    assert len(result.candidates) == 4
+    assert len(result.candidates) == 6
     assert {item.code for item in result.candidates} == {
-        "LOGISTIC", "BOOSTED_STUMPS", "REGIME_LOGISTIC", "RULE_BASELINE",
+        "LOGISTIC",
+        "BOOSTED_STUMPS",
+        "HISTOGRAM_GB",
+        "REGIME_LOGISTIC",
+        "STACKED",
+        "RULE_BASELINE",
     }
     assert sum(item.selected for item in result.candidates) == 1
     assert result.selected_model in {item.code for item in result.candidates}
@@ -84,3 +92,13 @@ def test_each_competition_fold_purges_labels_that_exit_after_validation_starts()
         for audit in result.fold_audits
     )
     assert all(audit.validation_sample_count > 0 for audit in result.fold_audits)
+
+
+def test_constrained_stacking_weights_are_non_negative_bounded_and_normalized() -> None:
+    model = ConstrainedStackingModel.fit(samples(360))
+
+    weights = [weight for _, _, weight in model.weighted_models]
+
+    assert sum(weights) == pytest.approx(1.0)
+    assert all(0 <= weight <= 0.60 for weight in weights)
+    assert 0.01 <= model.predict(samples(1)[0].features) <= 0.99

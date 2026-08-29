@@ -102,6 +102,9 @@ class DeepCandidateEvidence(BaseModel):
     health_status: Literal["HEALTHY", "DEGRADED"]
     deep_score: float | None = None
     final_rank: int | None = None
+    relative_score: float | None = None
+    relative_rank: int | None = None
+    research_tier: Literal["ACTIONABLE", "CONDITIONAL", "WATCH"] | None = None
     evidence: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     forecast_report: dict[str, object] | None = None
@@ -142,6 +145,7 @@ class DiscoveryReport(BaseModel):
     sectors: list[DiscoverySector]
     candidates: list[DiscoveryCandidate]
     deep_evidence: list[DeepCandidateEvidence]
+    relative_candidates: list[DeepCandidateEvidence] = Field(default_factory=list)
     final_candidates: list[DeepCandidateEvidence]
     funnel: DiscoveryFunnel
     warnings: list[str] = Field(default_factory=list)

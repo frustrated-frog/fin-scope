@@ -55,6 +55,7 @@ def validate_walk_forward(
     observations: list[WalkForwardObservation] = []
     model: RegularizedLogisticModel | None = None
     matured_count = 0
+    refit_every = retraining_interval(model_code)
     for candidate in ordered:
         while (
             matured_count < len(ordered)
@@ -64,7 +65,7 @@ def validate_walk_forward(
         if matured_count < initial_training_size:
             continue
         matured = ordered[:matured_count]
-        if model is None or len(observations) % 20 == 0:
+        if model is None or len(observations) % refit_every == 0:
             model = _fit_model(model_code, matured)
         baseline = sum(sample.positive for sample in matured) / len(matured)
         observations.append(
@@ -150,3 +151,9 @@ def _fit_model(model_code: str, samples: Sequence[ForecastSample]):
         return RegularizedLogisticModel.fit(samples)
     from finscope_market_data.forecast.model_competition import fit_model
     return fit_model(model_code, samples)
+
+
+def retraining_interval(model_code: str) -> int:
+    if model_code in {"HISTOGRAM_GB", "STACKED"}:
+        return 60
+    return 20

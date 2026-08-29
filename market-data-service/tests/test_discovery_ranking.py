@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from finscope_market_data.discovery.ranking import (
     rank_deep_candidates,
     rank_lightweight_candidates,
+    rank_relative_candidates,
 )
 from finscope_market_data.discovery.schemas import (
     DeepCandidateEvidence,
@@ -189,3 +190,31 @@ def test_final_ranking_returns_only_candidates_that_pass_deep_gates() -> None:
     assert [item.code for item in ranked] == ["600001", "000001"]
     assert [item.final_rank for item in ranked] == [1, 2]
     assert all(item.qualified for item in ranked)
+
+
+def test_relative_ranking_returns_best_research_candidates_without_faking_qualification() -> None:
+    evidence = [
+        DeepCandidateEvidence(
+            code=f"00000{index}",
+            qualified=False,
+            conclusion="NO_CLEAR_ADVANTAGE",
+            calibrated_probability=0.50 + index * 0.02,
+            probability_lower_bound=0.42 + index * 0.02,
+            brier_skill_score=-0.08 + index * 0.01,
+            locked_accuracy=0.48 + index * 0.01,
+            locked_log_loss=0.76 - index * 0.01,
+            risk_adjusted_return=-0.20 + index * 0.05,
+            max_drawdown=-0.22 + index * 0.01,
+            stability_score=0.35 + index * 0.05,
+            health_status="HEALTHY",
+        )
+        for index in range(1, 7)
+    ]
+
+    ranked = rank_relative_candidates(evidence, limit=5)
+
+    assert len(ranked) == 5
+    assert [item.relative_rank for item in ranked] == [1, 2, 3, 4, 5]
+    assert ranked[0].code == "000006"
+    assert all(not item.qualified for item in ranked)
+    assert all(item.research_tier in {"CONDITIONAL", "WATCH"} for item in ranked)

@@ -22,6 +22,7 @@ public class StockDiscoveryReport {
     private List<Map<String, Object>> sectors = new ArrayList<Map<String, Object>>();
     private List<Map<String, Object>> candidates = new ArrayList<Map<String, Object>>();
     private List<Map<String, Object>> deepEvidence = new ArrayList<Map<String, Object>>();
+    private List<Map<String, Object>> relativeCandidates = new ArrayList<Map<String, Object>>();
     private List<Map<String, Object>> finalCandidates = new ArrayList<Map<String, Object>>();
     private Funnel funnel;
     private List<String> warnings = new ArrayList<String>();

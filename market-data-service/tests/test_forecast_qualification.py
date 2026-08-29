@@ -9,6 +9,7 @@ from finscope_market_data.forecast.qualification import (
     assess_qualification_status,
     evaluate_probability_metrics,
     mature_training_samples,
+    optimize_selective_thresholds,
     qualify_model,
     reliability_bins,
     selective_metrics,
@@ -142,3 +143,24 @@ def test_independent_audit_uses_requested_horizon_stride() -> None:
     assert split.audit.development.independent_sample_count == 12
     assert split.audit.calibration.independent_sample_count == 4
     assert split.audit.locked_test.independent_sample_count == 4
+
+
+def test_selective_thresholds_are_learned_from_calibration_quality_and_coverage() -> None:
+    probabilities = [0.08, 0.18, 0.32, 0.46, 0.54, 0.68, 0.82, 0.92]
+    labels = [False, False, False, True, False, True, True, True]
+
+    policy = optimize_selective_thresholds(
+        probabilities,
+        labels,
+        minimum_coverage=0.30,
+    )
+    metrics = selective_metrics(
+        probabilities,
+        labels,
+        lower_threshold=policy.lower_threshold,
+        upper_threshold=policy.upper_threshold,
+    )
+
+    assert 0 < policy.lower_threshold < 0.5 < policy.upper_threshold < 1
+    assert metrics.coverage >= 0.30
+    assert metrics.covered_accuracy >= 0.80

@@ -224,6 +224,14 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsAndValidatesVersionNineModelCompetition() {
+        SingleStockForecast result = clientReturning(v9Payload()).forecast("600519", 5);
+
+        assertEquals("single-stock-research-v9", result.getReportSchemaVersion());
+        assertEquals(6, result.getModelCompetition().getCandidates().size());
+    }
+
+    @Test
     void rejectsVersionEightWhenShadowModelChangesFinalProbability() {
         PythonSingleStockForecastClient client = clientReturning(
                 v8Payload().replace("\"finalProbability\":0.61",
@@ -407,6 +415,28 @@ class PythonSingleStockForecastClientTest {
                 .replace("single-stock-research-v7", "single-stock-research-v8")
                 .replace("\"warnings\":[]}",
                         "\"panelModel\":" + panel + ",\"warnings\":[]}");
+    }
+
+    private static String v9Payload() {
+        String challenger = "{\"code\":\"HISTOGRAM_GB\",\"name\":\"正则化直方图梯度提升\"," +
+                "\"selected\":false,\"selectionSampleCount\":45,\"accuracy\":0.58," +
+                "\"brierScore\":0.23,\"logLoss\":0.66,\"baselineBrierScore\":0.24," +
+                "\"validationFoldCount\":3,\"brierStd\":0.02,\"role\":\"CHALLENGER\"," +
+                "\"modelVersion\":\"competition-histogram_gb-platt-v9\"," +
+                "\"rawProbability\":0.57,\"calibratedProbability\":0.55," +
+                "\"shadowDecision\":\"ABSTAIN\",\"qualificationStatus\":\"CONDITIONAL\"," +
+                "\"lockedMetrics\":{\"sampleCount\":15,\"accuracy\":0.6," +
+                "\"brierScore\":0.22,\"baselineBrierScore\":0.24," +
+                "\"brierSkillScore\":0.08,\"logLoss\":0.64," +
+                "\"expectedCalibrationError\":0.08},\"reason\":\"对照\"}";
+        String stacked = challenger.replace("HISTOGRAM_GB", "STACKED")
+                .replace("正则化直方图梯度提升", "受约束时序集成")
+                .replace("histogram_gb", "stacked");
+        return v8Payload()
+                .replace("single-stock-research-v8", "single-stock-research-v9")
+                .replace("-platt-v6", "-platt-v9")
+                .replace("}]},\"leakageAudit\"",
+                        "}," + challenger + "," + stacked + "]},\"leakageAudit\"");
     }
 
     private static String auditEngine(String code) {

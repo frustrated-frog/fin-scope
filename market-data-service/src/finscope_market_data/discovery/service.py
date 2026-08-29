@@ -19,6 +19,7 @@ from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.ranking import (
     rank_deep_candidates,
     rank_lightweight_candidates,
+    rank_relative_candidates,
 )
 from finscope_market_data.discovery.context_factors import enrich_context_factors
 from finscope_market_data.discovery.schemas import (
@@ -153,6 +154,7 @@ class StockDiscoveryService:
             market_bars,
         )
         final = rank_deep_candidates(deep, request.final_limit)
+        relative = rank_relative_candidates(deep, request.final_limit)
         as_of = max(
             (bars[-1].trade_date for bars in bars_by_code.values() if bars),
             default=request.business_date or datetime.now().date().isoformat(),
@@ -190,6 +192,7 @@ class StockDiscoveryService:
             sectors=sectors,
             candidates=ordered_candidates,
             deep_evidence=deep,
+            relative_candidates=relative,
             final_candidates=final,
             funnel=DiscoveryFunnel(
                 raw_constituent_count=universe.raw_constituent_count,

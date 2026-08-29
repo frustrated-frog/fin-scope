@@ -34,7 +34,7 @@ public class PythonSingleStockForecastClient {
             "single-stock-research-v2", "single-stock-research-v3",
             "single-stock-research-v4", "single-stock-research-v5",
             "single-stock-research-v6", "single-stock-research-v7",
-            "single-stock-research-v8"));
+            "single-stock-research-v8", "single-stock-research-v9"));
     private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
             "CHAMPION", "CHALLENGER", "BASELINE"));
     private static final Set<String> AUDIT_STATUSES = new HashSet<String>(Arrays.asList(
@@ -142,6 +142,29 @@ public class PythonSingleStockForecastClient {
         }
         if ("single-stock-research-v8".equals(result.getReportSchemaVersion())) {
             validateVersionEight(result);
+        }
+        if ("single-stock-research-v9".equals(result.getReportSchemaVersion())) {
+            validateVersionNine(result);
+        }
+    }
+
+    private void validateVersionNine(SingleStockForecast result) {
+        validateVersionEight(result);
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            return;
+        }
+        if (result.getModelCompetition() == null
+                || result.getModelCompetition().getCandidates() == null
+                || result.getModelCompetition().getCandidates().size() != 6) {
+            throw contract("SCHEMA_DRIFT", "Python v9 模型竞赛必须包含六个冻结候选", false);
+        }
+        Set<String> modelCodes = new HashSet<String>();
+        for (SingleStockForecast.ModelCandidate candidate
+                : result.getModelCompetition().getCandidates()) {
+            modelCodes.add(candidate.getCode());
+        }
+        if (!modelCodes.contains("HISTOGRAM_GB") || !modelCodes.contains("STACKED")) {
+            throw contract("SCHEMA_DRIFT", "Python v9 缺少非线性或受约束集成候选", false);
         }
     }
 

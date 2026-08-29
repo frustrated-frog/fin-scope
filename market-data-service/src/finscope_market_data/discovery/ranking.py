@@ -65,23 +65,64 @@ def rank_deep_candidates(
         and item.conclusion not in {"NO_CLEAR_ADVANTAGE", "INSUFFICIENT_DATA"}
     ]
     for item in qualified:
-        drawdown_quality = max(0.0, 1.0 + item.max_drawdown)
-        item.deep_score = round(
-            item.probability_lower_bound * 0.30
-            + item.calibrated_probability * 0.10
-            + item.brier_skill_score * 0.15
-            + item.locked_accuracy * 0.10
-            + max(0.0, 1.0 - item.locked_log_loss) * 0.05
-            + item.risk_adjusted_return * 0.10
-            + drawdown_quality * 0.05
-            + item.stability_score * 0.15,
-            8,
-        )
+        item.deep_score = _evidence_score(item)
     qualified.sort(key=lambda item: (-(item.deep_score or 0.0), item.code))
     selected = qualified[: max(0, final_limit)]
     for rank, item in enumerate(selected, start=1):
         item.final_rank = rank
     return selected
+
+
+def rank_relative_candidates(
+    candidates: Iterable[DeepCandidateEvidence], limit: int = 5
+) -> list[DeepCandidateEvidence]:
+    """Rank deep-reviewed names without turning relative strength into a buy signal."""
+    ranked = [item.model_copy(deep=True) for item in candidates]
+    for item in ranked:
+        health_penalty = 0.18 if item.health_status == "DEGRADED" else 0.0
+        evidence_penalty = (
+            0.12 if item.conclusion == "INSUFFICIENT_DATA"
+            else 0.06 if item.conclusion == "NO_CLEAR_ADVANTAGE"
+            else 0.0
+        )
+        item.relative_score = round(
+            _evidence_score(item) - health_penalty - evidence_penalty,
+            8,
+        )
+        if (
+            item.qualified
+            and item.health_status == "HEALTHY"
+            and item.conclusion in {"ROBUST", "CONDITIONALLY_EFFECTIVE"}
+        ):
+            item.research_tier = "ACTIONABLE"
+        elif (
+            item.health_status == "HEALTHY"
+            and item.conclusion != "INSUFFICIENT_DATA"
+            and item.brier_skill_score > -0.05
+        ):
+            item.research_tier = "CONDITIONAL"
+        else:
+            item.research_tier = "WATCH"
+    ranked.sort(key=lambda item: (-(item.relative_score or 0.0), item.code))
+    selected = ranked[: max(0, limit)]
+    for rank, item in enumerate(selected, start=1):
+        item.relative_rank = rank
+    return selected
+
+
+def _evidence_score(item: DeepCandidateEvidence) -> float:
+    drawdown_quality = max(0.0, 1.0 + item.max_drawdown)
+    return round(
+        item.probability_lower_bound * 0.30
+        + item.calibrated_probability * 0.10
+        + item.brier_skill_score * 0.15
+        + item.locked_accuracy * 0.10
+        + max(0.0, 1.0 - item.locked_log_loss) * 0.05
+        + item.risk_adjusted_return * 0.10
+        + drawdown_quality * 0.05
+        + item.stability_score * 0.15,
+        8,
+    )
 
 
 def _robust_z(values: list[float]) -> list[float]:

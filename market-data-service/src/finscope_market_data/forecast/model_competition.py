@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import statistics
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
+
+from sklearn.ensemble import HistGradientBoostingClassifier
 
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.logistic import RegularizedLogisticModel
@@ -95,6 +97,99 @@ class BoostedStumpModel:
             for dimension, threshold, left, right in self.stumps
         )
         return _bounded(value)
+
+
+@dataclass(frozen=True)
+class HistogramGradientBoostingModel:
+    estimator: Any | None
+    positive_class_index: int | None
+    constant_probability: float
+
+    @classmethod
+    def fit(
+        cls, samples: Sequence[ForecastSample]
+    ) -> "HistogramGradientBoostingModel":
+        if not samples:
+            raise ValueError("直方图提升模型训练样本不能为空")
+        labels = [int(item.positive) for item in samples]
+        constant = _bounded(sum(labels) / len(labels))
+        if len(set(labels)) < 2:
+            return cls(None, None, constant)
+        estimator = HistGradientBoostingClassifier(
+            learning_rate=0.075,
+            max_iter=40,
+            max_leaf_nodes=9,
+            max_depth=3,
+            max_bins=63,
+            min_samples_leaf=max(12, min(30, len(samples) // 18)),
+            l2_regularization=1.5,
+            early_stopping=False,
+            random_state=20260830,
+        )
+        estimator.fit(
+            [list(item.features) for item in samples],
+            labels,
+        )
+        positive_index = list(estimator.classes_).index(1)
+        return cls(estimator, positive_index, constant)
+
+    def predict(self, features: Sequence[float]) -> float:
+        if self.estimator is None or self.positive_class_index is None:
+            return self.constant_probability
+        probabilities = self.estimator.predict_proba([list(features)])[0]
+        return _bounded(probabilities[self.positive_class_index])
+
+
+@dataclass(frozen=True)
+class ConstrainedStackingModel:
+    weighted_models: tuple[tuple[str, ProbabilityModel, float], ...]
+
+    @classmethod
+    def fit(
+        cls, samples: Sequence[ForecastSample]
+    ) -> "ConstrainedStackingModel":
+        if len(samples) < 120:
+            raise ValueError("受约束集成至少需要 120 个时序样本")
+        ordered = tuple(sorted(samples, key=lambda item: item.signal_date))
+        validation_start = max(80, int(len(ordered) * 0.75))
+        validation_date = ordered[validation_start].signal_date
+        training = tuple(
+            item for item in ordered[:validation_start]
+            if item.exit_date < validation_date
+        )
+        validation = ordered[validation_start:]
+        if not training or not validation:
+            raise ValueError("受约束集成无法形成无泄漏内部验证集")
+        model_codes = (
+            "LOGISTIC",
+            "BOOSTED_STUMPS",
+            "HISTOGRAM_GB",
+            "REGIME_LOGISTIC",
+        )
+        labels = [item.positive for item in validation]
+        baseline = sum(item.positive for item in training) / len(training)
+        baseline_brier = sum(
+            (baseline - float(label)) ** 2 for label in labels
+        ) / len(labels)
+        validation_scores: list[float] = []
+        for code in model_codes:
+            model = _fit_base_model(code, training)
+            brier = sum(
+                (model.predict(item.features) - float(item.positive)) ** 2
+                for item in validation
+            ) / len(validation)
+            validation_scores.append(max(1e-6, baseline_brier - brier))
+        weights = _capped_normalized_weights(validation_scores, cap=0.60)
+        return cls(tuple(
+            (code, _fit_base_model(code, ordered), weight)
+            for code, weight in zip(model_codes, weights)
+        ))
+
+    def predict(self, features: Sequence[float]) -> float:
+        return _bounded(sum(
+            model.predict(features) * weight
+            for _, model, weight in self.weighted_models
+        ))
 
 
 @dataclass(frozen=True)
@@ -194,7 +289,9 @@ def run_model_competition(
     candidates: tuple[tuple[str, str], ...] = (
         ("LOGISTIC", "正则化逻辑回归"),
         ("BOOSTED_STUMPS", "轻量梯度提升树桩"),
+        ("HISTOGRAM_GB", "正则化直方图梯度提升"),
         ("REGIME_LOGISTIC", "市场状态感知逻辑回归"),
+        ("STACKED", "受约束时序集成"),
         ("RULE_BASELINE", "确定性动量规则"),
     )
     scored: list[tuple[float, str, str, tuple[object, ...]]] = []
@@ -248,15 +345,56 @@ def run_model_competition(
 
 
 def fit_model(code: str, samples: Sequence[ForecastSample]) -> ProbabilityModel:
+    if code == "STACKED":
+        return ConstrainedStackingModel.fit(samples)
+    return _fit_base_model(code, samples)
+
+
+def _fit_base_model(
+    code: str, samples: Sequence[ForecastSample]
+) -> ProbabilityModel:
     if code == "LOGISTIC":
         return RegularizedLogisticModel.fit(samples)
     if code == "BOOSTED_STUMPS":
         return BoostedStumpModel.fit(samples)
+    if code == "HISTOGRAM_GB":
+        return HistogramGradientBoostingModel.fit(samples)
     if code == "REGIME_LOGISTIC":
         return RegimeAwareLogisticModel.fit(samples)
     if code == "RULE_BASELINE":
         return RuleBaselineModel()
     raise ValueError(f"未知预测模型：{code}")
+
+
+def _capped_normalized_weights(
+    scores: Sequence[float], *, cap: float
+) -> tuple[float, ...]:
+    if not scores:
+        raise ValueError("集成权重评分不能为空")
+    positive = [max(0.0, float(score)) for score in scores]
+    if sum(positive) <= 0:
+        positive = [1.0 for _ in positive]
+    weights = [score / sum(positive) for score in positive]
+    free = set(range(len(weights)))
+    fixed: set[int] = set()
+    while free:
+        over = {index for index in free if weights[index] > cap}
+        if not over:
+            break
+        for index in over:
+            weights[index] = cap
+        fixed.update(over)
+        free.difference_update(over)
+        remaining = 1.0 - sum(weights[index] for index in fixed)
+        free_score = sum(positive[index] for index in free)
+        for index in free:
+            weights[index] = (
+                remaining * positive[index] / free_score
+                if free_score > 0
+                else remaining / len(free)
+            )
+    total = sum(weights)
+    return tuple(weight / total for weight in weights)
 
 
 def _bounded(value: float) -> float:

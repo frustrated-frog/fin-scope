@@ -44,6 +44,7 @@ class PythonStockDiscoveryClientTest {
         assertEquals(true, body.get().contains("\"deepLimit\":15"));
         assertEquals("2026-08-14", report.getAsOfDate());
         assertEquals(2, report.getFinalCount());
+        assertEquals(2, report.getRelativeCandidates().size());
         assertEquals("TONGHUASHUN", report.getSourceFamily());
     }
 
@@ -129,6 +130,10 @@ class PythonStockDiscoveryClientTest {
                 + "\"retrieved_at\":\"2026-08-14T15:35:00\"}],"
                 + "\"candidates\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
                 + "\"deep_evidence\":[{\"code\":\"000001\"},{\"code\":\"600001\"}],"
+                + "\"relative_candidates\":[{\"code\":\"000001\",\"relative_rank\":1,"
+                + "\"relative_score\":0.72,\"research_tier\":\"ACTIONABLE\"},{"
+                + "\"code\":\"600001\",\"relative_rank\":2,\"relative_score\":0.64,"
+                + "\"research_tier\":\"CONDITIONAL\"}],"
                 + "\"final_candidates\":[{\"code\":\"000001\",\"final_rank\":1,"
                 + "\"qualified\":true,\"health_status\":\"HEALTHY\",\"conclusion\":\"ROBUST\","
                 + "\"calibrated_probability\":0.64,\"probability_lower_bound\":0.55,"
