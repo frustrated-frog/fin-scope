@@ -110,11 +110,53 @@ class SnapshotStore:
                 "SELECT payload_json FROM market_breadth_snapshot WHERE business_date=?",
                 (business_date,),
             ).fetchone()
-        return (
-            None
-            if row is None
-            else MarketBreadthSnapshot.model_validate_json(row[0])
-        )
+        if row is None:
+            return None
+        try:
+            return MarketBreadthSnapshot.model_validate_json(row[0])
+        except ValueError:
+            return None
+
+    def load_daily_bar_panel(
+        self,
+        business_date: str,
+        max_bars_per_symbol: int = 320,
+    ) -> dict[str, list[DailyBar]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                WITH bars AS (
+                    SELECT symbol_key,
+                           json_extract(bar.value, '$.trade_date') AS trade_date,
+                           bar.value AS bar_json
+                    FROM market_data_snapshot,
+                         json_each(payload_json, '$.data') AS bar
+                    WHERE capability=?
+                      AND json_extract(bar.value, '$.trade_date')<=?
+                ), ranked AS (
+                    SELECT symbol_key, trade_date, bar_json,
+                           row_number() OVER (
+                               PARTITION BY symbol_key ORDER BY trade_date DESC
+                           ) AS position
+                    FROM bars
+                )
+                SELECT symbol_key, bar_json
+                FROM ranked
+                WHERE position<=?
+                ORDER BY symbol_key, trade_date
+                """,
+                (
+                    DataCapability.DAILY_BARS.value,
+                    business_date,
+                    max_bars_per_symbol,
+                ),
+            ).fetchall()
+        panel: dict[str, list[DailyBar]] = {}
+        for symbol_key, bar_json in rows:
+            panel.setdefault(symbol_key, []).append(
+                DailyBar.model_validate_json(bar_json)
+            )
+        return panel
 
     def load_daily_bar_pairs(
         self,

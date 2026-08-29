@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import statistics
+from collections import deque
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from finscope_market_data.models import MarketBreadthSnapshot, QualityStatus
+from finscope_market_data.models import (
+    MarketBreadthSnapshot,
+    MarketInternalHistoryPoint,
+    MarketNewHighLow,
+    MarketReturnDistributionBucket,
+    MarketTrendBreadth,
+    QualityStatus,
+)
 from finscope_market_data.snapshot_store import SnapshotStore
 
 
@@ -118,8 +126,10 @@ class MarketBreadthService:
             limit_up_count=limit_up,
             limit_down_count=limit_down,
             median_change_pct=statistics.median(changes),
+            return_distribution=_return_distribution(changes),
             warnings=warnings,
         )
+        self._attach_historical_internals(result, business_date, warnings)
         self._snapshot_store.save_market_breadth(result)
         return result
 
@@ -158,7 +168,7 @@ class MarketBreadthService:
         advance = sum(1 for value in changes if value > 0)
         decline = sum(1 for value in changes if value < 0)
         flat = len(changes) - advance - decline
-        return MarketBreadthSnapshot(
+        result = MarketBreadthSnapshot(
             business_date=business_date.isoformat(),
             source_code=source_code,
             source_family=source_family,
@@ -173,8 +183,60 @@ class MarketBreadthService:
             limit_up_count=limit_up,
             limit_down_count=limit_down,
             median_change_pct=statistics.median(changes),
+            return_distribution=_return_distribution(changes),
             warnings=warnings,
         )
+        self._attach_historical_internals(result, business_date, warnings)
+        return result
+
+    def _attach_historical_internals(
+        self,
+        snapshot: MarketBreadthSnapshot,
+        business_date: date,
+        warnings: list[str],
+    ) -> None:
+        if self._snapshot_store is None:
+            warnings.append("本地全A日K面板不可用，趋势宽度与历史轨迹暂缺")
+            return
+        panel = self._snapshot_store.load_daily_bar_panel(
+            business_date.isoformat()
+        )
+        history = _market_internal_history(panel)
+        snapshot.history = history
+        current = next(
+            (
+                point
+                for point in reversed(history)
+                if point.business_date == business_date.isoformat()
+            ),
+            None,
+        )
+        if current is None:
+            warnings.append("当日日K面板尚未完整入库，趋势宽度与历史型指标暂缺")
+            return
+        snapshot.trend_breadth = MarketTrendBreadth(
+            ma20_ratio=current.ma20_ratio,
+            ma20_valid_count=_trend_valid_count(panel, business_date, 20),
+            ma60_ratio=current.ma60_ratio,
+            ma60_valid_count=_trend_valid_count(panel, business_date, 60),
+            ma120_ratio=current.ma120_ratio,
+            ma120_valid_count=_trend_valid_count(panel, business_date, 120),
+            ma250_ratio=current.ma250_ratio,
+            ma250_valid_count=_trend_valid_count(panel, business_date, 250),
+        )
+        snapshot.new_high_low = MarketNewHighLow(
+            high20_count=current.new_high20_count,
+            low20_count=current.new_low20_count,
+            valid20_count=_trend_valid_count(panel, business_date, 20),
+            high60_count=current.new_high60_count,
+            low60_count=current.new_low60_count,
+            valid60_count=_trend_valid_count(panel, business_date, 60),
+            high250_count=current.new_high250_count,
+            low250_count=current.new_low250_count,
+            valid250_count=_trend_valid_count(panel, business_date, 250),
+        )
+        snapshot.net_advances = current.net_advances
+        snapshot.advance_decline_line = current.advance_decline_line
 
     def _normalize(self, frame: Any, family: str) -> list[tuple[float, float]]:
         rows: list[tuple[float, float]] = []
@@ -294,3 +356,151 @@ def _message(error: Exception) -> str:
 
 def _shanghai_now() -> datetime:
     return datetime.now(ZoneInfo("Asia/Shanghai"))
+
+
+_DISTRIBUTION_BUCKETS = (
+    ("DOWN_7", "≤ -7%", None, -7.0),
+    ("DOWN_3_7", "-7% ~ -3%", -7.0, -3.0),
+    ("DOWN_0_3", "-3% ~ 0", -3.0, 0.0),
+    ("FLAT", "0", 0.0, 0.0),
+    ("UP_0_3", "0 ~ 3%", 0.0, 3.0),
+    ("UP_3_7", "3% ~ 7%", 3.0, 7.0),
+    ("UP_7", "≥ 7%", 7.0, None),
+)
+
+
+def _return_distribution(
+    changes: list[float],
+) -> list[MarketReturnDistributionBucket]:
+    counts = {code: 0 for code, _, _, _ in _DISTRIBUTION_BUCKETS}
+    for value in changes:
+        if value <= -7.0:
+            counts["DOWN_7"] += 1
+        elif value <= -3.0:
+            counts["DOWN_3_7"] += 1
+        elif value < 0.0:
+            counts["DOWN_0_3"] += 1
+        elif value == 0.0:
+            counts["FLAT"] += 1
+        elif value < 3.0:
+            counts["UP_0_3"] += 1
+        elif value < 7.0:
+            counts["UP_3_7"] += 1
+        else:
+            counts["UP_7"] += 1
+    total = max(1, len(changes))
+    return [
+        MarketReturnDistributionBucket(
+            code=code,
+            label=label,
+            lower_bound=lower,
+            upper_bound=upper,
+            count=counts[code],
+            ratio=counts[code] / total,
+        )
+        for code, label, lower, upper in _DISTRIBUTION_BUCKETS
+    ]
+
+
+def _market_internal_history(
+    panel: dict[str, list[Any]],
+) -> list[MarketInternalHistoryPoint]:
+    all_dates = sorted({bar.trade_date for bars in panel.values() for bar in bars})
+    target_dates = set(all_dates[-60:])
+    aggregates: dict[str, dict[str, Any]] = {
+        trade_date: {
+            "changes": [],
+            "amount": 0.0,
+            "above": {20: 0, 60: 0, 120: 0, 250: 0},
+            "valid": {20: 0, 60: 0, 120: 0, 250: 0},
+            "high": {20: 0, 60: 0, 250: 0},
+            "low": {20: 0, 60: 0, 250: 0},
+        }
+        for trade_date in target_dates
+    }
+    for bars in panel.values():
+        closes = [bar.close for bar in bars]
+        prefix = [0.0]
+        for close in closes:
+            prefix.append(prefix[-1] + close)
+        for index, bar in enumerate(bars):
+            if index == 0 or bar.trade_date not in target_dates:
+                continue
+            previous = closes[index - 1]
+            if previous <= 0 or bar.close <= 0:
+                continue
+            aggregate = aggregates[bar.trade_date]
+            aggregate["changes"].append(
+                (bar.close / previous - 1.0) * 100.0
+            )
+            aggregate["amount"] += max(0.0, bar.amount or 0.0)
+            for window in (20, 60, 120, 250):
+                if index + 1 < window:
+                    continue
+                start = index + 1 - window
+                average = (prefix[index + 1] - prefix[start]) / window
+                aggregate["valid"][window] += 1
+                if bar.close > average:
+                    aggregate["above"][window] += 1
+            for window in (20, 60, 250):
+                if index + 1 < window:
+                    continue
+                start = index + 1 - window
+                window_closes = closes[start:index + 1]
+                if bar.close >= max(window_closes):
+                    aggregate["high"][window] += 1
+                if bar.close <= min(window_closes):
+                    aggregate["low"][window] += 1
+
+    values: list[MarketInternalHistoryPoint] = []
+    rolling_net: deque[int] = deque(maxlen=60)
+    for trade_date in sorted(aggregates):
+        aggregate = aggregates[trade_date]
+        changes = aggregate["changes"]
+        if not changes:
+            continue
+        advance = sum(1 for value in changes if value > 0)
+        decline = sum(1 for value in changes if value < 0)
+        flat = len(changes) - advance - decline
+        net_advances = advance - decline
+        rolling_net.append(net_advances)
+        values.append(MarketInternalHistoryPoint(
+            business_date=trade_date,
+            advance_count=advance,
+            decline_count=decline,
+            flat_count=flat,
+            valid_count=len(changes),
+            advance_ratio=advance / len(changes),
+            total_amount=aggregate["amount"],
+            median_change_pct=statistics.median(changes),
+            ma20_ratio=_ratio(aggregate["above"][20], aggregate["valid"][20]),
+            ma60_ratio=_ratio(aggregate["above"][60], aggregate["valid"][60]),
+            ma120_ratio=_ratio(aggregate["above"][120], aggregate["valid"][120]),
+            ma250_ratio=_ratio(aggregate["above"][250], aggregate["valid"][250]),
+            new_high20_count=aggregate["high"][20],
+            new_low20_count=aggregate["low"][20],
+            new_high60_count=aggregate["high"][60],
+            new_low60_count=aggregate["low"][60],
+            new_high250_count=aggregate["high"][250],
+            new_low250_count=aggregate["low"][250],
+            net_advances=net_advances,
+            advance_decline_line=sum(rolling_net),
+        ))
+    return values
+
+
+def _trend_valid_count(
+    panel: dict[str, list[Any]],
+    business_date: date,
+    window: int,
+) -> int:
+    target = business_date.isoformat()
+    return sum(
+        1
+        for bars in panel.values()
+        if len(bars) >= window and bars[-1].trade_date == target
+    )
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return None if denominator == 0 else numerator / denominator

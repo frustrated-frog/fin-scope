@@ -35,7 +35,7 @@ def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
 
     result = service.fetch(date(2026, 8, 21))
 
-    assert result.schema_version == "market-breadth-v1"
+    assert result.schema_version == "market-breadth-v2"
     assert result.business_date == "2026-08-21"
     assert result.source_code == "AKSHARE_EASTMONEY_A_SPOT"
     assert result.source_family == "EASTMONEY"
@@ -262,6 +262,72 @@ def test_closed_business_date_uses_local_daily_bar_panel_with_partial_quality(tm
     assert result.total_amount == 400.0
     assert result.median_change_pct == 0.0
     assert any("2 只" in warning and "不代表完整全A" in warning for warning in result.warnings)
+
+
+def test_daily_bar_panel_calculates_market_internal_structure_and_sixty_day_history(tmp_path) -> None:
+    store = SnapshotStore(tmp_path / "snapshots.db")
+    trade_dates = pd.bdate_range(end="2026-08-21", periods=260)
+    series = (
+        ("SH", "600001", [100.0 + index for index in range(260)]),
+        ("SZ", "000001", [400.0 - index for index in range(260)]),
+        ("SZ", "300001", [200.0] * 259 + [210.0]),
+    )
+    for market, code, closes in series:
+        symbol = StockSymbol(market=market, code=code)
+        bars = [
+            DailyBar(
+                symbol=symbol,
+                trade_date=trade_date.date().isoformat(),
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                volume=100,
+                amount=200.0,
+                adjustment="QFQ",
+            )
+            for trade_date, close in zip(trade_dates, closes)
+        ]
+        store.save(DataEnvelope[list[DailyBar]](
+            capability=DataCapability.DAILY_BARS,
+            symbol=symbol,
+            quality_status=QualityStatus.FRESH_FALLBACK,
+            source_code="FIXTURE",
+            source_family="FIXTURE",
+            retrieved_at=datetime(2026, 8, 22, 12, 0),
+            data=bars,
+        ))
+
+    result = MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 24),
+        now_provider=lambda: datetime(2026, 8, 24, 12, 0),
+        snapshot_store=store,
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-24"}]),
+    ).fetch(date(2026, 8, 21))
+
+    assert result.schema_version == "market-breadth-v2"
+    assert sum(bucket.count for bucket in result.return_distribution) == 3
+    assert next(bucket for bucket in result.return_distribution if bucket.code == "UP_3_7").count == 1
+    assert result.trend_breadth.ma20_ratio == 2 / 3
+    assert result.trend_breadth.ma60_ratio == 2 / 3
+    assert result.trend_breadth.ma120_ratio == 2 / 3
+    assert result.trend_breadth.ma250_ratio == 2 / 3
+    assert result.new_high_low.high20_count == 2
+    assert result.new_high_low.low20_count == 1
+    assert result.new_high_low.high250_count == 2
+    assert result.new_high_low.low250_count == 1
+    assert result.net_advances == 1
+    assert result.advance_decline_line == 1
+    assert len(result.history) == 60
+    assert result.history[-1].business_date == "2026-08-21"
+    assert result.history[-1].ma20_ratio == 2 / 3
+    assert result.history[-1].new_high20_count == 2
+    assert result.history[-1].new_low20_count == 1
+    assert result.history[-1].advance_decline_line == 1
 
 
 def test_weekday_holiday_accepts_the_latest_calendar_trade_date(tmp_path) -> None:

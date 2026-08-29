@@ -31,10 +31,73 @@ class QualityStatus(str, Enum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+class MarketReturnDistributionBucket(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    label: str
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    count: int = Field(ge=0)
+    ratio: float = Field(ge=0, le=1)
+
+
+class MarketTrendBreadth(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ma20_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma20_valid_count: int = Field(default=0, ge=0)
+    ma60_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma60_valid_count: int = Field(default=0, ge=0)
+    ma120_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma120_valid_count: int = Field(default=0, ge=0)
+    ma250_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma250_valid_count: int = Field(default=0, ge=0)
+
+
+class MarketNewHighLow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    high20_count: int = Field(default=0, ge=0)
+    low20_count: int = Field(default=0, ge=0)
+    valid20_count: int = Field(default=0, ge=0)
+    high60_count: int = Field(default=0, ge=0)
+    low60_count: int = Field(default=0, ge=0)
+    valid60_count: int = Field(default=0, ge=0)
+    high250_count: int = Field(default=0, ge=0)
+    low250_count: int = Field(default=0, ge=0)
+    valid250_count: int = Field(default=0, ge=0)
+
+
+class MarketInternalHistoryPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    business_date: str
+    advance_count: int = Field(ge=0)
+    decline_count: int = Field(ge=0)
+    flat_count: int = Field(ge=0)
+    valid_count: int = Field(ge=1)
+    advance_ratio: float = Field(ge=0, le=1)
+    total_amount: float = Field(ge=0)
+    median_change_pct: float
+    ma20_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma60_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma120_ratio: float | None = Field(default=None, ge=0, le=1)
+    ma250_ratio: float | None = Field(default=None, ge=0, le=1)
+    new_high20_count: int = Field(default=0, ge=0)
+    new_low20_count: int = Field(default=0, ge=0)
+    new_high60_count: int = Field(default=0, ge=0)
+    new_low60_count: int = Field(default=0, ge=0)
+    new_high250_count: int = Field(default=0, ge=0)
+    new_low250_count: int = Field(default=0, ge=0)
+    net_advances: int
+    advance_decline_line: int
+
+
 class MarketBreadthSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["market-breadth-v1"] = "market-breadth-v1"
+    schema_version: Literal["market-breadth-v2"] = "market-breadth-v2"
     market: Literal["CN-A"] = "CN-A"
     business_date: str
     source_code: str
@@ -50,6 +113,16 @@ class MarketBreadthSnapshot(BaseModel):
     limit_up_count: int | None = Field(default=None, ge=0)
     limit_down_count: int | None = Field(default=None, ge=0)
     median_change_pct: float
+    return_distribution: list[MarketReturnDistributionBucket] = Field(
+        default_factory=list
+    )
+    trend_breadth: MarketTrendBreadth = Field(
+        default_factory=MarketTrendBreadth
+    )
+    new_high_low: MarketNewHighLow = Field(default_factory=MarketNewHighLow)
+    net_advances: int = 0
+    advance_decline_line: int = 0
+    history: list[MarketInternalHistoryPoint] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
