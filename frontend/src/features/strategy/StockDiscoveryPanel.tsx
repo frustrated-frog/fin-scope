@@ -17,6 +17,10 @@ const conclusions: Record<string, string> = {
   NO_CLEAR_ADVANTAGE: '无明显优势', INSUFFICIENT_DATA: '数据不足'
 };
 
+const researchTiers: Record<string, string> = {
+  ACTIONABLE: '严格通过', CONDITIONAL: '条件研究', WATCH: '观察名单'
+};
+
 function pct(value?: number, digits = 1) {
   return value == null ? '—' : `${(value * 100).toFixed(digits)}%`;
 }
@@ -48,10 +52,11 @@ function CandidateCard({ evidence, candidate, onOpenResearch }: {
   candidate?: StockDiscoveryCandidate;
   onOpenResearch: (code: string) => void;
 }) {
-  return <article className="discovery-candidate" data-health={evidence.health_status}>
-    <div className="discovery-rank"><span>#{String(evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
+  const tier = evidence.research_tier ?? (evidence.qualified ? 'ACTIONABLE' : 'WATCH');
+  return <article className="discovery-candidate" data-health={evidence.health_status} data-tier={tier}>
+    <div className="discovery-rank"><span>#{String(evidence.relative_rank ?? evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
     <div className="discovery-candidate-main">
-      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}</h4></div><div className="discovery-verdicts"><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
+      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}</h4></div><div className="discovery-verdicts"><em data-tier={tier}>{researchTiers[tier]}</em><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
       <div className="discovery-probability"><div><span>未来 5 日上涨概率</span><strong>{pct(evidence.calibrated_probability)}</strong></div><i aria-hidden="true"><b style={{ width: pct(evidence.calibrated_probability) }} /></i><small>保守下界 {pct(evidence.probability_lower_bound)} · 不是确定性收益承诺</small></div>
       <dl>
         <div><dt>锁定样本准确率</dt><dd>{pct(evidence.locked_accuracy)}</dd></div>
@@ -62,7 +67,7 @@ function CandidateCard({ evidence, candidate, onOpenResearch }: {
         <div><dt>一手资金</dt><dd>{money(candidate?.lot_cost)}</dd></div>
       </dl>
       <footer><div>{(candidate?.sector_names ?? []).map(name => <span key={name}>{name}</span>)}</div><div className="discovery-candidate-actions"><small>现价 {candidate ? `¥${candidate.price.toFixed(2)}` : '—'}</small><button type="button" onClick={() => onOpenResearch(evidence.code)}>进入单股完整研究</button></div></footer>
-      {(evidence.evidence.length > 0 || evidence.risks.length > 0) && <details><summary>查看入选证据与风险边界</summary><div className="discovery-evidence"><section><b>为什么进入前五</b>{evidence.evidence.map(item => <p key={item}>{item}</p>)}</section><section><b>必须同时看到</b>{evidence.risks.map(item => <p key={item}>{item}</p>)}</section></div></details>}
+      {(evidence.evidence.length > 0 || evidence.risks.length > 0) && <details><summary>查看排序证据与风险边界</summary><div className="discovery-evidence"><section><b>为什么相对领先</b>{evidence.evidence.map(item => <p key={item}>{item}</p>)}</section><section><b>必须同时看到</b>{evidence.risks.map(item => <p key={item}>{item}</p>)}</section></div></details>}
     </div>
   </article>;
 }
@@ -110,6 +115,10 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
   const run = latest && 'run' in latest ? latest.run : undefined;
   const candidates = useMemo(() => new Map(report?.candidates.map(item => [item.code, item]) ?? []), [report]);
   const finalCodes = useMemo(() => new Set(report?.final_candidates.map(item => item.code) ?? []), [report]);
+  const researchCandidates = useMemo(() => {
+    if (report?.relative_candidates?.length) return report.relative_candidates;
+    return report?.final_candidates ?? [];
+  }, [report]);
 
   if (!report) {
     const businessFailed = statusDetail?.businessStatus === 'FAILED';
@@ -143,17 +152,18 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
 
     <div className="discovery-analysis-grid">
       <RiskReturnMap evidence={report.deep_evidence} candidates={report.candidates} finalCodes={finalCodes} />
-      <CandidateFactorMatrix evidence={report.final_candidates} candidates={report.candidates} />
+      <CandidateFactorMatrix evidence={researchCandidates} candidates={report.candidates} />
     </div>
 
     <PanelCoverageMatrix evidence={report.deep_evidence} candidates={report.candidates} />
 
     <div className="discovery-layout">
       <main>
-        <div className="discovery-section-title"><div><span>FINAL SHORTLIST</span><h4>有优势才出现，最多五只</h4></div><p>{report.final_candidates.length ? `本轮 ${report.final_candidates.length} 只通过最终门禁` : '本轮没有股票通过最终门禁，这也是有效结论'}</p></div>
-        <div className="discovery-final-list">{report.final_candidates.length
-          ? report.final_candidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
-          : <div className="discovery-no-edge"><strong>宁可空缺，也不凑满前五</strong><p>当前候选在概率质量、样本外证据或稳定性上未形成足够优势。</p></div>}</div>
+        <div className="discovery-section-title"><div><span>RELATIVE RESEARCH SHORTLIST</span><h4>相对优势 Top 5</h4></div><p>从全部深度候选中排序，不把相对领先包装成买入结论</p></div>
+        <div className="discovery-action-gate" data-empty={!report.final_candidates.length || undefined}><div><span>STRICT ACTION GATE</span><strong>严格可行动 {report.final_candidates.length}</strong></div><p>{report.final_candidates.length ? `其中 ${report.final_candidates.map(item => candidates.get(item.code)?.name ?? item.code).join('、')} 通过全部概率、回测、稳定性门禁。` : '本轮无人通过绝对门禁；下方仍展示最值得继续研究的五只，但全部不是买入信号。'}</p></div>
+        <div className="discovery-final-list">{researchCandidates.length
+          ? researchCandidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
+          : <div className="discovery-no-edge"><strong>深度样本暂不可用</strong><p>本批次没有形成可比较的深度证据，系统不会输出空洞排序。</p></div>}</div>
       </main>
       <aside className="discovery-context">
         <section><header><span>HOT SECTORS</span><b>同花顺 · 净流入降序</b></header>{report.sectors.map(sector => <div className="discovery-sector" key={`${sector.category}-${sector.code}`}><i>{String(sector.source_rank).padStart(2, '0')}</i><p><strong>{sector.name}</strong><small>{constituentSource(sector.constituent_source_family)} · {constituentQuality(sector.constituent_quality_status)}</small><em>成分覆盖 {sector.resolved_constituent_count ?? '—'} / {sector.expected_constituent_count ?? '—'}</em></p><div><b>{money(sector.main_net_inflow)}</b>{sector.change_pct != null && <small>{sector.change_pct > 0 ? '+' : ''}{sector.change_pct.toFixed(2)}%</small>}</div></div>)}</section>

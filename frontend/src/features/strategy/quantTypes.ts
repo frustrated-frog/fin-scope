@@ -431,6 +431,8 @@ export interface StockDiscoveryEvidence {
   probability_lower_bound: number; brier_skill_score: number; locked_accuracy: number;
   locked_log_loss: number; risk_adjusted_return: number; max_drawdown: number;
   stability_score: number; health_status: string; deep_score?: number; final_rank?: number;
+  relative_score?: number; relative_rank?: number;
+  research_tier?: 'ACTIONABLE' | 'CONDITIONAL' | 'WATCH';
   backtest_audit_status?: 'PASS' | 'WARNING' | 'UNAVAILABLE';
   backtest_entry_date_agreement_rate?: number; backtest_return_delta?: number;
   evidence: string[]; risks: string[]; forecast_report?: SingleStockForecast;
@@ -445,7 +447,8 @@ export interface StockDiscoveryReport {
     unsupported_scope_excluded_count?: number; constituent_count: number; admitted_count: number; quantified_count: number;
     deep_review_count: number; final_count: number };
   sectors: StockDiscoverySector[]; candidates: StockDiscoveryCandidate[];
-  deep_evidence: StockDiscoveryEvidence[]; final_candidates: StockDiscoveryEvidence[];
+  deep_evidence: StockDiscoveryEvidence[]; relative_candidates?: StockDiscoveryEvidence[];
+  final_candidates: StockDiscoveryEvidence[];
 }
 
 export type StockDiscoveryLatest =

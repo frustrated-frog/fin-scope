@@ -81,11 +81,11 @@ test('plots every deep candidate and highlights the final shortlist', () => {
   expect(screen.getByText('最终入选 1 只')).toBeInTheDocument();
 });
 
-test('compares final candidates using six explainable factor columns', () => {
+test('compares relative candidates using six explainable factor columns', () => {
   render(<CandidateFactorMatrix evidence={[evidence[0], { ...evidence[1], final_rank: 2 }]}
     candidates={candidates} />);
 
-  expect(screen.getByRole('table', { name: '最终候选因子对比' })).toBeInTheDocument();
+  expect(screen.getByRole('table', { name: '相对候选因子对比' })).toBeInTheDocument();
   expect(screen.getByText('相对动量')).toBeInTheDocument();
   expect(screen.getByText('60日回撤')).toBeInTheDocument();
   expect(screen.getAllByText('强').length).toBeGreaterThan(0);
@@ -110,5 +110,5 @@ test('keeps visual explanations honest when no candidates are available', () => 
     <CandidateFactorMatrix evidence={[]} candidates={[]} /></>);
 
   expect(screen.getByText('本批没有可绘制的深度候选。')).toBeInTheDocument();
-  expect(screen.getByText('没有最终候选，因此不生成因子对比。')).toBeInTheDocument();
+  expect(screen.getByText('没有相对候选，因此不生成因子对比。')).toBeInTheDocument();
 });

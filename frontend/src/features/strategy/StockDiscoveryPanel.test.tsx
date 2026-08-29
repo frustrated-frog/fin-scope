@@ -41,7 +41,8 @@ test('presents the latest automatic selection without a manual refresh action', 
         funnel: { raw_constituent_count: 139, scope_excluded_count: 31, star_market_excluded_count: 25, beijing_market_excluded_count: 6, unsupported_scope_excluded_count: 0, constituent_count: 108, admitted_count: 42, quantified_count: 42, deep_review_count: 15, final_count: 1 },
         sectors: [{ code: '881125', name: '人工智能', category: 'INDUSTRY', source_rank: 1, change_pct: 2.4, main_net_inflow: 980000000, expected_constituent_count: 52, resolved_constituent_count: 52, constituent_source_family: 'TONGHUASHUN', constituent_quality_status: 'COMPLETE', constituent_coverage: 1 }],
         candidates: [{ code: '600001', market: 'SH', name: '样本股份', price: 12.34, lot_cost: 1239, admitted: true, rejection_reasons: [], sector_names: ['人工智能'], factors: { relative_momentum_20: .12, momentum_60: .2, trend_consistency: .65, liquidity: 21.4, volatility_20: .03, drawdown_60: -.09 }, lightweight_score: 0.72, lightweight_rank: 1 }],
-        deep_evidence: [{ code: '600001', qualified: true, conclusion: 'ROBUST', calibrated_probability: 0.64, probability_lower_bound: 0.55, brier_skill_score: 0.12, locked_accuracy: 0.58, locked_log_loss: 0.63, risk_adjusted_return: 0.71, max_drawdown: -0.12, stability_score: 0.81, health_status: 'HEALTHY', deep_score: 0.78, final_rank: 1, evidence: ['锁定样本优于基准'], risks: ['概率不是确定收益'] }],
+        deep_evidence: [{ code: '600001', qualified: true, conclusion: 'ROBUST', calibrated_probability: 0.64, probability_lower_bound: 0.55, brier_skill_score: 0.12, locked_accuracy: 0.58, locked_log_loss: 0.63, risk_adjusted_return: 0.71, max_drawdown: -0.12, stability_score: 0.81, health_status: 'HEALTHY', deep_score: 0.78, relative_rank: 1, research_tier: 'ACTIONABLE', evidence: ['锁定样本优于基准'], risks: ['概率不是确定收益'] }],
+        relative_candidates: [{ code: '600001', qualified: true, conclusion: 'ROBUST', calibrated_probability: 0.64, probability_lower_bound: 0.55, brier_skill_score: 0.12, locked_accuracy: 0.58, locked_log_loss: 0.63, risk_adjusted_return: 0.71, max_drawdown: -0.12, stability_score: 0.81, backtest_audit_status: 'PASS', health_status: 'HEALTHY', relative_score: 0.78, relative_rank: 1, research_tier: 'ACTIONABLE', evidence: ['锁定样本优于基准'], risks: ['概率不是确定收益'] }],
         final_candidates: [{ code: '600001', qualified: true, conclusion: 'ROBUST', calibrated_probability: 0.64, probability_lower_bound: 0.55, brier_skill_score: 0.12, locked_accuracy: 0.58, locked_log_loss: 0.63, risk_adjusted_return: 0.71, max_drawdown: -0.12, stability_score: 0.81, backtest_audit_status: 'PASS', backtest_entry_date_agreement_rate: 1, backtest_return_delta: .0002, health_status: 'HEALTHY', deep_score: 0.78, final_rank: 1, evidence: ['锁定样本优于基准'], risks: ['概率不是确定收益'] }]
       }
     });
@@ -52,9 +53,12 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(await screen.findByRole('heading', { name: /样本股份/ })).toBeInTheDocument();
   expect(screen.getAllByText('64.0%').length).toBeGreaterThanOrEqual(1);
   expect(screen.getByText('锁定样本优于基准')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '相对优势 Top 5' })).toBeInTheDocument();
+  expect(screen.getByText('严格可行动 1')).toBeInTheDocument();
+  expect(screen.getByText('严格通过')).toBeInTheDocument();
   expect(screen.getByText('双引擎一致')).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();
-  expect(screen.getByRole('table', { name: '最终候选因子对比' })).toBeInTheDocument();
+  expect(screen.getByRole('table', { name: '相对候选因子对比' })).toBeInTheDocument();
   expect(screen.getByText('38.9% 保留')).toBeInTheDocument();
   expect(screen.getByText('同花顺唯一热榜')).toBeInTheDocument();
   expect(screen.getByText('净流入降序')).toBeInTheDocument();

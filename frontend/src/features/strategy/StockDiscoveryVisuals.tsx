@@ -148,14 +148,14 @@ export function CandidateFactorMatrix({ evidence, candidates }: {
   candidates: StockDiscoveryCandidate[];
 }) {
   if (!evidence.length) {
-    return <p className="quant-visual-empty discovery-visual-empty">没有最终候选，因此不生成因子对比。</p>;
+    return <p className="quant-visual-empty discovery-visual-empty">没有相对候选，因此不生成因子对比。</p>;
   }
   const candidateByCode = new Map(candidates.map(item => [item.code, item]));
   const rows = evidence.map(item => ({ evidence: item, candidate: candidateByCode.get(item.code) }));
   return <section className="discovery-visual-card candidate-factor-matrix">
-    <header><div><span>RELATIVE FACTOR TAPE</span><h4>最终候选因子对比</h4></div><small>当前前五内部相对强弱 · 波动率越低越优</small></header>
-    <div><table aria-label="最终候选因子对比"><thead><tr><th>候选</th>{factorColumns.map(item => <th key={item.key}>{item.label}</th>)}</tr></thead>
-      <tbody>{rows.map(({ evidence: item, candidate }) => <tr key={item.code}><th><b>#{item.final_rank ?? '—'}</b><span>{candidate?.name ?? item.code}</span><small>{item.code}</small></th>{factorColumns.map(factor => {
+    <header><div><span>RELATIVE FACTOR TAPE</span><h4>相对候选因子对比</h4></div><small>当前 Top 5 内部相对强弱 · 波动率越低越优</small></header>
+    <div><table aria-label="相对候选因子对比"><thead><tr><th>候选</th>{factorColumns.map(item => <th key={item.key}>{item.label}</th>)}</tr></thead>
+      <tbody>{rows.map(({ evidence: item, candidate }) => <tr key={item.code}><th><b>#{item.relative_rank ?? item.final_rank ?? '—'}</b><span>{candidate?.name ?? item.code}</span><small>{item.code}</small></th>{factorColumns.map(factor => {
         const value = candidate?.factors?.[factor.key];
         if (typeof value !== 'number' || !Number.isFinite(value)) {
           return <td key={factor.key} data-level="无数据"><strong>无数据</strong><small>—</small></td>;
@@ -167,6 +167,6 @@ export function CandidateFactorMatrix({ evidence, candidates }: {
         return <td key={factor.key} data-level={level}><strong>{level}</strong><small>{factor.format(value)}</small></td>;
       })}</tr>)}</tbody>
     </table></div>
-    <footer>“强/中/弱”只表示本批最终候选之间的相对位置，不代表跨批次绝对评分。</footer>
+    <footer>“强/中/弱”只表示本批相对候选之间的位置，不代表跨批次绝对评分或买入建议。</footer>
   </section>;
 }
