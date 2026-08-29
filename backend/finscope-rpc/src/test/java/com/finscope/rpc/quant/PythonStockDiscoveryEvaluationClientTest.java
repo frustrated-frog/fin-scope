@@ -41,6 +41,7 @@ class PythonStockDiscoveryEvaluationClientTest {
         assertEquals("ACCUMULATING", report.getStatus());
         assertEquals(3, report.getPendingCount());
         assertEquals(1, report.getMaturedCandidateCount());
+        assertEquals("SHADOW_ACCUMULATING", report.getRankingChallenger().getStatus());
     }
 
     @Test
@@ -87,6 +88,14 @@ class PythonStockDiscoveryEvaluationClientTest {
                 + "\"sector_performance\":[],\"model_race\":{\"status\":\"EVIDENCE_ACCUMULATING\","
                 + "\"sample_count\":0,\"minimum_promotion_samples\":30,\"champion_code\":null,"
                 + "\"promotion_candidate_code\":null,\"conclusion\":\"尚无真实结果\",\"candidates\":[]},"
+                + "\"ranking_challenger\":{\"status\":\"SHADOW_ACCUMULATING\","
+                + "\"training_date_count\":0,\"calibration_date_count\":0,"
+                + "\"locked_date_count\":0,\"observation_count\":1,\"pair_count\":0,"
+                + "\"pairwise_accuracy\":null,\"rank_ic\":null,\"top_k\":3,"
+                + "\"top_k_average_return\":null,\"admitted_pool_average_return\":null,"
+                + "\"top_k_excess_return\":null,\"feature_weights\":[],"
+                + "\"method\":\"DATE_GROUPED_PAIRWISE_LOGISTIC_V1\","
+                + "\"reason\":\"独立到期批次少于 20 个\"},"
                 + "\"recent_outcomes\":[],\"warnings\":[]}";
     }
 

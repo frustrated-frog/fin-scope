@@ -2,6 +2,7 @@ package com.finscope.rpc.quant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.finscope.domain.quant.discovery.StockDiscoveryAccuracyReport;
 import com.finscope.domain.quant.discovery.StockDiscoveryEvaluationRequest;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
@@ -28,7 +29,17 @@ public class PythonStockDiscoveryEvaluationClient {
     private int timeoutMs;
     private final ObjectMapper json = new ObjectMapper();
     private final ObjectMapper snakeJson = new ObjectMapper()
-            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+            .addMixIn(StockDiscoveryAccuracyReport.RankingChallenger.class,
+                    RankingChallengerMixin.class);
+
+    private abstract static class RankingChallengerMixin {
+        @JsonProperty("top_k_average_return")
+        abstract void setTopKAverageReturn(Double value);
+
+        @JsonProperty("top_k_excess_return")
+        abstract void setTopKExcessReturn(Double value);
+    }
 
     public PythonStockDiscoveryEvaluationClient() {
     }
@@ -69,6 +80,7 @@ public class PythonStockDiscoveryEvaluationClient {
                 || report.getSelectionMetrics() == null || report.getSelectionMetrics().size() != 3
                 || report.getWindows() == null || report.getWindows().size() != 3
                 || report.getSectorPerformance() == null || report.getModelRace() == null
+                || report.getRankingChallenger() == null
                 || report.getRecentOutcomes() == null || report.getWarnings() == null
                 || report.getPendingCount() != request.getPendingCount()
                 || report.getMaturedCandidateCount() != request.getObservations().size()
@@ -94,10 +106,24 @@ public class PythonStockDiscoveryEvaluationClient {
             windowDays.add(metric.getWindowDays());
         }
         StockDiscoveryAccuracyReport.ProbabilityQuality quality = report.getProbabilityQuality();
+        StockDiscoveryAccuracyReport.RankingChallenger ranking = report.getRankingChallenger();
         if (!selectionLimits.equals(Set.of(1, 3, 5)) || !windowDays.equals(Set.of(30, 90, 180))
                 || !unit(quality.getAccuracy()) || !unit(quality.getExpectedCalibrationError())
                 || !unit(quality.getBaselineProbability()) || !finite(quality.getBrierScore())
-                || !finite(quality.getBrierSkillScore()) || !finite(quality.getLogLoss())) {
+                || !finite(quality.getBrierSkillScore()) || !finite(quality.getLogLoss())
+                || !("SHADOW_ACCUMULATING".equals(ranking.getStatus())
+                || "SHADOW_EVALUATING".equals(ranking.getStatus())
+                || "PROMOTION_REVIEW".equals(ranking.getStatus()))
+                || ranking.getTrainingDateCount() < 0 || ranking.getCalibrationDateCount() < 0
+                || ranking.getLockedDateCount() < 0 || ranking.getObservationCount() < 0
+                || ranking.getPairCount() < 0 || ranking.getTopK() != 3
+                || !unit(ranking.getPairwiseAccuracy()) || !finite(ranking.getRankIc())
+                || ranking.getRankIc() != null
+                && (ranking.getRankIc() < -1d || ranking.getRankIc() > 1d)
+                || !finite(ranking.getTopKAverageReturn())
+                || !finite(ranking.getAdmittedPoolAverageReturn())
+                || !finite(ranking.getTopKExcessReturn())
+                || ranking.getFeatureWeights() == null || ranking.getMethod() == null) {
             throw contract("SCHEMA_DRIFT", "Python 股票发现真实评测指标范围无效", false, null);
         }
     }

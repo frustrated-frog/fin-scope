@@ -24,6 +24,8 @@ public class SingleStockForecast {
     private Double upProbability;
     private Double rawProbability;
     private ConfidenceInterval probabilityInterval;
+    private ReturnDistribution returnDistribution;
+    private SelectionBiasAudit selectionBiasAudit;
     private Double expectedNetReturn;
     private Double lowerNetReturn;
     private Double upperNetReturn;
@@ -254,6 +256,51 @@ public class SingleStockForecast {
         private int validIterations;
         private String reason;
         private String limitation;
+    }
+
+    @Data
+    public static class ReturnDistribution {
+        private String status;
+        private int horizonDays;
+        private Double p10;
+        private Double p50;
+        private Double p90;
+        private Double rawP10;
+        private Double rawP50;
+        private Double rawP90;
+        private Double conformalRadius;
+        private Double lockedCoverage;
+        private Double meanIntervalWidth;
+        private Double lockedPinballLoss;
+        private int sampleCount;
+        private int developmentCount;
+        private int calibrationCount;
+        private int lockedCount;
+        private LocalDate developmentLastExitDate;
+        private LocalDate calibrationStartDate;
+        private LocalDate calibrationEndDate;
+        private LocalDate lockedStartDate;
+        private String method;
+        private String reason;
+    }
+
+    @Data
+    public static class SelectionBiasAudit {
+        private String status;
+        private String verdict;
+        private int trialCount;
+        private int returnObservationCount;
+        private Double observedSharpe;
+        private Double probabilisticSharpeProbability;
+        private Double deflatedSharpeProbability;
+        private Double expectedMaximumSharpe;
+        private Double probabilityOfBacktestOverfitting;
+        private Integer minimumTrackRecordLength;
+        private Double skewness;
+        private Double excessKurtosis;
+        private int combinationCount;
+        private String method;
+        private String reason;
     }
 
     @Data

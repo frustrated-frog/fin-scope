@@ -34,7 +34,8 @@ public class PythonSingleStockForecastClient {
             "single-stock-research-v2", "single-stock-research-v3",
             "single-stock-research-v4", "single-stock-research-v5",
             "single-stock-research-v6", "single-stock-research-v7",
-            "single-stock-research-v8", "single-stock-research-v9"));
+            "single-stock-research-v8", "single-stock-research-v9",
+            "single-stock-research-v10"));
     private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
             "CHAMPION", "CHALLENGER", "BASELINE"));
     private static final Set<String> AUDIT_STATUSES = new HashSet<String>(Arrays.asList(
@@ -48,6 +49,8 @@ public class PythonSingleStockForecastClient {
             "UNAVAILABLE", "PANEL_CORE", "PANEL_FULL"));
     private static final Set<String> PANEL_DRIFT_STATUSES = new HashSet<String>(Arrays.asList(
             "UNAVAILABLE", "HEALTHY", "WATCH", "REJECTED"));
+    private static final Set<String> SELECTION_BIAS_VERDICTS = new HashSet<String>(Arrays.asList(
+            "PASS", "CAUTION", "HIGH_RISK", "NOT_EVALUATED"));
 
     private final String baseUrl;
     private final FinanceHttpClient http;
@@ -146,6 +149,59 @@ public class PythonSingleStockForecastClient {
         if ("single-stock-research-v9".equals(result.getReportSchemaVersion())) {
             validateVersionNine(result);
         }
+        if ("single-stock-research-v10".equals(result.getReportSchemaVersion())) {
+            validateVersionTen(result);
+        }
+    }
+
+    private void validateVersionTen(SingleStockForecast result) {
+        validateVersionNine(result);
+        if ("INSUFFICIENT_DATA".equals(result.getStatus())) {
+            return;
+        }
+        SingleStockForecast.ReturnDistribution distribution = result.getReturnDistribution();
+        SingleStockForecast.SelectionBiasAudit bias = result.getSelectionBiasAudit();
+        if (distribution == null || !"AVAILABLE".equals(distribution.getStatus())
+                || distribution.getHorizonDays() != result.getHorizonDays()
+                || distribution.getP10() == null || distribution.getP50() == null
+                || distribution.getP90() == null || distribution.getRawP10() == null
+                || distribution.getRawP50() == null || distribution.getRawP90() == null
+                || distribution.getP10() > distribution.getP50()
+                || distribution.getP50() > distribution.getP90()
+                || distribution.getRawP10() > distribution.getRawP50()
+                || distribution.getRawP50() > distribution.getRawP90()
+                || !finiteNonNegative(distribution.getConformalRadius())
+                || !finiteNonNegative(distribution.getMeanIntervalWidth())
+                || !finiteNonNegative(distribution.getLockedPinballLoss())
+                || distribution.getSampleCount() < 1 || distribution.getDevelopmentCount() < 1
+                || distribution.getCalibrationCount() < 1 || distribution.getLockedCount() < 1
+                || distribution.getDevelopmentLastExitDate() == null
+                || distribution.getCalibrationStartDate() == null
+                || distribution.getCalibrationEndDate() == null
+                || distribution.getLockedStartDate() == null
+                || !distribution.getDevelopmentLastExitDate().isBefore(
+                        distribution.getCalibrationStartDate())
+                || !distribution.getCalibrationEndDate().isBefore(
+                        distribution.getLockedStartDate())
+                || distribution.getMethod() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v10 收益分布证据无效", false);
+        }
+        probability(distribution.getLockedCoverage());
+        if (bias == null || !"AVAILABLE".equals(bias.getStatus())
+                || !SELECTION_BIAS_VERDICTS.contains(bias.getVerdict())
+                || bias.getTrialCount() < 1 || bias.getReturnObservationCount() < 30
+                || !finite(bias.getObservedSharpe())
+                || !finite(bias.getExpectedMaximumSharpe())
+                || bias.getMinimumTrackRecordLength() == null
+                || bias.getMinimumTrackRecordLength() < 2
+                || !finite(bias.getSkewness()) || !finite(bias.getExcessKurtosis())
+                || bias.getCombinationCount() < 1 || bias.getMethod() == null
+                || bias.getReason() == null) {
+            throw contract("SCHEMA_DRIFT", "Python v10 选择偏差审计无效", false);
+        }
+        probability(bias.getProbabilisticSharpeProbability());
+        probability(bias.getDeflatedSharpeProbability());
+        probability(bias.getProbabilityOfBacktestOverfitting());
     }
 
     private void validateVersionNine(SingleStockForecast result) {

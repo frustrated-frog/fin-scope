@@ -22,6 +22,7 @@ public class StockDiscoveryAccuracyReport {
     private List<WindowMetric> windows = new ArrayList<>();
     private List<SectorPerformance> sectorPerformance = new ArrayList<>();
     private ModelRace modelRace;
+    private RankingChallenger rankingChallenger;
     private List<RecentOutcome> recentOutcomes = new ArrayList<>();
     private List<String> warnings = new ArrayList<>();
 
@@ -115,5 +116,24 @@ public class StockDiscoveryAccuracyReport {
         private double actualNetReturn;
         private String actualDirection;
         private List<String> sectorNames = new ArrayList<>();
+    }
+
+    @Data
+    public static class RankingChallenger {
+        private String status;
+        private int trainingDateCount;
+        private int calibrationDateCount;
+        private int lockedDateCount;
+        private int observationCount;
+        private int pairCount;
+        private Double pairwiseAccuracy;
+        private Double rankIc;
+        private int topK;
+        private Double topKAverageReturn;
+        private Double admittedPoolAverageReturn;
+        private Double topKExcessReturn;
+        private List<Double> featureWeights = new ArrayList<>();
+        private String method;
+        private String reason;
     }
 }

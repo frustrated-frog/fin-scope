@@ -232,6 +232,18 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsAndValidatesVersionTenProbabilisticReturnAndSelectionBias() {
+        SingleStockForecast result = clientReturning(v10Payload()).forecast("600519", 5);
+
+        assertEquals("single-stock-research-v10", result.getReportSchemaVersion());
+        assertEquals("AVAILABLE", result.getReturnDistribution().getStatus());
+        assertEquals(-0.03d, result.getReturnDistribution().getP10(), .000001d);
+        assertEquals(0.92d,
+                result.getSelectionBiasAudit().getDeflatedSharpeProbability(), .000001d);
+        assertEquals(11, result.getSelectionBiasAudit().getTrialCount());
+    }
+
+    @Test
     void rejectsVersionEightWhenShadowModelChangesFinalProbability() {
         PythonSingleStockForecastClient client = clientReturning(
                 v8Payload().replace("\"finalProbability\":0.61",
@@ -437,6 +449,34 @@ class PythonSingleStockForecastClientTest {
                 .replace("-platt-v6", "-platt-v9")
                 .replace("}]},\"leakageAudit\"",
                         "}," + challenger + "," + stacked + "]},\"leakageAudit\"");
+    }
+
+    private static String v10Payload() {
+        String distribution = "{\"status\":\"AVAILABLE\",\"horizonDays\":5," +
+                "\"p10\":-0.03,\"p50\":0.012,\"p90\":0.06," +
+                "\"rawP10\":-0.02,\"rawP50\":0.012,\"rawP90\":0.05," +
+                "\"conformalRadius\":0.01,\"lockedCoverage\":0.82," +
+                "\"meanIntervalWidth\":0.09,\"lockedPinballLoss\":0.012," +
+                "\"sampleCount\":1200,\"developmentCount\":700," +
+                "\"calibrationCount\":240,\"lockedCount\":240," +
+                "\"developmentLastExitDate\":\"2021-01-01\"," +
+                "\"calibrationStartDate\":\"2021-01-02\"," +
+                "\"calibrationEndDate\":\"2023-01-01\"," +
+                "\"lockedStartDate\":\"2023-01-02\"," +
+                "\"method\":\"HISTOGRAM_QUANTILE_CQR_V1\"}";
+        String bias = "{\"status\":\"AVAILABLE\",\"verdict\":\"CAUTION\"," +
+                "\"trialCount\":11,\"returnObservationCount\":240," +
+                "\"observedSharpe\":1.1,\"probabilisticSharpeProbability\":0.97," +
+                "\"deflatedSharpeProbability\":0.92,\"expectedMaximumSharpe\":0.4," +
+                "\"probabilityOfBacktestOverfitting\":0.24," +
+                "\"minimumTrackRecordLength\":180,\"skewness\":-0.2," +
+                "\"excessKurtosis\":1.3,\"combinationCount\":70," +
+                "\"method\":\"DEFLATED_SHARPE_CSCV_V1\",\"reason\":\"条件证据\"}";
+        return v9Payload()
+                .replace("single-stock-research-v9", "single-stock-research-v10")
+                .replace("-platt-v9", "-platt-v10")
+                .replace("\"warnings\":[]}", "\"returnDistribution\":" + distribution
+                        + ",\"selectionBiasAudit\":" + bias + ",\"warnings\":[]}");
     }
 
     private static String auditEngine(String code) {
