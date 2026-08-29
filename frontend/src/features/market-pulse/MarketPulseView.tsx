@@ -224,6 +224,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
   const [backfilling, setBackfilling] = useState(false);
   const [view, setView] = useState<'review' | 'breadth' | 'rotation' | 'history'>('review');
   const loadRequest = useRef(0);
+  const autoRepairAttempted = useRef(false);
 
   const load = async (date?: string) => {
     const requestId = ++loadRequest.current;
@@ -248,21 +249,42 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
     void load();
   }, []);
 
-  const refresh = async () => {
+  const refresh = async (notify = true) => {
     setRefreshing(true);
     setMessage('正在刷新市场机会判断');
     try {
       await api('/api/market-pulse/refresh', { method: 'POST' });
       await load();
-      addToast('市场机会判断已刷新', 'success');
+      if (notify) {
+        addToast('市场机会判断已刷新', 'success');
+      }
       setMessage('市场机会判断已刷新');
     } catch (error) {
-      addToast(error instanceof Error ? error.message : '市场机会刷新失败', 'error');
+      if (notify) {
+        addToast(error instanceof Error ? error.message : '市场机会刷新失败', 'error');
+      }
       setMessage('市场机会刷新失败');
     } finally {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (loading || refreshing || !workspace || autoRepairAttempted.current) {
+      return;
+    }
+    autoRepairAttempted.current = true;
+    const historyRequiresRepair = workspace.historyPoints?.some(point =>
+      point.advanceRatio == null || point.totalAmount == null || point.medianChangePct == null
+    ) ?? false;
+    const requiresRepair = workspace.qualityStatus === 'UNAVAILABLE'
+      || workspace.breadth?.qualityStatus === 'UNAVAILABLE'
+      || historyRequiresRepair;
+    if (!requiresRepair) {
+      return;
+    }
+    void refresh(false);
+  }, [loading, refreshing, workspace]);
 
   const backfillPreviousWeek = async () => {
     setBackfilling(true);
@@ -304,7 +326,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
         <div className="market-pulse-empty">
           <span aria-hidden="true">⌁</span><h3>还没有第一份市场判断</h3>
           <p>刷新后会冻结市场内部结构、行业轮动和 Radar 事件变化。</p>
-          <button type="button" onClick={refresh} disabled={refreshing}>刷新今日判断</button>
+          <button type="button" onClick={() => void refresh()} disabled={refreshing}>刷新今日判断</button>
         </div>
       </section>
     );
@@ -335,7 +357,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
             {!dates.length && <option value={workspace.businessDate}>{workspace.businessDate}</option>}
             {dates.map(date => <option key={date} value={date}>{date}</option>)}
           </select></label>
-          <button type="button" aria-label="刷新今日判断" onClick={refresh} disabled={refreshing}>{refreshing ? '正在计算…' : '刷新今日判断'}</button>
+          <button type="button" aria-label="刷新今日判断" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在计算…' : '刷新今日判断'}</button>
         </div>
       </header>
 

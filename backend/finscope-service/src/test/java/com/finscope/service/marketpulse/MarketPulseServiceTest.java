@@ -234,11 +234,89 @@ class MarketPulseServiceTest {
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 21)));
     }
 
+    @Test
+    void refreshRepairsRecentTradingDayBreadthButSkipsInvalidCalendarSnapshots() {
+        LocalDate latest = LocalDate.of(2026, 8, 28);
+        LocalDate historical = LocalDate.of(2026, 8, 26);
+        LocalDate weekend = LocalDate.of(2026, 8, 23);
+        when(features.latestBusinessDate()).thenReturn(latest);
+        when(features.businessDates(latest.minusDays(60), latest))
+                .thenReturn(Arrays.asList(historical, latest));
+        when(sectors.calculateResult(latest)).thenReturn(sectorResult(Collections.emptyList()));
+        when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
+        when(features.calculate(latest, 0D, 0.6D)).thenReturn(regime(latest));
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(confirmations.confirm(anyList(), anyList())).thenReturn(Collections.emptyList());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(latest)).thenReturn(Optional.empty());
+        when(breadthService.calculate(latest)).thenReturn(breadth(latest));
+
+        MarketPulseWorkspace missing = workspace(historical, unavailableBreadth(historical));
+        missing.getWarnings().add("全A市场宽度不可用：采集请求超时");
+        MarketPulseWorkspace invalid = workspace(weekend, unavailableBreadth(weekend));
+        when(repository.findRecentWorkspaces(20, latest)).thenReturn(Arrays.asList(missing, invalid));
+        MarketBreadthSnapshot recovered = breadth(historical);
+        recovered.setAdvanceCount(2946);
+        recovered.setValidCount(5546);
+        recovered.setTotalAmount(1_821_418_342_968D);
+        recovered.setMedianChangePct(0.22D);
+        when(breadthService.calculate(historical)).thenReturn(recovered);
+
+        service.refresh();
+
+        ArgumentCaptor<MarketPulseWorkspace> captor = ArgumentCaptor.forClass(MarketPulseWorkspace.class);
+        verify(repository, org.mockito.Mockito.times(2)).saveWorkspace(captor.capture());
+        MarketPulseWorkspace repaired = captor.getAllValues().get(1);
+        assertEquals(historical, repaired.getBusinessDate());
+        assertEquals(2946, repaired.getBreadth().getAdvanceCount());
+        assertTrue(repaired.getWarnings().stream().noneMatch(value -> value.startsWith("全A市场宽度不可用")));
+        verify(breadthService, org.mockito.Mockito.never()).calculate(weekend);
+    }
+
+    @Test
+    void historyAndDatePickerExcludeSnapshotsThatAreNotTradingDays() {
+        LocalDate latest = LocalDate.of(2026, 8, 28);
+        LocalDate friday = LocalDate.of(2026, 8, 21);
+        LocalDate weekend = LocalDate.of(2026, 8, 23);
+        MarketPulseWorkspace current = workspace(latest, breadth(latest));
+        MarketPulseWorkspace invalid = workspace(weekend, unavailableBreadth(weekend));
+        MarketPulseWorkspace previous = workspace(friday, breadth(friday));
+        when(features.latestBusinessDate()).thenReturn(latest);
+        when(features.businessDates(latest.minusDays(60), latest))
+                .thenReturn(Arrays.asList(friday, latest));
+        when(repository.findLatestWorkspace(latest)).thenReturn(Optional.of(current));
+        when(repository.findRecentWorkspaces(20, latest)).thenReturn(Arrays.asList(current, invalid, previous));
+        when(repository.findRecentDates(100, latest)).thenReturn(Arrays.asList(latest, weekend, friday));
+
+        MarketPulseWorkspace result = service.latest();
+
+        assertEquals(Arrays.asList(latest, friday), service.dates(20));
+        assertEquals(2, result.getHistoryPoints().size());
+        assertEquals(latest, result.getHistoryPoints().get(0).getBusinessDate());
+        assertEquals(friday, result.getHistoryPoints().get(1).getBusinessDate());
+    }
+
     private MarketBreadthSnapshot breadth(LocalDate date) {
         MarketBreadthSnapshot value = new MarketBreadthSnapshot();
         value.setBusinessDate(date);
         value.setQualityStatus("FRESH_PRIMARY");
         value.setAdvanceRatio(0.6D);
+        return value;
+    }
+
+    private MarketBreadthSnapshot unavailableBreadth(LocalDate date) {
+        MarketBreadthSnapshot value = new MarketBreadthSnapshot();
+        value.setBusinessDate(date);
+        value.setQualityStatus("UNAVAILABLE");
+        value.setSourceCode("UNAVAILABLE");
+        return value;
+    }
+
+    private MarketPulseWorkspace workspace(LocalDate date, MarketBreadthSnapshot breadth) {
+        MarketPulseWorkspace value = new MarketPulseWorkspace();
+        value.setBusinessDate(date);
+        value.setBreadth(breadth);
+        value.setRegime(regime(date));
+        value.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
         return value;
     }
 

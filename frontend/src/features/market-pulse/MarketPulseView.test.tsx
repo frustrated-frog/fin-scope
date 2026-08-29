@@ -143,6 +143,79 @@ test('refreshes and reloads the frozen workspace', async () => {
   expect(fetch).toHaveBeenCalledWith('/api/market-pulse/refresh', expect.objectContaining({ method: 'POST' }));
 });
 
+test('automatically retries once when the frozen market breadth is unavailable', async () => {
+  let latestCalls = 0;
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+    const path = String(input);
+    let data: unknown;
+    if (path.endsWith('/dates')) {
+      data = ['2026-08-21'];
+    } else if (path.endsWith('/refresh') && options?.method === 'POST') {
+      data = { status: 'SUCCEEDED' };
+    } else {
+      latestCalls += 1;
+      data = latestCalls === 1
+        ? { ...workspace, breadth: { businessDate: '2026-08-21', qualityStatus: 'UNAVAILABLE' } }
+        : workspace;
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        success: true, code: 'SUCCESS', message: 'success', traceId: 'trace',
+        timestamp: '2026-08-23T10:00:00Z', data
+      })
+    });
+  }));
+
+  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+    '/api/market-pulse/refresh',
+    expect.objectContaining({ method: 'POST' })
+  ));
+  fireEvent.click(await screen.findByRole('tab', { name: '市场宽度' }));
+  expect(await screen.findByText('3,200')).toBeInTheDocument();
+  expect(latestCalls).toBe(2);
+});
+
+test('automatically retries once when historical breadth metrics are missing', async () => {
+  let latestCalls = 0;
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+    const path = String(input);
+    let data: unknown;
+    if (path.endsWith('/dates')) {
+      data = ['2026-08-21'];
+    } else if (path.endsWith('/refresh') && options?.method === 'POST') {
+      data = { status: 'SUCCEEDED' };
+    } else {
+      latestCalls += 1;
+      data = latestCalls === 1
+        ? {
+            ...workspace,
+            historyPoints: [{ ...workspace.historyPoints[0], advanceRatio: undefined, totalAmount: undefined }]
+          }
+        : workspace;
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        success: true, code: 'SUCCESS', message: 'success', traceId: 'trace',
+        timestamp: '2026-08-23T10:00:00Z', data
+      })
+    });
+  }));
+
+  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+    '/api/market-pulse/refresh',
+    expect.objectContaining({ method: 'POST' })
+  ));
+  expect(latestCalls).toBe(2);
+});
+
 test('backfills the five requested days and opens one historical review', async () => {
   const addToast = vi.fn();
   render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);

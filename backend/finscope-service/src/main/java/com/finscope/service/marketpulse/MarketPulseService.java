@@ -24,11 +24,13 @@ import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.time.temporal.ChronoUnit;
+import java.util.Set;
 
 /** 编排市场状态、行业轮动、事件确认与研究候选，冻结为每日工作台快照。 */
 @Service
@@ -55,7 +57,10 @@ public class MarketPulseService {
     private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
-        return refreshDate(featureService.latestBusinessDate(), false);
+        LocalDate businessDate = featureService.latestBusinessDate();
+        MarketPulseRefreshResult value = refreshDate(businessDate, false);
+        repairRecentBreadth(businessDate);
+        return value;
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
@@ -164,7 +169,20 @@ public class MarketPulseService {
     }
 
     public List<LocalDate> dates(int limit) {
-        return repository.findRecentDates(Math.max(1, Math.min(limit, 100)), featureService.latestBusinessDate());
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        LocalDate maximumBusinessDate = featureService.latestBusinessDate();
+        Set<LocalDate> tradingDates = tradingDates(maximumBusinessDate);
+        List<LocalDate> values = new ArrayList<>();
+        for (LocalDate date : repository.findRecentDates(100, maximumBusinessDate)) {
+            if (!isEligibleTradingDate(date, tradingDates)) {
+                continue;
+            }
+            values.add(date);
+            if (values.size() >= boundedLimit) {
+                break;
+            }
+        }
+        return values;
     }
 
     private List<MarketPulseCandidate> candidates(LocalDate businessDate, List<SectorRotationItem> sectors) {
@@ -179,8 +197,12 @@ public class MarketPulseService {
     private MarketPulseWorkspace hydrate(MarketPulseWorkspace workspace) {
         List<MarketRegimeSnapshot> recent = new ArrayList<>();
         List<MarketPulseHistoryPoint> history = new ArrayList<>();
+        Set<LocalDate> tradingDates = tradingDates(workspace.getBusinessDate());
         List<MarketPulseWorkspace> recentWorkspaces = repository.findRecentWorkspaces(20, workspace.getBusinessDate());
         for (MarketPulseWorkspace recentWorkspace : recentWorkspaces) {
+            if (!isEligibleTradingDate(recentWorkspace.getBusinessDate(), tradingDates)) {
+                continue;
+            }
             if (recent.size() < 5 && recentWorkspace.getRegime() != null) {
                 recent.add(recentWorkspace.getRegime());
             }
@@ -189,6 +211,63 @@ public class MarketPulseService {
         workspace.setRecentRegimes(recent);
         workspace.setHistoryPoints(history);
         return workspace;
+    }
+
+    private void repairRecentBreadth(LocalDate maximumBusinessDate) {
+        Set<LocalDate> tradingDates = tradingDates(maximumBusinessDate);
+        for (MarketPulseWorkspace workspace : repository.findRecentWorkspaces(20, maximumBusinessDate)) {
+            LocalDate businessDate = workspace.getBusinessDate();
+            if (!isEligibleTradingDate(businessDate, tradingDates)) {
+                continue;
+            }
+            if (usableBreadth(workspace.getBreadth())) {
+                continue;
+            }
+            MarketBreadthSnapshot recovered = breadthService.calculate(businessDate);
+            if (!usableBreadth(recovered)) {
+                continue;
+            }
+            workspace.setBreadth(recovered);
+            workspace.getWarnings().removeIf(this::isStaleBreadthWarning);
+            for (String warning : recovered.getWarnings()) {
+                if (warning != null && !workspace.getWarnings().contains(warning)) {
+                    workspace.getWarnings().add(warning);
+                }
+            }
+            workspace.setDailyReview(reviewService.generate(workspace));
+            repository.saveWorkspace(workspace);
+        }
+    }
+
+    private boolean isEligibleTradingDate(LocalDate date, Set<LocalDate> tradingDates) {
+        if (date == null || date.getDayOfWeek().getValue() >= 6) {
+            return false;
+        }
+        return tradingDates.isEmpty() || tradingDates.contains(date);
+    }
+
+    private Set<LocalDate> tradingDates(LocalDate maximumBusinessDate) {
+        if (maximumBusinessDate == null) {
+            return Collections.emptySet();
+        }
+        try {
+            return new HashSet<>(featureService.businessDates(maximumBusinessDate.minusDays(60), maximumBusinessDate));
+        } catch (RuntimeException ignored) {
+            return Collections.emptySet();
+        }
+    }
+
+    private boolean usableBreadth(MarketBreadthSnapshot breadth) {
+        return breadth != null
+                && breadth.getAdvanceRatio() != null
+                && breadth.getValidCount() != null
+                && breadth.getValidCount() > 0
+                && breadth.getTotalAmount() != null
+                && breadth.getMedianChangePct() != null;
+    }
+
+    private boolean isStaleBreadthWarning(String warning) {
+        return warning != null && warning.startsWith("全A市场宽度不可用");
     }
 
     private MarketPulseHistoryPoint historyPoint(MarketPulseWorkspace workspace) {
