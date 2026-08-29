@@ -585,7 +585,7 @@ def test_market_breadth_endpoint_returns_versioned_contract(tmp_path: Path) -> N
     response = api.get("/v1/markets/CN-A/breadth?business_date=2026-08-21")
 
     assert response.status_code == 200
-    assert response.json()["schema_version"] == "market-breadth-v1"
+    assert response.json()["schema_version"] == "market-breadth-v2"
     assert response.json()["business_date"] == "2026-08-21"
     assert response.json()["advance_count"] == 3200
     assert response.json()["limit_up_count"] == 68

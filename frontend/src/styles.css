@@ -18878,7 +18878,7 @@ input[type="checkbox"] {
   .market-pulse-internal-card > header { align-items: start; flex-direction: column; }
   .market-pulse-internal-card > header small { text-align: left; }
   .market-pulse-histogram-bars { gap: 3px; }
-  .market-pulse-histogram-bars small { font-size: 10px; }
+  .market-pulse-histogram-bars small { font-size: 11px; }
   .market-pulse-change-summary { grid-template-columns: 1fr; }
   .market-pulse-change-summary > header { border-right: 0; border-bottom: 1px solid var(--line); }
   .market-pulse-change-summary ul { grid-template-columns: 1fr; }
