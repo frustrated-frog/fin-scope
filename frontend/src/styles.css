@@ -18533,9 +18533,9 @@ input[type="checkbox"] {
 
 .market-pulse-controls { position: relative; z-index: 1; display: grid; align-content: center; gap: 10px; }
 .market-pulse-auto-refresh { display: grid; grid-template-columns: auto 1fr; gap: 3px 9px; align-items: baseline; border: 1px solid color-mix(in srgb, var(--mp-green) 30%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--mp-green) 6%, var(--surface-2)); padding: 9px 10px; }
-.market-pulse-auto-refresh span { grid-row: 1 / 3; align-self: center; border-radius: 99px; background: color-mix(in srgb, var(--mp-green) 14%, transparent); color: var(--mp-green); padding: 4px 7px; font-size: 10px; font-weight: 780; letter-spacing: .04em; }
+.market-pulse-auto-refresh span { grid-row: 1 / 3; align-self: center; border-radius: 99px; background: color-mix(in srgb, var(--mp-green) 14%, transparent); color: var(--mp-green); padding: 4px 7px; font-size: 11px; font-weight: 780; letter-spacing: .04em; }
 .market-pulse-auto-refresh strong { color: var(--ink); font-size: 13px; font-weight: 740; }
-.market-pulse-auto-refresh small { color: var(--faint); font-size: 10px; }
+.market-pulse-auto-refresh small { color: var(--faint); font-size: 11px; }
 .market-pulse-controls label { display: grid; gap: 5px; }
 .market-pulse-controls label > span { color: var(--faint); font-size: 11px; font-weight: 700; }
 .market-pulse-controls select,
