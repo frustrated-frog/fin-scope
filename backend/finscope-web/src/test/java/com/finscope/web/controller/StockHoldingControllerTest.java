@@ -1,9 +1,11 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.strategy.holding.StockAccountSnapshot;
+import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
 import com.finscope.domain.strategy.holding.StockTransaction;
 import com.finscope.domain.strategy.holding.StockTransactionType;
 import com.finscope.service.strategy.holding.StockAccountService;
+import com.finscope.service.strategy.holding.HoldingStrategyDecisionService;
 import com.finscope.service.strategy.holding.StockTransactionService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
@@ -36,6 +38,8 @@ class StockHoldingControllerTest {
     private StockTransactionService transactions;
     @MockBean
     private StockAccountService accounts;
+    @MockBean
+    private HoldingStrategyDecisionService holdingDecisions;
 
     @Test
     void exposesStockAccountAndCreatesBuyEvent() throws Exception {
@@ -68,5 +72,24 @@ class StockHoldingControllerTest {
         mockMvc.perform(get("/api/strategy/stock-transactions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    void listsAndRefreshesFrozenHoldingDecisions() throws Exception {
+        HoldingStrategyDecision decision = new HoldingStrategyDecision();
+        decision.setId(21L);
+        decision.setInstrumentCode("600570.SH");
+        decision.setAction("HOLD");
+        decision.setDecisionDate(LocalDate.of(2026, 8, 31));
+        when(holdingDecisions.list(100)).thenReturn(Collections.singletonList(decision));
+        when(holdingDecisions.refresh()).thenReturn(Collections.singletonList(decision));
+
+        mockMvc.perform(get("/api/strategy/holding-decisions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(21))
+                .andExpect(jsonPath("$.data[0].action").value("HOLD"));
+        mockMvc.perform(post("/api/strategy/holding-decisions/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].instrumentCode").value("600570.SH"));
     }
 }

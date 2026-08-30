@@ -54,6 +54,9 @@ class DatabaseInitializerStrategySchemaTest {
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_transaction'", Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='holding_strategy_decision'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM pragma_index_list('stock_transaction') indexes "
                         + "JOIN pragma_index_info(indexes.name) columns ON columns.name='client_request_id' "
                         + "WHERE indexes.\"unique\"=1",

@@ -102,6 +102,14 @@ public class SingleStockForecastRunRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public Optional<SingleStockForecastRun> findLatest(String instrumentCode) {
+        List<SingleStockForecastRun> values = jdbcTemplate.query(
+                "SELECT * FROM single_stock_forecast_run WHERE instrument_code=? "
+                        + "ORDER BY as_of_date DESC,id DESC LIMIT 1",
+                mapper, instrumentCode);
+        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    }
+
     public List<SingleStockForecastRun> findAll(String instrumentCode, int limit) {
         return findAll(instrumentCode, limit, null);
     }

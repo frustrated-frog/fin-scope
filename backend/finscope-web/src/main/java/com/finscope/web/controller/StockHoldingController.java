@@ -2,12 +2,15 @@ package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.strategy.holding.StockTransaction;
+import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
+import com.finscope.service.strategy.holding.HoldingStrategyDecisionService;
 import com.finscope.service.strategy.holding.StockAccountService;
 import com.finscope.service.strategy.holding.StockTransactionService;
 import com.finscope.web.request.strategy.CreateStockTransactionRequest;
 import com.finscope.web.request.strategy.ReverseStockTransactionRequest;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.web.response.strategy.StockAccountResponse;
+import com.finscope.web.response.strategy.HoldingStrategyDecisionResponse;
 import com.finscope.web.response.strategy.StockTransactionResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +31,8 @@ public class StockHoldingController {
     private StockTransactionService transactions;
     @Resource
     private StockAccountService accounts;
+    @Resource
+    private HoldingStrategyDecisionService holdingDecisions;
 
     @GetMapping("/stock-account")
     public ApiResponse<StockAccountResponse> account() {
@@ -56,5 +61,26 @@ public class StockHoldingController {
             @PathVariable Long id, @RequestBody ReverseStockTransactionRequest request) {
         return ApiResponses.success(StockTransactionResponse.of(transactions.reverse(
                 id, request.getClientRequestId(), request.getTradeDate(), request.getNote())));
+    }
+
+    @GetMapping("/holding-decisions")
+    public ApiResponse<List<HoldingStrategyDecisionResponse>> holdingDecisions(
+            @RequestParam(defaultValue = "100") int limit) {
+        return ApiResponses.success(decisionResponses(holdingDecisions.list(limit)));
+    }
+
+    @PostMapping("/holding-decisions/refresh")
+    public ApiResponse<List<HoldingStrategyDecisionResponse>> refreshHoldingDecisions() {
+        return ApiResponses.success(decisionResponses(holdingDecisions.refresh()));
+    }
+
+    private List<HoldingStrategyDecisionResponse> decisionResponses(
+            List<HoldingStrategyDecision> values) {
+        List<HoldingStrategyDecisionResponse> responses =
+                new ArrayList<HoldingStrategyDecisionResponse>();
+        for (HoldingStrategyDecision value : values) {
+            responses.add(HoldingStrategyDecisionResponse.of(value));
+        }
+        return responses;
     }
 }

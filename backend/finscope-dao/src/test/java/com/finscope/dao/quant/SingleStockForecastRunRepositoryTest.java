@@ -44,6 +44,8 @@ class SingleStockForecastRunRepositoryTest {
         assertTrue(second.isSameDataAsPrevious());
         assertEquals("{\"sequence\":2}", repository.findById(second.getId())
                 .orElseThrow(AssertionError::new).getReportJson());
+        assertEquals(second.getId(), repository.findLatest("603618.SH")
+                .orElseThrow(AssertionError::new).getId());
         assertEquals(second.getId(), repository.findAll("603618.SH", 20).get(0).getId());
         assertEquals(2, repository.findAll("603618.SH", 20).size());
     }
