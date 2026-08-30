@@ -43,6 +43,13 @@ export type SectorRotation = {
   rotationScore: number;
   stage?: string;
   explanations?: string[];
+  rotationTrail?: SectorRotationPoint[];
+};
+
+export type SectorRotationPoint = {
+  businessDate?: string;
+  relativeStrength?: number;
+  relativeMomentum?: number;
 };
 
 export type MarketEventConfirmation = {
@@ -135,6 +142,10 @@ export type MarketInternalHistoryPoint = {
   newLow250Count?: number;
   netAdvances?: number;
   advanceDeclineLine?: number;
+  advanceAmountRatio?: number;
+  netAdvancingAmount?: number;
+  mcclellanOscillator?: number;
+  breadthThrustRatio?: number;
 };
 
 export type MarketBreadthChangeSummary = {
@@ -146,7 +157,24 @@ export type MarketBreadthChangeSummary = {
   ma20RatioChange?: number;
   newHighLowBalanceChange?: number;
   netAdvancesChange?: number;
+  advanceAmountRatioChange?: number;
+  mcclellanOscillatorChange?: number;
   changes?: string[];
+};
+
+export type MarketVolumePressure = {
+  advanceAmount?: number;
+  declineAmount?: number;
+  flatAmount?: number;
+  advanceAmountRatio?: number;
+  netAdvancingAmount?: number;
+  trin?: number;
+};
+
+export type MarketBreadthMomentum = {
+  mcclellanOscillator?: number;
+  breadthThrustRatio?: number;
+  status?: string;
 };
 
 export type MarketBreadth = {
@@ -169,6 +197,8 @@ export type MarketBreadth = {
   newHighLow?: MarketNewHighLow;
   netAdvances?: number;
   advanceDeclineLine?: number;
+  volumePressure?: MarketVolumePressure;
+  breadthMomentum?: MarketBreadthMomentum;
   history?: MarketInternalHistoryPoint[];
   changeSummary?: MarketBreadthChangeSummary;
   indices?: MarketIndexPerformance[];

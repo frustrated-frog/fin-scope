@@ -48,6 +48,46 @@ function marketAmount(value?: number) {
   return `${(value / 1_000_000_000_000).toFixed(2)} 万亿`;
 }
 
+function amountText(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  if (Math.abs(value) >= 1_000_000_000_000) {
+    return `${(value / 1_000_000_000_000).toFixed(2)} 万亿`;
+  }
+  return `${(value / 100_000_000).toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} 亿`;
+}
+
+function signedAmountText(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${(Math.abs(value) / 100_000_000).toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} 亿`;
+}
+
+function ratioText(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function signedDecimal(value?: number) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
+}
+
+const breadthMomentumLabels: Record<string, string> = {
+  BULLISH_THRUST: '宽度冲击',
+  RECOVERING: '参与修复',
+  NEUTRAL: '中性震荡',
+  WEAKENING: '参与减弱',
+  UNAVAILABLE: '暂不可用'
+};
+
 function dateText(value?: string | number[]) {
   if (Array.isArray(value)) {
     return `${value[0]}-${String(value[1]).padStart(2, '0')}-${String(value[2]).padStart(2, '0')}`;
@@ -128,11 +168,49 @@ function MarketBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
           <div><dt>涨跌中位数</dt><dd className={(breadth?.medianChangePct ?? 0) < 0 ? 'negative' : 'positive'}>{percent(breadth?.medianChangePct, true)}</dd></div>
         </dl>
       </div>
+      <MarketPressureMomentumPanel breadth={breadth} />
       <div className="market-pulse-internals-grid">
         <ReturnDistributionPanel breadth={breadth} />
         <TrendBreadthPanel breadth={breadth} />
         <NewHighLowPanel breadth={breadth} />
       </div>
+    </section>
+  );
+}
+
+function MarketPressureMomentumPanel({ breadth }: { breadth?: MarketBreadth }) {
+  const pressure = breadth?.volumePressure;
+  const momentum = breadth?.breadthMomentum;
+  const advanceShare = Math.max(0, Math.min(100, (pressure?.advanceAmountRatio ?? 0) * 100));
+  return (
+    <section className="market-pulse-pressure-momentum" aria-label="市场买卖压力与宽度动量">
+      <article className="market-pulse-pressure-card">
+        <header>
+          <div><span>VOLUME PRESSURE</span><h4>买卖压力</h4></div>
+          <strong>{ratioText(pressure?.advanceAmountRatio)}</strong>
+        </header>
+        <div className="market-pulse-pressure-bar" aria-label={`上涨成交额占比 ${ratioText(pressure?.advanceAmountRatio)}`}>
+          <i className="advance" style={{ width: `${advanceShare}%` }} />
+          <i className="decline" style={{ width: `${100 - advanceShare}%` }} />
+        </div>
+        <dl>
+          <div><dt>上涨成交额</dt><dd>{amountText(pressure?.advanceAmount)}</dd></div>
+          <div><dt>下跌成交额</dt><dd>{amountText(pressure?.declineAmount)}</dd></div>
+          <div><dt>净上涨成交额</dt><dd className={(pressure?.netAdvancingAmount ?? 0) < 0 ? 'negative' : 'positive'}>{signedAmountText(pressure?.netAdvancingAmount)}</dd></div>
+          <div><dt>量价广度</dt><dd>TRIN {pressure?.trin == null ? '—' : pressure.trin.toFixed(2)}</dd></div>
+        </dl>
+      </article>
+      <article className="market-pulse-momentum-card">
+        <header>
+          <div><span>BREADTH MOMENTUM</span><h4>宽度动量</h4></div>
+          <strong className={`status-${momentum?.status?.toLowerCase() ?? 'unavailable'}`}>{breadthMomentumLabels[momentum?.status ?? 'UNAVAILABLE'] ?? label(momentum?.status)}</strong>
+        </header>
+        <dl>
+          <div><dt>McClellan Oscillator</dt><dd className={(momentum?.mcclellanOscillator ?? 0) < 0 ? 'negative' : 'positive'}>{signedDecimal(momentum?.mcclellanOscillator)}</dd></div>
+          <div><dt>10 日参与率 EMA</dt><dd>{ratioText(momentum?.breadthThrustRatio)}</dd></div>
+        </dl>
+        <p>家数动量用于判断行情参与是否继续扩散；与成交额压力合看，可区分普涨修复和少数权重拉动。</p>
+      </article>
     </section>
   );
 }
@@ -303,25 +381,32 @@ function MarketInternalsHistory({ points }: { points?: MarketInternalHistoryPoin
   const selected = values[Math.min(selectedIndex, values.length - 1)];
   const balances = values.map(item => (item.newHigh20Count ?? 0) - (item.newLow20Count ?? 0));
   const adValues = values.map(item => item.advanceDeclineLine ?? 0);
+  const oscillatorValues = values.map(item => item.mcclellanOscillator ?? 0);
   const balanceExtent = symmetricExtent(balances);
   const adExtent = symmetricExtent(adValues);
+  const oscillatorExtent = symmetricExtent(oscillatorValues);
   const selectedX = values.length === 1 ? 470 : selectedIndex / (values.length - 1) * 940;
   return (
     <section className="market-pulse-internals-history" aria-label="60 日市场内部轨迹">
-      <header><div><span>60D INTERNALS</span><h3>60 日市场内部轨迹</h3></div><p>同轴观察参与度、趋势宽度、新高新低和 A-D Line。</p></header>
-      <div className="market-pulse-internals-legend"><span className="advance">上涨比例</span><span className="ma20">MA20</span><span className="ma60">MA60</span><span className="balance">新高 - 新低</span><span className="ad">A-D Line</span></div>
+      <header><div><span>60D INTERNALS</span><h3>60 日市场内部轨迹</h3></div><p>同轴观察参与度、趋势宽度、买卖压力和广度动量。</p></header>
+      <div className="market-pulse-internals-legend"><span className="advance">上涨比例</span><span className="ma20">MA20</span><span className="ma60">MA60</span><span className="balance">新高 - 新低</span><span className="ad">A-D Line</span><span className="pressure">上涨成交额占比</span><span className="oscillator">McClellan</span></div>
       <div className="market-pulse-internals-chart">
-        <svg viewBox="0 0 940 320" role="img" aria-label="市场内部结构 60 日多轨图">
+        <svg viewBox="0 0 940 435" role="img" aria-label="市场内部结构 60 日多轨图">
           <line x1="0" y1="120" x2="940" y2="120" className="divider" />
           <line x1="0" y1="215" x2="940" y2="215" className="divider" />
+          <line x1="0" y1="310" x2="940" y2="310" className="divider" />
+          <line x1="0" y1="375" x2="940" y2="375" className="divider" />
           <line x1="0" y1="167.5" x2="940" y2="167.5" className="zero" />
-          <line x1="0" y1="267.5" x2="940" y2="267.5" className="zero" />
+          <line x1="0" y1="262.5" x2="940" y2="262.5" className="zero" />
+          <line x1="0" y1="405" x2="940" y2="405" className="zero" />
           <path d={pathFor(values, point => point.advanceRatio, value => 108 - value * 88)} className="advance" />
           <path d={pathFor(values, point => point.ma20Ratio, value => 108 - value * 88)} className="ma20" />
           <path d={pathFor(values, point => point.ma60Ratio, value => 108 - value * 88)} className="ma60" />
           <path d={pathFor(values, point => (point.newHigh20Count ?? 0) - (point.newLow20Count ?? 0), value => 167.5 - value / balanceExtent * 35)} className="balance" />
-          <path d={pathFor(values, point => point.advanceDeclineLine, value => 267.5 - value / adExtent * 35)} className="ad" />
-          <line x1={selectedX} y1="12" x2={selectedX} y2="305" className="selected" />
+          <path d={pathFor(values, point => point.advanceDeclineLine, value => 262.5 - value / adExtent * 35)} className="ad" />
+          <path d={pathFor(values, point => point.advanceAmountRatio, value => 363 - value * 41)} className="pressure" />
+          <path d={pathFor(values, point => point.mcclellanOscillator, value => 405 - value / oscillatorExtent * 23)} className="oscillator" />
+          <line x1={selectedX} y1="12" x2={selectedX} y2="428" className="selected" />
         </svg>
         <input type="range" min="0" max={values.length - 1} value={Math.min(selectedIndex, values.length - 1)} aria-label="选择市场内部轨迹日期" onChange={event => setSelectedIndex(Number(event.target.value))} />
       </div>
@@ -331,6 +416,8 @@ function MarketInternalsHistory({ points }: { points?: MarketInternalHistoryPoin
         <span><small>MA20 / MA60</small><strong>{percent(selected.ma20Ratio)} / {percent(selected.ma60Ratio)}</strong></span>
         <span><small>新高 - 新低</small><strong>{signedInteger((selected.newHigh20Count ?? 0) - (selected.newLow20Count ?? 0))}</strong></span>
         <span><small>A-D Line</small><strong>{signedInteger(selected.advanceDeclineLine)}</strong></span>
+        <span><small>上涨额占比</small><strong>{ratioText(selected.advanceAmountRatio)}</strong></span>
+        <span><small>McClellan</small><strong>{signedDecimal(selected.mcclellanOscillator)}</strong></span>
         <span><small>涨跌中位数</small><strong>{percent(selected.medianChangePct, true)}</strong></span>
       </div>
     </section>

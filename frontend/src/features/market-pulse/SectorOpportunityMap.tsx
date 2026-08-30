@@ -1,6 +1,6 @@
 import { CSSProperties, useMemo, useState } from 'react';
 
-import type { SectorRotation } from './marketPulseTypes';
+import type { SectorRotation, SectorRotationPoint } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   EMERGING: '萌芽',
@@ -71,6 +71,56 @@ function relativeStrength(item: SectorRotation) {
   return item.excessReturn5d ?? item.return5d ?? 0;
 }
 
+function rotationTrail(item: SectorRotation): SectorRotationPoint[] {
+  const points = item.rotationTrail?.filter(point =>
+    point.relativeStrength != null && Number.isFinite(point.relativeStrength)
+    && point.relativeMomentum != null && Number.isFinite(point.relativeMomentum)
+  ) ?? [];
+  if (points.length) {
+    return points;
+  }
+  return [{ relativeStrength: relativeStrength(item), relativeMomentum: acceleration(item) }];
+}
+
+function rotationPoint(item: SectorRotation) {
+  const points = rotationTrail(item);
+  return points[points.length - 1];
+}
+
+function rotationPath(points: SectorRotationPoint[], maximumStrength: number, maximumMomentum: number) {
+  return points.map((point, index) => {
+    const x = 50 + (point.relativeStrength ?? 0) / maximumStrength * 42;
+    const y = 50 - (point.relativeMomentum ?? 0) / maximumMomentum * 42;
+    return `${index ? 'L' : 'M'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+}
+
+function quadrant(point?: SectorRotationPoint) {
+  const strength = point?.relativeStrength ?? 0;
+  const momentum = point?.relativeMomentum ?? 0;
+  if (strength >= 0 && momentum >= 0) {
+    return '领先';
+  }
+  if (strength < 0 && momentum >= 0) {
+    return '改善';
+  }
+  if (strength >= 0) {
+    return '减弱';
+  }
+  return '落后';
+}
+
+function rotationPace(points: SectorRotationPoint[]) {
+  if (points.length < 2) {
+    return '轮动平稳';
+  }
+  const latest = points[points.length - 1];
+  const previous = points[points.length - 2];
+  const strengthChange = (latest.relativeStrength ?? 0) - (previous.relativeStrength ?? 0);
+  const momentumChange = (latest.relativeMomentum ?? 0) - (previous.relativeMomentum ?? 0);
+  return Math.hypot(strengthChange, momentumChange) >= 0.75 ? '轮动加速' : '轮动平稳';
+}
+
 export function SectorOpportunityMap({ sectors, onOpenStockDiscovery }: Props) {
   const allSorted = useMemo(
     () => [...sectors].sort((left, right) => right.rotationScore - left.rotationScore),
@@ -86,8 +136,11 @@ export function SectorOpportunityMap({ sectors, onOpenStockDiscovery }: Props) {
   const [mode, setMode] = useState<MapMode>('heatmap');
   const [selectedCode, setSelectedCode] = useState<string>();
   const selected = sorted.find(item => item.sectorCode === selectedCode) ?? sorted[0];
-  const maximumStrength = Math.max(1, ...sorted.map(item => Math.abs(relativeStrength(item))));
-  const maximumAcceleration = Math.max(1, ...sorted.map(item => Math.abs(acceleration(item))));
+  const allTrailPoints = sorted.flatMap(rotationTrail);
+  const maximumStrength = Math.max(1, ...allTrailPoints.map(point => Math.abs(point.relativeStrength ?? 0)));
+  const maximumAcceleration = Math.max(1, ...allTrailPoints.map(point => Math.abs(point.relativeMomentum ?? 0)));
+  const selectedTrail = selected ? rotationTrail(selected) : [];
+  const selectedPoint = selectedTrail[selectedTrail.length - 1];
 
   return (
     <section className="market-pulse-opportunity-map">
@@ -127,10 +180,20 @@ export function SectorOpportunityMap({ sectors, onOpenStockDiscovery }: Props) {
               <span className="quadrant weakening">减弱</span>
               <span className="quadrant lagging">落后</span>
               <span className="axis-label axis-x">相对强度 →</span>
-              <span className="axis-label axis-y">短期加速度 →</span>
+              <span className="axis-label axis-y">强度动量 →</span>
+              <svg className="market-pulse-rotation-trails" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="行业十日轮动尾迹">
+                {sorted.map(item => (
+                  <path
+                    key={item.sectorCode}
+                    d={rotationPath(rotationTrail(item), maximumStrength, maximumAcceleration)}
+                    className={`market-pulse-rotation-trail${selected?.sectorCode === item.sectorCode ? ' is-selected' : ''}`}
+                  />
+                ))}
+              </svg>
               {sorted.map(item => {
-                const strength = relativeStrength(item);
-                const speed = acceleration(item);
+                const point = rotationPoint(item);
+                const strength = point.relativeStrength ?? 0;
+                const speed = point.relativeMomentum ?? 0;
                 const style = {
                   '--point-x': `${50 + strength / maximumStrength * 42}%`,
                   '--point-y': `${50 - speed / maximumAcceleration * 42}%`,
@@ -141,7 +204,7 @@ export function SectorOpportunityMap({ sectors, onOpenStockDiscovery }: Props) {
                     type="button"
                     key={item.sectorCode}
                     style={style}
-                    aria-label={`${item.sectorName}，相对强度 ${signedPercent(strength)}，短期加速度 ${signedPercent(speed)}`}
+                    aria-label={`${item.sectorName}，相对强度 ${signedPercent(strength)}，强度动量 ${signedPercent(speed)}`}
                     aria-pressed={selected?.sectorCode === item.sectorCode}
                     onClick={() => setSelectedCode(item.sectorCode)}
                   >
@@ -169,7 +232,14 @@ export function SectorOpportunityMap({ sectors, onOpenStockDiscovery }: Props) {
               <div><dt>持续天数</dt><dd>{selected.persistenceDays ?? 0} 天</dd></div>
               <div><dt>拥挤度</dt><dd>{selected.crowdingScore ?? 0}</dd></div>
               <div><dt>轮动分</dt><dd>{selected.rotationScore}</dd></div>
+              <div><dt>相对强度</dt><dd>{signedPercent(selectedPoint?.relativeStrength)}</dd></div>
+              <div><dt>强度动量</dt><dd>{signedPercent(selectedPoint?.relativeMomentum)}</dd></div>
             </dl>
+            <section className="market-pulse-sector-trail-summary" aria-label="行业轮动尾迹摘要">
+              <span>10日尾迹</span>
+              <strong>{quadrant(selectedPoint)} · {rotationPace(selectedTrail)}</strong>
+              <small>{selectedTrail.length} 个交易日 · 横轴为相对强度，纵轴为强度动量</small>
+            </section>
             {(selected.explanations?.length ?? 0) > 1 && <ul>{selected.explanations?.slice(1, 4).map(item => <li key={item}>{item}</li>)}</ul>}
             <footer>
               <p>这里只解释行业状态，个股候选、模型排序与研究入口由股票发现统一管理。</p>

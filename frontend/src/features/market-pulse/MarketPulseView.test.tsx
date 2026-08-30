@@ -53,12 +53,19 @@ const workspace = {
     },
     netAdvances: 1400,
     advanceDeclineLine: 8600,
+    volumePressure: {
+      advanceAmount: 1450000000000, declineAmount: 720000000000, flatAmount: 130000000000,
+      advanceAmountRatio: 0.6682027649769585, netAdvancingAmount: 730000000000, trin: 0.81
+    },
+    breadthMomentum: {
+      mcclellanOscillator: 42.5, breadthThrustRatio: 0.57, status: 'RECOVERING'
+    },
     history: [
       { businessDate: '2026-08-17', advanceRatio: 0.72, totalAmount: 2300000000000, medianChangePct: 1.2, ma20Ratio: 0.62, ma60Ratio: 0.58, ma120Ratio: 0.52, ma250Ratio: 0.46, newHigh20Count: 95, newLow20Count: 18, netAdvances: 2100, advanceDeclineLine: 6500 },
       { businessDate: '2026-08-18', advanceRatio: 0.42, totalAmount: 2200000000000, medianChangePct: -0.2, ma20Ratio: 0.57, ma60Ratio: 0.55, ma120Ratio: 0.51, ma250Ratio: 0.46, newHigh20Count: 54, newLow20Count: 45, netAdvances: -700, advanceDeclineLine: 5800 },
       { businessDate: '2026-08-19', advanceRatio: 0.18, totalAmount: 2500000000000, medianChangePct: -2.1, ma20Ratio: 0.43, ma60Ratio: 0.49, ma120Ratio: 0.49, ma250Ratio: 0.45, newHigh20Count: 21, newLow20Count: 156, netAdvances: -3200, advanceDeclineLine: 2600 },
       { businessDate: '2026-08-20', advanceRatio: 0.55, totalAmount: 2100000000000, medianChangePct: 0.3, ma20Ratio: 0.48, ma60Ratio: 0.51, ma120Ratio: 0.49, ma250Ratio: 0.46, newHigh20Count: 30, newLow20Count: 40, netAdvances: 500, advanceDeclineLine: 3100 },
-      { businessDate: '2026-08-21', advanceRatio: 3200 / 5100, totalAmount: 2300000000000, medianChangePct: 0.7, ma20Ratio: 0.61, ma60Ratio: 0.56, ma120Ratio: 0.51, ma250Ratio: 0.47, newHigh20Count: 88, newLow20Count: 23, netAdvances: 1400, advanceDeclineLine: 4500 }
+      { businessDate: '2026-08-21', advanceRatio: 3200 / 5100, totalAmount: 2300000000000, medianChangePct: 0.7, ma20Ratio: 0.61, ma60Ratio: 0.56, ma120Ratio: 0.51, ma250Ratio: 0.47, newHigh20Count: 88, newLow20Count: 23, netAdvances: 1400, advanceDeclineLine: 4500, advanceAmountRatio: 0.6682, netAdvancingAmount: 730000000000, mcclellanOscillator: 42.5, breadthThrustRatio: 0.57 }
     ],
     changeSummary: {
       previousBusinessDate: '2026-08-20', headline: '市场参与快速扩散', advanceRatioChange: 0.08,
@@ -94,8 +101,16 @@ const workspace = {
     { businessDate: '2026-08-19', marketStage: 'SELL_OFF', confidenceScore: 83, features: { return1d: -0.034 } }
   ],
   sectors: [
-    { sectorCode: 'BK1040', sectorName: '创新药', return1d: 2.1, return5d: 5.8, mainNetInflow: 3200000000, rotationScore: 78, stage: 'PERSISTENT', explanations: ['5日收益 5.80%'] },
-    { sectorCode: 'BK0737', sectorName: '贵金属', return1d: 0.8, return5d: 2.2, mainNetInflow: 1100000000, rotationScore: 61, stage: 'EMERGING', explanations: ['资金排名较前次改善'] }
+    { sectorCode: 'BK1040', sectorName: '创新药', return1d: 2.1, return5d: 5.8, mainNetInflow: 3200000000, rotationScore: 78, stage: 'PERSISTENT', explanations: ['5日收益 5.80%'], rotationTrail: [
+      { businessDate: '2026-08-18', relativeStrength: -0.8, relativeMomentum: 0.3 },
+      { businessDate: '2026-08-19', relativeStrength: -0.2, relativeMomentum: 0.7 },
+      { businessDate: '2026-08-20', relativeStrength: 0.6, relativeMomentum: 1.0 },
+      { businessDate: '2026-08-21', relativeStrength: 1.8, relativeMomentum: 0.6 }
+    ] },
+    { sectorCode: 'BK0737', sectorName: '贵金属', return1d: 0.8, return5d: 2.2, mainNetInflow: 1100000000, rotationScore: 61, stage: 'EMERGING', explanations: ['资金排名较前次改善'], rotationTrail: [
+      { businessDate: '2026-08-20', relativeStrength: 0.4, relativeMomentum: -0.2 },
+      { businessDate: '2026-08-21', relativeStrength: 0.1, relativeMomentum: -0.5 }
+    ] }
   ],
   eventConfirmations: [
     { radarEventId: 7, title: 'mRNA 肿瘤疫苗临床数据更新', sectorName: '创新药', eventScore: 82, marketReactionScore: 78, confirmationState: 'CONFIRMED', eligibleForRanking: true, evidence: ['事件与市场同向确认'] }
@@ -148,11 +163,23 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.getByRole('heading', { name: '趋势宽度' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '新高 / 新低' })).toBeInTheDocument();
   expect(screen.getByText('A-D Line')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '买卖压力' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '宽度动量' })).toBeInTheDocument();
+  expect(screen.getByText('66.82%')).toBeInTheDocument();
+  expect(screen.getByText('+7,300.0 亿')).toBeInTheDocument();
+  expect(screen.getByText('TRIN 0.81')).toBeInTheDocument();
+  expect(screen.getByText('+42.5')).toBeInTheDocument();
+  expect(screen.getByText('参与修复')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('tab', { name: '行业轮动' }));
 
   expect(screen.getByRole('heading', { name: '行业机会地图' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '创新药' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '轮动地图' }));
+  expect(screen.getByRole('img', { name: '行业十日轮动尾迹' })).toBeInTheDocument();
+  expect(document.querySelectorAll('.market-pulse-rotation-trail')).toHaveLength(2);
+  expect(screen.getByText('10日尾迹')).toBeInTheDocument();
+  expect(screen.getByText('领先 · 轮动加速')).toBeInTheDocument();
   expect(screen.getByText('事件与行情确认')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '示例医药' })).not.toBeInTheDocument();
   expect(screen.queryByText('股票研究候选')).not.toBeInTheDocument();
