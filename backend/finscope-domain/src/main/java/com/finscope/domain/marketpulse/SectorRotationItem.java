@@ -22,5 +22,6 @@ public class SectorRotationItem {
     private int crowdingScore;
     private int rotationScore;
     private SectorRotationStage stage;
+    private List<SectorRotationPoint> rotationTrail = new ArrayList<>();
     private List<String> explanations = new ArrayList<>();
 }

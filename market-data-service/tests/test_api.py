@@ -626,7 +626,7 @@ def test_tonghuashun_sector_history_endpoint_returns_versioned_contract(
     )
 
     assert response.status_code == 200
-    assert response.json()["schema_version"] == "sector-history-v1"
+    assert response.json()["schema_version"] == "sector-history-v2"
     assert response.json()["business_date"] == "2026-08-21"
     assert response.json()["entries"][0]["return_20d"] == 6.5
 

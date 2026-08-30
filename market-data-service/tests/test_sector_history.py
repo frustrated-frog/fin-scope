@@ -19,9 +19,12 @@ def history_frame(start: str, count: int, base: float = 100.0) -> pd.DataFrame:
 
 
 def test_sector_history_calculates_returns_without_future_leakage() -> None:
+    dates = pd.bdate_range(end="2026-08-21", periods=40)
     frame = pd.concat(
         [
-            history_frame("2026-07-20", 25),
+            pd.DataFrame(
+                {"日期": dates, "收盘价": [100.0 + index for index in range(40)]}
+            ),
             pd.DataFrame([{"日期": "2026-08-24", "收盘价": 999.0}]),
         ],
         ignore_index=True,
@@ -38,16 +41,56 @@ def test_sector_history_calculates_returns_without_future_leakage() -> None:
     result = service.fetch(date(2026, 8, 21), window=20)
 
     item = result.entries[0]
-    assert result.schema_version == "sector-history-v1"
+    assert result.schema_version == "sector-history-v2"
     assert result.business_date == "2026-08-21"
     assert result.quality_status == "FRESH_PRIMARY"
     assert result.covered_trade_dates[-1] == "2026-08-21"
     assert item.last_trade_date == "2026-08-21"
-    assert item.return_1d == pytest.approx((124 / 123 - 1) * 100)
-    assert item.return_5d == pytest.approx((124 / 119 - 1) * 100)
-    assert item.return_20d == pytest.approx((124 / 104 - 1) * 100)
+    assert item.return_1d == pytest.approx((139 / 138 - 1) * 100)
+    assert item.return_5d == pytest.approx((139 / 134 - 1) * 100)
+    assert item.return_20d == pytest.approx((139 / 119 - 1) * 100)
     assert item.positive_days_5 == 5
-    assert item.coverage_days == 25
+    assert item.coverage_days == 40
+    assert len(item.rotation_trail) == 10
+    assert item.rotation_trail[-1].business_date == "2026-08-21"
+    assert [point.business_date for point in item.rotation_trail] == sorted(
+        point.business_date for point in item.rotation_trail
+    )
+    assert all(point.relative_strength == 0 for point in item.rotation_trail)
+    assert all(point.relative_momentum == 0 for point in item.rotation_trail)
+
+
+def test_sector_history_builds_cross_sectional_relative_strength_trails() -> None:
+    dates = pd.bdate_range(end="2026-08-21", periods=45)
+
+    def load(name: str, start: str, end: str) -> pd.DataFrame:
+        step = 2.0 if name == "半导体" else 0.2
+        return pd.DataFrame(
+            {"日期": dates, "收盘价": [100.0 + step * index for index in range(45)]}
+        )
+
+    service = TonghuashunSectorHistoryService(
+        catalog_loader=lambda: pd.DataFrame(
+            [
+                {"name": "半导体", "code": "881121"},
+                {"name": "白酒", "code": "881273"},
+            ]
+        ),
+        history_loader=load,
+        max_workers=1,
+    )
+
+    result = service.fetch(date(2026, 8, 21), window=40)
+
+    by_code = {item.code: item for item in result.entries}
+    assert len(by_code["881121"].rotation_trail) == 10
+    assert by_code["881121"].rotation_trail[-1].relative_strength > 0
+    assert by_code["881273"].rotation_trail[-1].relative_strength < 0
+    assert all(
+        point.business_date <= "2026-08-21"
+        for item in result.entries
+        for point in item.rotation_trail
+    )
 
 
 def test_sector_history_keeps_successful_industries_when_one_loader_fails() -> None:

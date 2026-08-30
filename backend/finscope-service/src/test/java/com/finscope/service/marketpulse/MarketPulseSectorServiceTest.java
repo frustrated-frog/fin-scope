@@ -7,6 +7,7 @@ import com.finscope.domain.marketpulse.SectorHistorySnapshot;
 import com.finscope.domain.marketpulse.MarketPulseSectorResult;
 import com.finscope.dao.marketpulse.MarketPulseRepository;
 import com.finscope.domain.marketpulse.SectorRotationItem;
+import com.finscope.domain.marketpulse.SectorRotationPoint;
 import com.finscope.rpc.marketpulse.SectorHistorySource;
 import com.finscope.service.instrument.SectorMarketService;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,6 +63,8 @@ class MarketPulseSectorServiceTest {
         assertEquals(3.2D, semiconductor.getReturn5d());
         assertEquals(6.5D, semiconductor.getReturn20d());
         assertEquals(4, semiconductor.getPersistenceDays());
+        assertEquals(2, semiconductor.getRotationTrail().size());
+        assertEquals(1.8D, semiconductor.getRotationTrail().get(1).getRelativeStrength());
         assertNotEquals(25, semiconductor.getRotationScore());
         assertEquals(-2.4D, liquor.getReturn5d());
         verify(repository).findRecentDates(1, date.minusDays(1));
@@ -136,6 +139,15 @@ class MarketPulseSectorServiceTest {
         value.setReturn5d(five);
         value.setReturn20d(twenty);
         value.setPositiveDays5(positiveDays);
+        SectorRotationPoint previous = new SectorRotationPoint();
+        previous.setBusinessDate(LocalDate.of(2026, 8, 20));
+        previous.setRelativeStrength(1.2D);
+        previous.setRelativeMomentum(0.4D);
+        SectorRotationPoint current = new SectorRotationPoint();
+        current.setBusinessDate(LocalDate.of(2026, 8, 21));
+        current.setRelativeStrength(1.8D);
+        current.setRelativeMomentum(0.6D);
+        value.setRotationTrail(Arrays.asList(previous, current));
         return value;
     }
 

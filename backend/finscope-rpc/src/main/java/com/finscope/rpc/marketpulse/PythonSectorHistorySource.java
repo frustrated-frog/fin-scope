@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketpulse.SectorHistoryItem;
 import com.finscope.domain.marketpulse.SectorHistorySnapshot;
+import com.finscope.domain.marketpulse.SectorRotationPoint;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -25,7 +26,7 @@ import java.util.regex.Pattern;
 @Component
 public class PythonSectorHistorySource implements SectorHistorySource {
     private static final String CLIENT_CODE = "PYTHON_SECTOR_HISTORY";
-    private static final String SCHEMA_VERSION = "sector-history-v1";
+    private static final String SCHEMA_VERSION = "sector-history-v2";
     private static final String SOURCE_FAMILY = "TONGHUASHUN";
     private static final String SOURCE_CODE = "AKSHARE_TONGHUASHUN_SECTOR_HISTORY";
     private static final Pattern SECTOR_CODE = Pattern.compile("\\d{6}");
@@ -119,7 +120,32 @@ public class PythonSectorHistorySource implements SectorHistorySource {
             item.setReturn5d(optionalNumber(row, "return_5d"));
             item.setReturn20d(optionalNumber(row, "return_20d"));
             item.setPositiveDays5(optionalInteger(row, "positive_days_5", 0, 5));
+            item.setRotationTrail(rotationTrail(row.path("rotation_trail"), businessDate));
             values.add(item);
+        }
+        return values;
+    }
+
+    private List<SectorRotationPoint> rotationTrail(JsonNode rows, LocalDate maximum) {
+        if (!rows.isArray() || rows.size() > 10) {
+            throw contract("SECTOR_HISTORY_ENTRY_DRIFT",
+                    "rotation trail must be an array with at most ten points", false);
+        }
+        List<SectorRotationPoint> values = new ArrayList<>();
+        LocalDate previous = null;
+        for (JsonNode row : rows) {
+            LocalDate businessDate = LocalDate.parse(requiredText(row, "business_date"));
+            if (businessDate.isAfter(maximum)
+                    || previous != null && !businessDate.isAfter(previous)) {
+                throw contract("SECTOR_HISTORY_DATE_DRIFT",
+                        "rotation trail dates must be ascending and bounded", false);
+            }
+            SectorRotationPoint value = new SectorRotationPoint();
+            value.setBusinessDate(businessDate);
+            value.setRelativeStrength(requiredNumber(row, "relative_strength"));
+            value.setRelativeMomentum(requiredNumber(row, "relative_momentum"));
+            values.add(value);
+            previous = businessDate;
         }
         return values;
     }

@@ -123,6 +123,7 @@ public class MarketPulseSectorService {
         }
         value.setPreviousFlowRank(previousFlowRank);
         value.setCrowdingScore(crowding(value));
+        value.setRotationTrail(new ArrayList<>(history.getRotationTrail()));
         return value;
     }
 

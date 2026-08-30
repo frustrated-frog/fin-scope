@@ -12,6 +12,14 @@ CatalogLoader = Callable[[], Any]
 HistoryLoader = Callable[[str, str, str], Any]
 
 
+class SectorRotationPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    business_date: str
+    relative_strength: float
+    relative_momentum: float
+
+
 class SectorHistoryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -23,12 +31,13 @@ class SectorHistoryEntry(BaseModel):
     return_5d: float | None = None
     return_20d: float | None = None
     positive_days_5: int | None = Field(default=None, ge=0, le=5)
+    rotation_trail: list[SectorRotationPoint] = Field(default_factory=list)
 
 
 class SectorHistoryEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["sector-history-v1"] = "sector-history-v1"
+    schema_version: Literal["sector-history-v2"] = "sector-history-v2"
     source_code: Literal["AKSHARE_TONGHUASHUN_SECTOR_HISTORY"] = (
         "AKSHARE_TONGHUASHUN_SECTOR_HISTORY"
     )
@@ -61,6 +70,7 @@ class TonghuashunSectorHistoryService:
         catalog = self._catalog()
         start_date = business_date - timedelta(days=bounded_window * 2 + 30)
         results: dict[int, SectorHistoryEntry] = {}
+        bars_by_index: dict[int, list[tuple[date, float]]] = {}
         dates: set[str] = set()
         warnings_by_index: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
@@ -77,14 +87,18 @@ class TonghuashunSectorHistoryService:
             for future in as_completed(futures):
                 index, code, name = futures[future]
                 try:
-                    entry, trade_dates = future.result()
+                    entry, trade_dates, bars = future.result()
                     results[index] = entry
+                    bars_by_index[index] = bars
                     dates.update(trade_dates)
                 except Exception as error:
                     warnings_by_index[index] = (
                         f"{name}({code})行业历史不可用: {_message(error)}"
                     )
         entries = [results[index] for index in sorted(results)]
+        trails = _rotation_trails(bars_by_index)
+        for index, entry in results.items():
+            entry.rotation_trail = trails.get(index, [])
         warnings = [warnings_by_index[index] for index in sorted(warnings_by_index)]
         if not entries:
             raise RuntimeError("同花顺没有有效行业历史")
@@ -123,7 +137,7 @@ class TonghuashunSectorHistoryService:
         name: str,
         start_date: date,
         business_date: date,
-    ) -> tuple[SectorHistoryEntry, list[str]]:
+    ) -> tuple[SectorHistoryEntry, list[str], list[tuple[date, float]]]:
         frame = self._history_loader(
             name,
             start_date.strftime("%Y%m%d"),
@@ -147,6 +161,7 @@ class TonghuashunSectorHistoryService:
                 positive_days_5=_positive_days(closes, 5),
             ),
             [trade_date.isoformat() for trade_date, _ in bars],
+            bars,
         )
 
     @staticmethod
@@ -197,6 +212,45 @@ def _positive_days(closes: list[float], days: int) -> int | None:
         for index in range(len(closes) - days, len(closes))
         if closes[index] > closes[index - 1]
     )
+
+
+def _rotation_trails(
+    bars_by_index: dict[int, list[tuple[date, float]]],
+) -> dict[int, list[SectorRotationPoint]]:
+    returns_by_date: dict[date, dict[int, float]] = {}
+    for sector_index, bars in bars_by_index.items():
+        for position in range(20, len(bars)):
+            trade_date, close = bars[position]
+            previous_close = bars[position - 20][1]
+            if previous_close <= 0:
+                continue
+            returns_by_date.setdefault(trade_date, {})[sector_index] = (
+                close / previous_close - 1.0
+            ) * 100.0
+
+    strength_by_index: dict[int, list[tuple[date, float]]] = {}
+    for trade_date in sorted(returns_by_date):
+        daily_returns = returns_by_date[trade_date]
+        mean_return = sum(daily_returns.values()) / len(daily_returns)
+        for sector_index, sector_return in daily_returns.items():
+            strength_by_index.setdefault(sector_index, []).append(
+                (trade_date, sector_return - mean_return)
+            )
+
+    trails: dict[int, list[SectorRotationPoint]] = {}
+    for sector_index, strengths in strength_by_index.items():
+        points = [
+            SectorRotationPoint(
+                business_date=strengths[position][0].isoformat(),
+                relative_strength=strengths[position][1],
+                relative_momentum=(
+                    strengths[position][1] - strengths[position - 5][1]
+                ),
+            )
+            for position in range(5, len(strengths))
+        ]
+        trails[sector_index] = points[-10:]
+    return trails
 
 
 def _date(value: object) -> date | None:

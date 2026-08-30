@@ -22,7 +22,7 @@ class PythonSectorHistorySourceTest {
         AtomicReference<URI> requested = new AtomicReference<URI>();
         FinanceHttpClient http = (provider, uri, headers) -> {
             requested.set(uri);
-            return response(payload("sector-history-v1", "2026-08-21"));
+            return response(payload("sector-history-v2", "2026-08-21"));
         };
         PythonSectorHistorySource source = source(http);
 
@@ -34,14 +34,21 @@ class PythonSectorHistorySourceTest {
         assertEquals(2, result.getEntries().size());
         assertEquals(6.5D, result.getEntries().get(0).getReturn20d());
         assertEquals(4, result.getEntries().get(0).getPositiveDays5());
+        assertEquals(2, result.getEntries().get(0).getRotationTrail().size());
+        assertEquals(LocalDate.of(2026, 8, 21),
+                result.getEntries().get(0).getRotationTrail().get(1).getBusinessDate());
+        assertEquals(1.8D,
+                result.getEntries().get(0).getRotationTrail().get(1).getRelativeStrength());
+        assertEquals(0.6D,
+                result.getEntries().get(0).getRotationTrail().get(1).getRelativeMomentum());
     }
 
     @Test
     void rejectsSchemaAndDateDrift() {
         PythonSectorHistorySource schema = source((provider, uri, headers) ->
-                response(payload("sector-history-v2", "2026-08-21")));
+                response(payload("sector-history-v1", "2026-08-21")));
         PythonSectorHistorySource date = source((provider, uri, headers) ->
-                response(payload("sector-history-v1", "2026-08-20")));
+                response(payload("sector-history-v2", "2026-08-20")));
 
         assertEquals("SECTOR_HISTORY_SCHEMA_DRIFT", assertThrows(
                 ProviderContractException.class,
@@ -54,10 +61,10 @@ class PythonSectorHistorySourceTest {
     @Test
     void rejectsSourceAndStaleIndustryDrift() {
         PythonSectorHistorySource sourceCode = source((provider, uri, headers) -> response(
-                payload("sector-history-v1", "2026-08-21")
+                payload("sector-history-v2", "2026-08-21")
                         .replace("AKSHARE_TONGHUASHUN_SECTOR_HISTORY", "UNKNOWN_SOURCE")));
         PythonSectorHistorySource stale = source((provider, uri, headers) -> response(
-                payload("sector-history-v1", "2026-08-21")
+                payload("sector-history-v2", "2026-08-21")
                         .replace("\"last_trade_date\":\"2026-08-21\"",
                                 "\"last_trade_date\":\"2026-08-20\"")));
 
@@ -91,9 +98,13 @@ class PythonSectorHistorySourceTest {
                 + "\"entries\":["
                 + "{\"code\":\"881121\",\"name\":\"半导体\",\"last_trade_date\":\"2026-08-21\","
                 + "\"coverage_days\":60,\"return_1d\":0.8,\"return_5d\":3.2,"
-                + "\"return_20d\":6.5,\"positive_days_5\":4},"
+                + "\"return_20d\":6.5,\"positive_days_5\":4,"
+                + "\"rotation_trail\":["
+                + "{\"business_date\":\"2026-08-20\",\"relative_strength\":1.2,\"relative_momentum\":0.4},"
+                + "{\"business_date\":\"2026-08-21\",\"relative_strength\":1.8,\"relative_momentum\":0.6}]},"
                 + "{\"code\":\"881273\",\"name\":\"白酒\",\"last_trade_date\":\"2026-08-21\","
                 + "\"coverage_days\":60,\"return_1d\":-1.1,\"return_5d\":-2.4,"
-                + "\"return_20d\":-4.5,\"positive_days_5\":1}],\"warnings\":[]}";
+                + "\"return_20d\":-4.5,\"positive_days_5\":1,"
+                + "\"rotation_trail\":[]}],\"warnings\":[]}";
     }
 }

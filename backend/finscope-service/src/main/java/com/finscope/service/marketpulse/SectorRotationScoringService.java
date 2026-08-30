@@ -99,6 +99,7 @@ public class SectorRotationScoringService {
         value.setBreadthRatio(source.getBreadthRatio());
         value.setPersistenceDays(source.getPersistenceDays());
         value.setCrowdingScore(source.getCrowdingScore());
+        value.setRotationTrail(new ArrayList<>(source.getRotationTrail()));
         return value;
     }
 
