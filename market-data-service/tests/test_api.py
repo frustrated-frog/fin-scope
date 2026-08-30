@@ -755,6 +755,38 @@ def test_single_stock_forecast_endpoint_validates_six_digit_code(tmp_path: Path)
     assert response.status_code == 422
 
 
+def test_holding_strategy_endpoint_keeps_personal_cost_out_of_decision(tmp_path: Path) -> None:
+    api = client(tmp_path, [MultiCapabilityProvider()])
+    payload = {
+        "instrumentCode": "600570.SH",
+        "asOfDate": "2026-08-31",
+        "horizonDays": 5,
+        "marketPrice": 30,
+        "quantity": 100,
+        "cash": 7000,
+        "totalEquity": 10000,
+        "currentWeight": 0.30,
+        "upProbability": 0.68,
+        "p10Return": -0.035,
+        "p50Return": 0.032,
+        "p90Return": 0.09,
+        "forecastStatus": "ROBUST",
+        "modelHealthStatus": "HEALTHY",
+        "quoteAgeDays": 0,
+        "modelVersion": "panel-logit-v10",
+        "dataFingerprint": "sha256:abc",
+        "costBasis": 60,
+        "unrealizedReturn": -0.5,
+    }
+
+    response = api.post("/v1/quant/holding-strategies/evaluate", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["action"] == "ALLOW_ADD"
+    assert response.json()["suggestedQuantity"] == 100
+    assert response.headers["cache-control"] == "no-store, private"
+
+
 def test_financial_statement_endpoint_exposes_three_normalized_statements(tmp_path: Path) -> None:
     api = client(tmp_path, [MultiCapabilityProvider()])
 

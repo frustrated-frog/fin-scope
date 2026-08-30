@@ -25,6 +25,10 @@ from finscope_market_data.discovery.service import (
     StockDiscoveryService,
 )
 from finscope_market_data.health import ProviderHealthRegistry
+from finscope_market_data.holding_policy import (
+    HoldingStrategyRequest,
+    evaluate_holding_strategy,
+)
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
@@ -334,6 +338,17 @@ def create_app(
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
+        )
+
+    @application.post("/v1/quant/holding-strategies/evaluate")
+    async def holding_strategy(
+        request: HoldingStrategyRequest,
+    ) -> JSONResponse:
+        result = evaluate_holding_strategy(request)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
+            headers={"Cache-Control": "no-store, private"},
         )
 
     @application.post("/v1/quant/stock-discoveries")
