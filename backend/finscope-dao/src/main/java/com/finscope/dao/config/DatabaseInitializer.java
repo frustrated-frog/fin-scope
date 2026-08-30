@@ -1033,6 +1033,26 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_holding_instrument ON strategy_holding(instrument_id)");
         ensureColumn("strategy_holding", "quantity", "REAL");
         ensureColumn("strategy_holding", "average_cost", "REAL");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_transaction ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "client_request_id TEXT NOT NULL UNIQUE,"
+                + "instrument_id INTEGER,"
+                + "event_type TEXT NOT NULL CHECK(event_type IN ('OPENING_BALANCE','BUY','SELL','CASH_DIVIDEND','BONUS_SHARE','CASH_DEPOSIT','CASH_WITHDRAWAL','REVERSAL')),"
+                + "trade_date TEXT NOT NULL,"
+                + "quantity NUMERIC CHECK(quantity IS NULL OR quantity >= 0),"
+                + "price NUMERIC CHECK(price IS NULL OR price >= 0),"
+                + "commission NUMERIC NOT NULL DEFAULT 0 CHECK(commission >= 0),"
+                + "stamp_duty NUMERIC NOT NULL DEFAULT 0 CHECK(stamp_duty >= 0),"
+                + "transfer_fee NUMERIC NOT NULL DEFAULT 0 CHECK(transfer_fee >= 0),"
+                + "other_fee NUMERIC NOT NULL DEFAULT 0 CHECK(other_fee >= 0),"
+                + "cash_amount NUMERIC NOT NULL DEFAULT 0 CHECK(cash_amount >= 0),"
+                + "reversal_of_id INTEGER UNIQUE,"
+                + "note TEXT,"
+                + "created_at TEXT NOT NULL,"
+                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT,"
+                + "FOREIGN KEY(reversal_of_id) REFERENCES stock_transaction(id) ON DELETE RESTRICT)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_transaction_date ON stock_transaction(trade_date,id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_transaction_instrument ON stock_transaction(instrument_id,trade_date,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_playbook ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "code TEXT NOT NULL UNIQUE,"

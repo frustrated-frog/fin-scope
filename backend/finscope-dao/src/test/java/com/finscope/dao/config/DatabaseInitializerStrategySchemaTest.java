@@ -51,6 +51,13 @@ class DatabaseInitializerStrategySchemaTest {
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM pragma_foreign_key_list('strategy_holding') WHERE \"table\"='instrument'",
                 Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_transaction'", Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pragma_index_list('stock_transaction') indexes "
+                        + "JOIN pragma_index_info(indexes.name) columns ON columns.name='client_request_id' "
+                        + "WHERE indexes.\"unique\"=1",
+                Integer.class));
 
         jdbcTemplate.update("INSERT INTO instrument(code,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
                 "020608", "FUND", "测试基金", "2026-07-12T00:00:00", "2026-07-12T00:00:00");
