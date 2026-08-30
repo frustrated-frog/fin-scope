@@ -45,6 +45,9 @@ test('presents the latest automatic selection without a manual refresh action', 
         recentOutcomes: [{ runId: 9, instrumentCode: '600001.SH', asOfDate: '2026-08-14', finalRank: 1, calibratedProbability: .64, actualNetReturn: .04, actualDirection: 'UP', sectorNames: ['人工智能'] }], warnings: []
       });
     }
+    if (path === '/api/strategy/stock-account') {
+      return apiResponse({ positions: [{ instrumentCode: '600001.SH' }] });
+    }
     return apiResponse({
       run: { id: 9, businessDate: '2026-08-14', status: 'SUCCEEDED', budget: 6000, qualityStatus: 'FRESH_PRIMARY', finalCount: 1 },
       report: {
@@ -71,6 +74,7 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByText('严格可行动 1')).toBeInTheDocument();
   expect(screen.getByText('严格通过')).toBeInTheDocument();
   expect(screen.getByText('双引擎一致')).toBeInTheDocument();
+  expect(await screen.findByText('真实持有')).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();
   expect(screen.getByRole('table', { name: '相对候选因子对比' })).toBeInTheDocument();
   expect(screen.getByText('38.9% 保留')).toBeInTheDocument();

@@ -49,16 +49,17 @@ function constituentQuality(value?: string) {
   return '质量待确认';
 }
 
-function CandidateCard({ evidence, candidate, onOpenResearch }: {
+function CandidateCard({ evidence, candidate, held, onOpenResearch }: {
   evidence: StockDiscoveryEvidence;
   candidate?: StockDiscoveryCandidate;
+  held?: boolean;
   onOpenResearch: (code: string) => void;
 }) {
   const tier = evidence.research_tier ?? (evidence.qualified ? 'ACTIONABLE' : 'WATCH');
   return <article className="discovery-candidate" data-health={evidence.health_status} data-tier={tier}>
     <div className="discovery-rank"><span>#{String(evidence.relative_rank ?? evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
     <div className="discovery-candidate-main">
-      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}</h4></div><div className="discovery-verdicts"><em data-tier={tier}>{researchTiers[tier]}</em><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
+      <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}{held ? <em className="discovery-held-badge">真实持有</em> : null}</h4></div><div className="discovery-verdicts"><em data-tier={tier}>{researchTiers[tier]}</em><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
       <div className="discovery-probability"><div><span>未来 5 日上涨概率</span><strong>{pct(evidence.calibrated_probability)}</strong></div><i aria-hidden="true"><b style={{ width: pct(evidence.calibrated_probability) }} /></i><small>保守下界 {pct(evidence.probability_lower_bound)} · 不是确定性收益承诺</small></div>
       <dl>
         <div><dt>锁定样本准确率</dt><dd>{pct(evidence.locked_accuracy)}</dd></div>
@@ -86,6 +87,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
   const [failed, setFailed] = useState(false);
   const [accuracy, setAccuracy] = useState<StockDiscoveryAccuracyReport>();
   const [accuracyFailed, setAccuracyFailed] = useState(false);
+  const [heldCodes, setHeldCodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +106,12 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
           if (!cancelled) { setAccuracy(accuracyValue); setAccuracyFailed(false); }
         } catch {
           if (!cancelled) { setAccuracyFailed(true); }
+        }
+        try {
+          const account = await api<{ positions: Array<{ instrumentCode: string }> }>('/api/strategy/stock-account');
+          if (!cancelled) setHeldCodes(new Set(account.positions.map(item => item.instrumentCode.slice(0, 6))));
+        } catch {
+          if (!cancelled) setHeldCodes(new Set());
         }
       } catch (error) {
         if (!cancelled) { setFailed(true); addToast(error instanceof Error ? error.message : '股票发现结果加载失败', 'error'); }
@@ -177,7 +185,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
         <div className="discovery-section-title"><div><span>RELATIVE RESEARCH SHORTLIST</span><h4>相对优势 Top 5</h4></div><p>从全部深度候选中排序，不把相对领先包装成买入结论</p></div>
         <div className="discovery-action-gate" data-empty={!report.final_candidates.length || undefined}><div><span>STRICT ACTION GATE</span><strong>严格可行动 {report.final_candidates.length}</strong></div><p>{report.final_candidates.length ? `其中 ${report.final_candidates.map(item => candidates.get(item.code)?.name ?? item.code).join('、')} 通过全部概率、回测、稳定性门禁。` : '本轮无人通过绝对门禁；下方仍展示最值得继续研究的五只，但全部不是买入信号。'}</p></div>
         <div className="discovery-final-list">{researchCandidates.length
-          ? researchCandidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
+          ? researchCandidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} held={heldCodes.has(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
           : <div className="discovery-no-edge"><strong>深度样本暂不可用</strong><p>本批次没有形成可比较的深度证据，系统不会输出空洞排序。</p></div>}</div>
       </main>
       <aside className="discovery-context">
