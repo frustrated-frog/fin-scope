@@ -1,0 +1,30 @@
+.discovery-market-context {
+  display: grid;
+  grid-template-columns: minmax(260px, .7fr) minmax(0, 1.3fr);
+  gap: 22px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #397b8e 34%, var(--line));
+  border-radius: 14px;
+  background:
+    linear-gradient(108deg, color-mix(in srgb, #397b8e 10%, var(--surface)), var(--surface) 58%),
+    var(--surface);
+  box-shadow: 0 12px 30px rgba(12, 28, 39, .06);
+  padding: 19px 22px;
+}
+
+.discovery-market-context > header { min-width: 0; }
+.discovery-market-context > header span { color: #397b8e; font: 760 11px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; }
+.discovery-market-context > header strong { display: block; margin-top: 5px; color: var(--ink); font: 540 22px/1.2 "Iowan Old Style", "Songti SC", serif; }
+.discovery-market-context > header p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.discovery-market-context > header time { display: block; margin-top: 8px; color: var(--faint); font: 11px ui-monospace, monospace; }
+.discovery-market-context dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); }
+.discovery-market-context dl > div { min-width: 0; background: var(--surface-2); padding: 10px 12px; }
+.discovery-market-context dt { color: var(--faint); font-size: 11px; }
+.discovery-market-context dd { overflow: hidden; margin: 5px 0 0; color: var(--ink); font-size: 12px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.discovery-market-context[data-risk="DEFENSIVE"] { border-color: color-mix(in srgb, #c45f4c 42%, var(--line)); }
+.discovery-market-context[data-risk="OFFENSIVE"] { border-color: color-mix(in srgb, #27856b 42%, var(--line)); }
+
+@media (max-width: 760px) {
+  .discovery-market-context { grid-template-columns: 1fr; padding: 18px; }
+  .discovery-market-context dl { grid-template-columns: 1fr; }
+}

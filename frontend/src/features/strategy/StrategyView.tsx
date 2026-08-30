@@ -3,12 +3,14 @@ import { LongTermStrategyView } from './LongTermStrategyView';
 import { QuantWorkspace } from './QuantWorkspace';
 import { StockLearningCardPanel } from './StockLearningCardPanel';
 import { QuantResearchEntryIntent } from './quantTypes';
+import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 
 interface Props {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
+  marketContext?: StockDiscoveryMarketContext;
 }
 
 export function StrategyView(props: Props) {

@@ -4,6 +4,13 @@ import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 
+const marketContext = {
+  businessDate: '2026-08-21', transitionCode: 'REPAIR_EXPANSION' as const,
+  transitionLabel: '修复正在扩散', riskPosture: 'BALANCED' as const,
+  preferredSectors: ['创新药', '贵金属'], avoidSectors: ['半导体'],
+  chasePolicy: 'PULLBACK_ONLY' as const, summary: '宽度、成交压力与家数动量同步改善'
+};
+
 test('presents the latest automatic selection without a manual refresh action', async () => {
   const onOpenResearch = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -54,7 +61,8 @@ test('presents the latest automatic selection without a manual refresh action', 
     });
   }));
 
-  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} onOpenResearch={onOpenResearch} />);
+  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} onOpenResearch={onOpenResearch}
+    marketContext={marketContext} />);
 
   expect(await screen.findByRole('heading', { name: /样本股份/ })).toBeInTheDocument();
   expect(screen.getAllByText('64.0%').length).toBeGreaterThanOrEqual(1);
@@ -71,6 +79,11 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByText('同花顺成分')).toBeInTheDocument();
   expect(screen.getByText('权限范围剔除 31 只')).toBeInTheDocument();
   expect(screen.getByText('成分覆盖 52 / 52')).toBeInTheDocument();
+  expect(screen.getByText('来自市场转折雷达')).toBeInTheDocument();
+  expect(screen.getByText('修复正在扩散')).toBeInTheDocument();
+  expect(screen.getByText('创新药 · 贵金属')).toBeInTheDocument();
+  expect(screen.getByText('均衡试错')).toBeInTheDocument();
+  expect(screen.getByText('只等回撤确认')).toBeInTheDocument();
   expect(await screen.findByRole('heading', { name: '真实预测验收台' })).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /股票发现真实概率校准图/ })).toBeInTheDocument();
   expect(screen.getByText('真实样本尚少，继续积累，不提前宣称优势。')).toBeInTheDocument();

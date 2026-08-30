@@ -26,6 +26,7 @@ import { WatchlistView } from './features/watchlist/WatchlistView';
 import { StrategyView } from './features/strategy/StrategyView';
 import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
 import { api } from './shared/api/client';
+import type { StockDiscoveryMarketContext } from './shared/types/marketContext';
 import { useViewRevision } from './shared/api/useViewRevision';
 import {
   AgentRun,
@@ -93,6 +94,7 @@ export default function App() {
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
+  const [stockDiscoveryMarketContext, setStockDiscoveryMarketContext] = useState<StockDiscoveryMarketContext>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
   const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
   const [dashboardRadarEventId, setDashboardRadarEventId] = useState<number | null>(null);
@@ -627,13 +629,15 @@ export default function App() {
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
-      {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage} onOpenStockDiscovery={() => setView('strategy')} />}
+      {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage}
+        onOpenStockDiscovery={(context) => { setStockDiscoveryMarketContext(context); setView('strategy'); }} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
         initialStockCode={industryChainStockCode}
         onOpenNewsEvent={(eventId) => { setDashboardRadarEventId(eventId); setView('news'); }} />}
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
-      {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
+      {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent}
+        marketContext={stockDiscoveryMarketContext} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
       {view === 'majorEvents' && <MajorEventView addToast={addToast} />}
     </AppShell>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 import { StockDiscoveryAccuracyReport, StockDiscoveryCandidate, StockDiscoveryEvidence, StockDiscoveryLatest, StockDiscoveryStatus } from './quantTypes';
 import './BacktestAuditPanel.css';
 import {
@@ -9,6 +10,7 @@ import {
   RiskReturnMap
 } from './StockDiscoveryVisuals';
 import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
+import './StockDiscoveryMarketContext.css';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -72,10 +74,11 @@ function CandidateCard({ evidence, candidate, onOpenResearch }: {
   </article>;
 }
 
-export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
+export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, marketContext }: {
   addToast: Toast;
   setMessage: (message: string) => void;
   onOpenResearch?: (code: string) => void;
+  marketContext?: StockDiscoveryMarketContext;
 }) {
   const [latest, setLatest] = useState<StockDiscoveryLatest>();
   const [runningStatus, setRunningStatus] = useState('EMPTY');
@@ -137,6 +140,18 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch }: {
       <div><p>STOCK DISCOVERY / AUTOPILOT</p><h3>市场已经替你跑完一遍</h3><span>不是按股价挑便宜股票。系统先量化所有买得起一手的热门板块候选，再从深度预测中留下真正更有优势的结果。</span></div>
       <aside><i data-status={runningStatus} /><small>{runningStatus === 'RUNNING' ? '新批次计算中' : 'LATEST VERIFIED CLOSE'}</small><strong>{report.as_of_date}</strong><span>{report.source_family} · {report.quality_status === 'FRESH_PRIMARY' ? '主数据源新鲜' : '备用源结果'}</span></aside>
     </header>
+
+    {marketContext && <section className="discovery-market-context" data-risk={marketContext.riskPosture}
+      aria-label="来自市场转折雷达的研究上下文">
+      <header><span>来自市场转折雷达</span><strong>{marketContext.transitionLabel}</strong>
+        <p>{marketContext.summary}</p><time>{marketContext.businessDate ?? '当前交易日'}</time></header>
+      <dl>
+        <div><dt>风险姿态</dt><dd>{{ OFFENSIVE: '进攻观察', BALANCED: '均衡试错', DEFENSIVE: '防守优先' }[marketContext.riskPosture]}</dd></div>
+        <div><dt>优先研究</dt><dd>{marketContext.preferredSectors.join(' · ') || '等待行业确认'}</dd></div>
+        <div><dt>谨慎方向</dt><dd>{marketContext.avoidSectors.join(' · ') || '当前无强制回避'}</dd></div>
+        <div><dt>参与纪律</dt><dd>{{ CONFIRMATION_ALLOWED: '确认后参与', PULLBACK_ONLY: '只等回撤确认', NO_CHASING: '不追高' }[marketContext.chasePolicy]}</dd></div>
+      </dl>
+    </section>}
 
     <DiscoveryFunnel funnel={report.funnel} />
 

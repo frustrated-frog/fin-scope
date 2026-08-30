@@ -1,3 +1,7 @@
+import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
+
+export type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
+
 export type MarketPulseQuality = 'READY' | 'PARTIAL' | 'STALE' | 'UNAVAILABLE';
 
 export type MarketRegimeFeatures = {
@@ -299,17 +303,6 @@ export type MarketNextSessionScenario = {
   emphasis: 'PRIMARY' | 'SECONDARY' | 'GUARD';
   triggers: string[];
   posture: string;
-};
-
-export type StockDiscoveryMarketContext = {
-  businessDate?: string;
-  transitionCode: MarketTransitionCode;
-  transitionLabel: string;
-  riskPosture: 'OFFENSIVE' | 'BALANCED' | 'DEFENSIVE';
-  preferredSectors: string[];
-  avoidSectors: string[];
-  chasePolicy: 'CONFIRMATION_ALLOWED' | 'PULLBACK_ONLY' | 'NO_CHASING';
-  summary: string;
 };
 
 export type MarketTransitionDecision = {

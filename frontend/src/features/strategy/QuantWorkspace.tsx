@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
@@ -34,11 +35,12 @@ function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
   </div>;
 }
 
-export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed }: {
+export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed, marketContext }: {
   addToast: Toast;
   setMessage: (message: string) => void;
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
+  marketContext?: StockDiscoveryMarketContext;
 }) {
   const [pane, setPane] = useState<Pane>('discovery');
   const [forecastCode, setForecastCode] = useState<string>();
@@ -174,7 +176,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
       {([['discovery','股票发现'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略学院'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'LEARN' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
     </nav>
 
-    {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
+    {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} marketContext={marketContext}
+      onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
