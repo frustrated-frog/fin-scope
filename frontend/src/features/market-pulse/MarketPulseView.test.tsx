@@ -141,6 +141,8 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} onOpenStockDiscovery={onOpenStockDiscovery} />);
 
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
+  expect(screen.getByText('交易日 15:30')).toBeInTheDocument();
+  expect(screen.getByText('错过后每小时补跑')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '急跌后缩量修复，反弹持续性仍需量能确认' })).toBeInTheDocument();
   expect(screen.queryByText('指数全景')).not.toBeInTheDocument();
   expect(screen.queryByText(/创业板指领涨/)).not.toBeInTheDocument();
@@ -201,17 +203,17 @@ test('switches from the default daily review to historical evolution', async () 
   expect(screen.getByText('2.10 万亿')).toBeInTheDocument();
 });
 
-test('refreshes and reloads the frozen workspace', async () => {
+test('keeps a manual recovery action beside the automatic schedule', async () => {
   const addToast = vi.fn();
   render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
 
-  fireEvent.click(await screen.findByRole('button', { name: '刷新今日判断' }));
+  fireEvent.click(await screen.findByRole('button', { name: '立即补刷新' }));
 
-  await waitFor(() => expect(addToast).toHaveBeenCalledWith('市场机会判断已刷新', 'success'));
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('市场机会判断已补刷新', 'success'));
   expect(fetch).toHaveBeenCalledWith('/api/market-pulse/refresh', expect.objectContaining({ method: 'POST' }));
 });
 
-test('automatically retries once when the frozen market breadth is unavailable', async () => {
+test('does not write automatically from the page when market breadth is unavailable', async () => {
   let latestCalls = 0;
   vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
     const path = String(input);
@@ -238,16 +240,15 @@ test('automatically retries once when the frozen market breadth is unavailable',
 
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+  expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
+  await waitFor(() => expect(latestCalls).toBe(1));
+  expect(fetch).not.toHaveBeenCalledWith(
     '/api/market-pulse/refresh',
     expect.objectContaining({ method: 'POST' })
-  ));
-  fireEvent.click(await screen.findByRole('tab', { name: '市场宽度' }));
-  expect(await screen.findByText('3,200')).toBeInTheDocument();
-  expect(latestCalls).toBe(2);
+  );
 });
 
-test('automatically retries once when historical breadth metrics are missing', async () => {
+test('does not write automatically from the page when historical breadth is incomplete', async () => {
   let latestCalls = 0;
   vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
     const path = String(input);
@@ -277,11 +278,12 @@ test('automatically retries once when historical breadth metrics are missing', a
 
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+  expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
+  await waitFor(() => expect(latestCalls).toBe(1));
+  expect(fetch).not.toHaveBeenCalledWith(
     '/api/market-pulse/refresh',
     expect.objectContaining({ method: 'POST' })
-  ));
-  expect(latestCalls).toBe(2);
+  );
 });
 
 test('backfills the five requested days and opens one historical review', async () => {
