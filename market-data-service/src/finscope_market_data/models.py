@@ -69,6 +69,27 @@ class MarketNewHighLow(BaseModel):
     valid250_count: int = Field(default=0, ge=0)
 
 
+class MarketVolumePressure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    advance_amount: float = Field(default=0, ge=0)
+    decline_amount: float = Field(default=0, ge=0)
+    flat_amount: float = Field(default=0, ge=0)
+    advance_amount_ratio: float | None = Field(default=None, ge=0, le=1)
+    net_advancing_amount: float = 0
+    trin: float | None = Field(default=None, ge=0)
+
+
+class MarketBreadthMomentum(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mcclellan_oscillator: float | None = None
+    breadth_thrust_ratio: float | None = Field(default=None, ge=0, le=1)
+    status: Literal[
+        "BULLISH_THRUST", "RECOVERING", "NEUTRAL", "WEAKENING", "UNAVAILABLE"
+    ] = "UNAVAILABLE"
+
+
 class MarketInternalHistoryPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -92,12 +113,20 @@ class MarketInternalHistoryPoint(BaseModel):
     new_low250_count: int = Field(default=0, ge=0)
     net_advances: int
     advance_decline_line: int
+    advance_amount: float = Field(default=0, ge=0)
+    decline_amount: float = Field(default=0, ge=0)
+    flat_amount: float = Field(default=0, ge=0)
+    advance_amount_ratio: float | None = Field(default=None, ge=0, le=1)
+    net_advancing_amount: float = 0
+    trin: float | None = Field(default=None, ge=0)
+    mcclellan_oscillator: float | None = None
+    breadth_thrust_ratio: float | None = Field(default=None, ge=0, le=1)
 
 
 class MarketBreadthSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["market-breadth-v2"] = "market-breadth-v2"
+    schema_version: Literal["market-breadth-v3"] = "market-breadth-v3"
     market: Literal["CN-A"] = "CN-A"
     business_date: str
     source_code: str
@@ -122,6 +151,8 @@ class MarketBreadthSnapshot(BaseModel):
     new_high_low: MarketNewHighLow = Field(default_factory=MarketNewHighLow)
     net_advances: int = 0
     advance_decline_line: int = 0
+    volume_pressure: MarketVolumePressure = Field(default_factory=MarketVolumePressure)
+    breadth_momentum: MarketBreadthMomentum = Field(default_factory=MarketBreadthMomentum)
     history: list[MarketInternalHistoryPoint] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 

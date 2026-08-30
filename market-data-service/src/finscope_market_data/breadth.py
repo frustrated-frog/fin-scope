@@ -9,10 +9,12 @@ from zoneinfo import ZoneInfo
 
 from finscope_market_data.models import (
     MarketBreadthSnapshot,
+    MarketBreadthMomentum,
     MarketInternalHistoryPoint,
     MarketNewHighLow,
     MarketReturnDistributionBucket,
     MarketTrendBreadth,
+    MarketVolumePressure,
     QualityStatus,
 )
 from finscope_market_data.snapshot_store import SnapshotStore
@@ -87,11 +89,15 @@ class MarketBreadthService:
         if self._snapshot_store is None:
             raise RuntimeError("历史业务日没有同日期历史快照或本地日K样本")
         pairs = self._snapshot_store.load_daily_bar_pairs(business_date.isoformat())
-        changes = [
-            round((current.close / previous.close - 1.0) * 100.0, 6)
+        rows = [
+            (
+                round((current.close / previous.close - 1.0) * 100.0, 6),
+                max(0.0, current.amount or 0.0),
+            )
             for previous, current in pairs
             if previous.close > 0 and current.close > 0
         ]
+        changes = [change for change, _ in rows]
         if not changes:
             raise RuntimeError("历史业务日没有同日期历史快照或本地日K样本")
         warnings = [
@@ -127,6 +133,7 @@ class MarketBreadthService:
             limit_down_count=limit_down,
             median_change_pct=statistics.median(changes),
             return_distribution=_return_distribution(changes),
+            volume_pressure=_volume_pressure(rows),
             warnings=warnings,
         )
         self._attach_historical_internals(result, business_date, warnings)
@@ -184,6 +191,7 @@ class MarketBreadthService:
             limit_down_count=limit_down,
             median_change_pct=statistics.median(changes),
             return_distribution=_return_distribution(changes),
+            volume_pressure=_volume_pressure(rows),
             warnings=warnings,
         )
         self._attach_historical_internals(result, business_date, warnings)
@@ -237,6 +245,11 @@ class MarketBreadthService:
         )
         snapshot.net_advances = current.net_advances
         snapshot.advance_decline_line = current.advance_decline_line
+        snapshot.breadth_momentum = MarketBreadthMomentum(
+            mcclellan_oscillator=current.mcclellan_oscillator,
+            breadth_thrust_ratio=current.breadth_thrust_ratio,
+            status=_momentum_status(history),
+        )
 
     def _normalize(self, frame: Any, family: str) -> list[tuple[float, float]]:
         rows: list[tuple[float, float]] = []
@@ -411,6 +424,9 @@ def _market_internal_history(
         trade_date: {
             "changes": [],
             "amount": 0.0,
+            "advance_amount": 0.0,
+            "decline_amount": 0.0,
+            "flat_amount": 0.0,
             "above": {20: 0, 60: 0, 120: 0, 250: 0},
             "valid": {20: 0, 60: 0, 120: 0, 250: 0},
             "high": {20: 0, 60: 0, 250: 0},
@@ -430,10 +446,16 @@ def _market_internal_history(
             if previous <= 0 or bar.close <= 0:
                 continue
             aggregate = aggregates[bar.trade_date]
-            aggregate["changes"].append(
-                (bar.close / previous - 1.0) * 100.0
-            )
-            aggregate["amount"] += max(0.0, bar.amount or 0.0)
+            change = (bar.close / previous - 1.0) * 100.0
+            amount = max(0.0, bar.amount or 0.0)
+            aggregate["changes"].append(change)
+            aggregate["amount"] += amount
+            if change > 0:
+                aggregate["advance_amount"] += amount
+            elif change < 0:
+                aggregate["decline_amount"] += amount
+            else:
+                aggregate["flat_amount"] += amount
             for window in (20, 60, 120, 250):
                 if index + 1 < window:
                     continue
@@ -454,6 +476,9 @@ def _market_internal_history(
 
     values: list[MarketInternalHistoryPoint] = []
     rolling_net: deque[int] = deque(maxlen=60)
+    net_ema19: float | None = None
+    net_ema39: float | None = None
+    thrust_ema10: float | None = None
     for trade_date in sorted(aggregates):
         aggregate = aggregates[trade_date]
         changes = aggregate["changes"]
@@ -464,6 +489,16 @@ def _market_internal_history(
         flat = len(changes) - advance - decline
         net_advances = advance - decline
         rolling_net.append(net_advances)
+        net_ema19 = _ema(net_ema19, float(net_advances), 19)
+        net_ema39 = _ema(net_ema39, float(net_advances), 39)
+        participation = _ratio(advance, advance + decline)
+        if participation is not None:
+            thrust_ema10 = _ema(thrust_ema10, participation, 10)
+        pressure = _volume_pressure([
+            (1.0, aggregate["advance_amount"]),
+            (-1.0, aggregate["decline_amount"]),
+            (0.0, aggregate["flat_amount"]),
+        ], advance_count=advance, decline_count=decline)
         values.append(MarketInternalHistoryPoint(
             business_date=trade_date,
             advance_count=advance,
@@ -485,6 +520,14 @@ def _market_internal_history(
             new_low250_count=aggregate["low"][250],
             net_advances=net_advances,
             advance_decline_line=sum(rolling_net),
+            advance_amount=pressure.advance_amount,
+            decline_amount=pressure.decline_amount,
+            flat_amount=pressure.flat_amount,
+            advance_amount_ratio=pressure.advance_amount_ratio,
+            net_advancing_amount=pressure.net_advancing_amount,
+            trin=pressure.trin,
+            mcclellan_oscillator=net_ema19 - net_ema39,
+            breadth_thrust_ratio=thrust_ema10,
         ))
     return values
 
@@ -504,3 +547,63 @@ def _trend_valid_count(
 
 def _ratio(numerator: int, denominator: int) -> float | None:
     return None if denominator == 0 else numerator / denominator
+
+
+def _volume_pressure(
+    rows: list[tuple[float, float]],
+    advance_count: int | None = None,
+    decline_count: int | None = None,
+) -> MarketVolumePressure:
+    advance_amount = sum(amount for change, amount in rows if change > 0)
+    decline_amount = sum(amount for change, amount in rows if change < 0)
+    flat_amount = sum(amount for change, amount in rows if change == 0)
+    advances = advance_count
+    if advances is None:
+        advances = sum(1 for change, _ in rows if change > 0)
+    declines = decline_count
+    if declines is None:
+        declines = sum(1 for change, _ in rows if change < 0)
+    directional_amount = advance_amount + decline_amount
+    advance_amount_ratio = (
+        None if directional_amount == 0 else advance_amount / directional_amount
+    )
+    trin = None
+    if advances > 0 and declines > 0 and advance_amount > 0 and decline_amount > 0:
+        trin = (advances / declines) / (advance_amount / decline_amount)
+    return MarketVolumePressure(
+        advance_amount=advance_amount,
+        decline_amount=decline_amount,
+        flat_amount=flat_amount,
+        advance_amount_ratio=advance_amount_ratio,
+        net_advancing_amount=advance_amount - decline_amount,
+        trin=trin,
+    )
+
+
+def _ema(previous: float | None, current: float, period: int) -> float:
+    if previous is None:
+        return current
+    alpha = 2.0 / (period + 1.0)
+    return previous + alpha * (current - previous)
+
+
+def _momentum_status(history: list[MarketInternalHistoryPoint]) -> str:
+    if not history:
+        return "UNAVAILABLE"
+    current = history[-1]
+    thrust = current.breadth_thrust_ratio
+    oscillator = current.mcclellan_oscillator
+    if thrust is None or oscillator is None:
+        return "UNAVAILABLE"
+    recent = [
+        point.breadth_thrust_ratio
+        for point in history[-10:]
+        if point.breadth_thrust_ratio is not None
+    ]
+    if thrust >= 0.615 and recent and min(recent) <= 0.4:
+        return "BULLISH_THRUST"
+    if thrust >= 0.52 and oscillator > 0:
+        return "RECOVERING"
+    if thrust <= 0.4 and oscillator < 0:
+        return "WEAKENING"
+    return "NEUTRAL"

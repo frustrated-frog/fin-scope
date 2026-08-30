@@ -35,7 +35,7 @@ def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
 
     result = service.fetch(date(2026, 8, 21))
 
-    assert result.schema_version == "market-breadth-v2"
+    assert result.schema_version == "market-breadth-v3"
     assert result.business_date == "2026-08-21"
     assert result.source_code == "AKSHARE_EASTMONEY_A_SPOT"
     assert result.source_family == "EASTMONEY"
@@ -46,9 +46,36 @@ def test_eastmoney_snapshot_calculates_core_market_breadth() -> None:
     assert result.valid_count == 3
     assert result.advance_ratio == 1 / 3
     assert result.total_amount == 600
+    assert result.volume_pressure.advance_amount == 100
+    assert result.volume_pressure.decline_amount == 200
+    assert result.volume_pressure.flat_amount == 300
+    assert result.volume_pressure.advance_amount_ratio == 1 / 3
+    assert result.volume_pressure.net_advancing_amount == -100
+    assert result.volume_pressure.trin == 2.0
     assert result.limit_up_count == 1
     assert result.limit_down_count == 1
     assert result.median_change_pct == 0
+
+
+def test_market_pressure_keeps_trin_null_when_declining_amount_is_zero() -> None:
+    service = MarketBreadthService(
+        eastmoney_loader=lambda: pd.DataFrame(
+            [
+                {"代码": "600001", "最新价": 10.2, "涨跌幅": 2.0, "成交额": 100},
+                {"代码": "000001", "最新价": 8.1, "涨跌幅": -1.0, "成交额": 0},
+            ]
+        ),
+        sina_loader=lambda: pd.DataFrame(),
+        limit_up_loader=lambda _: pd.DataFrame(),
+        limit_down_loader=lambda _: pd.DataFrame(),
+        today_provider=lambda: date(2026, 8, 21),
+        calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-21"}]),
+    )
+
+    result = service.fetch(date(2026, 8, 21))
+
+    assert result.volume_pressure.advance_amount_ratio == 1.0
+    assert result.volume_pressure.trin is None
 
 
 def test_default_retrieved_at_contains_timezone_offset() -> None:
@@ -309,7 +336,7 @@ def test_daily_bar_panel_calculates_market_internal_structure_and_sixty_day_hist
         calendar_loader=lambda: pd.DataFrame([{"trade_date": "2026-08-24"}]),
     ).fetch(date(2026, 8, 21))
 
-    assert result.schema_version == "market-breadth-v2"
+    assert result.schema_version == "market-breadth-v3"
     assert sum(bucket.count for bucket in result.return_distribution) == 3
     assert next(bucket for bucket in result.return_distribution if bucket.code == "UP_3_7").count == 1
     assert result.trend_breadth.ma20_ratio == 2 / 3
@@ -322,12 +349,24 @@ def test_daily_bar_panel_calculates_market_internal_structure_and_sixty_day_hist
     assert result.new_high_low.low250_count == 1
     assert result.net_advances == 1
     assert result.advance_decline_line == 1
+    assert result.volume_pressure.advance_amount == 400.0
+    assert result.volume_pressure.decline_amount == 200.0
+    assert result.volume_pressure.advance_amount_ratio == 2 / 3
+    assert result.volume_pressure.net_advancing_amount == 200.0
+    assert result.volume_pressure.trin == 1.0
+    assert result.breadth_momentum.mcclellan_oscillator == 0.05
+    assert result.breadth_momentum.breadth_thrust_ratio == 0.5303030303030303
+    assert result.breadth_momentum.status == "RECOVERING"
     assert len(result.history) == 60
     assert result.history[-1].business_date == "2026-08-21"
     assert result.history[-1].ma20_ratio == 2 / 3
     assert result.history[-1].new_high20_count == 2
     assert result.history[-1].new_low20_count == 1
     assert result.history[-1].advance_decline_line == 1
+    assert result.history[-1].advance_amount_ratio == 2 / 3
+    assert result.history[-1].net_advancing_amount == 200.0
+    assert result.history[-1].mcclellan_oscillator == 0.05
+    assert result.history[-1].breadth_thrust_ratio == 0.5303030303030303
 
 
 def test_weekday_holiday_accepts_the_latest_calendar_trade_date(tmp_path) -> None:
