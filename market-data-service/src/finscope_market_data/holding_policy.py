@@ -67,6 +67,24 @@ class HoldingStrategyResult(HoldingPolicyModel):
     policy_version: str = "holding-policy-v1"
 
 
+class HoldingStrategySettlementRequest(HoldingPolicyModel):
+    action: Literal[
+        "HOLD", "ALLOW_ADD", "REDUCE_CONCENTRATION", "EXIT_TRIGGERED", "ABSTAIN"
+    ]
+    suggested_quantity: int = Field(ge=0)
+    held_quantity: float = Field(gt=0)
+    current_market_value: float = Field(gt=0)
+    entry_price: float = Field(gt=0)
+    actual_net_return: float
+
+
+class HoldingStrategySettlementResult(HoldingPolicyModel):
+    strategy_return: float
+    hold_return: float
+    incremental_return: float
+    method: str = "frozen-action-v1"
+
+
 def evaluate_holding_strategy(
     request: HoldingStrategyRequest,
 ) -> HoldingStrategyResult:
@@ -190,3 +208,27 @@ def _reduction_quantity(request: HoldingStrategyRequest) -> int:
     lots = max(1, floor(excess_value / request.market_price / request.lot_size))
     proposed = lots * request.lot_size
     return min(floor(request.quantity), proposed)
+
+
+def settle_holding_strategy(
+    request: HoldingStrategySettlementRequest,
+) -> HoldingStrategySettlementResult:
+    hold_return = request.actual_net_return
+    strategy_return = hold_return
+    if request.action == "ALLOW_ADD":
+        additional_value = request.suggested_quantity * request.entry_price
+        exposure_multiple = 1 + additional_value / request.current_market_value
+        strategy_return = hold_return * exposure_multiple
+    elif request.action == "REDUCE_CONCENTRATION":
+        remaining_ratio = max(
+            0.0,
+            1 - request.suggested_quantity / request.held_quantity,
+        )
+        strategy_return = hold_return * remaining_ratio
+    elif request.action == "EXIT_TRIGGERED":
+        strategy_return = 0.0
+    return HoldingStrategySettlementResult(
+        strategy_return=round(strategy_return, 8),
+        hold_return=round(hold_return, 8),
+        incremental_return=round(strategy_return - hold_return, 8),
+    )

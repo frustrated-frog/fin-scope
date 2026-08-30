@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.domain.strategy.holding.HoldingStrategyAdvice;
 import com.finscope.domain.strategy.holding.HoldingStrategyEvaluationRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementResult;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -56,6 +58,30 @@ public class PythonHoldingStrategyClient {
             throw error;
         } catch (Exception error) {
             throw contract("SCHEMA_DRIFT", "Python 持仓策略响应不符合契约", false, error);
+        }
+    }
+
+    public HoldingStrategySettlementResult settle(HoldingStrategySettlementRequest request) {
+        if (request == null || request.getAction() == null || request.getHeldQuantity() <= 0
+                || request.getCurrentMarketValue() <= 0 || request.getEntryPrice() <= 0) {
+            throw contract("INVALID_REQUEST", "持仓策略结算请求缺少必要字段", false, null);
+        }
+        try {
+            FinanceHttpResponse response = http.postJson(CLIENT_CODE,
+                    URI.create(trim(baseUrl) + "/v1/quant/holding-strategies/settle"),
+                    json.writeValueAsString(request), Collections.<String, String>emptyMap(), timeoutMs);
+            HoldingStrategySettlementResult result = json.readValue(
+                    response.getBody(), HoldingStrategySettlementResult.class);
+            if (result.getMethod() == null || !Double.isFinite(result.getStrategyReturn())
+                    || !Double.isFinite(result.getHoldReturn())
+                    || !Double.isFinite(result.getIncrementalReturn())) {
+                throw contract("SCHEMA_DRIFT", "Python 持仓策略结算响应缺少必要字段", false, null);
+            }
+            return result;
+        } catch (ProviderContractException error) {
+            throw error;
+        } catch (Exception error) {
+            throw contract("SCHEMA_DRIFT", "Python 持仓策略结算响应不符合契约", false, error);
         }
     }
 

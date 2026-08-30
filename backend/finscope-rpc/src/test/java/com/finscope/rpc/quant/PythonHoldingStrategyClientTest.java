@@ -2,6 +2,7 @@ package com.finscope.rpc.quant;
 
 import com.finscope.domain.strategy.holding.HoldingStrategyAdvice;
 import com.finscope.domain.strategy.holding.HoldingStrategyEvaluationRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementRequest;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,35 @@ class PythonHoldingStrategyClientTest {
         assertEquals("holding-policy-v1", advice.getPolicyVersion());
         assertTrue(body.get().contains("\"costBasis\":25.0"));
         assertFalse(body.get().contains("averageCost"));
+    }
+
+    @Test
+    void settlesFrozenActionAgainstSameStockHold() {
+        FinanceHttpClient http = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String request,
+                                                Map<String, String> headers, int requestTimeoutMs) {
+                assertTrue(uri.toString().endsWith("/v1/quant/holding-strategies/settle"));
+                return new FinanceHttpResponse(200, "{\"strategyReturn\":0.16,\"holdReturn\":0.08,"
+                        + "\"incrementalReturn\":0.08,\"method\":\"frozen-action-v1\"}",
+                        Instant.now(), "hash");
+            }
+        };
+        HoldingStrategySettlementRequest request = new HoldingStrategySettlementRequest();
+        request.setAction("ALLOW_ADD");
+        request.setSuggestedQuantity(100);
+        request.setHeldQuantity(100);
+        request.setCurrentMarketValue(3000d);
+        request.setEntryPrice(30d);
+        request.setActualNetReturn(0.08d);
+
+        assertEquals(0.08d, new PythonHoldingStrategyClient(
+                "http://127.0.0.1:8000", http, 30000).settle(request).getIncrementalReturn());
     }
 
     private HoldingStrategyEvaluationRequest request() {

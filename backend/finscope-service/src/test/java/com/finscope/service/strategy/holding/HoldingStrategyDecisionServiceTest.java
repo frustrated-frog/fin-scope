@@ -8,6 +8,8 @@ import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.strategy.holding.HoldingStrategyAdvice;
 import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
 import com.finscope.domain.strategy.holding.HoldingStrategyEvaluationRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementResult;
 import com.finscope.domain.strategy.holding.StockAccountSnapshot;
 import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.rpc.quant.PythonHoldingStrategyClient;
@@ -27,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -98,6 +101,38 @@ class HoldingStrategyDecisionServiceTest {
         assertEquals("UNAVAILABLE", result.get(1).getValidationStatus());
         assertNull(result.get(0).getId());
         assertTrue(result.get(0).getBlockers().get(0).contains("尚无可复用"));
+    }
+
+    @Test
+    void settlesMaturedAdviceAgainstFrozenSameStockBenchmark() {
+        HoldingStrategyDecision pending = new HoldingStrategyDecision();
+        pending.setId(21L);
+        pending.setInstrumentCode("600570.SH");
+        pending.setForecastRunId(12L);
+        pending.setAction("ALLOW_ADD");
+        pending.setSuggestedQuantity(100);
+        pending.setCurrentMarketValue(3000d);
+        pending.setInputJson("{\"marketPrice\":30,\"quantity\":100}");
+        SingleStockForecastRun matured = run(12L, "600570.SH");
+        matured.setMaturityStatus(SingleStockForecastRun.MaturityStatus.MATURED);
+        SingleStockForecastRun.ForecastOutcome outcome = new SingleStockForecastRun.ForecastOutcome();
+        outcome.setEntryOpen(30d);
+        outcome.setActualNetReturn(0.08d);
+        matured.setOutcome(outcome);
+        HoldingStrategySettlementResult settlement = new HoldingStrategySettlementResult();
+        settlement.setStrategyReturn(0.16d);
+        settlement.setHoldReturn(0.08d);
+        settlement.setIncrementalReturn(0.08d);
+        settlement.setMethod("frozen-action-v1");
+        when(decisions.findPendingDue(any(), anyInt()))
+                .thenReturn(Collections.singletonList(pending));
+        when(forecasts.detail(12L)).thenReturn(matured);
+        when(client.settle(any(HoldingStrategySettlementRequest.class))).thenReturn(settlement);
+        when(decisions.findAll(100)).thenReturn(Collections.singletonList(pending));
+
+        service.list(100);
+
+        verify(decisions).settle(21L, 0.16d, 0.08d, 0.08d);
     }
 
     private StockAccountSnapshot account(StockPosition... positions) {

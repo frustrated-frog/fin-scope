@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from finscope_market_data.holding_policy import (
+    HoldingStrategySettlementRequest,
     HoldingStrategyRequest,
     evaluate_holding_strategy,
+    settle_holding_strategy,
 )
 
 
@@ -83,3 +85,40 @@ def test_cost_basis_is_explanatory_and_never_changes_action() -> None:
 
     assert low_cost.action == high_cost.action
     assert low_cost.suggested_quantity == high_cost.suggested_quantity
+
+
+def test_settlement_compares_action_with_same_stock_hold_benchmark() -> None:
+    result = settle_holding_strategy(
+        HoldingStrategySettlementRequest.model_validate(
+            {
+                "action": "ALLOW_ADD",
+                "suggestedQuantity": 100,
+                "heldQuantity": 100,
+                "currentMarketValue": 3000,
+                "entryPrice": 30,
+                "actualNetReturn": 0.08,
+            }
+        )
+    )
+
+    assert result.hold_return == 0.08
+    assert result.strategy_return == 0.16
+    assert result.incremental_return == 0.08
+
+
+def test_exit_shadow_action_stays_in_cash_after_trigger() -> None:
+    result = settle_holding_strategy(
+        HoldingStrategySettlementRequest.model_validate(
+            {
+                "action": "EXIT_TRIGGERED",
+                "suggestedQuantity": 100,
+                "heldQuantity": 100,
+                "currentMarketValue": 3000,
+                "entryPrice": 30,
+                "actualNetReturn": -0.12,
+            }
+        )
+    )
+
+    assert result.strategy_return == 0
+    assert result.incremental_return == 0.12

@@ -49,6 +49,7 @@ class HoldingStrategyDecisionRepositoryTest {
         value.setBenchmark("同一只股票保持当时持仓不动");
         value.setPolicyVersion("holding-policy-v1");
         value.setValidationStatus("PENDING");
+        value.setMaturityDate(LocalDate.of(2026, 9, 7));
         value.setInputJson("{}");
         value.setOutputJson("{}");
 
@@ -59,5 +60,12 @@ class HoldingStrategyDecisionRepositoryTest {
         assertEquals("概率门禁通过", saved.getEvidence().get(0));
         assertEquals("不足一手", saved.getBlockers().get(0));
         assertEquals(1, repository.findAll(50).size());
+        assertEquals(1, repository.findPendingDue(LocalDate.of(2026, 9, 7), 50).size());
+        assertTrue(repository.settle(saved.getId(), 0.04d, 0.03d, 0.01d));
+        assertTrue(!repository.settle(saved.getId(), 0.04d, 0.03d, 0.01d));
+        HoldingStrategyDecision settled = repository.findById(saved.getId())
+                .orElseThrow(AssertionError::new);
+        assertEquals("MATURED", settled.getValidationStatus());
+        assertEquals(0.01d, settled.getIncrementalReturn(), 0.000001d);
     }
 }

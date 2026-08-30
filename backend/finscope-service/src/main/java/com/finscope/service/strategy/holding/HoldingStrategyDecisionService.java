@@ -11,6 +11,8 @@ import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.strategy.holding.HoldingStrategyAdvice;
 import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
 import com.finscope.domain.strategy.holding.HoldingStrategyEvaluationRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementRequest;
+import com.finscope.domain.strategy.holding.HoldingStrategySettlementResult;
 import com.finscope.domain.strategy.holding.StockAccountSnapshot;
 import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.rpc.quant.PythonHoldingStrategyClient;
@@ -50,16 +52,59 @@ public class HoldingStrategyDecisionService {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     public List<HoldingStrategyDecision> list(int limit) {
+        settleDue();
         return decisions.findAll(limit);
     }
 
     public List<HoldingStrategyDecision> refresh() {
+        settleDue();
         StockAccountSnapshot account = accounts.snapshot();
         List<HoldingStrategyDecision> result = new ArrayList<HoldingStrategyDecision>();
         for (StockPosition position : account.getPositions()) {
             result.add(evaluateOne(position, account));
         }
         return result;
+    }
+
+    private void settleDue() {
+        List<HoldingStrategyDecision> pending = decisions.findPendingDue(LocalDate.now(), 100);
+        for (HoldingStrategyDecision decision : pending) {
+            try {
+                settleOne(decision);
+            } catch (RuntimeException error) {
+                log.warn("持仓影子策略到期结算失败 decisionId={} code={} error={}",
+                        decision.getId(), decision.getInstrumentCode(), error.getMessage());
+            }
+        }
+    }
+
+    private void settleOne(HoldingStrategyDecision decision) {
+        if (decision.getForecastRunId() == null) {
+            decisions.markUnavailable(decision.getId());
+            return;
+        }
+        SingleStockForecastRun run = forecasts.detail(decision.getForecastRunId());
+        if (run.getMaturityStatus() == SingleStockForecastRun.MaturityStatus.UNAVAILABLE) {
+            decisions.markUnavailable(decision.getId());
+            return;
+        }
+        if (run.getMaturityStatus() != SingleStockForecastRun.MaturityStatus.MATURED
+                || run.getOutcome() == null || run.getOutcome().getActualNetReturn() == null) {
+            return;
+        }
+        HoldingStrategyEvaluationRequest frozenInput = readFrozenInput(decision.getInputJson());
+        double entryPrice = run.getOutcome().getEntryOpen() == null
+                ? frozenInput.getMarketPrice() : run.getOutcome().getEntryOpen();
+        HoldingStrategySettlementRequest request = new HoldingStrategySettlementRequest();
+        request.setAction(decision.getAction());
+        request.setSuggestedQuantity(decision.getSuggestedQuantity());
+        request.setHeldQuantity(frozenInput.getQuantity());
+        request.setCurrentMarketValue(decision.getCurrentMarketValue());
+        request.setEntryPrice(entryPrice);
+        request.setActualNetReturn(run.getOutcome().getActualNetReturn());
+        HoldingStrategySettlementResult result = client.settle(request);
+        decisions.settle(decision.getId(), result.getStrategyReturn(),
+                result.getHoldReturn(), result.getIncrementalReturn());
     }
 
     private HoldingStrategyDecision evaluateOne(StockPosition position, StockAccountSnapshot account) {
@@ -241,6 +286,14 @@ public class HoldingStrategyDecisionService {
             return json.writeValueAsString(value);
         } catch (Exception error) {
             throw new IllegalStateException("无法冻结持仓策略证据", error);
+        }
+    }
+
+    private HoldingStrategyEvaluationRequest readFrozenInput(String value) {
+        try {
+            return json.readValue(value, HoldingStrategyEvaluationRequest.class);
+        } catch (Exception error) {
+            throw new IllegalStateException("无法读取冻结持仓策略输入", error);
         }
     }
 

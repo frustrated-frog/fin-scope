@@ -126,6 +126,26 @@ public class HoldingStrategyDecisionRepository {
                 mapper, bounded);
     }
 
+    public List<HoldingStrategyDecision> findPendingDue(LocalDate today, int limit) {
+        return jdbcTemplate.query("SELECT * FROM holding_strategy_decision "
+                        + "WHERE validation_status='PENDING' AND maturity_date IS NOT NULL "
+                        + "AND maturity_date<=? ORDER BY maturity_date,id LIMIT ?",
+                mapper, today.toString(), Math.max(1, Math.min(limit, 200)));
+    }
+
+    public boolean settle(Long id, double strategyReturn, double holdReturn,
+                          double incrementalReturn) {
+        return jdbcTemplate.update("UPDATE holding_strategy_decision SET validation_status='MATURED',"
+                        + "strategy_return=?,hold_return=?,incremental_return=? "
+                        + "WHERE id=? AND validation_status='PENDING'",
+                strategyReturn, holdReturn, incrementalReturn, id) == 1;
+    }
+
+    public boolean markUnavailable(Long id) {
+        return jdbcTemplate.update("UPDATE holding_strategy_decision SET validation_status='UNAVAILABLE' "
+                        + "WHERE id=? AND validation_status='PENDING'", id) == 1;
+    }
+
     private List<String> readList(String value) {
         if (value == null || value.trim().isEmpty()) {
             return Collections.emptyList();
