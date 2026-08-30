@@ -1,6 +1,7 @@
 import type {
   MarketInternalHistoryPoint,
   MarketNextSessionScenario,
+  MarketPulseHistoryPoint,
   MarketPulseWorkspace,
   MarketStateTrajectoryPoint,
   MarketTransitionCode,
@@ -122,18 +123,21 @@ function gauge(code: MarketTransitionGauge['code'], label: string, score: number
 }
 
 function transitionCode(workspace: MarketPulseWorkspace, participation?: number, momentum?: number,
-                        fragility?: number, impulse?: number): MarketTransitionCode {
-  if (!finite(participation) || !finite(momentum) || !(workspace.sectors?.length)) {
+                        leadership?: number, fragility?: number, impulse?: number): MarketTransitionCode {
+  const hasMarketStructure = [participation, momentum, impulse].some(finite);
+  const availableDimensions = [participation, momentum, leadership, fragility, impulse].filter(finite).length;
+  if (!hasMarketStructure || availableDimensions < 2 || !(workspace.sectors?.length)) {
     return 'INSUFFICIENT_DATA';
   }
-  if (workspace.regime?.marketStage === 'SELL_OFF' || (participation < 34 && momentum < 42)) {
+  const breadthSupport = momentum ?? leadership ?? 50;
+  if (workspace.regime?.marketStage === 'SELL_OFF' || ((participation ?? 50) < 34 && breadthSupport < 42)) {
     return 'RISK_RELEASE';
   }
   if ((workspace.regime?.marketStage === 'POST_SELL_OFF_REPAIR' || (impulse ?? 0) >= 64)
-      && participation >= 50 && momentum >= 52) {
+      && (participation ?? 0) >= 50 && breadthSupport >= 52) {
     return 'REPAIR_EXPANSION';
   }
-  if ((fragility ?? 0) >= 66 || (participation < 48 && momentum >= 55)) {
+  if ((fragility ?? 0) >= 66 || ((participation ?? 50) < 48 && breadthSupport >= 55)) {
     return 'NARROWING_DIVERGENCE';
   }
   if (workspace.regime?.rotationState === 'FAST') {
@@ -195,8 +199,36 @@ function trajectoryPoint(point: MarketInternalHistoryPoint): MarketStateTrajecto
   return { businessDate: point.businessDate, participation: clamp(participation), riskAppetite: clamp(appetite), state };
 }
 
+function historyTrajectoryPoint(point: MarketPulseHistoryPoint): MarketStateTrajectoryPoint | undefined {
+  if (!point.businessDate || !finite(point.advanceRatio)) {
+    return undefined;
+  }
+  const stageAppetite: Record<string, number> = {
+    RISK_ON: 76, TREND_EXPANSION: 76, POST_SELL_OFF_REPAIR: 56,
+    RANGE_ROTATION: 50, HIGH_LEVEL_DIVERGENCE: 42, SELL_OFF: 20
+  };
+  const riskAppetite = average([
+    finite(point.medianChangePct) ? clamp(50 + point.medianChangePct * 16) : undefined,
+    stageAppetite[point.marketStage ?? '']
+  ]);
+  if (!finite(riskAppetite)) {
+    return undefined;
+  }
+  const participation = clamp(point.advanceRatio * 100);
+  const state = participation >= 55
+    ? (riskAppetite >= 55 ? 'EXPANSION' : 'ROTATION')
+    : (riskAppetite >= 50 ? 'REPAIR' : 'RISK_RELEASE');
+  return { businessDate: point.businessDate, participation, riskAppetite: clamp(riskAppetite), state };
+}
+
 function buildTrajectory(workspace: MarketPulseWorkspace) {
-  return (workspace.breadth?.history ?? []).slice(-10).map(trajectoryPoint)
+  const internalTrajectory = (workspace.breadth?.history ?? []).slice(-10).map(trajectoryPoint)
+    .filter((point): point is MarketStateTrajectoryPoint => Boolean(point));
+  if (internalTrajectory.length >= 2) {
+    return internalTrajectory;
+  }
+  return [...(workspace.historyPoints ?? [])].sort((left, right) => (left.businessDate ?? '').localeCompare(right.businessDate ?? ''))
+    .slice(-10).map(historyTrajectoryPoint)
     .filter((point): point is MarketStateTrajectoryPoint => Boolean(point));
 }
 
@@ -271,10 +303,10 @@ export function buildMarketTransitionDecision(workspace: MarketPulseWorkspace): 
   const leadership = leadershipScore(workspace.sectors ?? []);
   const fragility = fragilityScore(workspace, leadership);
   const impulse = changeImpulse(workspace);
-  const code = transitionCode(workspace, participation, momentum, fragility, impulse);
+  const code = transitionCode(workspace, participation, momentum, leadership, fragility, impulse);
   const strength = code === 'INSUFFICIENT_DATA'
     ? 0
-    : clamp(average([impulse, participation, momentum, finite(fragility) ? 100 - fragility : undefined]) ?? 0);
+    : clamp(average([impulse, participation, momentum, leadership, finite(fragility) ? 100 - fragility : undefined]) ?? 0);
   return {
     transition: {
       code,

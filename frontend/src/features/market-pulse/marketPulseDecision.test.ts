@@ -69,4 +69,26 @@ describe('market transition decision', () => {
     expect(decision.gauges.every(item => item.available === false)).toBe(true);
     expect(decision.scenarios[0].triggers).toContain('等待全A宽度与行业轮动恢复');
   });
+
+  test('keeps a partial decision and trajectory when long-window breadth momentum is absent', () => {
+    const decision = buildMarketTransitionDecision({
+      businessDate: '2026-08-28', qualityStatus: 'READY',
+      regime: { marketStage: 'RANGE_ROTATION', rotationState: 'SLOW', features: { sectorDispersion: 0.018 } },
+      breadth: { advanceRatio: 0.54 },
+      historyPoints: [
+        { businessDate: '2026-08-27', marketStage: 'SELL_OFF', advanceRatio: 0.31, medianChangePct: -1.2 },
+        { businessDate: '2026-08-28', marketStage: 'RANGE_ROTATION', advanceRatio: 0.54, medianChangePct: 0.22 }
+      ],
+      sectors: [
+        { sectorCode: 'BK1', sectorName: '煤炭', return5d: 7, breadthRatio: 0.68, rotationScore: 74, stage: 'PERSISTENT' },
+        { sectorCode: 'BK2', sectorName: '证券', return5d: 4, breadthRatio: 0.59, rotationScore: 64, stage: 'EMERGING' }
+      ]
+    });
+
+    expect(decision.transition.code).toBe('RANGE_BALANCE');
+    expect(decision.transition.strength).toBeGreaterThan(0);
+    expect(decision.gauges.find(item => item.code === 'BREADTH_MOMENTUM')?.available).toBe(false);
+    expect(decision.trajectory).toHaveLength(2);
+    expect(decision.trajectory[1].state).toBe('REPAIR');
+  });
 });
