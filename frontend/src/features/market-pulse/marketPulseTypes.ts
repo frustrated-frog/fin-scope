@@ -261,3 +261,67 @@ export type MarketPulseBackfillResult = {
   }>;
   failures?: Record<string, string>;
 };
+
+export type MarketTransitionCode =
+  | 'REPAIR_EXPANSION'
+  | 'NARROWING_DIVERGENCE'
+  | 'RISK_RELEASE'
+  | 'RAPID_ROTATION'
+  | 'RANGE_BALANCE'
+  | 'INSUFFICIENT_DATA';
+
+export type MarketTransitionGaugeCode =
+  | 'PARTICIPATION'
+  | 'BREADTH_MOMENTUM'
+  | 'LEADERSHIP_HEALTH'
+  | 'FRAGILITY';
+
+export type MarketTransitionGauge = {
+  code: MarketTransitionGaugeCode;
+  label: string;
+  score: number;
+  available: boolean;
+  status: string;
+  detail: string;
+};
+
+export type MarketStateTrajectoryPoint = {
+  businessDate: string;
+  participation: number;
+  riskAppetite: number;
+  state: 'REPAIR' | 'EXPANSION' | 'ROTATION' | 'RISK_RELEASE';
+};
+
+export type MarketNextSessionScenario = {
+  code: 'EXTEND_REPAIR' | 'ROTATE_AND_SPLIT' | 'RISK_RELEASE';
+  title: string;
+  matchScore: number;
+  emphasis: 'PRIMARY' | 'SECONDARY' | 'GUARD';
+  triggers: string[];
+  posture: string;
+};
+
+export type StockDiscoveryMarketContext = {
+  businessDate?: string;
+  transitionCode: MarketTransitionCode;
+  transitionLabel: string;
+  riskPosture: 'OFFENSIVE' | 'BALANCED' | 'DEFENSIVE';
+  preferredSectors: string[];
+  avoidSectors: string[];
+  chasePolicy: 'CONFIRMATION_ALLOWED' | 'PULLBACK_ONLY' | 'NO_CHASING';
+  summary: string;
+};
+
+export type MarketTransitionDecision = {
+  transition: {
+    code: MarketTransitionCode;
+    label: string;
+    strength: number;
+    summary: string;
+    drivers: string[];
+  };
+  gauges: MarketTransitionGauge[];
+  trajectory: MarketStateTrajectoryPoint[];
+  scenarios: MarketNextSessionScenario[];
+  discoveryContext: StockDiscoveryMarketContext;
+};
