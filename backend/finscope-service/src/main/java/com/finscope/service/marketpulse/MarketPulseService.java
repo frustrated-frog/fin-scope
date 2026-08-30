@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -31,11 +32,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /** 编排市场状态、行业轮动、事件确认与研究候选，冻结为每日工作台快照。 */
 @Service
 public class MarketPulseService {
     private static final ZoneId CHINA_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final LocalTime AFTER_CLOSE_REFRESH_TIME = LocalTime.of(15, 30);
+    private final AtomicBoolean refreshRunning = new AtomicBoolean(false);
 
     @Resource
     private MarketPulseFeatureService featureService;
@@ -57,21 +62,63 @@ public class MarketPulseService {
     private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
-        LocalDate businessDate = featureService.latestBusinessDate();
-        MarketPulseRefreshResult value = refreshDate(businessDate, false);
-        repairRecentBreadth(businessDate);
-        return value;
+        return executeExclusive(() -> refreshLatest(featureService.latestBusinessDate()));
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
-        LocalDate latestBusinessDate = featureService.latestBusinessDate();
-        if (latestBusinessDate == null || !latestBusinessDate.equals(businessDate)) {
-            throw new IllegalArgumentException("只允许刷新最新有效交易日，历史日期必须读取冻结快照");
+        return executeExclusive(() -> {
+            LocalDate latestBusinessDate = featureService.latestBusinessDate();
+            if (latestBusinessDate == null || !latestBusinessDate.equals(businessDate)) {
+                throw new IllegalArgumentException("只允许刷新最新有效交易日，历史日期必须读取冻结快照");
+            }
+            return refreshDate(businessDate, false);
+        });
+    }
+
+    public Optional<MarketPulseRefreshResult> refreshScheduled(LocalDate expectedBusinessDate) {
+        if (!refreshRunning.compareAndSet(false, true)) {
+            return Optional.empty();
         }
-        return refreshDate(businessDate, false);
+        try {
+            LocalDate latestBusinessDate = featureService.latestBusinessDate();
+            if (latestBusinessDate == null || !latestBusinessDate.equals(expectedBusinessDate)) {
+                return Optional.empty();
+            }
+            return Optional.of(refreshLatest(latestBusinessDate));
+        } finally {
+            refreshRunning.set(false);
+        }
+    }
+
+    public Optional<MarketPulseRefreshResult> recoverMissing() {
+        if (!refreshRunning.compareAndSet(false, true)) {
+            return Optional.empty();
+        }
+        try {
+            LocalDate latestBusinessDate = featureService.latestBusinessDate();
+            if (latestBusinessDate == null) {
+                return Optional.empty();
+            }
+            Optional<MarketPulseWorkspace> existing = repository.findWorkspace(latestBusinessDate);
+            if (existing.isPresent() && isAfterCloseSnapshot(existing.get(), latestBusinessDate)) {
+                return Optional.empty();
+            }
+            return Optional.of(refreshLatest(latestBusinessDate));
+        } finally {
+            refreshRunning.set(false);
+        }
+    }
+
+    private boolean isAfterCloseSnapshot(MarketPulseWorkspace workspace, LocalDate businessDate) {
+        LocalDateTime generatedAt = workspace.getGeneratedAt();
+        return generatedAt != null && !generatedAt.isBefore(businessDate.atTime(AFTER_CLOSE_REFRESH_TIME));
     }
 
     public MarketPulseBackfillResult backfill(LocalDate startDate, LocalDate endDate) {
+        return executeExclusive(() -> backfillExclusive(startDate, endDate));
+    }
+
+    private MarketPulseBackfillResult backfillExclusive(LocalDate startDate, LocalDate endDate) {
         LocalDate latestBusinessDate = featureService.latestBusinessDate();
         validateBackfillRange(startDate, endDate, latestBusinessDate);
         MarketPulseBackfillResult value = new MarketPulseBackfillResult();
@@ -92,6 +139,23 @@ public class MarketPulseService {
             value.setStatus("PARTIAL");
         }
         return value;
+    }
+
+    private MarketPulseRefreshResult refreshLatest(LocalDate businessDate) {
+        MarketPulseRefreshResult value = refreshDate(businessDate, false);
+        repairRecentBreadth(businessDate);
+        return value;
+    }
+
+    private <T> T executeExclusive(Supplier<T> operation) {
+        if (!refreshRunning.compareAndSet(false, true)) {
+            throw new IllegalStateException("市场机会判断正在刷新，请稍后重试");
+        }
+        try {
+            return operation.get();
+        } finally {
+            refreshRunning.set(false);
+        }
     }
 
     private MarketPulseRefreshResult refreshDate(LocalDate businessDate, boolean historical) {

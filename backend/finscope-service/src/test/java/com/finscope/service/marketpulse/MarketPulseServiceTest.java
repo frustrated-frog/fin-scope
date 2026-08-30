@@ -25,10 +25,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -164,6 +167,72 @@ class MarketPulseServiceTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> service.refresh(LocalDate.of(2026, 8, 20)));
+    }
+
+    @Test
+    void scheduledRefreshOnlyRunsWhenTheExpectedTradingDateIsAvailable() {
+        LocalDate expectedDate = LocalDate.of(2026, 8, 24);
+        when(features.latestBusinessDate()).thenReturn(LocalDate.of(2026, 8, 21));
+
+        Optional<MarketPulseRefreshResult> result = service.refreshScheduled(expectedDate);
+
+        assertTrue(!result.isPresent());
+        verify(sectors, never()).calculateResult(any(LocalDate.class));
+        verify(repository, never()).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void recoverySkipsAnExistingFrozenWorkspace() {
+        LocalDate latestTradingDate = LocalDate.of(2026, 8, 21);
+        when(features.latestBusinessDate()).thenReturn(latestTradingDate);
+        MarketPulseWorkspace existing = workspace(latestTradingDate, breadth(latestTradingDate));
+        existing.setGeneratedAt(LocalDateTime.of(2026, 8, 21, 15, 31));
+        when(repository.findWorkspace(latestTradingDate)).thenReturn(Optional.of(existing));
+
+        Optional<MarketPulseRefreshResult> result = service.recoverMissing();
+
+        assertTrue(!result.isPresent());
+        verify(sectors, never()).calculateResult(any(LocalDate.class));
+        verify(repository, never()).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void recoveryReplacesAnIntradaySnapshotWithAnAfterCloseSnapshot() {
+        LocalDate latestTradingDate = LocalDate.of(2026, 8, 21);
+        prepareEmptyRefresh(latestTradingDate);
+        MarketPulseWorkspace intraday = workspace(latestTradingDate, breadth(latestTradingDate));
+        intraday.setGeneratedAt(LocalDateTime.of(2026, 8, 21, 11, 30));
+        when(repository.findWorkspace(latestTradingDate)).thenReturn(Optional.of(intraday));
+
+        Optional<MarketPulseRefreshResult> result = service.recoverMissing();
+
+        assertTrue(result.isPresent());
+        verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void recoveryBuildsTheLatestTradingDateWhenItsSnapshotIsMissing() {
+        LocalDate latestTradingDate = LocalDate.of(2026, 8, 21);
+        prepareEmptyRefresh(latestTradingDate);
+        when(repository.findWorkspace(latestTradingDate)).thenReturn(Optional.empty());
+
+        Optional<MarketPulseRefreshResult> result = service.recoverMissing();
+
+        assertTrue(result.isPresent());
+        assertEquals(latestTradingDate, result.get().getBusinessDate());
+        verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void manualAndAutomaticRefreshesShareOneExecutionGuard() {
+        ReflectionTestUtils.setField(service, "refreshRunning", new AtomicBoolean(true));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, service::refresh);
+
+        assertEquals("市场机会判断正在刷新，请稍后重试", error.getMessage());
+        assertTrue(!service.refreshScheduled(LocalDate.of(2026, 8, 21)).isPresent());
+        assertTrue(!service.recoverMissing().isPresent());
+        verify(features, never()).latestBusinessDate();
     }
 
     @Test
@@ -301,6 +370,19 @@ class MarketPulseServiceTest {
         value.setQualityStatus("FRESH_PRIMARY");
         value.setAdvanceRatio(0.6D);
         return value;
+    }
+
+    private void prepareEmptyRefresh(LocalDate date) {
+        when(features.latestBusinessDate()).thenReturn(date);
+        when(sectors.calculateResult(date)).thenReturn(sectorResult(Collections.emptyList()));
+        when(breadthService.calculate(date)).thenReturn(breadth(date));
+        when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
+        when(features.calculate(date, 0D, 0.6D)).thenReturn(regime(date));
+        when(radarRepository.findEventsBetween(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(confirmations.confirm(Collections.emptyList(), Collections.emptyList()))
+                .thenReturn(Collections.emptyList());
+        when(discoveryRepository.findLatestSuccessOnOrBefore(date)).thenReturn(Optional.empty());
+        when(repository.findRecentWorkspaces(20, date)).thenReturn(Collections.emptyList());
     }
 
     private MarketBreadthSnapshot unavailableBreadth(LocalDate date) {

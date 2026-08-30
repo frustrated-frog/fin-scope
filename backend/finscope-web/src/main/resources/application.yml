@@ -121,6 +121,10 @@ finscope:
       retry-interval-ms: 5000
       retry-attempts: 2
       dlt-topic: finscope.quant.stock-discovery.requested.dlt
+  market-pulse:
+    refresh-cron: 0 30 15 * * MON-FRI
+    recovery-initial-delay-ms: 30000
+    recovery-interval-ms: 3600000
   radar:
     refresh-initial-delay-ms: 15000
     refresh-interval-ms: 300000
