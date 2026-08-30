@@ -1,0 +1,172 @@
+.market-transition-cockpit {
+  --transition-accent: var(--mp-amber);
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--transition-accent) 24%, var(--line));
+  border-radius: var(--mp-panel-radius);
+  background: var(--surface);
+  box-shadow: 0 18px 46px rgba(12, 28, 39, .07);
+}
+
+.market-transition-cockpit[data-transition="REPAIR_EXPANSION"] { --transition-accent: var(--mp-blue); }
+.market-transition-cockpit[data-transition="NARROWING_DIVERGENCE"],
+.market-transition-cockpit[data-transition="RISK_RELEASE"] { --transition-accent: var(--mp-red); }
+.market-transition-cockpit[data-transition="RANGE_BALANCE"] { --transition-accent: var(--mp-green); }
+
+.market-transition-thesis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 180px minmax(260px, .8fr);
+  gap: 26px;
+  align-items: center;
+  min-height: 230px;
+  padding: 28px 30px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--transition-accent) 10%, var(--surface)), transparent 58%),
+    repeating-linear-gradient(90deg, transparent 0, transparent 79px, color-mix(in srgb, var(--line) 40%, transparent) 80px);
+}
+
+.market-transition-title > span,
+.market-transition-scenarios > header span,
+.market-transition-trajectory figcaption span,
+.market-transition-handoff-copy > span {
+  color: var(--transition-accent);
+  font: 760 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em;
+}
+
+.market-transition-title h3 { margin: 7px 0 0; color: var(--muted); font-size: 14px; font-weight: 720; }
+.market-transition-title h2 { margin: 7px 0 0; color: var(--ink); font: 520 clamp(30px, 3.4vw, 48px)/1.06 "Iowan Old Style", "Songti SC", STSong, serif; letter-spacing: -.035em; }
+.market-transition-title p { max-width: 680px; margin: 13px 0 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+.market-transition-strength { display: grid; align-content: center; padding: 8px 24px; border-right: 1px solid var(--line); border-left: 1px solid var(--line); }
+.market-transition-strength > div { display: flex; align-items: baseline; justify-content: center; }
+.market-transition-strength span { margin-right: auto; color: var(--faint); font-size: 11px; font-weight: 720; }
+.market-transition-strength strong { color: var(--ink); font: 520 50px/.9 "Iowan Old Style", serif; font-variant-numeric: tabular-nums; }
+.market-transition-strength small { color: var(--faint); font-size: 11px; }
+.market-transition-strength > i { height: 5px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.market-transition-strength > i b { display: block; height: 100%; border-radius: inherit; background: var(--transition-accent); }
+.market-transition-strength em { margin-top: 9px; color: var(--transition-accent); font: 720 11px ui-monospace, monospace; letter-spacing: .06em; text-align: right; }
+
+.market-transition-drivers { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.market-transition-drivers li { position: relative; color: var(--muted); padding: 9px 10px 9px 23px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--surface-2) 76%, transparent); font-size: 13px; line-height: 1.45; }
+.market-transition-drivers li::before { position: absolute; top: 15px; left: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--transition-accent); content: ""; }
+
+.market-transition-gauges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); background: var(--line); gap: 1px; }
+.market-transition-gauges article { min-width: 0; background: var(--surface); padding: 18px 20px; }
+.market-transition-gauges article[data-code="FRAGILITY"] { background: color-mix(in srgb, var(--mp-red) 4%, var(--surface)); }
+.market-transition-gauges header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.market-transition-gauges header span { color: var(--muted); font-size: 12px; font-weight: 720; }
+.market-transition-gauges header b { color: var(--ink); font: 700 22px ui-monospace, monospace; }
+.market-transition-gauges > article > i { display: block; height: 5px; margin: 12px 0 11px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.market-transition-gauges > article > i b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--mp-green), var(--mp-blue), var(--mp-red)); }
+.market-transition-gauges article[data-code="FRAGILITY"] > i b { background: linear-gradient(90deg, var(--mp-blue), var(--mp-amber), var(--mp-red)); }
+.market-transition-gauges article > strong { color: var(--transition-accent); font-size: 13px; }
+.market-transition-gauges article > p { margin: 5px 0 0; color: var(--faint); font-size: 12px; line-height: 1.5; }
+
+.market-transition-main { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(390px, .88fr); min-height: 590px; }
+.market-transition-trajectory { min-width: 0; margin: 0; padding: 24px 26px 22px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 40%, var(--surface)); }
+.market-transition-trajectory figcaption,
+.market-transition-scenarios > header { display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+.market-transition-trajectory h3,
+.market-transition-scenarios > header h3 { margin: 6px 0 0; color: var(--ink); font: 540 23px/1.15 "Iowan Old Style", "Songti SC", serif; }
+.market-transition-trajectory figcaption p,
+.market-transition-scenarios > header p { max-width: 330px; margin: 0; color: var(--faint); font-size: 12px; line-height: 1.55; text-align: right; }
+.market-transition-chart { margin-top: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.market-transition-chart svg { display: block; width: 100%; height: auto; min-height: 360px; }
+.market-transition-chart .quadrant { stroke: none; }
+.market-transition-chart .quadrant.repair { fill: color-mix(in srgb, var(--mp-blue) 5%, var(--surface)); }
+.market-transition-chart .quadrant.expansion { fill: color-mix(in srgb, var(--mp-red) 5%, var(--surface)); }
+.market-transition-chart .quadrant.release { fill: color-mix(in srgb, var(--mp-green) 6%, var(--surface)); }
+.market-transition-chart .quadrant.rotation { fill: color-mix(in srgb, var(--mp-amber) 5%, var(--surface)); }
+.market-transition-chart .axis { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }
+.market-transition-chart .quadrant-label { font: 720 12px ui-monospace, monospace; letter-spacing: .05em; }
+.market-transition-chart .quadrant-label.repair { fill: var(--mp-blue); }
+.market-transition-chart .quadrant-label.expansion { fill: var(--mp-red); }
+.market-transition-chart .quadrant-label.release { fill: var(--mp-green); }
+.market-transition-chart .quadrant-label.rotation { fill: var(--mp-amber); }
+.market-transition-chart .axis-label { fill: var(--faint); font: 12px sans-serif; }
+.market-transition-chart .axis-y { transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; }
+.market-transition-chart .trajectory-path { fill: none; stroke: url(#marketTransitionPath); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.market-transition-chart .market-transition-arrow { fill: var(--mp-red); }
+.market-transition-chart .trajectory-point { fill: var(--mp-blue); stroke: var(--surface); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.market-transition-chart .trajectory-point.selected { fill: var(--mp-red); }
+.market-transition-chart .trajectory-pulse { fill: color-mix(in srgb, var(--mp-red) 10%, transparent); stroke: color-mix(in srgb, var(--mp-red) 38%, transparent); stroke-width: 1; }
+.market-transition-chart .trajectory-date { fill: var(--muted); font: 700 11px ui-monospace, monospace; }
+.market-transition-trajectory > input { width: 100%; margin: 13px 0 8px; accent-color: var(--transition-accent); cursor: pointer; }
+.market-transition-selected { display: grid; grid-template-columns: 116px minmax(120px, 1fr) repeat(2, minmax(90px, .6fr)); gap: 1px; background: var(--line); }
+.market-transition-selected > * { min-width: 0; background: var(--surface); padding: 11px 12px; }
+.market-transition-selected time { color: var(--transition-accent); font: 700 12px ui-monospace, monospace; }
+.market-transition-selected > strong { color: var(--ink); font-size: 13px; }
+.market-transition-selected span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.market-transition-selected small { color: var(--faint); font-size: 11px; }
+.market-transition-selected b { color: var(--ink); font: 720 14px ui-monospace, monospace; }
+.market-transition-chart-empty { display: grid; place-items: center; min-height: 410px; margin-top: 18px; border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--muted); text-align: center; }
+.market-transition-chart-empty p { margin: 5px 0 0; color: var(--faint); font-size: 12px; }
+
+.market-transition-scenarios { min-width: 0; padding: 24px 26px 22px; }
+.market-transition-scenarios > header { align-items: flex-start; flex-direction: column; gap: 3px; }
+.market-transition-scenarios > header p { max-width: none; margin-top: 5px; text-align: left; }
+.market-transition-scenarios > div { display: grid; gap: 11px; margin-top: 19px; }
+.market-transition-scenarios article { display: grid; grid-template-columns: 38px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.market-transition-scenarios article[data-emphasis="PRIMARY"] { border-color: color-mix(in srgb, var(--transition-accent) 58%, var(--line)); box-shadow: 0 10px 26px color-mix(in srgb, var(--transition-accent) 10%, transparent); }
+.scenario-rank { display: grid; grid-template-rows: auto 1fr; justify-items: center; padding: 15px 0; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--transition-accent) 5%, var(--surface)); }
+.scenario-rank span { color: var(--faint); font: 700 11px ui-monospace, monospace; }
+.scenario-rank i { width: 1px; margin-top: 10px; background: var(--line-strong); }
+.scenario-body { min-width: 0; padding: 15px 16px 16px; }
+.scenario-body > header { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
+.scenario-body em { display: inline-block; margin-bottom: 5px; border-radius: 99px; background: color-mix(in srgb, var(--transition-accent) 12%, transparent); color: var(--transition-accent); padding: 3px 7px; font-size: 11px; font-style: normal; font-weight: 760; }
+.scenario-body h4 { margin: 0; color: var(--ink); font-size: 15px; }
+.scenario-body header > strong { color: var(--ink); font: 520 28px/1 "Iowan Old Style", serif; }
+.scenario-body header > strong small { color: var(--faint); font: 11px sans-serif; }
+.scenario-body ul { display: grid; gap: 5px; margin: 12px 0; padding: 0; list-style: none; }
+.scenario-body li { position: relative; color: var(--muted); padding-left: 12px; font-size: 12px; line-height: 1.45; }
+.scenario-body li::before { position: absolute; top: .58em; left: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--transition-accent); content: ""; }
+.scenario-body > p { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink); font-size: 12px; line-height: 1.5; }
+.scenario-body > p span { margin-right: 8px; color: var(--faint); font-size: 11px; font-weight: 720; }
+
+.market-transition-handoff { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(0, 1.3fr) auto; gap: 24px; align-items: center; padding: 20px 26px; border-top: 1px solid var(--line); background: linear-gradient(105deg, color-mix(in srgb, var(--transition-accent) 8%, var(--surface)), var(--surface) 65%); }
+.market-transition-handoff-copy h3 { margin: 6px 0 0; color: var(--ink); font-size: 16px; }
+.market-transition-handoff-copy p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.market-transition-handoff dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); }
+.market-transition-handoff dl > div { min-width: 0; background: var(--surface-2); padding: 9px 11px; }
+.market-transition-handoff dt { color: var(--faint); font-size: 11px; }
+.market-transition-handoff dd { overflow: hidden; margin: 4px 0 0; color: var(--ink); font-size: 12px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.market-transition-handoff button { min-height: 42px; border: 1px solid var(--transition-accent); border-radius: 8px; background: var(--transition-accent); color: #fff; padding: 0 16px; font-size: 12px; font-weight: 760; cursor: pointer; }
+
+@media (max-width: 1260px) {
+  .market-transition-thesis { grid-template-columns: minmax(0, 1fr) 170px; }
+  .market-transition-drivers { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .market-transition-main { grid-template-columns: 1fr; }
+  .market-transition-trajectory { border-right: 0; border-bottom: 1px solid var(--line); }
+  .market-transition-handoff { grid-template-columns: minmax(230px, .7fr) minmax(0, 1.3fr); }
+  .market-transition-handoff button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .market-transition-thesis { grid-template-columns: 1fr; min-height: 0; padding: 23px 20px; }
+  .market-transition-strength { padding: 16px 0; border-right: 0; border-left: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .market-transition-drivers { grid-column: auto; grid-template-columns: 1fr; }
+  .market-transition-gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-transition-gauges article { padding: 16px; }
+  .market-transition-trajectory,
+  .market-transition-scenarios { padding: 20px 16px; }
+  .market-transition-trajectory figcaption { align-items: flex-start; flex-direction: column; }
+  .market-transition-trajectory figcaption p { text-align: left; }
+  .market-transition-chart { overflow-x: auto; }
+  .market-transition-chart svg { min-width: 620px; }
+  .market-transition-selected { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-transition-handoff { grid-template-columns: 1fr; padding: 20px; }
+  .market-transition-handoff dl { grid-template-columns: 1fr; }
+  .market-transition-handoff button { grid-column: auto; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-transition-cockpit * { scroll-behavior: auto; }
+}
+
+@media (prefers-contrast: more) {
+  .market-transition-cockpit,
+  .market-transition-scenarios article,
+  .market-transition-chart { border-color: var(--ink); box-shadow: none; }
+}

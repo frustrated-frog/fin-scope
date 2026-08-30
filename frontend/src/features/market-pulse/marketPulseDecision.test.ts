@@ -47,7 +47,7 @@ describe('market transition decision', () => {
     expect(decision.transition.strength).toBeGreaterThanOrEqual(60);
     expect(decision.scenarios).toHaveLength(3);
     expect(decision.scenarios.filter(item => item.emphasis === 'PRIMARY')).toHaveLength(1);
-    expect(decision.trajectory.at(-1)?.businessDate).toBe('2026-08-21');
+    expect(decision.trajectory[decision.trajectory.length - 1]?.businessDate).toBe('2026-08-21');
   });
 
   test('measures leadership, fragility and preferred research sectors without stock candidates', () => {

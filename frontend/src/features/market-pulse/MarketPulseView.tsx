@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { buildMarketTransitionDecision } from './marketPulseDecision';
+import { MarketTransitionPanel } from './MarketTransitionPanel';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
-import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime } from './marketPulseTypes';
+import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -26,7 +28,7 @@ const stateLabels: Record<string, string> = {
 type ViewProps = {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
-  onOpenStockDiscovery?: () => void;
+  onOpenStockDiscovery?: (context?: StockDiscoveryMarketContext) => void;
 };
 
 function label(value?: string) {
@@ -462,7 +464,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const [view, setView] = useState<'review' | 'breadth' | 'rotation' | 'history'>('review');
+  const [view, setView] = useState<'review' | 'transition' | 'breadth' | 'rotation' | 'history'>('review');
   const loadRequest = useRef(0);
 
   const load = async (date?: string) => {
@@ -537,6 +539,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
 
   const regime = workspace?.regime;
   const sectors = useMemo(() => [...(workspace?.sectors ?? [])].sort((a, b) => b.rotationScore - a.rotationScore), [workspace]);
+  const transitionDecision = useMemo(() => workspace ? buildMarketTransitionDecision(workspace) : null, [workspace]);
 
   if (loading && !workspace) {
     return <section className="market-pulse-page"><div className="market-pulse-loading" role="status">正在校准市场状态与行业轮动…</div></section>;
@@ -590,12 +593,16 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
 
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
+        <button type="button" role="tab" aria-selected={view === 'transition'} onClick={() => setView('transition')}>转折与情景</button>
         <button type="button" role="tab" aria-selected={view === 'breadth'} onClick={() => setView('breadth')}>市场宽度</button>
         <button type="button" role="tab" aria-selected={view === 'rotation'} onClick={() => setView('rotation')}>行业轮动</button>
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
 
       {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />}
+
+      {view === 'transition' && transitionDecision && <MarketTransitionPanel decision={transitionDecision}
+        onOpenStockDiscovery={context => onOpenStockDiscovery?.(context)} />}
 
       {view === 'history' && <HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} />}
 
@@ -617,7 +624,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
 
       <section className="market-pulse-discovery-handoff" aria-label="股票发现入口">
         <div><span>NEXT / STOCK DISCOVERY</span><h3>行业方向已经看清，个股筛选去股票发现</h3><p>Market Pulse 保留市场与行业视角；候选池、模型排序和单股研究继续由现有股票发现页面负责。</p></div>
-        <button type="button" onClick={onOpenStockDiscovery}>进入股票发现</button>
+        <button type="button" onClick={() => onOpenStockDiscovery?.()}>进入股票发现</button>
       </section>
       </>}
 

@@ -203,6 +203,16 @@ test('switches from the default daily review to historical evolution', async () 
   expect(screen.getByText('2.10 万亿')).toBeInTheDocument();
 });
 
+test('opens the market transition cockpit from the dedicated tab', async () => {
+  render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole('tab', { name: '转折与情景' }));
+
+  expect(screen.getByRole('heading', { name: '市场转折雷达' })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '十日市场状态迁移轨迹' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '下一交易日情景' })).toBeInTheDocument();
+});
+
 test('keeps a manual recovery action beside the automatic schedule', async () => {
   const addToast = vi.fn();
   render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
