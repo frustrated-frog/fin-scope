@@ -90,9 +90,9 @@ class MarketBreadthServiceTest {
         QuantDailyBarSource bars = mock(QuantDailyBarSource.class);
         MarketBreadthSnapshot breadth = breadth(date, 0.63D);
         breadth.getHistory().add(internal(date.minusDays(1), 0.45D, 0.48D,
-                2_000_000_000_000D, 30, 40, -500));
+                2_000_000_000_000D, 30, 40, -500, 0.42D, -18D));
         breadth.getHistory().add(internal(date, 0.63D, 0.61D,
-                2_300_000_000_000D, 88, 23, 1400));
+                2_300_000_000_000D, 88, 23, 1400, 0.67D, 42.5D));
         when(breadthSource.fetch(date)).thenReturn(breadth);
         when(bars.fetch(anyString(), anyInt())).thenReturn(batch(date));
         MarketBreadthService service = new MarketBreadthService();
@@ -107,9 +107,15 @@ class MarketBreadthServiceTest {
         assertEquals(0.15D, result.getChangeSummary().getTotalAmountChangeRatio(), 0.000001D);
         assertEquals(75, result.getChangeSummary().getNewHighLowBalanceChange());
         assertEquals(1900, result.getChangeSummary().getNetAdvancesChange());
+        assertEquals(0.25D, result.getChangeSummary().getAdvanceAmountRatioChange(), 0.000001D);
+        assertEquals(60.5D, result.getChangeSummary().getMcclellanOscillatorChange(), 0.000001D);
         assertTrue(result.getChangeSummary().getHeadline().contains("扩散"));
         assertTrue(result.getChangeSummary().getChanges().stream()
                 .anyMatch(value -> value.contains("MA20")));
+        assertTrue(result.getChangeSummary().getChanges().stream()
+                .anyMatch(value -> value.contains("上涨成交额占比")));
+        assertTrue(result.getChangeSummary().getChanges().stream()
+                .anyMatch(value -> value.contains("宽度动量")));
     }
 
     private MarketBreadthSnapshot breadth(LocalDate date, double ratio) {
@@ -149,7 +155,9 @@ class MarketBreadthServiceTest {
 
     private MarketInternalHistoryPoint internal(LocalDate date, double advanceRatio,
                                                 double ma20Ratio, double totalAmount,
-                                                int high20, int low20, int netAdvances) {
+                                                int high20, int low20, int netAdvances,
+                                                double advanceAmountRatio,
+                                                double mcclellanOscillator) {
         MarketInternalHistoryPoint value = new MarketInternalHistoryPoint();
         value.setBusinessDate(date);
         value.setAdvanceRatio(advanceRatio);
@@ -159,6 +167,8 @@ class MarketBreadthServiceTest {
         value.setNewHigh20Count(high20);
         value.setNewLow20Count(low20);
         value.setNetAdvances(netAdvances);
+        value.setAdvanceAmountRatio(advanceAmountRatio);
+        value.setMcclellanOscillator(mcclellanOscillator);
         return value;
     }
 }

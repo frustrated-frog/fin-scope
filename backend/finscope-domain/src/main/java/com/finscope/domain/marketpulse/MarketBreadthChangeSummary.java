@@ -16,5 +16,7 @@ public class MarketBreadthChangeSummary {
     private Double ma20RatioChange;
     private Integer newHighLowBalanceChange;
     private Integer netAdvancesChange;
+    private Double advanceAmountRatioChange;
+    private Double mcclellanOscillatorChange;
     private List<String> changes = new ArrayList<>();
 }

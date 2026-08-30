@@ -3,10 +3,12 @@ package com.finscope.rpc.marketpulse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
+import com.finscope.domain.marketpulse.MarketBreadthMomentum;
 import com.finscope.domain.marketpulse.MarketInternalHistoryPoint;
 import com.finscope.domain.marketpulse.MarketNewHighLow;
 import com.finscope.domain.marketpulse.MarketReturnDistributionBucket;
 import com.finscope.domain.marketpulse.MarketTrendBreadth;
+import com.finscope.domain.marketpulse.MarketVolumePressure;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -27,6 +29,8 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
     private static final String CLIENT_CODE = "PYTHON_MARKET_BREADTH";
     private static final Set<String> QUALITY_VALUES = Set.of(
             "FRESH_PRIMARY", "FRESH_FALLBACK", "PARTIAL_FRESH", "STALE_FALLBACK");
+    private static final Set<String> MOMENTUM_VALUES = Set.of(
+            "BULLISH_THRUST", "RECOVERING", "NEUTRAL", "WEAKENING", "UNAVAILABLE");
     @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
     private String baseUrl;
     @Resource
@@ -50,7 +54,7 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
 
     private MarketBreadthSnapshot parse(FinanceHttpResponse response, LocalDate requested) throws Exception {
         JsonNode root = json.readTree(response.getBody());
-        if (!"market-breadth-v2".equals(text(root, "schema_version"))) {
+        if (!"market-breadth-v3".equals(text(root, "schema_version"))) {
             throw contract("MARKET_BREADTH_SCHEMA_DRIFT", "unsupported market breadth schema", false);
         }
         if (!"CN-A".equals(text(root, "market"))) {
@@ -84,11 +88,42 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
         value.setNewHighLow(newHighLow(requiredObject(root, "new_high_low")));
         value.setNetAdvances(requiredInteger(root, "net_advances"));
         value.setAdvanceDeclineLine(requiredInteger(root, "advance_decline_line"));
+        value.setVolumePressure(volumePressure(requiredObject(root, "volume_pressure")));
+        value.setBreadthMomentum(breadthMomentum(requiredObject(root, "breadth_momentum")));
         value.setHistory(history(root.path("history"), businessDate));
         value.setWarnings(warnings(root.path("warnings")));
         if (value.getAdvanceCount() + value.getDeclineCount() + value.getFlatCount()
                 != value.getValidCount()) {
             throw contract("MARKET_BREADTH_COUNT_MISMATCH", "market breadth counts do not sum to valid count", false);
+        }
+        return value;
+    }
+
+    private MarketVolumePressure volumePressure(JsonNode node) {
+        MarketVolumePressure value = new MarketVolumePressure();
+        value.setAdvanceAmount(requiredNonNegativeNumber(node, "advance_amount"));
+        value.setDeclineAmount(requiredNonNegativeNumber(node, "decline_amount"));
+        value.setFlatAmount(requiredNonNegativeNumber(node, "flat_amount"));
+        value.setAdvanceAmountRatio(optionalRatio(node, "advance_amount_ratio"));
+        value.setNetAdvancingAmount(requiredNumber(node, "net_advancing_amount"));
+        value.setTrin(optionalNonNegativeNumber(node, "trin"));
+        return value;
+    }
+
+    private MarketBreadthMomentum breadthMomentum(JsonNode node) {
+        MarketBreadthMomentum value = new MarketBreadthMomentum();
+        value.setMcclellanOscillator(optionalNumber(node, "mcclellan_oscillator"));
+        value.setBreadthThrustRatio(optionalRatio(node, "breadth_thrust_ratio"));
+        value.setStatus(requiredText(node, "status"));
+        if (!MOMENTUM_VALUES.contains(value.getStatus())) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT",
+                    "unsupported breadth momentum status", false);
+        }
+        if (!"UNAVAILABLE".equals(value.getStatus())
+                && (value.getMcclellanOscillator() == null
+                || value.getBreadthThrustRatio() == null)) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT",
+                    "available breadth momentum requires numeric values", false);
         }
         return value;
     }
@@ -204,6 +239,14 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
         value.setNewLow250Count(requiredNonNegativeInteger(row, "new_low250_count"));
         value.setNetAdvances(requiredInteger(row, "net_advances"));
         value.setAdvanceDeclineLine(requiredInteger(row, "advance_decline_line"));
+        value.setAdvanceAmount(requiredNonNegativeNumber(row, "advance_amount"));
+        value.setDeclineAmount(requiredNonNegativeNumber(row, "decline_amount"));
+        value.setFlatAmount(requiredNonNegativeNumber(row, "flat_amount"));
+        value.setAdvanceAmountRatio(optionalRatio(row, "advance_amount_ratio"));
+        value.setNetAdvancingAmount(requiredNumber(row, "net_advancing_amount"));
+        value.setTrin(optionalNonNegativeNumber(row, "trin"));
+        value.setMcclellanOscillator(requiredNumber(row, "mcclellan_oscillator"));
+        value.setBreadthThrustRatio(requiredRatio(row, "breadth_thrust_ratio"));
         return value;
     }
 
@@ -262,6 +305,14 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
     private Double requiredNonNegativeNumber(JsonNode node, String field) {
         double value = requiredNumber(node, field);
         if (value < 0D) {
+            throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be non-negative", false);
+        }
+        return value;
+    }
+
+    private Double optionalNonNegativeNumber(JsonNode node, String field) {
+        Double value = optionalNumber(node, field);
+        if (value != null && value < 0D) {
             throw contract("MARKET_BREADTH_SCHEMA_DRIFT", field + " must be non-negative", false);
         }
         return value;

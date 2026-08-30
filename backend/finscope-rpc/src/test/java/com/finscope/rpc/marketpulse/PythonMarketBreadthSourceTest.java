@@ -53,11 +53,23 @@ class PythonMarketBreadthSourceTest {
         assertEquals(23, result.getNewHighLow().getLow20Count());
         assertEquals(1400, result.getNetAdvances());
         assertEquals(8600, result.getAdvanceDeclineLine());
+        assertEquals(1_450_000_000_000D, result.getVolumePressure().getAdvanceAmount());
+        assertEquals(720_000_000_000D, result.getVolumePressure().getDeclineAmount());
+        assertEquals(0.6682027649769585D,
+                result.getVolumePressure().getAdvanceAmountRatio());
+        assertEquals(730_000_000_000D,
+                result.getVolumePressure().getNetAdvancingAmount());
+        assertEquals(0.81D, result.getVolumePressure().getTrin());
+        assertEquals(42.5D, result.getBreadthMomentum().getMcclellanOscillator());
+        assertEquals(0.57D, result.getBreadthMomentum().getBreadthThrustRatio());
+        assertEquals("RECOVERING", result.getBreadthMomentum().getStatus());
         assertEquals(2, result.getHistory().size());
         assertEquals(LocalDate.of(2026, 8, 20), result.getHistory().get(0).getBusinessDate());
         assertEquals(0.52D, result.getHistory().get(0).getAdvanceRatio());
         assertEquals(0.61D, result.getHistory().get(1).getMa20Ratio());
         assertEquals(8600, result.getHistory().get(1).getAdvanceDeclineLine());
+        assertEquals(0.67D, result.getHistory().get(1).getAdvanceAmountRatio());
+        assertEquals(42.5D, result.getHistory().get(1).getMcclellanOscillator());
         assertTrue(result.getWarnings().contains("东方财富不可用"));
     }
 
@@ -65,7 +77,7 @@ class PythonMarketBreadthSourceTest {
     void rejectsSchemaDriftAndBusinessDateMismatch() {
         PythonMarketBreadthSource schemaDrift = source(
                 payload("FRESH_PRIMARY", "2026-08-21")
-                        .replace("market-breadth-v2", "market-breadth-v3"));
+                        .replace("market-breadth-v3", "market-breadth-v2"));
         PythonMarketBreadthSource dateMismatch = source(
                 payload("FRESH_PRIMARY", "2026-08-20"));
 
@@ -75,6 +87,23 @@ class PythonMarketBreadthSourceTest {
         assertEquals("MARKET_BREADTH_DATE_MISMATCH", assertThrows(
                 ProviderContractException.class,
                 () -> dateMismatch.fetch(LocalDate.of(2026, 8, 21))).getErrorType());
+    }
+
+    @Test
+    void preservesNullableTrinAndRejectsInvalidPressureRatio() {
+        PythonMarketBreadthSource nullable = source(
+                payload("FRESH_PRIMARY", "2026-08-21")
+                        .replace("\"trin\":0.81", "\"trin\":null"));
+        PythonMarketBreadthSource invalid = source(
+                payload("FRESH_PRIMARY", "2026-08-21")
+                        .replace("\"advance_amount_ratio\":0.6682027649769585",
+                                "\"advance_amount_ratio\":1.2"));
+
+        assertEquals(null, nullable.fetch(LocalDate.of(2026, 8, 21))
+                .getVolumePressure().getTrin());
+        assertEquals("MARKET_BREADTH_SCHEMA_DRIFT", assertThrows(
+                ProviderContractException.class,
+                () -> invalid.fetch(LocalDate.of(2026, 8, 21))).getErrorType());
     }
 
     private PythonMarketBreadthSource source(String body) {
@@ -95,7 +124,7 @@ class PythonMarketBreadthSourceTest {
     }
 
     private static String payload(String quality, String date) {
-        return "{\"schema_version\":\"market-breadth-v2\",\"market\":\"CN-A\","
+        return "{\"schema_version\":\"market-breadth-v3\",\"market\":\"CN-A\","
                 + "\"business_date\":\"" + date + "\","
                 + "\"source_code\":\"AKSHARE_SINA_A_SPOT\",\"source_family\":\"SINA\","
                 + "\"quality_status\":\"" + quality + "\","
@@ -115,6 +144,12 @@ class PythonMarketBreadthSourceTest {
                 + "\"trend_breadth\":{\"ma20_ratio\":0.61,\"ma20_valid_count\":5080,\"ma60_ratio\":0.56,\"ma60_valid_count\":5020,\"ma120_ratio\":0.51,\"ma120_valid_count\":4950,\"ma250_ratio\":0.47,\"ma250_valid_count\":4800},"
                 + "\"new_high_low\":{\"high20_count\":88,\"low20_count\":23,\"valid20_count\":5080,\"high60_count\":51,\"low60_count\":19,\"valid60_count\":5020,\"high250_count\":32,\"low250_count\":14,\"valid250_count\":4800},"
                 + "\"net_advances\":1400,\"advance_decline_line\":8600,"
+                + "\"volume_pressure\":{\"advance_amount\":1450000000000,"
+                + "\"decline_amount\":720000000000,\"flat_amount\":130000000000,"
+                + "\"advance_amount_ratio\":0.6682027649769585,"
+                + "\"net_advancing_amount\":730000000000,\"trin\":0.81},"
+                + "\"breadth_momentum\":{\"mcclellan_oscillator\":42.5,"
+                + "\"breadth_thrust_ratio\":0.57,\"status\":\"RECOVERING\"},"
                 + "\"history\":["
                 + history("2026-08-20", 0.52, 0.57, 7200, 52, 31)
                 + "," + history("2026-08-21", 0.6274509803921569, 0.61, 8600, 88, 23)
@@ -132,6 +167,10 @@ class PythonMarketBreadthSourceTest {
                 + "\"new_high20_count\":" + high20 + ",\"new_low20_count\":" + low20 + ","
                 + "\"new_high60_count\":42,\"new_low60_count\":20,"
                 + "\"new_high250_count\":28,\"new_low250_count\":15,"
-                + "\"net_advances\":200,\"advance_decline_line\":" + adLine + "}";
+                + "\"net_advances\":200,\"advance_decline_line\":" + adLine + ","
+                + "\"advance_amount\":1474000000000,\"decline_amount\":726000000000,"
+                + "\"flat_amount\":0,\"advance_amount_ratio\":0.67,"
+                + "\"net_advancing_amount\":748000000000,\"trin\":0.82,"
+                + "\"mcclellan_oscillator\":42.5,\"breadth_thrust_ratio\":0.57}";
     }
 }

@@ -71,12 +71,19 @@ public class MarketBreadthService {
         value.setNewHighLowBalanceChange(balanceChange(current, previous));
         value.setNetAdvancesChange(integerDifference(
                 current.getNetAdvances(), previous.getNetAdvances()));
+        value.setAdvanceAmountRatioChange(difference(
+                current.getAdvanceAmountRatio(), previous.getAdvanceAmountRatio()));
+        value.setMcclellanOscillatorChange(difference(
+                current.getMcclellanOscillator(), previous.getMcclellanOscillator()));
         value.setHeadline(changeHeadline(value.getAdvanceRatioChange()));
         appendRatioChange(value.getChanges(), "上涨比例", value.getAdvanceRatioChange());
         appendRatioChange(value.getChanges(), "MA20 趋势宽度", value.getMa20RatioChange());
         appendCountChange(value.getChanges(), "20日新高减新低", value.getNewHighLowBalanceChange());
         appendPercentChange(value.getChanges(), "成交额", value.getTotalAmountChangeRatio());
         appendCountChange(value.getChanges(), "净上涨家数", value.getNetAdvancesChange());
+        appendRatioChange(value.getChanges(), "上涨成交额占比",
+                value.getAdvanceAmountRatioChange());
+        appendMomentumChange(value.getChanges(), value.getMcclellanOscillatorChange());
         return value;
     }
 
@@ -117,6 +124,14 @@ public class MarketBreadthService {
         }
         String direction = change >= 0 ? "改善" : "转弱";
         changes.add(label + direction + " " + Math.abs(change) + " 家");
+    }
+
+    private void appendMomentumChange(List<String> changes, Double change) {
+        if (change == null) {
+            return;
+        }
+        String direction = change >= 0D ? "增强" : "减弱";
+        changes.add(String.format(Locale.ROOT, "宽度动量%s %.1f", direction, Math.abs(change)));
     }
 
     private Double difference(Double current, Double previous) {
@@ -195,15 +210,37 @@ public class MarketBreadthService {
             return "市场宽度不可用，指数表现仅供低置信度参考";
         }
         if (ratio >= 0.58D && indexReturn > 0D) {
-            return "主要指数与个股宽度共振走强";
+            return withPressure("主要指数与个股宽度共振走强", value);
         }
         if (ratio <= 0.42D && indexReturn > 0D) {
-            return "指数上涨但个股宽度偏弱，行情可能由权重驱动";
+            return withPressure("指数上涨但个股宽度偏弱，行情可能由权重驱动", value);
         }
         if (ratio <= 0.42D) {
-            return "主要指数与多数个股共同承压";
+            return withPressure("主要指数与多数个股共同承压", value);
         }
-        return "市场涨跌分布相对均衡，尚未形成广泛共振";
+        return withPressure("市场涨跌分布相对均衡，尚未形成广泛共振", value);
+    }
+
+    private String withPressure(String base, MarketBreadthSnapshot value) {
+        List<String> clauses = new ArrayList<>();
+        if (value.getVolumePressure() != null
+                && value.getVolumePressure().getAdvanceAmountRatio() != null) {
+            double pressure = value.getVolumePressure().getAdvanceAmountRatio();
+            if (pressure >= 0.6D) {
+                clauses.add("上涨成交额占优");
+            } else if (pressure <= 0.4D) {
+                clauses.add("下跌成交额占优");
+            }
+        }
+        if (value.getBreadthMomentum() != null) {
+            String status = value.getBreadthMomentum().getStatus();
+            if ("BULLISH_THRUST".equals(status) || "RECOVERING".equals(status)) {
+                clauses.add("宽度动量改善");
+            } else if ("WEAKENING".equals(status)) {
+                clauses.add("宽度动量转弱");
+            }
+        }
+        return clauses.isEmpty() ? base : base + "；" + String.join("，", clauses);
     }
 
     private MarketBreadthSnapshot unavailable(LocalDate businessDate, RuntimeException error) {

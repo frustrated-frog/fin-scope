@@ -26,4 +26,12 @@ public class MarketInternalHistoryPoint {
     private Integer newLow250Count;
     private Integer netAdvances;
     private Integer advanceDeclineLine;
+    private Double advanceAmount;
+    private Double declineAmount;
+    private Double flatAmount;
+    private Double advanceAmountRatio;
+    private Double netAdvancingAmount;
+    private Double trin;
+    private Double mcclellanOscillator;
+    private Double breadthThrustRatio;
 }

@@ -28,6 +28,8 @@ public class MarketBreadthSnapshot {
     private MarketNewHighLow newHighLow;
     private Integer netAdvances;
     private Integer advanceDeclineLine;
+    private MarketVolumePressure volumePressure;
+    private MarketBreadthMomentum breadthMomentum;
     private List<MarketInternalHistoryPoint> history = new ArrayList<>();
     private MarketBreadthChangeSummary changeSummary;
     private List<MarketIndexPerformance> indices = new ArrayList<>();
