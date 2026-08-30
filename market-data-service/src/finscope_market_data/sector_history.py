@@ -73,6 +73,26 @@ class TonghuashunSectorHistoryService:
         bars_by_index: dict[int, list[tuple[date, float]]] = {}
         dates: set[str] = set()
         warnings_by_index: dict[int, str] = {}
+
+        concurrent_start = len(catalog)
+        for index, (code, name) in enumerate(catalog):
+            try:
+                entry, trade_dates, bars = self._entry(
+                    code,
+                    name,
+                    start_date,
+                    business_date,
+                )
+                results[index] = entry
+                bars_by_index[index] = bars
+                dates.update(trade_dates)
+                concurrent_start = index + 1
+                break
+            except Exception as error:
+                warnings_by_index[index] = (
+                    f"{name}({code})行业历史不可用: {_message(error)}"
+                )
+
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {
                 executor.submit(
@@ -82,7 +102,10 @@ class TonghuashunSectorHistoryService:
                     start_date,
                     business_date,
                 ): (index, code, name)
-                for index, (code, name) in enumerate(catalog)
+                for index, (code, name) in enumerate(
+                    catalog[concurrent_start:],
+                    start=concurrent_start,
+                )
             }
             for future in as_completed(futures):
                 index, code, name = futures[future]

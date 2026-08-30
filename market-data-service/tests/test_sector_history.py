@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import date, datetime
 
 import pandas as pd
@@ -115,6 +116,32 @@ def test_sector_history_keeps_successful_industries_when_one_loader_fails() -> N
     assert [item.code for item in result.entries] == ["881121"]
     assert result.quality_status == "PARTIAL_FRESH"
     assert result.warnings == ["白酒(881273)行业历史不可用: upstream rejected"]
+
+
+def test_sector_history_initializes_provider_on_the_calling_thread() -> None:
+    calls: list[str] = []
+
+    def load(name: str, start: str, end: str) -> pd.DataFrame:
+        calls.append(name)
+        if len(calls) == 1:
+            assert threading.current_thread() is threading.main_thread()
+        return history_frame("2026-07-20", 25)
+
+    service = TonghuashunSectorHistoryService(
+        catalog_loader=lambda: pd.DataFrame(
+            [
+                {"name": "半导体", "code": "881121"},
+                {"name": "白酒", "code": "881273"},
+            ]
+        ),
+        history_loader=load,
+        max_workers=2,
+    )
+
+    result = service.fetch(date(2026, 8, 21), window=20)
+
+    assert len(result.entries) == 2
+    assert result.quality_status == "FRESH_PRIMARY"
 
 
 def test_sector_history_rejects_an_empty_effective_result() -> None:
