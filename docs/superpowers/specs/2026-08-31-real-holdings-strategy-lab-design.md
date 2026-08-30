@@ -85,7 +85,7 @@ Java 负责读取账本、行情、最新预测并编排请求；持仓策略计
 持仓策略刷新
   -> 读取最新真实持仓 + 不复权行情 + 最新单股预测
   -> PythonHoldingStrategyClient
-  -> Python /holding-strategy/evaluate
+  -> Python /v1/quant/holding-strategies/evaluate
   -> 冻结 HoldingStrategyDecision
   -> 到期任务计算 outcome
 ```
