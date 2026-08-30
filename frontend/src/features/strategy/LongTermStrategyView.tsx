@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../../shared/api/client';
 import { StrategyOverview, StrategyPlaybook, StrategyPlaybookRule, StrategyReview, StrategyStockThesis } from '../../shared/types';
+import { RealHoldingsLab } from './RealHoldingsLab';
 
-type Tab = 'portfolio' | 'playbooks' | 'theses' | 'reviews';
+type Tab = 'portfolio' | 'real-holdings' | 'playbooks' | 'theses' | 'reviews';
 const roleLabels: Record<string, string> = { CORE: '核心', SATELLITE: '卫星', DEFENSIVE: '防守', OBSERVE: '观察', SIMULATED: '模拟', LIVE_VALIDATION: '真实验证' };
 const stageLabels: Record<string, string> = { RESEARCH_POOL: '研究池', WATCH_POOL: '观察池', SIMULATED_PORTFOLIO: '模拟组合', LIVE_VALIDATION: '小仓位验证' };
 const statusLabels: Record<string, string> = { RESEARCHING: '研究中', ACTIVE: '使用中', PAUSED: '已暂停' };
@@ -70,17 +71,18 @@ export function LongTermStrategyView({ addToast, setMessage }: { addToast: (mess
   async function addReview(event: FormEvent) { event.preventDefault(); try { await api('/api/strategy/reviews', { method: 'POST', body: JSON.stringify(review) }); setReviewOpen(false); setReview({ reviewDate: new Date().toISOString().slice(0, 10), facts: '', reasoning: '', nextAction: '' }); await load(); } catch (error) { addToast(error instanceof Error ? error.message : '保存失败', 'error'); } }
 
   return <section className="strategy-workspace">
-    <header className="strategy-hero">
+    {tab !== 'real-holdings' ? <><header className="strategy-hero">
       <div><p className="strategy-kicker">Compound discipline · 复利纪律</p><h3>长期投资地图</h3><p>把持仓、策略、研究假设和复盘放在同一条可验证的轨道上。</p></div>
       <button className="primary-button" type="button" onClick={() => setAssetOpen(true)}>添加资产</button>
     </header>
     <div className="strategy-rail" aria-label="复利轨道">
       {['CORE', 'SATELLITE', 'DEFENSIVE', 'OBSERVE'].map(role => <div className="strategy-rail-segment" data-role={role} key={role}><span>{roleLabels[role]}</span><strong>{(roleTotals[role] ?? 0).toFixed(0)}%</strong><i style={{ width: `${Math.min(100, roleTotals[role] ?? 0)}%` }} /></div>)}
-    </div>
+    </div></> : null}
     <nav className="strategy-tabs" role="tablist">
-      {([['portfolio', '组合'], ['playbooks', '策略库'], ['theses', '股票孵化'], ['reviews', '复盘']] as Array<[Tab, string]>).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
+      {([['portfolio', '组合'], ['real-holdings', '真实持仓'], ['playbooks', '策略库'], ['theses', '股票孵化'], ['reviews', '复盘']] as Array<[Tab, string]>).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
     </nav>
     {loading ? <div className="strategy-empty">正在加载策略数据…</div> : null}
+    {!loading && tab === 'real-holdings' ? <RealHoldingsLab addToast={addToast} /> : null}
     {!loading && tab === 'portfolio' && <div className="strategy-layout"><div className="strategy-main"><div className="strategy-section-head"><div><span>Portfolio map</span><h4>组合资产</h4></div><b>{overview.targetWeight.toFixed(0)}% 已配置</b></div>{overview.holdings.length === 0 ? <div className="strategy-empty"><h4>还没有组合资产</h4><p>从你真实持有的第一只场外基金开始，定义它在组合里的角色。</p><button type="button" onClick={() => setAssetOpen(true)}>添加资产</button></div> : <div className="strategy-asset-grid">{overview.holdings.map(item => <article className="strategy-asset" key={item.id}><div><span>{item.type === 'FUND' ? '场外基金' : '股票'} · {roleLabels[item.role]}</span><h4>{item.name || item.code}</h4><small>{item.code}{item.type === 'STOCK' && item.quantity != null ? ` · ${item.quantity} 股${item.averageCost != null ? ` · 均价 ¥${item.averageCost}` : ''}` : ''}</small></div><div className="strategy-weight"><strong>{item.targetWeight.toFixed(0)}%</strong><small>目标权重</small></div><p>{item.note || '尚未记录配置理由'}</p><button type="button" className="text-button" onClick={() => removeAsset(item.id, item.revision)}>移出组合</button></article>)}</div>}</div><aside className="strategy-aside"><span>This cycle</span><h4>本周期行动</h4><ol><li>让目标权重形成完整结构</li><li>启用一项正在训练的策略</li><li>记录事实、推理与下一步行动</li></ol></aside></div>}
     {!loading && tab === 'playbooks' && (
       <div className="strategy-card-grid">
