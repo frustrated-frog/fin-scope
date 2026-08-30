@@ -19,7 +19,7 @@ import java.util.Optional;
 
 @Repository
 public class StockTransactionRepository {
-    private static final String SELECT = "SELECT t.*,i.code AS instrument_code,i.name AS instrument_name "
+    private static final String SELECT = "SELECT t.*,i.code AS instrument_code,i.name AS instrument_name,i.market AS instrument_market "
             + "FROM stock_transaction t LEFT JOIN instrument i ON i.id=t.instrument_id ";
 
     @Resource
@@ -32,7 +32,8 @@ public class StockTransactionRepository {
         long instrumentId = rs.getLong("instrument_id");
         value.setInstrumentId(rs.wasNull() ? null : instrumentId);
         String code = rs.getString("instrument_code");
-        value.setInstrumentCode(code == null ? null : code + marketSuffix(code));
+        String market = rs.getString("instrument_market");
+        value.setInstrumentCode(code == null ? null : code + "." + (market == null ? market(code) : market));
         value.setInstrumentName(rs.getString("instrument_name"));
         value.setType(StockTransactionType.valueOf(rs.getString("event_type")));
         value.setTradeDate(java.time.LocalDate.parse(rs.getString("trade_date")));
@@ -108,13 +109,13 @@ public class StockTransactionRepository {
         }
     }
 
-    private static String marketSuffix(String code) {
+    private static String market(String code) {
         if (code.startsWith("6")) {
-            return ".SH";
+            return "SH";
         }
         if (code.startsWith("8") || code.startsWith("4")) {
-            return ".BJ";
+            return "BJ";
         }
-        return ".SZ";
+        return "SZ";
     }
 }

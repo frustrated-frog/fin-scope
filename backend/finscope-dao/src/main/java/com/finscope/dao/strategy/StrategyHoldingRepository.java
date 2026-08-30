@@ -59,8 +59,16 @@ public class StrategyHoldingRepository {
             ps.setString(2, holding.getRole());
             ps.setDouble(3, holding.getTargetWeight());
             ps.setDouble(4, holding.getCurrentWeight());
-            if (holding.getQuantity() == null) ps.setNull(5, java.sql.Types.REAL); else ps.setDouble(5, holding.getQuantity());
-            if (holding.getAverageCost() == null) ps.setNull(6, java.sql.Types.REAL); else ps.setDouble(6, holding.getAverageCost());
+            if (holding.getQuantity() == null) {
+                ps.setNull(5, java.sql.Types.REAL);
+            } else {
+                ps.setDouble(5, holding.getQuantity());
+            }
+            if (holding.getAverageCost() == null) {
+                ps.setNull(6, java.sql.Types.REAL);
+            } else {
+                ps.setDouble(6, holding.getAverageCost());
+            }
             ps.setString(7, holding.getNote());
             ps.setInt(8, holding.getSortOrder());
             ps.setLong(9, holding.getRevision());
@@ -116,5 +124,10 @@ public class StrategyHoldingRepository {
 
     public boolean deleteByIdAndRevision(Long id, long revision) {
         return jdbcTemplate.update("DELETE FROM strategy_holding WHERE id=? AND revision=?", id, revision) == 1;
+    }
+
+    public boolean updatePositionProjection(Long id, Double quantity, Double averageCost) {
+        return jdbcTemplate.update("UPDATE strategy_holding SET quantity=?,average_cost=?,revision=revision+1,updated_at=? WHERE id=?",
+                quantity, averageCost, TimeUtil.text(LocalDateTime.now()), id) == 1;
     }
 }
