@@ -18,7 +18,8 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.net.URI;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -73,7 +74,8 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
         value.setSourceCode(requiredText(root, "source_code"));
         value.setSourceFamily(requiredText(root, "source_family"));
         value.setQualityStatus(quality);
-        value.setRetrievedAt(OffsetDateTime.parse(requiredText(root, "retrieved_at")).toLocalDateTime());
+        value.setRetrievedAt(LocalDateTime.parse(
+                requiredText(root, "retrieved_at"), DateTimeFormatter.ISO_DATE_TIME));
         value.setAdvanceCount(requiredNonNegativeInteger(root, "advance_count"));
         value.setDeclineCount(requiredNonNegativeInteger(root, "decline_count"));
         value.setFlatCount(requiredNonNegativeInteger(root, "flat_count"));

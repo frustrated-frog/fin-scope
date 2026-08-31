@@ -106,6 +106,18 @@ class PythonMarketBreadthSourceTest {
                 () -> invalid.fetch(LocalDate.of(2026, 8, 21))).getErrorType());
     }
 
+    @Test
+    void acceptsTimezoneFreeRetrievedAtFromFrozenPythonSnapshot() {
+        PythonMarketBreadthSource source = source(
+                payload("PARTIAL_FRESH", "2026-08-21")
+                        .replace("2026-08-21T15:20:00+08:00", "2026-08-30T22:00:00"));
+
+        MarketBreadthSnapshot result = source.fetch(LocalDate.of(2026, 8, 21));
+
+        assertEquals(java.time.LocalDateTime.of(2026, 8, 30, 22, 0),
+                result.getRetrievedAt());
+    }
+
     private PythonMarketBreadthSource source(String body) {
         return source("http://127.0.0.1:8000",
                 (provider, uri, headers) -> response(body));
