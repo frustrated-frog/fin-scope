@@ -136,7 +136,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
 
   async function saveMajorEvent(item: NewsFeedItem) {
     try {
-      await api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'NEWS_ITEM', originKey: item.id, title: item.title, summary: item.content, sourceName: item.sourceName, sourceUrl: item.url, categoryCode: item.categoryCode, occurredDate: item.publishedAt ? item.publishedAt.slice(0, 10) : new Date().toISOString().slice(0, 10) }) });
+      await api('/api/major-events', { method: 'POST', body: JSON.stringify({ originType: 'NEWS_ITEM', originKey: item.id, occurredDate: item.publishedAt ? item.publishedAt.slice(0, 10) : new Date().toISOString().slice(0, 10) }) });
       setSavedItems((current) => new Set(current).add(item.id));
       addToast('已记入大事记', 'success');
     } catch (error) { addToast(error instanceof Error ? error.message : '记入大事记失败', 'error'); }

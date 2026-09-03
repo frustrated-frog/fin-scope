@@ -108,6 +108,7 @@ public final class ResearchRadarView {
 
     public static class EventCard {
         private final Long id;
+        private final String eventKey;
         private final String title;
         private final String summary;
         private final String categoryCode;
@@ -153,7 +154,7 @@ public final class ResearchRadarView {
         }
 
         public EventCard(RadarEvent event, RadarEventInterpretation interpretation, RadarEventWorkspace.Summary workspace) {
-            this.id=event.getId(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
+            this.id=event.getId(); this.eventKey=event.getEventKey(); this.title=event.getCanonicalTitle(); this.summary=event.getSummary();
             this.categoryCode=event.getCategoryCode(); this.hotspotScore=event.getHotspotScore(); this.hotspotExplanation=event.getHotspotExplanation();
             this.hotspotLifecycleState=event.getHotspotLifecycleState();
             this.confidenceScore=event.getConfidenceScore(); this.confidenceExplanation=event.getConfidenceExplanation();
@@ -196,6 +197,7 @@ public final class ResearchRadarView {
             return "首次进入研究雷达";
         }
         public Long getId() { return id; }
+        public String getEventKey() { return eventKey; }
         public String getTitle() { return title; }
         public String getSummary() { return summary; }
         public String getCategoryCode() { return categoryCode; }

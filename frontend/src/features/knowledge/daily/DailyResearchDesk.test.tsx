@@ -20,6 +20,7 @@ const radar: ResearchRadarSnapshot = {
   overview: { eventCount: 1, highPriorityCount: 1, watchlistRelatedCount: 1, sourceCount: 3 },
   events: [{
     id: 8,
+    eventKey: 'storage-price-change',
     title: '储能系统报价出现变化',
     summary: '多条快讯指向近期报价变化。',
     priorityScore: 86,

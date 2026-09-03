@@ -13,6 +13,7 @@ export type RadarNewsItem = {
 
 export type RadarEvent = {
   id: number;
+  eventKey: string;
   title: string;
   summary: string;
   categoryCode?: string;

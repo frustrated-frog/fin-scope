@@ -6,9 +6,9 @@ import { describeVerificationGap, projectDailyResearch } from './dailyResearchPr
 const snapshot: ResearchRadarSnapshot = {
   overview: { eventCount: 3, highPriorityCount: 1, watchlistRelatedCount: 1, sourceCount: 6 },
   events: [
-    { id: 1, title: '较早变化', summary: '摘要', priorityScore: 62, recommendation: '值得浏览', reasons: [], watchlistRelated: false, watchlistExplanation: '', sourceCount: 1, signalCount: 1, uncertainty: '仍需确认', nextObservation: '跟踪公告', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T08:00:00' },
-    { id: 2, title: '高优先级变化', summary: '摘要', priorityScore: 88, recommendation: '重点关注', reasons: [], watchlistRelated: true, watchlistExplanation: '与持仓相关', sourceCount: 3, signalCount: 3, uncertainty: '订单持续性未知', nextObservation: '等待经营数据', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T09:00:00' },
-    { id: 3, title: '同分但更新', summary: '摘要', priorityScore: 62, recommendation: '值得浏览', reasons: [], watchlistRelated: false, watchlistExplanation: '', sourceCount: 2, signalCount: 2, uncertainty: '影响范围未知', nextObservation: '观察价格', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T10:00:00' }
+    { id: 1, eventKey: 'older-change', title: '较早变化', summary: '摘要', priorityScore: 62, recommendation: '值得浏览', reasons: [], watchlistRelated: false, watchlistExplanation: '', sourceCount: 1, signalCount: 1, uncertainty: '仍需确认', nextObservation: '跟踪公告', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T08:00:00' },
+    { id: 2, eventKey: 'high-priority-change', title: '高优先级变化', summary: '摘要', priorityScore: 88, recommendation: '重点关注', reasons: [], watchlistRelated: true, watchlistExplanation: '与持仓相关', sourceCount: 3, signalCount: 3, uncertainty: '订单持续性未知', nextObservation: '等待经营数据', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T09:00:00' },
+    { id: 3, eventKey: 'newer-change', title: '同分但更新', summary: '摘要', priorityScore: 62, recommendation: '值得浏览', reasons: [], watchlistRelated: false, watchlistExplanation: '', sourceCount: 2, signalCount: 2, uncertainty: '影响范围未知', nextObservation: '观察价格', suggestedResearchQuestion: '', lastSeenAt: '2026-08-01T10:00:00' }
   ],
   liveItems: [
     { id: 'a', kind: 'FLASH', title: '公司发布新产品', content: '公司发布新产品。', publishedAt: '2026-08-01T09:00:00', providerCode: 'CLS', sourceName: '财联社', sourceTier: 'MEDIA' },

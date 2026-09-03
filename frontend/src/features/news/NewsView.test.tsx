@@ -9,6 +9,7 @@ vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 
 const event = {
   id: 10,
+  eventKey: 'battery-release',
   title: '宁德时代发布新一代电池',
   summary: '两家来源确认新品正式发布。',
   categoryCode: 'COMPANY',
@@ -278,6 +279,9 @@ test('records a radar event with an in-app toast instead of a native alert', asy
 
   try {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('已记入大事记', 'success'));
+    expect(api).toHaveBeenCalledWith('/api/major-events', expect.objectContaining({
+      body: expect.stringContaining('"originKey":"battery-release"')
+    }));
     expect(nativeAlert).not.toHaveBeenCalled();
   } finally {
     nativeAlert.mockRestore();

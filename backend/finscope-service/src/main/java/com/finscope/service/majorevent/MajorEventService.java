@@ -10,7 +10,11 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.majorevent.MajorEvent;
 import com.finscope.domain.majorevent.MajorEventCreateCommand;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.service.news.NewsFeedItem;
+import com.finscope.service.news.NewsFeedService;
 import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,23 +22,22 @@ import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class MajorEventService {
-    private final MajorEventRepository events;
-    private final ArticleRepository articles;
-    private final RadarRepository radar;
-
-    public MajorEventService(MajorEventRepository events, ArticleRepository articles, RadarRepository radar) {
-        this.events = events;
-        this.articles = articles;
-        this.radar = radar;
-    }
+    @Resource
+    private MajorEventRepository events;
+    @Resource
+    private ArticleRepository articles;
+    @Resource
+    private RadarRepository radar;
+    @Resource
+    private NewsFeedService news;
 
     public MajorEvent create(MajorEventCreateCommand command) {
         validateOrigin(command);
-        if (events.findByOrigin(command.getOriginType(), command.getOriginKey()).isPresent()) {
-            throw new BusinessException(BizErrorCode.MAJOR_EVENT_ALREADY_RECORDED);
-        }
         MajorEvent event = "ARTICLE".equals(command.getOriginType()) ? articleSnapshot(command)
                 : "RADAR_EVENT".equals(command.getOriginType()) ? radarSnapshot(command) : liveNewsSnapshot(command);
+        if (events.findByOrigin(event.getOriginType(), event.getOriginKey()).isPresent()) {
+            throw new BusinessException(BizErrorCode.MAJOR_EVENT_ALREADY_RECORDED);
+        }
         event.setOccurredDate(command.getOccurredDate() == null ? event.getOccurredDate() : command.getOccurredDate());
         event.setNote(trimToNull(command.getNote()));
         return events.save(event);
@@ -70,9 +73,9 @@ public class MajorEventService {
     }
 
     private MajorEvent radarSnapshot(MajorEventCreateCommand command) {
-        Long id = parsePersistentId(command.getOriginKey(), "雷达事件");
-        RadarEvent radarEvent = radar.findEvent(id).orElseThrow(() -> new ResourceNotFoundException("雷达事件不存在：" + id));
+        RadarEvent radarEvent = findRadarEvent(command.getOriginKey());
         MajorEvent event = base(command);
+        event.setOriginKey(radarEvent.getEventKey());
         event.setTitle(radarEvent.getCanonicalTitle());
         event.setSummary(radarEvent.getSummary());
         event.setSourceName("研究雷达");
@@ -81,15 +84,32 @@ public class MajorEventService {
         return event;
     }
 
+    private RadarEvent findRadarEvent(String originKey) {
+        java.util.Optional<RadarEvent> byKey = radar.findEventByKey(originKey);
+        if (byKey.isPresent()) {
+            return byKey.get();
+        }
+        try {
+            return radar.findEvent(Long.valueOf(originKey)).orElseThrow(() ->
+                    new ResourceNotFoundException("雷达事件不存在或缓存已过期：" + originKey));
+        } catch (NumberFormatException error) {
+            throw new ResourceNotFoundException("雷达事件不存在或缓存已过期：" + originKey);
+        }
+    }
+
     private MajorEvent liveNewsSnapshot(MajorEventCreateCommand command) {
-        if (trimToNull(command.getTitle()) == null) throw new BusinessException(BizErrorCode.NEWS_TITLE_REQUIRED);
+        NewsFeedItem item = news.load("ALL", 100).getItems().stream()
+                .filter(value -> command.getOriginKey().equals(value.getId()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "新闻不存在或缓存已过期：" + command.getOriginKey()));
         MajorEvent event = base(command);
-        event.setTitle(command.getTitle().trim());
-        event.setSummary(trimToNull(command.getSummary()));
-        event.setSourceName(trimToNull(command.getSourceName()));
-        event.setSourceUrl(trimToNull(command.getSourceUrl()));
-        event.setCategoryCode(trimToNull(command.getCategoryCode()));
-        event.setOccurredDate(command.getOccurredDate() == null ? LocalDate.now() : command.getOccurredDate());
+        event.setTitle(item.getTitle());
+        event.setSummary(trimToNull(item.getContent()));
+        event.setSourceName(trimToNull(item.getSourceName()));
+        event.setSourceUrl(trimToNull(item.getUrl()));
+        event.setCategoryCode(trimToNull(item.getCategoryCode()));
+        event.setOccurredDate(item.getPublishedAt() == null ? LocalDate.now() : item.getPublishedAt().toLocalDate());
         return event;
     }
 
