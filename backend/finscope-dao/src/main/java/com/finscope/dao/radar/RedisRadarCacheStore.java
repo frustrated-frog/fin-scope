@@ -139,6 +139,18 @@ public class RedisRadarCacheStore {
             state.getResearchLinks().remove(eventId);
         }
         state.getNotifications().removeIf(value -> value.getEventId() != null && expiredEventIds.contains(value.getEventId()));
+        for (Long eventId : expiredEventIds) {
+            state.getAgentRunsBySubject().remove("RADAR_EVENT:" + eventId);
+        }
+        state.getIndustryChainImpacts().values().forEach(values -> {
+            for (Long eventId : expiredEventIds) {
+                values.remove(eventId);
+            }
+        });
+        state.getIndustryChainImpacts().entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        state.getAgentRunsBySubject().values().forEach(values -> values.removeIf(value ->
+                value.getCreatedAt() == null || value.getCreatedAt().isBefore(cutoff)));
+        state.getAgentRunsBySubject().entrySet().removeIf(entry -> entry.getValue().isEmpty());
         state.getPairDecisions().entrySet().removeIf(entry -> entry.getValue().getUpdatedAt() != null
                 && entry.getValue().getUpdatedAt().isBefore(cutoff));
         Set<Long> expiredRunIds = new HashSet<Long>();
@@ -162,7 +174,8 @@ public class RedisRadarCacheStore {
                 || state.getRuns() == null || state.getRunSteps() == null || state.getUserStates() == null
                 || state.getTimelines() == null || state.getTimelineFingerprints() == null
                 || state.getResearchLinks() == null || state.getNotifications() == null
-                || state.getNotificationFingerprints() == null) {
+                || state.getNotificationFingerprints() == null || state.getAgentRunsBySubject() == null
+                || state.getIndustryChainImpacts() == null) {
             throw new IllegalStateException("Redis 雷达临时缓存结构不完整");
         }
     }

@@ -1,7 +1,7 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarAgentTraceRepository;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
@@ -49,7 +49,13 @@ class RadarCanonicalTitleAgentTest {
 
     private RadarCanonicalTitleAgent agent(LlmChatClient llm) {
         return new RadarCanonicalTitleAgent(llm, new ObjectMapper(),
-                new RadarAgentTraceRecorder(mock(AgentRunRepository.class)));
+                recorder());
+    }
+
+    private RadarAgentTraceRecorder recorder() {
+        RadarAgentTraceRecorder recorder = new RadarAgentTraceRecorder();
+        org.springframework.test.util.ReflectionTestUtils.setField(recorder, "runs", mock(RadarAgentTraceRepository.class));
+        return recorder;
     }
 
     private RadarSignal signal(Long id, String title) {

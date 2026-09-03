@@ -8,6 +8,7 @@ import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarPairDecision;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.domain.agent.AgentRun;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -83,6 +84,21 @@ class RadarCacheRepositoriesTest {
         assertEquals(1, evidence.findByEventId(7L).size());
         assertEquals("SUCCESS", interpretations.findLatestByEventId(7L).orElseThrow().getStatus());
         assertTrue(decisions.find("a:b").isPresent());
+    }
+
+    @Test
+    void storesRadarAgentTracesInTheSharedTemporaryState() {
+        RadarAgentTraceRepository traces = inject(new RadarAgentTraceRepository());
+        AgentRun run = new AgentRun();
+        run.setSubjectType("RADAR_EVENT");
+        run.setSubjectId(7L);
+        run.setNodeName("radar-evidence-plan");
+
+        traces.record(run);
+
+        assertEquals(1, traces.findBySubject("RADAR_EVENT", 7L).size());
+        assertTrue(traces.findBySubject("RADAR_EVENT", 7L).get(0).getId() > 0);
+        assertEquals(1, inject(new RadarRepository()).findAgentRunsBySubject("RADAR_EVENT", 7L).size());
     }
 
     private RadarEvent event(String key, LocalDateTime now) {

@@ -1,5 +1,6 @@
 package com.finscope.dao.radar;
 
+import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarSignal;
@@ -157,6 +158,14 @@ public class RadarRepository {
     public List<RadarEventSignal> findEventSignals(Long eventId) {
         return new ArrayList<RadarEventSignal>(store.read().getEventSignals()
                 .getOrDefault(eventId, Collections.emptyList()));
+    }
+
+    public List<AgentRun> findAgentRunsBySubject(String subjectType, Long subjectId) {
+        if (subjectType == null || subjectId == null) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<AgentRun>(store.read().getAgentRunsBySubject()
+                .getOrDefault(subjectType + ':' + subjectId, Collections.emptyList()));
     }
 
     public List<RadarEvent> findRanked(String category, boolean watchlistOnly, int limit) {

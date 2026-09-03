@@ -1,11 +1,13 @@
 package com.finscope.service.investmentobservation;
 
-import com.finscope.dao.radar.RadarRepository;
+import com.finscope.dao.majorevent.MajorEventRepository;
+import com.finscope.domain.majorevent.MajorEvent;
 import com.finscope.domain.radar.RadarEvent;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 
@@ -15,27 +17,31 @@ import static org.mockito.Mockito.when;
 class InvestmentObservationCandidateServiceTest {
 
     @Test
-    void keepsInvestmentLearningSignalsWithoutPromotingGeneralPoliticsOrPersonalCases() {
-        RadarRepository repository = Mockito.mock(RadarRepository.class);
+    void onlyUsesNewsThatTheUserHasPersistedAsMajorEvents() {
+        MajorEventRepository repository = Mockito.mock(MajorEventRepository.class);
         InvestmentObservationCandidateService service = new InvestmentObservationCandidateService();
-        ReflectionTestUtils.setField(service, "radarRepository", repository);
-        RadarEvent industrialGrowth = event(1L, "1至7月四川省规上工业增加值同比增长6.6%", "FINANCE");
-        RadarEvent personalCase = event(2L, "交通银行原副行长涉嫌受贿被提起公诉", "FINANCE");
-        RadarEvent airportIncident = event(3L, "日本成田机场一客机冒黑烟", "POLITICS");
-        when(repository.findObservationCandidates(50))
-                .thenReturn(Arrays.asList(industrialGrowth, personalCase, airportIncident));
+        ReflectionTestUtils.setField(service, "majorEvents", repository);
+        MajorEvent industrialGrowth = event(1L, "RADAR_EVENT", "规上工业增加值同比增长");
+        MajorEvent personalCase = event(2L, "RADAR_EVENT", "原副行长涉嫌受贿被提起公诉");
+        MajorEvent article = event(3L, "ARTICLE", "长期研究文章");
+        when(repository.find(null, null, null, null))
+                .thenReturn(Arrays.asList(industrialGrowth, personalCase, article));
 
         List<RadarEvent> candidates = service.load();
 
         assertEquals(1, candidates.size());
         assertEquals(industrialGrowth.getId(), candidates.get(0).getId());
+        assertEquals("规上工业增加值同比增长", candidates.get(0).getCanonicalTitle());
     }
 
-    private RadarEvent event(Long id, String title, String dashboardCategory) {
-        RadarEvent value = new RadarEvent();
+    private MajorEvent event(Long id, String originType, String title) {
+        MajorEvent value = new MajorEvent();
         value.setId(id);
-        value.setCanonicalTitle(title);
-        value.setDashboardCategory(dashboardCategory);
+        value.setOriginType(originType);
+        value.setTitle(title);
+        value.setSummary(title);
+        value.setCategoryCode("FINANCE");
+        value.setOccurredDate(LocalDate.of(2026, 9, 4));
         return value;
     }
 }

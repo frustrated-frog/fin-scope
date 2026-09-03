@@ -1,14 +1,15 @@
 package com.finscope.service.radar;
 
-import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarAgentTraceRepository;
 import com.finscope.domain.agent.AgentRun;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
+
 @Component
 public class RadarAgentTraceRecorder {
-    private final AgentRunRepository runs;
-
-    public RadarAgentTraceRecorder(AgentRunRepository runs) { this.runs = runs; }
+    @Resource
+    private RadarAgentTraceRepository runs;
 
     public void record(String nodeName, String subjectType, Long subjectId, String status,
                        String input, String output, String errorType, String fallbackReason,
@@ -35,7 +36,9 @@ public class RadarAgentTraceRecorder {
     }
 
     private String limit(String value, int max) {
-        if (value == null) return "";
+        if (value == null) {
+            return "";
+        }
         String compact = value.replaceAll("[\\r\\n\\t]+", " ").trim();
         return compact.length() <= max ? compact : compact.substring(0, max);
     }

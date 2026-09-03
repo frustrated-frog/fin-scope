@@ -2,6 +2,8 @@ package com.finscope.dao.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.EphemeralContentCacheProperties;
+import com.finscope.domain.agent.AgentRun;
+import com.finscope.domain.industrychain.IndustryChainEventImpact;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEventWorkspace;
@@ -20,6 +22,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,6 +92,14 @@ class RedisRadarCacheStoreTest {
         cached.getEvents().put(20L, oldEvent);
         cached.getEventIdsByKey().put("old-event", 20L);
         cached.getEventSignals().put(20L, Collections.singletonList(link));
+        AgentRun trace = new AgentRun();
+        trace.setCreatedAt(now.minusHours(37));
+        cached.getAgentRunsBySubject().put("RADAR_EVENT:20", Collections.singletonList(trace));
+        IndustryChainEventImpact impact = new IndustryChainEventImpact();
+        impact.setRadarEventId(20L);
+        Map<Long, IndustryChainEventImpact> impacts = new LinkedHashMap<Long, IndustryChainEventImpact>();
+        impacts.put(20L, impact);
+        cached.getIndustryChainImpacts().put(1L, impacts);
         when(valueOperations.get(RedisRadarCacheStore.STATE_KEY)).thenReturn(
                 new ObjectMapper().findAndRegisterModules().writeValueAsString(cached));
 
@@ -98,6 +110,8 @@ class RedisRadarCacheStoreTest {
         assertFalse(result.getEvents().containsKey(20L));
         assertFalse(result.getEventIdsByKey().containsKey("old-event"));
         assertFalse(result.getEventSignals().containsKey(20L));
+        assertFalse(result.getAgentRunsBySubject().containsKey("RADAR_EVENT:20"));
+        assertFalse(result.getIndustryChainImpacts().containsKey(1L));
     }
 
     @Test

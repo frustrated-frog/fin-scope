@@ -1,7 +1,7 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarAgentTraceRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
@@ -100,7 +100,13 @@ class RadarEventInterpretationAgentTest {
 
     private RadarEventInterpretationAgent agent(LlmChatClient llm) {
         return new RadarEventInterpretationAgent(llm, new ObjectMapper(),
-                new RadarAgentTraceRecorder(mock(AgentRunRepository.class)));
+                recorder());
+    }
+
+    private RadarAgentTraceRecorder recorder() {
+        RadarAgentTraceRecorder recorder = new RadarAgentTraceRecorder();
+        org.springframework.test.util.ReflectionTestUtils.setField(recorder, "runs", mock(RadarAgentTraceRepository.class));
+        return recorder;
     }
 
     private LlmChatClient configuredLlm() {

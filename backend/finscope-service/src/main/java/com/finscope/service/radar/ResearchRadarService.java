@@ -277,7 +277,7 @@ public class ResearchRadarService {
         } catch (RuntimeException ignored) {
         }
         return new ResearchRadarView.EventDetail(event, signals, repository.findEventSignals(id), evidence,
-                agentRuns == null ? Collections.emptyList() : agentRuns.findBySubject("RADAR_EVENT", id), interpretation,
+                repository.findAgentRunsBySubject("RADAR_EVENT", id), interpretation,
                 opened == null ? null : opened.getState(), opened == null ? Collections.<RadarEventWorkspace.Observation>emptyList() : opened.getObservations(),
                 timelineEntries, trustView, opened == null ? Collections.<RadarEventWorkspace.ResearchLink>emptyList() : opened.getResearchLinks());
     }

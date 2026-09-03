@@ -1,7 +1,7 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.radar.RadarAgentTraceRepository;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LlmChatClient;
@@ -24,7 +24,7 @@ class RadarEventMatchAgentTest {
     @Test
     void acceptsStrictSameEventDecisionAndRecordsTrace() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        AgentRunRepository runs = mock(AgentRunRepository.class);
+        RadarAgentTraceRepository runs = mock(RadarAgentTraceRepository.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(contains("同一现实事件"), contains("存储芯片板块持续走强"), eq(15_000), eq(320)))
                 .thenReturn("{\"sameEvent\":true,\"confidence\":0.91,"
@@ -47,7 +47,7 @@ class RadarEventMatchAgentTest {
     @Test
     void modelDisabledFallsBackToConservativeSplit() {
         LlmChatClient llm = mock(LlmChatClient.class);
-        AgentRunRepository runs = mock(AgentRunRepository.class);
+        RadarAgentTraceRepository runs = mock(RadarAgentTraceRepository.class);
         when(llm.isConfigured()).thenReturn(false);
 
         RadarEventMatchAgent.Decision result = agent(llm, runs).decide(
@@ -61,7 +61,7 @@ class RadarEventMatchAgentTest {
     @Test
     void unknownJsonFieldIsRejectedAndFallsBack() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        AgentRunRepository runs = mock(AgentRunRepository.class);
+        RadarAgentTraceRepository runs = mock(RadarAgentTraceRepository.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(contains("同一现实事件"), contains("存储芯片板块持续走强"), eq(15_000), eq(320)))
                 .thenReturn("{\"sameEvent\":true,\"confidence\":0.91,\"reason\":\"相同\",\"chainOfThought\":\"hidden\"}");
@@ -76,7 +76,7 @@ class RadarEventMatchAgentTest {
     @Test
     void traceWriteFailureDoesNotBreakAgentDecision() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
-        AgentRunRepository runs = mock(AgentRunRepository.class);
+        RadarAgentTraceRepository runs = mock(RadarAgentTraceRepository.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.complete(contains("同一现实事件"), contains("存储芯片板块持续走强"), eq(15_000), eq(320)))
                 .thenReturn("{\"sameEvent\":true,\"confidence\":0.91,\"reason\":\"同一现实事件\"}");
@@ -88,8 +88,14 @@ class RadarEventMatchAgentTest {
         assertTrue(result.isSameEvent());
     }
 
-    private RadarEventMatchAgent agent(LlmChatClient llm, AgentRunRepository runs) {
-        return new RadarEventMatchAgent(llm, new ObjectMapper(), new RadarAgentTraceRecorder(runs));
+    private RadarEventMatchAgent agent(LlmChatClient llm, RadarAgentTraceRepository runs) {
+        return new RadarEventMatchAgent(llm, new ObjectMapper(), recorder(runs));
+    }
+
+    private RadarAgentTraceRecorder recorder(RadarAgentTraceRepository runs) {
+        RadarAgentTraceRecorder recorder = new RadarAgentTraceRecorder();
+        org.springframework.test.util.ReflectionTestUtils.setField(recorder, "runs", runs);
+        return recorder;
     }
 
     private RadarSignal signal(Long id, String title) {

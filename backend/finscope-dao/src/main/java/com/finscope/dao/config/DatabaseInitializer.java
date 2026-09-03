@@ -20,6 +20,8 @@ import java.util.Map;
 public class DatabaseInitializer implements InitializingBean {
     @Resource
     private JdbcTemplate jdbcTemplate;
+    @Resource
+    private EphemeralContentDataMigration ephemeralContentDataMigration;
     @Value("${finscope.data-root:../data}")
     private String dataRoot;
 
@@ -33,6 +35,9 @@ public class DatabaseInitializer implements InitializingBean {
         Files.createDirectories(Paths.get(dataRoot).resolve("raw"));
         Files.createDirectories(Paths.get(dataRoot).resolve("exports"));
         createSchema();
+        if (ephemeralContentDataMigration != null) {
+            ephemeralContentDataMigration.migrate();
+        }
         seedNewsCategories();
         seedStrategyPlaybooks();
     }
@@ -813,11 +818,14 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("agent_run", "progress_delta", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("agent_run", "budget_snapshot", "TEXT");
         ensureColumn("agent_run", "metadata_json", "TEXT");
+        ensureColumn("agent_run", "subject_type", "TEXT");
+        ensureColumn("agent_run", "subject_id", "INTEGER");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_research ON agent_run(research_run_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_event ON agent_run(event_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_article ON agent_run(article_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_fingerprint ON agent_run(action_fingerprint)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_step ON agent_run(research_run_id, step_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_subject ON agent_run(subject_type,subject_id,id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_agent_run_status ON agent_run(status)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run_plan ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"

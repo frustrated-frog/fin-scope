@@ -1,5 +1,7 @@
 package com.finscope.dao.radar;
 
+import com.finscope.domain.agent.AgentRun;
+import com.finscope.domain.industrychain.IndustryChainEventImpact;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventSignal;
@@ -14,9 +16,9 @@ import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashSet;
 import java.util.Set;
 
 @Data
@@ -38,6 +40,9 @@ public class RadarCacheState {
     private Map<Long, List<RadarEventWorkspace.ResearchLink>> researchLinks = new LinkedHashMap<Long, List<RadarEventWorkspace.ResearchLink>>();
     private List<RadarEventWorkspace.Notification> notifications = new ArrayList<RadarEventWorkspace.Notification>();
     private Set<String> notificationFingerprints = new LinkedHashSet<String>();
+    private Map<String, List<AgentRun>> agentRunsBySubject = new LinkedHashMap<String, List<AgentRun>>();
+    private Map<Long, Map<Long, IndustryChainEventImpact>> industryChainImpacts =
+            new LinkedHashMap<Long, Map<Long, IndustryChainEventImpact>>();
     private long nextSequence = 1L;
 
     public long nextSequence() {
