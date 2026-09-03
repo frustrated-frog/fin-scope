@@ -1,6 +1,7 @@
 package com.finscope.dao.radar;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.EphemeralContentCacheProperties;
 import com.finscope.domain.radar.RadarEvent;
@@ -44,6 +45,7 @@ public class RedisRadarCacheStore {
         LocalDateTime now = LocalDateTime.now(clock);
         RadarCacheState state = readAt(now);
         T result = mutation.apply(state);
+        prune(state, now);
         write(state);
         return result;
     }
@@ -78,7 +80,9 @@ public class RedisRadarCacheStore {
         try {
             String payload = redisTemplate.opsForValue().get(STATE_KEY);
             RadarCacheState state = payload == null || payload.trim().isEmpty()
-                    ? new RadarCacheState() : objectMapper.readValue(payload, RadarCacheState.class);
+                    ? new RadarCacheState() : objectMapper.readerFor(RadarCacheState.class)
+                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(payload);
             normalize(state);
             prune(state, now);
             return state;

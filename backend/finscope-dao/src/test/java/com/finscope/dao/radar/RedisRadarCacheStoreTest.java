@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.EphemeralContentCacheProperties;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventSignal;
+import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,5 +98,22 @@ class RedisRadarCacheStoreTest {
         assertFalse(result.getEvents().containsKey(20L));
         assertFalse(result.getEventIdsByKey().containsKey("old-event"));
         assertFalse(result.getEventSignals().containsKey(20L));
+    }
+
+    @Test
+    void readsWorkspaceNotificationsWithDerivedReadProperty() throws Exception {
+        RadarEventWorkspace.Notification notification = new RadarEventWorkspace.Notification();
+        notification.setId(1L);
+        notification.setEventId(2L);
+        notification.setCreatedAt(LocalDateTime.of(2026, 9, 4, 11, 0));
+        RadarCacheState cached = new RadarCacheState();
+        cached.getNotifications().add(notification);
+        when(valueOperations.get(RedisRadarCacheStore.STATE_KEY)).thenReturn(
+                new ObjectMapper().findAndRegisterModules().writeValueAsString(cached));
+
+        RadarCacheState result = store.read();
+
+        assertEquals(1, result.getNotifications().size());
+        assertFalse(result.getNotifications().get(0).isRead());
     }
 }

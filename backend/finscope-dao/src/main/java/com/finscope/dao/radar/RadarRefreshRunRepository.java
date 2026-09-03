@@ -1,111 +1,121 @@
 package com.finscope.dao.radar;
 
-import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarRefreshStep;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public class RadarRefreshRunRepository {
-    private final JdbcTemplate jdbc;
-
-    public RadarRefreshRunRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    @Resource
+    private RedisRadarCacheStore store;
 
     public RadarRefreshRun startRun(String runKey, String triggerType, LocalDateTime startedAt) {
-        jdbc.update("INSERT INTO radar_refresh_run(run_key,trigger_type,status,started_at) VALUES(?,?,?,?)",
-                runKey, triggerType, "RUNNING", TimeUtil.text(startedAt));
-        return findByKey(runKey).orElseThrow(IllegalStateException::new);
+        return store.update(state -> {
+            RadarRefreshRun value = new RadarRefreshRun();
+            value.setId(store.stableId("run", runKey));
+            value.setRunKey(runKey);
+            value.setTriggerType(triggerType);
+            value.setStatus("RUNNING");
+            value.setStartedAt(startedAt);
+            state.getRuns().put(value.getId(), value);
+            return value;
+        });
     }
 
     public RadarRefreshStep startStep(Long runId, String stepCode, LocalDateTime startedAt) {
-        jdbc.update("INSERT INTO radar_refresh_step(run_id,step_code,status,started_at) VALUES(?,?,?,?)",
-                runId, stepCode, "RUNNING", TimeUtil.text(startedAt));
-        return findStep(runId, stepCode).orElseThrow(IllegalStateException::new);
+        return store.update(state -> {
+            RadarRefreshStep value = new RadarRefreshStep();
+            value.setId(store.stableId("run-step", runId + ":" + stepCode));
+            value.setRunId(runId);
+            value.setStepCode(stepCode);
+            value.setStatus("RUNNING");
+            value.setStartedAt(startedAt);
+            List<RadarRefreshStep> values = state.getRunSteps().computeIfAbsent(runId,
+                    ignored -> new ArrayList<RadarRefreshStep>());
+            values.removeIf(existing -> stepCode.equals(existing.getStepCode()));
+            values.add(value);
+            return value;
+        });
     }
 
     public RadarRefreshStep completeStep(Long runId, String stepCode, String status,
                                          int inputCount, int outputCount, String details, LocalDateTime completedAt) {
-        jdbc.update("UPDATE radar_refresh_step SET status=?,completed_at=?,input_count=?,output_count=?,details=? "
-                        + "WHERE run_id=? AND step_code=?",
-                status, TimeUtil.text(completedAt), inputCount, outputCount, details, runId, stepCode);
-        return findStep(runId, stepCode).orElseThrow(IllegalStateException::new);
+        return store.update(state -> {
+            RadarRefreshStep value = findStep(state, runId, stepCode).orElseThrow(IllegalStateException::new);
+            value.setStatus(status);
+            value.setCompletedAt(completedAt);
+            value.setInputCount(inputCount);
+            value.setOutputCount(outputCount);
+            value.setDetails(details);
+            return value;
+        });
     }
 
     public RadarRefreshRun completeRun(Long id, int sourceCount, int signalCount, int eventCount,
                                        String warning, LocalDateTime completedAt) {
-        jdbc.update("UPDATE radar_refresh_run SET status='SUCCESS',completed_at=?,source_count=?,signal_count=?,"
-                        + "event_count=?,warning=?,error=NULL WHERE id=?",
-                TimeUtil.text(completedAt), sourceCount, signalCount, eventCount, emptyToNull(warning), id);
-        return findById(id).orElseThrow(IllegalStateException::new);
+        return store.update(state -> {
+            RadarRefreshRun value = requireRun(state, id);
+            value.setStatus("SUCCESS");
+            value.setCompletedAt(completedAt);
+            value.setSourceCount(sourceCount);
+            value.setSignalCount(signalCount);
+            value.setEventCount(eventCount);
+            value.setWarning(emptyToNull(warning));
+            value.setError(null);
+            return value;
+        });
     }
 
     public RadarRefreshRun failRun(Long id, String error, LocalDateTime completedAt) {
-        jdbc.update("UPDATE radar_refresh_run SET status='FAILED',completed_at=?,error=? WHERE id=?",
-                TimeUtil.text(completedAt), error, id);
-        return findById(id).orElseThrow(IllegalStateException::new);
+        return store.update(state -> {
+            RadarRefreshRun value = requireRun(state, id);
+            value.setStatus("FAILED");
+            value.setCompletedAt(completedAt);
+            value.setError(error);
+            return value;
+        });
     }
 
     public Optional<RadarRefreshRun> findLatestCompletedRun() {
-        List<RadarRefreshRun> values = jdbc.query("SELECT * FROM radar_refresh_run WHERE status='SUCCESS' "
-                        + "ORDER BY completed_at DESC,id DESC LIMIT 1", runMapper());
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+        return store.read().getRuns().values().stream().filter(value -> "SUCCESS".equals(value.getStatus()))
+                .max(Comparator.comparing(RadarRefreshRun::getCompletedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(RadarRefreshRun::getId));
     }
 
-    /** 最近一次批次（任意状态），包括正在运行与失败的批次，供页面透出生产状态。 */
     public Optional<RadarRefreshRun> findLatestRun() {
-        List<RadarRefreshRun> values = jdbc.query("SELECT * FROM radar_refresh_run "
-                        + "ORDER BY started_at DESC,id DESC LIMIT 1", runMapper());
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+        return store.read().getRuns().values().stream()
+                .max(Comparator.comparing(RadarRefreshRun::getStartedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(RadarRefreshRun::getId));
     }
 
     public List<RadarRefreshStep> findSteps(Long runId) {
-        return jdbc.query("SELECT * FROM radar_refresh_step WHERE run_id=? ORDER BY id", stepMapper(), runId);
+        List<RadarRefreshStep> values = new ArrayList<RadarRefreshStep>(store.read().getRunSteps()
+                .getOrDefault(runId, java.util.Collections.emptyList()));
+        values.sort(Comparator.comparing(RadarRefreshStep::getId));
+        return values;
     }
 
-    private Optional<RadarRefreshRun> findByKey(String key) {
-        List<RadarRefreshRun> values = jdbc.query("SELECT * FROM radar_refresh_run WHERE run_key=?", runMapper(), key);
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    private RadarRefreshRun requireRun(RadarCacheState state, Long id) {
+        RadarRefreshRun value = state.getRuns().get(id);
+        if (value == null) {
+            throw new IllegalStateException("雷达生产批次不存在: " + id);
+        }
+        return value;
     }
 
-    private Optional<RadarRefreshRun> findById(Long id) {
-        List<RadarRefreshRun> values = jdbc.query("SELECT * FROM radar_refresh_run WHERE id=?", runMapper(), id);
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    private Optional<RadarRefreshStep> findStep(RadarCacheState state, Long runId, String stepCode) {
+        return state.getRunSteps().getOrDefault(runId, java.util.Collections.emptyList()).stream()
+                .filter(value -> stepCode.equals(value.getStepCode())).findFirst();
     }
 
-    private Optional<RadarRefreshStep> findStep(Long runId, String stepCode) {
-        List<RadarRefreshStep> values = jdbc.query("SELECT * FROM radar_refresh_step WHERE run_id=? AND step_code=?",
-                stepMapper(), runId, stepCode);
-        return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
+    private String emptyToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value;
     }
-
-    private org.springframework.jdbc.core.RowMapper<RadarRefreshRun> runMapper() {
-        return (rs, rowNum) -> {
-            RadarRefreshRun value = new RadarRefreshRun();
-            value.setId(rs.getLong("id")); value.setRunKey(rs.getString("run_key"));
-            value.setTriggerType(rs.getString("trigger_type")); value.setStatus(rs.getString("status"));
-            value.setStartedAt(TimeUtil.localDateTime(rs, "started_at"));
-            value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
-            value.setSourceCount(rs.getInt("source_count")); value.setSignalCount(rs.getInt("signal_count"));
-            value.setEventCount(rs.getInt("event_count")); value.setWarning(rs.getString("warning"));
-            value.setError(rs.getString("error")); return value;
-        };
-    }
-
-    private org.springframework.jdbc.core.RowMapper<RadarRefreshStep> stepMapper() {
-        return (rs, rowNum) -> {
-            RadarRefreshStep value = new RadarRefreshStep(); value.setId(rs.getLong("id"));
-            value.setRunId(rs.getLong("run_id")); value.setStepCode(rs.getString("step_code"));
-            value.setStatus(rs.getString("status")); value.setStartedAt(TimeUtil.localDateTime(rs, "started_at"));
-            value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at")); value.setInputCount(rs.getInt("input_count"));
-            value.setOutputCount(rs.getInt("output_count")); value.setDetails(rs.getString("details"));
-            value.setError(rs.getString("error")); return value;
-        };
-    }
-
-    private String emptyToNull(String value) { return value == null || value.trim().isEmpty() ? null : value; }
 }

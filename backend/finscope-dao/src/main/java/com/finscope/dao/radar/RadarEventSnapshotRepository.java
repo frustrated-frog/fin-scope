@@ -1,67 +1,43 @@
 package com.finscope.dao.radar;
 
-import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.radar.RadarEventSnapshot;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public class RadarEventSnapshotRepository {
-    private final JdbcTemplate jdbc;
-
-    public RadarEventSnapshotRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    @Resource
+    private RedisRadarCacheStore store;
 
     public RadarEventSnapshot save(RadarEventSnapshot snapshot) {
-        jdbc.update("INSERT INTO radar_event_snapshot(event_id,snapshot_at,signal_count,independent_source_count,"
-                        + "velocity_score,hotness_score,confirmation_score,freshness_score,rank_trend_score,"
-                        + "confidence_score,score_version,lifecycle_state,explanation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                        + "ON CONFLICT(event_id,snapshot_at) DO UPDATE SET signal_count=excluded.signal_count,"
-                        + "independent_source_count=excluded.independent_source_count,velocity_score=excluded.velocity_score,"
-                        + "hotness_score=excluded.hotness_score,confirmation_score=excluded.confirmation_score,"
-                        + "freshness_score=excluded.freshness_score,rank_trend_score=excluded.rank_trend_score,"
-                        + "confidence_score=excluded.confidence_score,score_version=excluded.score_version,"
-                        + "lifecycle_state=excluded.lifecycle_state,explanation=excluded.explanation",
-                snapshot.getEventId(), TimeUtil.text(snapshot.getSnapshotAt()), snapshot.getSignalCount(),
-                snapshot.getIndependentSourceCount(), snapshot.getVelocityScore(), snapshot.getHotnessScore(),
-                snapshot.getConfirmationScore(), snapshot.getFreshnessScore(), snapshot.getRankTrendScore(),
-                snapshot.getConfidenceScore(), snapshot.getScoreVersion(), snapshot.getLifecycleState(),
-                snapshot.getExplanation());
-        return jdbc.queryForObject("SELECT * FROM radar_event_snapshot WHERE event_id=? AND snapshot_at=?",
-                mapper(), snapshot.getEventId(), TimeUtil.text(snapshot.getSnapshotAt()));
+        return store.update(state -> {
+            snapshot.setId(store.stableId("snapshot", snapshot.getEventId() + ":" + snapshot.getSnapshotAt()));
+            List<RadarEventSnapshot> values = state.getSnapshots().computeIfAbsent(snapshot.getEventId(),
+                    ignored -> new ArrayList<RadarEventSnapshot>());
+            values.removeIf(value -> snapshot.getSnapshotAt().equals(value.getSnapshotAt()));
+            values.add(snapshot);
+            return snapshot;
+        });
     }
 
     public Optional<RadarEventSnapshot> findLatestBefore(Long eventId, LocalDateTime before) {
-        List<RadarEventSnapshot> values = jdbc.query("SELECT * FROM radar_event_snapshot WHERE event_id=? AND snapshot_at<? "
-                        + "ORDER BY snapshot_at DESC,id DESC LIMIT 1", mapper(), eventId, TimeUtil.text(before));
-        return values.isEmpty() ? Optional.<RadarEventSnapshot>empty() : Optional.of(values.get(0));
+        return store.read().getSnapshots().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
+                .filter(value -> value.getSnapshotAt() != null && value.getSnapshotAt().isBefore(before))
+                .max(Comparator.comparing(RadarEventSnapshot::getSnapshotAt).thenComparing(RadarEventSnapshot::getId));
     }
 
-    /**
-     * 清理历史快照：事件已离开雷达（EXPIRED）的快照立即删除（其趋势历史不再有展示价值），
-     * 其余事件只保留 keepAfter 之后（默认最近 7 天）的快照，避免快照表随生产批次无限膨胀。
-     * 每次生产批次结束时调用一次即可。
-     */
     public void deleteExpired(LocalDateTime keepAfter) {
-        jdbc.update("DELETE FROM radar_event_snapshot WHERE snapshot_at<? OR event_id IN ("
-                        + "SELECT id FROM radar_event WHERE status='EXPIRED')",
-                TimeUtil.text(keepAfter));
-    }
-
-    private org.springframework.jdbc.core.RowMapper<RadarEventSnapshot> mapper() {
-        return (rs, rowNum) -> {
-            RadarEventSnapshot value = new RadarEventSnapshot();
-            value.setId(rs.getLong("id")); value.setEventId(rs.getLong("event_id"));
-            value.setSnapshotAt(TimeUtil.localDateTime(rs, "snapshot_at")); value.setSignalCount(rs.getInt("signal_count"));
-            value.setIndependentSourceCount(rs.getInt("independent_source_count")); value.setVelocityScore(rs.getDouble("velocity_score"));
-            value.setHotnessScore(rs.getInt("hotness_score")); value.setConfirmationScore(rs.getDouble("confirmation_score"));
-            value.setFreshnessScore(rs.getDouble("freshness_score")); value.setRankTrendScore(rs.getDouble("rank_trend_score"));
-            value.setConfidenceScore(rs.getInt("confidence_score")); value.setScoreVersion(rs.getString("score_version"));
-            value.setLifecycleState(rs.getString("lifecycle_state"));
-            value.setExplanation(rs.getString("explanation")); return value;
-        };
+        store.update(state -> {
+            for (List<RadarEventSnapshot> values : state.getSnapshots().values()) {
+                values.removeIf(value -> value.getSnapshotAt() == null || value.getSnapshotAt().isBefore(keepAfter));
+            }
+            return null;
+        });
     }
 }
