@@ -72,6 +72,21 @@ class NewsFeedServiceTest {
     }
 
     @Test
+    void excludesNewsOlderThanTheAbsoluteThirtySixHourWindow() {
+        ResearchMaterialGateway gateway = mock(ResearchMaterialGateway.class);
+        ResearchMaterial current = material("CLS_NEWS_FLASH", "CLS", "窗口内", "当前内容", 9, 45);
+        ResearchMaterial expired = material("THS_NEWS_FLASH", "THS", "已过期", "历史内容", 9, 30);
+        expired.setPublishedAt(LocalDateTime.of(2026, 7, 28, 21, 59));
+        when(gateway.readNewsFlashSources(argThat(request -> true)))
+                .thenReturn(new ResearchMaterialGatewayResult(Arrays.asList(expired, current), Collections.emptyList()));
+
+        NewsFeedSnapshot result = new NewsFeedService(gateway, fixedClock()).load(20);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("窗口内", result.getItems().get(0).getTitle());
+    }
+
+    @Test
     void returnsAllItemsImmediatelyAndSchedulesAgentClassification() {
         ResearchMaterialGateway gateway = gatewayWithTwoItems();
         NewsClassificationRepository classifications = mock(NewsClassificationRepository.class);

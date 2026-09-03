@@ -42,14 +42,14 @@ public class ResearchMaterialGateway {
                                    ProviderRoutePolicy routePolicy,
                                    ProviderRequestGuard guard) {
         this(providers, routePolicy, guard, ResearchMaterialCacheRepository.noop(), Runnable::run,
-                Duration.ofMinutes(4), Duration.ofMinutes(2));
+                Duration.ofMinutes(4), Duration.ofHours(36));
     }
 
     public ResearchMaterialGateway(List<ResearchMaterialProvider> providers,
                                    ProviderRoutePolicy routePolicy,
                                    ProviderRequestGuard guard,
                                    ResearchMaterialCacheRepository cache) {
-        this(providers, routePolicy, guard, cache, Runnable::run, Duration.ofMinutes(4), Duration.ofMinutes(2));
+        this(providers, routePolicy, guard, cache, Runnable::run, Duration.ofMinutes(4), Duration.ofHours(36));
     }
 
     @Autowired
@@ -59,10 +59,10 @@ public class ResearchMaterialGateway {
                                    ResearchMaterialCacheRepository cache,
                                    @Qualifier("newsFetchExecutor") Executor newsFetchExecutor,
                                    @Value("${finscope.redis.cache.research-material-ttl-seconds:240}") long cacheTtlSeconds,
-                                   @Value("${finscope.news.source-snapshot-ttl-seconds:120}") long sourceSnapshotTtlSeconds) {
+                                   @Value("${finscope.ephemeral-content.ttl-hours:36}") long ephemeralTtlHours) {
         this(providers, routePolicy, guard, cache, newsFetchExecutor,
                 Duration.ofSeconds(Math.max(1L, cacheTtlSeconds)),
-                Duration.ofSeconds(Math.max(1L, sourceSnapshotTtlSeconds)));
+                Duration.ofHours(Math.max(1L, ephemeralTtlHours)));
     }
 
     private ResearchMaterialGateway(List<ResearchMaterialProvider> providers,
@@ -80,7 +80,7 @@ public class ResearchMaterialGateway {
         this.cacheTtl = cacheTtl == null || cacheTtl.isNegative() || cacheTtl.isZero()
                 ? Duration.ofMinutes(4) : cacheTtl;
         this.sourceSnapshotTtl = sourceSnapshotTtl == null || sourceSnapshotTtl.isNegative() || sourceSnapshotTtl.isZero()
-                ? Duration.ofMinutes(2) : sourceSnapshotTtl;
+                ? Duration.ofHours(36) : sourceSnapshotTtl;
         this.newsFetchExecutor = newsFetchExecutor == null ? Runnable::run : newsFetchExecutor;
     }
 

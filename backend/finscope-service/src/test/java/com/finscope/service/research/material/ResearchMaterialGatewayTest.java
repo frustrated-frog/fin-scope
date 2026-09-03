@@ -114,6 +114,7 @@ class ResearchMaterialGatewayTest {
         assertEquals(2, result.getMaterials().size());
         assertTrue(result.getWarnings().get(0).contains("FAILED"));
         assertTrue(cache.entries.containsKey("finscope:news-source:HEALTHY"));
+        assertEquals(Duration.ofHours(36), cache.lastTtl);
     }
 
     @Test
@@ -175,6 +176,7 @@ class ResearchMaterialGatewayTest {
         private final Map<String, ResearchMaterialCacheEntry> entries = new LinkedHashMap<String, ResearchMaterialCacheEntry>();
         private int reads;
         private int writes;
+        private Duration lastTtl;
 
         private FakeCache() { }
 
@@ -189,6 +191,7 @@ class ResearchMaterialGatewayTest {
         @Override
         public void put(String key, ResearchMaterialCacheEntry value, Duration ttl) {
             writes++;
+            lastTtl = ttl;
             entries.put(key, value);
             entry = value;
         }

@@ -24,7 +24,7 @@ import java.util.LinkedHashMap;
 public class RadarSnapshotProjectionService {
     public static final String DEFAULT_RADAR_VARIANT = "category=ALL&watchlist=false&limit=20&state=ALL";
     public static final String HOTSPOT_VARIANT = "hotspots";
-    private static final Duration TTL = Duration.ofMinutes(10);
+    private static final Duration TTL = Duration.ofHours(36);
 
     private final ViewSnapshotCacheService snapshots;
     private final ViewRevisionService revisions;

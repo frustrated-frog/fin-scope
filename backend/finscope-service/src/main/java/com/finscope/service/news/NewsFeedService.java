@@ -76,6 +76,9 @@ public class NewsFeedService {
         ResearchMaterialGatewayResult result = gateway.readNewsFlashSources(
                 new ResearchMaterialRequest("000001", "", 50));
         List<ResearchMaterial> ordered = new ArrayList<ResearchMaterial>(result.getMaterials());
+        LocalDateTime cutoff = LocalDateTime.now(clock).minusHours(36);
+        ordered.removeIf(material -> material.getPublishedAt() == null
+                || material.getPublishedAt().isBefore(cutoff));
         ordered.sort(Comparator.comparing(ResearchMaterial::getPublishedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
 

@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.function.Supplier;
 
@@ -25,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -55,6 +57,8 @@ class NewsFeedControllerTest {
                 .andExpect(jsonPath("$.data.items").isArray());
 
         verify(newsFeedService).load("COMPANY", 25);
+        verify(snapshots).readOrLoad(eq("news"), eq("category=COMPANY&limit=25"),
+                eq(Duration.ofHours(36)), any());
     }
 
     @Test

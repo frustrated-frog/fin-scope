@@ -10,6 +10,7 @@ import com.finscope.service.dashboard.DashboardHotspotRankingService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -60,7 +61,9 @@ class RadarSnapshotProjectionServiceTest {
         verify(revisions).publishBatch(revisionsToPublish, run.getCompletedAt());
         ArgumentCaptor<Object> radarView = ArgumentCaptor.forClass(Object.class);
         verify(snapshots).write(eq("radar"), eq(4L), eq(RadarSnapshotProjectionService.DEFAULT_RADAR_VARIANT),
-                radarView.capture(), any());
+                radarView.capture(), eq(Duration.ofHours(36)));
+        verify(snapshots).write(eq("dashboard"), eq(9L), eq(RadarSnapshotProjectionService.HOTSPOT_VARIANT),
+                any(), eq(Duration.ofHours(36)));
         ResearchRadarView projected = (ResearchRadarView) radarView.getValue();
         assertTrue(projected.getEvents().get(0).isFollowed());
         assertTrue("COMPLETED".equals(projected.getEvents().get(0).getInterpretationStatus()));

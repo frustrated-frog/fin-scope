@@ -56,7 +56,7 @@ public class NewsFeedController {
         String normalizedCategory = category == null ? "ALL" : category.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 100));
         JsonNode data = snapshots.readOrLoad("news", "category=" + normalizedCategory + "&limit=" + normalizedLimit,
-                Duration.ofSeconds(30), () -> newsFeedService.load(normalizedCategory, normalizedLimit));
+                Duration.ofHours(36), () -> newsFeedService.load(normalizedCategory, normalizedLimit));
         return ApiResponses.success(data);
     }
 
