@@ -46,7 +46,7 @@
 }
 .holdings-lab-hero h3 { font-size: clamp(25px, 3vw, 38px); letter-spacing: -.035em; margin: 0 0 9px; }
 .holdings-lab-hero span { color: #9baba8; font-size: 13px; }
-.holdings-lab-hero > button,
+.holdings-hero-actions > button,
 .holding-transaction-form footer button[type='submit'] {
   background: var(--holding-green);
   border: 0;
@@ -56,6 +56,8 @@
   font-weight: 750;
   padding: 12px 19px;
 }
+.holdings-hero-actions { display: flex; gap: 9px; }
+.holdings-hero-actions > button.secondary { background: rgba(84, 215, 238, .07); border: 1px solid rgba(84, 215, 238, .2); box-shadow: none; color: #a8dce2; }
 
 .holdings-lab-tabs {
   align-items: center;
@@ -115,7 +117,7 @@
   border-bottom: 1px solid rgba(148, 181, 171, .1);
   display: grid;
   gap: 20px;
-  grid-template-columns: minmax(150px, 1.35fr) repeat(3, minmax(100px, 1fr)) minmax(110px, 1fr);
+  grid-template-columns: minmax(150px, 1.35fr) repeat(3, minmax(100px, 1fr)) minmax(110px, 1fr) auto;
   min-height: 88px;
   padding: 14px 21px;
 }
@@ -129,6 +131,9 @@
 .holding-position-action { border-left: 1px solid var(--holding-line); padding-left: 18px; }
 .holding-position-action[data-action='ALLOW_ADD'] b { color: var(--holding-green); }
 .holding-position-action[data-action='EXIT_TRIGGERED'] b, .holding-position-action[data-action='REDUCE_CONCENTRATION'] b { color: var(--holding-red); }
+.holding-position-open { background: rgba(84, 215, 238, .055); border: 1px solid rgba(84, 215, 238, .13); border-radius: 10px; color: #8eb9bc; font-size: 10px; padding: 9px 10px; white-space: nowrap; }
+.holding-position-open span { color: var(--holding-cyan); margin-left: 3px; }
+.holding-position-open:hover { background: rgba(84, 215, 238, .1); color: #c6ebee; }
 
 .holdings-risk-rail { padding-bottom: 20px; }
 .holding-gauge { display: grid; gap: 8px; padding: 17px 20px 3px; }
@@ -139,6 +144,10 @@
 .holding-gauge-track i { background: linear-gradient(90deg, var(--holding-cyan), var(--holding-green)); border-radius: inherit; display: block; height: 100%; }
 .holding-gauge[data-warn='true'] b { color: var(--holding-red); }
 .holding-gauge[data-warn='true'] .holding-gauge-track i { background: var(--holding-red); }
+.holding-cash-untracked { background: rgba(208, 168, 105, .055); border: 1px solid rgba(208, 168, 105, .12); border-radius: 12px; display: grid; gap: 5px; margin: 17px 20px 0; padding: 13px; }
+.holding-cash-untracked span { color: #887b69; font-size: 10px; }
+.holding-cash-untracked b { color: #d0a869; font-size: 13px; }
+.holding-cash-untracked p { color: #7e8179; font-size: 10px; line-height: 1.55; margin: 2px 0 0; }
 .holdings-boundary { background: rgba(82, 224, 174, .055); border: 1px solid rgba(82, 224, 174, .12); border-radius: 12px; margin: 19px 20px 0; padding: 13px; }
 .holdings-boundary b { color: var(--holding-green); font-size: 11px; }
 .holdings-boundary p { color: #82928e; font-size: 11px; line-height: 1.65; margin: 6px 0 0; }
@@ -154,6 +163,71 @@
 .transaction-pill[data-type='SELL'], .transaction-pill[data-type='CASH_WITHDRAWAL'] { color: #ffad80; }
 .transaction-pill[data-type='REVERSAL'] { color: #899792; }
 .holding-link { background: transparent; border: 0; color: #8aa39c; font-size: 11px; padding: 5px; }
+.holding-link.primary { color: var(--holding-cyan); }
+.holding-ledger-actions { align-items: flex-start; display: flex; flex-direction: column; }
+
+.holding-analysis-overlay { align-items: stretch; backdrop-filter: blur(11px); background: rgba(3, 9, 13, .72); display: flex; inset: 0; justify-content: flex-end; position: fixed; z-index: 1200; }
+.holding-analysis-drawer { background: linear-gradient(155deg, #101e25 0%, #0b151b 60%, #0c171c 100%); border-left: 1px solid rgba(84, 215, 238, .19); box-shadow: -28px 0 70px rgba(0, 0, 0, .32); color: var(--holding-ink); height: 100%; overflow-y: auto; width: min(1080px, 92vw); }
+.holding-analysis-header { align-items: center; background: rgba(9, 18, 23, .88); border-bottom: 1px solid var(--holding-line); display: flex; justify-content: space-between; padding: 25px 30px; position: sticky; top: 0; z-index: 3; }
+.holding-analysis-header span, .holding-section-title span { color: var(--holding-cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-weight: 700; letter-spacing: .15em; }
+.holding-analysis-header h3 { font-size: 25px; letter-spacing: -.035em; margin: 5px 0 3px; }
+.holding-analysis-header p { color: #70817d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; margin: 0; }
+.holding-analysis-header-result { align-items: center; display: flex; gap: 22px; }
+.holding-analysis-header-result strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 26px; }
+.holding-analysis-header-result button { background: rgba(255, 255, 255, .045); border: 1px solid var(--holding-line); border-radius: 50%; color: #91a19d; font-size: 21px; height: 36px; width: 36px; }
+.holding-analysis-body { display: grid; gap: 15px; padding: 22px 28px 38px; }
+.holding-analysis-loading { align-content: center; display: grid; justify-items: center; min-height: 70vh; }
+.holding-analysis-loading i { animation: holding-spin 1s linear infinite; border: 2px solid rgba(84, 215, 238, .12); border-top-color: var(--holding-cyan); border-radius: 50%; height: 30px; width: 30px; }
+.holding-analysis-loading b { font-size: 14px; margin-top: 16px; }
+.holding-analysis-loading span { color: #72827e; font-size: 10px; margin-top: 6px; }
+.holding-path-card, .holding-analysis-summary, .holding-forecast-card, .holding-analysis-notes { background: rgba(16, 29, 35, .78); border: 1px solid var(--holding-line); border-radius: 18px; }
+.holding-section-title { align-items: center; border-bottom: 1px solid var(--holding-line); display: flex; justify-content: space-between; padding: 17px 20px; }
+.holding-section-title h4 { font-size: 16px; margin: 4px 0 0; }
+.holding-section-title small { color: #6f817c; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+.holding-path-chart { display: block; height: clamp(260px, 34vw, 380px); overflow: visible; padding: 10px 12px 0; width: calc(100% - 24px); }
+.holding-path-chart text { fill: #6c7f7a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.holding-chart-grid { stroke: rgba(148, 181, 171, .11); stroke-width: 1; }
+.holding-chart-zero { stroke: rgba(210, 225, 220, .28); stroke-dasharray: 5 6; stroke-width: 1; }
+.holding-chart-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.holding-chart-line.positive { filter: drop-shadow(0 5px 9px rgba(82, 224, 174, .2)); stroke: var(--holding-green); }
+.holding-chart-line.negative { filter: drop-shadow(0 5px 9px rgba(255, 120, 120, .2)); stroke: var(--holding-red); }
+.holding-chart-entry { fill: #0e1d22; stroke: #d0a869; stroke-width: 3; }
+.holding-chart-last { fill: var(--holding-green); stroke: #d9fff1; stroke-width: 2; }
+.holding-path-caption { align-items: center; border-top: 1px solid var(--holding-line); color: #778985; display: flex; font-size: 9px; gap: 18px; padding: 12px 20px; }
+.holding-path-caption span { align-items: center; display: flex; gap: 6px; }
+.holding-path-caption i { border-radius: 99px; display: inline-block; height: 2px; width: 18px; }
+.holding-path-caption i.cost { background: #889690; }
+.holding-path-caption i.path { background: var(--holding-green); }
+.holding-path-caption em { font-style: normal; margin-left: auto; }
+.holding-path-unavailable { color: #72837e; display: grid; min-height: 220px; place-items: center; }
+.holding-analysis-summary { overflow: hidden; }
+.holding-position-facts { background: rgba(4, 12, 17, .25); display: grid; grid-template-columns: repeat(3, 1fr); }
+.holding-position-facts > div { border-right: 1px solid var(--holding-line); display: grid; gap: 6px; padding: 18px 20px; }
+.holding-position-facts > div:last-child { border-right: 0; }
+.holding-position-facts small, .holding-risk-grid small, .holding-forecast-grid small { color: #6f817c; font-size: 9px; }
+.holding-position-facts b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; }
+.holding-position-facts span, .holding-risk-grid span { color: #63746f; font-size: 9px; }
+.holding-risk-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+.holding-risk-grid article { border-right: 1px solid var(--holding-line); border-top: 1px solid var(--holding-line); display: grid; gap: 6px; min-height: 78px; padding: 15px 20px; }
+.holding-risk-grid article:nth-child(3n) { border-right: 0; }
+.holding-risk-grid b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+.holding-risk-grid article[data-tone='positive'] b { color: var(--holding-green); }
+.holding-risk-grid article[data-tone='negative'] b { color: var(--holding-red); }
+.holding-forecast-grid { display: grid; grid-template-columns: 1.25fr repeat(3, 1fr); padding: 18px 20px; }
+.holding-forecast-grid > div { border-right: 1px solid var(--holding-line); display: grid; gap: 6px; padding: 0 20px; }
+.holding-forecast-grid > div:first-child { padding-left: 0; }
+.holding-forecast-grid > div:last-child { border-right: 0; }
+.holding-forecast-grid b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; }
+.holding-forecast-grid .probability strong { color: var(--holding-cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 25px; }
+.holding-forecast-grid .probability span { color: #8da09a; font-size: 9px; }
+.holding-forecast-card footer { align-items: center; border-top: 1px solid var(--holding-line); color: #758783; display: flex; font-size: 9px; justify-content: space-between; padding: 11px 20px; }
+.holding-forecast-card footer code { color: #60746e; }
+.holding-forecast-empty { color: #788a85; padding: 25px 20px; }
+.holding-analysis-notes { padding: 15px 20px; }
+.holding-analysis-notes b { color: #d0a869; font-size: 10px; }
+.holding-analysis-notes p { color: #788a85; font-size: 10px; line-height: 1.55; margin: 5px 0 0; }
+
+.holdings-lab button:focus-visible { outline: 2px solid rgba(84, 215, 238, .8); outline-offset: 2px; }
 
 .holdings-diagnosis-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .diagnosis-card { padding: 22px; }
@@ -236,11 +310,12 @@
 .holding-transaction-form > footer .ghost-button { background: transparent; border: 1px solid var(--holding-line); border-radius: 10px; color: #90a09c; padding: 10px 17px; }
 
 @keyframes holding-pulse { 50% { box-shadow: 0 0 0 6px rgba(208, 168, 105, 0); opacity: .65; } }
+@keyframes holding-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1050px) {
   .holdings-metric-grid { grid-template-columns: repeat(2, 1fr); }
   .holdings-overview-grid { grid-template-columns: 1fr; }
-  .holding-position-row { grid-template-columns: minmax(160px, 1.3fr) repeat(2, 1fr); }
+  .holding-position-row { grid-template-columns: minmax(160px, 1.3fr) repeat(2, 1fr) auto; }
   .holding-position-action { border-left: 0; padding-left: 0; }
   .holdings-diagnosis-grid { grid-template-columns: 1fr; }
 }
@@ -250,6 +325,8 @@
   .holdings-metric-grid { grid-template-columns: 1fr; }
   .holding-position-row { grid-template-columns: 1fr 1fr; }
   .holding-position-name { grid-column: 1 / -1; }
+  .holdings-hero-actions { width: 100%; }
+  .holdings-hero-actions button { flex: 1; }
   .shadow-numbers { grid-template-columns: 1fr 1fr; row-gap: 16px; }
   .shadow-numbers div:nth-child(2) { border-right: 0; }
   .shadow-evidence { grid-template-columns: 1fr; }
@@ -257,9 +334,21 @@
   .validation-list article { grid-template-columns: 1fr 1fr; }
   .validation-list article > div:first-child { grid-column: 1 / -1; }
   .holding-form-grid, .holding-form-grid.fees { grid-template-columns: 1fr 1fr; }
+  .holding-analysis-drawer { width: 100vw; }
+  .holding-analysis-header { padding: 20px; }
+  .holding-analysis-body { padding: 14px 14px 28px; }
+  .holding-path-chart { height: 250px; }
+  .holding-position-facts, .holding-risk-grid { grid-template-columns: 1fr 1fr; }
+  .holding-position-facts > div:nth-child(2), .holding-risk-grid article:nth-child(2n) { border-right: 0; }
+  .holding-position-facts > div:last-child { border-right: 1px solid var(--holding-line); grid-column: 1 / -1; }
+  .holding-risk-grid article:nth-child(3n) { border-right: 1px solid var(--holding-line); }
+  .holding-forecast-grid { grid-template-columns: 1fr 1fr; row-gap: 18px; }
+  .holding-forecast-grid > div:nth-child(2) { border-right: 0; }
+  .holding-forecast-card footer { align-items: flex-start; flex-direction: column; gap: 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .validation-status i { animation: none; }
   .holdings-lab-tabs button { transition: none; }
+  .holding-analysis-loading i { animation: none; }
 }

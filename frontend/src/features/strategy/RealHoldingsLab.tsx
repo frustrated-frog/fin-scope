@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import { HoldingAnalysisDrawer, type HoldingAnalysis } from './HoldingAnalysisDrawer';
 import './RealHoldingsLab.css';
 
 type LabTab = 'overview' | 'ledger' | 'diagnosis' | 'shadow' | 'validation';
@@ -9,13 +10,14 @@ type Position = {
   instrumentCode: string; instrumentName?: string; quantity: number; totalCost: number;
   averageCost: number; lastPrice?: number; quoteDate?: string; quoteQuality?: string;
   marketValue?: number; realizedProfit: number; unrealizedProfit?: number;
-  dividendIncome: number; totalProfit?: number; weight: number;
+  dividendIncome: number; totalProfit?: number; weight: number; openedOn?: string;
+  openingBalance?: boolean;
 };
 
 type StockAccount = {
   cash: number; marketValue: number; totalEquity: number; realizedProfit: number;
   unrealizedProfit: number; dividendIncome: number; totalProfit: number;
-  concentration: number; calculatedAt?: string; positions: Position[];
+  concentration: number; cashTracked?: boolean; calculatedAt?: string; positions: Position[];
 };
 
 type StockTransaction = {
@@ -37,7 +39,7 @@ type HoldingDecision = {
 
 const emptyAccount: StockAccount = {
   cash: 0, marketValue: 0, totalEquity: 0, realizedProfit: 0, unrealizedProfit: 0,
-  dividendIncome: 0, totalProfit: 0, concentration: 0, positions: []
+  dividendIncome: 0, totalProfit: 0, concentration: 0, cashTracked: false, positions: []
 };
 
 const transactionLabels: Record<TransactionType, string> = {
@@ -50,8 +52,8 @@ const actionLabels: Record<HoldingDecision['action'], string> = {
   EXIT_TRIGGERED: '退出条件触发', ABSTAIN: '证据不足'
 };
 
-const initialForm = () => ({
-  type: 'BUY' as TransactionType, tradeDate: new Date().toISOString().slice(0, 10), code: '',
+const initialForm = (type: TransactionType = 'BUY') => ({
+  type, tradeDate: new Date().toISOString().slice(0, 10), code: '',
   quantity: '', price: '', commission: '', stampDuty: '', transferFee: '', otherFee: '',
   cashAmount: '', note: ''
 });
@@ -65,6 +67,9 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
   const [refreshing, setRefreshing] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(initialForm());
+  const [analysisTarget, setAnalysisTarget] = useState<Position>();
+  const [analysis, setAnalysis] = useState<HoldingAnalysis>();
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   async function load(autoEvaluate = true) {
     try {
@@ -133,6 +138,39 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
     }
   }
 
+  function openForm(type: TransactionType) {
+    setForm(initialForm(type));
+    setFormOpen(true);
+  }
+
+  async function reclassifyOpening(item: StockTransaction) {
+    try {
+      await api(`/api/strategy/stock-transactions/${item.id}/reclassify-opening`, {
+        method: 'POST', body: JSON.stringify({
+          clientRequestId: uniqueRequestId(), tradeDate: new Date().toISOString().slice(0, 10)
+        })
+      });
+      await load(false);
+      addToast('已追加冲正并更正为期初持仓', 'success');
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '期初持仓更正失败', 'error');
+    }
+  }
+
+  async function openAnalysis(position: Position) {
+    setAnalysisTarget(position);
+    setAnalysis(undefined);
+    setAnalysisLoading(true);
+    try {
+      setAnalysis(await api<HoldingAnalysis>(`/api/strategy/stock-positions/${encodeURIComponent(position.instrumentCode)}/analysis`));
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : '持仓分析暂不可用', 'error');
+      setAnalysisTarget(undefined);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }
+
   return <section className="holdings-lab">
     <header className="holdings-lab-hero">
       <div>
@@ -140,7 +178,10 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
         <h3>真实持仓策略实验室</h3>
         <span>人工记账、真实行情估值、独立仓位建议。系统只给可验证的动作许可，不替你下单。</span>
       </div>
-      <button type="button" onClick={() => setFormOpen(true)}>记录交易</button>
+      <div className="holdings-hero-actions">
+        <button type="button" className="secondary" onClick={() => openForm('BUY')}>记录新交易</button>
+        <button type="button" onClick={() => openForm('OPENING_BALANCE')}>补录已有持仓</button>
+      </div>
     </header>
 
     <nav className="holdings-lab-tabs" aria-label="真实持仓视图">
@@ -151,7 +192,7 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
     {loading ? <div className="holdings-lab-empty">正在重放交易账本并获取原始行情…</div> : null}
     {!loading && tab === 'overview' ? <>
       <div className="holdings-metric-grid">
-        <Metric label="账户净值" value={money(account.totalEquity)} note={`现金占比 ${percent(availableCashRate)}`} tone="primary" />
+        <Metric label={account.cashTracked ? '账户净值' : '股票资产'} value={money(account.totalEquity)} note={account.cashTracked ? `现金占比 ${percent(availableCashRate)}` : '现金未登记，仅统计股票资产'} tone="primary" />
         <Metric label="持仓市值" value={money(account.marketValue)} note={`${account.positions.length} 只真实持仓`} />
         <Metric label="累计盈亏" value={signedMoney(account.totalProfit)} note={`估算收益率 ${percent(profitRate)}`} tone={account.totalProfit >= 0 ? 'positive' : 'negative'} />
         <Metric label="已实现 + 分红" value={signedMoney(account.realizedProfit + account.dividendIncome)} note={`浮动盈亏 ${signedMoney(account.unrealizedProfit)}`} />
@@ -168,13 +209,14 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
                 <div><small>现价 / 均价</small><b>¥{fixed(position.lastPrice)} <em>/ ¥{fixed(position.averageCost)}</em></b></div>
                 <div><small>持仓盈亏</small><b className={(position.unrealizedProfit ?? 0) >= 0 ? 'up' : 'down'}>{signedMoney(position.unrealizedProfit ?? 0)}</b></div>
                 <div className="holding-position-action" data-action={decision?.action ?? 'ABSTAIN'}><small>影子动作</small><b>{decision ? actionLabels[decision.action] : '等待预测记录'}</b></div>
+                <button type="button" className="holding-position-open" aria-label={`查看${position.instrumentName || position.instrumentCode}持仓量化分析`} onClick={() => openAnalysis(position)}>展开分析 <span>↗</span></button>
               </article>;
             })}</div>}
         </section>
         <aside className="holdings-panel holdings-risk-rail">
           <PanelHead eyebrow="RISK RAIL" title="组合风险护栏" meta="不参与涨跌模型" />
           <Gauge label="单股集中度" value={account.concentration} warn={account.concentration > .65} />
-          <Gauge label="现金缓冲" value={availableCashRate} warn={availableCashRate < .1} inverse />
+          {account.cashTracked ? <Gauge label="现金缓冲" value={availableCashRate} warn={availableCashRate < .1} inverse /> : <div className="holding-cash-untracked"><span>现金缓冲</span><b>尚未登记</b><p>期初持仓不会虚构历史现金。需要组合仓位建议时，可补录当前可用现金。</p></div>}
           <div className="holdings-boundary"><b>边界声明</b><p>成本价与浮亏只用于解释真实账户，不作为预测因子；加仓至少满足一手、费用后优势和集中度约束。</p></div>
         </aside>
       </div>
@@ -185,8 +227,8 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
       {transactions.length === 0 ? <Empty title="账本仍为空" text="记录不会被直接修改；录错时系统会追加一条冲正事件。" /> : <div className="holdings-table-wrap"><table><thead><tr><th>日期</th><th>事件</th><th>标的</th><th>数量</th><th>成交价</th><th>现金 / 费用</th><th>备注</th><th /></tr></thead><tbody>{transactions.map(item => <tr key={item.id}>
         <td>{item.tradeDate}</td><td><span className="transaction-pill" data-type={item.type}>{transactionLabels[item.type]}</span></td>
         <td><b>{item.instrumentName || '账户资金'}</b><small>{item.instrumentCode || 'CASH'}</small></td><td>{item.quantity ?? '—'}</td><td>{item.price == null ? '—' : `¥${fixed(item.price)}`}</td>
-        <td>{item.cashAmount ? money(item.cashAmount) : `费用 ${money(item.totalFees)}`}</td><td>{item.note || '—'}</td>
-        <td>{item.type !== 'REVERSAL' && !transactions.some(candidate => candidate.reversalOfId === item.id) ? <button type="button" className="holding-link" onClick={() => reverse(item)}>冲正</button> : <span>已冻结</span>}</td>
+        <td>{item.cashAmount ? money(item.cashAmount) : `费用 ${money(item.totalFees)}`}</td><td>{item.note || '—'}<small>录入 {dateTime(item.createdAt)}</small></td>
+        <td>{item.type !== 'REVERSAL' && !transactions.some(candidate => candidate.reversalOfId === item.id) ? <div className="holding-ledger-actions">{item.type === 'BUY' ? <button type="button" className="holding-link primary" onClick={() => reclassifyOpening(item)}>改为期初</button> : null}<button type="button" className="holding-link" onClick={() => reverse(item)}>冲正</button></div> : <span>已冻结</span>}</td>
       </tr>)}</tbody></table></div>}
     </section> : null}
 
@@ -231,9 +273,10 @@ export function RealHoldingsLab({ addToast }: { addToast: (message: string, type
       {needsCash(form.type) ? <label>现金金额<input aria-label="现金金额" type="number" min="0" step="0.01" value={form.cashAmount} onChange={event => setForm({ ...form, cashAmount: event.target.value })} required /></label> : null}
       {needsPrice(form.type) ? <details><summary>交易费用（可选）</summary><div className="holding-form-grid fees"><label>佣金<input type="number" min="0" step="0.01" value={form.commission} onChange={event => setForm({ ...form, commission: event.target.value })} /></label><label>印花税<input type="number" min="0" step="0.01" value={form.stampDuty} onChange={event => setForm({ ...form, stampDuty: event.target.value })} /></label><label>过户费<input type="number" min="0" step="0.01" value={form.transferFee} onChange={event => setForm({ ...form, transferFee: event.target.value })} /></label><label>其他费用<input type="number" min="0" step="0.01" value={form.otherFee} onChange={event => setForm({ ...form, otherFee: event.target.value })} /></label></div></details> : null}
       <label>备注<textarea value={form.note} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="记录交易原因或核对信息" /></label>
-      <div className="holding-form-boundary">A 股买入必须为 100 股整数倍；卖出允许按真实余量记录。</div>
+      <div className="holding-form-boundary">{form.type === 'OPENING_BALANCE' ? '用于补录系统启用前已持有的股票：只建立持仓数量和成本，不扣减账户现金。' : 'A 股买入必须为 100 股整数倍；卖出允许按真实余量记录。'}</div>
       <footer><button type="button" className="ghost-button" onClick={() => setFormOpen(false)}>取消</button><button type="submit">写入不可变账本</button></footer>
     </form></div> : null}
+    {analysisTarget ? <HoldingAnalysisDrawer analysis={analysis} loading={analysisLoading} targetName={analysisTarget.instrumentName || analysisTarget.instrumentCode} targetCode={analysisTarget.instrumentCode} onClose={() => { setAnalysisTarget(undefined); setAnalysis(undefined); }} /> : null}
   </section>;
 }
 
