@@ -1,11 +1,14 @@
 package com.finscope.service.news;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.agent.AgentRunRepository;
+import com.finscope.dao.cache.EphemeralContentCacheProperties;
 import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsClassificationRepository;
 import com.finscope.domain.news.NewsCategory;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -36,6 +39,10 @@ class NewsClassificationCoordinatorTest {
             context.registerBean(NewsCategoryRepository.class, () -> mock(NewsCategoryRepository.class));
             context.registerBean(NewsClassificationAgent.class, () -> mock(NewsClassificationAgent.class));
             context.registerBean(AgentRunRepository.class, () -> mock(AgentRunRepository.class));
+            context.registerBean(StringRedisTemplate.class, () -> mock(StringRedisTemplate.class));
+            context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
+            context.registerBean(EphemeralContentCacheProperties.class,
+                    () -> new EphemeralContentCacheProperties());
             context.registerBean("newsClassificationExecutor", Executor.class, () -> Runnable::run);
             context.register(NewsClassificationCoordinator.class);
 

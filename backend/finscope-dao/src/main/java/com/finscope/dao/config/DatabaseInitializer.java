@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.quant.QuantStrategyCatalogRepository;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,7 +21,7 @@ import java.util.Map;
 public class DatabaseInitializer implements InitializingBean {
     @Resource
     private JdbcTemplate jdbcTemplate;
-    @Resource
+    @Autowired(required = false)
     private EphemeralContentDataMigration ephemeralContentDataMigration;
     @Value("${finscope.data-root:../data}")
     private String dataRoot;

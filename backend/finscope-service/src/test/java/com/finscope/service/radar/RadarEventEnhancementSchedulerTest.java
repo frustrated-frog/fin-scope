@@ -1,10 +1,14 @@
 package com.finscope.service.radar;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.dao.cache.EphemeralContentCacheProperties;
 import com.finscope.dao.radar.RadarRepository;
+import com.finscope.dao.radar.RedisRadarCacheStore;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarSignal;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -25,6 +29,11 @@ class RadarEventEnhancementSchedulerTest {
             context.registerBean(RadarCanonicalTitleAgent.class, () -> mock(RadarCanonicalTitleAgent.class));
             context.registerBean(RadarEvidenceOrchestrator.class, () -> mock(RadarEvidenceOrchestrator.class));
             context.registerBean(RadarRepository.class, () -> mock(RadarRepository.class));
+            context.registerBean(RedisRadarCacheStore.class, () -> mock(RedisRadarCacheStore.class));
+            context.registerBean(StringRedisTemplate.class, () -> mock(StringRedisTemplate.class));
+            context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
+            context.registerBean(EphemeralContentCacheProperties.class,
+                    () -> new EphemeralContentCacheProperties());
             context.registerBean(RadarSnapshotProjectionService.class,
                     () -> mock(RadarSnapshotProjectionService.class));
             context.registerBean("radarAgentExecutor", Executor.class, () -> Runnable::run);

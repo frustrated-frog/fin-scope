@@ -227,7 +227,7 @@ class ResearchRadarServiceTest {
         RadarEvidence external=new RadarEvidence();external.setTitle("公司公告");external.setSourceName("深交所");
         when(evidence.findByEventId(10L)).thenReturn(Collections.singletonList(external));
         AgentRun trace=new AgentRun();trace.setNodeName("radar-evidence-plan");trace.setStatus("SUCCESS");trace.setInput("完整提示词不应返回");trace.setOutput("actions=2");
-        when(runs.findBySubject("RADAR_EVENT",10L)).thenReturn(Collections.singletonList(trace));
+        when(repository.findAgentRunsBySubject("RADAR_EVENT",10L)).thenReturn(Collections.singletonList(trace));
 
         ResearchRadarView.EventDetail detail=service.detail(10L);
         assertEquals(1,detail.getEvidence().size());
