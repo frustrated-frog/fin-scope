@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
-import { RadarObservationList } from './RadarObservationList';
 import { RadarTimeline } from './RadarTimeline';
 import { RadarTrustPanel } from './RadarTrustPanel';
 import type { RadarEvent, RadarEventDetail, RadarInterpretation, RadarWorkspaceState } from './researchRadarTypes';
@@ -45,7 +44,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
   const interpretation = detail?.interpretation; const result = interpretation?.result;
   return <div className="radar-drawer-backdrop" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
     <aside className="radar-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="radar-detail-title">
-      <header><div><span>EVENT RESEARCH DOSSIER</span><h2 id="radar-detail-title">{event.title}</h2><div className="radar-drawer-state"><button type="button" aria-pressed={Boolean(detail?.workspaceState?.followed??event.followed)} onClick={()=>void updateState({followed:!(detail?.workspaceState?.followed??event.followed)})}>{detail?.workspaceState?.followed??event.followed?'取消关注':'关注变化'}</button><button type="button" onClick={()=>void updateState({disposition:'LATER'})}>稍后看</button><button type="button" onClick={()=>void updateState({disposition:'IGNORED'})}>忽略</button></div></div><button type="button" className="radar-drawer-close" aria-label="关闭事件解读" onClick={onClose}>×</button></header>
+      <header><div><span>EVENT RESEARCH DOSSIER</span><h2 id="radar-detail-title">{event.title}</h2><div className="radar-drawer-state"><button type="button" aria-pressed={Boolean(detail?.workspaceState?.followed??event.followed)} onClick={()=>void updateState({followed:!(detail?.workspaceState?.followed??event.followed)})}>{detail?.workspaceState?.followed??event.followed?'取消临时关注':'临时关注'}</button><button type="button" onClick={()=>void updateState({disposition:'LATER'})}>稍后看</button><button type="button" onClick={()=>void updateState({disposition:'IGNORED'})}>忽略</button></div></div><button type="button" className="radar-drawer-close" aria-label="关闭事件解读" onClick={onClose}>×</button></header>
       <nav className="radar-dossier-tabs" aria-label="事件详情栏目">{([['interpretation','解读'],['timeline','事件脉络'],['evidence','证据'],['tracking','跟踪']] as [Tab,string][]).map(([code,label])=><button type="button" key={code} className={tab===code?'active':''} aria-pressed={tab===code} onClick={()=>setTab(code)}>{label}</button>)}</nav>
       <div className="radar-detail-scroll">
         <section className="radar-detail-overview"><div><strong>{event.priorityScore}</strong><span>研究优先级</span></div><p>{event.summary}</p><small>{event.sourceCount} 个独立来源共同报道</small></section>
@@ -64,7 +63,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
           {detail?.agentTrace?.length?<details className="radar-agent-trace radar-drawer-trace"><summary>Agent 运行状态</summary><ol>{detail.agentTrace.map((trace,index)=><li key={`${trace.nodeName}-${index}`}><div><strong>{agentNodeLabel(trace.nodeName)}</strong><span>{trace.status} · {trace.durationMs}ms</span></div>{trace.summary?<p>{trace.summary}</p>:null}{trace.fallbackUsed?<small>已降级：{trace.fallbackReason||trace.errorType||'使用确定性结果'}</small>:null}</li>)}</ol></details>:null}
         </section>:null}
 
-        {tab==='tracking'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>下一步观察</h3><span>{detail?.observations?.filter((item)=>item.status==='OPEN').length??0} 项待验证</span></div><RadarObservationList eventId={event.id} items={detail?.observations} onChange={(observations)=>setDetail((current)=>current?{...current,observations}:current)}/>
+        {tab==='tracking'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>临时跟踪</h3><span>随事件缓存过期</span></div><p className="radar-empty-copy">需要长期保存和记录后续变化时，请先将事件记入大事记。</p>
           <div className="radar-research-links"><h3>关联研究结论</h3>{detail?.researchLinks?.length?<ul>{detail.researchLinks.map((link)=><li key={link.id}><div><strong>研究运行 #{link.researchRunId}</strong><span>{link.status}</span></div>{link.questionSnapshot?<p>{link.questionSnapshot}</p>:null}{link.summary?<small>{link.summary}</small>:null}</li>)}</ul>:<p className="radar-empty-copy">从事件卡片启动研究后，结论会回到这里。</p>}</div>
         </section>:null}
       </div>

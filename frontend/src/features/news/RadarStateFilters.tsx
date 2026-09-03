@@ -1,7 +1,7 @@
 import type { RadarEvent, RadarStateFilter } from './researchRadarTypes';
 
 const FILTERS: { code: RadarStateFilter; label: string }[] = [
-  { code: 'ALL', label: '进行中' }, { code: 'UNREAD', label: '未读' }, { code: 'FOLLOWED', label: '已关注' },
+  { code: 'ALL', label: '进行中' }, { code: 'UNREAD', label: '未读' }, { code: 'FOLLOWED', label: '临时关注' },
   { code: 'LATER', label: '稍后看' }, { code: 'IGNORED', label: '已忽略' }
 ];
 

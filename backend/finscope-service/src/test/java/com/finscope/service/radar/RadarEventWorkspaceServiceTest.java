@@ -36,17 +36,15 @@ class RadarEventWorkspaceServiceTest {
     }
 
     @Test
-    void openingAnEventMarksItReadAndCreatesTheDefaultObservation() {
+    void openingAnEventMarksItReadWithoutCreatingPersistentObservations() {
         RadarEvent event = event();
         RadarEventWorkspace.State state = new RadarEventWorkspace.State(); state.setEventId(10L);
         when(workspace.updateState(eq(10L), eq(true), eq(null), eq(null), anyString())).thenReturn(state);
-        when(workspace.ensureDefaultObservation(10L, "跟踪订单、指引与后续公告变化"))
-                .thenReturn(Collections.<RadarEventWorkspace.Observation>emptyList());
 
         RadarEventWorkspaceService.OpenedEvent opened = service.open(event);
 
         assertEquals(10L, opened.getState().getEventId());
-        verify(workspace).ensureDefaultObservation(10L, "跟踪订单、指引与后续公告变化");
+        verify(workspace, never()).ensureDefaultObservation(eq(10L), anyString());
     }
 
     @Test
@@ -57,8 +55,6 @@ class RadarEventWorkspaceServiceTest {
         RadarEventWorkspace.State updated = new RadarEventWorkspace.State(); updated.setEventId(10L); updated.setRead(true);
         when(workspace.findState(10L)).thenReturn(previous);
         when(workspace.updateState(eq(10L), eq(true), eq(null), eq(null), anyString())).thenReturn(updated);
-        when(workspace.ensureDefaultObservation(10L, "跟踪订单、指引与后续公告变化"))
-                .thenReturn(Collections.<RadarEventWorkspace.Observation>emptyList());
 
         service.open(event());
 
@@ -90,12 +86,12 @@ class RadarEventWorkspaceServiceTest {
         RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(10L);
         summary.setFollowed(true); summary.setLastViewedFingerprint("older-version");
         Map<Long,RadarEventWorkspace.Summary> summaries=new LinkedHashMap<Long,RadarEventWorkspace.Summary>();summaries.put(10L,summary);
-        when(workspace.createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("关注事件出现新变化"),eq("宁德时代发布新电池"))).thenReturn(true);
+        when(workspace.createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("临时关注事件出现新变化"),eq("宁德时代发布新电池"))).thenReturn(true);
 
         service.createChangeNotifications(Collections.singletonList(event),summaries);
 
         assertEquals(1,summary.getUnreadNotificationCount());
-        verify(workspace).createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("关注事件出现新变化"),eq("宁德时代发布新电池"));
+        verify(workspace).createNotification(eq(10L),eq("FOLLOWED_EVENT_CHANGED"),anyString(),eq("临时关注事件出现新变化"),eq("宁德时代发布新电池"));
     }
 
     @Test
@@ -119,7 +115,7 @@ class RadarEventWorkspaceServiceTest {
         RadarEventWorkspaceService.NotificationCenter center = service.notifications(30);
 
         assertEquals("DAILY_SUMMARY", center.getItems().get(0).getNotificationType());
-        assertEquals("新增事件 4 · 关注变化 2 · 待处理观察 3", center.getItems().get(0).getMessage());
+        assertEquals("新增事件 4 · 临时关注变化 2", center.getItems().get(0).getMessage());
         assertEquals(4, center.getTodayCount());
     }
 

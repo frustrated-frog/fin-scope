@@ -6,7 +6,6 @@ import com.finscope.service.radar.ResearchRadarView;
 import com.finscope.service.radar.RadarEventWorkspaceService;
 import com.finscope.service.radar.RadarResearchLinkService;
 import com.finscope.domain.radar.RadarEventWorkspace;
-import com.finscope.web.request.RadarObservationRequest;
 import com.finscope.web.request.UpdateRadarEventStateRequest;
 import com.finscope.web.request.RadarResearchLinkRequest;
 import com.finscope.web.response.ApiResponses;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -25,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
 import javax.annotation.Resource;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/research-radar")
@@ -79,7 +76,7 @@ public class ResearchRadarController {
         return ApiResponses.success(service.requestRefresh());
     }
 
-    /** 直接查询持久化关注清单；不读取雷达排行快照。 */
+    /** 直接查询当前 36 小时缓存窗口内的临时关注清单。 */
     @GetMapping("/followed")
     public ApiResponse<ResearchRadarView> followed(@RequestParam(defaultValue="20") int limit) {
         return ApiResponses.success(service.loadFollowed(limit));
@@ -118,57 +115,6 @@ public class ResearchRadarController {
     public ApiResponse<RadarEventWorkspace.State> updateState(@PathVariable Long id,
                                                               @RequestBody UpdateRadarEventStateRequest request) {
         return ApiResponses.success(workspace.updateState(id, request.getRead(), request.getFollowed(), request.getDisposition()));
-    }
-
-    /**
-     * 查询雷达事件的观察记录列表。
-     *
-     * @param id 雷达事件 ID。
-     * @return 该事件的观察记录列表。
-     */
-    @GetMapping("/events/{id}/observations")
-    public ApiResponse<List<RadarEventWorkspace.Observation>> observations(@PathVariable Long id) {
-        return ApiResponses.success(workspace.observations(id));
-    }
-
-    /**
-     * 新增雷达事件观察记录。
-     *
-     * @param id 雷达事件 ID。
-     * @param request 观察记录请求，包含观察内容。
-     * @return 新增的观察记录。
-     */
-    @PostMapping("/events/{id}/observations")
-    public ApiResponse<RadarEventWorkspace.Observation> addObservation(@PathVariable Long id,
-                                                                       @RequestBody RadarObservationRequest request) {
-        return ApiResponses.success(workspace.addObservation(id, request.getContent()));
-    }
-
-    /**
-     * 更新雷达事件观察记录状态。
-     *
-     * @param id 雷达事件 ID。
-     * @param observationId 观察记录 ID。
-     * @param request 观察记录请求，包含目标状态。
-     * @return 更新后的观察记录。
-     */
-    @PatchMapping("/events/{id}/observations/{observationId}")
-    public ApiResponse<RadarEventWorkspace.Observation> updateObservation(@PathVariable Long id,
-                                                                          @PathVariable Long observationId,
-                                                                          @RequestBody RadarObservationRequest request) {
-        return ApiResponses.success(workspace.updateObservation(id, observationId, request.getStatus()));
-    }
-
-    /**
-     * 删除雷达事件观察记录。
-     *
-     * @param id 雷达事件 ID。
-     * @param observationId 观察记录 ID。
-     * @return 204 No Content 响应，表示删除成功且无响应体。
-     */
-    @DeleteMapping("/events/{id}/observations/{observationId}")
-    public ResponseEntity<Void> deleteObservation(@PathVariable Long id, @PathVariable Long observationId) {
-        workspace.deleteObservation(id, observationId); return ResponseEntity.noContent().build();
     }
 
     /**

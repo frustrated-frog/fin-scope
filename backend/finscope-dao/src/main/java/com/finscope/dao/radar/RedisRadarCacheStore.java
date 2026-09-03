@@ -135,6 +135,7 @@ public class RedisRadarCacheStore {
             state.getInterpretations().remove(eventId);
             state.getUserStates().remove(eventId);
             state.getTimelines().remove(eventId);
+            state.getTimelineFingerprints().remove(eventId);
             state.getResearchLinks().remove(eventId);
         }
         state.getNotifications().removeIf(value -> value.getEventId() != null && expiredEventIds.contains(value.getEventId()));
@@ -159,7 +160,9 @@ public class RedisRadarCacheStore {
                 || state.getEventIdsByKey() == null || state.getEventSignals() == null || state.getSnapshots() == null
                 || state.getEvidence() == null || state.getInterpretations() == null || state.getPairDecisions() == null
                 || state.getRuns() == null || state.getRunSteps() == null || state.getUserStates() == null
-                || state.getTimelines() == null || state.getResearchLinks() == null || state.getNotifications() == null) {
+                || state.getTimelines() == null || state.getTimelineFingerprints() == null
+                || state.getResearchLinks() == null || state.getNotifications() == null
+                || state.getNotificationFingerprints() == null) {
             throw new IllegalStateException("Redis 雷达临时缓存结构不完整");
         }
     }

@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Data
 public class RadarCacheState {
@@ -32,8 +34,10 @@ public class RadarCacheState {
     private Map<Long, List<RadarRefreshStep>> runSteps = new LinkedHashMap<Long, List<RadarRefreshStep>>();
     private Map<Long, RadarEventWorkspace.State> userStates = new LinkedHashMap<Long, RadarEventWorkspace.State>();
     private Map<Long, List<RadarEventWorkspace.TimelineEntry>> timelines = new LinkedHashMap<Long, List<RadarEventWorkspace.TimelineEntry>>();
+    private Map<Long, Set<String>> timelineFingerprints = new LinkedHashMap<Long, Set<String>>();
     private Map<Long, List<RadarEventWorkspace.ResearchLink>> researchLinks = new LinkedHashMap<Long, List<RadarEventWorkspace.ResearchLink>>();
     private List<RadarEventWorkspace.Notification> notifications = new ArrayList<RadarEventWorkspace.Notification>();
+    private Set<String> notificationFingerprints = new LinkedHashSet<String>();
     private long nextSequence = 1L;
 
     public long nextSequence() {

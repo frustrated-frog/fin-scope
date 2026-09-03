@@ -237,7 +237,7 @@ public class ResearchRadarService {
     }
 
     /**
-     * 直接读取持久化关注清单，不经过雷达榜单、分类过滤或快照缓存。
+     * 直接读取当前缓存窗口内的临时关注清单，不经过雷达榜单或分类过滤。
      */
     public ResearchRadarView loadFollowed(int requestedLimit) {
         int limit = Math.max(1, Math.min(requestedLimit, 50));

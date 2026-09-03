@@ -241,8 +241,8 @@ test('keeps the twenty-item radar context stable while showing the independent f
 
   expect(await screen.findByRole('button', { name: '进行中 20' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '未读 19' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '已关注 2' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '已关注 2' }));
+  expect(screen.getByRole('button', { name: '临时关注 2' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '临时关注 2' }));
 
   expect(await screen.findByRole('heading', { name: event.title })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: anotherFollowedEvent.title })).toBeInTheDocument();
@@ -250,7 +250,7 @@ test('keeps the twenty-item radar context stable while showing the independent f
   expect(within(screen.getByLabelText('雷达概览')).getByText('20')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '进行中 20' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '未读 19' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '已关注 2' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '临时关注 2' })).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/followed?limit=20');
 });
 
@@ -305,7 +305,7 @@ test('keeps tracking details behind explicit dossier tabs', async () => {
   await userEvent.click(screen.getByRole('button', { name: '证据' }));
   expect(screen.getByText('2/2')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '跟踪' }));
-  expect(screen.getByText('观察公司正式公告')).toBeInTheDocument();
+  expect(screen.getByText('需要长期保存和记录后续变化时，请先将事件记入大事记。')).toBeInTheDocument();
   expect(screen.getByText('研究运行 #41')).toBeInTheDocument();
 });
 

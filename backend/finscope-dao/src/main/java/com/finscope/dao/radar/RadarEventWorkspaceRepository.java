@@ -2,26 +2,31 @@ package com.finscope.dao.radar;
 
 import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
-import com.finscope.common.util.TimeUtil;
+import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventWorkspace;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
+import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 
 @Repository
 public class RadarEventWorkspaceRepository {
     private static final List<String> DISPOSITIONS = Arrays.asList("ACTIVE", "LATER", "IGNORED");
-    private static final List<String> OBSERVATION_STATUSES = Arrays.asList("OPEN", "DONE");
-    private final JdbcTemplate jdbc;
 
-    public RadarEventWorkspaceRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    @Resource
+    private RedisRadarCacheStore store;
 
     public RadarEventWorkspace.State updateState(Long eventId, boolean markRead, String disposition,
                                                   Boolean followed, String fingerprint) {
@@ -29,247 +34,256 @@ public class RadarEventWorkspaceRepository {
         if (disposition != null && !DISPOSITIONS.contains(disposition)) {
             throw new BusinessException(BizErrorCode.RADAR_EVENT_STATE_INVALID);
         }
-        LocalDateTime now = LocalDateTime.now();
-        jdbc.update("INSERT INTO radar_event_user_state(event_id,followed,disposition,updated_at) "
-                        + "VALUES(?,0,'ACTIVE',?) ON CONFLICT(event_id) DO NOTHING",
-                eventId, TimeUtil.text(now));
-        StringBuilder sql = new StringBuilder("UPDATE radar_event_user_state SET updated_at=?");
-        List<Object> args = new ArrayList<Object>(); args.add(TimeUtil.text(now));
-        if (markRead) { sql.append(",read_at=?"); args.add(TimeUtil.text(now)); }
-        if (disposition != null) { sql.append(",disposition=?"); args.add(disposition); }
-        if (followed != null) { sql.append(",followed=?"); args.add(followed ? 1 : 0); }
-        if (fingerprint != null) { sql.append(",last_viewed_fingerprint=?"); args.add(fingerprint); }
-        sql.append(" WHERE event_id=?"); args.add(eventId);
-        jdbc.update(sql.toString(), args.toArray());
-        return findState(eventId);
+        return store.update(state -> {
+            RadarEventWorkspace.State value = state.getUserStates().get(eventId);
+            if (value == null) {
+                value = defaultState(eventId);
+            }
+            LocalDateTime now = LocalDateTime.now();
+            if (markRead) {
+                value.setRead(true);
+                value.setReadAt(now);
+            }
+            if (disposition != null) {
+                value.setDisposition(disposition);
+            }
+            if (followed != null) {
+                value.setFollowed(followed);
+            }
+            if (fingerprint != null) {
+                value.setLastViewedFingerprint(fingerprint);
+            }
+            value.setUpdatedAt(now);
+            state.getUserStates().put(eventId, value);
+            return value;
+        });
     }
 
     public RadarEventWorkspace.State findState(Long eventId) {
-        List<RadarEventWorkspace.State> rows = jdbc.query("SELECT * FROM radar_event_user_state WHERE event_id=?",
-                this::mapState, eventId);
-        if (!rows.isEmpty()) return rows.get(0);
-        RadarEventWorkspace.State state = new RadarEventWorkspace.State(); state.setEventId(eventId); return state;
+        RadarEventWorkspace.State value = store.read().getUserStates().get(eventId);
+        return value == null ? defaultState(eventId) : value;
     }
 
     public Map<Long, RadarEventWorkspace.Summary> findSummaries(List<Long> eventIds) {
         Map<Long, RadarEventWorkspace.Summary> result = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();
-        if (eventIds == null || eventIds.isEmpty()) return result;
-        StringBuilder idRows = new StringBuilder(); List<Object> args = new ArrayList<Object>();
-        for (Long eventId : eventIds) {
-            if (idRows.length() > 0) idRows.append(" UNION ALL ");
-            idRows.append("SELECT ? event_id"); args.add(eventId);
-            RadarEventWorkspace.Summary empty = new RadarEventWorkspace.Summary(); empty.setEventId(eventId);
-            result.put(eventId, empty);
+        if (eventIds == null || eventIds.isEmpty()) {
+            return result;
         }
-        String sql = "SELECT ids.event_id,s.read_at,s.followed,s.disposition,s.last_viewed_fingerprint,s.updated_at,"
-                + "COALESCE(o.total_count,0) observation_count,COALESCE(o.open_count,0) open_observation_count,"
-                + "COALESCE(r.run_count,0) research_run_count,COALESCE(n.unread_count,0) unread_notification_count "
-                + "FROM (" + idRows + ") ids "
-                + "LEFT JOIN radar_event_user_state s ON s.event_id=ids.event_id "
-                + "LEFT JOIN (SELECT event_id,COUNT(*) total_count,SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END) open_count FROM radar_event_observation GROUP BY event_id) o ON o.event_id=ids.event_id "
-                + "LEFT JOIN (SELECT event_id,COUNT(*) run_count FROM radar_event_research_link GROUP BY event_id) r ON r.event_id=ids.event_id "
-                + "LEFT JOIN (SELECT event_id,COUNT(*) unread_count FROM radar_event_notification WHERE read_at IS NULL GROUP BY event_id) n ON n.event_id=ids.event_id";
-        for (RadarEventWorkspace.Summary value : jdbc.query(sql, this::mapSummary, args.toArray())) {
-            result.put(value.getEventId(), value);
+        RadarCacheState state = store.read();
+        for (Long eventId : eventIds) {
+            RadarEventWorkspace.Summary summary = summary(state.getUserStates().get(eventId), eventId);
+            summary.setResearchRunCount(state.getResearchLinks().getOrDefault(eventId, Collections.emptyList()).size());
+            int unread = 0;
+            for (RadarEventWorkspace.Notification notification : state.getNotifications()) {
+                if (Objects.equals(eventId, notification.getEventId()) && !notification.isRead()) {
+                    unread++;
+                }
+            }
+            summary.setUnreadNotificationCount(unread);
+            result.put(eventId, summary);
         }
         return result;
     }
 
-    /**
-     * 关注清单以用户状态表为入口，避免被雷达榜单的排序窗口截断。
-     * 过期事件仍保留历史状态，但不再作为当前关注卡片展示。
-     */
     public List<Long> findFollowedEventIds(int limit) {
-        return jdbc.queryForList("SELECT s.event_id FROM radar_event_user_state s "
-                        + "JOIN radar_event e ON e.id=s.event_id "
-                        + "WHERE s.followed=1 AND s.disposition<>'IGNORED' AND e.status IN ('ACTIVE','QUIET') "
-                        + "ORDER BY s.updated_at DESC,s.event_id DESC LIMIT ?",
-                Long.class, Math.max(1, Math.min(limit, 50)));
+        RadarCacheState state = store.read();
+        return state.getUserStates().values().stream()
+                .filter(RadarEventWorkspace.State::isFollowed)
+                .filter(value -> !"IGNORED".equals(value.getDisposition()))
+                .filter(value -> active(state.getEvents().get(value.getEventId())))
+                .sorted(Comparator.comparing(RadarEventWorkspace.State::getUpdatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(RadarEventWorkspace.State::getEventId)
+                .limit(Math.max(1, Math.min(limit, 50)))
+                .collect(Collectors.toList());
     }
 
+    /** 雷达是临时流，不再承载可长期维护的观察项。 */
     public List<RadarEventWorkspace.Observation> ensureDefaultObservation(Long eventId, String content) {
-        insertObservation(eventId, content, "SYSTEM"); return findObservations(eventId);
+        return Collections.emptyList();
     }
 
     public RadarEventWorkspace.Observation addObservation(Long eventId, String content) {
-        String normalized = normalizeObservation(content);
-        insertObservation(eventId, content, "USER");
-        return jdbc.query("SELECT * FROM radar_event_observation WHERE event_id=? AND normalized_content=? AND source='USER'",
-                this::mapObservation, eventId, normalized).get(0);
+        throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND);
     }
 
     public RadarEventWorkspace.Observation setObservationStatus(Long eventId, Long observationId, String status) {
-        if (!OBSERVATION_STATUSES.contains(status)) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_STATE_INVALID);
-        LocalDateTime now = LocalDateTime.now();
-        int updated = jdbc.update("UPDATE radar_event_observation SET status=?,completed_at=?,updated_at=? WHERE id=? AND event_id=?",
-                status, "DONE".equals(status) ? TimeUtil.text(now) : null, TimeUtil.text(now), observationId, eventId);
-        if (updated == 0) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND);
-        return findObservation(eventId, observationId);
+        throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND);
     }
 
     public void deleteObservation(Long eventId, Long observationId) {
-        RadarEventWorkspace.Observation value = findObservation(eventId, observationId);
-        if (!"USER".equals(value.getSource())) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_SYSTEM_UNDELETABLE);
-        jdbc.update("DELETE FROM radar_event_observation WHERE id=? AND event_id=?", observationId, eventId);
+        throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND);
     }
 
     public List<RadarEventWorkspace.Observation> findObservations(Long eventId) {
-        return jdbc.query("SELECT * FROM radar_event_observation WHERE event_id=? ORDER BY status ASC,created_at ASC,id ASC",
-                this::mapObservation, eventId);
+        return Collections.emptyList();
     }
 
     public void appendTimeline(Long eventId, String eventFingerprint, String eventType, String title,
                                String summary, String referenceType, Long referenceId, LocalDateTime occurredAt) {
-        requireEventId(eventId); LocalDateTime now = LocalDateTime.now();
-        jdbc.update("INSERT INTO radar_event_timeline(event_id,event_fingerprint,event_type,title,summary,reference_type,reference_id,occurred_at,created_at) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(event_id,event_fingerprint,event_type,reference_type,reference_id) DO NOTHING",
-                eventId, eventFingerprint, eventType, title, summary, referenceType, referenceId,
-                TimeUtil.text(occurredAt == null ? now : occurredAt), TimeUtil.text(now));
+        requireEventId(eventId);
+        store.update(state -> {
+            List<RadarEventWorkspace.TimelineEntry> values = state.getTimelines()
+                    .computeIfAbsent(eventId, ignored -> new ArrayList<RadarEventWorkspace.TimelineEntry>());
+            Set<String> fingerprints = state.getTimelineFingerprints()
+                    .computeIfAbsent(eventId, ignored -> new LinkedHashSet<String>());
+            String key = eventFingerprint + ':' + eventType + ':' + referenceType + ':' + referenceId;
+            if (fingerprints.add(key)) {
+                RadarEventWorkspace.TimelineEntry value = new RadarEventWorkspace.TimelineEntry();
+                value.setId(state.nextSequence());
+                value.setEventId(eventId);
+                value.setEventType(eventType);
+                value.setTitle(title);
+                value.setSummary(summary);
+                value.setReferenceType(referenceType);
+                value.setReferenceId(referenceId);
+                value.setOccurredAt(occurredAt == null ? LocalDateTime.now() : occurredAt);
+                values.add(value);
+            }
+            return null;
+        });
     }
 
     public List<RadarEventWorkspace.TimelineEntry> findTimeline(Long eventId) {
-        return jdbc.query("SELECT * FROM radar_event_timeline WHERE event_id=? ORDER BY occurred_at DESC,id DESC",
-                this::mapTimeline, eventId);
+        List<RadarEventWorkspace.TimelineEntry> values = new ArrayList<RadarEventWorkspace.TimelineEntry>(
+                store.read().getTimelines().getOrDefault(eventId, Collections.emptyList()));
+        values.sort(Comparator.comparing(RadarEventWorkspace.TimelineEntry::getOccurredAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return values;
     }
 
     public RadarEventWorkspace.ResearchLink linkResearchRun(Long eventId, Long researchRunId, String questionSnapshot) {
-        requireEventId(eventId); LocalDateTime now=LocalDateTime.now();
-        jdbc.update("INSERT INTO radar_event_research_link(event_id,research_run_id,question_snapshot,created_at) VALUES(?,?,?,?) "
-                        + "ON CONFLICT(event_id,research_run_id) DO NOTHING",
-                eventId,researchRunId,questionSnapshot==null?null:questionSnapshot.trim(),TimeUtil.text(now));
-        return jdbc.query(researchLinkSql()+" WHERE l.event_id=? AND l.research_run_id=?",this::mapResearchLink,eventId,researchRunId).get(0);
+        requireEventId(eventId);
+        return store.update(state -> {
+            List<RadarEventWorkspace.ResearchLink> values = state.getResearchLinks()
+                    .computeIfAbsent(eventId, ignored -> new ArrayList<RadarEventWorkspace.ResearchLink>());
+            for (RadarEventWorkspace.ResearchLink existing : values) {
+                if (Objects.equals(existing.getResearchRunId(), researchRunId)) {
+                    return existing;
+                }
+            }
+            RadarEventWorkspace.ResearchLink value = new RadarEventWorkspace.ResearchLink();
+            value.setId(state.nextSequence());
+            value.setEventId(eventId);
+            value.setResearchRunId(researchRunId);
+            value.setQuestionSnapshot(questionSnapshot == null ? null : questionSnapshot.trim());
+            value.setCreatedAt(LocalDateTime.now());
+            values.add(value);
+            return value;
+        });
     }
 
     public List<RadarEventWorkspace.ResearchLink> findResearchLinks(Long eventId) {
-        return jdbc.query(researchLinkSql()+" WHERE l.event_id=? ORDER BY l.created_at DESC,l.id DESC",this::mapResearchLink,eventId);
+        List<RadarEventWorkspace.ResearchLink> values = new ArrayList<RadarEventWorkspace.ResearchLink>(
+                store.read().getResearchLinks().getOrDefault(eventId, Collections.emptyList()));
+        values.sort(Comparator.comparing(RadarEventWorkspace.ResearchLink::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return values;
     }
 
-    public boolean createNotification(Long eventId,String notificationType,String fingerprint,String title,String message){
-        LocalDateTime now=LocalDateTime.now();
-        return jdbc.update("INSERT INTO radar_event_notification(event_id,notification_type,fingerprint,title,message,created_at) "
-                        + "VALUES(?,?,?,?,?,?) ON CONFLICT(notification_type,fingerprint) DO NOTHING",
-                eventId,notificationType,fingerprint,title,message,TimeUtil.text(now))>0;
+    public boolean createNotification(Long eventId, String notificationType, String fingerprint,
+                                      String title, String message) {
+        return store.update(state -> {
+            String key = notificationType + ':' + fingerprint;
+            if (!state.getNotificationFingerprints().add(key)) {
+                return false;
+            }
+            RadarEventWorkspace.Notification value = new RadarEventWorkspace.Notification();
+            value.setId(state.nextSequence());
+            value.setEventId(eventId);
+            value.setNotificationType(notificationType);
+            value.setTitle(title);
+            value.setMessage(message);
+            value.setCreatedAt(LocalDateTime.now());
+            state.getNotifications().add(value);
+            return true;
+        });
     }
 
-    public List<RadarEventWorkspace.Notification> findNotifications(int limit){
-        return jdbc.query("SELECT * FROM radar_event_notification ORDER BY created_at DESC,id DESC LIMIT ?",this::mapNotification,
-                Math.max(1,Math.min(limit,100)));
+    public List<RadarEventWorkspace.Notification> findNotifications(int limit) {
+        List<RadarEventWorkspace.Notification> values = new ArrayList<RadarEventWorkspace.Notification>(store.read().getNotifications());
+        values.sort(Comparator.comparing(RadarEventWorkspace.Notification::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return values.stream().limit(Math.max(1, Math.min(limit, 100))).collect(Collectors.toList());
     }
 
-    public int countUnreadNotifications(){
-        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE read_at IS NULL",Integer.class);
-        return value==null?0:value;
+    public int countUnreadNotifications() {
+        return (int) store.read().getNotifications().stream().filter(value -> !value.isRead()).count();
     }
 
-    public int countNotificationsOn(LocalDate date){
-        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE substr(created_at,1,10)=?",Integer.class,date.toString());
-        return value==null?0:value;
+    public int countNotificationsOn(LocalDate date) {
+        return (int) store.read().getNotifications().stream()
+                .filter(value -> value.getCreatedAt() != null && date.equals(value.getCreatedAt().toLocalDate()))
+                .count();
     }
 
-    public int countNewEventsOn(LocalDate date){
-        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event WHERE substr(first_seen_at,1,10)=?",Integer.class,date.toString());
-        return value==null?0:value;
+    public int countNewEventsOn(LocalDate date) {
+        return (int) store.read().getEvents().values().stream()
+                .filter(value -> value.getFirstSeenAt() != null && date.equals(value.getFirstSeenAt().toLocalDate()))
+                .count();
     }
 
-    public int countFollowedChangesOn(LocalDate date){
-        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_notification WHERE notification_type='FOLLOWED_EVENT_CHANGED' AND substr(created_at,1,10)=?",Integer.class,date.toString());
-        return value==null?0:value;
+    public int countFollowedChangesOn(LocalDate date) {
+        return (int) store.read().getNotifications().stream()
+                .filter(value -> "FOLLOWED_EVENT_CHANGED".equals(value.getNotificationType()))
+                .filter(value -> value.getCreatedAt() != null && date.equals(value.getCreatedAt().toLocalDate()))
+                .count();
     }
 
-    public int countOpenObservations(){
-        Integer value=jdbc.queryForObject("SELECT COUNT(*) FROM radar_event_observation WHERE status='OPEN'",Integer.class);
-        return value==null?0:value;
+    public int countOpenObservations() {
+        return 0;
     }
 
-    public void markNotificationRead(Long id){
-        jdbc.update("UPDATE radar_event_notification SET read_at=COALESCE(read_at,?) WHERE id=?",TimeUtil.text(LocalDateTime.now()),id);
+    public void markNotificationRead(Long id) {
+        store.update(state -> {
+            for (RadarEventWorkspace.Notification value : state.getNotifications()) {
+                if (Objects.equals(value.getId(), id) && value.getReadAt() == null) {
+                    value.setReadAt(LocalDateTime.now());
+                }
+            }
+            return null;
+        });
     }
 
-    public void markAllNotificationsRead(){
-        jdbc.update("UPDATE radar_event_notification SET read_at=? WHERE read_at IS NULL",TimeUtil.text(LocalDateTime.now()));
+    public void markAllNotificationsRead() {
+        store.update(state -> {
+            LocalDateTime now = LocalDateTime.now();
+            for (RadarEventWorkspace.Notification value : state.getNotifications()) {
+                if (value.getReadAt() == null) {
+                    value.setReadAt(now);
+                }
+            }
+            return null;
+        });
     }
 
-    private String researchLinkSql() {
-        return "SELECT l.*,r.status research_status,"
-                + "COALESCE(NULLIF(p.conclusion,''),NULLIF(p.executive_summary,''),r.summary) research_summary "
-                + "FROM radar_event_research_link l JOIN research_run r ON r.id=l.research_run_id "
-                + "LEFT JOIN research_report p ON p.research_run_id=r.id";
-    }
-
-    private void insertObservation(Long eventId, String content, String source) {
-        requireEventId(eventId); String value = validateObservation(content); String normalized = normalizeObservation(value);
-        LocalDateTime now = LocalDateTime.now();
-        jdbc.update("INSERT INTO radar_event_observation(event_id,content,normalized_content,status,source,created_at,updated_at) "
-                        + "VALUES(?,?,?,'OPEN',?,?,?) ON CONFLICT(event_id,normalized_content,source) DO NOTHING",
-                eventId, value, normalized, source, TimeUtil.text(now), TimeUtil.text(now));
-    }
-
-    private RadarEventWorkspace.Observation findObservation(Long eventId, Long observationId) {
-        List<RadarEventWorkspace.Observation> rows = jdbc.query(
-                "SELECT * FROM radar_event_observation WHERE event_id=? AND id=?", this::mapObservation, eventId, observationId);
-        if (rows.isEmpty()) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_NOT_FOUND); return rows.get(0);
-    }
-
-    private RadarEventWorkspace.State mapState(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+    private RadarEventWorkspace.State defaultState(Long eventId) {
         RadarEventWorkspace.State value = new RadarEventWorkspace.State();
-        value.setEventId(rs.getLong("event_id")); value.setReadAt(TimeUtil.localDateTime(rs, "read_at"));
-        value.setFollowed(rs.getInt("followed") == 1); value.setDisposition(rs.getString("disposition"));
-        value.setLastViewedFingerprint(rs.getString("last_viewed_fingerprint"));
-        value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at")); return value;
-    }
-
-    private RadarEventWorkspace.Summary mapSummary(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        RadarEventWorkspace.Summary value = new RadarEventWorkspace.Summary(); value.setEventId(rs.getLong("event_id"));
-        value.setReadAt(TimeUtil.localDateTime(rs, "read_at")); value.setFollowed(rs.getInt("followed") == 1);
-        value.setDisposition(rs.getString("disposition") == null ? "ACTIVE" : rs.getString("disposition"));
-        value.setLastViewedFingerprint(rs.getString("last_viewed_fingerprint"));
-        value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at"));
-        value.setObservationCount(rs.getInt("observation_count")); value.setOpenObservationCount(rs.getInt("open_observation_count"));
-        value.setResearchRunCount(rs.getInt("research_run_count")); value.setUnreadNotificationCount(rs.getInt("unread_notification_count"));
+        value.setEventId(eventId);
         return value;
     }
 
-    private RadarEventWorkspace.Observation mapObservation(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        RadarEventWorkspace.Observation value = new RadarEventWorkspace.Observation();
-        value.setId(rs.getLong("id")); value.setEventId(rs.getLong("event_id")); value.setContent(rs.getString("content"));
-        value.setStatus(rs.getString("status")); value.setSource(rs.getString("source"));
-        value.setCreatedAt(TimeUtil.localDateTime(rs, "created_at")); value.setCompletedAt(TimeUtil.localDateTime(rs, "completed_at"));
-        value.setUpdatedAt(TimeUtil.localDateTime(rs, "updated_at")); return value;
+    private RadarEventWorkspace.Summary summary(RadarEventWorkspace.State state, Long eventId) {
+        RadarEventWorkspace.Summary value = new RadarEventWorkspace.Summary();
+        value.setEventId(eventId);
+        if (state != null) {
+            value.setRead(state.isRead());
+            value.setReadAt(state.getReadAt());
+            value.setFollowed(state.isFollowed());
+            value.setDisposition(state.getDisposition());
+            value.setLastViewedFingerprint(state.getLastViewedFingerprint());
+            value.setUpdatedAt(state.getUpdatedAt());
+        }
+        return value;
     }
 
-    private RadarEventWorkspace.TimelineEntry mapTimeline(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        RadarEventWorkspace.TimelineEntry value = new RadarEventWorkspace.TimelineEntry();
-        value.setId(rs.getLong("id")); value.setEventId(rs.getLong("event_id")); value.setEventType(rs.getString("event_type"));
-        value.setTitle(rs.getString("title")); value.setSummary(rs.getString("summary"));
-        value.setReferenceType(rs.getString("reference_type")); value.setReferenceId(rs.getLong("reference_id"));
-        value.setOccurredAt(TimeUtil.localDateTime(rs, "occurred_at")); return value;
-    }
-
-    private RadarEventWorkspace.ResearchLink mapResearchLink(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        RadarEventWorkspace.ResearchLink value=new RadarEventWorkspace.ResearchLink();
-        value.setId(rs.getLong("id"));value.setEventId(rs.getLong("event_id"));value.setResearchRunId(rs.getLong("research_run_id"));
-        value.setQuestionSnapshot(rs.getString("question_snapshot"));value.setStatus(rs.getString("research_status"));
-        value.setSummary(rs.getString("research_summary"));value.setCreatedAt(TimeUtil.localDateTime(rs,"created_at"));return value;
-    }
-
-    private RadarEventWorkspace.Notification mapNotification(java.sql.ResultSet rs,int row)throws java.sql.SQLException{
-        RadarEventWorkspace.Notification value=new RadarEventWorkspace.Notification();value.setId(rs.getLong("id"));
-        long eventId=rs.getLong("event_id");value.setEventId(rs.wasNull()?null:eventId);value.setNotificationType(rs.getString("notification_type"));
-        value.setTitle(rs.getString("title"));value.setMessage(rs.getString("message"));value.setReadAt(TimeUtil.localDateTime(rs,"read_at"));
-        value.setCreatedAt(TimeUtil.localDateTime(rs,"created_at"));return value;
-    }
-
-    private String validateObservation(String value) {
-        String result = value == null ? "" : value.trim();
-        if (result.isEmpty()) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_REQUIRED);
-        if (result.length() > 300) throw new BusinessException(BizErrorCode.RADAR_OBSERVATION_TOO_LONG); return result;
-    }
-
-    private String normalizeObservation(String value) {
-        return validateObservation(value).replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT);
+    private boolean active(RadarEvent event) {
+        return event != null && ("ACTIVE".equals(event.getStatus()) || "QUIET".equals(event.getStatus()));
     }
 
     private void requireEventId(Long eventId) {
-        if (eventId == null || eventId <= 0) throw new BusinessException(BizErrorCode.RADAR_EVENT_ID_REQUIRED);
+        if (eventId == null || eventId <= 0) {
+            throw new BusinessException(BizErrorCode.RADAR_EVENT_ID_REQUIRED);
+        }
     }
 }
