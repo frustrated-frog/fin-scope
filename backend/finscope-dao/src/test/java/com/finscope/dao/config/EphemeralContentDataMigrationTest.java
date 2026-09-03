@@ -38,6 +38,6 @@ class EphemeralContentDataMigrationTest {
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM radar_event", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM major_event", Integer.class));
         assertEquals(5, jdbc.queryForObject("SELECT COUNT(*) FROM news_category", Integer.class));
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version='20260904_ephemeral_news_radar'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=402", Integer.class));
     }
 }

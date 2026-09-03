@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 public class RedisRadarCacheStore {
     static final String STATE_KEY = "finscope:radar:state";
 
-    @Resource
+    @Resource(name = "stringRedisTemplate")
     private StringRedisTemplate redisTemplate;
     @Resource
     private ObjectMapper objectMapper;

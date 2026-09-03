@@ -8,7 +8,7 @@ import javax.annotation.Resource;
 
 @Component
 public class EphemeralContentDataMigration {
-    static final String VERSION = "20260904_ephemeral_news_radar";
+    static final int VERSION = 402;
 
     @Resource
     private JdbcTemplate jdbcTemplate;
@@ -16,7 +16,7 @@ public class EphemeralContentDataMigration {
     @Transactional
     public void migrate() {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
-                + "version TEXT PRIMARY KEY,applied_at TEXT NOT NULL)");
+                + "version INTEGER PRIMARY KEY,description TEXT NOT NULL,applied_at TEXT NOT NULL)");
         Integer applied = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM schema_migration WHERE version=?", Integer.class, VERSION);
         if (applied != null && applied > 0) {
@@ -46,6 +46,7 @@ public class EphemeralContentDataMigration {
         jdbcTemplate.update("DELETE FROM news_item_classification");
         jdbcTemplate.update("DELETE FROM agent_run WHERE subject_type IN ('RADAR_EVENT','RADAR_CLUSTER') "
                 + "OR node_name LIKE 'radar-%'");
-        jdbcTemplate.update("INSERT INTO schema_migration(version,applied_at) VALUES(?,CURRENT_TIMESTAMP)", VERSION);
+        jdbcTemplate.update("INSERT INTO schema_migration(version,description,applied_at) "
+                + "VALUES(?,?,CURRENT_TIMESTAMP)", VERSION, "ephemeral news and radar cache cutover");
     }
 }

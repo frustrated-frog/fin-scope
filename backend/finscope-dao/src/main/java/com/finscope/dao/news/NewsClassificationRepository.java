@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 public class NewsClassificationRepository {
     private static final String KEY_PREFIX = "finscope:news:classification:";
 
-    @Resource
+    @Resource(name = "stringRedisTemplate")
     private StringRedisTemplate redisTemplate;
     @Resource
     private ObjectMapper objectMapper;
