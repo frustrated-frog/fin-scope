@@ -54,7 +54,7 @@ FinScope 当前已使用 Redis 缓存新闻来源快照和页面视图，但新�
 稳定来源键不再依赖 SQLite 自增 ID：
 
 - 新闻沿用 `providerCode:externalId`，无外部 ID 时使用规范化 URL 或内容指纹。
-- 雷达事件使用事件指纹作为字符串 `eventKey`，API 中的事件标识改为稳定字符串。
+- 雷达事件使用事件指纹作为字符串 `eventKey`。为保持现有 API 兼容，页面仍使用由 `eventKey` 确定性计算出的正数 `Long` 标识；大事记持久化的是原始 `eventKey`，而不是该临时数值投影。
 - 大事记的 `originKey` 保存该稳定键并继续承担幂等约束。
 
 ## 核心数据流
