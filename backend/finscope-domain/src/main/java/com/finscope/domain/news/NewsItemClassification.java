@@ -1,31 +1,45 @@
 package com.finscope.domain.news;
 
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
-public final class NewsItemClassification {
-    private final String itemId;
-    private final String status;
-    private final String categoryCode;
-    private final double confidence;
-    private final String reason;
-    private final String modelName;
-    private final String errorMessage;
-    private final String manualCategoryCode;
-    private final String manualReason;
-    private final String reviewStatus;
-    private final LocalDateTime reviewedAt;
-    private final LocalDateTime updatedAt;
+@Data
+@NoArgsConstructor
+public class NewsItemClassification {
+    private String itemId;
+    private String status;
+    private String categoryCode;
+    private double confidence;
+    private String reason;
+    private String modelName;
+    private String errorMessage;
+    private String manualCategoryCode;
+    private String manualReason;
+    private String reviewStatus;
+    private LocalDateTime reviewedAt;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public NewsItemClassification(String itemId, String status, String categoryCode, double confidence,
                                   String reason, String modelName, String errorMessage, LocalDateTime updatedAt) {
         this(itemId, status, categoryCode, confidence, reason, modelName, errorMessage,
-                null, null, null, null, updatedAt);
+                null, null, null, null, updatedAt, updatedAt);
     }
 
     public NewsItemClassification(String itemId, String status, String categoryCode, double confidence,
                                   String reason, String modelName, String errorMessage,
                                   String manualCategoryCode, String manualReason, String reviewStatus,
                                   LocalDateTime reviewedAt, LocalDateTime updatedAt) {
+        this(itemId, status, categoryCode, confidence, reason, modelName, errorMessage,
+                manualCategoryCode, manualReason, reviewStatus, reviewedAt, updatedAt, updatedAt);
+    }
+
+    public NewsItemClassification(String itemId, String status, String categoryCode, double confidence,
+                                  String reason, String modelName, String errorMessage,
+                                  String manualCategoryCode, String manualReason, String reviewStatus,
+                                  LocalDateTime reviewedAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.itemId = itemId;
         this.status = status;
         this.categoryCode = categoryCode;
@@ -37,24 +51,19 @@ public final class NewsItemClassification {
         this.manualReason = manualReason;
         this.reviewStatus = reviewStatus;
         this.reviewedAt = reviewedAt;
+        this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public String getItemId() { return itemId; }
-    public String getStatus() { return status; }
-    public String getCategoryCode() { return categoryCode; }
-    public double getConfidence() { return confidence; }
-    public String getReason() { return reason; }
-    public String getModelName() { return modelName; }
-    public String getErrorMessage() { return errorMessage; }
-    public String getManualCategoryCode() { return manualCategoryCode; }
-    public String getManualReason() { return manualReason; }
-    public String getReviewStatus() { return reviewStatus; }
-    public LocalDateTime getReviewedAt() { return reviewedAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
     public String getEffectiveCategoryCode() {
         return manualCategoryCode == null ? categoryCode : manualCategoryCode;
     }
-    public boolean isPendingReview() { return "PENDING_REVIEW".equals(reviewStatus); }
-    public boolean isManuallyReviewed() { return manualCategoryCode != null; }
+
+    public boolean isPendingReview() {
+        return "PENDING_REVIEW".equals(reviewStatus);
+    }
+
+    public boolean isManuallyReviewed() {
+        return manualCategoryCode != null;
+    }
 }
