@@ -1,10 +1,12 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.strategy.holding.StockAccountSnapshot;
+import com.finscope.domain.strategy.holding.StockHoldingAnalysis;
 import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
 import com.finscope.domain.strategy.holding.StockTransaction;
 import com.finscope.domain.strategy.holding.StockTransactionType;
 import com.finscope.service.strategy.holding.StockAccountService;
+import com.finscope.service.strategy.holding.StockHoldingAnalysisService;
 import com.finscope.service.strategy.holding.HoldingStrategyDecisionService;
 import com.finscope.service.strategy.holding.StockTransactionService;
 import com.finscope.web.config.CorsConfig;
@@ -40,6 +42,8 @@ class StockHoldingControllerTest {
     private StockAccountService accounts;
     @MockBean
     private HoldingStrategyDecisionService holdingDecisions;
+    @MockBean
+    private StockHoldingAnalysisService holdingAnalysis;
 
     @Test
     void exposesStockAccountAndCreatesBuyEvent() throws Exception {
@@ -91,5 +95,49 @@ class StockHoldingControllerTest {
         mockMvc.perform(post("/api/strategy/holding-decisions/refresh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].instrumentCode").value("600570.SH"));
+    }
+
+    @Test
+    void reclassifiesHistoricalBuyAsOpeningBalanceWithoutDeletingLedgerHistory() throws Exception {
+        StockTransaction saved = new StockTransaction();
+        saved.setId(11L);
+        saved.setType(StockTransactionType.OPENING_BALANCE);
+        saved.setTradeDate(LocalDate.of(2026, 7, 15));
+        when(transactions.reclassifyAsOpeningBalance(
+                eq(9L), eq("opening-fix-9"), eq(LocalDate.of(2026, 9, 4))))
+                .thenReturn(saved);
+
+        mockMvc.perform(post("/api/strategy/stock-transactions/9/reclassify-opening")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientRequestId\":\"opening-fix-9\","
+                                + "\"tradeDate\":\"2026-09-04\",\"note\":\"历史补录\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(11))
+                .andExpect(jsonPath("$.data.type").value("OPENING_BALANCE"));
+    }
+
+    @Test
+    void exposesHoldingPathRiskAndFrozenForecastEvidence() throws Exception {
+        StockHoldingAnalysis analysis = new StockHoldingAnalysis();
+        analysis.setInstrumentCode("600570.SH");
+        analysis.setInstrumentName("恒生电子");
+        analysis.setEntryDate(LocalDate.of(2026, 7, 15));
+        analysis.setAsOfDate(LocalDate.of(2026, 8, 31));
+        analysis.setHoldingReturn(0.24d);
+        analysis.setMaximumDrawdown(-0.09d);
+        StockHoldingAnalysis.ForecastEvidence forecast =
+                new StockHoldingAnalysis.ForecastEvidence();
+        forecast.setRunId(12L);
+        forecast.setUpProbability(0.61d);
+        analysis.setForecast(forecast);
+        when(holdingAnalysis.analyze("600570.SH")).thenReturn(analysis);
+
+        mockMvc.perform(get("/api/strategy/stock-positions/600570.SH/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.instrumentName").value("恒生电子"))
+                .andExpect(jsonPath("$.data.holdingReturn").value(0.24d))
+                .andExpect(jsonPath("$.data.maximumDrawdown").value(-0.09d))
+                .andExpect(jsonPath("$.data.forecast.runId").value(12))
+                .andExpect(jsonPath("$.data.forecast.upProbability").value(0.61d));
     }
 }

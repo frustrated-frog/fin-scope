@@ -117,7 +117,8 @@ public class HoldingStrategyDecisionService {
         if (!hasValuation(position) || account.getTotalEquity().signum() <= 0) {
             return unavailable(position, decisionDate, "真实行情或账户净值暂不可用");
         }
-        Optional<SingleStockForecastRun> latest = forecastRuns.findLatest(position.getInstrumentCode());
+        Optional<SingleStockForecastRun> latest = forecastRuns.findLatest(
+                canonicalInstrumentCode(position.getInstrumentCode()));
         if (!latest.isPresent()) {
             return unavailable(position, decisionDate, "尚无可复用的单股预测记录");
         }
@@ -230,6 +231,20 @@ public class HoldingStrategyDecisionService {
     private boolean hasValuation(StockPosition position) {
         return position.getLastPrice() != null && position.getLastPrice().signum() > 0
                 && position.getMarketValue() != null && position.getQuoteDate() != null;
+    }
+
+    private String canonicalInstrumentCode(String code) {
+        if (code == null || code.trim().isEmpty() || code.contains(".")) {
+            return code;
+        }
+        String normalized = code.trim();
+        if (normalized.startsWith("6") || normalized.startsWith("9")) {
+            return normalized + ".SH";
+        }
+        if (normalized.startsWith("4") || normalized.startsWith("8")) {
+            return normalized + ".BJ";
+        }
+        return normalized + ".SZ";
     }
 
     private String healthStatus(ForecastModelHealth health) {

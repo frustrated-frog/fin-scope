@@ -48,6 +48,7 @@ class PythonHoldingStrategyClientTest {
         assertEquals("HOLD", advice.getAction());
         assertEquals("holding-policy-v1", advice.getPolicyVersion());
         assertTrue(body.get().contains("\"costBasis\":25.0"));
+        assertTrue(body.get().contains("\"asOfDate\":\"2026-08-31\""));
         assertFalse(body.get().contains("averageCost"));
     }
 

@@ -1,6 +1,7 @@
 package com.finscope.rpc.quant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.domain.strategy.holding.HoldingStrategyAdvice;
 import com.finscope.domain.strategy.holding.HoldingStrategyEvaluationRequest;
@@ -31,7 +32,8 @@ public class PythonHoldingStrategyClient {
     private FinanceHttpClient http;
     @Value("${finscope.python-market-data.evaluation-timeout-ms:30000}")
     private int timeoutMs;
-    private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     public PythonHoldingStrategyClient() {
     }

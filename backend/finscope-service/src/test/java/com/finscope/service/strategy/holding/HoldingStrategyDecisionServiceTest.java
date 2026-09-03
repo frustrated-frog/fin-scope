@@ -104,6 +104,24 @@ class HoldingStrategyDecisionServiceTest {
     }
 
     @Test
+    void resolvesLegacyBareHoldingCodeAgainstCanonicalForecastCode() {
+        StockPosition position = position("603618", "杭电股份");
+        StockAccountSnapshot account = account(position);
+        SingleStockForecastRun run = run(14L, "603618.SH");
+        when(accounts.snapshot()).thenReturn(account);
+        when(decisions.findUnique(any(), any(), any())).thenReturn(Optional.empty());
+        when(forecastRuns.findLatest("603618.SH")).thenReturn(Optional.of(run));
+        when(forecasts.detail(14L)).thenReturn(run);
+        when(client.evaluate(any(HoldingStrategyEvaluationRequest.class))).thenReturn(advice());
+        when(decisions.save(any(HoldingStrategyDecision.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<HoldingStrategyDecision> result = service.refresh();
+
+        assertEquals("ALLOW_ADD", result.get(0).getAction());
+        verify(forecastRuns).findLatest("603618.SH");
+    }
+
+    @Test
     void settlesMaturedAdviceAgainstFrozenSameStockBenchmark() {
         HoldingStrategyDecision pending = new HoldingStrategyDecision();
         pending.setId(21L);

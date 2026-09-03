@@ -29,6 +29,7 @@ class StockAccountServiceTest {
         position.setAverageCost(new BigDecimal("25"));
         StockAccountSnapshot replayed = new StockAccountSnapshot();
         replayed.setCash(new BigDecimal("1000"));
+        replayed.setCashTracked(true);
         replayed.setPositions(Collections.singletonList(position));
         when(transactions.account()).thenReturn(replayed);
         Quote quote = new Quote();
@@ -47,6 +48,40 @@ class StockAccountServiceTest {
         assertEquals(0, new BigDecimal("3000").compareTo(result.getMarketValue()));
         assertEquals(0, new BigDecimal("500").compareTo(result.getUnrealizedProfit()));
         assertEquals(0, new BigDecimal("4000").compareTo(result.getTotalEquity()));
+        assertEquals(0, new BigDecimal("0.75000000")
+                .compareTo(result.getPositions().get(0).getWeight()));
+        assertEquals(0, new BigDecimal("0.75000000").compareTo(result.getConcentration()));
         assertEquals("RAW_QUOTE", result.getPositions().get(0).getQuoteQuality());
+    }
+
+    @Test
+    void doesNotTreatInferredNegativeCashAsPartOfEquityWhenCashWasNeverRegistered() {
+        StockTransactionService transactions = mock(StockTransactionService.class);
+        QuoteService quotes = mock(QuoteService.class);
+        StockPosition position = new StockPosition();
+        position.setInstrumentCode("603618.SH");
+        position.setQuantity(new BigDecimal("100"));
+        position.setTotalCost(new BigDecimal("3249"));
+        position.setAverageCost(new BigDecimal("32.49"));
+        StockAccountSnapshot replayed = new StockAccountSnapshot();
+        replayed.setCash(new BigDecimal("-3249"));
+        replayed.setCashTracked(false);
+        replayed.setPositions(Collections.singletonList(position));
+        when(transactions.account()).thenReturn(replayed);
+        Quote quote = new Quote();
+        quote.setInstrumentCode("603618");
+        quote.setPrice(39.25d);
+        quote.setValid(true);
+        quote.setAsOf(LocalDateTime.of(2026, 9, 3, 15, 0));
+        when(quotes.fetch("STOCK", Collections.singletonList("603618"), false))
+                .thenReturn(Collections.singletonList(quote));
+        StockAccountService service = new StockAccountService();
+        ReflectionTestUtils.setField(service, "transactions", transactions);
+        ReflectionTestUtils.setField(service, "quotes", quotes);
+
+        StockAccountSnapshot result = service.snapshot();
+
+        assertEquals(0, new BigDecimal("3925").compareTo(result.getTotalEquity()));
+        assertEquals(0, new BigDecimal("1.00000000").compareTo(result.getConcentration()));
     }
 }

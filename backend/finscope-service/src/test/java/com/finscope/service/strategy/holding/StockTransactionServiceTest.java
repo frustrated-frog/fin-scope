@@ -69,6 +69,32 @@ class StockTransactionServiceTest {
         assertEquals("A 股买入数量必须是 100 股的整数倍", error.getMessage());
     }
 
+    @Test
+    void reclassifiesHistoricalBuyAsOpeningBalanceWithImmutableEvents() {
+        StockTransaction original = buy("original-buy", "100");
+        original.setId(9L);
+        original.setInstrumentId(7L);
+        original.setInstrumentCode("600570.SH");
+        original.setInstrumentName("恒生电子");
+        when(repository.findById(9L)).thenReturn(Optional.of(original));
+        when(repository.findByClientRequestId(any())).thenReturn(Optional.empty());
+        when(repository.save(any())).thenAnswer(invocation -> {
+            StockTransaction value = invocation.getArgument(0);
+            value.setId(value.getType() == StockTransactionType.REVERSAL ? 10L : 11L);
+            return value;
+        });
+
+        StockTransaction replacement = service.reclassifyAsOpeningBalance(
+                9L, "repair-9", LocalDate.of(2026, 9, 4));
+
+        assertEquals(StockTransactionType.OPENING_BALANCE, replacement.getType());
+        assertEquals(LocalDate.of(2026, 8, 31), replacement.getTradeDate());
+        assertEquals(new BigDecimal("100"), replacement.getQuantity());
+        assertEquals(new BigDecimal("28.50"), replacement.getPrice());
+        assertEquals("repair-9:opening", replacement.getClientRequestId());
+        verify(repository, org.mockito.Mockito.times(2)).save(any());
+    }
+
     private StockTransaction buy(String requestId, String quantity) {
         StockTransaction value = new StockTransaction();
         value.setClientRequestId(requestId);

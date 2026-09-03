@@ -5,11 +5,13 @@ import com.finscope.domain.strategy.holding.StockTransaction;
 import com.finscope.domain.strategy.holding.HoldingStrategyDecision;
 import com.finscope.service.strategy.holding.HoldingStrategyDecisionService;
 import com.finscope.service.strategy.holding.StockAccountService;
+import com.finscope.service.strategy.holding.StockHoldingAnalysisService;
 import com.finscope.service.strategy.holding.StockTransactionService;
 import com.finscope.web.request.strategy.CreateStockTransactionRequest;
 import com.finscope.web.request.strategy.ReverseStockTransactionRequest;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.web.response.strategy.StockAccountResponse;
+import com.finscope.web.response.strategy.StockHoldingAnalysisResponse;
 import com.finscope.web.response.strategy.HoldingStrategyDecisionResponse;
 import com.finscope.web.response.strategy.StockTransactionResponse;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +35,8 @@ public class StockHoldingController {
     private StockAccountService accounts;
     @Resource
     private HoldingStrategyDecisionService holdingDecisions;
+    @Resource
+    private StockHoldingAnalysisService holdingAnalysis;
 
     @GetMapping("/stock-account")
     public ApiResponse<StockAccountResponse> account() {
@@ -61,6 +65,19 @@ public class StockHoldingController {
             @PathVariable Long id, @RequestBody ReverseStockTransactionRequest request) {
         return ApiResponses.success(StockTransactionResponse.of(transactions.reverse(
                 id, request.getClientRequestId(), request.getTradeDate(), request.getNote())));
+    }
+
+    @PostMapping("/stock-transactions/{id}/reclassify-opening")
+    public ApiResponse<StockTransactionResponse> reclassifyOpening(
+            @PathVariable Long id, @RequestBody ReverseStockTransactionRequest request) {
+        return ApiResponses.success(StockTransactionResponse.of(
+                transactions.reclassifyAsOpeningBalance(
+                        id, request.getClientRequestId(), request.getTradeDate())));
+    }
+
+    @GetMapping("/stock-positions/{code}/analysis")
+    public ApiResponse<StockHoldingAnalysisResponse> holdingAnalysis(@PathVariable String code) {
+        return ApiResponses.success(StockHoldingAnalysisResponse.of(holdingAnalysis.analyze(code)));
     }
 
     @GetMapping("/holding-decisions")

@@ -15,6 +15,8 @@ public class StockPosition {
     private BigDecimal averageCost = BigDecimal.ZERO;
     private BigDecimal realizedProfit = BigDecimal.ZERO;
     private BigDecimal dividendIncome = BigDecimal.ZERO;
+    private LocalDate openedOn;
+    private boolean openingBalance;
     private BigDecimal lastPrice;
     private LocalDate quoteDate;
     private String quoteQuality;

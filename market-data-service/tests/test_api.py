@@ -682,6 +682,30 @@ def test_daily_bar_endpoint_accepts_single_stock_research_history_limit(tmp_path
     assert response.status_code == 200
 
 
+def test_holding_analysis_endpoint_uses_cached_daily_bar_capability(tmp_path: Path) -> None:
+    api = client(tmp_path, [MultiCapabilityProvider()])
+
+    response = api.post(
+        "/v1/quant/holding-analyses",
+        json={
+            "instrumentCode": "600519.SH",
+            "entryDate": "2026-07-01",
+            "costBasis": 1400,
+            "quantity": 100,
+            "marketPrice": 1480.5,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["instrumentCode"] == "600519.SH"
+    assert body["latestPrice"] == 1480.5
+    assert body["marketValue"] == 148050
+    assert body["qualityStatus"] == "PARTIAL_HISTORY"
+    assert body["sourceCode"] == "FIXTURE"
+    assert response.headers["cache-control"] == "no-store, private"
+
+
 def test_single_stock_forecast_endpoint_uses_full_qfq_history(tmp_path: Path) -> None:
     provider = ForecastDailyBarProvider()
     api = client(tmp_path, [provider])

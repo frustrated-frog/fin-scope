@@ -87,6 +87,40 @@ public class StockTransactionService {
         return saved;
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public StockTransaction reclassifyAsOpeningBalance(Long targetId,
+                                                       String clientRequestId,
+                                                       LocalDate correctionDate) {
+        String openingRequestId = clientRequestId + ":opening";
+        Optional<StockTransaction> duplicate = repository.findByClientRequestId(openingRequestId);
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
+        StockTransaction target = repository.findById(targetId)
+                .orElseThrow(() -> new IllegalArgumentException("待更正交易不存在"));
+        if (target.getType() != StockTransactionType.BUY) {
+            throw new IllegalArgumentException("只有误记为买入的历史持仓可以更正为期初持仓");
+        }
+        LocalDate effectiveCorrectionDate = correctionDate == null
+                ? LocalDate.now() : correctionDate;
+        reverse(targetId, clientRequestId + ":reversal", effectiveCorrectionDate,
+                "更正为期初持仓：原买入 #" + targetId);
+
+        StockTransaction opening = new StockTransaction();
+        opening.setClientRequestId(openingRequestId);
+        opening.setType(StockTransactionType.OPENING_BALANCE);
+        opening.setTradeDate(target.getTradeDate());
+        opening.setQuantity(target.getQuantity());
+        opening.setPrice(target.getPrice());
+        opening.setCommission(target.getCommission());
+        opening.setStampDuty(target.getStampDuty());
+        opening.setTransferFee(target.getTransferFee());
+        opening.setOtherFee(target.getOtherFee());
+        opening.setCashAmount(BigDecimal.ZERO);
+        opening.setNote("历史补录，由买入 #" + targetId + " 更正");
+        return create(bareCode(target.getInstrumentCode()), opening);
+    }
+
     public StockAccountSnapshot account() {
         return accountingService.replay(repository.findAll(1000));
     }

@@ -26,6 +26,7 @@ public class StockPositionAccountingService {
         Set<Long> reversedIds = reversedIds(safeEvents);
         Map<Long, StockPosition> positions = new LinkedHashMap<Long, StockPosition>();
         BigDecimal cash = ZERO;
+        boolean cashTracked = false;
         for (StockTransaction event : safeEvents) {
             if (event.getType() == StockTransactionType.REVERSAL
                     || event.getId() != null && reversedIds.contains(event.getId())) {
@@ -33,10 +34,12 @@ public class StockPositionAccountingService {
             }
             if (event.getType() == StockTransactionType.CASH_DEPOSIT) {
                 cash = cash.add(zero(event.getCashAmount()));
+                cashTracked = true;
                 continue;
             }
             if (event.getType() == StockTransactionType.CASH_WITHDRAWAL) {
                 cash = cash.subtract(zero(event.getCashAmount()));
+                cashTracked = true;
                 continue;
             }
             StockPosition position = position(positions, event);
@@ -56,7 +59,7 @@ public class StockPositionAccountingService {
                 applyBonus(position, event);
             }
         }
-        return snapshot(positions, cash);
+        return snapshot(positions, cash, cashTracked);
     }
 
     private Set<Long> reversedIds(List<StockTransaction> events) {
@@ -91,10 +94,16 @@ public class StockPositionAccountingService {
         }
         position.setQuantity(event.getQuantity());
         position.setTotalCost(turnover(event).add(event.totalFees()));
+        position.setOpenedOn(event.getTradeDate());
+        position.setOpeningBalance(true);
         updateAverageCost(position);
     }
 
     private void applyBuy(StockPosition position, StockTransaction event) {
+        if (position.getQuantity().signum() == 0) {
+            position.setOpenedOn(event.getTradeDate());
+            position.setOpeningBalance(false);
+        }
         position.setQuantity(position.getQuantity().add(event.getQuantity()));
         position.setTotalCost(position.getTotalCost().add(turnover(event)).add(event.totalFees()));
         updateAverageCost(position);
@@ -128,7 +137,9 @@ public class StockPositionAccountingService {
                 position.getQuantity(), 8, RoundingMode.HALF_UP));
     }
 
-    private StockAccountSnapshot snapshot(Map<Long, StockPosition> positionMap, BigDecimal cash) {
+    private StockAccountSnapshot snapshot(Map<Long, StockPosition> positionMap,
+                                          BigDecimal cash,
+                                          boolean cashTracked) {
         StockAccountSnapshot snapshot = new StockAccountSnapshot();
         snapshot.setCash(cash);
         List<StockPosition> openPositions = new ArrayList<StockPosition>();
@@ -145,6 +156,7 @@ public class StockPositionAccountingService {
         snapshot.setPositions(openPositions);
         snapshot.setRealizedProfit(realized);
         snapshot.setDividendIncome(dividends);
+        snapshot.setCashTracked(cashTracked);
         snapshot.setTotalProfit(realized.add(dividends));
         snapshot.setTotalEquity(cash);
         snapshot.setCalculatedAt(LocalDateTime.now());

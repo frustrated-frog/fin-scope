@@ -53,8 +53,9 @@ public class StockAccountService {
         account.setMarketValue(marketValue);
         account.setUnrealizedProfit(unrealized);
         account.setTotalProfit(account.getRealizedProfit().add(account.getDividendIncome()).add(unrealized));
-        account.setTotalEquity(account.getCash().add(marketValue));
-        applyWeights(account, marketValue);
+        account.setTotalEquity(account.isCashTracked()
+                ? account.getCash().add(marketValue) : marketValue);
+        applyWeights(account, account.getTotalEquity());
         account.setCalculatedAt(LocalDateTime.now());
         return account;
     }
@@ -80,14 +81,14 @@ public class StockAccountService {
         }
     }
 
-    private void applyWeights(StockAccountSnapshot account, BigDecimal marketValue) {
+    private void applyWeights(StockAccountSnapshot account, BigDecimal totalEquity) {
         BigDecimal concentration = BigDecimal.ZERO;
         for (StockPosition position : account.getPositions()) {
-            if (marketValue.signum() <= 0 || position.getMarketValue() == null) {
+            if (totalEquity.signum() <= 0 || position.getMarketValue() == null) {
                 position.setWeight(BigDecimal.ZERO);
                 continue;
             }
-            BigDecimal weight = position.getMarketValue().divide(marketValue, 8, RoundingMode.HALF_UP);
+            BigDecimal weight = position.getMarketValue().divide(totalEquity, 8, RoundingMode.HALF_UP);
             position.setWeight(weight);
             if (weight.compareTo(concentration) > 0) {
                 concentration = weight;

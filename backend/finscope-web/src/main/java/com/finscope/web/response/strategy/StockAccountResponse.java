@@ -20,6 +20,7 @@ public class StockAccountResponse {
     private BigDecimal dividendIncome;
     private BigDecimal totalProfit;
     private BigDecimal concentration;
+    private boolean cashTracked;
     private LocalDateTime calculatedAt;
     private List<PositionResponse> positions = new ArrayList<PositionResponse>();
 
@@ -33,6 +34,7 @@ public class StockAccountResponse {
         response.dividendIncome = value.getDividendIncome();
         response.totalProfit = value.getTotalProfit();
         response.concentration = value.getConcentration();
+        response.cashTracked = value.isCashTracked();
         response.calculatedAt = value.getCalculatedAt();
         for (StockPosition position : value.getPositions()) {
             response.positions.add(PositionResponse.of(position));
@@ -54,6 +56,8 @@ public class StockAccountResponse {
         private BigDecimal realizedProfit;
         private BigDecimal unrealizedProfit;
         private BigDecimal dividendIncome;
+        private LocalDate openedOn;
+        private boolean openingBalance;
         private BigDecimal totalProfit;
         private BigDecimal weight;
 
@@ -71,6 +75,8 @@ public class StockAccountResponse {
             response.realizedProfit = value.getRealizedProfit();
             response.unrealizedProfit = value.getUnrealizedProfit();
             response.dividendIncome = value.getDividendIncome();
+            response.openedOn = value.getOpenedOn();
+            response.openingBalance = value.isOpeningBalance();
             response.totalProfit = value.getTotalProfit();
             response.weight = value.getWeight();
             return response;

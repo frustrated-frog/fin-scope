@@ -17,6 +17,7 @@ public class StockAccountSnapshot {
     private BigDecimal dividendIncome = BigDecimal.ZERO;
     private BigDecimal totalProfit = BigDecimal.ZERO;
     private BigDecimal concentration = BigDecimal.ZERO;
+    private boolean cashTracked;
     private LocalDateTime calculatedAt;
     private List<StockPosition> positions = new ArrayList<StockPosition>();
 }

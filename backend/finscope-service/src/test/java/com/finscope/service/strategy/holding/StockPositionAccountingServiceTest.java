@@ -48,6 +48,20 @@ class StockPositionAccountingServiceTest {
     }
 
     @Test
+    void openingBalanceKeepsCashUnregisteredAndCapturesEntryDate() {
+        StockTransaction opening = event(1, StockTransactionType.OPENING_BALANCE,
+                "100", "32.49", "0");
+        opening.setTradeDate(LocalDate.of(2026, 7, 15));
+
+        StockAccountSnapshot account = service.replay(Collections.singletonList(opening));
+
+        assertMoney("0", account.getCash());
+        assertEquals(false, account.isCashTracked());
+        assertEquals(LocalDate.of(2026, 7, 15), account.getPositions().get(0).getOpenedOn());
+        assertEquals(true, account.getPositions().get(0).isOpeningBalance());
+    }
+
+    @Test
     void rejectsSellingMoreThanCurrentPosition() {
         assertThrows(IllegalArgumentException.class, () -> service.replay(Arrays.asList(
                 event(1, StockTransactionType.BUY, "100", "10", "0"),

@@ -31,6 +31,10 @@ from finscope_market_data.holding_policy import (
     evaluate_holding_strategy,
     settle_holding_strategy,
 )
+from finscope_market_data.holding_analysis import (
+    HoldingAnalysisRequest,
+    analyze_holding,
+)
 from finscope_market_data.models import DataCapability, DataEnvelope, QualityStatus, StockSymbol
 from finscope_market_data.providers.akshare_provider import AkshareProvider
 from finscope_market_data.providers.eastmoney import EastmoneyProvider
@@ -358,6 +362,30 @@ def create_app(
         request: HoldingStrategySettlementRequest,
     ) -> JSONResponse:
         result = settle_holding_strategy(request)
+        return JSONResponse(
+            status_code=200,
+            content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
+            headers={"Cache-Control": "no-store, private"},
+        )
+
+    @application.post("/v1/quant/holding-analyses")
+    async def holding_analysis(request: HoldingAnalysisRequest) -> JSONResponse:
+        code, market = request.instrument_code.split(".")
+        envelope = await _router(application).fetch(
+            DataCapability.DAILY_BARS,
+            StockSymbol(market=market, code=code),
+            limit=5000,
+        )
+        if envelope.data is None:
+            raise HTTPException(status_code=503, detail="持仓历史行情当前不可用")
+        try:
+            result = analyze_holding(
+                request,
+                envelope.data,
+                source_code=envelope.source_code or "UNKNOWN",
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
