@@ -102,6 +102,14 @@ public class JdkFinanceHttpClient implements FinanceHttpClient {
                 "application/json"), headers, maxBytes, requestTimeoutMs);
     }
 
+    @Override
+    public FinanceHttpResponse postJson(String provider, URI uri, String body,
+                                        Map<String, String> headers, int requestTimeoutMs,
+                                        int requestedMaxBytes) throws Exception {
+        return execute(provider, AcquisitionRequest.post(uri, body,
+                "application/json"), headers, requestedMaxBytes, requestTimeoutMs);
+    }
+
     private FinanceHttpResponse execute(String provider, AcquisitionRequest.Builder request,
                                         Map<String, String> headers, int requestedMaxBytes) throws Exception {
         return execute(provider, request, headers, requestedMaxBytes, readTimeoutMs);

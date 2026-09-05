@@ -18,6 +18,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PythonStockDiscoveryClientTest {
     @Test
+    void acceptsLargeBoundedDiscoveryReportWithoutRaisingOtherResponseLimits() throws Exception {
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
+        byte[] response = (payload() + " ".repeat(2 * 1024 * 1024))
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        server.createContext("/v1/quant/stock-discoveries", exchange -> {
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            String url = "http://127.0.0.1:" + server.getAddress().getPort();
+            var http = new com.finscope.rpc.marketintel.JdkFinanceHttpClient(1000, 3000, 2 * 1024 * 1024);
+            var report = new PythonStockDiscoveryClient(url, http, 3000)
+                    .discover(LocalDate.of(2026, 8, 14), 6000d, "stock-discovery-v2");
+            assertEquals(2, report.getFinalCount());
+            assertThrows(ProviderContractException.class, () -> http.postJson("OTHER",
+                    URI.create(url + "/v1/quant/stock-discoveries"), "{}", Map.of(), 3000));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void postsBoundedAutomaticDiscoveryRequestAndMapsSummary() {
         AtomicReference<String> body = new AtomicReference<String>();
         AtomicInteger timeout = new AtomicInteger();

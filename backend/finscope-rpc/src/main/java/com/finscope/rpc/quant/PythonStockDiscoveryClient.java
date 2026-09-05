@@ -20,6 +20,7 @@ import java.util.Set;
 
 @Component
 public class PythonStockDiscoveryClient {
+    private static final int MAX_REPORT_BYTES = 8 * 1024 * 1024;
     private static final String CLIENT_CODE = "PYTHON_STOCK_DISCOVERY";
     @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
     private String baseUrl;
@@ -55,7 +56,7 @@ public class PythonStockDiscoveryClient {
             request.put("policyVersion", policyVersion);
             FinanceHttpResponse response = http.postJson(CLIENT_CODE,
                     URI.create(trim(baseUrl) + "/v1/quant/stock-discoveries"),
-                    json.writeValueAsString(request), Collections.<String, String>emptyMap(), timeoutMs);
+                    json.writeValueAsString(request), Collections.<String, String>emptyMap(), timeoutMs, MAX_REPORT_BYTES);
             StockDiscoveryReport report = snakeJson.readValue(response.getBody(), StockDiscoveryReport.class);
             validate(report, policyVersion);
             report.setRawJson(response.getBody());
