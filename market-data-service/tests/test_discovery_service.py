@@ -729,3 +729,29 @@ def test_deep_forecast_reuses_shared_backtest_audit_summary(monkeypatch) -> None
     assert result["backtest_audit_status"] == "PASS"
     assert result["backtest_entry_date_agreement_rate"] == 1.0
     assert result["backtest_return_delta"] == 0.0002
+
+
+@pytest.mark.asyncio
+async def test_panel_training_leaves_event_loop_responsive(monkeypatch):
+    import asyncio
+    from threading import Event
+    from time import monotonic
+
+    entered, release = Event(), Event()
+    service = StockDiscoveryService(providers=[FakeProvider()], market=FakeMarket(),
+                                    forecast_builder=lambda *args: {})
+
+    def training(*args):
+        entered.set()
+        release.wait(3)
+        return None
+
+    monkeypatch.setattr(service, "_train_panel_artifact", training)
+    started = monotonic()
+    task = asyncio.create_task(service.discover(DiscoveryRequest()))
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        assert monotonic() - started < 1.5
+    finally:
+        release.set()
+        await task

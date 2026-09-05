@@ -134,7 +134,8 @@ class StockDiscoveryService:
         market_bars = await self._market_context(request, warnings)
         candidates, bars_by_code = await self._admit(members, request, warnings)
         candidates = enrich_context_factors(candidates, sectors)
-        panel_artifact = self._train_panel_artifact(
+        panel_artifact = await asyncio.to_thread(
+            self._train_panel_artifact,
             bars_by_code,
             request.horizon_days,
             warnings,
