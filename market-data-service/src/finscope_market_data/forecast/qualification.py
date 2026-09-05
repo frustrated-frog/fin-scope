@@ -141,7 +141,11 @@ def qualify_model(
         split.development,
         split.calibration[0].signal_date,
     )
-    calibration_anchors = split.calibration[::independent_stride_days]
+    calibration_samples = mature_training_samples(
+        split.calibration,
+        split.locked_test[0].signal_date,
+    )
+    calibration_anchors = calibration_samples[::independent_stride_days]
     locked_anchors = split.locked_test[::independent_stride_days]
     if not training or not calibration_anchors or not locked_anchors:
         raise ValueError("资格检验切分无法形成有效训练和测试样本")
@@ -194,7 +198,11 @@ def qualify_model(
             independent_stride_days=independent_stride_days,
             purged_count=len(split.development) - len(training),
         ),
-        calibration=_slice(split.calibration, independent_stride_days=independent_stride_days),
+        calibration=_slice(
+            calibration_samples,
+            independent_stride_days=independent_stride_days,
+            purged_count=len(split.calibration) - len(calibration_samples),
+        ),
         locked_test=_slice(split.locked_test, independent_stride_days=independent_stride_days),
     )
     return ModelQualification(

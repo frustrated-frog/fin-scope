@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -64,7 +65,7 @@ def test_qualification_exposes_the_exact_model_its_calibrator_was_fitted_for(
 
     result = qualify_model(history, independent_stride_days=5, model_code=model_code)
     split = split_qualification_samples(history, independent_stride_days=5)
-    anchors = split.calibration[::5]
+    anchors = mature_training_samples(split.calibration, split.locked_test[0].signal_date)[::5]
 
     assert tuple(result.model.predict(item.features) for item in anchors) == pytest.approx(
         result.calibration_raw_probabilities
@@ -164,3 +165,38 @@ def test_selective_thresholds_are_learned_from_calibration_quality_and_coverage(
     assert 0 < policy.lower_threshold < 0.5 < policy.upper_threshold < 1
     assert metrics.coverage >= 0.30
     assert metrics.covered_accuracy >= 0.80
+
+
+@pytest.mark.parametrize("horizon_days", [1, 5, 20])
+@pytest.mark.parametrize("boundary_only", [False, True])
+def test_calibration_ignores_labels_not_mature_before_locked_start(
+    horizon_days: int, boundary_only: bool,
+) -> None:
+    history = [
+        replace(
+            item,
+            exit_date=(date.fromisoformat(item.signal_date)
+                       + timedelta(days=horizon_days)).isoformat(),
+            net_return=0.01 if (index // horizon_days) % 2 else -0.01,
+        )
+        for index, item in enumerate(samples(2000))
+    ]
+    split = split_qualification_samples(history, independent_stride_days=horizon_days)
+    cutoff = split.locked_test[0].signal_date
+    changed = [
+        replace(item, net_return=-item.net_return)
+        if (item.exit_date == cutoff if boundary_only else item.exit_date >= cutoff)
+        else item
+        for item in history
+    ]
+    original = qualify_model(history, independent_stride_days=horizon_days)
+    flipped = qualify_model(changed, independent_stride_days=horizon_days)
+
+    assert original.calibration.status == "FITTED"
+    assert original.calibration == flipped.calibration
+    assert original.locked_test.raw_probabilities == flipped.locked_test.raw_probabilities
+    assert original.locked_test.calibrated_probabilities == flipped.locked_test.calibrated_probabilities
+    assert original.split_audit.calibration.purged_count == horizon_days
+    matured = mature_training_samples(split.calibration, cutoff)
+    assert original.calibration.sample_count == len(matured[::horizon_days])
+    assert original.split_audit.calibration.independent_sample_count == original.calibration.sample_count

@@ -19,7 +19,7 @@ from finscope_market_data.forecast.qualification import (
 )
 
 
-PANEL_SCHEMA_VERSION = "panel-probability-v1"
+PANEL_SCHEMA_VERSION = "panel-probability-v2"
 MAX_BLEND_WEIGHT = 0.45
 
 
@@ -44,6 +44,7 @@ class PanelArtifact:
     development_last_exit_date: str
     calibration_start_date: str
     calibration_end_date: str
+    calibration_last_exit_date: str
     locked_start_date: str
     model_means: tuple[float, ...]
     model_scales: tuple[float, ...]
@@ -88,6 +89,7 @@ class PanelArtifact:
             development_last_exit_date=str(payload["development_last_exit_date"]),
             calibration_start_date=str(payload["calibration_start_date"]),
             calibration_end_date=str(payload["calibration_end_date"]),
+            calibration_last_exit_date=str(payload["calibration_last_exit_date"]),
             locked_start_date=str(payload["locked_start_date"]),
             model_means=tuple(float(item) for item in payload["model_means"]),
             model_scales=tuple(float(item) for item in payload["model_scales"]),
@@ -217,6 +219,7 @@ def train_panel_artifact(
         for values in usable.values()
         for item in values
         if calibration_start <= item.signal_date < locked_start
+        and item.exit_date < locked_start
     ]
     locked_by_code = {
         code: tuple(item for item in values if item.signal_date >= locked_start)
@@ -285,7 +288,8 @@ def train_panel_artifact(
         ),
         development_last_exit_date=max(item.exit_date for item in development_rows),
         calibration_start_date=calibration_start,
-        calibration_end_date=all_dates[calibration_end - 1],
+        calibration_end_date=max(item.signal_date for item in calibration_rows),
+        calibration_last_exit_date=max(item.exit_date for item in calibration_rows),
         locked_start_date=locked_start,
         model_means=tuple(float(value) for value in model.means),
         model_scales=tuple(float(value) for value in model.scales),
@@ -408,6 +412,11 @@ def _validate_artifact(artifact: PanelArtifact) -> None:
         raise ValueError("面板模型训练标签未完成清洗")
     if not artifact.calibration_end_date < artifact.locked_start_date:
         raise ValueError("面板模型锁定测试边界无效")
+    calibration_last_exit = datetime.strptime(artifact.calibration_last_exit_date, "%Y-%m-%d").date()
+    locked_start = datetime.strptime(artifact.locked_start_date, "%Y-%m-%d").date()
+    calibration_end = datetime.strptime(artifact.calibration_end_date, "%Y-%m-%d").date()
+    if not calibration_end <= calibration_last_exit < locked_start:
+        raise ValueError("面板模型校准标签未完成清洗")
     dimensions = len(artifact.feature_codes)
     if not (
         len(artifact.model_means) == dimensions

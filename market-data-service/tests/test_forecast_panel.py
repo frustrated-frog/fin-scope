@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 import json
 import math
+
+import pytest
 
 from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.panel import (
@@ -171,3 +174,64 @@ def test_store_keeps_full_and_core_artifacts_separate(tmp_path) -> None:
     assert store.load(5, mode="PANEL_CORE").mode == "PANEL_CORE"
     assert store.load(5, mode="PANEL_FULL").mode == "PANEL_FULL"
     assert len(store.load(5, mode="PANEL_FULL").current_features_by_code) == 20
+
+
+@pytest.mark.parametrize("horizon_days", [1, 5, 20])
+@pytest.mark.parametrize("boundary_only", [False, True])
+def test_panel_calibrator_ignores_labels_not_mature_before_locked_start(
+    horizon_days: int, boundary_only: bool,
+) -> None:
+    source = {
+        str(code): [
+            replace(item, exit_date=(datetime.fromisoformat(item.signal_date)
+                                    + timedelta(days=horizon_days)).date().isoformat())
+            for item in _samples(code)
+        ]
+        for code in range(2)
+    }
+    cutoff = source["0"][208].signal_date
+    changed = {
+        code: [
+            replace(item, net_return=-item.net_return)
+            if (item.exit_date == cutoff if boundary_only else item.exit_date >= cutoff)
+            else item
+            for item in rows
+        ]
+        for code, rows in source.items()
+    }
+    options = dict(horizon_days=horizon_days, minimum_instruments=2, minimum_samples=100)
+    original = train_panel_artifact(source, **options)
+    flipped = train_panel_artifact(changed, **options)
+
+    assert original.calibration == flipped.calibration
+    assert original.model_weights == flipped.model_weights
+    features = source["0"][208].features
+    assert original.calibration.calibrate(original.model().predict(features)) == (
+        flipped.calibration.calibrate(flipped.model().predict(features))
+    )
+    assert original.calibration.sample_count == 2 * (52 - horizon_days)
+    assert original.calibration_last_exit_date < original.locked_start_date
+
+
+@pytest.mark.parametrize("invalid_proof", ["missing", "same_date", "future", "empty", "old_version"])
+def test_panel_store_rejects_missing_or_invalid_calibration_boundary_proof(
+    tmp_path, invalid_proof: str,
+) -> None:
+    artifact = train_panel_artifact(
+        {"0": _samples(0), "1": _samples(1)},
+        horizon_days=5, minimum_instruments=2, minimum_samples=100,
+    )
+    payload = artifact.to_dict()
+    if invalid_proof == "missing":
+        payload.pop("calibration_last_exit_date", None)
+    elif invalid_proof == "same_date":
+        payload["calibration_last_exit_date"] = artifact.locked_start_date
+    elif invalid_proof == "future":
+        payload["calibration_last_exit_date"] = "2099-01-01"
+    elif invalid_proof == "empty":
+        payload["calibration_last_exit_date"] = ""
+    else:
+        payload["schema_version"] = "panel-probability-v1"
+    (tmp_path / "panel-model-5.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert PanelArtifactStore(tmp_path).load(5) is None
