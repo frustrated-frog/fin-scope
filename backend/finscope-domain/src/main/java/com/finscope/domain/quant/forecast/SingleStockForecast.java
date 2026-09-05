@@ -25,6 +25,7 @@ public class SingleStockForecast {
     private Double rawProbability;
     private ConfidenceInterval probabilityInterval;
     private ReturnDistribution returnDistribution;
+    private NextSessionPrediction nextSession;
     private SelectionBiasAudit selectionBiasAudit;
     private Double expectedNetReturn;
     private Double lowerNetReturn;

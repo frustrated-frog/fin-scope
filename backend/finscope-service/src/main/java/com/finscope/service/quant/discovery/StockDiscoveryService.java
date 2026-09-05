@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,7 +38,11 @@ public class StockDiscoveryService {
             return run;
         }
         StockDiscoveryRequestedEvent event = event(run);
-        if (!publisher.publish(event)) {
+        boolean delivered = publisher.publish(event);
+        boolean unclaimedRecovery = "RECOVERY".equals(triggerType)
+                && "CREATED".equals(run.getStatus()) && run.getCreatedAt() != null
+                && run.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(5));
+        if (!delivered || unclaimedRecovery) {
             try {
                 fallbackExecutor.execute(() -> execute(event));
             } catch (RuntimeException error) {

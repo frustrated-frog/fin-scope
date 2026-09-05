@@ -1385,6 +1385,15 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS quant_experiment_interpretation ("
                 + "experiment_id INTEGER PRIMARY KEY,content_json TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,"
                 + "FOREIGN KEY(experiment_id) REFERENCES quant_experiment(id) ON DELETE CASCADE)");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS next_session_prediction ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_code TEXT NOT NULL,"
+                + "as_of_date TEXT NOT NULL,target_date TEXT NOT NULL,data_fingerprint TEXT NOT NULL,"
+                + "prediction_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'PENDING',"
+                + "actual_return REAL,prediction_correct INTEGER,interval_covered INTEGER,"
+                + "settled_at TEXT,outcome_note TEXT,"
+                + "UNIQUE(instrument_code,as_of_date,data_fingerprint))");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_next_session_pending "
+                + "ON next_session_prediction(status,target_date,id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS single_stock_forecast_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,instrument_code TEXT NOT NULL,as_of_date TEXT NOT NULL,"
                 + "horizon_days INTEGER NOT NULL DEFAULT 20,status TEXT NOT NULL,up_probability REAL,"
