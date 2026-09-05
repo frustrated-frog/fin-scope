@@ -6,6 +6,7 @@ import { ForecastModelRace } from './ForecastModelRace';
 import { BacktestAuditPanel } from './BacktestAuditPanel';
 import { ForecastProfessionalAudit } from './ForecastProfessionalAudit';
 import { ForecastReturnPrism } from './ForecastReturnPrism';
+import { NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
 import {
   EquityDrawdownChart,
   FactorContributionChart,
@@ -188,6 +189,7 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
 
         {report?.status === 'INSUFFICIENT_DATA' && <section className="single-forecast-gate" role="status"><span>DATA GATE / SAVED</span><h4>数据不足</h4><p>{report.conclusion}</p><strong>已取得 {report.barCount} 根日线；本次不足结论也已保存。</strong><small>截止 {report.asOfDate} · {report.sourceCode}</small></section>}
 
+        {report && <><NextSessionForecast prediction={report.nextSession} /><NextSessionOutcomeHistory code={report.instrumentCode} /></>}
         {report && report.status !== 'INSUFFICIENT_DATA' && report.upProbability != null && <>
           <section className="single-forecast-board" data-tone={status.tone}>
             <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · {report.horizonDays}D 独立试验 · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>

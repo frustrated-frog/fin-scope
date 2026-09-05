@@ -11,6 +11,7 @@ import {
 } from './StockDiscoveryVisuals';
 import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
 import './StockDiscoveryMarketContext.css';
+import { NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -60,7 +61,8 @@ function CandidateCard({ evidence, candidate, held, onOpenResearch }: {
     <div className="discovery-rank"><span>#{String(evidence.relative_rank ?? evidence.final_rank ?? '—').padStart(2, '0')}</span><i /></div>
     <div className="discovery-candidate-main">
       <header><div><small>{candidate ? `${candidate.code}.${candidate.market}` : evidence.code}</small><h4>{candidate?.name ?? evidence.code}{held ? <em className="discovery-held-badge">真实持有</em> : null}</h4></div><div className="discovery-verdicts"><em data-tier={tier}>{researchTiers[tier]}</em><b>{conclusions[evidence.conclusion] ?? evidence.conclusion}</b>{evidence.backtest_audit_status && <span data-status={evidence.backtest_audit_status}>{evidence.backtest_audit_status === 'PASS' ? '双引擎一致' : evidence.backtest_audit_status === 'WARNING' ? '账本有差异' : '影子待复核'}</span>}</div></header>
-      <div className="discovery-probability"><div><span>未来 5 日上涨概率</span><strong>{pct(evidence.calibrated_probability)}</strong></div><i aria-hidden="true"><b style={{ width: pct(evidence.calibrated_probability) }} /></i><small>保守下界 {pct(evidence.probability_lower_bound)} · 不是确定性收益承诺</small></div>
+      <NextSessionForecast prediction={evidence.forecast_report?.nextSession} compact />
+      <div className="discovery-probability"><div><span>未来 5 日上涨概率</span><strong>{pct(evidence.calibrated_probability)}</strong></div><i aria-hidden="true"><b style={{ width: pct(evidence.calibrated_probability) }} /></i><small>原有交易周期研究 · 保守下界 {pct(evidence.probability_lower_bound)}</small></div>
       <dl>
         <div><dt>锁定样本准确率</dt><dd>{pct(evidence.locked_accuracy)}</dd></div>
         <div><dt>Brier 技能分</dt><dd>{evidence.brier_skill_score.toFixed(3)}</dd></div>
@@ -162,6 +164,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
     </section>}
 
     <DiscoveryFunnel funnel={report.funnel} />
+    <NextSessionOutcomeHistory />
 
     <section className="discovery-provenance" aria-label="股票发现数据来源与交易范围">
       <article><span>RANKING AUTHORITY</span><strong>同花顺唯一热榜</strong><small><b>净流入降序</b> · 行业板块</small></article>

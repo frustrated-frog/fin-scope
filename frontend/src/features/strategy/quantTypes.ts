@@ -319,6 +319,7 @@ export interface ForecastSelectionBiasAudit {
 }
 
 export interface SingleStockForecast {
+  nextSession?: NextSessionPrediction;
   reportSchemaVersion: string; modelVersion: string;
   instrumentCode: string; asOfDate: string; horizonDays: number;
   status: SingleStockForecastStatus; conclusion: string;
@@ -388,6 +389,22 @@ export interface SingleStockForecast {
   qlibReference?: { status: string; role: string; runtimeDependency: boolean };
   panelModel?: ForecastPanelModel;
   warnings: string[];
+}
+
+export interface NextSessionPrediction {
+  status: 'READY' | 'WATCH' | 'INSUFFICIENT_DATA' | 'STALE_DATA' | 'CALENDAR_UNAVAILABLE' | 'BEFORE_CLOSE';
+  asOfDate: string; targetDate?: string; generatedAt: string; label: string; lastClose: number;
+  upProbability?: number; expectedReturn?: number; lowerReturn?: number; upperReturn?: number;
+  decision: 'UP' | 'DOWN' | 'ABSTAIN'; modelCode?: string; modelVersion: string; dataFingerprint: string;
+  trainingThrough?: string; calibrationThrough?: string; trainingSampleCount: number;
+  calibrationSampleCount: number; validationSampleCount: number; accuracy?: number;
+  brierScore?: number; baselineBrierScore?: number; intervalCoverage?: number; warnings: string[];
+}
+
+export interface NextSessionPredictionRecord {
+  id: number; instrumentCode: string; prediction: NextSessionPrediction;
+  status: 'PENDING' | 'MATURED' | 'UNAVAILABLE'; actualReturn?: number;
+  correct?: boolean; intervalCovered?: boolean; settledAt?: string; outcomeNote?: string;
 }
 
 export interface SingleStockForecastRun {
