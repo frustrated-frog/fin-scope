@@ -330,7 +330,8 @@ def create_app(
         scope = TradingScopePolicy().classify(request.code)
         if scope.reason == "NO_STAR_MARKET_PERMISSION":
             context_warnings.append("该标的属于科创板，当前账户不可交易，本报告仅供研究")
-        result = build_forecast(
+        result = await asyncio.to_thread(
+            build_forecast,
             envelope.data,
             instrument_code=f"{request.code}.{market}",
             source_code=envelope.source_code or "UNKNOWN",

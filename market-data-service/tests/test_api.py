@@ -851,3 +851,26 @@ def test_unavailable_data_returns_structured_503(tmp_path: Path) -> None:
     assert response.status_code == 503
     assert response.json()["quality_status"] == "UNAVAILABLE"
     assert response.json()["data"] is None
+
+
+def test_forecast_training_does_not_block_health_endpoint(tmp_path: Path, monkeypatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from types import SimpleNamespace
+
+    entered, release = Event(), Event()
+
+    def training(*args, **kwargs):
+        entered.set()
+        release.wait(5)
+        return SimpleNamespace(model_dump=lambda **kwargs: {"instrumentCode": "600519.SH"})
+
+    monkeypatch.setattr("finscope_market_data.app.build_forecast", training)
+    with client(tmp_path, [ForecastDailyBarProvider()]) as api, ThreadPoolExecutor(max_workers=2) as pool:
+        prediction = pool.submit(api.post, "/v1/quant/single-stock-forecasts", json={"code": "600519"})
+        try:
+            assert entered.wait(3)
+            assert pool.submit(api.get, "/health").result(timeout=2).status_code == 200
+        finally:
+            release.set()
+        assert prediction.result(timeout=3).status_code == 200
