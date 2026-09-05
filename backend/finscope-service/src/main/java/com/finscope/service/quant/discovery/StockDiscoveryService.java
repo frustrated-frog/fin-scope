@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,7 +19,7 @@ import java.util.concurrent.Executor;
 @Slf4j
 @Service
 public class StockDiscoveryService {
-    public static final String POLICY_VERSION = "stock-discovery-v2";
+    public static final String POLICY_VERSION = "stock-discovery-v3-next-session";
     @Resource
     private StockDiscoveryRepository repository;
     @Resource
@@ -40,8 +39,7 @@ public class StockDiscoveryService {
         StockDiscoveryRequestedEvent event = event(run);
         boolean delivered = publisher.publish(event);
         boolean unclaimedRecovery = "RECOVERY".equals(triggerType)
-                && "CREATED".equals(run.getStatus()) && run.getCreatedAt() != null
-                && run.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(5));
+                && "CREATED".equals(run.getStatus());
         if (!delivered || unclaimedRecovery) {
             try {
                 fallbackExecutor.execute(() -> execute(event));

@@ -53,6 +53,22 @@ class NextSessionPredictionServiceTest {
         verify(repository).unavailable(eq(1L), any(), contains("目标交易日"));
     }
 
+    @Test
+    void staleUpstreamKeepsOutcomePendingForRetry() {
+        var repository = mock(NextSessionPredictionRepository.class);
+        var source = mock(QuantDailyBarSource.class);
+        var service = service(repository, source);
+        when(repository.findPending(100)).thenReturn(List.of(record()));
+        when(source.fetch("000001.SZ", 5000)).thenReturn(new QuantDailyBarBatch(
+                List.of(bar("2026-09-04", 10)), "TEST", "TEST", "STALE_CACHE",
+                LocalDate.of(2026, 9, 4), List.of()));
+
+        service.settle(LocalDateTime.of(2026, 9, 9, 16, 0));
+
+        verify(repository, never()).unavailable(any(), any(), any());
+        verify(repository, never()).settle(any(), anyDouble(), anyBoolean(), anyBoolean(), any(), any());
+    }
+
     private NextSessionPredictionService service(NextSessionPredictionRepository repository, QuantDailyBarSource source) {
         var value = new NextSessionPredictionService();
         ReflectionTestUtils.setField(value, "repository", repository);

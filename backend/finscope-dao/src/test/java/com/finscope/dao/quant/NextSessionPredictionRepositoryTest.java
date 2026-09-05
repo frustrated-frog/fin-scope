@@ -60,6 +60,17 @@ class NextSessionPredictionRepositoryTest {
         assertEquals(0, repository.importFrozenReports());
     }
 
+    @Test
+    void importsSingleStockReportsAndDeduplicatesTheSameDiscoveryPrediction() {
+        insertDiscovery("2026-09-04T16:00:00", "READY");
+        jdbc.update("INSERT INTO single_stock_forecast_run(instrument_code,horizon_days,as_of_date,"
+                + "created_at,status,data_fingerprint,model_version,report_schema_version,report_json) "
+                + "SELECT '000001.SZ',5,'2026-09-04','2026-09-04T16:00:00','READY','test','v1','v1',"
+                + "json_extract(report_json,'$.deep_evidence[0].forecast_report') FROM stock_discovery_run");
+        assertEquals(1, repository.importFrozenReports());
+        assertEquals(1, repository.history("000001", 10).size());
+    }
+
     private void insertDiscovery(String generatedAt, String status) {
         String prediction = "{\"status\":\"" + status + "\",\"asOfDate\":\"2026-09-04\","
                 + "\"targetDate\":\"2026-09-07\",\"generatedAt\":\"" + generatedAt + "\","

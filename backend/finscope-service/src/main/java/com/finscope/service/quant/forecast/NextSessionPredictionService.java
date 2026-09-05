@@ -70,7 +70,8 @@ public class NextSessionPredictionService {
         QuantDailyBar signal = onDate(batch, prediction.getAsOfDate());
         QuantDailyBar target = onDate(batch, prediction.getTargetDate());
         if (!validClose(signal) || !validClose(target)) {
-            if (now.toLocalDate().isAfter(prediction.getTargetDate().plusDays(1))) {
+            if (now.toLocalDate().isAfter(prediction.getTargetDate().plusDays(1))
+                    && batch.getBars().stream().anyMatch(bar -> bar.getTradeDate().isAfter(prediction.getTargetDate()))) {
                 repository.unavailable(record.getId(), now, "目标交易日或基准日缺少可验证收盘价，禁止替换为其他日期");
             }
             return;
