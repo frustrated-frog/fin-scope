@@ -80,6 +80,7 @@ class DiscoveryCandidate(BaseModel):
 
 
 class DeepCandidateEvidence(BaseModel):
+    next_session_score: float | None = None
     code: str
     qualified: bool
     conclusion: Literal[

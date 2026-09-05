@@ -218,3 +218,18 @@ def test_relative_ranking_returns_best_research_candidates_without_faking_qualif
     assert ranked[0].code == "000006"
     assert all(not item.qualified for item in ranked)
     assert all(item.research_tier in {"CONDITIONAL", "WATCH"} for item in ranked)
+
+
+def test_relative_list_prioritizes_verified_next_session_edge_without_changing_trade_gate():
+    def evidence(code, status, expected):
+        return DeepCandidateEvidence(code=code, qualified=False, conclusion="NO_CLEAR_ADVANTAGE",
+            calibrated_probability=.6, probability_lower_bound=.4, brier_skill_score=-.1,
+            locked_accuracy=.5, locked_log_loss=.7, risk_adjusted_return=0,
+            max_drawdown=-.1, stability_score=.5, health_status="DEGRADED",
+            forecast_report={"nextSession": {"status": status, "upProbability": .65,
+                "expectedReturn": expected, "lowerReturn": -.02, "upperReturn": .03}})
+    ranked = rank_relative_candidates([evidence("000001", "WATCH", .04),
+                                       evidence("000002", "READY", .01)])
+    assert ranked[0].code == "000002"
+    assert ranked[0].next_session_score is not None
+    assert not ranked[0].qualified

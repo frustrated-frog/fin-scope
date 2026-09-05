@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+import math
 from typing import Iterable
 
 from finscope_market_data.discovery.schemas import (
@@ -103,11 +104,28 @@ def rank_relative_candidates(
             item.research_tier = "CONDITIONAL"
         else:
             item.research_tier = "WATCH"
-    ranked.sort(key=lambda item: (-(item.relative_score or 0.0), item.code))
+    for item in ranked:
+        _, score = _next_session_priority(item)
+        item.next_session_score = score
+    ranked.sort(key=lambda item: (-_next_session_priority(item)[0],
+                                 -(item.next_session_score or 0.0), -(item.relative_score or 0.0), item.code))
     selected = ranked[: max(0, limit)]
     for rank, item in enumerate(selected, start=1):
         item.relative_rank = rank
     return selected
+
+
+def _next_session_priority(item: DeepCandidateEvidence) -> tuple[int, float | None]:
+    prediction = (item.forecast_report or {}).get("nextSession")
+    if not isinstance(prediction, dict) or prediction.get("status") not in {"READY", "WATCH"}:
+        return 0, None
+    values = [prediction.get(key) for key in ("expectedReturn", "lowerReturn", "upperReturn")]
+    if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in values):
+        return 0, None
+    expected, lower, upper = values
+    # Research ordering only. The existing executable trade gate is not relaxed.
+    score = expected / max((upper - lower) / 2.0, 0.005)
+    return (2 if prediction["status"] == "READY" else 1), round(score, 8)
 
 
 def _evidence_score(item: DeepCandidateEvidence) -> float:

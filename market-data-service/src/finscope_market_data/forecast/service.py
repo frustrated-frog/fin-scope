@@ -22,6 +22,7 @@ from finscope_market_data.forecast.factor_catalog import FACTORS
 from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import FEATURE_CODES, build_samples, current_features
 from finscope_market_data.forecast.model_competition import run_model_competition
+from finscope_market_data.forecast.next_session import build_next_session_forecast
 from finscope_market_data.forecast.performance import (
     BacktestReport,
     annual_performance,
@@ -123,6 +124,7 @@ def build_forecast(
         ordered, instrument_code, horizon_days, context=context
     )
     base = dict(
+        next_session=build_next_session_forecast(ordered, context=context, now=panel_now),
         instrument_code=instrument_code,
         as_of_date=ordered[-1].trade_date,
         horizon_days=horizon_days,

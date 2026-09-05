@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from finscope_market_data.forecast.next_session_types import NextSessionPrediction
 
 
 def _to_camel(value: str) -> str:
@@ -431,6 +432,7 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
+    next_session: NextSessionPrediction | None = None
     report_schema_version: str = "single-stock-research-v10"
     model_version: str = "competition-pending-v10"
     instrument_code: str
