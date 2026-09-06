@@ -1,0 +1,150 @@
+.flow-field {
+  position: relative;
+  isolation: isolate;
+}
+
+.flow-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.flow-field[data-flow-ready="true"] > .flow-canvas {
+  opacity: 1;
+}
+
+.shell-flow {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+}
+
+.shell-flow::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: 0.065;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.55' filter='url(%23grain)'/%3E%3C/svg%3E");
+}
+
+[data-theme="dark"] .shell-flow::after {
+  opacity: 0.095;
+}
+
+.flow-field--cards .dashboard-pulse-item {
+  --ink-primary: 28, 142, 125;
+  --ink-secondary: 64, 110, 151;
+  z-index: 1;
+  border-radius: 14px;
+  border-color: rgba(var(--ink-primary), 0.28);
+  background:
+    radial-gradient(ellipse at 8% 12%, rgba(var(--ink-primary), 0.24), transparent 70%),
+    radial-gradient(ellipse at 95% 90%, rgba(var(--ink-secondary), 0.25), transparent 70%),
+    #e4eeea;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 10px 25px rgba(19, 47, 45, 0.06);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.flow-field--cards .is-attention {
+  --ink-primary: 188, 124, 41;
+  --ink-secondary: 101, 81, 150;
+}
+
+.flow-field--cards .is-review {
+  --ink-primary: 46, 111, 199;
+  --ink-secondary: 59, 146, 159;
+}
+
+.flow-field--cards .is-active {
+  --ink-primary: 200, 96, 70;
+  --ink-secondary: 122, 77, 151;
+}
+
+[data-theme="dark"] .flow-field--cards .dashboard-pulse-item {
+  background:
+    radial-gradient(ellipse at 8% 12%, rgba(var(--ink-primary), 0.35), transparent 70%),
+    radial-gradient(ellipse at 95% 90%, rgba(var(--ink-secondary), 0.38), transparent 70%),
+    #0d1b22;
+}
+
+.flow-field--cards[data-flow-ready="true"] .dashboard-pulse-item {
+  background: transparent;
+}
+
+.flow-field--cards .dashboard-pulse-item::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.11), transparent 40%, rgba(255, 255, 255, 0.035));
+}
+
+.flow-field--cards .dashboard-pulse-item:hover,
+.flow-field--cards .dashboard-pulse-item:active {
+  transform: none;
+}
+
+.flow-field--cards .dashboard-pulse-item:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -4px;
+  transform: none;
+}
+
+.flow-field--cards .dashboard-pulse-value > strong {
+  color: #183c39;
+}
+
+.flow-field--cards .dashboard-pulse-item-label,
+.flow-field--cards .dashboard-pulse-item > small:last-child,
+.flow-field--cards .dashboard-pulse-value > small {
+  color: #35524e;
+}
+
+[data-theme="dark"] .flow-field--cards .dashboard-pulse-value > strong {
+  color: #f0f7f4;
+  text-shadow: 0 2px 14px rgba(1, 9, 12, 0.24);
+}
+
+[data-theme="dark"] .flow-field--cards .dashboard-pulse-item-label,
+[data-theme="dark"] .flow-field--cards .dashboard-pulse-item > small:last-child,
+[data-theme="dark"] .flow-field--cards .dashboard-pulse-value > small {
+  color: #d3e3df;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .flow-field--cards .dashboard-pulse-item:hover {
+    border-color: rgba(var(--ink-primary), 0.8);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 8px 24px rgba(var(--ink-primary), 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-field--cards .dashboard-pulse-item {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .flow-canvas,
+  .shell-flow {
+    visibility: hidden;
+  }
+
+  .flow-field--cards[data-flow-ready="true"] .dashboard-pulse-item {
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .flow-field--cards .dashboard-pulse-item > *,
+  .flow-field--cards .dashboard-pulse-value > strong,
+  .flow-field--cards .dashboard-pulse-value > small {
+    color: var(--ink);
+  }
+}

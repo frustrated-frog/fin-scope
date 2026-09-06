@@ -1,0 +1,60 @@
+import { act, render, waitFor } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+import { FlowField } from './FlowField';
+
+function controller() {
+  return { setActive: vi.fn(), setMotion: vi.fn(), refresh: vi.fn(), destroy: vi.fn() };
+}
+
+function media(reduced = false) {
+  const listeners = new Set<() => void>();
+  const query = {
+    matches: reduced,
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn)
+  };
+  vi.stubGlobal('matchMedia', () => query);
+  return { query, listeners };
+}
+
+test('pauses while hidden, follows motion preference and releases renderer on unmount', async () => {
+  const { query, listeners } = media();
+  const engine = controller();
+  const { container, unmount } = render(<FlowField mode="ambient" loadRenderer={async () => () => engine} />);
+  await waitFor(() => expect(container.firstChild).toHaveAttribute('data-flow-ready', 'true'));
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+  act(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(engine.setActive).toHaveBeenLastCalledWith(false);
+  act(() => {
+    query.matches = true;
+    listeners.forEach(fn => fn());
+  });
+  expect(engine.setMotion).toHaveBeenLastCalledWith(false);
+  unmount();
+  expect(engine.destroy).toHaveBeenCalledTimes(1);
+  expect(listeners.size).toBe(0);
+  vi.restoreAllMocks();
+});
+
+test('does not create a renderer after asynchronous loading finishes on an unmounted view', async () => {
+  media();
+  const create = vi.fn(() => controller());
+  let resolve!: (value: typeof create) => void;
+  const pending = new Promise<typeof create>(done => { resolve = done; });
+  const { unmount } = render(<FlowField mode="cards" loadRenderer={() => pending} />);
+  unmount();
+  await act(async () => { resolve(create); });
+  expect(create).not.toHaveBeenCalled();
+});
+
+test('retains children and static fallback if GPU initialization fails', async () => {
+  media();
+  const { container, getByRole } = render(
+    <FlowField mode="cards" loadRenderer={async () => () => { throw new Error('WebGL unavailable'); }}>
+      <button>打开文章</button>
+    </FlowField>
+  );
+  await waitFor(() => expect(container.firstChild).toHaveAttribute('data-flow-ready', 'false'));
+  expect(getByRole('button')).toHaveTextContent('打开文章');
+  expect(container.querySelector('canvas')).toHaveAttribute('aria-hidden', 'true');
+});

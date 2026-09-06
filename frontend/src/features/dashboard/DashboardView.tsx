@@ -1,4 +1,5 @@
 import { Table } from '../../shared/components/Table';
+import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import {
   AgentRun,
   Article,
@@ -137,11 +138,12 @@ export function DashboardView({
             </span>
           </div>
         </div>
-        <div className="dashboard-pulse-items" aria-label="研究队列总览">
+        <FlowField mode="cards" className="dashboard-pulse-items">
           {pulseItems.map((item) => (
             <button
               key={item.label}
               className={`dashboard-pulse-item is-${item.tone}`}
+              data-ink-card={item.tone}
               type="button"
               aria-label={`${item.label} ${item.value}，${item.detail}。打开${pulseWorkspaceName(item.view)}`}
               onClick={() => onChangeView(item.view)}
@@ -155,7 +157,7 @@ export function DashboardView({
               <small>{item.detail}</small>
             </button>
           ))}
-        </div>
+        </FlowField>
       </section>
 
       <section className="dashboard-hotspots" aria-labelledby="dashboard-hotspots-heading">

@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 
 import { ToastHost } from '../shared/components/ToastHost';
+import { FlowField } from '../shared/visuals/fluid/FlowField';
 import { ToastItem, View } from '../shared/types';
 
 const navGroups: Array<{
@@ -77,6 +78,7 @@ export function AppShell({
   return (
     <div className="app-shell" data-theme={theme}>
       <div className="shell-ambient" aria-hidden="true" />
+      <FlowField mode="ambient" className="shell-flow" />
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
