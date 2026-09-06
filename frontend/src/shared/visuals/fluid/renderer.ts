@@ -3,9 +3,9 @@ import { FluidSimulation } from './FluidSimulation';
 import { GpuPass } from './gpu';
 import { ParticleField } from './ParticleField';
 import { FluidQuality, localPointer, simulationDimensions } from './quality';
-import { inkDisplay } from './shaders';
+import { liquidGlassDisplay } from './glassMaterial';
 
-export type FlowMode = 'ambient' | 'cards';
+export type FlowMode = 'ambient' | 'cards' | 'panels';
 export interface FlowController {
   setActive(active: boolean): void;
   setMotion(motion: boolean): void;
@@ -18,12 +18,7 @@ export type FlowFactory = (canvas: HTMLCanvasElement, host: HTMLElement, options
   onFailure: () => void;
 }) => FlowController;
 
-const PALETTES = [
-  [new Vector3(0.20, 0.72, 0.62), new Vector3(0.10, 0.32, 0.40)],
-  [new Vector3(0.82, 0.44, 0.13), new Vector3(0.26, 0.22, 0.51)],
-  [new Vector3(0.16, 0.46, 0.86), new Vector3(0.22, 0.64, 0.69)],
-  [new Vector3(0.84, 0.29, 0.19), new Vector3(0.34, 0.23, 0.57)]
-];
+const FLOW_DYES = [new Vector3(0.62, 0.72, 0.77), new Vector3(0.16, 0.26, 0.32)];
 
 export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   const context = canvas.getContext('webgl2', { alpha: true, antialias: false, premultipliedAlpha: false });
@@ -37,7 +32,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   renderer.setClearColor(0x000000, 0);
   renderer.debug.onShaderError = () => { throw new Error('Fluid shader compilation failed'); };
   const gpu = new GpuPass(renderer);
-  const cards = options.mode === 'cards' ? Array.from(host.querySelectorAll<HTMLElement>('[data-ink-card]')) : [];
+  const surfaces = options.mode === 'ambient' ? [] : Array.from(host.querySelectorAll<HTMLElement>('[data-flow-surface]'));
   const interactionHost = options.mode === 'ambient' ? host.closest<HTMLElement>('.app-shell') ?? host : host;
   const quality = new FluidQuality(window.innerWidth < 760);
   const simulations: FluidSimulation[] = [];
@@ -45,6 +40,8 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   const pointer = new Vector2();
   const targetPointer = new Vector2();
   const size = new Vector2();
+  const dyeTexel = new Vector2();
+  const velocityTexel = new Vector2();
   const dyeColor = new Vector3();
   const previous = { x: 0, y: 0, card: -2 };
   let pending: { x: number; y: number; card: number } | undefined;
@@ -63,7 +60,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   let currentLevel = -1;
 
   const seed = (simulation: FluidSimulation, index: number) => {
-    const palette = PALETTES[index % PALETTES.length];
+    const palette = FLOW_DYES;
     for (let drop = 0; drop < 9; drop += 1) {
       const angle = drop * 2.399 + index * 0.7;
       const x = 0.5 + Math.cos(angle) * 0.34;
@@ -84,9 +81,9 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
     // Keep the canvas at the scroll viewport origin; card rects already include scrolling.
     canvas.style.transform = `translate(${host.scrollLeft}px, ${host.scrollTop}px)`;
     dark = host.closest('[data-theme]')?.getAttribute('data-theme') === 'dark';
-    const count = options.mode === 'cards' ? cards.length : 1;
+    const count = options.mode === 'ambient' ? 1 : surfaces.length;
     const grids = Array.from({ length: count }, (_, index) => {
-      const rect = cards[index]?.getBoundingClientRect();
+      const rect = surfaces[index]?.getBoundingClientRect();
       return simulationDimensions(rect?.width ?? width, rect?.height ?? height, quality.level);
     });
     const geometryChanged = grids.some((grid, index) => {
@@ -98,7 +95,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       simulations.length = 0;
       for (let index = 0; index < count; index += 1) {
         const grid = grids[index];
-        const simulation = new FluidSimulation(gpu, grid.width, grid.height, options.mode === 'cards' ? 3 : 1);
+        const simulation = new FluidSimulation(gpu, grid.width, grid.height, options.mode === 'ambient' ? 1 : 3);
         simulations.push(simulation);
         seed(simulation, index);
       }
@@ -118,8 +115,8 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
     if (!motion || !active || event.pointerType === 'touch') {
       return;
     }
-    const card = options.mode === 'ambient' ? -1 : cards.findIndex(element => element.contains(event.target as Node));
-    if (card === -1 && options.mode === 'cards') {
+    const card = options.mode === 'ambient' ? -1 : surfaces.findIndex(element => element.contains(event.target as Node));
+    if (card === -1 && options.mode !== 'ambient') {
       previous.card = -2;
       return;
     }
@@ -139,12 +136,12 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       return;
     }
     const index = pending.card < 0 ? 0 : pending.card;
-    const rect = (cards[index] ?? host).getBoundingClientRect();
+    const rect = (surfaces[index] ?? host).getBoundingClientRect();
     const point = localPointer(pending.x, pending.y, rect);
     const same = pending.card === previous.card;
     const dx = same ? Math.max(-0.15, Math.min(0.15, point.x - previous.x)) : 0;
     const dy = same ? Math.max(-0.15, Math.min(0.15, point.y - previous.y)) : 0;
-    const palette = PALETTES[index % PALETTES.length];
+    const palette = FLOW_DYES;
     dyeColor.copy(palette[0]).multiplyScalar(0.28);
     simulations[index]?.splat(point.x, point.y, dx * 850, dy * 850, dyeColor, 0.004);
     targetPointer.set(point.x * 2 - 1, point.y * 2 - 1);
@@ -174,7 +171,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
         resize();
       }
       const hostRect = host.getBoundingClientRect();
-      const rects = cards.map(card => card.getBoundingClientRect());
+      const rects = surfaces.map(card => card.getBoundingClientRect());
       const visible = (index: number) => {
         const rect = rects[index];
         return !rect || (rect.bottom > 0 && rect.top < window.innerHeight && rect.right > hostRect.left && rect.left < hostRect.right);
@@ -190,7 +187,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
           }
           if (feed) {
             const angle = elapsed * 0.32 + index * 2.1;
-            dyeColor.copy(PALETTES[index % 4][Math.floor(elapsed / 8) % 2]).multiplyScalar(options.mode === 'cards' ? 0.055 : 0.015);
+            dyeColor.copy(FLOW_DYES[Math.floor(elapsed / 8) % 2]).multiplyScalar(options.mode === 'ambient' ? 0.015 : 0.08);
             simulation.splat(0.5 + Math.cos(angle) * 0.31, 0.5 + Math.sin(angle * 1.3) * 0.3,
               Math.sin(angle * 1.4) * 4, Math.cos(angle) * 4, dyeColor, 0.009);
           }
@@ -211,7 +208,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
         particles.render(renderer, pointer, dark, quality.level);
       } else {
         renderer.setScissorTest(true);
-        cards.forEach((card, index) => {
+        surfaces.forEach((card, index) => {
           if (!visible(index)) {
             return;
           }
@@ -221,9 +218,14 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
           renderer.setViewport(x, y, rect.width, rect.height);
           renderer.setScissor(Math.max(0, x), Math.max(0, y), Math.min(rect.width, width - Math.max(0, x)), Math.min(rect.height, height - Math.max(0, y)));
           size.set(rect.width, rect.height);
-          gpu.draw(inkDisplay, {
-            dye: simulations[index].dye.read.texture, size, dark: dark ? 1 : 0,
-            tint: PALETTES[index % 4][0], radius: parseFloat(getComputedStyle(card).borderTopLeftRadius) || 12
+          const simulation = simulations[index];
+          dyeTexel.set(1 / simulation.dye.read.width, 1 / simulation.dye.read.height);
+          velocityTexel.set(1 / simulation.velocity.read.width, 1 / simulation.velocity.read.height);
+          gpu.draw(liquidGlassDisplay, {
+            dye: simulation.dye.read.texture, velocity: simulation.velocity.read.texture,
+            dyeTexel, velocityTexel, size, dark: dark ? 1 : 0, time: elapsed,
+            panel: options.mode === 'panels' ? 1 : 0, seed: index,
+            radius: parseFloat(getComputedStyle(card).borderTopLeftRadius) || 12
           }, null);
         });
         renderer.setScissorTest(false);

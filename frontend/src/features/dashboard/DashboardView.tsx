@@ -143,7 +143,7 @@ export function DashboardView({
             <button
               key={item.label}
               className={`dashboard-pulse-item is-${item.tone}`}
-              data-ink-card={item.tone}
+              data-flow-surface={item.tone}
               type="button"
               aria-label={`${item.label} ${item.value}，${item.detail}。打开${pulseWorkspaceName(item.view)}`}
               onClick={() => onChangeView(item.view)}
@@ -168,11 +168,11 @@ export function DashboardView({
           </div>
           <p>按热点分排列金融、科技与政治事件；摘要保留事实内容，点击可进入事件详情。</p>
         </div>
-        <div className="dashboard-hotspot-grid">
+        <FlowField mode="panels" className="dashboard-hotspot-grid">
           {normalizedHotspotRankings.map((ranking) => (
             <HotspotBoard key={ranking.categoryCode} ranking={ranking} onOpen={onOpenRadarEvent} />
           ))}
-        </div>
+        </FlowField>
       </section>
 
       <section className="dashboard-priority" aria-labelledby="dashboard-priority-heading">
@@ -319,7 +319,7 @@ function HotspotBoard({ ranking, onOpen }: {
   onOpen: (eventId: number) => void;
 }) {
   return (
-    <article className={`dashboard-hotspot-board is-${ranking.categoryCode.toLowerCase()}`}>
+    <article className={`dashboard-hotspot-board is-${ranking.categoryCode.toLowerCase()}`} data-flow-surface={ranking.categoryCode}>
       <header>
         <div>
           <span>{ranking.categoryCode}</span>

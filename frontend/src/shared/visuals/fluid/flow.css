@@ -27,119 +27,173 @@
 
 .app-shell > .shell-ambient {
   background:
-    radial-gradient(ellipse at 18% 12%, var(--glow), transparent 44%),
-    radial-gradient(ellipse at 82% 35%, var(--warm-glow), transparent 42%);
+    radial-gradient(ellipse at 18% 12%, rgba(128, 162, 180, 0.13), transparent 44%),
+    radial-gradient(ellipse at 82% 35%, rgba(150, 165, 178, 0.10), transparent 42%);
   mask-image: none;
 }
 
 .app-shell[data-theme="dark"] > .shell-ambient {
   background:
-    radial-gradient(ellipse at 18% 12%, rgba(25, 117, 104, 0.16), transparent 44%),
-    radial-gradient(ellipse at 82% 35%, rgba(127, 99, 51, 0.09), transparent 42%);
+    radial-gradient(ellipse at 18% 12%, rgba(82, 113, 135, 0.12), transparent 44%),
+    radial-gradient(ellipse at 82% 35%, rgba(108, 122, 143, 0.08), transparent 42%);
 }
 
 .shell-flow::after {
   position: absolute;
   inset: 0;
   content: "";
-  opacity: 0.065;
+  opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.55' filter='url(%23grain)'/%3E%3C/svg%3E");
 }
 
 [data-theme="dark"] .shell-flow::after {
-  opacity: 0.095;
+  opacity: 0.055;
 }
 
-.flow-field--cards .dashboard-pulse-item {
-  --ink-primary: 28, 142, 125;
-  --ink-secondary: 64, 110, 151;
+
+/* Shared silver/graphite material. Static gradients also cover unavailable WebGL. */
+.flow-field--cards,
+.flow-field--panels {
+  --glass-line: rgba(111, 141, 158, 0.29);
+  --glass-ink: #233945;
+  --glass-muted: #475d6a;
+  --glass-focus: #2c738d;
+  --glass-veil: rgba(244, 248, 249, 0.16);
+  --glass-hover: rgba(134, 172, 190, 0.12);
+}
+
+[data-theme="dark"] .flow-field--cards,
+[data-theme="dark"] .flow-field--panels {
+  --glass-line: rgba(157, 186, 201, 0.22);
+  --glass-ink: #e3ebef;
+  --glass-muted: #b7c7d0;
+  --glass-focus: #9dc7d8;
+  --glass-veil: rgba(9, 17, 24, 0.16);
+  --glass-hover: rgba(157, 189, 204, 0.075);
+}
+
+.flow-field [data-flow-surface] {
+  position: relative;
   z-index: 1;
-  border-radius: 14px;
-  border-color: rgba(var(--ink-primary), 0.28);
+  border: 1px solid var(--glass-line);
+  border-radius: 16px;
   background:
-    radial-gradient(ellipse at 8% 12%, rgba(var(--ink-primary), 0.24), transparent 70%),
-    radial-gradient(ellipse at 95% 90%, rgba(var(--ink-secondary), 0.25), transparent 70%),
-    #e4eeea;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 10px 25px rgba(19, 47, 45, 0.06);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+    radial-gradient(ellipse at 15% 12%, rgba(175, 199, 211, 0.22), transparent 65%),
+    radial-gradient(ellipse at 92% 85%, rgba(147, 182, 195, 0.18), transparent 64%),
+    rgba(230, 238, 242, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 32px rgba(20, 34, 44, 0.07);
 }
 
-.flow-field--cards .is-attention {
-  --ink-primary: 188, 124, 41;
-  --ink-secondary: 101, 81, 150;
-}
-
-.flow-field--cards .is-review {
-  --ink-primary: 46, 111, 199;
-  --ink-secondary: 59, 146, 159;
-}
-
-.flow-field--cards .is-active {
-  --ink-primary: 200, 96, 70;
-  --ink-secondary: 122, 77, 151;
-}
-
-[data-theme="dark"] .flow-field--cards .dashboard-pulse-item {
+[data-theme="dark"] .flow-field [data-flow-surface] {
   background:
-    radial-gradient(ellipse at 8% 12%, rgba(var(--ink-primary), 0.35), transparent 70%),
-    radial-gradient(ellipse at 95% 90%, rgba(var(--ink-secondary), 0.38), transparent 70%),
-    #0d1b22;
+    radial-gradient(ellipse at 15% 12%, rgba(141, 171, 188, 0.16), transparent 65%),
+    radial-gradient(ellipse at 92% 85%, rgba(101, 145, 165, 0.12), transparent 64%),
+    rgba(14, 24, 33, 0.76);
 }
 
-.flow-field--cards[data-flow-ready="true"] .dashboard-pulse-item {
+.flow-field[data-flow-ready="true"] [data-flow-surface] {
   background: transparent;
 }
 
-.flow-field--cards .dashboard-pulse-item::after {
+.flow-field [data-flow-surface]::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   content: "";
   pointer-events: none;
-  background: linear-gradient(120deg, rgba(255, 255, 255, 0.11), transparent 40%, rgba(255, 255, 255, 0.035));
+  background: linear-gradient(120deg, rgba(227, 242, 249, 0.09), transparent 38%, rgba(201, 225, 239, 0.025));
+}
+
+.flow-field--cards .dashboard-pulse-item {
+  --pulse-tone: #739cae;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
 .flow-field--cards .dashboard-pulse-item:hover,
-.flow-field--cards .dashboard-pulse-item:active {
+.flow-field--cards .dashboard-pulse-item:active,
+.flow-field--cards .dashboard-pulse-item:focus-visible {
   transform: none;
 }
 
 .flow-field--cards .dashboard-pulse-item:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--glass-focus);
   outline-offset: -4px;
-  transform: none;
 }
 
-.flow-field--cards .dashboard-pulse-value > strong {
-  color: #183c39;
+.flow-field--cards .dashboard-pulse-value > strong,
+.flow-field--panels .dashboard-hotspot-copy > strong,
+.flow-field--panels .dashboard-hotspot-board > header h4 {
+  color: var(--glass-ink);
 }
 
 .flow-field--cards .dashboard-pulse-item-label,
 .flow-field--cards .dashboard-pulse-item > small:last-child,
-.flow-field--cards .dashboard-pulse-value > small {
-  color: #35524e;
+.flow-field--cards .dashboard-pulse-value > small,
+.flow-field--panels .dashboard-hotspot-copy > p,
+.flow-field--panels .dashboard-hotspot-meta,
+.flow-field--panels .dashboard-hotspot-empty {
+  color: var(--glass-muted);
 }
 
-[data-theme="dark"] .flow-field--cards .dashboard-pulse-value > strong {
-  color: #f0f7f4;
-  text-shadow: 0 2px 14px rgba(1, 9, 12, 0.24);
+/* Reading layers are transparent DOM surfaces over the animated material. */
+.flow-field--panels .dashboard-hotspot-board {
+  --hotspot-board-accent: var(--glass-focus);
 }
 
-[data-theme="dark"] .flow-field--cards .dashboard-pulse-item-label,
-[data-theme="dark"] .flow-field--cards .dashboard-pulse-item > small:last-child,
-[data-theme="dark"] .flow-field--cards .dashboard-pulse-value > small {
-  color: #d3e3df;
+.flow-field--panels .dashboard-hotspot-board > * {
+  position: relative;
+  z-index: 1;
+}
+
+.flow-field--panels .dashboard-hotspot-board > header {
+  border-top: 0;
+  border-bottom: 1px solid var(--glass-line);
+  padding: 21px 20px 18px;
+  background: linear-gradient(115deg, var(--glass-veil), transparent);
+}
+
+.flow-field--panels .dashboard-hotspot-board > header h4 {
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.flow-field--panels .dashboard-hotspot-board > header span,
+.flow-field--panels .dashboard-hotspot-board > header > strong,
+.flow-field--panels .dashboard-hotspot-rank,
+.flow-field--panels .dashboard-hotspot-meta b {
+  color: var(--glass-focus);
+}
+
+.flow-field--panels .dashboard-hotspot-item,
+.flow-field--panels .dashboard-hotspot-item.is-lead {
+  background: linear-gradient(90deg, var(--glass-veil), transparent 94%);
+  border-bottom-color: var(--glass-line);
+  transition: background-color 180ms ease;
+}
+
+.flow-field--panels .dashboard-hotspot-item:hover,
+.flow-field--panels .dashboard-hotspot-item:focus-visible {
+  background-color: var(--glass-hover);
+  box-shadow: none;
+}
+
+.flow-field--panels .dashboard-hotspot-item:focus-visible {
+  outline: 2px solid var(--glass-focus);
+  outline-offset: -3px;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .flow-field--cards .dashboard-pulse-item:hover {
-    border-color: rgba(var(--ink-primary), 0.8);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 8px 24px rgba(var(--ink-primary), 0.15);
+    border-color: var(--glass-focus);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 10px 28px rgba(132, 167, 187, 0.12);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flow-field--cards .dashboard-pulse-item {
+  .flow-field--cards .dashboard-pulse-item,
+  .flow-field--panels .dashboard-hotspot-item {
     transition: none;
   }
 }
@@ -150,14 +204,15 @@
     visibility: hidden;
   }
 
-  .flow-field--cards[data-flow-ready="true"] .dashboard-pulse-item {
-    background: var(--surface);
-    color: var(--ink);
+  .flow-field--cards,
+  .flow-field--panels {
+    --glass-ink: var(--ink);
+    --glass-muted: var(--ink);
+    --glass-focus: var(--accent);
   }
 
-  .flow-field--cards .dashboard-pulse-item > *,
-  .flow-field--cards .dashboard-pulse-value > strong,
-  .flow-field--cards .dashboard-pulse-value > small {
+  .flow-field[data-flow-ready="true"] [data-flow-surface] {
+    background: var(--surface);
     color: var(--ink);
   }
 }

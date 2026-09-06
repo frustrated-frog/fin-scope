@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -53,6 +53,20 @@ test('opens the selected radar event from a ranking item', async () => {
   await userEvent.click(screen.getByRole('button', { name: /央行宣布下调存款准备金率/ }));
 
   expect(onOpenRadarEvent).toHaveBeenCalledWith(11);
+});
+
+test('shares one hotspot canvas across three surfaces and keeps keyboard access without WebGL', async () => {
+  const onOpenRadarEvent = vi.fn();
+  renderDashboard(onOpenRadarEvent);
+  const group = screen.getByRole('group', { name: '热点动态榜单' });
+  expect(group.querySelectorAll('canvas')).toHaveLength(1);
+  expect(group.querySelectorAll('[data-flow-surface]')).toHaveLength(3);
+  await waitFor(() => expect(group).toHaveAttribute('data-flow-ready', 'false'));
+  const story = within(group).getByRole('button', { name: /央行宣布下调存款准备金率/ });
+  story.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(onOpenRadarEvent).toHaveBeenCalledWith(11);
+  expect(within(group).getByRole('heading', { name: '科技' })).toBeInTheDocument();
 });
 
 test('frames the research pulse as a ready command surface while retaining metric navigation', () => {

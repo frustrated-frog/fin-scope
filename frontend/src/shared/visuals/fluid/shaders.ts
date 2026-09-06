@@ -89,37 +89,6 @@ export const fade = field + `
   void main() { gl_FragColor = texture2D(source, vUv) * 0.75; }
 `;
 
-export const inkDisplay = `
-  varying vec2 vUv;
-  uniform sampler2D dye;
-  uniform vec2 size;
-  uniform float radius;
-  uniform float dark;
-  uniform vec3 tint;
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  void main() {
-    vec3 ink = texture2D(dye, vUv).rgb;
-    float density = length(ink);
-    vec2 texel = 1.0 / size;
-    float dx = length(texture2D(dye, vUv + vec2(texel.x, 0.0)).rgb) - density;
-    float dy = length(texture2D(dye, vUv + vec2(0.0, texel.y)).rgb) - density;
-    float relief = clamp((dx + dy) * 8.0, -0.08, 0.08);
-    vec3 darkBase = vec3(0.022, 0.038, 0.048);
-    vec3 pigment = ink / (density + 0.0001) * 0.44 + vec3(0.14);
-    vec3 paper = mix(vec3(0.93, 0.96, 0.95), pigment, min(0.52, density * 0.36));
-    vec3 color = mix(paper, darkBase + ink * 0.47, dark);
-    color += tint * (0.025 + relief);
-    color += (hash(gl_FragCoord.xy) - 0.5) * 0.027;
-    // Soft central veil reserves contrast for the DOM labels and numbers.
-    float veil = (1.0 - smoothstep(0.08, 0.70, vUv.x)) * 0.18;
-    color = mix(color, mix(vec3(0.95), darkBase, dark), veil);
-    vec2 q = abs((vUv - 0.5) * size) - (size * 0.5 - radius);
-    float edge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-    float mask = 1.0 - smoothstep(-1.0, 0.0, edge);
-    gl_FragColor = vec4(max(color, vec3(0.0)), mask);
-  }
-`;
-
 export const particleStep = `
   varying vec2 vUv;
   uniform sampler2D positions;
@@ -163,9 +132,8 @@ export const particleFragment = `
   varying float depth;
   void main() {
     float d = length(gl_PointCoord - 0.5);
-    float alpha = (1.0 - smoothstep(0.10, 0.5, d)) * mix(0.20, 0.56, depth);
-    vec3 color = mix(vec3(0.14, 0.40, 0.35), vec3(0.43, 0.79, 0.74), dark);
-    color = mix(color, mix(vec3(0.43, 0.34, 0.22), vec3(0.85, 0.68, 0.44), dark), step(0.88, depth));
+    float alpha = (1.0 - smoothstep(0.10, 0.5, d)) * mix(0.13, 0.40, depth);
+    vec3 color = mix(vec3(0.27, 0.36, 0.41), vec3(0.66, 0.76, 0.80), dark);
     gl_FragColor = vec4(color, alpha);
   }
 `;

@@ -47,6 +47,7 @@ export function FlowField({ mode, className = '', children, loadRenderer = loadD
     }
     intersection?.observe(host);
     resize?.observe(host);
+    host.querySelectorAll('[data-flow-surface]').forEach(surface => resize?.observe(surface));
     document.addEventListener('visibilitychange', syncVisibility);
     motion?.addEventListener?.('change', syncMotion);
     window.addEventListener('resize', refresh);
@@ -80,7 +81,12 @@ export function FlowField({ mode, className = '', children, loadRenderer = loadD
   }, [loadRenderer, mode]);
 
   return (
-    <div ref={hostRef} className={`flow-field flow-field--${mode} ${className}`} aria-label={mode === 'cards' ? '研究队列总览' : undefined}>
+    <div
+      ref={hostRef}
+      className={`flow-field flow-field--${mode} ${className}`}
+      role={mode === 'ambient' ? undefined : 'group'}
+      aria-label={mode === 'cards' ? '研究队列总览' : mode === 'panels' ? '热点动态榜单' : undefined}
+    >
       <canvas ref={canvasRef} className="flow-canvas" aria-hidden="true" />
       {children}
     </div>
