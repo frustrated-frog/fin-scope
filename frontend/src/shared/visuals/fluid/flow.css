@@ -27,18 +27,18 @@
 
 .app-shell > .shell-ambient {
   background:
-    radial-gradient(ellipse at 20% 24%, rgba(66, 160, 206, 0.20), transparent 58%),
-    radial-gradient(ellipse at 75% 18%, rgba(154, 105, 220, 0.22), transparent 56%),
-    radial-gradient(ellipse at 68% 82%, rgba(212, 119, 170, 0.14), transparent 60%),
+    radial-gradient(ellipse at 20% 24%, rgba(97, 171, 191, 0.16), transparent 58%),
+    radial-gradient(ellipse at 75% 18%, rgba(156, 126, 208, 0.18), transparent 56%),
+    radial-gradient(ellipse at 68% 82%, rgba(204, 142, 164, 0.12), transparent 60%),
     linear-gradient(145deg, #e6ebef, #e1e7ed 55%, #e8eaef);
   mask-image: none;
 }
 
 .app-shell[data-theme="dark"] > .shell-ambient {
   background:
-    radial-gradient(ellipse at 20% 24%, rgba(28, 117, 194, 0.24), transparent 58%),
-    radial-gradient(ellipse at 75% 18%, rgba(126, 54, 205, 0.25), transparent 56%),
-    radial-gradient(ellipse at 68% 82%, rgba(181, 58, 123, 0.18), transparent 60%),
+    radial-gradient(ellipse at 20% 24%, rgba(48, 115, 155, 0.18), transparent 58%),
+    radial-gradient(ellipse at 75% 18%, rgba(117, 73, 178, 0.19), transparent 56%),
+    radial-gradient(ellipse at 68% 82%, rgba(158, 80, 116, 0.13), transparent 60%),
     linear-gradient(145deg, #131c26, #141b25 55%, #19202b);
 }
 
