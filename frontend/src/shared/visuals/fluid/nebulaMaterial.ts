@@ -27,9 +27,11 @@ export const nebulaDisplay = `
     float detail = cloud(p * 5.0 + vec2(wisps * 1.5, t * 0.7));
     float band = exp(-pow((p.y + p.x * 0.35 + (wisps - 0.5) * 0.45) * 2.8, 2.0));
     float mist = smoothstep(0.22, 0.82, wisps * 0.6 + detail * 0.4) * band;
-    vec3 hue = mix(vec3(0.20, 0.42, 0.49), vec3(0.43, 0.31, 0.55), smoothstep(-0.7, 0.7, p.x));
-    vec3 night = vec3(0.067, 0.092, 0.13) + hue * mist * 0.30;
-    vec3 day = vec3(0.87, 0.90, 0.94) + (hue - vec3(0.38)) * mist * 0.18;
+    vec3 hue = mix(vec3(0.08, 0.46, 0.76), vec3(0.53, 0.20, 0.82), smoothstep(-0.7, 0.7, p.x));
+    float roseCloud = smoothstep(0.25, 0.8, p.x + p.y * 0.5) * detail;
+    hue = mix(hue, vec3(0.76, 0.24, 0.48), roseCloud * 0.65);
+    vec3 night = vec3(0.047, 0.065, 0.115) + hue * (0.045 + mist * 0.55);
+    vec3 day = vec3(0.85, 0.88, 0.94) + (hue - vec3(0.38)) * (0.025 + mist * 0.28);
     gl_FragColor = vec4(mix(day, night, dark), 1.0);
   }
 `;
