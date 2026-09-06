@@ -123,17 +123,24 @@ export const particleVertex = `
     depth = state.z;
     vec2 xy = state.xy * 2.0 - 1.0 + pointer * (depth - 0.5) * 0.022;
     gl_Position = vec4(xy, 0.0, 1.0);
-    gl_PointSize = mix(1.5, 4.4, depth * depth) * pixelRatio;
+    gl_PointSize = mix(1.1, 3.0, depth * depth) * pixelRatio;
   }
 `;
 
 export const particleFragment = `
   uniform float dark;
+  uniform float time;
   varying float depth;
   void main() {
     float d = length(gl_PointCoord - 0.5);
-    float alpha = (1.0 - smoothstep(0.10, 0.5, d)) * mix(0.13, 0.40, depth);
-    vec3 color = mix(vec3(0.27, 0.36, 0.41), vec3(0.66, 0.76, 0.80), dark);
+    float core = 1.0 - smoothstep(0.02, 0.28, d);
+    float halo = (1.0 - smoothstep(0.12, 0.5, d)) * 0.16;
+    float shimmer = 0.82 + 0.18 * sin(time * 0.55 + depth * 43.0);
+    float alpha = (core + halo) * mix(0.12, 0.36, depth * depth) * shimmer;
+    vec3 cool = vec3(0.62, 0.72, 0.88);
+    vec3 warm = vec3(0.85, 0.74, 0.79);
+    vec3 color = mix(vec3(0.49, 0.57, 0.68), mix(cool, warm, depth), dark);
+    alpha *= mix(0.48, 1.0, dark);
     gl_FragColor = vec4(color, alpha);
   }
 `;

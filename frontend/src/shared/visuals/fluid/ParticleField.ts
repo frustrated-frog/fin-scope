@@ -12,7 +12,7 @@ export class ParticleField {
   private geometry = new BufferGeometry();
   private uniforms = {
     positions: { value: this.state.read.texture }, pointer: { value: new Vector2() },
-    size: { value: new Vector2() }, dark: { value: 0 }, pixelRatio: { value: 1 }
+    size: { value: new Vector2() }, dark: { value: 0 }, pixelRatio: { value: 1 }, time: { value: 0 }
   };
   private material = new ShaderMaterial({
     vertexShader: particleVertex, fragmentShader: particleFragment, uniforms: this.uniforms,
@@ -35,6 +35,7 @@ export class ParticleField {
   }
 
   step(velocity: Texture, width: number, height: number, dt: number, time: number) {
+    this.uniforms.time.value = time;
     this.texel.set(1 / width, 1 / height);
     this.gpu.draw(particleStep, {
       positions: this.state.read.texture, velocity, texel: this.texel, dt, time, initialize: this.initialized ? 0 : 1
@@ -48,7 +49,7 @@ export class ParticleField {
     this.uniforms.pointer.value.copy(pointer);
     this.uniforms.dark.value = dark ? 1 : 0;
     this.uniforms.pixelRatio.value = renderer.getPixelRatio();
-    this.geometry.setDrawRange(0, [384, 640, 1024][level]);
+    this.geometry.setDrawRange(0, [256, 448, 640][level]);
     renderer.render(this.scene, this.camera);
   }
 
