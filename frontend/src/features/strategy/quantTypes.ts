@@ -391,7 +391,44 @@ export interface SingleStockForecast {
   warnings: string[];
 }
 
+export interface NextSessionJointEvidence {
+  modelVersion: string;
+  selectedClassifier: string;
+  applied: boolean;
+  classificationEligible: boolean;
+  rankingEligible: boolean;
+  featureCount: number;
+  universeCount: number;
+  trainingSampleCount: number;
+  validationSampleCount: number;
+  validationDayCount: number;
+  testStart: string;
+  testEnd: string;
+  selectionBrierScore: number;
+  selectionRankIc: number;
+  pooledBrierScore: number;
+  baselineBrierScore: number;
+  logisticBrierScore: number;
+  accuracy: number;
+  intervalCoverage: number;
+  regressionMse: number;
+  baselineRegressionMse: number;
+  rankIc: number;
+  top5Return: number;
+  top5PoolExcess: number;
+  top5MomentumExcess: number;
+  rankingScore: number;
+  rankingPercentile: number;
+  stockValidationCount: number;
+  stockBrierScore?: number;
+  stockBaselineBrierScore?: number;
+  upProbability: number;
+  expectedReturn: number;
+  reason: string;
+}
+
 export interface NextSessionPrediction {
+  jointModel?: NextSessionJointEvidence;
   status: 'READY' | 'WATCH' | 'INSUFFICIENT_DATA' | 'STALE_DATA' | 'CALENDAR_UNAVAILABLE' | 'BEFORE_CLOSE';
   asOfDate: string; targetDate?: string; generatedAt: string; label: string; lastClose: number;
   upProbability?: number; expectedReturn?: number; lowerReturn?: number; upperReturn?: number;

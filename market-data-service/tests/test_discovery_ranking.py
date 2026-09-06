@@ -233,3 +233,17 @@ def test_relative_list_prioritizes_verified_next_session_edge_without_changing_t
     assert ranked[0].code == "000002"
     assert ranked[0].next_session_score is not None
     assert not ranked[0].qualified
+
+
+def test_learned_ranker_changes_deep_shortlist_only_after_independent_acceptance():
+    candidates = [candidate('000001', 10, .8), candidate('000002', 10, .1)]
+    snapshot = {'evidence': {'rankingEligible': False}, 'predictions': {
+        '000001': {'rankingScore': -1., 'rankingPercentile': .25},
+        '000002': {'rankingScore': 2., 'rankingPercentile': .75},
+    }}
+    assert rank_lightweight_candidates(candidates, joint_snapshot=snapshot)[0].code == '000001'
+    snapshot['evidence']['rankingEligible'] = True
+    ranked = rank_lightweight_candidates(candidates, joint_snapshot=snapshot)
+    assert ranked[0].code == '000002'
+    assert ranked[0].lightweight_rank == 1
+    assert ranked[0].factors['joint_ranking_score'] == 2.

@@ -25,3 +25,22 @@ test('does not manufacture probabilities for missing or stale evidence', () => {
   expect(screen.getByText('行情已过期')).toBeInTheDocument();
   expect(screen.queryByText('65.0%')).not.toBeInTheDocument();
 });
+
+test('keeps joint shadow probabilities separate and never calls ranking a probability', () => {
+  const jointModel = {
+    modelVersion: 'joint-v1', selectedClassifier: 'LIGHTGBM', applied: false,
+    classificationEligible: false, rankingEligible: true, featureCount: 38, universeCount: 183,
+    trainingSampleCount: 20000, validationSampleCount: 10000, validationDayCount: 60,
+    testStart: '2026-06-10', testEnd: '2026-09-04', selectionBrierScore: .24, selectionRankIc: .02,
+    pooledBrierScore: .24, baselineBrierScore: .25, logisticBrierScore: .245, accuracy: .55,
+    intervalCoverage: .8, regressionMse: .001, baselineRegressionMse: .002, rankIc: .03,
+    top5Return: .002, top5PoolExcess: .001, top5MomentumExcess: .001, rankingScore: 1.2,
+    rankingPercentile: .9, stockValidationCount: 60, stockBrierScore: .26, stockBaselineBrierScore: .25,
+    upProbability: .7, expectedReturn: .01, reason: '该股概率尚未优于原模型',
+  };
+  render(<NextSessionForecast prediction={{ ...prediction, jointModel }} />);
+  expect(screen.getByText('65.0%')).toBeInTheDocument();
+  expect(screen.getByText('联合模型对照 · 当前保留原预测')).toBeInTheDocument();
+  expect(screen.getByText(/90.0%（越高越靠前，非上涨概率）/)).toBeInTheDocument();
+  expect(screen.getByText(/对照上涨概率 70.0%/)).toBeInTheDocument();
+});

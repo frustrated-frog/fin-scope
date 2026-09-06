@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from finscope_market_data.forecast.joint_snapshot import JointSnapshotStore
+
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -114,6 +116,7 @@ def create_app(
 ) -> FastAPI:
     config = settings or Settings()
     panel_store = PanelArtifactStore(config.data_dir / "quant")
+    joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -145,6 +148,7 @@ def create_app(
                     config.data_dir / "stock-discovery-constituents.json"
                 ),
                 panel_store=panel_store,
+                joint_store=joint_store,
             )
         if application.state.sectors is None:
             application.state.sectors = TonghuashunSectorService()
@@ -341,6 +345,7 @@ def create_app(
             horizon_days=request.horizon_days,
             context=context,
             panel_artifact=panel_store.load(request.horizon_days),
+            joint_snapshot=joint_store.load(),
         )
         return JSONResponse(
             status_code=200,

@@ -33,5 +33,6 @@ public class NextSessionPrediction {
     private Double brierScore;
     private Double baselineBrierScore;
     private Double intervalCoverage;
+    private NextSessionJointEvidence jointModel;
     private List<String> warnings = new ArrayList<>();
 }

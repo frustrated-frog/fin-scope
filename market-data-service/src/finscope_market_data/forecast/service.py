@@ -22,6 +22,7 @@ from finscope_market_data.forecast.factor_catalog import FACTORS
 from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import FEATURE_CODES, build_samples, current_features
 from finscope_market_data.forecast.model_competition import run_model_competition
+from finscope_market_data.forecast.joint_snapshot import apply_joint_snapshot
 from finscope_market_data.forecast.next_session import build_next_session_forecast
 from finscope_market_data.forecast.performance import (
     BacktestReport,
@@ -101,6 +102,7 @@ def build_forecast(
     context: AlignedForecastContext | None = None,
     panel_artifact: PanelArtifact | None = None,
     panel_now: datetime | None = None,
+    joint_snapshot: dict | None = None,
 ) -> SingleStockForecastResult:
     if horizon_days not in (1, 5, 20):
         raise ValueError("单股预测只支持 1、5、20 日周期")
@@ -124,7 +126,7 @@ def build_forecast(
         ordered, instrument_code, horizon_days, context=context
     )
     base = dict(
-        next_session=build_next_session_forecast(ordered, context=context, now=panel_now),
+        next_session=apply_joint_snapshot(build_next_session_forecast(ordered, context=context, now=panel_now), ordered, joint_snapshot),
         instrument_code=instrument_code,
         as_of_date=ordered[-1].trade_date,
         horizon_days=horizon_days,

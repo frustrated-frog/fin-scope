@@ -12,3 +12,5 @@
 .next-session-audit { display: grid; gap: 7px; margin-bottom: 12px; font-size: 12px; color: #a7b9c0; }
 .next-session-history table { width: 100%; text-align: left; font-size: 12px; border-collapse: collapse; }
 .next-session-history td, .next-session-history th { padding: 12px 8px; border-bottom: 1px solid rgba(150, 180, 190, .12); white-space: nowrap; }
+
+.next-session-joint { border-top: 1px solid var(--border-color, #dde3e8); padding-top: 12px; margin-top: 12px; }

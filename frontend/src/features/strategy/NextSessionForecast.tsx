@@ -14,6 +14,7 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
   if (!prediction) {
     return <section className="next-session-forecast"><strong>这份历史报告尚未包含次日收盘预测</strong><p>新生成的研究会同时保留次日预测与原有交易周期验证。</p></section>;
   }
+  const joint = prediction.jointModel;
   const valid = ['READY', 'WATCH'].includes(prediction.status);
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
   const historical = Boolean(prediction.targetDate && prediction.targetDate <= today);
@@ -25,7 +26,19 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
       <div><dt>预期涨跌</dt><dd>{signed(prediction.expectedReturn)}</dd></div>
       <div><dt>80% 校准区间</dt><dd>{signed(prediction.lowerReturn)} ～ {signed(prediction.upperReturn)}</dd></div>
     </dl>}
-    {!compact && valid && <div className="next-session-audit"><span>滚动验证 {prediction.validationSampleCount} 日 · 准确率 {percent(prediction.accuracy)}</span><span>Brier {prediction.brierScore?.toFixed(3) ?? '—'} / 基线 {prediction.baselineBrierScore?.toFixed(3) ?? '—'}（越低越好）</span><span>历史区间覆盖 {percent(prediction.intervalCoverage)} · 校准数据截至 {prediction.calibrationThrough}</span></div>}
+    {!compact && valid && <div className="next-session-audit"><span>{joint?.applied ? '独立验证' : '滚动验证'} {prediction.validationSampleCount} 个样本 · 准确率 {percent(prediction.accuracy)}</span><span>Brier {prediction.brierScore?.toFixed(3) ?? '—'} / 基线 {prediction.baselineBrierScore?.toFixed(3) ?? '—'}（越低越好）</span><span>历史区间覆盖 {percent(prediction.intervalCoverage)} · 校准数据截至 {prediction.calibrationThrough}</span></div>}
+    {valid && joint && <div className="next-session-joint" aria-label="联合模型与排序证据">
+      <strong>{joint.applied ? '联合模型已用于本次预测' : '联合模型对照 · 当前保留原预测'}</strong>
+      <p>{joint.universeCount} 只股票 · {joint.featureCount} 个因子 · {joint.selectedClassifier} + LambdaRank</p>
+      <p>股票排序：{joint.rankingEligible ? '已启用' : '对照观察'} · 截面位置 {percent(joint.rankingPercentile)}（越高越靠前，非上涨概率）</p>
+      <details><summary>查看独立测试与新旧比较</summary>
+        <p>测试 {joint.testStart} ～ {joint.testEnd} · {joint.validationDayCount} 个交易日 / {joint.validationSampleCount} 个股票样本，指标按日等权。</p>
+        <p>联合 Brier {joint.pooledBrierScore.toFixed(4)} / 历史频率 {joint.baselineBrierScore.toFixed(4)} / 联合逻辑回归 {joint.logisticBrierScore.toFixed(4)}（越低越好）</p>
+        <p>该股联合 Brier {joint.stockBrierScore?.toFixed(4) ?? '—'} · 对照上涨概率 {percent(joint.upProbability)} · 对照预期涨跌 {signed(joint.expectedReturn)}</p>
+        <p>排序 Rank IC {joint.rankIc.toFixed(3)} · Top 5 次日平均涨跌 {signed(joint.top5Return)} · 超过同日股票池 {signed(joint.top5PoolExcess)} / 动量排序 {signed(joint.top5MomentumExcess)}</p>
+        <p>{joint.reason}。这些是当前可用股票池内的历史比较，尚未消除幸存者偏差。</p>
+      </details>
+    </div>}
     <details><summary>生成时点与预测边界</summary><p>{prediction.generatedAt.replace('T', ' ')} · {prediction.modelCode ?? '未训练'} · {prediction.modelVersion}</p><p>训练标签截至 {prediction.trainingThrough ?? '—'}；校准标签截至 {prediction.calibrationThrough ?? '—'}；训练 / 校准样本 {prediction.trainingSampleCount} / {prediction.calibrationSampleCount}</p>{prediction.warnings.map(warning => <p key={warning}>{warning}</p>)}</details>
   </section>;
 }

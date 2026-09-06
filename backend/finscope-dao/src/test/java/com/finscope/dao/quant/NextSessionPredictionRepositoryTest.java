@@ -71,6 +71,24 @@ class NextSessionPredictionRepositoryTest {
         assertEquals(1, repository.history("000001", 10).size());
     }
 
+    @Test
+    void retainsJointEvidenceWhenImportingFrozenPrediction() {
+        insertDiscovery("2026-09-04T16:00:00", "WATCH");
+        jdbc.update("UPDATE stock_discovery_run SET report_json=json_set(report_json, "
+                + "'$.deep_evidence[0].forecast_report.nextSession.jointModel', "
+                + "json('{\"modelVersion\":\"joint-v1\",\"selectedClassifier\":\"LIGHTGBM\","
+                + "\"applied\":false,\"rankingEligible\":true,\"rankingScore\":1.2,"
+                + "\"pooledBrierScore\":0.2545}'))");
+        assertEquals(1, repository.importFrozenReports());
+        var joint = repository.history("000001", 10).get(0).getPrediction().getJointModel();
+        assertNotNull(joint);
+        assertEquals("LIGHTGBM", joint.getSelectedClassifier());
+        assertTrue(joint.isRankingEligible());
+        assertFalse(joint.isApplied());
+        assertEquals(1.2, joint.getRankingScore());
+        assertEquals(0.2545, joint.getPooledBrierScore());
+    }
+
     private void insertDiscovery(String generatedAt, String status) {
         String prediction = "{\"status\":\"" + status + "\",\"asOfDate\":\"2026-09-04\","
                 + "\"targetDate\":\"2026-09-07\",\"generatedAt\":\"" + generatedAt + "\","

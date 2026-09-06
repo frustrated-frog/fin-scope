@@ -31,6 +31,9 @@ from finscope_market_data.discovery.schemas import (
     DiscoverySector,
 )
 from finscope_market_data.forecast.service import build_forecast
+from finscope_market_data.forecast.joint_dataset import build_joint_dataset, history_fingerprint
+from finscope_market_data.forecast.joint_snapshot import JointSnapshotStore
+from finscope_market_data.forecast.joint_training import MODEL_VERSION as JOINT_MODEL_VERSION, train_joint_snapshot
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.features import (
     FEATURE_CODES,
@@ -102,6 +105,7 @@ class StockDiscoveryService:
         constituent_providers: Sequence[object] | None = None,
         constituent_snapshot_path: str | Path | None = None,
         trading_scope: TradingScopePolicy | None = None,
+        joint_store: JointSnapshotStore | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
@@ -114,6 +118,7 @@ class StockDiscoveryService:
             Path(universe_snapshot_path) if universe_snapshot_path else None
         )
         self.panel_store = panel_store
+        self.joint_store = joint_store
         self.constituent_providers = tuple(
             providers if constituent_providers is None else constituent_providers
         )
@@ -134,6 +139,11 @@ class StockDiscoveryService:
         market_bars = await self._market_context(request, warnings)
         candidates, bars_by_code = await self._admit(members, request, warnings)
         candidates = enrich_context_factors(candidates, sectors)
+        joint_snapshot = await asyncio.to_thread(
+            self._train_joint_snapshot,
+            {candidate.code: bars_by_code[candidate.code] for candidate in candidates if candidate.admitted},
+            request.business_date, market_bars, warnings,
+        )
         panel_artifact = await asyncio.to_thread(
             self._train_panel_artifact,
             bars_by_code,
@@ -141,7 +151,7 @@ class StockDiscoveryService:
             warnings,
             market_bars,
         )
-        lightweight = rank_lightweight_candidates(candidates)
+        lightweight = rank_lightweight_candidates(candidates, joint_snapshot=joint_snapshot)
         by_code = {item.code: item for item in candidates}
         for ranked in lightweight:
             by_code[ranked.code] = ranked
@@ -153,6 +163,7 @@ class StockDiscoveryService:
             warnings,
             panel_artifact,
             market_bars,
+            joint_snapshot,
         )
         final = rank_deep_candidates(deep, request.final_limit)
         relative = rank_relative_candidates(deep, request.final_limit)
@@ -615,6 +626,7 @@ class StockDiscoveryService:
         warnings: list[str],
         panel_artifact: PanelArtifact | None = None,
         market_bars: Sequence[DailyBar] = (),
+        joint_snapshot: dict | None = None,
     ) -> list[DeepCandidateEvidence]:
         semaphore = asyncio.Semaphore(self.deep_concurrency)
 
@@ -629,6 +641,7 @@ class StockDiscoveryService:
                             request,
                             panel_artifact,
                             market_bars,
+                            joint_snapshot,
                         )
                     else:
                         payload = await asyncio.to_thread(
@@ -644,6 +657,32 @@ class StockDiscoveryService:
 
         values = await asyncio.gather(*(evaluate(item) for item in candidates))
         return [item for item in values if item is not None]
+
+    def _train_joint_snapshot(self, histories, business_date, market_bars, warnings):
+        if self.joint_store is None or not histories:
+            return None
+        as_of = business_date or max(bars[-1].trade_date for bars in histories.values())
+        histories = {code: tuple(bar for bar in bars if bar.trade_date <= as_of)
+                     for code, bars in histories.items()}
+        market_bars = tuple(bar for bar in market_bars if bar.trade_date <= as_of)
+        inputs = {code: history_fingerprint(bars) for code, bars in sorted(histories.items())}
+        input_fingerprint = hashlib.sha256(json.dumps(
+            [JOINT_MODEL_VERSION, as_of, inputs, history_fingerprint(market_bars)], sort_keys=True,
+        ).encode()).hexdigest()
+        existing = self.joint_store.load()
+        if existing and existing.get('inputFingerprint') == input_fingerprint:
+            return existing
+        try:
+            dataset = build_joint_dataset(histories, as_of=as_of, market_bars=market_bars)
+            snapshot = train_joint_snapshot(dataset)
+            snapshot['inputFingerprint'] = input_fingerprint
+            self.joint_store.save(snapshot)
+            if not snapshot['evidence']['rankingEligible']:
+                warnings.append('联合 LambdaRank 未通过独立测试，保留原选股排序并展示新模型对照')
+            return snapshot
+        except (ValueError, OSError) as error:
+            warnings.append(f'次日联合训练未完成：{_safe(error)}')
+            return None
 
     def _train_panel_artifact(
         self,
@@ -711,6 +750,7 @@ def _forecast(
     request: DiscoveryRequest,
     panel_artifact: PanelArtifact | None = None,
     market_bars: Sequence[DailyBar] = (),
+    joint_snapshot: dict | None = None,
 ) -> dict[str, object]:
     context = (
         build_aligned_context(bars, market_bars=market_bars)
@@ -726,6 +766,7 @@ def _forecast(
         horizon_days=request.horizon_days,
         context=context,
         panel_artifact=panel_artifact,
+        joint_snapshot=joint_snapshot,
     )
     qualification = report.qualification
     metrics = qualification.locked_test.calibrated_metrics if qualification else None

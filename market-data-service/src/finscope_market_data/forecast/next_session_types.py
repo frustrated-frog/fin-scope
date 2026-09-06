@@ -3,6 +3,43 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
+class NextSessionJointEvidence(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_version: str
+    selected_classifier: str
+    applied: bool = False
+    classification_eligible: bool
+    ranking_eligible: bool
+    feature_count: int
+    universe_count: int
+    training_sample_count: int
+    validation_sample_count: int
+    validation_day_count: int
+    test_start: str
+    test_end: str
+    selection_brier_score: float
+    selection_rank_ic: float
+    pooled_brier_score: float
+    baseline_brier_score: float
+    logistic_brier_score: float
+    accuracy: float
+    interval_coverage: float
+    regression_mse: float
+    baseline_regression_mse: float
+    rank_ic: float
+    top5_return: float
+    top5_pool_excess: float
+    top5_momentum_excess: float
+    ranking_score: float
+    ranking_percentile: float
+    stock_validation_count: int
+    stock_brier_score: float | None = None
+    stock_baseline_brier_score: float | None = None
+    up_probability: float = Field(ge=0, le=1)
+    expected_return: float
+    reason: str
+
+
 class NextSessionPrediction(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     status: Literal["READY", "WATCH", "INSUFFICIENT_DATA", "STALE_DATA", "CALENDAR_UNAVAILABLE", "BEFORE_CLOSE"]
@@ -28,4 +65,5 @@ class NextSessionPrediction(BaseModel):
     brier_score: float | None = None
     baseline_brier_score: float | None = None
     interval_coverage: float | None = None
+    joint_model: NextSessionJointEvidence | None = None
     warnings: list[str] = Field(default_factory=list)

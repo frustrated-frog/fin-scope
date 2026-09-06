@@ -29,6 +29,7 @@ RISK_FACTORS = (
 
 def rank_lightweight_candidates(
     candidates: Iterable[DiscoveryCandidate],
+    *, joint_snapshot: dict | None = None,
 ) -> list[DiscoveryCandidate]:
     admitted = [item.model_copy(deep=True) for item in candidates if item.admitted]
     if not admitted:
@@ -50,6 +51,16 @@ def rank_lightweight_candidates(
             8,
         )
     admitted.sort(key=lambda item: (-(item.lightweight_score or 0.0), item.code))
+    if joint_snapshot and joint_snapshot.get('evidence', {}).get('rankingEligible'):
+        predictions = joint_snapshot.get('predictions', {})
+        for item in admitted:
+            prediction = predictions.get(item.code)
+            if prediction:
+                item.factors['joint_ranking_score'] = prediction['rankingScore']
+                item.factors['joint_ranking_percentile'] = prediction['rankingPercentile']
+        admitted.sort(key=lambda item: (
+            -item.factors.get('joint_ranking_percentile', -1.0), -(item.lightweight_score or 0.0), item.code,
+        ))
     for rank, item in enumerate(admitted, start=1):
         item.lightweight_rank = rank
     return admitted
@@ -119,6 +130,11 @@ def _next_session_priority(item: DeepCandidateEvidence) -> tuple[int, float | No
     prediction = (item.forecast_report or {}).get("nextSession")
     if not isinstance(prediction, dict) or prediction.get("status") not in {"READY", "WATCH"}:
         return 0, None
+    joint = prediction.get('jointModel')
+    if isinstance(joint, dict) and joint.get('rankingEligible') is True:
+        score = joint.get('rankingScore')
+        if isinstance(score, (int, float)) and math.isfinite(score):
+            return 3, round(score, 8)
     values = [prediction.get(key) for key in ("expectedReturn", "lowerReturn", "upperReturn")]
     if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in values):
         return 0, None
