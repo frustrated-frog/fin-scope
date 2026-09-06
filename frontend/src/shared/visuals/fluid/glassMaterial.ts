@@ -13,6 +13,7 @@ export const liquidGlassDisplay = `
   uniform float time;
   uniform float panel;
   uniform float seed;
+  uniform vec3 tint;
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -56,10 +57,13 @@ export const liquidGlassDisplay = `
 
     vec3 graphite = vec3(0.033, 0.045, 0.058);
     vec3 silver = vec3(0.64, 0.72, 0.77);
-    vec3 ice = vec3(0.45, 0.63, 0.68);
-    vec3 darkGlass = graphite + silver * illumination + ice * fresnel * 0.06;
+    // Tint follows the simulated folds and thickness; silver peaks stay reflective.
+    float pigment = clamp(sheet * 0.36 + thickness * 0.28 + fold * 0.24, 0.0, 0.72);
+    vec3 ice = mix(silver, tint, 0.78);
+    vec3 darkGlass = graphite + mix(silver, tint, 0.65) * illumination + tint * pigment * 0.19 + ice * fresnel * 0.06;
     vec3 lightGlass = vec3(0.93, 0.95, 0.96) - silver * (sheet * 0.15 + thickness * 0.07)
       + vec3(0.06) * fold;
+    lightGlass = mix(lightGlass, tint * 0.52 + vec3(0.45), pigment * 0.72);
     vec3 color = mix(lightGlass, darkGlass, dark);
 
     // A soft absorption layer keeps dense news copy readable without flattening the folds.

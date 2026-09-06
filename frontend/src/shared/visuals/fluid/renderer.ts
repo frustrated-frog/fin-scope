@@ -36,6 +36,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   const interactionHost = options.mode === 'ambient' ? host.closest<HTMLElement>('.app-shell') ?? host : host;
   const quality = new FluidQuality(window.innerWidth < 760);
   const simulations: FluidSimulation[] = [];
+  const surfaceTints = surfaces.map(() => new Vector3(0.45, 0.63, 0.68));
   const particles = options.mode === 'ambient' ? new ParticleField(gpu) : undefined;
   const pointer = new Vector2();
   const targetPointer = new Vector2();
@@ -81,6 +82,12 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
     // Keep the canvas at the scroll viewport origin; card rects already include scrolling.
     canvas.style.transform = `translate(${host.scrollLeft}px, ${host.scrollTop}px)`;
     dark = host.closest('[data-theme]')?.getAttribute('data-theme') === 'dark';
+    surfaces.forEach((surface, index) => {
+      const channels = getComputedStyle(surface).getPropertyValue('--flow-tint').trim().split(/\s+/).map(Number);
+      if (channels.length === 3 && channels.every(Number.isFinite)) {
+        surfaceTints[index].set(channels[0] / 255, channels[1] / 255, channels[2] / 255);
+      }
+    });
     const count = options.mode === 'ambient' ? 1 : surfaces.length;
     const grids = Array.from({ length: count }, (_, index) => {
       const rect = surfaces[index]?.getBoundingClientRect();
@@ -224,7 +231,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
           gpu.draw(liquidGlassDisplay, {
             dye: simulation.dye.read.texture, velocity: simulation.velocity.read.texture,
             dyeTexel, velocityTexel, size, dark: dark ? 1 : 0, time: elapsed,
-            panel: options.mode === 'panels' ? 1 : 0, seed: index,
+            panel: options.mode === 'panels' ? 1 : 0, seed: index, tint: surfaceTints[index],
             radius: parseFloat(getComputedStyle(card).borderTopLeftRadius) || 12
           }, null);
         });
