@@ -1,6 +1,7 @@
 """Point-in-time next-close panel with compact Alpha158-inspired price/volume factors."""
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, replace
 import hashlib
 import json
@@ -97,15 +98,22 @@ def build_joint_dataset(
     })
     next_date = dict(zip(dates, dates[1:]))
     samples_by_code = {}
+    valid_labels = set()
     current = {}
     fingerprints = {}
     for code, bars in eligible.items():
         context = build_aligned_context(bars, market_bars=market)
         indices = {bar.trade_date: index for index, bar in enumerate(bars)}
+        samples = build_close_samples(bars, context)
+        valid_labels.update((code, sample.signal_date) for sample in samples
+                            if next_date.get(sample.signal_date) == sample.exit_date)
+        # Include the final observable close even when its future label is unknown.
+        # Cross-sectional feature membership must not reveal tomorrow's suspension.
+        samples.append(ForecastSample(bars[-1].trade_date, bars[-1].trade_date,
+                                      bars[-1].trade_date, current_features(bars, context), 0.0))
         samples_by_code[code] = tuple(
             replace(sample, features=(*sample.features, *_extra_features(bars, indices[sample.signal_date])))
-            for sample in build_close_samples(bars, context)
-            if next_date.get(sample.signal_date) == sample.exit_date
+            for sample in samples
         )
         if bars[-1].trade_date == as_of:
             current[code] = (*current_features(bars, context), *_extra_features(bars, len(bars) - 1))
@@ -115,6 +123,11 @@ def build_joint_dataset(
     )
     if not current or not enriched:
         raise ValueError('有效次日预测截面不足')
-    rows = tuple(sorted((JointRow(code, sample) for code, samples in enriched.items() for sample in samples),
+    rows = tuple(sorted((JointRow(code, sample) for code, samples in enriched.items() for sample in samples
+                         if (code, sample.signal_date) in valid_labels),
                         key=lambda row: (row.sample.signal_date, row.code)))
+    counts = Counter(row.sample.signal_date for row in rows)
+    rows = tuple(row for row in rows if counts[row.sample.signal_date] >= minimum_cross_section)
+    if not rows:
+        raise ValueError('可验证次日标签的截面不足')
     return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *cross_codes))

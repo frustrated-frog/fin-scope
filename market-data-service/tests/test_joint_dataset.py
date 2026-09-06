@@ -51,3 +51,14 @@ def test_short_or_unadjusted_history_cannot_enter_joint_training():
     data = histories(40)
     with pytest.raises(ValueError, match='截面'):
         build_joint_dataset(data, as_of=data['000001'][-1].trade_date, minimum_cross_section=2)
+
+
+def test_tomorrow_suspension_cannot_change_other_stocks_features_today():
+    data = histories()
+    as_of = data['000001'][-1].trade_date
+    signal = data['000001'][89].trade_date
+    original = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
+    data['000001'].pop(90)
+    changed = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
+    get_features = lambda dataset: next(r.sample.features for r in dataset.rows if r.code == '000002' and r.sample.signal_date == signal)
+    assert get_features(original) == get_features(changed)
