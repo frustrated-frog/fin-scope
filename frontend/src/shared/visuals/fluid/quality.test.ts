@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { FluidQuality, localPointer } from './quality';
+import { FluidQuality, localPointer, simulationDimensions } from './quality';
 
 test('maps card input into bounded bottom-origin coordinates', () => {
   expect(localPointer(150, 75, { left: 100, top: 50, width: 100, height: 100 })).toEqual({ x: 0.5, y: 0.75 });
@@ -20,4 +20,10 @@ test('reduces quality after sustained expensive frames, not a single hitch', () 
 test('starts conservatively on small screens and bounds high density displays', () => {
   expect(new FluidQuality(true).level).toBe(1);
   expect(new FluidQuality(false).pixelRatio(3)).toBeLessThanOrEqual(1.5);
+});
+
+test('recomputes fluid grid aspect when a card changes from portrait to landscape', () => {
+  expect(simulationDimensions(100, 200, 2)).toEqual({ width: 56, height: 112 });
+  expect(simulationDimensions(200, 100, 2)).toEqual({ width: 224, height: 112 });
+  expect(simulationDimensions(0, 0, 0)).toEqual({ width: 19, height: 48 });
 });

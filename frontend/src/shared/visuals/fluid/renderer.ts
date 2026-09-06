@@ -2,7 +2,7 @@ import { NoToneMapping, Vector2, Vector3, WebGLRenderer } from 'three';
 import { FluidSimulation } from './FluidSimulation';
 import { GpuPass } from './gpu';
 import { ParticleField } from './ParticleField';
-import { FluidQuality, localPointer } from './quality';
+import { FluidQuality, localPointer, simulationDimensions } from './quality';
 import { inkDisplay } from './shaders';
 
 export type FlowMode = 'ambient' | 'cards';
@@ -81,16 +81,24 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
     height = Math.max(1, host.clientHeight);
     renderer.setPixelRatio(quality.pixelRatio(window.devicePixelRatio));
     renderer.setSize(width, height, false);
+    // Keep the canvas at the scroll viewport origin; card rects already include scrolling.
+    canvas.style.transform = `translate(${host.scrollLeft}px, ${host.scrollTop}px)`;
     dark = host.closest('[data-theme]')?.getAttribute('data-theme') === 'dark';
-    if (currentLevel !== quality.level) {
+    const count = options.mode === 'cards' ? cards.length : 1;
+    const grids = Array.from({ length: count }, (_, index) => {
+      const rect = cards[index]?.getBoundingClientRect();
+      return simulationDimensions(rect?.width ?? width, rect?.height ?? height, quality.level);
+    });
+    const geometryChanged = grids.some((grid, index) => {
+      const previousGrid = simulations[index]?.velocity.read;
+      return previousGrid?.width !== grid.width || previousGrid?.height !== grid.height;
+    });
+    if (currentLevel !== quality.level || geometryChanged) {
       simulations.forEach(simulation => simulation.dispose());
       simulations.length = 0;
-      const count = options.mode === 'cards' ? cards.length : 1;
       for (let index = 0; index < count; index += 1) {
-        const rect = cards[index]?.getBoundingClientRect();
-        const aspect = Math.max(0.4, Math.min(3, rect ? rect.width / Math.max(1, rect.height) : width / height));
-        const resolution = [40, 56, 72][quality.level];
-        const simulation = new FluidSimulation(gpu, Math.round(resolution * aspect), resolution, options.mode === 'cards' ? 3 : 1);
+        const grid = grids[index];
+        const simulation = new FluidSimulation(gpu, grid.width, grid.height, options.mode === 'cards' ? 3 : 1);
         simulations.push(simulation);
         seed(simulation, index);
       }
@@ -209,7 +217,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
           }
           const rect = rects[index];
           const x = rect.left - hostRect.left;
-          const y = hostRect.bottom - rect.bottom;
+          const y = height - (rect.bottom - hostRect.top);
           renderer.setViewport(x, y, rect.width, rect.height);
           renderer.setScissor(Math.max(0, x), Math.max(0, y), Math.min(rect.width, width - Math.max(0, x)), Math.min(rect.height, height - Math.max(0, y)));
           size.set(rect.width, rect.height);
@@ -270,7 +278,9 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       particles?.dispose();
       gpu.dispose();
       renderer.dispose();
-      renderer.forceContextLoss();
+      if (!context.isContextLost()) {
+        renderer.forceContextLoss();
+      }
     }
   };
   const onContextLost = (event: Event) => {

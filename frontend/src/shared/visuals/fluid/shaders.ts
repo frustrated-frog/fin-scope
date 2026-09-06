@@ -105,7 +105,9 @@ export const inkDisplay = `
     float dy = length(texture2D(dye, vUv + vec2(0.0, texel.y)).rgb) - density;
     float relief = clamp((dx + dy) * 8.0, -0.08, 0.08);
     vec3 darkBase = vec3(0.022, 0.038, 0.048);
-    vec3 color = mix(vec3(0.91, 0.95, 0.94) - ink * 0.26, darkBase + ink * 0.47, dark);
+    vec3 pigment = ink / (density + 0.0001) * 0.44 + vec3(0.14);
+    vec3 paper = mix(vec3(0.93, 0.96, 0.95), pigment, min(0.52, density * 0.36));
+    vec3 color = mix(paper, darkBase + ink * 0.47, dark);
     color += tint * (0.025 + relief);
     color += (hash(gl_FragCoord.xy) - 0.5) * 0.027;
     // Soft central veil reserves contrast for the DOM labels and numbers.

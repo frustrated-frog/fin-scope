@@ -25,6 +25,19 @@
   pointer-events: none;
 }
 
+.app-shell > .shell-ambient {
+  background:
+    radial-gradient(ellipse at 18% 12%, var(--glow), transparent 44%),
+    radial-gradient(ellipse at 82% 35%, var(--warm-glow), transparent 42%);
+  mask-image: none;
+}
+
+.app-shell[data-theme="dark"] > .shell-ambient {
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(25, 117, 104, 0.16), transparent 44%),
+    radial-gradient(ellipse at 82% 35%, rgba(127, 99, 51, 0.09), transparent 42%);
+}
+
 .shell-flow::after {
   position: absolute;
   inset: 0;

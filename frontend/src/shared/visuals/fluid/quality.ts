@@ -5,6 +5,12 @@ export function localPointer(clientX: number, clientY: number, rect: Pick<DOMRec
   };
 }
 
+export function simulationDimensions(width: number, height: number, level: number) {
+  const aspect = Math.max(0.4, Math.min(3, width / Math.max(1, height)));
+  const resolution = [48, 80, 112][level];
+  return { width: Math.round(resolution * aspect), height: resolution };
+}
+
 /** A session only steps down: repeated quality oscillation is distracting. */
 export class FluidQuality {
   level: number;

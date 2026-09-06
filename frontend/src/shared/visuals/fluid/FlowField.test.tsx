@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { FlowField } from './FlowField';
+import type { FlowFactory } from './renderer';
 
 function controller() {
   return { setActive: vi.fn(), setMotion: vi.fn(), refresh: vi.fn(), destroy: vi.fn() };
@@ -57,4 +58,20 @@ test('retains children and static fallback if GPU initialization fails', async (
   await waitFor(() => expect(container.firstChild).toHaveAttribute('data-flow-ready', 'false'));
   expect(getByRole('button')).toHaveTextContent('打开文章');
   expect(container.querySelector('canvas')).toHaveAttribute('aria-hidden', 'true');
+});
+
+test('destroys failed context once and switches back to readable static cards', async () => {
+  media();
+  const engine = controller();
+  let fail!: () => void;
+  const create: FlowFactory = (_canvas, _host, options) => {
+    fail = options.onFailure;
+    return engine;
+  };
+  const { container, unmount } = render(<FlowField mode="cards" loadRenderer={async () => create} />);
+  await waitFor(() => expect(container.firstChild).toHaveAttribute('data-flow-ready', 'true'));
+  act(() => fail());
+  expect(container.firstChild).toHaveAttribute('data-flow-ready', 'false');
+  unmount();
+  expect(engine.destroy).toHaveBeenCalledTimes(1);
 });
