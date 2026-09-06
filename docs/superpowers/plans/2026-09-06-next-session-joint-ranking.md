@@ -22,11 +22,11 @@
 
 ## 任务
 
-- [ ] 数据与特征：新增 `forecast/joint_dataset.py`；测试 `tests/test_joint_dataset.py` 覆盖未来数据不变性、次日停牌排除、截面同日分组、短历史和特征有限性。先运行失败测试，再实现。
-- [ ] 训练与对照：新增 `forecast/joint_training.py`，包括固定时序切分、LightGBM classifier/regressor/ranker、概率校准及独立测试指标；测试 `tests/test_joint_training.py` 覆盖标签边界、排名分组、固定测试不参与选择、可学习合成信号、不可推广的弱模型。
-- [ ] 快照与应用：新增 `forecast/joint_snapshot.py`，存储 JSON 预测快照及验证证据（不反序列化不可信 pickle）；`app.py`、`forecast/service.py`、`discovery/service.py`、`discovery/ranking.py` 接入。校验日期和行情指纹，缺少有效联合模型仍保留单股结果。专项测试验证实际接入与回退。
-- [ ] 页面与契约：Python `next_session_types.py`、Java `domain/quant/forecast` 独立联合证据 DTO、React `NextSessionForecast.tsx` / `quantTypes.ts`。测试确认概率与排序指标分开，旧报告兼容。
-- [ ] 真实实验：在本地真实日线上训练，保存 JSON 对照结果；针对代表性股票补充同日期原单股模型对照。结果不佳不得反复窥探最终测试再调参。
+- [x] 数据与特征：新增 `forecast/joint_dataset.py`；测试 `tests/test_joint_dataset.py` 覆盖未来数据不变性、次日停牌排除、截面同日分组、短历史和特征有限性。先运行失败测试，再实现。
+- [x] 训练与对照：新增 `forecast/joint_training.py`，包括固定时序切分、LightGBM classifier/regressor/ranker、概率校准及独立测试指标；测试 `tests/test_joint_training.py` 覆盖标签边界、排名分组、固定测试不参与选择、可学习合成信号、不可推广的弱模型。
+- [x] 快照与应用：新增 `forecast/joint_snapshot.py`，存储 JSON 预测快照及验证证据（不反序列化不可信 pickle）；`app.py`、`forecast/service.py`、`discovery/service.py`、`discovery/ranking.py` 接入。校验日期和行情指纹，缺少有效联合模型仍保留单股结果。专项测试验证实际接入与回退。
+- [x] 页面与契约：Python `next_session_types.py`、Java `domain/quant/forecast` 独立联合证据 DTO、React `NextSessionForecast.tsx` / `quantTypes.ts`。测试确认概率与排序指标分开，旧报告兼容。
+- [x] 真实实验：在本地真实日线上训练，保存 JSON 对照结果；针对代表性股票补充同日期原单股模型对照。结果不佳不得反复窥探最终测试再调参。
 - [ ] 验证与交付：相应 Python/Java/前端测试与构建；重启原服务，真实 API、浏览器检验两部分功能；更新实验结论，分批提交推送。
 
 ## 执行命令与验收
