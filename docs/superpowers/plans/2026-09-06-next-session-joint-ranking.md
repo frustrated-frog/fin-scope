@@ -27,7 +27,7 @@
 - [x] 快照与应用：新增 `forecast/joint_snapshot.py`，存储 JSON 预测快照及验证证据（不反序列化不可信 pickle）；`app.py`、`forecast/service.py`、`discovery/service.py`、`discovery/ranking.py` 接入。校验日期和行情指纹，缺少有效联合模型仍保留单股结果。专项测试验证实际接入与回退。
 - [x] 页面与契约：Python `next_session_types.py`、Java `domain/quant/forecast` 独立联合证据 DTO、React `NextSessionForecast.tsx` / `quantTypes.ts`。测试确认概率与排序指标分开，旧报告兼容。
 - [x] 真实实验：在本地真实日线上训练，保存 JSON 对照结果；针对代表性股票补充同日期原单股模型对照。结果不佳不得反复窥探最终测试再调参。
-- [ ] 验证与交付：相应 Python/Java/前端测试与构建；重启原服务，真实 API、浏览器检验两部分功能；更新实验结论，分批提交推送。
+- [x] 验证与交付：相应 Python/Java/前端测试与构建；重启原服务，真实 API、浏览器检验两部分功能；更新实验结论，分批提交推送。
 
 ## 执行命令与验收
 
