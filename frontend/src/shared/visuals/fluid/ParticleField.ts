@@ -1,14 +1,14 @@
-import { BufferGeometry, Float32BufferAttribute, OrthographicCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
 import type { Texture, WebGLRenderer } from 'three';
 import { GpuPass, SwapTarget } from './gpu';
 import { particleFragment, particleStep, particleVertex } from './shaders';
 
-const PARTICLE_SIDE = 32;
+const PARTICLE_SIDE = 48;
 
 export class ParticleField {
   private state = new SwapTarget(PARTICLE_SIDE, PARTICLE_SIDE, true);
   private scene = new Scene();
-  private camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private camera = new PerspectiveCamera(60, 1, 0.1, 30);
   private geometry = new BufferGeometry();
   private uniforms = {
     positions: { value: this.state.read.texture }, pointer: { value: new Vector2() },
@@ -45,11 +45,17 @@ export class ParticleField {
   }
 
   render(renderer: WebGLRenderer, pointer: Vector2, dark: boolean, level: number) {
+    renderer.getSize(this.uniforms.size.value);
+    const aspect = this.uniforms.size.value.x / Math.max(1, this.uniforms.size.value.y);
+    if (this.camera.aspect !== aspect) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+    }
     this.uniforms.positions.value = this.state.read.texture;
     this.uniforms.pointer.value.copy(pointer);
     this.uniforms.dark.value = dark ? 1 : 0;
     this.uniforms.pixelRatio.value = renderer.getPixelRatio();
-    this.geometry.setDrawRange(0, [256, 448, 640][level]);
+    this.geometry.setDrawRange(0, [768, 1408, 2304][level]);
     renderer.render(this.scene, this.camera);
   }
 

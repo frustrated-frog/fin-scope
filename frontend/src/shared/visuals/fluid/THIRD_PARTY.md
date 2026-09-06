@@ -31,3 +31,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## 三维星场参考（2026-09-07）
+
+参考 [Drei Stars](https://github.com/pmndrs/drei/blob/master/src/core/Stars.tsx) 的透视尺寸衰减与柔边星点，以及 [Three.js 官方粒子示例](https://github.com/mrdoob/three.js/blob/dev/examples/webgl_points_sprites.html) 的三维空间分布与鼠标视差。这里只借鉴技术思路，未复制其实现或图片资源，也未引入 React Three Fiber / Drei 依赖。星场的 GPU 深度循环、星点材质和星云着色器由本项目实现。

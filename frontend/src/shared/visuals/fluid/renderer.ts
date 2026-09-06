@@ -4,6 +4,7 @@ import { GpuPass } from './gpu';
 import { ParticleField } from './ParticleField';
 import { FluidQuality, localPointer, simulationDimensions } from './quality';
 import { liquidGlassDisplay } from './glassMaterial';
+import { nebulaDisplay } from './nebulaMaterial';
 
 export type FlowMode = 'ambient' | 'cards' | 'panels';
 export interface FlowController {
@@ -212,6 +213,8 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       renderer.setViewport(0, 0, width, height);
       renderer.clear();
       if (particles) {
+        size.set(width, height);
+        gpu.draw(nebulaDisplay, { time: elapsed, dark: dark ? 1 : 0, size, pointer }, null);
         particles.render(renderer, pointer, dark, quality.level);
       } else {
         renderer.setScissorTest(true);

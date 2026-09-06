@@ -105,8 +105,10 @@ export const particleStep = `
       state = vec4(hash(vUv), hash(vUv + 9.72), depth, 1.0);
     }
     vec2 v = texture2D(velocity, state.xy).xy * texel;
-    vec2 drift = vec2(sin(time * 0.09 + depth * 12.0), cos(depth * 17.0 + time * 0.08)) * 0.003;
+    vec2 drift = vec2(sin(time * 0.09 + depth * 12.0), cos(depth * 17.0 + time * 0.08)) * 0.006;
     state.xy = fract(state.xy + (v * 0.35 + drift) * dt + 1.0);
+    // Travel toward the camera, wrapping at the near plane with a soft fade.
+    state.z = fract(state.z - dt * 0.018 + 1.0);
     gl_FragColor = state;
   }
 `;
@@ -117,13 +119,23 @@ export const particleVertex = `
   uniform vec2 pointer;
   uniform vec2 size;
   uniform float pixelRatio;
+  uniform float time;
   varying float depth;
+  varying float visibility;
+  varying float variety;
   void main() {
     vec4 state = texture2D(positions, reference);
     depth = state.z;
-    vec2 xy = state.xy * 2.0 - 1.0 + pointer * (depth - 0.5) * 0.022;
-    gl_Position = vec4(xy, 0.0, 1.0);
-    gl_PointSize = mix(1.1, 3.0, depth * depth) * pixelRatio;
+    variety = fract(sin(dot(reference, vec2(127.1, 311.7))) * 43758.5453);
+    float aspect = size.x / max(size.y, 1.0);
+    vec2 plane = (state.xy - 0.5) * vec2(aspect, 1.0) * 20.0;
+    float angle = time * 0.012;
+    plane = mat2(cos(angle), -sin(angle), sin(angle), cos(angle)) * plane;
+    vec3 world = vec3(plane - pointer * vec2(aspect, 1.0) * 0.75, -2.0 - depth * 18.0);
+    vec4 viewPosition = modelViewMatrix * vec4(world, 1.0);
+    gl_Position = projectionMatrix * viewPosition;
+    gl_PointSize = clamp(mix(2.8, 6.0, variety) * 9.0 / -viewPosition.z, 1.5, 10.0) * pixelRatio;
+    visibility = smoothstep(0.0, 0.08, depth) * (1.0 - smoothstep(0.88, 1.0, depth));
   }
 `;
 
@@ -131,16 +143,20 @@ export const particleFragment = `
   uniform float dark;
   uniform float time;
   varying float depth;
+  varying float visibility;
+  varying float variety;
   void main() {
-    float d = length(gl_PointCoord - 0.5);
-    float core = 1.0 - smoothstep(0.02, 0.28, d);
-    float halo = (1.0 - smoothstep(0.12, 0.5, d)) * 0.16;
-    float shimmer = 0.82 + 0.18 * sin(time * 0.55 + depth * 43.0);
-    float alpha = (core + halo) * mix(0.12, 0.36, depth * depth) * shimmer;
-    vec3 cool = vec3(0.62, 0.72, 0.88);
-    vec3 warm = vec3(0.85, 0.74, 0.79);
-    vec3 color = mix(vec3(0.49, 0.57, 0.68), mix(cool, warm, depth), dark);
-    alpha *= mix(0.48, 1.0, dark);
-    gl_FragColor = vec4(color, alpha);
+    vec2 p = gl_PointCoord - 0.5;
+    float d = length(p);
+    float core = 1.0 - smoothstep(0.05, 0.24, d);
+    float halo = exp(-d * d * 18.0) * 0.30;
+    float rays = exp(-min(abs(p.x), abs(p.y)) * 65.0) * (1.0 - smoothstep(0.05, 0.48, d));
+    float shimmer = 0.76 + 0.24 * sin(time * 1.1 + variety * 43.0);
+    float alpha = (core + halo + rays * step(0.94, variety) * 0.28)
+      * mix(0.48, 0.88, variety) * shimmer * visibility;
+    vec3 cool = vec3(0.63, 0.78, 0.98);
+    vec3 warm = vec3(0.95, 0.76, 0.79);
+    vec3 color = mix(vec3(0.30, 0.43, 0.61), mix(cool, warm, variety), dark);
+    gl_FragColor = vec4(color, alpha * mix(0.65, 1.0, dark));
   }
 `;
