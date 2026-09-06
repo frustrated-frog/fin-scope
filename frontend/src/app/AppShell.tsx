@@ -109,6 +109,8 @@ export function AppShell({
                   key={item.id}
                   className={view === item.id ? 'nav-item active' : 'nav-item'}
                   aria-label={item.label}
+                  aria-current={view === item.id ? 'page' : undefined}
+                  type="button"
                   onClick={() => onChangeView(item.id)}
                 >
                   <span className="nav-code">{item.code}</span>

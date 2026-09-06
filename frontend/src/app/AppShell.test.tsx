@@ -27,7 +27,8 @@ test('groups the workspace and exposes one knowledge entry', () => {
   expect(screen.getByText('研究流')).toBeInTheDocument();
   expect(screen.getByText('知识与判断')).toBeInTheDocument();
   expect(screen.getByText('系统')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Facts & Knowledge' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Facts & Knowledge' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('button', { name: 'News Wire' })).not.toHaveAttribute('aria-current');
   expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Market Intel' })).toBeInTheDocument();

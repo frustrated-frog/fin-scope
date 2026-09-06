@@ -1,0 +1,185 @@
+/* The navigation shares the sky behind the workspace instead of forming a solid wall. */
+.app-shell .sidebar {
+  --nav-ink: #283651;
+  --nav-muted: #526582;
+  --nav-line: rgba(113, 132, 180, 0.22);
+  --nav-hover: rgba(130, 155, 220, 0.12);
+  --nav-accent: #405b9c;
+  color: var(--nav-ink);
+  border-right: 1px solid var(--nav-line);
+  background:
+    radial-gradient(ellipse at 0% 14%, rgba(98, 170, 218, 0.13), transparent 56%),
+    radial-gradient(ellipse at 100% 80%, rgba(153, 117, 211, 0.12), transparent 58%),
+    rgba(222, 231, 247, 0.62);
+  backdrop-filter: blur(14px) saturate(125%);
+  -webkit-backdrop-filter: blur(14px) saturate(125%);
+  box-shadow: inset -1px 0 0 rgba(232, 242, 255, 0.18);
+}
+
+.app-shell[data-theme="dark"] .sidebar {
+  --nav-ink: #dce6f6;
+  --nav-muted: #9aaecb;
+  --nav-line: rgba(142, 166, 220, 0.18);
+  --nav-hover: rgba(132, 153, 216, 0.10);
+  --nav-accent: #b6cbff;
+  background:
+    radial-gradient(ellipse at 0% 14%, rgba(51, 126, 184, 0.12), transparent 56%),
+    radial-gradient(ellipse at 100% 80%, rgba(116, 65, 189, 0.15), transparent 58%),
+    rgba(15, 23, 43, 0.53);
+}
+
+.app-shell .brand {
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--nav-line);
+}
+
+.app-shell .brand h1 {
+  color: var(--nav-ink);
+  letter-spacing: -0.035em;
+}
+
+.app-shell .brand p,
+.app-shell .sidebar .signal-label,
+.app-shell .sidebar .nav-group-label,
+.app-shell .sidebar .nav-copy small {
+  color: var(--nav-muted);
+}
+
+.app-shell .sidebar-signal {
+  border-color: var(--nav-line);
+  border-radius: 14px;
+  background: linear-gradient(125deg, rgba(132, 166, 222, 0.10), rgba(164, 132, 215, 0.06));
+  box-shadow: inset 0 1px 0 rgba(227, 239, 255, 0.12);
+  padding: 12px;
+}
+
+.app-shell .sidebar-signal::before {
+  display: none;
+}
+
+.app-shell .sidebar-signal strong {
+  color: var(--nav-ink);
+}
+
+.app-shell .signal-flow span {
+  background: var(--nav-line);
+}
+
+.app-shell .signal-flow span:nth-child(-n + 3) {
+  background: linear-gradient(90deg, #59a7c8, #8d86d8);
+}
+
+.app-shell .sidebar > nav {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nav-line) transparent;
+}
+
+.app-shell .sidebar > nav::-webkit-scrollbar-thumb {
+  background: var(--nav-line);
+}
+
+.app-shell .nav-group {
+  gap: 5px;
+  margin-bottom: 15px;
+}
+
+.app-shell .nav-group-label {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  margin-bottom: 6px;
+}
+
+.app-shell .nav-item {
+  color: var(--nav-ink);
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 7px;
+  border-radius: 13px;
+  padding: 9px 8px;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.app-shell .nav-item:hover {
+  transform: none;
+  color: var(--nav-ink);
+  background: var(--nav-hover);
+  border-color: var(--nav-line);
+}
+
+.app-shell .nav-item.active {
+  color: var(--nav-accent);
+  border-color: rgba(126, 153, 221, 0.40);
+  background:
+    radial-gradient(ellipse at 14% 10%, rgba(100, 177, 229, 0.19), transparent 70%),
+    linear-gradient(115deg, rgba(130, 159, 224, 0.18), rgba(156, 121, 213, 0.16));
+  box-shadow: inset 0 1px 0 rgba(214, 232, 255, 0.21), 0 5px 18px rgba(29, 38, 77, 0.06);
+}
+
+.app-shell .nav-item.active::after {
+  inset: 14px auto 14px 0;
+  width: 2px;
+  background: linear-gradient(180deg, #83c8e4, #a795e8);
+  box-shadow: none;
+}
+
+.app-shell .nav-code {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--nav-line);
+  border-radius: 9px;
+  color: var(--nav-muted);
+  background: rgba(145, 166, 207, 0.06);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.app-shell .nav-item.active .nav-code {
+  color: var(--nav-accent);
+  border-color: rgba(125, 157, 221, 0.38);
+  background: rgba(124, 156, 229, 0.14);
+}
+
+.app-shell .nav-copy span {
+  font-weight: 650;
+}
+
+.app-shell .nav-item:focus-visible {
+  outline: 2px solid var(--nav-accent);
+  outline-offset: -3px;
+}
+
+@media (max-width: 980px) {
+  .app-shell .nav-item {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .app-shell .nav-code {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .nav-item {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .app-shell .sidebar {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .app-shell .sidebar {
+    color: CanvasText;
+    background: Canvas;
+  }
+  .app-shell .nav-item.active {
+    outline: 2px solid Highlight;
+  }
+}

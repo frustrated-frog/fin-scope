@@ -42,11 +42,6 @@
     linear-gradient(145deg, #131c26, #141b25 55%, #19202b);
 }
 
-/* Let the surrounding frame share the glass surfaces' blue-gray atmosphere. */
-.app-shell:has(:is(.dashboard-pulse, .glass-workspace)) .sidebar {
-  background: linear-gradient(170deg, #24323e, #1c2633 75%);
-}
-
 .app-shell:has(:is(.dashboard-pulse, .glass-workspace)) .topbar {
   background: rgba(230, 236, 242, 0.84);
   border-bottom-color: rgba(113, 136, 158, 0.18);
