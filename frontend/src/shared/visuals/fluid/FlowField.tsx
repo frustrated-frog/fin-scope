@@ -69,7 +69,7 @@ export function FlowField({ mode, className = '', label, children, loadRenderer 
       observeSurfaces();
       refresh();
     }) : undefined;
-    content?.observe(host, { childList: true, subtree: true });
+    content?.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-flow-surface'] });
     document.addEventListener('visibilitychange', syncVisibility);
     motion?.addEventListener?.('change', syncMotion);
     window.addEventListener('resize', refresh);

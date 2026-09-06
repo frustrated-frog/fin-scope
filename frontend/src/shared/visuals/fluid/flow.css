@@ -357,3 +357,16 @@
     background: var(--surface);
   }
 }
+
+/* Keep gain/loss text readable on the pale glass as well as the night palette. */
+.glass-workspace.watchlist-page {
+  --watchlist-cyan: #19788a;
+  --watchlist-green: #16794f;
+  --watchlist-rose: #b63d56;
+}
+
+[data-theme="dark"] .glass-workspace.watchlist-page {
+  --watchlist-cyan: #4ddbc8;
+  --watchlist-green: #42d69a;
+  --watchlist-rose: #ff7585;
+}

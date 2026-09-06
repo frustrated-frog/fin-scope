@@ -88,6 +88,9 @@ test('refreshes the same workspace renderer when asynchronous cards arrive or ar
   await waitFor(() => expect(engine.refresh).toHaveBeenCalled());
   expect(getByRole('group', { name: '自选行情' })).toContainElement(getByRole('button'));
   engine.refresh.mockClear();
+  rerender(<FlowField mode="workspace" label="自选行情" loadRenderer={loadRenderer}><button data-flow-surface="review">股票</button></FlowField>);
+  await waitFor(() => expect(engine.refresh).toHaveBeenCalled());
+  engine.refresh.mockClear();
   rerender(<FlowField mode="workspace" label="自选行情" loadRenderer={loadRenderer} />);
   await waitFor(() => expect(engine.refresh).toHaveBeenCalled());
   expect(create).toHaveBeenCalledTimes(1);
