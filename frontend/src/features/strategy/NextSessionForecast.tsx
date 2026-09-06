@@ -7,8 +7,9 @@ const statusCopy: Record<NextSessionPrediction['status'], string> = {
   READY: '初步验证通过', WATCH: '观察预测 · 方向暂不判断', INSUFFICIENT_DATA: '历史样本不足',
   STALE_DATA: '行情已过期', CALENDAR_UNAVAILABLE: '交易日历待核验', BEFORE_CLOSE: '等待完整收盘数据',
 };
-const percent = (value?: number) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
-const signed = (value?: number) => value == null ? '—' : `${value > 0 ? '+' : ''}${percent(value)}`;
+const percent = (value?: number, digits = 1) => value == null ? '—' : `${(value * 100).toFixed(digits)}%`;
+const signed = (value?: number, digits = 1) => value == null ? '—' : `${value > 0 ? '+' : ''}${percent(value, digits)}`;
+const excessPoints = (value: number) => signed(value, 3).replace('%', ' 个百分点');
 
 export function NextSessionForecast({ prediction, compact = false }: { prediction?: NextSessionPrediction; compact?: boolean }) {
   if (!prediction) {
@@ -35,7 +36,7 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
         <p>测试 {joint.testStart} ～ {joint.testEnd} · {joint.validationDayCount} 个交易日 / {joint.validationSampleCount} 个股票样本，指标按日等权。</p>
         <p>联合 Brier {joint.pooledBrierScore.toFixed(4)} / 历史频率 {joint.baselineBrierScore.toFixed(4)} / 联合逻辑回归 {joint.logisticBrierScore.toFixed(4)}（越低越好）</p>
         <p>该股联合 Brier {joint.stockBrierScore?.toFixed(4) ?? '—'} · 对照上涨概率 {percent(joint.upProbability)} · 对照预期涨跌 {signed(joint.expectedReturn)}</p>
-        <p>排序 Rank IC {joint.rankIc.toFixed(3)} · Top 5 次日平均涨跌 {signed(joint.top5Return)} · 超过同日股票池 {signed(joint.top5PoolExcess)} / 动量排序 {signed(joint.top5MomentumExcess)}</p>
+        <p>排序 Rank IC {joint.rankIc.toFixed(3)} · Top 5 次日平均涨跌 {signed(joint.top5Return, 3)} · 超过同日股票池 {excessPoints(joint.top5PoolExcess)} / 动量排序 {excessPoints(joint.top5MomentumExcess)}</p>
         <p>{joint.reason}。这些是当前可用股票池内的历史比较，尚未消除幸存者偏差。</p>
       </details>
     </div>}

@@ -43,4 +43,6 @@ test('keeps joint shadow probabilities separate and never calls ranking a probab
   expect(screen.getByText('联合模型对照 · 当前保留原预测')).toBeInTheDocument();
   expect(screen.getByText(/90.0%（越高越靠前，非上涨概率）/)).toBeInTheDocument();
   expect(screen.getByText(/对照上涨概率 70.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/Top 5 次日平均涨跌 \+0.200%/)).toBeInTheDocument();
+  expect(screen.getByText(/超过同日股票池 \+0.100 个百分点/)).toBeInTheDocument();
 });
