@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import { api } from '../../shared/api/client';
 import { FollowedSector, WatchlistItem } from '../../shared/types';
 import { AttributionReaderView } from './AttributionReaderView';
@@ -317,12 +318,12 @@ export function WatchlistView({
   }
 
   return (
-    <div className="watchlist-page">
+    <FlowField mode="workspace" label="自选行情面板" className="watchlist-page glass-workspace">
       <section className="market-index-overview" aria-labelledby="market-index-title">
         <h4 id="market-index-title">市场指数</h4>
         <div className="market-index-grid">
-          {marketIndices.map((index) => (
-            <article className="market-index-card" data-testid="market-index-card" key={index.code}>
+          {marketIndices.map((index, position) => (
+            <article className="market-index-card" data-flow-surface={['active', 'review', 'fresh', 'attention'][position % 4]} data-testid="market-index-card" key={index.code}>
               <span className="market-index-name">{index.name}</span>
               {['STALE_FALLBACK', 'UNAVAILABLE'].includes(index.qualityStatus || '')
                 && <span className="market-data-old-badge">旧数据</span>}
@@ -495,6 +496,7 @@ export function WatchlistView({
                     <div className="watchlist-grid">
                       {groupBlock.list.map((item) => (
                         <article
+                          data-flow-surface={item.type === 'FUND' ? 'review' : 'fresh'}
                           className={`panel watchlist-card${isAbnormal(latestChangePct(item)) ? ' watchlist-card-abnormal' : ''}`}
                           key={item.id}
                           tabIndex={0}
@@ -670,6 +672,6 @@ export function WatchlistView({
           }}
         />
       )}
-    </div>
+    </FlowField>
   );
 }

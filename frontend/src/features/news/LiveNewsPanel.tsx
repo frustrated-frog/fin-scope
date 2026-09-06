@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import { api } from '../../shared/api/client';
 import { useViewRevision } from '../../shared/api/useViewRevision';
 
@@ -176,8 +177,9 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
     category.code !== 'ALL' && category.code !== 'PENDING_REVIEW');
 
   return (
+    <FlowField mode="workspace" label="市场资讯面板" className="glass-workspace">
     <section className="news-view" aria-label="市场资讯">
-      <header className="news-command-bar">
+      <header className="news-command-bar" data-flow-surface="TECHNOLOGY">
         <div className="news-command-copy">
           <div className="news-live-label"><span aria-hidden="true" /> LIVE MARKET WIRE</div>
           <h1>市场正在发生</h1>
@@ -235,6 +237,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         </aside>
       </div>
     </section>
+    </FlowField>
   );
 
   async function refreshSources() {
@@ -265,7 +268,7 @@ function FlashItem({ item, latest, categories, onReview, onSave, saved }: {
   saved: boolean;
 }) {
   const content = <><div className="news-flash-meta"><span>{item.sourceName}</span><small>{item.sourceTier}</small>{latest ? <em>NEW</em> : null}</div><h3>{item.title}</h3><p>{item.content}</p></>;
-  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" /><div className="news-flash-content">{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-item-link">{content}</a> : content}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></div></article>;
+  return <article className={latest ? 'news-flash-item is-latest' : 'news-flash-item'}><time dateTime={item.publishedAt}>{formatTime(item.publishedAt)}<small>{formatDate(item.publishedAt)}</small></time><span className="news-pulse-dot" aria-hidden="true" /><div className="news-flash-content" data-flow-surface={item.categoryCode || (item.providerCode === 'CLS' ? 'attention' : 'active')}>{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="news-item-link">{content}</a> : content}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></div></article>;
 }
 
 function ArticleCard({ item, categories, onReview, onSave, saved }: {
@@ -276,7 +279,7 @@ function ArticleCard({ item, categories, onReview, onSave, saved }: {
   saved: boolean;
 }) {
   const body = <><div className="news-card-meta"><span>{item.sourceName}</span><time dateTime={item.publishedAt}>{formatDateTime(item.publishedAt)}</time></div><h3>{item.title}</h3><p>{item.content}</p><span className="news-card-action">阅读原文 <b aria-hidden="true">↗</b></span></>;
-  return <article className="news-depth-card">{item.url ? <a className="news-item-link" href={item.url} target="_blank" rel="noreferrer">{body}</a> : body}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></article>;
+  return <article className="news-depth-card" data-flow-surface={item.categoryCode || 'review'}>{item.url ? <a className="news-item-link" href={item.url} target="_blank" rel="noreferrer">{body}</a> : body}<button type="button" className={`major-event-save${saved ? ' is-saved' : ''}`} onClick={() => !saved && void onSave(item)} aria-label={`${saved ? '已记入大事记：' : '记入大事记：'}${item.title}`} aria-pressed={saved}><span aria-hidden="true">{saved ? '✓' : '+'}</span>{saved ? '已记入大事记' : '记入大事记'}</button><ClassificationReview item={item} categories={categories} onReview={onReview} /></article>;
 }
 
 function ClassificationReview({ item, categories, onReview }: {

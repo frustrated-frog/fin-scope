@@ -75,3 +75,20 @@ test('destroys failed context once and switches back to readable static cards', 
   unmount();
   expect(engine.destroy).toHaveBeenCalledTimes(1);
 });
+
+test('refreshes the same workspace renderer when asynchronous cards arrive or are removed', async () => {
+  media();
+  const engine = controller();
+  const create = vi.fn(() => engine);
+  const loadRenderer = async () => create;
+  const { rerender, getByRole } = render(<FlowField mode="workspace" label="自选行情" loadRenderer={loadRenderer} />);
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  engine.refresh.mockClear();
+  rerender(<FlowField mode="workspace" label="自选行情" loadRenderer={loadRenderer}><button data-flow-surface="fresh">股票</button></FlowField>);
+  await waitFor(() => expect(engine.refresh).toHaveBeenCalled());
+  expect(getByRole('group', { name: '自选行情' })).toContainElement(getByRole('button'));
+  engine.refresh.mockClear();
+  rerender(<FlowField mode="workspace" label="自选行情" loadRenderer={loadRenderer} />);
+  await waitFor(() => expect(engine.refresh).toHaveBeenCalled());
+  expect(create).toHaveBeenCalledTimes(1);
+});

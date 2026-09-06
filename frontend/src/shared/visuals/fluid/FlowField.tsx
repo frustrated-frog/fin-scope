@@ -8,9 +8,10 @@ const loadDefaultRenderer = async (): Promise<FlowFactory> => {
   return (await import('./renderer')).createFlowRenderer;
 };
 
-export function FlowField({ mode, className = '', children, loadRenderer = loadDefaultRenderer }: {
+export function FlowField({ mode, className = '', label, children, loadRenderer = loadDefaultRenderer }: {
   mode: FlowMode;
   className?: string;
+  label?: string;
   children?: ReactNode;
   loadRenderer?: () => Promise<FlowFactory>;
 }) {
@@ -47,7 +48,28 @@ export function FlowField({ mode, className = '', children, loadRenderer = loadD
     }
     intersection?.observe(host);
     resize?.observe(host);
-    host.querySelectorAll('[data-flow-surface]').forEach(surface => resize?.observe(surface));
+    const observedSurfaces = new Set<Element>();
+    const observeSurfaces = () => {
+      const current = new Set(host.querySelectorAll('[data-flow-surface]'));
+      observedSurfaces.forEach(surface => {
+        if (!current.has(surface)) {
+          resize?.unobserve(surface);
+          observedSurfaces.delete(surface);
+        }
+      });
+      current.forEach(surface => {
+        if (!observedSurfaces.has(surface)) {
+          resize?.observe(surface);
+          observedSurfaces.add(surface);
+        }
+      });
+    };
+    observeSurfaces();
+    const content = mode === 'workspace' ? new MutationObserver(() => {
+      observeSurfaces();
+      refresh();
+    }) : undefined;
+    content?.observe(host, { childList: true, subtree: true });
     document.addEventListener('visibilitychange', syncVisibility);
     motion?.addEventListener?.('change', syncMotion);
     window.addEventListener('resize', refresh);
@@ -72,6 +94,7 @@ export function FlowField({ mode, className = '', children, loadRenderer = loadD
       intersection?.disconnect();
       resize?.disconnect();
       theme.disconnect();
+      content?.disconnect();
       document.removeEventListener('visibilitychange', syncVisibility);
       document.removeEventListener('scroll', refresh, true);
       motion?.removeEventListener?.('change', syncMotion);
@@ -85,7 +108,7 @@ export function FlowField({ mode, className = '', children, loadRenderer = loadD
       ref={hostRef}
       className={`flow-field flow-field--${mode} ${className}`}
       role={mode === 'ambient' ? undefined : 'group'}
-      aria-label={mode === 'cards' ? '研究队列总览' : mode === 'panels' ? '热点动态榜单' : undefined}
+      aria-label={label ?? (mode === 'cards' ? '研究队列总览' : mode === 'panels' ? '热点动态榜单' : undefined)}
     >
       <canvas ref={canvasRef} className="flow-canvas" aria-hidden="true" />
       {children}

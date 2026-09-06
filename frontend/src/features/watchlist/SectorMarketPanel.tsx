@@ -94,7 +94,7 @@ export function SectorMarketPanel({
 
   function renderRanking(title: string, tone: 'leader' | 'laggard', items: SectorMarketEntry[]) {
     return (
-      <div className={`sector-rank-column sector-rank-${tone}`}>
+      <div className={`sector-rank-column sector-rank-${tone}`} data-flow-surface={tone === 'leader' ? 'attention' : 'active'}>
         <div className="sector-rank-head">
           <span>{title}</span>
           <small>涨跌幅 · 主力净流入</small>
@@ -240,7 +240,7 @@ export function SectorMarketPanel({
         ) : (
           <div className="sector-follow-grid">
             {follows.data.map((sector) => (
-              <article className="sector-follow-card" data-testid={`followed-sector-${sector.code}`} key={sector.code}>
+              <article className="sector-follow-card" data-flow-surface="FINANCE" data-testid={`followed-sector-${sector.code}`} key={sector.code}>
                 <button
                   className="sector-follow-remove"
                   type="button"

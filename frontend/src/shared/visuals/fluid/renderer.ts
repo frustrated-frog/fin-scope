@@ -6,7 +6,7 @@ import { FluidQuality, localPointer, simulationDimensions } from './quality';
 import { liquidGlassDisplay } from './glassMaterial';
 import { nebulaDisplay } from './nebulaMaterial';
 
-export type FlowMode = 'ambient' | 'cards' | 'panels';
+export type FlowMode = 'ambient' | 'cards' | 'panels' | 'workspace';
 export interface FlowController {
   setActive(active: boolean): void;
   setMotion(motion: boolean): void;
@@ -33,11 +33,11 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   renderer.setClearColor(0x000000, 0);
   renderer.debug.onShaderError = () => { throw new Error('Fluid shader compilation failed'); };
   const gpu = new GpuPass(renderer);
-  const surfaces = options.mode === 'ambient' ? [] : Array.from(host.querySelectorAll<HTMLElement>('[data-flow-surface]'));
+  let surfaces = options.mode === 'ambient' ? [] : Array.from(host.querySelectorAll<HTMLElement>('[data-flow-surface]'));
   const interactionHost = options.mode === 'ambient' ? host.closest<HTMLElement>('.app-shell') ?? host : host;
   const quality = new FluidQuality(window.innerWidth < 760);
-  const simulations: FluidSimulation[] = [];
-  const surfaceTints = surfaces.map(() => new Vector3(0.45, 0.63, 0.68));
+  let simulations: Array<FluidSimulation | undefined> = [];
+  let surfaceTints = surfaces.map(() => new Vector3(0.45, 0.63, 0.68));
   const particles = options.mode === 'ambient' ? new ParticleField(gpu) : undefined;
   const pointer = new Vector2();
   const targetPointer = new Vector2();
@@ -59,7 +59,6 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   let width = 0;
   let height = 0;
   let dark = false;
-  let currentLevel = -1;
 
   const seed = (simulation: FluidSimulation, index: number) => {
     const palette = FLOW_DYES;
@@ -76,12 +75,28 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
   };
 
   const resize = () => {
-    width = Math.max(1, host.clientWidth);
-    height = Math.max(1, host.clientHeight);
+    const workspace = options.mode === 'workspace';
+    if (workspace) {
+      const next = Array.from(host.querySelectorAll<HTMLElement>('[data-flow-surface]'));
+      const previousSimulations = new Map(surfaces.map((surface, index) => [surface, simulations[index]]));
+      surfaces.forEach(surface => {
+        if (!next.includes(surface)) {
+          previousSimulations.get(surface)?.dispose();
+        }
+      });
+      simulations = next.map(surface => previousSimulations.get(surface));
+      if (next.some((surface, index) => surface !== surfaces[index]) || next.length !== surfaces.length) {
+        onLeave();
+      }
+      surfaces = next;
+      surfaceTints = surfaces.map(() => new Vector3(0.45, 0.63, 0.68));
+    }
+    width = Math.max(1, workspace ? window.innerWidth : host.clientWidth);
+    height = Math.max(1, workspace ? window.innerHeight : host.clientHeight);
     renderer.setPixelRatio(quality.pixelRatio(window.devicePixelRatio));
     renderer.setSize(width, height, false);
     // Keep the canvas at the scroll viewport origin; card rects already include scrolling.
-    canvas.style.transform = `translate(${host.scrollLeft}px, ${host.scrollTop}px)`;
+    canvas.style.transform = workspace ? '' : `translate(${host.scrollLeft}px, ${host.scrollTop}px)`;
     dark = host.closest('[data-theme]')?.getAttribute('data-theme') === 'dark';
     surfaces.forEach((surface, index) => {
       const channels = getComputedStyle(surface).getPropertyValue('--flow-tint').trim().split(/\s+/).map(Number);
@@ -90,25 +105,25 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       }
     });
     const count = options.mode === 'ambient' ? 1 : surfaces.length;
-    const grids = Array.from({ length: count }, (_, index) => {
+    for (let index = 0; index < count; index += 1) {
       const rect = surfaces[index]?.getBoundingClientRect();
-      return simulationDimensions(rect?.width ?? width, rect?.height ?? height, quality.level);
-    });
-    const geometryChanged = grids.some((grid, index) => {
+      const inView = !rect || (rect.width > 0 && rect.height > 0 && rect.bottom > 0
+        && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth);
+      if (workspace && !inView) {
+        simulations[index]?.dispose();
+        simulations[index] = undefined;
+        continue;
+      }
+      const grid = simulationDimensions(rect?.width ?? width, rect?.height ?? height, quality.level);
       const previousGrid = simulations[index]?.velocity.read;
-      return previousGrid?.width !== grid.width || previousGrid?.height !== grid.height;
-    });
-    if (currentLevel !== quality.level || geometryChanged) {
-      simulations.forEach(simulation => simulation.dispose());
-      simulations.length = 0;
-      for (let index = 0; index < count; index += 1) {
-        const grid = grids[index];
+      if (previousGrid?.width !== grid.width || previousGrid?.height !== grid.height) {
+        simulations[index]?.dispose();
         const simulation = new FluidSimulation(gpu, grid.width, grid.height, options.mode === 'ambient' ? 1 : 3);
-        simulations.push(simulation);
+        simulations[index] = simulation;
         seed(simulation, index);
       }
-      currentLevel = quality.level;
     }
+    host.dataset.flowSurfaces = String(simulations.filter(Boolean).length);
     host.dataset.flowQuality = String(quality.level);
     dirty = false;
   };
@@ -190,7 +205,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
         pointer.lerp(targetPointer, 1 - Math.exp(-dt * 5));
         const feed = elapsed - lastFeed > 0.12;
         simulations.forEach((simulation, index) => {
-          if (!visible(index)) {
+          if (!simulation || !visible(index)) {
             return;
           }
           if (feed) {
@@ -219,22 +234,22 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       } else {
         renderer.setScissorTest(true);
         surfaces.forEach((card, index) => {
-          if (!visible(index)) {
+          const simulation = simulations[index];
+          if (!simulation || !visible(index)) {
             return;
           }
           const rect = rects[index];
-          const x = rect.left - hostRect.left;
-          const y = height - (rect.bottom - hostRect.top);
+          const x = rect.left - (options.mode === 'workspace' ? 0 : hostRect.left);
+          const y = height - (rect.bottom - (options.mode === 'workspace' ? 0 : hostRect.top));
           renderer.setViewport(x, y, rect.width, rect.height);
-          renderer.setScissor(Math.max(0, x), Math.max(0, y), Math.min(rect.width, width - Math.max(0, x)), Math.min(rect.height, height - Math.max(0, y)));
+          renderer.setScissor(Math.max(0, x), Math.max(0, y), Math.max(0, Math.min(x + rect.width, width) - Math.max(0, x)), Math.max(0, Math.min(y + rect.height, height) - Math.max(0, y)));
           size.set(rect.width, rect.height);
-          const simulation = simulations[index];
           dyeTexel.set(1 / simulation.dye.read.width, 1 / simulation.dye.read.height);
           velocityTexel.set(1 / simulation.velocity.read.width, 1 / simulation.velocity.read.height);
           gpu.draw(liquidGlassDisplay, {
             dye: simulation.dye.read.texture, velocity: simulation.velocity.read.texture,
             dyeTexel, velocityTexel, size, dark: dark ? 1 : 0, time: elapsed,
-            panel: options.mode === 'panels' ? 1 : 0, seed: index, tint: surfaceTints[index],
+            panel: options.mode === 'cards' ? 0 : 1, seed: index, tint: surfaceTints[index],
             radius: parseFloat(getComputedStyle(card).borderTopLeftRadius) || 12
           }, null);
         });
@@ -242,8 +257,9 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       }
       // Include scheduling delay to notice GPU-bound frames, not only JS submission time.
       const cost = Math.max(performance.now() - begin, previousTime ? (now - previousTime) * 16.7 / interval : 0);
+      const previousLevel = quality.level;
       quality.record(cost);
-      if (quality.level !== currentLevel) {
+      if (quality.level !== previousLevel) {
         dirty = true;
       }
     } catch {
@@ -286,7 +302,7 @@ export const createFlowRenderer: FlowFactory = (canvas, host, options) => {
       interactionHost.removeEventListener('pointermove', onPointer);
       interactionHost.removeEventListener('pointerleave', onLeave);
       canvas.removeEventListener('webglcontextlost', onContextLost);
-      simulations.forEach(simulation => simulation.dispose());
+      simulations.forEach(simulation => simulation?.dispose());
       particles?.dispose();
       gpu.dispose();
       renderer.dispose();

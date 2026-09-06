@@ -43,16 +43,16 @@
 }
 
 /* Let the surrounding frame share the glass surfaces' blue-gray atmosphere. */
-.app-shell:has(.dashboard-pulse) .sidebar {
+.app-shell:has(:is(.dashboard-pulse, .glass-workspace)) .sidebar {
   background: linear-gradient(170deg, #24323e, #1c2633 75%);
 }
 
-.app-shell:has(.dashboard-pulse) .topbar {
+.app-shell:has(:is(.dashboard-pulse, .glass-workspace)) .topbar {
   background: rgba(230, 236, 242, 0.84);
   border-bottom-color: rgba(113, 136, 158, 0.18);
 }
 
-.app-shell[data-theme="dark"]:has(.dashboard-pulse) .topbar {
+.app-shell[data-theme="dark"]:has(:is(.dashboard-pulse, .glass-workspace)) .topbar {
   background: rgba(23, 32, 44, 0.84);
 }
 
@@ -258,5 +258,102 @@
   .flow-field[data-flow-ready="true"] [data-flow-surface] {
     background: var(--surface);
     color: var(--ink);
+  }
+}
+
+/* One viewport-sized renderer behind a dynamic page of glass surfaces. */
+.flow-field--workspace > .flow-canvas {
+  position: fixed;
+  z-index: -1;
+  width: 100vw;
+  height: 100vh;
+}
+
+.glass-workspace {
+  --flow-tint: 115 140 225;
+  --glass-line: rgba(111, 141, 158, 0.30);
+  --glass-veil: rgba(240, 246, 250, 0.18);
+  --glass-focus: #2c738d;
+  --glass-ink: #233945;
+  --glass-muted: #475d6a;
+}
+
+[data-theme="dark"] .glass-workspace {
+  --flow-tint: 115 140 225;
+  --glass-line: rgba(157, 186, 201, 0.24);
+  --glass-veil: rgba(12, 21, 32, 0.16);
+  --glass-focus: #9dc7d8;
+  --glass-ink: #e3ebef;
+  --glass-muted: #b7c7d0;
+}
+
+.glass-workspace :is(.sector-market-panel, .sector-market-scan, .sector-follow-workspace,
+  .watchlist-group, .news-flash-panel, .news-depth-panel),
+.glass-workspace.watchlist-page > .panel.wide {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--glass-line);
+  box-shadow: inset 0 1px 0 rgba(210, 229, 245, 0.08);
+}
+
+.glass-workspace [data-flow-surface] {
+  border-color: var(--glass-line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+  color: var(--glass-ink);
+}
+
+/* News categories retain their identity without changing price gain/loss colors. */
+.glass-workspace [data-flow-surface="COMPANY"] { --flow-tint: 115 140 225; }
+.glass-workspace [data-flow-surface="INDUSTRY"] { --flow-tint: 70 185 150; }
+.glass-workspace [data-flow-surface="POLICY"] { --flow-tint: 225 154 73; }
+.glass-workspace [data-flow-surface="GLOBAL"] { --flow-tint: 166 130 219; }
+.glass-workspace [data-flow-surface="MARKET"] { --flow-tint: 69 161 213; }
+
+.glass-workspace[data-flow-ready="true"] [data-flow-surface],
+.glass-workspace[data-flow-ready="true"] [data-flow-surface]:hover {
+  background: transparent;
+  transform: none;
+}
+
+.glass-workspace .news-flash-content {
+  padding: 18px 20px;
+  border: 1px solid var(--glass-line);
+}
+
+.glass-workspace [data-flow-surface]::before {
+  display: none;
+}
+
+.glass-workspace [data-flow-surface]::after {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  box-shadow: none;
+}
+
+.glass-workspace :is(.news-flash-content p, .news-depth-card p, .watchlist-stats, .watchlist-note) {
+  color: var(--glass-muted);
+}
+
+.glass-workspace :is(.news-category-rail, .news-filter-rail, .watchlist-group-head, .sector-rank-head) {
+  background: var(--glass-veil);
+}
+
+.glass-workspace :is(.sector-rank-list li, .watchlist-attr-summary, .fund-estimate-row) {
+  background-color: var(--glass-veil);
+}
+
+.glass-workspace [data-flow-surface]:focus-visible {
+  outline: 2px solid var(--glass-focus);
+  outline-offset: -3px;
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .glass-workspace[data-flow-ready="true"] [data-flow-surface] {
+    background: var(--surface);
   }
 }
