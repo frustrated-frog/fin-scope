@@ -474,3 +474,26 @@ test('opens fund holdings from the keyboard-accessible card', async () => {
 
   expect(await screen.findByRole('dialog', { name: '半导体基金 持仓透视' })).toBeInTheDocument();
 });
+
+test('colors stock and fund fluid by the current quote direction, with neutral unavailable quotes', async () => {
+  const cases = [
+    { name: '上涨股票', type: 'STOCK', changePct: 1.2, tone: 'watchlist-up' },
+    { name: '下跌股票', type: 'STOCK', changePct: -1.2, tone: 'watchlist-down' },
+    { name: '持平股票', type: 'STOCK', changePct: 0, tone: 'watchlist-flat' },
+    { name: '缺失行情', type: 'STOCK', tone: 'watchlist-flat' },
+    { name: '失效行情', type: 'STOCK', changePct: 2, quoteValid: false, tone: 'watchlist-flat' },
+    { name: '上涨估值基金', type: 'FUND', changePct: 0.8, confirmedNavChangePct: -1, tone: 'watchlist-up' },
+    { name: '下跌估值基金', type: 'FUND', changePct: -0.8, confirmedNavChangePct: 1, tone: 'watchlist-down' },
+    { name: '净值回退基金', type: 'FUND', confirmedNavChangePct: 1, tone: 'watchlist-up' },
+    { name: '持平估值基金', type: 'FUND', changePct: 0, confirmedNavChangePct: 1, tone: 'watchlist-flat' }
+  ];
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+    path === '/api/watchlist' ? cases.map((item, index) => ({
+      id: index + 1, code: String(600000 + index), quoteValid: true, ...item
+    })) : []
+  ) as never);
+  render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
+  for (const item of cases) {
+    expect((await screen.findByText(item.name)).closest('.watchlist-card')).toHaveAttribute('data-flow-surface', item.tone);
+  }
+});

@@ -365,3 +365,8 @@
   --watchlist-green: #42d69a;
   --watchlist-rose: #ff7585;
 }
+
+/* Watchlist ink follows the displayed quote direction, including the static fallback. */
+.glass-workspace.watchlist-page [data-flow-surface="watchlist-up"] { --flow-tint: 225 88 108; }
+.glass-workspace.watchlist-page [data-flow-surface="watchlist-down"] { --flow-tint: 53 184 132; }
+.glass-workspace.watchlist-page [data-flow-surface="watchlist-flat"] { --flow-tint: 145 162 182; }

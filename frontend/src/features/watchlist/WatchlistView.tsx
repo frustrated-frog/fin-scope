@@ -496,7 +496,7 @@ export function WatchlistView({
                     <div className="watchlist-grid">
                       {groupBlock.list.map((item) => (
                         <article
-                          data-flow-surface={item.type === 'FUND' ? 'review' : 'fresh'}
+                          data-flow-surface={changeClass(item.quoteValid ? latestChangePct(item) : undefined)}
                           className={`panel watchlist-card${isAbnormal(latestChangePct(item)) ? ' watchlist-card-abnormal' : ''}`}
                           key={item.id}
                           tabIndex={0}
