@@ -1,7 +1,7 @@
 """Point-in-time next-close panel with compact Alpha158-inspired price/volume factors."""
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 import hashlib
 import json
@@ -11,6 +11,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from finscope_market_data.models import DailyBar
+from finscope_market_data.forecast.industry_features import IndustryMembership, INDUSTRY_FEATURE_CODES, industry_features
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.features import FEATURE_CODES, ForecastSample, _validated_bars, current_features
 from finscope_market_data.forecast.next_session import build_close_samples
@@ -28,6 +29,7 @@ EXTRA_FEATURE_CODES = (
 class JointRow:
     code: str
     sample: ForecastSample
+    market_return: float | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,7 @@ def _extra_features(bars: Sequence[DailyBar], index: int) -> tuple[float, ...]:
 def build_joint_dataset(
     histories: Mapping[str, Sequence[DailyBar]], *, as_of: str,
     market_bars: Sequence[DailyBar] = (), minimum_cross_section: int = 20,
+    memberships: Sequence[IndustryMembership] = (),
 ) -> JointDataset:
     market = tuple(bar for bar in market_bars if bar.trade_date <= as_of)
     eligible = {}
@@ -97,6 +100,9 @@ def build_joint_dataset(
         bar.trade_date for bars in eligible.values() for bar in bars
     })
     next_date = dict(zip(dates, dates[1:]))
+    market_closes = {bar.trade_date: bar.close for bar in market}
+    market_returns = {day: market_closes[next_day] / market_closes[day] - 1
+                      for day, next_day in next_date.items() if day in market_closes and next_day in market_closes}
     samples_by_code = {}
     valid_labels = set()
     current = {}
@@ -118,16 +124,26 @@ def build_joint_dataset(
         if bars[-1].trade_date == as_of:
             current[code] = (*current_features(bars, context), *_extra_features(bars, len(bars) - 1))
             fingerprints[code] = history_fingerprint(bars)
+    if memberships:
+        by_day = defaultdict(dict)
+        for code, samples in samples_by_code.items():
+            for sample in samples:
+                by_day[sample.signal_date][code] = sample.features
+        industry_by_day = {day: industry_features(features, memberships, day) for day, features in by_day.items()}
+        samples_by_code = {code: tuple(replace(sample, features=(*sample.features, *industry_by_day[sample.signal_date][code]))
+                                      for sample in samples) for code, samples in samples_by_code.items()}
+        extras = industry_features(current, memberships, as_of)
+        current = {code: (*features, *extras[code]) for code, features in current.items()}
     enriched, current, cross_codes = augment_cross_sectional_features(
         samples_by_code, current, minimum_cross_section=minimum_cross_section,
     )
     if not current or not enriched:
         raise ValueError('有效次日预测截面不足')
-    rows = tuple(sorted((JointRow(code, sample) for code, samples in enriched.items() for sample in samples
+    rows = tuple(sorted((JointRow(code, sample, market_returns.get(sample.signal_date)) for code, samples in enriched.items() for sample in samples
                          if (code, sample.signal_date) in valid_labels),
                         key=lambda row: (row.sample.signal_date, row.code)))
     counts = Counter(row.sample.signal_date for row in rows)
     rows = tuple(row for row in rows if counts[row.sample.signal_date] >= minimum_cross_section)
     if not rows:
         raise ValueError('可验证次日标签的截面不足')
-    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *cross_codes))
+    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *(INDUSTRY_FEATURE_CODES if memberships else ()), *cross_codes))
