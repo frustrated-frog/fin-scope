@@ -1,0 +1,131 @@
+/* Shared static materials: keep content opacity and existing semantic accents intact. */
+.app-shell {
+  --workspace-glass: rgba(240, 245, 252, 0.32);
+  --workspace-glass-inset: rgba(236, 243, 252, 0.20);
+}
+
+.app-shell[data-theme="dark"] {
+  --workspace-glass: rgba(20, 29, 45, 0.32);
+  --workspace-glass-inset: rgba(25, 36, 54, 0.20);
+}
+
+/* Explicit surfaces avoid accidentally changing charts, inputs, menus and dialog masks. */
+.app-shell[data-theme] main.workspace :is(
+  article, .panel, .list-item, .insight-field-item, .article-card, .article-category-segment,
+  .investment-observation-stats, .investment-observation-focus, .investment-observation-queue,
+  .recognition-update, .studio-format-map, .studio-pagination, .discovery-run-note,
+  .market-intel-metrics, .market-intel-ledger, .market-intel-rule, .market-intel-evaluation,
+  .global-company-command, .financials-archive,
+  .discovery-head, .discovery-funnel, .discovery-provenance, .discovery-market-context,
+  .discovery-accuracy, .discovery-accuracy-unavailable, .discovery-selection-ledger,
+  .discovery-ranking-challenger, .discovery-window-strip, .discovery-outcome-tape,
+  .next-session-forecast, .holdings-metric, .holdings-boundary,
+  .market-transition-cockpit, .market-transition-thesis, .market-transition-gauges,
+  .market-transition-trajectory, .market-transition-selected, .market-transition-handoff,
+  .ic-library, .ic-dynamics, .ic-limitations, .ic-semantic-dossier, .ic-driver-columns,
+  .ic-phrase-list,
+  .source-material, .source-control-card, .source-item, .source-command-hero,
+  .source-command-overview, .source-board-metrics, .intake-batch-row,
+  .article-control-hero, .article-signal-panel, .article-stream-panel,
+  .article-ingest-panel, .article-queue-panel, .article-empty-panel, .article-hero-readouts,
+  .article-card-expanded, .brief-reader-hero, .brief-reader-overview,
+  .research-material, .research-thesis-card, .research-thesis-stage,
+  .research-decision-stage, .research-finding-card, .research-control-panel,
+  .research-detail-panel, .research-run-row, .research-task-card,
+  .research-report-hero, .research-agent-decision-card, .research-command-hero,
+  .event-card, .event-card-signal, .event-output-card, .thesis-card, .evidence-source-row,
+  .knowledge-action-card, .knowledge-now-panel, .knowledge-topic-card,
+  .learning-task-card, .verification-index-item, .recognition-agent-hero,
+  .studio-card, .studio-command-hero, .studio-hero-metrics, .studio-control-panel,
+  .studio-lead-card, .content-studio-card,
+  .dashboard-pulse, .dashboard-priority-lane, .dashboard-workspace-card,
+  .attribution-path-panel, .attribution-intel-panel, .attribution-track-card,
+  .attribution-narrative-hero, .attribution-force-card,
+  .market-intel-hero, .market-intel-evaluation-row, .dragon-tiger-panel,
+  .strategy-hero, .strategy-card-detail, .strategy-card-use, .strategy-card-state,
+  .strategy-academy-hero, .stock-learning-library-card, .stock-learning-card-hero,
+  .stock-learning-card-result, .quant-hero, .quant-panel, .single-forecast-board,
+  .discovery-visual-card, .discovery-accuracy-scoreboard, .panel-probability-path,
+  .holdings-lab-hero, .holdings-panel, .holding-path-card, .holding-forecast-card,
+  .financials-company-header, .financials-report-row, .valuation-panel,
+  .financials-metric-panel, .financials-statement-card, .financials-quality-panel,
+  .financial-agent-panel, .broker-research-evidence-card,
+  .news-flash-panel, .news-depth-panel, .news-depth-card, .radar-event-card,
+  .radar-notification-panel, .radar-trust-panel, .radar-overview, .major-events-hero,
+  .expectations-hero, .expectation-card, .expectation-gap-panel, .investment-observation-hero,
+  .market-pulse-hero, .market-pulse-stage, .market-pulse-map-stage,
+  .market-pulse-review, .market-pulse-review-overview,
+  .market-pulse-pressure-card, .market-pulse-momentum-card, .market-pulse-internal-card,
+  .ic-research-panel, .ic-driver-board, .ic-bottleneck-board, .ic-stage-profile
+):not(:where(
+  [data-flow-surface], .glass-workspace *,
+  [role="dialog"], [role="dialog"] *, [aria-modal="true"] *,
+  [class*="-drawer"], [class*="-drawer"] *, [class*="-modal"], [class*="-modal"] *,
+  [class*="-overlay"], [class*="-overlay"] *,
+  .parameter-map-grid *, .market-transition-chart *, .market-transition-gauges *,
+  .panel-probability-path *, .ic-canvas-shell *
+)) {
+  background: var(--workspace-glass);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Remove opaque page backplates that would otherwise hide the sky behind the cards. */
+.app-shell[data-theme] main.workspace :is(
+  .knowledge-workbench, .evidence-workbench, .ic-workbench, .ic-main, .daily-research-grid,
+  .global-company-workspace, .strategy-mode-shell, .dashboard-workspace-grid
+) {
+  background: transparent;
+}
+
+.app-shell[data-theme] main.workspace :is(
+  .knowledge-header, .daily-research-header, .evidence-workbench-head,
+  .knowledge-nav-item, .article-card-header,
+  .market-intel-metric-grid > div, .market-intel-evaluation-stats > div,
+  .market-pulse-momentum-card dl > div
+):not(:where([role="dialog"] *, .glass-workspace *)) {
+  background: var(--workspace-glass-inset);
+}
+
+/* Honor readability preferences without reducing the opacity of text or controls. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .app-shell {
+    --workspace-glass: var(--surface);
+    --workspace-glass-inset: var(--surface-2);
+  }
+  .app-shell[data-theme="dark"] {
+    --workspace-glass: var(--surface);
+    --workspace-glass-inset: var(--surface-2);
+  }
+}
+
+@media (forced-colors: active) {
+  .app-shell,
+  .app-shell[data-theme="dark"] {
+    --workspace-glass: Canvas;
+    --workspace-glass-inset: Canvas;
+  }
+}
+
+/* These legacy quant panels used fixed pale text even in the light theme. */
+.app-shell[data-theme="light"] main.workspace .holdings-lab :is(
+  .holdings-lab-hero, .holdings-panel, .holdings-metric, .holdings-boundary
+) {
+  --holding-ink: #24364a;
+  --holding-muted: #50657a;
+  --holding-green: #16794f;
+  --holding-cyan: #19788a;
+  --holding-red: #b63d56;
+  --holding-panel: rgba(240, 245, 252, 0.55);
+  color: var(--holding-ink);
+}
+
+.app-shell[data-theme="light"] main.workspace .next-session-forecast {
+  color: var(--ink);
+}
+
+.app-shell[data-theme="light"] main.workspace .next-session-forecast :is(
+  p, summary, header span, header b, dt, .next-session-audit
+) {
+  color: var(--muted);
+}
