@@ -125,6 +125,7 @@ class DiscoveryFunnel(BaseModel):
 
 
 class DiscoveryReport(BaseModel):
+    joint_training: dict[str, object] | None = None
     schema_version: str = "1.0.0"
     policy_version: str
     as_of_date: str

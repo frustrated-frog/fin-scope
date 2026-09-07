@@ -64,6 +64,8 @@ class PythonStockDiscoveryClientTest {
                 "http://127.0.0.1:8000", http, 900_000)
                 .discover(LocalDate.of(2026, 8, 14), 6000d, "stock-discovery-v2");
 
+        assertEquals(1200, report.getJointTraining().get("trainingUniverseCount"));
+        assertEquals("MARKET_RESIDUAL", report.getJointTraining().get("rankingTarget"));
         assertEquals(900_000, timeout.get());
         assertEquals(true, body.get().contains("\"deepLimit\":15"));
         assertEquals("2026-08-14", report.getAsOfDate());
@@ -140,7 +142,7 @@ class PythonStockDiscoveryClientTest {
     }
 
     private String payload() {
-        return "{\"schema_version\":\"1.0.0\",\"policy_version\":\"stock-discovery-v2\","
+        return "{\"joint_training\":{\"trainingUniverseCount\":1200,\"rankingTarget\":\"MARKET_RESIDUAL\"},\"schema_version\":\"1.0.0\",\"policy_version\":\"stock-discovery-v2\","
                 + "\"as_of_date\":\"2026-08-14\",\"source_code\":\"THS\",\"source_family\":\"TONGHUASHUN\","
                 + "\"quality_status\":\"FRESH_PRIMARY\",\"retrieved_at\":\"2026-08-14T15:35:00\","
                 + "\"data_fingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","

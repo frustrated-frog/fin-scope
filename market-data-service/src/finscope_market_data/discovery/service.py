@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import date, datetime
 import hashlib
 import json
@@ -33,6 +33,9 @@ from finscope_market_data.discovery.schemas import (
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.joint_dataset import build_joint_dataset, history_fingerprint
 from finscope_market_data.forecast.joint_snapshot import JointSnapshotStore
+from finscope_market_data.forecast.training_universe import load_training_universe
+from finscope_market_data.forecast.industry_features import load_industry_memberships
+from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.forecast.joint_training import MODEL_VERSION as JOINT_MODEL_VERSION, train_joint_snapshot
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.features import (
@@ -106,6 +109,7 @@ class StockDiscoveryService:
         constituent_snapshot_path: str | Path | None = None,
         trading_scope: TradingScopePolicy | None = None,
         joint_store: JointSnapshotStore | None = None,
+        training_store: SnapshotStore | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
@@ -119,6 +123,7 @@ class StockDiscoveryService:
         )
         self.panel_store = panel_store
         self.joint_store = joint_store
+        self.training_store = training_store
         self.constituent_providers = tuple(
             providers if constituent_providers is None else constituent_providers
         )
@@ -191,6 +196,7 @@ class StockDiscoveryService:
             json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
         return DiscoveryReport(
+            joint_training=joint_snapshot['evidence'] if joint_snapshot else None,
             policy_version=request.policy_version,
             as_of_date=as_of,
             source_code=provider.source_code,
@@ -665,20 +671,36 @@ class StockDiscoveryService:
         histories = {code: tuple(bar for bar in bars if bar.trade_date <= as_of)
                      for code, bars in histories.items()}
         market_bars = tuple(bar for bar in market_bars if bar.trade_date <= as_of)
+        display_codes = set(histories)
+        if self.training_store is not None:
+            broad = load_training_universe(self.training_store, as_of=as_of, required_codes=display_codes)
+            histories = {**broad, **histories}
+        memberships = load_industry_memberships(
+            self.constituent_snapshots.path, self.joint_store.path.parent / 'industry-membership-history.json',
+        ) if self.constituent_snapshots is not None else ()
         inputs = {code: history_fingerprint(bars) for code, bars in sorted(histories.items())}
         input_fingerprint = hashlib.sha256(json.dumps(
-            [JOINT_MODEL_VERSION, as_of, inputs, history_fingerprint(market_bars)], sort_keys=True,
+            [JOINT_MODEL_VERSION, as_of, inputs, history_fingerprint(market_bars), sorted(display_codes), [asdict(item) for item in memberships]], sort_keys=True,
         ).encode()).hexdigest()
         existing = self.joint_store.load()
         if existing and existing.get('inputFingerprint') == input_fingerprint:
             return existing
         try:
-            dataset = build_joint_dataset(histories, as_of=as_of, market_bars=market_bars)
-            snapshot = train_joint_snapshot(dataset)
+            dataset = build_joint_dataset(histories, as_of=as_of, market_bars=market_bars, memberships=memberships)
+            snapshot = train_joint_snapshot(dataset, evaluation_codes=display_codes)
+            # This window has already informed method development. Preserve it as a regression comparison.
+            if snapshot['evidence']['testStart'] <= '2026-09-06':
+                snapshot['evidence']['evidenceKind'] = 'RETROSPECTIVE'
+                snapshot['evidence']['classificationEligible'] = False
+                snapshot['evidence']['rankingEligible'] = False
+                for prediction in snapshot['predictions'].values():
+                    prediction['predictionEligible'] = False
+            else:
+                snapshot['evidence']['evidenceKind'] = 'FORWARD_WINDOW'
             snapshot['inputFingerprint'] = input_fingerprint
             self.joint_store.save(snapshot)
             if not snapshot['evidence']['rankingEligible']:
-                warnings.append('联合 LambdaRank 未通过独立测试，保留原选股排序并展示新模型对照')
+                warnings.append('联合排序当前仅作对照：历史回归窗口或优势门槛尚未满足，保留原选股排序')
             return snapshot
         except (ValueError, OSError) as error:
             warnings.append(f'次日联合训练未完成：{_safe(error)}')

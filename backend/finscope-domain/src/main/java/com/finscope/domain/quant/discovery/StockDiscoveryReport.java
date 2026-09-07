@@ -8,6 +8,7 @@ import java.util.Map;
 
 @Data
 public class StockDiscoveryReport {
+    private Map<String, Object> jointTraining;
     private String schemaVersion;
     private String policyVersion;
     private String asOfDate;

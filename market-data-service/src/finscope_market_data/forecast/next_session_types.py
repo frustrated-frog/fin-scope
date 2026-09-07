@@ -6,6 +6,13 @@ from pydantic.alias_generators import to_camel
 class NextSessionJointEvidence(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     model_version: str
+    training_universe_count: int | None = None
+    display_universe_count: int | None = None
+    industry_coverage: float | None = None
+    return_target: Literal['ABSOLUTE', 'MARKET_RESIDUAL'] | None = None
+    ranking_target: Literal['ABSOLUTE', 'MARKET_RESIDUAL'] | None = None
+    selection_return_mse: float | None = None
+    evidence_kind: Literal['RETROSPECTIVE', 'FORWARD_WINDOW'] | None = None
     selected_classifier: str
     applied: bool = False
     classification_eligible: bool

@@ -164,7 +164,14 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
     </section>}
 
     <DiscoveryFunnel funnel={report.funnel} />
-    <NextSessionOutcomeHistory />
+    {report.joint_training && <section className="next-session-forecast" aria-label="联合训练与预测目标">
+        <strong>宽池学习 · 候选范围保持独立</strong>
+        <p>训练池 {report.joint_training.trainingUniverseCount ?? report.joint_training.universeCount} 只 · 展示候选 {report.joint_training.displayUniverseCount} 只 · {report.joint_training.featureCount} 个因子 · 训练期行业覆盖 {pct(report.joint_training.industryCoverage)}</p>
+        <p>选股学习{report.joint_training.rankingTarget === 'MARKET_RESIDUAL' ? '扣除市场影响、按历史波动率调整的个股强弱' : '绝对收盘涨跌'}；单股页面继续预测实际收盘涨跌。</p>
+        <p>历史联合 Brier {report.joint_training.pooledBrierScore.toFixed(4)} / 基线 {report.joint_training.baselineBrierScore.toFixed(4)} · 展示池 Rank IC {report.joint_training.rankIc.toFixed(3)}</p>
+        {report.joint_training.evidenceKind === 'RETROSPECTIVE' && <p>当前为历史回归对照，尚不作为新方法的全新样本外证据；下一交易日有效预测仍需完整收盘行情。</p>}
+      </section>}
+      <NextSessionOutcomeHistory />
 
     <section className="discovery-provenance" aria-label="股票发现数据来源与交易范围">
       <article><span>RANKING AUTHORITY</span><strong>同花顺唯一热榜</strong><small><b>净流入降序</b> · 行业板块</small></article>

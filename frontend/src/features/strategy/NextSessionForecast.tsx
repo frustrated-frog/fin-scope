@@ -31,6 +31,9 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
     {valid && joint && <div className="next-session-joint" aria-label="联合模型与排序证据">
       <strong>{joint.applied ? '联合模型已用于本次预测' : '联合模型对照 · 当前保留原预测'}</strong>
       <p>{joint.universeCount} 只股票 · {joint.featureCount} 个因子 · {joint.selectedClassifier} + LambdaRank</p>
+      {joint.trainingUniverseCount != null && <p>训练池 {joint.trainingUniverseCount} 只 · 当前可预测 {joint.universeCount} 只 · 展示候选池 {joint.displayUniverseCount ?? joint.universeCount} 只 · 训练期行业因子覆盖 {percent(joint.industryCoverage)}</p>}
+      {joint.rankingTarget && <p>选股目标：{joint.rankingTarget === 'MARKET_RESIDUAL' ? '扣除市场影响、按历史波动率调整的个股强弱' : '绝对收盘涨跌'}；价格预测：{joint.returnTarget === 'MARKET_RESIDUAL' ? '市场分量 + 个股分量' : '直接预测收盘涨跌'}。</p>}
+      {joint.evidenceKind === 'RETROSPECTIVE' && <p>历史回归对照：该时间段已经参与方法研发，不作为新方法的全新样本外证据。</p>}
       <p>股票排序：{joint.rankingEligible ? '已启用' : '对照观察'} · 截面位置 {percent(joint.rankingPercentile)}（越高越靠前，非上涨概率）</p>
       <details><summary>查看独立测试与新旧比较</summary>
         <p>测试 {joint.testStart} ～ {joint.testEnd} · {joint.validationDayCount} 个交易日 / {joint.validationSampleCount} 个股票样本，指标按日等权。</p>

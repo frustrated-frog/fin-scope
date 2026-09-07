@@ -19,7 +19,7 @@ import java.util.concurrent.Executor;
 @Slf4j
 @Service
 public class StockDiscoveryService {
-    public static final String POLICY_VERSION = "stock-discovery-v4-joint-ranking";
+    public static final String POLICY_VERSION = "stock-discovery-v5-broad-residual";
     @Resource
     private StockDiscoveryRepository repository;
     @Resource

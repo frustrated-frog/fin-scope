@@ -149,6 +149,7 @@ def create_app(
                 ),
                 panel_store=panel_store,
                 joint_store=joint_store,
+                training_store=application.state.router.snapshots,
             )
         if application.state.sectors is None:
             application.state.sectors = TonghuashunSectorService()

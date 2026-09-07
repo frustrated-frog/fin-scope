@@ -78,7 +78,7 @@ class NextSessionPredictionRepositoryTest {
                 + "'$.deep_evidence[0].forecast_report.nextSession.jointModel', "
                 + "json('{\"modelVersion\":\"joint-v1\",\"selectedClassifier\":\"LIGHTGBM\","
                 + "\"applied\":false,\"rankingEligible\":true,\"rankingScore\":1.2,"
-                + "\"pooledBrierScore\":0.2545}'))");
+                + "\"returnTarget\":\"MARKET_RESIDUAL\",\"evidenceKind\":\"RETROSPECTIVE\",\"pooledBrierScore\":0.2545}'))");
         assertEquals(1, repository.importFrozenReports());
         var joint = repository.history("000001", 10).get(0).getPrediction().getJointModel();
         assertNotNull(joint);
@@ -87,6 +87,8 @@ class NextSessionPredictionRepositoryTest {
         assertFalse(joint.isApplied());
         assertEquals(1.2, joint.getRankingScore());
         assertEquals(0.2545, joint.getPooledBrierScore());
+        assertEquals(com.finscope.common.enums.quant.JointReturnTarget.MARKET_RESIDUAL, joint.getReturnTarget());
+        assertEquals(com.finscope.common.enums.quant.JointEvidenceKind.RETROSPECTIVE, joint.getEvidenceKind());
     }
 
     private void insertDiscovery(String generatedAt, String status) {

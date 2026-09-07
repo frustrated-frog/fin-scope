@@ -52,6 +52,9 @@ def apply_joint_snapshot(local: NextSessionPrediction, bars: Sequence[DailyBar],
                    and prediction['stockBrierScore'] < local.brier_score
                    and evidence['regressionMse'] < evidence['baselineRegressionMse'])
     reason = '联合概率和收益通过独立测试，并优于该股原模型' if applied else '联合模型保留为对照，尚未同时通过概率、收益及该股原模型比较'
+    if evidence.get('evidenceKind') == 'RETROSPECTIVE':
+        applied = False
+        reason = '该历史窗口已参与方法研发，仅作回归对照；等待新方法冻结后的完整前瞻验证窗口'
     fields = {key: prediction[key] for key in ('rankingScore', 'rankingPercentile', 'stockValidationCount',
               'stockBrierScore', 'stockBaselineBrierScore', 'upProbability', 'expectedReturn')}
     joint = NextSessionJointEvidence.model_validate({**evidence, **fields, 'applied': applied, 'reason': reason})
