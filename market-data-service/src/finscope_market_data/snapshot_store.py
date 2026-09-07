@@ -117,6 +117,23 @@ class SnapshotStore:
         except ValueError:
             return None
 
+    def daily_bar_symbols(self) -> list[str]:
+        with self._connect() as connection:
+            return [row[0] for row in connection.execute(
+                "SELECT symbol_key FROM market_data_snapshot WHERE capability=? ORDER BY symbol_key LIMIT 10000",
+                (DataCapability.DAILY_BARS.value,),
+            )]
+
+    def daily_history_as_of(self, symbol_key: str, as_of: str, limit: int = 1061) -> list[DailyBar]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT bar.value FROM market_data_snapshot, json_each(payload_json, '$.data') AS bar "
+                "WHERE capability=? AND symbol_key=? AND json_extract(bar.value, '$.trade_date')<=? "
+                "ORDER BY json_extract(bar.value, '$.trade_date') DESC LIMIT ?",
+                (DataCapability.DAILY_BARS.value, symbol_key, as_of, max(1, min(limit, 5000))),
+            ).fetchall()
+        return [DailyBar.model_validate_json(row[0]) for row in reversed(rows)]
+
     def load_daily_bar_panel(
         self,
         business_date: str,
