@@ -54,3 +54,9 @@ def test_promotion_requires_beating_original_model_and_does_not_relabel_pooled_a
     assert result.accuracy is None
     better_local = local.model_copy(update={'brier_score': .1})
     assert not apply_joint_snapshot(better_local, bars, snapshot).joint_model.applied
+    snapshot['evidence']['evidenceKind'] = 'RETROSPECTIVE'
+    retrospective = apply_joint_snapshot(local, bars, snapshot)
+    assert not retrospective.joint_model.applied
+    assert retrospective.up_probability == local.up_probability
+    assert retrospective.data_fingerprint == local.data_fingerprint
+    assert retrospective.joint_model.evidence_kind == 'RETROSPECTIVE'
