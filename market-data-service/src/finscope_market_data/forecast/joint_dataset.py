@@ -124,16 +124,15 @@ def build_joint_dataset(
         if bars[-1].trade_date == as_of:
             current[code] = (*current_features(bars, context), *_extra_features(bars, len(bars) - 1))
             fingerprints[code] = history_fingerprint(bars)
-    if memberships:
-        by_day = defaultdict(dict)
-        for code, samples in samples_by_code.items():
-            for sample in samples:
-                by_day[sample.signal_date][code] = sample.features
-        industry_by_day = {day: industry_features(features, memberships, day) for day, features in by_day.items()}
-        samples_by_code = {code: tuple(replace(sample, features=(*sample.features, *industry_by_day[sample.signal_date][code]))
-                                      for sample in samples) for code, samples in samples_by_code.items()}
-        extras = industry_features(current, memberships, as_of)
-        current = {code: (*features, *extras[code]) for code, features in current.items()}
+    by_day = defaultdict(dict)
+    for code, samples in samples_by_code.items():
+        for sample in samples:
+            by_day[sample.signal_date][code] = sample.features
+    industry_by_day = {day: industry_features(features, memberships, day) for day, features in by_day.items()}
+    samples_by_code = {code: tuple(replace(sample, features=(*sample.features, *industry_by_day[sample.signal_date][code]))
+                                  for sample in samples) for code, samples in samples_by_code.items()}
+    extras = industry_features(current, memberships, as_of)
+    current = {code: (*features, *extras[code]) for code, features in current.items()}
     enriched, current, cross_codes = augment_cross_sectional_features(
         samples_by_code, current, minimum_cross_section=minimum_cross_section,
     )
@@ -146,4 +145,4 @@ def build_joint_dataset(
     rows = tuple(row for row in rows if counts[row.sample.signal_date] >= minimum_cross_section)
     if not rows:
         raise ValueError('可验证次日标签的截面不足')
-    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *(INDUSTRY_FEATURE_CODES if memberships else ()), *cross_codes))
+    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *INDUSTRY_FEATURE_CODES, *cross_codes))

@@ -12,16 +12,17 @@ import math
 from typing import Sequence
 
 import numpy as np
-from lightgbm import LGBMClassifier, LGBMRegressor, LGBMRanker
+from lightgbm import LGBMClassifier, LGBMRanker
 from scipy.stats import rankdata
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from finscope_market_data.forecast.decomposed_returns import fit_return_model, market_targets_available, residual_targets
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow
 
-MODEL_VERSION = 'next-session-joint-lgbm-v1'
+MODEL_VERSION = 'next-session-broad-residual-v2'
 PARAMETERS = dict(n_estimators=100, learning_rate=.03, num_leaves=15,
                   max_depth=5, min_child_samples=40, reg_lambda=5.,
                   random_state=42, n_jobs=2, verbosity=-1, deterministic=True,
@@ -52,13 +53,14 @@ def _groups(rows: Sequence[JointRow]) -> list[np.ndarray]:
     return [np.arange(start, end) for start, end in zip(boundaries[:-1], boundaries[1:])]
 
 
-def ranking_labels(rows: Sequence[JointRow]) -> tuple[list[int], list[int]]:
+def ranking_labels(rows: Sequence[JointRow], target: str = 'ABSOLUTE') -> tuple[list[int], list[int]]:
     if list(rows) != sorted(rows, key=lambda row: (row.sample.signal_date, row.code)):
         raise ValueError('排序样本必须按日期、代码连续分组')
     labels = np.zeros(len(rows), dtype=int)
     groups = _groups(rows)
+    targets = residual_targets(rows) if target == 'MARKET_RESIDUAL' else np.array([row.sample.net_return for row in rows])
     for indices in groups:
-        values = np.array([rows[i].sample.net_return for i in indices])
+        values = targets[indices]
         labels[indices] = np.minimum(4, np.floor((rankdata(values) - 1) * 5 / len(indices))).astype(int)
     return labels.tolist(), [len(indices) for indices in groups]
 
@@ -88,10 +90,22 @@ def _classifiers(x: np.ndarray, returns: np.ndarray) -> dict:
     labels = returns > 0
     if len(np.unique(labels)) < 2:
         raise ValueError('联合训练需要同时存在上涨和下跌样本')
-    return {
+    models = {
         'LIGHTGBM': LGBMClassifier(**PARAMETERS).fit(x, labels),
         'POOLED_LOGISTIC': make_pipeline(StandardScaler(), LogisticRegression(C=.1, max_iter=500)).fit(x, labels),
     }
+    models['EQUAL_ENSEMBLE'] = EqualEnsemble(models['LIGHTGBM'], models['POOLED_LOGISTIC'])
+    return models
+
+
+class EqualEnsemble:
+    def __init__(self, tree, logistic):
+        self.tree = tree
+        self.logistic = logistic
+
+    def predict_proba(self, x):
+        probability = (_probability(self.tree, x) + _probability(self.logistic, x)) / 2
+        return np.column_stack((1 - probability, probability))
 
 
 def _probability(model, x: np.ndarray) -> np.ndarray:
@@ -107,11 +121,11 @@ def _calibrated(model, calibration_x, calibration_y, predict_x):
 
 
 def _radius(regressor, x, y) -> float:
-    residuals = np.sort(np.abs(y - regressor.booster_.predict(x)))
+    residuals = np.sort(np.abs(y - regressor.predict(x)))
     return float(residuals[min(len(residuals) - 1, math.ceil((len(residuals) + 1) * .8) - 1)])
 
 
-def train_joint_snapshot(dataset: JointDataset) -> dict:
+def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | None = None) -> dict:
     split = temporal_split(dataset.rows)
     tx, ty = _matrix(split['train'])
     sx, sy = _matrix(split['selection'])
@@ -124,14 +138,26 @@ def train_joint_snapshot(dataset: JointDataset) -> dict:
     probabilities = _calibrated(classifiers[selected], cx, cy, vx)
     logistic = _calibrated(classifiers['POOLED_LOGISTIC'], cx, cy, vx)
     baseline = float(np.mean(ty > 0))
-    regressor = LGBMRegressor(**PARAMETERS).fit(tx, ty)
-    regression = regressor.booster_.predict(vx)
+    return_models = {code: fit_return_model(code, split['train'], PARAMETERS)
+                     for code in (('ABSOLUTE', 'MARKET_RESIDUAL') if market_targets_available(split['train']) else ('ABSOLUTE',))}
+    return_selection = {code: _daily_mean((model.predict(sx) - sy) ** 2, split['selection'])
+                        for code, model in return_models.items()}
+    selected_return = min(return_selection, key=lambda code: (return_selection[code], code))
+    regressor = return_models[selected_return]
+    regression = regressor.predict(vx)
     radius = _radius(regressor, cx, cy)
-    labels, groups = ranking_labels(split['train'])
-    ranker = LGBMRanker(**PARAMETERS, objective='lambdarank', label_gain=[0, 1, 2, 3, 4])
+    ranking_target = 'MARKET_RESIDUAL' if market_targets_available(split['train']) else 'ABSOLUTE'
+    labels, groups = ranking_labels(split['train'], ranking_target)
+    ranker = LGBMRanker(**PARAMETERS, objective='lambdarank', label_gain=[0, 1, 2, 3, 4], lambdarank_truncation_level=8)
     ranker.fit(tx, labels, group=groups)
-    selection_rank = _ranking_metrics(ranker.booster_.predict(sx), split['selection'])
-    ranking = _ranking_metrics(ranker.booster_.predict(vx), split['test'])
+    selection_indices = [i for i, row in enumerate(split['selection']) if evaluation_codes is None or row.code in evaluation_codes]
+    test_indices = [i for i, row in enumerate(split['test']) if evaluation_codes is None or row.code in evaluation_codes]
+    if not selection_indices or not test_indices:
+        raise ValueError('展示股票池缺少可比较的历史截面')
+    selection_rank = _ranking_metrics(ranker.booster_.predict(sx)[selection_indices],
+                                      tuple(split['selection'][i] for i in selection_indices))
+    ranking = _ranking_metrics(ranker.booster_.predict(vx)[test_indices],
+                              tuple(split['test'][i] for i in test_indices))
     errors = (probabilities - (vy > 0)) ** 2
     baseline_errors = (baseline - (vy > 0)) ** 2
     brier = _daily_mean(errors, split['test'])
@@ -145,6 +171,11 @@ def train_joint_snapshot(dataset: JointDataset) -> dict:
                            and metrics['top5MomentumExcess'] > 0 for metrics in (selection_rank, ranking))
     counts = Counter(r.code for r in split['test'])
     evidence = dict(modelVersion=MODEL_VERSION, selectedClassifier=selected,
+        trainingUniverseCount=len({row.code for row in split['train']}),
+        displayUniverseCount=len(evaluation_codes) if evaluation_codes is not None else len(dataset.current_features_by_code),
+        industryCoverage=(float(np.mean([row.sample.features[dataset.feature_codes.index('PEER_COVERAGE')]
+                                       for row in split['train']])) if 'PEER_COVERAGE' in dataset.feature_codes else 0.),
+        returnTarget=selected_return, rankingTarget=ranking_target, selectionReturnMse=return_selection[selected_return],
         featureCount=len(dataset.feature_codes), universeCount=len(dataset.current_features_by_code),
         trainingSampleCount=len(split['train']), validationSampleCount=len(split['test']),
         validationDayCount=len(_groups(split['test'])),
@@ -166,11 +197,11 @@ def train_joint_snapshot(dataset: JointDataset) -> dict:
     current_x = np.array([dataset.current_features_by_code[code] for code in codes])
     production_model = _classifiers(px, py)[selected]
     current_p = _calibrated(production_model, pcx, pcy, current_x)
-    production_regression = LGBMRegressor(**PARAMETERS).fit(px, py)
-    current_mean = production_regression.booster_.predict(current_x)
+    production_regression = fit_return_model(selected_return, production_training, PARAMETERS)
+    current_mean = production_regression.predict(current_x)
     current_radius = _radius(production_regression, pcx, pcy)
-    production_labels, production_groups = ranking_labels(production_training)
-    production_ranker = LGBMRanker(**PARAMETERS, objective='lambdarank', label_gain=[0, 1, 2, 3, 4])
+    production_labels, production_groups = ranking_labels(production_training, ranking_target)
+    production_ranker = LGBMRanker(**PARAMETERS, objective='lambdarank', label_gain=[0, 1, 2, 3, 4], lambdarank_truncation_level=8)
     production_ranker.fit(px, production_labels, group=production_groups)
     scores = production_ranker.booster_.predict(current_x)
     percentiles = (rankdata(scores) - .5) / len(scores)
@@ -189,8 +220,8 @@ def train_joint_snapshot(dataset: JointDataset) -> dict:
             calibrationThrough=production_calibration[-1].sample.exit_date,
             trainingSampleCount=len(production_training), calibrationSampleCount=len(production_calibration))
     fingerprint_payload = [MODEL_VERSION, PARAMETERS, dataset.as_of, dataset.feature_codes,
-                           [(r.code, r.sample.signal_date, r.sample.features, r.sample.net_return) for r in dataset.rows],
-                           dataset.current_features_by_code]
+                           [(r.code, r.sample.signal_date, r.sample.features, r.sample.net_return, r.market_return) for r in dataset.rows],
+                           dataset.current_features_by_code, sorted(evaluation_codes) if evaluation_codes is not None else None]
     fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, allow_nan=False).encode()).hexdigest()
     return dict(schemaVersion=1, modelVersion=MODEL_VERSION, asOfDate=dataset.as_of,
                 dataFingerprint=fingerprint, evidence=evidence, predictions=predictions)

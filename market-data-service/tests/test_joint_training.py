@@ -55,4 +55,15 @@ def test_joint_models_learn_signal_and_keep_test_out_of_selection():
     assert evidence['selectedClassifier'] == other['evidence']['selectedClassifier']
     assert evidence['selectionBrierScore'] == other['evidence']['selectionBrierScore']
     assert evidence['selectionRankIc'] == other['evidence']['selectionRankIc']
+    assert evidence['returnTarget'] == other['evidence']['returnTarget']
+    assert evidence['selectionReturnMse'] == other['evidence']['selectionReturnMse']
     assert not other['evidence']['rankingEligible']
+
+
+def test_display_pool_changes_ranking_evaluation_without_changing_probability_fit():
+    data = dataset()
+    full = train_joint_snapshot(data)
+    narrowed = train_joint_snapshot(data, evaluation_codes={'0', '1', '2', '3', '4', '5'})
+    assert narrowed['evidence']['displayUniverseCount'] == 6
+    assert full['evidence']['pooledBrierScore'] == narrowed['evidence']['pooledBrierScore']
+    assert full['evidence']['top5Return'] != narrowed['evidence']['top5Return']

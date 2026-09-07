@@ -62,3 +62,13 @@ def test_tomorrow_suspension_cannot_change_other_stocks_features_today():
     changed = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
     get_features = lambda dataset: next(r.sample.features for r in dataset.rows if r.code == '000002' and r.sample.signal_date == signal)
     assert get_features(original) == get_features(changed)
+
+
+def test_future_industry_observation_cannot_change_historical_features_or_schema():
+    from finscope_market_data.forecast.industry_features import IndustryMembership
+    data = histories()
+    as_of = data['000001'][-1].trade_date
+    plain = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
+    future = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2,
+        memberships=[IndustryMembership('881001', '2026-01-01', tuple(data))])
+    assert plain == future
