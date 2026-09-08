@@ -93,3 +93,17 @@ def test_serving_distribution_uses_recent_mature_labels_and_current_volatility()
     changed = [replace(row, net_return=50.) if row.exit_date > cutoff else row for row in history]
     repeated = forecast_return_distribution(changed, current_features=(.2, .1, .4, 0., 0., .01), horizon_days=5, cutoff=cutoff)
     assert repeated == low
+
+
+def test_recent_distribution_cannot_replace_baseline_without_beating_zero_return(monkeypatch):
+    from dataclasses import replace
+    module = 'finscope_market_data.forecast.return_distribution'
+    monkeypatch.setattr(f'{module}._fit_quantile', lambda *args: 'baseline')
+    monkeypatch.setattr(f'{module}._recent_models', lambda *args: (('candidate',), 0.))
+    monkeypatch.setattr(f'{module}._ordered_predictions',
+        lambda models, features: (-.1, .02, .1) if models[0] == 'candidate' else (-1., .03, 1.))
+    history = [replace(row, net_return=0.) for row in _samples(800)]
+    result = forecast_return_distribution(history, current_features=(.2, .1, .4), horizon_days=5)
+    # Candidate improves both incumbent MAE and interval score, but the zero forecast is perfect.
+    assert result.production_applied is False
+    assert result.p50 == .03

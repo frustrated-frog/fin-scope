@@ -142,13 +142,17 @@ def forecast_return_distribution(
                 new_errors.append(abs(new_median - item.net_return))
                 old_scores.append(_interval_score(old_lower - historical_radius, old_upper + historical_radius, item.net_return))
                 new_scores.append(_interval_score(new_lower - gate_radius * item_scale, new_upper + gate_radius * item_scale, item.net_return))
-            passed = sum(new_errors) < sum(old_errors) and sum(new_scores) < sum(old_scores)
+            passed = (
+                sum(new_errors) < sum(old_errors)
+                and sum(new_errors) < sum(abs(item.net_return) for item in validation)
+                and sum(new_scores) < sum(old_scores)
+            )
         if passed:
             raw_lower, raw_median, raw_upper = (value * scale for value in _ordered_predictions(serving_models, features))
             radius = serving_radius * scale
         production = dict(production_applied=passed, production_training_through=training[-1].exit_date,
                           production_calibration_through=recent_calibration[-1].exit_date, production_scale=scale,
-                          reason="近期收益模型通过独立幅度与区间评分比较" if passed else "近期收益模型未通过独立比较，保留原收益分布")
+                          reason="近期收益模型通过原模型、零收益幅度基准与区间评分比较" if passed else "近期收益模型未通过独立比较，保留原收益分布")
     except ValueError:
         production = dict(reason="近期独立样本不足，当前收益分布保留历史模型")
     return ReturnDistributionResult(
