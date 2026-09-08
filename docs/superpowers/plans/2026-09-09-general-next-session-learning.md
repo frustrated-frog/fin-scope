@@ -21,37 +21,39 @@
 
 Files: 新建 `market-data-service/src/finscope_market_data/forecast/direction_evaluation.py`、`market_state_features.py` 与对应 tests；修改 `joint_dataset.py`。
 
-- [ ] 写失败测试：同日样本复制不改变日等权分数；全部看涨不能产生虚假的平衡准确率；原训练先验胜过模型时不得通过；改变未来日期不能改变历史市场特征。
+- [x] 写失败测试：同日样本复制不改变日等权分数；全部看涨不能产生虚假的平衡准确率；原训练先验胜过模型时不得通过；改变未来日期不能改变历史市场特征。
 
 ```python
 assert evaluate_direction(p, y, dates, {'PRIOR': baseline})['balancedAccuracy'] == .5
 assert market_state_features({'a': row, 'b': row})['a'] == market_state_features({'a': row, 'b': row})['b']
 ```
 
-- [ ] 运行 `.venv/bin/pytest tests/test_direction_evaluation.py tests/test_market_state_features.py -q`，确认缺失模块/行为导致失败。
-- [ ] 实现 `evaluate_direction(probabilities, labels, dates, baselines, regimes=None)`：按日期权重、基准逐一配对、块重采样、全样本和高置信度覆盖，输出 JSON 可序列化字典。输入非有限或长度不一致直接拒绝。
-- [ ] 实现 `market_state_features(features_by_code)`，以当日可见完整横截面计算上涨广度、收益分散、等权收益、趋势广度、流动性分组差异、市场波动及个股与状态交互；不读取未来标签或今日行业归属回填。追加到原特征之后以保持既有索引。
-- [ ] 测试通过后提交推送。
+- [x] 运行 `.venv/bin/pytest tests/test_direction_evaluation.py tests/test_market_state_features.py -q`，确认缺失模块/行为导致失败。
+- [x] 实现 `evaluate_direction(probabilities, labels, dates, baselines, regimes=None)`：按日期权重、基准逐一配对、块重采样、全样本和高置信度覆盖，输出 JSON 可序列化字典。输入非有限或长度不一致直接拒绝。
+- [x] 实现 `market_state_features(features_by_code)`，以当日可见完整横截面计算上涨广度、收益分散、等权收益、趋势广度、流动性分组差异、市场波动及个股与状态交互；不读取未来标签或今日行业归属回填。追加到原特征之后以保持既有索引。
+- [x] 测试通过后提交推送。
 
 ## Task 2：多时期候选比较与适应模型
 
 Files: 新建 `forecast/adaptive_classifiers.py`、`tests/test_adaptive_classifiers.py`；修改 `joint_training.py`、`tests/test_joint_training.py`。
 
-- [ ] 写失败测试：最新日期权重较高但同日总权重相同；候选选择不随最终测试标签变化；基础特征候选看不到新增市场特征。
-- [ ] 候选统一接口 `fit_candidates(rows, feature_codes, parameters)` 与 `.predict_proba(matrix)`。基础树按 MARKET_STATE_FEATURE_CODES 删除新增列；RECENT_TREE 按最近 180 个交易日；DECAY_TREE 的权重为 `2 ** (-age_days / 126) / same_day_count` 并归一化；其他候选维持同日等权。
-- [ ] 新增早期滚动比较，模型、校准及评价边界相互分离；以多个比较区间的日等权 Brier/方向基准表现和最差区间结果选出候选，测试区绝不参与选择。输出逐候选、逐时期成绩与入选原因。
-- [ ] 联合与单股使用统一方向评价，分类门槛与收益/排名门槛分开。生产重训选择同一候选配方，报告验证与当前拟合时间边界。
-- [ ] 相关 Python 回归通过后提交推送。
+- [x] 写失败测试：最新日期权重较高但同日总权重相同；候选选择不随最终测试标签变化；基础特征候选看不到新增市场特征。
+- [x] 候选统一接口 `fit_candidates(rows, feature_codes, parameters)` 与 `.predict_proba(matrix)`。基础树按 MARKET_STATE_FEATURE_CODES 删除新增列；RECENT_TREE 按最近 180 个交易日；DECAY_TREE 的权重为 `2 ** (-age_days / 126) / same_day_count` 并归一化；其他候选维持同日等权。
+- [x] 新增早期滚动比较，模型、校准及评价边界相互分离；以多个比较区间的日等权 Brier/方向基准表现和最差区间结果选出候选，测试区绝不参与选择。输出逐候选、逐时期成绩与入选原因。
+- [x] 联合与单股使用统一方向评价，分类门槛与收益/排名门槛分开。生产重训选择同一候选配方，报告验证与当前拟合时间边界。
+- [x] 相关 Python 回归通过后提交推送。
 
 ## Task 3：协议、页面、真实数据实验与后续复杂度决策
 
 Files: `next_session_types.py`、Java `SingleStockForecast.java` / 新版协议测试、前端 `quantTypes.ts` / `NextSessionForecast.tsx`（以现有实际文件为准）、`scripts/evaluate_general_next_session.py`、`docs/quant/2026-09-09-general-next-session-review.md`。
 
-- [ ] 添加可选 `directionEvaluation`、`adaptationEvidence` 证据；旧报告可读，新报告在原页面展示平衡准确率、基准差值、置信区间、覆盖及候选选择摘要。
-- [ ] 只读现有日线和原快照，冻结新数据集并跑完整候选比较与最终测试；分别列出绝对涨跌、收益幅度、排序结果。记录缓存/存活股票池限制以及已见历史身份。
-- [ ] 通过消融比较决定保留市场信息、近期权重及组合；不能以排名提升代替方向提升。复杂模型和新闻/分时数据若缺可验证历史，本批输出明确不引入的决定及前提。
-- [ ] Python 全套、Java 相关协议/服务、前端测试构建；重启并验证真实单股和股票发现，两处都具备新方向证据且次日预测有效。每批独立改动测试后提交推送。
+- [x] 添加可选 `directionEvaluation`、`adaptationEvidence` 证据；旧报告可读，新报告在原页面展示平衡准确率、基准差值、置信区间、覆盖及候选选择摘要。
+- [x] 只读现有日线和原快照，冻结新数据集并跑完整候选比较与最终测试；分别列出绝对涨跌、收益幅度、排序结果。记录缓存/存活股票池限制以及已见历史身份。
+- [x] 通过消融比较决定保留市场信息、近期权重及组合；不能以排名提升代替方向提升。复杂模型和新闻/分时数据若缺可验证历史，本批输出明确不引入的决定及前提。
+- [x] Python 全套、Java 相关协议/服务、前端测试构建；重启并验证真实单股和股票发现，两处都具备新方向证据且次日预测有效。每批独立改动测试后提交推送。
 
 ## 自检
 
 不改用户配置与 pnpm-lock；Java 字段注入、完整大括号、领域 DTO 落 domain，外部协议留 RPC；不建立新 Tab，不以拒绝预测后的命中率冒充全样本成绩。
+
+实施结果见 `docs/quant/2026-09-09-general-next-session-review.md`。计划的实现、测试、服务重启和真实页面验证已完成；实证未证明方向提升，因此未提升新联合模型的应用资格。
