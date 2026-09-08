@@ -49,23 +49,25 @@ def apply_joint_snapshot(local: NextSessionPrediction, bars: Sequence[DailyBar],
     evidence = snapshot.get('evidence', {})
     # The richer model must also beat this stock's existing rolling probability model.
     applied = bool(prediction.get('predictionEligible') and local.brier_score is not None
-                   and prediction['stockBrierScore'] < local.brier_score
-                   and evidence['regressionMse'] < evidence['baselineRegressionMse'])
-    reason = '联合概率和收益通过独立测试，并优于该股原模型' if applied else '联合模型保留为对照，尚未同时通过概率、收益及该股原模型比较'
+                   and prediction['stockBrierScore'] < local.brier_score)
+    reason = '联合方向概率通过独立测试，并优于该股原概率模型' if applied else '联合方向保留为对照，尚未通过方向及该股原概率模型比较'
     if evidence.get('evidenceKind') == 'RETROSPECTIVE':
         applied = False
         reason = '该历史窗口已参与方法研发，仅作回归对照；等待新方法冻结后的完整前瞻验证窗口'
+    return_applied = bool(applied and evidence['regressionMse'] < evidence['baselineRegressionMse']
+                          and evidence['intervalCoverage'] >= .7)
+    if applied and not return_applied:
+        reason += '；收益幅度保留原单股模型'
     fields = {key: prediction[key] for key in ('rankingScore', 'rankingPercentile', 'stockValidationCount',
               'stockBrierScore', 'stockBaselineBrierScore', 'upProbability', 'expectedReturn')}
-    joint = NextSessionJointEvidence.model_validate({**evidence, **fields, 'applied': applied, 'reason': reason})
+    joint = NextSessionJointEvidence.model_validate({**evidence, **fields, 'applied': applied, 'returnApplied': return_applied, 'reason': reason})
     if not applied:
         return local.model_copy(update={'joint_model': joint})
     probability = prediction['upProbability']
     updates = dict(joint_model=joint, model_code=evidence['selectedClassifier'], model_version=snapshot['modelVersion'],
         status='READY', decision='UP' if probability >= .55 else 'DOWN' if probability <= .45 else 'ABSTAIN',
         data_fingerprint=hashlib.sha256((local.data_fingerprint + snapshot['dataFingerprint']).encode()).hexdigest(),
-        up_probability=probability, expected_return=prediction['expectedReturn'], lower_return=prediction['lowerReturn'],
-        upper_return=prediction['upperReturn'], training_through=prediction['trainingThrough'],
+        up_probability=probability, training_through=prediction['trainingThrough'],
         calibration_through=prediction['calibrationThrough'], training_sample_count=prediction['trainingSampleCount'],
         calibration_sample_count=prediction['calibrationSampleCount'], validation_sample_count=prediction['stockValidationCount'],
         brier_score=prediction['stockBrierScore'], baseline_brier_score=prediction['stockBaselineBrierScore'],
@@ -73,4 +75,10 @@ def apply_joint_snapshot(local: NextSessionPrediction, bars: Sequence[DailyBar],
         accuracy=None, interval_coverage=None, direction_evaluation=None,
         warnings=['联合模型使用同日股票截面及历史价量；60 日独立测试通过不保证未来准确率',
                   '按当前可用股票池进行条件性比较，未消除幸存者偏差；收盘涨跌不等于可成交收益'])
+    if return_applied:
+        updates.update(expected_return=prediction['expectedReturn'], lower_return=prediction['lowerReturn'],
+                       upper_return=prediction['upperReturn'])
+    else:
+        updates['interval_coverage'] = local.interval_coverage
+        updates['warnings'].append('收益幅度与区间沿用原单股模型；上述训练与校准时点对应方向模型')
     return local.model_copy(update=updates)

@@ -139,6 +139,7 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     direction = evaluate_direction([v[0] for v in observations], [v[1] for v in observations],
         [s.signal_date for s in tested], {'PRIOR': [v[2] for v in observations],
         'MOMENTUM': [.55 if s.features[0] > 0 else .45 for s in tested]})
+    direction['flatSampleCount'] = sum(s.net_return == 0 for s in tested)
     ready = direction['eligible']
     return NextSessionPrediction(
         **base, direction_evaluation=direction, status="READY" if ready else "WATCH", up_probability=probability,

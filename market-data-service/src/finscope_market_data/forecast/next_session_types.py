@@ -17,6 +17,7 @@ class NextSessionJointEvidence(BaseModel):
     evidence_kind: Literal['RETROSPECTIVE', 'FORWARD_WINDOW'] | None = None
     selected_classifier: str
     applied: bool = False
+    return_applied: bool = False
     classification_eligible: bool
     ranking_eligible: bool
     feature_count: int

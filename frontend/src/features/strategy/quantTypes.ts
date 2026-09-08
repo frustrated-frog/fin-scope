@@ -394,7 +394,20 @@ export interface SingleStockForecast {
   warnings: string[];
 }
 
+export interface DirectionEvaluation {
+  accuracy: number; balancedAccuracy: number | null; brierScore: number;
+  flatSampleCount?: number;
+  dayCount: number; sampleCount: number; eligible: boolean; reason: string;
+  highConfidence: { coverage: number; accuracy: number | null };
+  comparisons: Record<string, { accuracy: number; brierScore: number;
+    accuracyDifferenceLower: number; accuracyDifferenceUpper: number;
+    brierDifferenceLower: number; brierDifferenceUpper: number }>;
+}
+
 export interface NextSessionJointEvidence {
+  directionEvaluation?: DirectionEvaluation;
+  adaptationEvidence?: { selected: string; periodCount: number; rule: string };
+
   trainingUniverseCount?: number;
   displayUniverseCount?: number;
   industryCoverage?: number;
@@ -405,6 +418,7 @@ export interface NextSessionJointEvidence {
   modelVersion: string;
   selectedClassifier: string;
   applied: boolean;
+  returnApplied?: boolean;
   classificationEligible: boolean;
   rankingEligible: boolean;
   featureCount: number;
@@ -438,6 +452,7 @@ export interface NextSessionJointEvidence {
 }
 
 export interface NextSessionPrediction {
+  directionEvaluation?: DirectionEvaluation;
   jointModel?: NextSessionJointEvidence;
   status: 'READY' | 'WATCH' | 'INSUFFICIENT_DATA' | 'STALE_DATA' | 'CALENDAR_UNAVAILABLE' | 'BEFORE_CLOSE';
   asOfDate: string; targetDate?: string; generatedAt: string; label: string; lastClose: number;

@@ -1,12 +1,16 @@
 package com.finscope.domain.quant.forecast;
 
 import lombok.Data;
+import java.util.Map;
 import com.finscope.common.enums.quant.JointEvidenceKind;
 import com.finscope.common.enums.quant.JointReturnTarget;
 
 /** Independent temporal evidence for joint next-close prediction and cross-sectional ranking. */
 @Data
 public class NextSessionJointEvidence {
+    private Map<String, Object> directionEvaluation;
+    private Map<String, Object> adaptationEvidence;
+
     private String modelVersion;
     private Integer trainingUniverseCount;
     private Integer displayUniverseCount;
@@ -17,6 +21,7 @@ public class NextSessionJointEvidence {
     private JointEvidenceKind evidenceKind;
     private String selectedClassifier;
     private boolean applied;
+    private Boolean returnApplied;
     private boolean classificationEligible;
     private boolean rankingEligible;
     private int featureCount;

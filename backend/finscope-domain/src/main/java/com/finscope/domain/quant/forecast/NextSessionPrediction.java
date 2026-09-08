@@ -2,6 +2,7 @@ package com.finscope.domain.quant.forecast;
 
 import com.finscope.common.enums.quant.NextSessionStatus;
 import lombok.Data;
+import java.util.Map;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,6 +11,8 @@ import java.util.List;
 /** Price prediction only: next exchange close relative to the frozen close, not executable P&L. */
 @Data
 public class NextSessionPrediction {
+    private Map<String, Object> directionEvaluation;
+
     private NextSessionStatus status;
     private LocalDate asOfDate;
     private LocalDate targetDate;

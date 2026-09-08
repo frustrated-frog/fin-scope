@@ -46,3 +46,16 @@ test('keeps joint shadow probabilities separate and never calls ranking a probab
   expect(screen.getByText(/Top 5 次日平均涨跌 \+0.200%/)).toBeInTheDocument();
   expect(screen.getByText(/超过同日股票池 \+0.100 个百分点/)).toBeInTheDocument();
 });
+
+test('separates full direction accuracy from high-confidence coverage', () => {
+  const directionEvaluation = {
+    accuracy: .54, balancedAccuracy: .51, brierScore: .24, dayCount: 60, sampleCount: 6000,
+    highConfidence: { coverage: .2, accuracy: .7 }, eligible: false,
+    reason: '尚未同时优于基准', comparisons: { PRIOR: {accuracy: .55, brierScore: .245,
+      accuracyDifferenceLower: -.04, accuracyDifferenceUpper: .02, brierDifferenceLower: -.01, brierDifferenceUpper: .003} },
+  };
+  render(<NextSessionForecast prediction={{...prediction, directionEvaluation}} />);
+  expect(screen.getByText(/平衡准确率 51.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/覆盖 20.0%.*命中 70.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/60 个交易日.*6000 个股票样本/)).toBeInTheDocument();
+});

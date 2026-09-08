@@ -92,7 +92,8 @@ def select_adaptive_candidate(training, selection, feature_codes, parameters):
         chunks = [validation_dates] if earlier else np.array_split(validation_dates, 3)
         prior = _mean(np.asarray([r.sample.positive for r in fit], dtype=float), fit)
         for chunk in chunks:
-            mask = np.asarray([r.sample.signal_date in set(chunk) for r in validation])
+            chunk_dates = set(chunk)
+            mask = np.asarray([r.sample.signal_date in chunk_dates for r in validation])
             rows = tuple(r for r, keep in zip(validation, mask) if keep)
             if not rows:
                 continue

@@ -52,6 +52,13 @@ def test_promotion_requires_beating_original_model_and_does_not_relabel_pooled_a
     assert result.up_probability == selected['upProbability']
     assert result.data_fingerprint != local.data_fingerprint
     assert result.accuracy is None
+    snapshot['evidence']['regressionMse'] = .003
+    probability_only = apply_joint_snapshot(local, bars, snapshot)
+    assert probability_only.joint_model.applied
+    assert not probability_only.joint_model.return_applied
+    assert probability_only.up_probability == selected['upProbability']
+    assert probability_only.expected_return == local.expected_return
+    snapshot['evidence']['regressionMse'] = .001
     better_local = local.model_copy(update={'brier_score': .1})
     assert not apply_joint_snapshot(better_local, bars, snapshot).joint_model.applied
     snapshot['evidence']['evidenceKind'] = 'RETROSPECTIVE'

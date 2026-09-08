@@ -90,6 +90,7 @@ def _ranking_metrics(scores: np.ndarray, rows: Sequence[JointRow]) -> dict[str, 
 
 
 def _classifiers(x: np.ndarray, returns: np.ndarray) -> dict:
+    # Frozen v2 recipe retained for the paired, read-only experiment CLI.
     labels = returns > 0
     if len(np.unique(labels)) < 2:
         raise ValueError('联合训练需要同时存在上涨和下跌样本')
@@ -174,6 +175,7 @@ def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | 
     direction = evaluate_direction(probabilities, vy > 0, [r.sample.signal_date for r in split['test']],
         {'PRIOR': np.full(len(vy), baseline), 'LOGISTIC': logistic,
          'MOMENTUM': np.asarray([.55 if r.sample.features[0] > 0 else .45 for r in split['test']])}, regimes)
+    direction['flatSampleCount'] = int(np.sum(vy == 0))
     classification_eligible = direction['eligible']
     ranking_eligible = all(metrics['rankIc'] > 0 and metrics['top5PoolExcess'] > 0
                            and metrics['top5MomentumExcess'] > 0 for metrics in (selection_rank, ranking))
