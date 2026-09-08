@@ -111,6 +111,7 @@ class StockDiscoveryService:
         trading_scope: TradingScopePolicy | None = None,
         joint_store: JointSnapshotStore | None = None,
         training_store: SnapshotStore | None = None,
+        provider_timeout_seconds: float = 30.0,
     ) -> None:
         self.providers = tuple(providers)
         self.market = market
@@ -118,6 +119,7 @@ class StockDiscoveryService:
         self.network_concurrency = network_concurrency
         self.deep_concurrency = deep_concurrency
         self.provider_attempts = max(1, provider_attempts)
+        self.provider_timeout_seconds = max(.001, provider_timeout_seconds)
         self.provider_retry_delay_seconds = max(0.0, provider_retry_delay_seconds)
         self.universe_snapshot_path = (
             Path(universe_snapshot_path) if universe_snapshot_path else None
@@ -276,7 +278,9 @@ class StockDiscoveryService:
                 continue
             for attempt in range(1, self.provider_attempts + 1):
                 try:
-                    sectors = await asyncio.to_thread(provider.sectors, limit)
+                    sectors = await asyncio.wait_for(
+                        asyncio.to_thread(provider.sectors, limit), timeout=self.provider_timeout_seconds,
+                    )
                     if not sectors:
                         raise RuntimeError("热门板块榜单为空")
                     if any(item.source_family != "TONGHUASHUN" for item in sectors):

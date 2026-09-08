@@ -755,3 +755,21 @@ async def test_panel_training_leaves_event_loop_responsive(monkeypatch):
     finally:
         release.set()
         await task
+
+
+@pytest.mark.asyncio
+async def test_hung_hot_sector_provider_falls_back_to_existing_snapshot(tmp_path):
+    import time
+    snapshot = tmp_path / 'universe.json'
+    first = StockDiscoveryService(providers=[FakeProvider()], market=FakeMarket(),
+                                  universe_snapshot_path=snapshot)
+    await first._universe(5)
+    class SlowProvider(FakeProvider):
+        def sectors(self, limit):
+            time.sleep(.1)
+            return super().sectors(limit)
+    service = StockDiscoveryService(providers=[SlowProvider()], market=FakeMarket(),
+        universe_snapshot_path=snapshot, provider_attempts=1, provider_timeout_seconds=.01)
+    result = await service._universe(5)
+    assert result.members
+    assert any('失败' in warning for warning in result.warnings)
