@@ -15,6 +15,7 @@ from finscope_market_data.forecast.industry_features import IndustryMembership, 
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.features import FEATURE_CODES, ForecastSample, _validated_bars, current_features
 from finscope_market_data.forecast.next_session import build_close_samples
+from finscope_market_data.forecast.market_state_features import market_state_features, MARKET_STATE_FEATURE_CODES
 from finscope_market_data.forecast.panel_features import augment_cross_sectional_features
 
 HISTORY_LIMIT = 1061
@@ -136,6 +137,15 @@ def build_joint_dataset(
     enriched, current, cross_codes = augment_cross_sectional_features(
         samples_by_code, current, minimum_cross_section=minimum_cross_section,
     )
+    observed_by_day = defaultdict(dict)
+    for code, samples in enriched.items():
+        for sample in samples:
+            observed_by_day[sample.signal_date][code] = sample.features
+    state_by_day = {day: market_state_features(values) for day, values in observed_by_day.items()}
+    enriched = {code: tuple(replace(sample, features=(*sample.features, *state_by_day[sample.signal_date][code]))
+                            for sample in samples) for code, samples in enriched.items()}
+    current_state = market_state_features(current)
+    current = {code: (*values, *current_state[code]) for code, values in current.items()}
     if not current or not enriched:
         raise ValueError('有效次日预测截面不足')
     rows = tuple(sorted((JointRow(code, sample, market_returns.get(sample.signal_date)) for code, samples in enriched.items() for sample in samples
@@ -145,4 +155,4 @@ def build_joint_dataset(
     rows = tuple(row for row in rows if counts[row.sample.signal_date] >= minimum_cross_section)
     if not rows:
         raise ValueError('可验证次日标签的截面不足')
-    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *INDUSTRY_FEATURE_CODES, *cross_codes))
+    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *INDUSTRY_FEATURE_CODES, *cross_codes, *MARKET_STATE_FEATURE_CODES))
