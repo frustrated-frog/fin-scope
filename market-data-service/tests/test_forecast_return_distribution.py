@@ -73,3 +73,23 @@ def test_return_distribution_returns_explicit_insufficient_state() -> None:
     assert result.status == "INSUFFICIENT_DATA"
     assert result.p10 is None
     assert result.reason is not None
+
+
+def test_serving_distribution_uses_recent_mature_labels_and_current_volatility():
+    from dataclasses import replace
+    history = [replace(row, features=(*row.features, 0., 0., .01)) for row in _samples(800)]
+    cutoff = history[700].exit_date
+    low = forecast_return_distribution(history, current_features=(.2, .1, .4, 0., 0., .01), horizon_days=5, cutoff=cutoff)
+    high = forecast_return_distribution(history, current_features=(.2, .1, .4, 0., 0., .04), horizon_days=5, cutoff=cutoff)
+    assert low.production_training_through > low.development_last_exit_date
+    assert low.production_calibration_through <= cutoff
+    from finscope_market_data.forecast.return_distribution import _return_scale
+    assert _return_scale((.2, .1, .4, 0., 0., .04), 5) == 4 * _return_scale((.2, .1, .4, 0., 0., .01), 5)
+    if low.production_applied:
+        assert high.p90 - high.p10 > 3.9 * (low.p90 - low.p10)
+    else:
+        assert high.p90 - high.p10 == low.p90 - low.p10
+    assert high.locked_coverage == low.locked_coverage
+    changed = [replace(row, net_return=50.) if row.exit_date > cutoff else row for row in history]
+    repeated = forecast_return_distribution(changed, current_features=(.2, .1, .4, 0., 0., .01), horizon_days=5, cutoff=cutoff)
+    assert repeated == low

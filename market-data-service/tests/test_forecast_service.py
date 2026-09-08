@@ -178,9 +178,9 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.validation is not None
     assert result.validation.independent_sample_count > 0
     assert len(result.recent_observations) <= 12
-    assert result.report_schema_version == "single-stock-research-v10"
+    assert result.report_schema_version == "single-stock-research-v11"
     assert result.model_version.startswith("competition-")
-    assert result.model_version.endswith("-v10")
+    assert result.model_version.endswith("-v11")
     assert result.raw_probability is not None
     assert result.return_distribution is not None
     assert result.return_distribution.status == "AVAILABLE"
@@ -190,7 +190,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     assert result.expected_net_return == result.return_distribution.p50
     assert result.upper_net_return == result.return_distribution.p90
     assert 0 <= result.return_distribution.locked_coverage <= 1
-    assert result.return_distribution.method == "HISTOGRAM_QUANTILE_CQR_V1"
+    assert result.return_distribution.method == "RECENT_VOLATILITY_CQR_V2"
     assert result.qualification is not None
     assert len(result.qualification.trial.trial_id) == 64
     assert result.qualification.split_audit.development.end_date < result.qualification.split_audit.calibration.start_date
@@ -216,7 +216,7 @@ def test_forecast_produces_auditable_default_five_day_probability() -> None:
     }
     for candidate in result.model_competition.candidates:
         assert candidate.role in {"CHAMPION", "CHALLENGER", "BASELINE"}
-        assert candidate.model_version.endswith("-v10")
+        assert candidate.model_version.endswith("-v11")
         assert 0 <= candidate.raw_probability <= 1
         assert 0 <= candidate.calibrated_probability <= 1
         assert candidate.shadow_decision in {"UP", "DOWN", "ABSTAIN"}
@@ -332,3 +332,12 @@ def test_context_history_participates_in_forecast_fingerprint() -> None:
         context=build_aligned_context(history, market_bars=changed_market))
 
     assert first.data_fingerprint != second.data_fingerprint
+
+
+def test_report_uses_recent_serving_fit_and_preserves_historical_audit():
+    result = build_forecast(bars(800), instrument_code="600519.SH", source_code="LOCAL",
+                            source_family="LOCAL", quality_status="FRESH_PRIMARY", warnings=[])
+    assert result.production_model['applied'] == result.production_model['gate']['passed']
+    assert result.production_model['trainingThrough'] > result.qualification.split_audit.development.end_date
+    assert result.production_model['calibrationThrough'] <= result.as_of_date
+    assert result.production_model['currentProbability'] == result.up_probability

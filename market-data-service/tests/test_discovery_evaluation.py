@@ -177,3 +177,14 @@ def test_evaluation_schema_rejects_non_finite_returns() -> None:
             actual_net_return=float("nan"),
             actual_direction="UP",
         )
+
+
+def test_probability_advantage_without_final_candidates_is_not_healthy():
+    observations = [_outcome(day + 1, f'{index:06d}', .02 if index % 2 else -.02,
+                             rank=None, probability=.8 if index % 2 else .2,
+                             as_of_date=f'2026-08-{day + 1:02d}')
+                    for day in range(5) for index in range(8)]
+    report = evaluate_discovery_outcomes(DiscoveryEvaluationRequest(observations=observations))
+    assert report.probability_quality.brier_skill_score > 0
+    assert report.status == 'WATCH'
+    assert '最终候选' in report.conclusion

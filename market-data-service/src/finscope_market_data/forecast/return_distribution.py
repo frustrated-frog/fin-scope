@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Sequence
 
 from sklearn.ensemble import HistGradientBoostingRegressor
 
 from finscope_market_data.forecast.features import ForecastSample
+from finscope_market_data.forecast.production_fit import recent_split
 
 
 MINIMUM_SAMPLE_COUNT = 150
@@ -38,6 +39,11 @@ class ReturnDistributionResult:
     locked_start_date: str | None
     method: str
     reason: str | None = None
+    production_applied: bool = False
+    production_training_through: str | None = None
+    production_calibration_through: str | None = None
+    production_scale: float | None = None
+    historical_conformal_radius: float | None = None
 
 
 def forecast_return_distribution(
@@ -45,13 +51,14 @@ def forecast_return_distribution(
     *,
     current_features: Sequence[float],
     horizon_days: int,
+    cutoff: str | None = None,
 ) -> ReturnDistributionResult:
     if horizon_days not in (1, 5, 20):
         raise ValueError("收益分布只支持 1、5、20 日周期")
     features = tuple(float(value) for value in current_features)
     if not features or any(not math.isfinite(value) for value in features):
         raise ValueError("当前收益分布特征必须为有限数值")
-    ordered = tuple(sorted(samples, key=lambda item: item.signal_date))
+    ordered = tuple(sorted((item for item in samples if cutoff is None or item.exit_date <= cutoff), key=lambda item: item.signal_date))
     if len(ordered) < MINIMUM_SAMPLE_COUNT:
         return _insufficient(horizon_days, len(ordered), "收益分布至少需要 150 个已成熟样本")
     dimensions = {len(item.features) for item in ordered}
@@ -111,7 +118,41 @@ def forecast_return_distribution(
         for prediction, quantile in zip(predictions, QUANTILES)
     ) / (len(locked) * len(QUANTILES))
     raw_lower, raw_median, raw_upper = _ordered_predictions(models, features)
+    historical_radius = radius
+    production = {}
+    try:
+        training, recent_calibration = recent_split(
+            ordered, cutoff=cutoff or max(item.exit_date for item in ordered), horizon_days=horizon_days,
+        )
+        serving_models, serving_radius = _recent_models(training, recent_calibration, horizon_days)
+        scale = _return_scale(features, horizon_days)
+        validation = locked[::horizon_days][-30:]
+        passed = False
+        if len(validation) >= 20:
+            from datetime import date, timedelta
+            before = (date.fromisoformat(validation[0].signal_date) - timedelta(days=1)).isoformat()
+            gate_training, gate_calibration = recent_split(ordered, cutoff=before, horizon_days=horizon_days)
+            gate_models, gate_radius = _recent_models(gate_training, gate_calibration, horizon_days)
+            old_errors, new_errors, old_scores, new_scores = [], [], [], []
+            for item in validation:
+                old_lower, old_median, old_upper = _ordered_predictions(models, item.features)
+                item_scale = _return_scale(item.features, horizon_days)
+                new_lower, new_median, new_upper = (value * item_scale for value in _ordered_predictions(gate_models, item.features))
+                old_errors.append(abs(old_median - item.net_return))
+                new_errors.append(abs(new_median - item.net_return))
+                old_scores.append(_interval_score(old_lower - historical_radius, old_upper + historical_radius, item.net_return))
+                new_scores.append(_interval_score(new_lower - gate_radius * item_scale, new_upper + gate_radius * item_scale, item.net_return))
+            passed = sum(new_errors) < sum(old_errors) and sum(new_scores) < sum(old_scores)
+        if passed:
+            raw_lower, raw_median, raw_upper = (value * scale for value in _ordered_predictions(serving_models, features))
+            radius = serving_radius * scale
+        production = dict(production_applied=passed, production_training_through=training[-1].exit_date,
+                          production_calibration_through=recent_calibration[-1].exit_date, production_scale=scale,
+                          reason="近期收益模型通过独立幅度与区间评分比较" if passed else "近期收益模型未通过独立比较，保留原收益分布")
+    except ValueError:
+        production = dict(reason="近期独立样本不足，当前收益分布保留历史模型")
     return ReturnDistributionResult(
+        **production, historical_conformal_radius=historical_radius,
         status="AVAILABLE",
         horizon_days=horizon_days,
         p10=raw_lower - radius,
@@ -132,8 +173,29 @@ def forecast_return_distribution(
         calibration_start_date=calibration[0].signal_date,
         calibration_end_date=calibration[-1].signal_date,
         locked_start_date=locked[0].signal_date,
-        method="HISTOGRAM_QUANTILE_CQR_V1",
+        method="RECENT_VOLATILITY_CQR_V2",
     )
+
+
+def _recent_models(training, calibration, horizon_days):
+    scaled = tuple(replace(item, net_return=item.net_return / _return_scale(item.features, horizon_days)) for item in training)
+    models = tuple(_fit_quantile(scaled, quantile) for quantile in QUANTILES)
+    residuals = []
+    for item in calibration:
+        lower, _, upper = _ordered_predictions(models, item.features)
+        actual = item.net_return / _return_scale(item.features, horizon_days)
+        residuals.append(max(lower - actual, actual - upper, 0.0))
+    return models, _finite_sample_quantile(sorted(residuals), 1.0 - MIS_COVERAGE_RATE)
+
+
+def _interval_score(lower, upper, actual):
+    # Proper interval score penalizes both misses and excessive width.
+    return upper - lower + 2 / MIS_COVERAGE_RATE * (max(lower - actual, 0) + max(actual - upper, 0))
+
+
+def _return_scale(features: Sequence[float], horizon_days: int) -> float:
+    # Feature 5 is signal-day historical daily volatility; never use future realised volatility.
+    return max(abs(features[5]), .005) * math.sqrt(horizon_days) if len(features) > 5 else 1.0
 
 
 def _fit_quantile(
@@ -203,6 +265,6 @@ def _insufficient(
         calibration_start_date=None,
         calibration_end_date=None,
         locked_start_date=None,
-        method="HISTOGRAM_QUANTILE_CQR_V1",
+        method="RECENT_VOLATILITY_CQR_V2",
         reason=reason,
     )

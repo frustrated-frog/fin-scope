@@ -412,9 +412,9 @@ def _health(
 ) -> tuple[str, str]:
     if quality.sample_count < MINIMUM_HEALTH_SAMPLES or matured_runs < MINIMUM_HEALTH_RUNS:
         return "ACCUMULATING", "真实到期样本仍在积累，当前不对预测能力下结论。"
-    average_return = (
-        statistics.fmean(item.actual_net_return for item in finals) if finals else 0.0
-    )
+    if not finals:
+        return "WATCH", "概率存在优势，但尚无最终候选到期收益，不能认定有效。"
+    average_return = statistics.fmean(item.actual_net_return for item in finals)
     if (quality.brier_skill_score or 0.0) > 0.0 and average_return >= 0.0:
         return "HEALTHY", "真实概率质量优于窗口基准，最终候选平均净收益未转负。"
     return "WATCH", "真实概率或最终候选收益尚未形成稳定优势，维持观察而不提高置信度。"

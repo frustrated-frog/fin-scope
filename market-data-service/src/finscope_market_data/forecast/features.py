@@ -88,7 +88,8 @@ def _features(
     industry = context.industry_bars if context is not None else ()
     market_momentum_5 = _context_momentum(market, index, 5)
     market_momentum_20 = _context_momentum(market, index, 20)
-    industry_momentum_20 = _context_momentum(industry, index, 20)
+    peer = context.peer_momentum_20[index] if context is not None and context.peer_momentum_20 else None
+    industry_momentum_20 = peer if peer is not None else _context_momentum(industry, index, 20)
     return (
         close / bars[index - 5].close - 1.0,
         close / bars[index - 20].close - 1.0,
@@ -119,7 +120,7 @@ def _features(
         industry_momentum_20,
         (
             close / bars[index - 20].close - 1.0 - industry_momentum_20
-            if _has_context_window(industry, index, 20)
+            if peer is not None or _has_context_window(industry, index, 20)
             else 0.0
         ),
     )

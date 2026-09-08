@@ -38,6 +38,7 @@ from finscope_market_data.forecast.industry_features import load_industry_member
 from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.forecast.joint_training import MODEL_VERSION as JOINT_MODEL_VERSION, train_joint_snapshot
 from finscope_market_data.forecast.context import build_aligned_context
+from finscope_market_data.forecast.peer_context import research_context
 from finscope_market_data.forecast.features import (
     FEATURE_CODES,
     build_samples,
@@ -648,6 +649,10 @@ class StockDiscoveryService:
                             panel_artifact,
                             market_bars,
                             joint_snapshot,
+                            research_context(bars_by_code[candidate.code], market_bars=market_bars,
+                                store=self.training_store, histories=bars_by_code,
+                                membership_path=self.constituent_snapshots.path if self.constituent_snapshots else None,
+                                history_path=self.joint_store.path.parent / 'industry-membership-history.json' if self.joint_store else None),
                         )
                     else:
                         payload = await asyncio.to_thread(
@@ -773,8 +778,9 @@ def _forecast(
     panel_artifact: PanelArtifact | None = None,
     market_bars: Sequence[DailyBar] = (),
     joint_snapshot: dict | None = None,
+    context=None,
 ) -> dict[str, object]:
-    context = (
+    context = context or (
         build_aligned_context(bars, market_bars=market_bars)
         if bars else None
     )

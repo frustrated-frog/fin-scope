@@ -5,9 +5,11 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class SingleStockForecast {
+    private Map<String, Object> productionModel;
     private String reportSchemaVersion;
     private String modelVersion;
     private String instrumentCode;
@@ -261,6 +263,11 @@ public class SingleStockForecast {
 
     @Data
     public static class ReturnDistribution {
+        private Boolean productionApplied;
+        private LocalDate productionTrainingThrough;
+        private LocalDate productionCalibrationThrough;
+        private Double productionScale;
+        private Double historicalConformalRadius;
         private String status;
         private int horizonDays;
         private Double p10;

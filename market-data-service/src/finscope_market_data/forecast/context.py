@@ -17,6 +17,7 @@ class AlignedForecastContext:
     industry_coverage: float
     market_regime: str
     industry_regime: str | None
+    peer_momentum_20: tuple[float | None, ...] = ()
 
 
 def build_aligned_context(

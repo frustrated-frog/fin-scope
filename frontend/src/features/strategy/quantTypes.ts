@@ -295,6 +295,8 @@ export interface ForecastPanelModel {
 }
 
 export interface ForecastReturnDistribution {
+  productionApplied?: boolean; productionTrainingThrough?: string; productionCalibrationThrough?: string;
+  productionScale?: number; historicalConformalRadius?: number;
   status: 'AVAILABLE' | 'INSUFFICIENT_DATA';
   horizonDays: number;
   p10?: number; p50?: number; p90?: number;
@@ -327,6 +329,7 @@ export interface SingleStockForecast {
   decisionReason?: string;
   barCount: number; labeledSampleCount?: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
+  productionModel?: { applied: boolean; reason: string; trainingThrough?: string; calibrationThrough?: string; historicalProbability?: number; currentProbability?: number };
   returnDistribution?: ForecastReturnDistribution;
   selectionBiasAudit?: ForecastSelectionBiasAudit;
   rawProbability?: number; probabilityInterval?: ForecastConfidenceInterval;

@@ -11,6 +11,7 @@ const summary = { id: 7, instrumentCode: '600519.SH', asOfDate: '2026-08-06',
   sameDataAsPrevious: false, createdAt: '2026-08-08T14:00:00' };
 
 const report = {
+  productionModel: { applied: true, trainingThrough: '2026-03-01', calibrationThrough: '2026-08-06', reason: '历史评估保持独立' },
   reportSchemaVersion: 'single-stock-research-v4', modelVersion: 'logistic-platt-selective-v4',
   instrumentCode: '600519.SH', asOfDate: '2026-08-06', horizonDays: 5,
   status: 'NO_CLEAR_EDGE', conclusion: '样本外没有稳定优于同股买入并持有。',
@@ -212,6 +213,7 @@ test('runs and presents a complete same-stock benchmark research report', async 
 
   expect((await screen.findAllByText('53.0%')).length).toBeGreaterThan(0);
   expect(screen.getAllByText('同股买入并持有').length).toBeGreaterThan(0);
+  expect(screen.getByRole('region', { name: '近期上线模型' })).toBeInTheDocument();
   expect(screen.getByText('最大回撤持续时间')).toBeInTheDocument();
   expect(screen.getByText('持仓时间占比')).toBeInTheDocument();
   expect(screen.getAllByText('20 日动量').length).toBeGreaterThan(0);

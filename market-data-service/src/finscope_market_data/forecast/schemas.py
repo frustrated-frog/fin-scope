@@ -210,6 +210,11 @@ class ConfidenceInterval(ForecastModel):
 
 
 class ReturnDistributionReport(ForecastModel):
+    production_applied: bool = False
+    production_training_through: str | None = None
+    production_calibration_through: str | None = None
+    production_scale: float | None = None
+    historical_conformal_radius: float | None = None
     status: Literal["AVAILABLE", "INSUFFICIENT_DATA"]
     horizon_days: Literal[1, 5, 20]
     p10: float | None = None
@@ -432,8 +437,9 @@ class ModelQualification(ForecastModel):
 
 
 class SingleStockForecastResult(ForecastModel):
+    production_model: dict | None = None
     next_session: NextSessionPrediction | None = None
-    report_schema_version: str = "single-stock-research-v10"
+    report_schema_version: str = "single-stock-research-v11"
     model_version: str = "competition-pending-v10"
     instrument_code: str
     as_of_date: str

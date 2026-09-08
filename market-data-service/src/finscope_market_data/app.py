@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
-from finscope_market_data.forecast.context import build_aligned_context
+from finscope_market_data.forecast.peer_context import research_context
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
 from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.schemas import (
@@ -327,11 +327,14 @@ def create_app(
             limit=5000,
         )
         market_bars = market_envelope.data or []
-        context = build_aligned_context(envelope.data, market_bars=market_bars)
+        context = await asyncio.to_thread(research_context, envelope.data, market_bars=market_bars,
+            store=_router(application).snapshots, membership_path=config.data_dir / 'stock-discovery-constituents.json',
+            history_path=config.data_dir / 'quant' / 'industry-membership-history.json')
         context_warnings = list(envelope.warnings)
         if context.market_coverage < 0.95:
             context_warnings.append("沪深300上下文覆盖不足，相关特征已按中性值降级")
-        context_warnings.append("第一批未启用行业代理指数，行业因子按中性值降级")
+        if context.industry_coverage < 0.95:
+            context_warnings.append("已知行业成员的同行动量历史覆盖不足，缺失日期使用中性值")
         scope = TradingScopePolicy().classify(request.code)
         if scope.reason == "NO_STAR_MARKET_PERMISSION":
             context_warnings.append("该标的属于科创板，当前账户不可交易，本报告仅供研究")

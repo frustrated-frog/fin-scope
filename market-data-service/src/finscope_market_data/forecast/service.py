@@ -62,6 +62,7 @@ from finscope_market_data.forecast.schemas import (
     StrategyPolicy,
     TrialIdentity,
 )
+from finscope_market_data.forecast.production_fit import fit_production_model, evaluate_recent_candidate
 from finscope_market_data.forecast.qualification import (
     ModelQualification,
     evaluate_probability_metrics,
@@ -86,8 +87,8 @@ from finscope_market_data.models import DailyBar
 COST_RATE = 0.0015
 PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
-MODEL_VERSION = "competition-shadow-race-v10"
-REPORT_VERSION = "single-stock-research-v10"
+MODEL_VERSION = "competition-recent-fit-v11"
+REPORT_VERSION = "single-stock-research-v11"
 
 
 def build_forecast(
@@ -176,6 +177,32 @@ def build_forecast(
         )
         for code, candidate in candidate_qualifications.items()
     }
+    historical_probability = candidate_probabilities[selected_model][1]
+    production_fits = {}
+    production_gates = {}
+    production_evidence = dict(applied=False, reason="近期独立训练或校准样本不足，保留历史模型",
+                               historicalProbability=historical_probability)
+    for code in candidate_qualifications:
+        try:
+            production_fits[code] = fit_production_model(
+                samples, cutoff=ordered[-1].trade_date, horizon_days=horizon_days, model_code=code,
+            )
+            production_gates[code] = evaluate_recent_candidate(samples, cutoff=ordered[-1].trade_date,
+                horizon_days=horizon_days, model_code=code, baseline=candidate_qualifications[code])
+            if production_gates[code]['passed']:
+                candidate_probabilities[code] = production_fits[code].predict(features)
+        except ValueError:
+            continue
+    serving = production_fits.get(selected_model)
+    if serving is not None:
+        production_evidence = dict(applied=production_gates[selected_model]["passed"], candidateProbability=serving.predict(features)[1], gate=production_gates[selected_model], method="RECENT_PURGED_REFIT_V1",
+            trainingThrough=serving.training_through, calibrationStart=serving.calibration_start,
+            calibrationThrough=serving.calibration_through, trainingCount=serving.training_count,
+            calibrationCount=serving.calibration_count, historicalProbability=historical_probability,
+            currentProbability=candidate_probabilities[selected_model][1],
+            reason=production_gates[selected_model]["reason"] + "；历史验收成绩保留，近期比较只用于模型选择")
+        if not production_gates[selected_model]["passed"]:
+            serving = None
     raw_probability, individual_probability = candidate_probabilities[selected_model]
     probability = individual_probability
     panel_model = PanelModelReport(
@@ -194,9 +221,8 @@ def build_forecast(
         panel_model = PanelModelReport.model_validate(asdict(assessment))
         probability = assessment.final_probability
     return_distribution = forecast_return_distribution(
-        samples,
-        current_features=features,
-        horizon_days=horizon_days,
+        samples, current_features=features, horizon_days=horizon_days,
+        cutoff=ordered[-1].trade_date,
     )
     if return_distribution.status == "AVAILABLE":
         lower = return_distribution.p10
@@ -247,7 +273,7 @@ def build_forecast(
     seed = _seed(data_fingerprint, "qualification")
     intervals = _qualification_intervals(qualification, performance, seed)
     probability_interval = _probability_interval(
-        qualification,
+        serving or qualification,
         raw_probability,
         _seed(data_fingerprint, "current-probability"),
     ) if qualification.status != "INSUFFICIENT_DATA" else _unavailable_interval(
@@ -266,11 +292,17 @@ def build_forecast(
         qualification.calibration_labels,
         minimum_coverage=0.30,
     )
+    serving_threshold = threshold_policy
+    if serving is not None:
+        serving_threshold = optimize_selective_thresholds(
+            [serving.calibration.calibrate(value) for value in serving.calibration_raw_probabilities],
+            serving.calibration_labels, minimum_coverage=0.30,
+        )
     decision, decision_reason = _decision(
         probability,
         qualification.status,
-        lower_threshold=threshold_policy.lower_threshold,
-        upper_threshold=threshold_policy.upper_threshold,
+        lower_threshold=serving_threshold.lower_threshold,
+        upper_threshold=serving_threshold.upper_threshold,
     )
     selective = selective_metrics(
         qualification.locked_test.calibrated_probabilities,
@@ -278,10 +310,11 @@ def build_forecast(
         lower_threshold=threshold_policy.lower_threshold,
         upper_threshold=threshold_policy.upper_threshold,
     )
-    runtime_model_version = f"competition-{selected_model.lower()}-platt-v10"
+    runtime_model_version = f"competition-{selected_model.lower()}-platt-v11"
     trial = _trial(data_fingerprint, seed, horizon_days, runtime_model_version)
     return SingleStockForecastResult(
         **base,
+        production_model=production_evidence,
         status=status,
         model_version=runtime_model_version,
         conclusion=conclusion,
@@ -305,7 +338,7 @@ def build_forecast(
         upper_net_return=upper,
         validation=_validation(validation),
         factor_explanations=_factor_explanations(
-            samples, features, qualification.explanation_model,
+            samples, features, serving.explanation_model if serving is not None else qualification.explanation_model,
             selected_model=selected_model,
         ),
         performance=_performance_report(performance),
@@ -366,7 +399,7 @@ def build_forecast(
                 if selected_model != "LOGISTIC"
                 else []
             ),
-            "主概率经过独立校准区 Platt 校准；锁定测试从未参与模型或校准器拟合",
+            "近期模型只有通过独立比较才替换当前输出；历史锁定评估保留原模型，不能当作本次重训成绩",
             "方向判断允许弃权；覆盖后命中率必须与覆盖率同时阅读",
             *(
                 [f"联合模型未参与最终概率：{panel_model.fallback_reason}"]
@@ -397,7 +430,7 @@ def _candidate_report(
     return ModelCandidate(
         **asdict(candidate),
         role=role,
-        model_version=f"competition-{candidate.code.lower()}-platt-v10",
+        model_version=f"competition-{candidate.code.lower()}-platt-v11",
         raw_probability=raw_probability,
         calibrated_probability=calibrated_probability,
         shadow_decision=shadow_decision,
@@ -709,8 +742,8 @@ def _context_report(context: AlignedForecastContext | None) -> ForecastContextRe
         ),
         industry=ContextSource(
             code=context.industry_code if context is not None else None,
-            label="行业代理指数",
-            status="AVAILABLE" if industry_coverage >= 0.95 else "UNAVAILABLE",
+            label="已归档行业同行等权动量" if context is not None and context.peer_momentum_20 else "行业代理指数",
+            status="AVAILABLE" if industry_coverage >= 0.95 else "DEGRADED" if industry_coverage > 0 else "UNAVAILABLE",
             coverage=industry_coverage,
             regime=context.industry_regime if context is not None else None,
             reason=None if industry_coverage >= 0.95 else "未匹配到具有可靠历史覆盖的行业代理",
@@ -884,4 +917,6 @@ def _fingerprint(
                     )
                 )
                 digest.update((row + "\n").encode())
+    if context is not None and context.peer_momentum_20:
+        digest.update(repr(context.peer_momentum_20).encode())
     return digest.hexdigest()

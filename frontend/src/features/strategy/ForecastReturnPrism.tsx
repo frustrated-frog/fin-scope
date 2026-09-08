@@ -24,6 +24,8 @@ export function ForecastReturnPrism({ distribution }: { distribution: ForecastRe
 
   return <section className="forecast-return-prism" aria-label="锁定样本收益分布">
     <header><div><span>RETURN DISTRIBUTION / LOCKED</span><h4>概率—收益棱镜</h4></div><p>不是单点承诺：P10 到 P90 展示模型认为较常见的净收益范围，零轴用于识别下行跨度。</p></header>
+    {!distribution.productionApplied && distribution.reason && <p>{distribution.reason}</p>}
+    {distribution.productionApplied && <p>当前分布已按历史波动率调整；近期训练截至 {distribution.productionTrainingThrough}，独立校准截至 {distribution.productionCalibrationThrough}。下方锁定成绩属于历史模型，不代表本次重训的未来覆盖率。</p>}
     <div className="forecast-prism-plot">
       <div className="forecast-prism-domain"><span>{signedPercent(domainLow)}</span><b>未来 {distribution.horizonDays} 个交易日净收益</b><span>{signedPercent(domainHigh)}</span></div>
       <div className="forecast-prism-axis">

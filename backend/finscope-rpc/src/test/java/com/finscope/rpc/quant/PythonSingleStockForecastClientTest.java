@@ -244,6 +244,17 @@ class PythonSingleStockForecastClientTest {
     }
 
     @Test
+    void mapsRecentServingEvidenceWithoutReplacingHistoricalScores() {
+        String payload = v10Payload().replace("single-stock-research-v10", "single-stock-research-v11")
+                .replace("\"warnings\":[]}", "\"productionModel\":{\"applied\":true,"
+                        + "\"trainingThrough\":\"2026-06-01\",\"calibrationThrough\":\"2026-08-06\"},\"warnings\":[]}");
+        SingleStockForecast result = clientReturning(payload).forecast("600519", 5);
+        assertEquals(true, result.getProductionModel().get("applied"));
+        assertEquals("2026-06-01", result.getProductionModel().get("trainingThrough"));
+        assertEquals(-0.03d, result.getReturnDistribution().getP10(), .000001d);
+    }
+
+    @Test
     void rejectsVersionEightWhenShadowModelChangesFinalProbability() {
         PythonSingleStockForecastClient client = clientReturning(
                 v8Payload().replace("\"finalProbability\":0.61",

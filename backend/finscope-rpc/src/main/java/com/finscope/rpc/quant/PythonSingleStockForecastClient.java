@@ -35,7 +35,7 @@ public class PythonSingleStockForecastClient {
             "single-stock-research-v4", "single-stock-research-v5",
             "single-stock-research-v6", "single-stock-research-v7",
             "single-stock-research-v8", "single-stock-research-v9",
-            "single-stock-research-v10"));
+            "single-stock-research-v10", "single-stock-research-v11"));
     private static final Set<String> CANDIDATE_ROLES = new HashSet<String>(Arrays.asList(
             "CHAMPION", "CHALLENGER", "BASELINE"));
     private static final Set<String> AUDIT_STATUSES = new HashSet<String>(Arrays.asList(
@@ -149,7 +149,8 @@ public class PythonSingleStockForecastClient {
         if ("single-stock-research-v9".equals(result.getReportSchemaVersion())) {
             validateVersionNine(result);
         }
-        if ("single-stock-research-v10".equals(result.getReportSchemaVersion())) {
+        if ("single-stock-research-v10".equals(result.getReportSchemaVersion())
+                || "single-stock-research-v11".equals(result.getReportSchemaVersion())) {
             validateVersionTen(result);
         }
     }
