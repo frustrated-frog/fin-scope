@@ -89,6 +89,8 @@ PRIMARY_THRESHOLD = 0.60
 DEFAULT_HORIZON = 5
 MODEL_VERSION = "competition-recent-fit-v11"
 REPORT_VERSION = "single-stock-research-v11"
+# Retrospective replay did not improve aggregate Brier; retain the candidate for forward comparison.
+RECENT_PROBABILITY_PROMOTION_ENABLED = False
 
 
 def build_forecast(
@@ -189,19 +191,19 @@ def build_forecast(
             )
             production_gates[code] = evaluate_recent_candidate(samples, cutoff=ordered[-1].trade_date,
                 horizon_days=horizon_days, model_code=code, baseline=candidate_qualifications[code])
-            if production_gates[code]['passed']:
+            if RECENT_PROBABILITY_PROMOTION_ENABLED and production_gates[code]['passed']:
                 candidate_probabilities[code] = production_fits[code].predict(features)
         except ValueError:
             continue
     serving = production_fits.get(selected_model)
     if serving is not None:
-        production_evidence = dict(applied=production_gates[selected_model]["passed"], candidateProbability=serving.predict(features)[1], gate=production_gates[selected_model], method="RECENT_PURGED_REFIT_V1",
+        production_evidence = dict(applied=RECENT_PROBABILITY_PROMOTION_ENABLED and production_gates[selected_model]["passed"], promotionMode="SHADOW", candidateProbability=serving.predict(features)[1], gate=production_gates[selected_model], method="RECENT_PURGED_REFIT_V1",
             trainingThrough=serving.training_through, calibrationStart=serving.calibration_start,
             calibrationThrough=serving.calibration_through, trainingCount=serving.training_count,
             calibrationCount=serving.calibration_count, historicalProbability=historical_probability,
             currentProbability=candidate_probabilities[selected_model][1],
-            reason=production_gates[selected_model]["reason"] + "；历史验收成绩保留，近期比较只用于模型选择")
-        if not production_gates[selected_model]["passed"]:
+            reason="近期候选保留对照：整体历史 Brier 未改善，暂不替换正式概率；" + production_gates[selected_model]["reason"])
+        if not production_evidence["applied"]:
             serving = None
     raw_probability, individual_probability = candidate_probabilities[selected_model]
     probability = individual_probability

@@ -337,7 +337,10 @@ def test_context_history_participates_in_forecast_fingerprint() -> None:
 def test_report_uses_recent_serving_fit_and_preserves_historical_audit():
     result = build_forecast(bars(800), instrument_code="600519.SH", source_code="LOCAL",
                             source_family="LOCAL", quality_status="FRESH_PRIMARY", warnings=[])
-    assert result.production_model['applied'] == result.production_model['gate']['passed']
+    assert result.production_model['applied'] is False
+    assert result.production_model['promotionMode'] == 'SHADOW'
+    assert result.production_model['historicalProbability'] == result.up_probability
+    assert 0 <= result.production_model['candidateProbability'] <= 1
     assert result.production_model['trainingThrough'] > result.qualification.split_audit.development.end_date
     assert result.production_model['calibrationThrough'] <= result.as_of_date
     assert result.production_model['currentProbability'] == result.up_probability

@@ -190,8 +190,9 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
         {report?.status === 'INSUFFICIENT_DATA' && <section className="single-forecast-gate" role="status"><span>DATA GATE / SAVED</span><h4>数据不足</h4><p>{report.conclusion}</p><strong>已取得 {report.barCount} 根日线；本次不足结论也已保存。</strong><small>截止 {report.asOfDate} · {report.sourceCode}</small></section>}
 
         {report?.productionModel && <section className="forecast-paper-section" aria-label="近期上线模型">
-          <strong>{report.productionModel.applied ? '近期数据重训已用于本次预测' : '保留原模型，近期候选未通过替换条件'}</strong>
+          <strong>{report.productionModel.applied ? '近期数据重训已用于本次预测' : '正式概率保留原模型，近期候选持续对照'}</strong>
           <p>训练标签截至 {report.productionModel.trainingThrough ?? '—'} · 独立校准截至 {report.productionModel.calibrationThrough ?? '—'}</p>
+          {report.productionModel.candidateProbability != null && <p>近期候选上涨概率 {(report.productionModel.candidateProbability * 100).toFixed(1)}% · 仅用于后续验证</p>}
           <p>{report.productionModel.reason}</p>
         </section>}
         {report && <><NextSessionForecast prediction={report.nextSession} /><NextSessionOutcomeHistory code={report.instrumentCode} /></>}
