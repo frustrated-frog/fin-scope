@@ -70,7 +70,7 @@ def apply_joint_snapshot(local: NextSessionPrediction, bars: Sequence[DailyBar],
         calibration_sample_count=prediction['calibrationSampleCount'], validation_sample_count=prediction['stockValidationCount'],
         brier_score=prediction['stockBrierScore'], baseline_brier_score=prediction['stockBaselineBrierScore'],
         # These two aggregate statistics are kept in joint evidence, never mislabeled as single-stock metrics.
-        accuracy=None, interval_coverage=None,
+        accuracy=None, interval_coverage=None, direction_evaluation=None,
         warnings=['联合模型使用同日股票截面及历史价量；60 日独立测试通过不保证未来准确率',
                   '按当前可用股票池进行条件性比较，未消除幸存者偏差；收盘涨跌不等于可成交收益'])
     return local.model_copy(update=updates)

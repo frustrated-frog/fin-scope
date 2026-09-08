@@ -19,10 +19,13 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from finscope_market_data.forecast.decomposed_returns import fit_return_model, market_targets_available, residual_targets
+from finscope_market_data.forecast.adaptive_classifiers import fit_candidates, select_adaptive_candidate
+from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow
 
-MODEL_VERSION = 'next-session-broad-residual-v2'
+MODEL_VERSION = 'next-session-general-adaptive-v3'
+METHOD_FROZEN_THROUGH = '2026-09-09'
 PARAMETERS = dict(n_estimators=100, learning_rate=.03, num_leaves=15,
                   max_depth=5, min_child_samples=40, reg_lambda=5.,
                   random_state=42, n_jobs=2, verbosity=-1, deterministic=True,
@@ -131,13 +134,12 @@ def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | 
     sx, sy = _matrix(split['selection'])
     cx, cy = _matrix(split['calibration'])
     vx, vy = _matrix(split['test'])
-    classifiers = _classifiers(tx, ty)
-    selection_scores = {code: _daily_mean((_probability(model, sx) - (sy > 0)) ** 2, split['selection'])
-                        for code, model in classifiers.items()}
-    selected = min(selection_scores, key=lambda code: (selection_scores[code], code))
+    selected, adaptation = select_adaptive_candidate(split['train'], split['selection'], dataset.feature_codes, PARAMETERS)
+    classifiers = fit_candidates(split['train'], dataset.feature_codes, PARAMETERS)
+    selection_scores = {code: item['meanBrier'] for code, item in adaptation['candidates'].items()}
     probabilities = _calibrated(classifiers[selected], cx, cy, vx)
     logistic = _calibrated(classifiers['POOLED_LOGISTIC'], cx, cy, vx)
-    baseline = float(np.mean(ty > 0))
+    baseline = _daily_mean((ty > 0).astype(float), split['train'])
     return_models = {code: fit_return_model(code, split['train'], PARAMETERS)
                      for code in (('ABSOLUTE', 'MARKET_RESIDUAL') if market_targets_available(split['train']) else ('ABSOLUTE',))}
     return_selection = {code: _daily_mean((model.predict(sx) - sy) ** 2, split['selection'])
@@ -166,11 +168,25 @@ def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | 
     coverage = _daily_mean((np.abs(vy - regression) <= radius).astype(float), split['test'])
     regression_mse = _daily_mean((regression - vy) ** 2, split['test'])
     baseline_mse = _daily_mean((float(np.mean(ty)) - vy) ** 2, split['test'])
-    classification_eligible = brier < baseline_brier and brier <= logistic_brier and .65 <= coverage <= .95
+    state_index = dataset.feature_codes.index('STATE_UP_BREADTH_20') if 'STATE_UP_BREADTH_20' in dataset.feature_codes else None
+    regimes = [('UP' if row.sample.features[state_index] > .6 else 'DOWN' if row.sample.features[state_index] < .4 else 'RANGE')
+               if state_index is not None else 'UNAVAILABLE' for row in split['test']]
+    direction = evaluate_direction(probabilities, vy > 0, [r.sample.signal_date for r in split['test']],
+        {'PRIOR': np.full(len(vy), baseline), 'LOGISTIC': logistic,
+         'MOMENTUM': np.asarray([.55 if r.sample.features[0] > 0 else .45 for r in split['test']])}, regimes)
+    classification_eligible = direction['eligible']
     ranking_eligible = all(metrics['rankIc'] > 0 and metrics['top5PoolExcess'] > 0
                            and metrics['top5MomentumExcess'] > 0 for metrics in (selection_rank, ranking))
+    ablation = {}
+    for code, model in classifiers.items():
+        candidate_p = _calibrated(model, cx, cy, vx)
+        audit = evaluate_direction(candidate_p, vy > 0, [r.sample.signal_date for r in split['test']],
+            {'PRIOR': np.full(len(vy), baseline)}, regimes)
+        ablation[code] = {key: audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'highConfidence', 'byRegime')}
+    adaptation['testAblation'] = ablation
+    adaptation['testAblationRole'] = 'DIAGNOSTIC_ONLY_NOT_SELECTION'
     counts = Counter(r.code for r in split['test'])
-    evidence = dict(modelVersion=MODEL_VERSION, selectedClassifier=selected,
+    evidence = dict(modelVersion=MODEL_VERSION, selectedClassifier=selected, directionEvaluation=direction, adaptationEvidence=adaptation,
         trainingUniverseCount=len({row.code for row in split['train']}),
         displayUniverseCount=len(evaluation_codes) if evaluation_codes is not None else len(dataset.current_features_by_code),
         industryCoverage=(float(np.mean([row.sample.features[dataset.feature_codes.index('PEER_COVERAGE')]
@@ -195,7 +211,7 @@ def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | 
     pcx, pcy = _matrix(production_calibration)
     codes = sorted(dataset.current_features_by_code)
     current_x = np.array([dataset.current_features_by_code[code] for code in codes])
-    production_model = _classifiers(px, py)[selected]
+    production_model = fit_candidates(production_training, dataset.feature_codes, PARAMETERS)[selected]
     current_p = _calibrated(production_model, pcx, pcy, current_x)
     production_regression = fit_return_model(selected_return, production_training, PARAMETERS)
     current_mean = production_regression.predict(current_x)

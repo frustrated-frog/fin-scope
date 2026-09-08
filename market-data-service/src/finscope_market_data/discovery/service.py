@@ -36,7 +36,7 @@ from finscope_market_data.forecast.joint_snapshot import JointSnapshotStore
 from finscope_market_data.forecast.training_universe import load_training_universe
 from finscope_market_data.forecast.industry_features import load_industry_memberships
 from finscope_market_data.snapshot_store import SnapshotStore
-from finscope_market_data.forecast.joint_training import MODEL_VERSION as JOINT_MODEL_VERSION, train_joint_snapshot
+from finscope_market_data.forecast.joint_training import MODEL_VERSION as JOINT_MODEL_VERSION, train_joint_snapshot, METHOD_FROZEN_THROUGH
 from finscope_market_data.forecast.context import build_aligned_context
 from finscope_market_data.forecast.peer_context import research_context
 from finscope_market_data.forecast.features import (
@@ -698,7 +698,7 @@ class StockDiscoveryService:
             dataset = build_joint_dataset(histories, as_of=as_of, market_bars=market_bars, memberships=memberships)
             snapshot = train_joint_snapshot(dataset, evaluation_codes=display_codes)
             # This window has already informed method development. Preserve it as a regression comparison.
-            if snapshot['evidence']['testStart'] <= '2026-09-06':
+            if snapshot['evidence']['testStart'] <= METHOD_FROZEN_THROUGH:
                 snapshot['evidence']['evidenceKind'] = 'RETROSPECTIVE'
                 snapshot['evidence']['classificationEligible'] = False
                 snapshot['evidence']['rankingEligible'] = False

@@ -99,3 +99,14 @@ def test_previous_close_remains_usable_until_target_session_open(hour, minute, s
     result = build_next_session_forecast(bars(100), now=datetime(2026, 9, 7, hour, minute))
     assert result.target_date == '2026-09-07'
     assert result.status == status
+
+
+def test_next_session_reports_absolute_direction_benchmarks_and_coverage():
+    result = build_next_session_forecast(bars(), now=datetime(2026, 9, 5, 11))
+    audit = result.direction_evaluation
+    assert audit['task'] == 'NEXT_CLOSE_DIRECTION'
+    assert audit['dayCount'] == 60
+    assert set(audit['comparisons']) == {'PRIOR','MOMENTUM'}
+    assert audit['accuracy'] == pytest.approx(result.accuracy)
+    assert (result.status == 'READY') == audit['eligible']
+    assert result.model_version == 'next-session-rolling-v2'

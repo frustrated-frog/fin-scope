@@ -6,6 +6,8 @@ from pydantic.alias_generators import to_camel
 class NextSessionJointEvidence(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     model_version: str
+    direction_evaluation: dict | None = None
+    adaptation_evidence: dict | None = None
     training_universe_count: int | None = None
     display_universe_count: int | None = None
     industry_coverage: float | None = None
@@ -61,7 +63,7 @@ class NextSessionPrediction(BaseModel):
     upper_return: float | None = None
     decision: Literal["UP", "DOWN", "ABSTAIN"] = "ABSTAIN"
     model_code: str | None = None
-    model_version: str = "next-session-rolling-v1"
+    model_version: str = "next-session-rolling-v2"
     data_fingerprint: str
     training_through: str | None = None
     calibration_through: str | None = None
@@ -72,5 +74,6 @@ class NextSessionPrediction(BaseModel):
     brier_score: float | None = None
     baseline_brier_score: float | None = None
     interval_coverage: float | None = None
+    direction_evaluation: dict | None = None
     joint_model: NextSessionJointEvidence | None = None
     warnings: list[str] = Field(default_factory=list)

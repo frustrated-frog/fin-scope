@@ -15,6 +15,7 @@ import numpy as np
 from sklearn.linear_model import Ridge
 
 from finscope_market_data.models import DailyBar
+from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.calibration import CalibrationResult, PlattCalibrator
 from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import ForecastSample, _features, _validated_bars
@@ -101,7 +102,7 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     as_of = date.fromisoformat(ordered[-1].trade_date)
     target = next_session(as_of)
     payload = [(b.trade_date, b.open, b.high, b.low, b.close, b.volume, b.amount, b.adjustment) for b in ordered]
-    fingerprint = hashlib.sha256(json.dumps(["next-session-rolling-v1", payload], allow_nan=False).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps(["next-session-rolling-v2", payload], allow_nan=False).encode()).hexdigest()
     base = dict(as_of_date=as_of.isoformat(), target_date=target.isoformat() if target else None,
                 generated_at=current.isoformat(), last_close=ordered[-1].close, data_fingerprint=fingerprint)
     if as_of > current.date() or (as_of == current.date() and current.time() < time(15, 10)):
@@ -134,9 +135,13 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     brier = sum((p - label) ** 2 for p, label, _, _ in observations) / count
     baseline = sum((prior - label) ** 2 for _, label, prior, _ in observations) / count
     coverage = sum(covered for _, _, _, covered in observations) / count
-    ready = brier < baseline and .65 <= coverage <= .95
+    tested = samples[-TEST_WINDOW:]
+    direction = evaluate_direction([v[0] for v in observations], [v[1] for v in observations],
+        [s.signal_date for s in tested], {'PRIOR': [v[2] for v in observations],
+        'MOMENTUM': [.55 if s.features[0] > 0 else .45 for s in tested]})
+    ready = direction['eligible']
     return NextSessionPrediction(
-        **base, status="READY" if ready else "WATCH", up_probability=probability,
+        **base, direction_evaluation=direction, status="READY" if ready else "WATCH", up_probability=probability,
         expected_return=expected, lower_return=lower, upper_return=upper,
         decision=("UP" if probability >= .55 else "DOWN" if probability <= .45 else "ABSTAIN") if ready else "ABSTAIN",
         model_code=current_fit.code, training_through=current_fit.training_through,
