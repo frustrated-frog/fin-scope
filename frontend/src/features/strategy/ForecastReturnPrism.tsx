@@ -35,6 +35,6 @@ export function ForecastReturnPrism({ distribution }: { distribution: ForecastRe
           <b key={label as string} data-quantile={label} style={{ left: position(value as number) }}><small>{label}</small><strong>{signedPercent(value as number)}</strong></b>)}
       </div>
     </div>
-    <footer><article><span>Conformal 锁定覆盖</span><strong>{percent(distribution.lockedCoverage)}</strong><small>{distribution.lockedCount} 个从未参与训练或校准的样本</small></article><article><span>平均区间宽度</span><strong>{percent(distribution.meanIntervalWidth)}</strong><small>越窄越精确，但必须结合覆盖率看</small></article><article><span>Pinball loss</span><strong>{distribution.lockedPinballLoss?.toFixed(3) ?? '—'}</strong><small>分位数预测误差，越低越好</small></article><article><span>Conformal 扩张</span><strong>{signedPercent(distribution.conformalRadius)}</strong><small>由独立校准段修正原始区间</small></article></footer>
+    <footer><article><span>Conformal 锁定覆盖</span><strong>{percent(distribution.lockedCoverage)}</strong><small>{distribution.lockedCount} 个历史模型验收样本；近期比较另行计算</small></article><article><span>平均区间宽度</span><strong>{percent(distribution.meanIntervalWidth)}</strong><small>越窄越精确，但必须结合覆盖率看</small></article><article><span>Pinball loss</span><strong>{distribution.lockedPinballLoss?.toFixed(3) ?? '—'}</strong><small>分位数预测误差，越低越好</small></article><article><span>Conformal 扩张</span><strong>{signedPercent(distribution.conformalRadius)}</strong><small>由独立校准段修正原始区间</small></article></footer>
   </section>;
 }

@@ -68,3 +68,12 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src .venv/bin/python scripts
 - 原 `application.yml` 与 `pnpm-lock.yaml` 修改保留，没有提交配置或凭据变更。
 
 本次逐条对照结果保存在本地 `../data/exports/quant-enhancement-review-2026-09-09.json`，不提交原始预测数据。
+
+## 最终服务与页面验收
+
+- Python / Java / 前端均已重启或载入最终构建，端口 8000 / 8080 / 5173 正常。
+- 单股记录 **20**：`single-stock-research-v11`，近期概率模式 SHADOW；收益模型通过原模型及零收益基准比较并应用；次日目标 `2026-09-09`，状态 READY。
+- 股票发现批次 **2758**：`stock-discovery-v6-recent-gated`，2026-09-08 收盘批次，SUCCEEDED。326 个范围内成分、307 个准入且完成轻量量化、15 个深度报告；15 份均为 V11，次日目标均为 `2026-09-09` 且具有概率。13 份 WATCH、2 份 READY，严格可行动数 0。
+- 15 份报告均保留近期概率为 SHADOW，1 份通过收益替换门槛。同行历史覆盖约 0.13%—0.33%，没有把短归档包装成完整覆盖。
+- 实际页面核对了新漏斗、15 个深度候选和相对候选内的次日预测，未新增 Tab。
+- 共享模型覆盖 318 只，仍标记 RETROSPECTIVE。面板模型本次保留旧产物，报告已披露前复权数据边界警告，未将失败回退伪装成新模型生效。
