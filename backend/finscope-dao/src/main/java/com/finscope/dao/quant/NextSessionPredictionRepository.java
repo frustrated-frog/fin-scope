@@ -24,10 +24,12 @@ public class NextSessionPredictionRepository {
 
     @Transactional
     public int importFrozenReports() {
-        String single = "SELECT instrument_code AS code,json_extract(report_json,'$.nextSession') AS prediction "
+        String single = "SELECT instrument_code AS code,created_at AS frozen_at,"
+                + "json_extract(report_json,'$.nextSession') AS prediction "
                 + "FROM single_stock_forecast_run WHERE json_valid(report_json) "
                 + "AND json_type(report_json,'$.nextSession')='object'";
-        String discovery = "SELECT json_extract(e.value,'$.forecast_report.instrumentCode') AS code,"
+        String discovery = "SELECT COALESCE(r.completed_at,r.created_at) AS frozen_at,"
+                + "json_extract(e.value,'$.forecast_report.instrumentCode') AS code,"
                 + "json_extract(e.value,'$.forecast_report.nextSession') AS prediction "
                 + "FROM stock_discovery_run r,json_each(r.report_json,'$.deep_evidence') e "
                 + "WHERE r.status='SUCCEEDED' AND json_valid(r.report_json) "
@@ -43,7 +45,12 @@ public class NextSessionPredictionRepository {
                 + "json_extract(prediction,'$.dataFingerprint'),prediction FROM (" + sourceQuery + ") source "
                 + "WHERE code IS NOT NULL AND json_extract(prediction,'$.status') IN ('READY','WATCH') "
                 + "AND json_extract(prediction,'$.label')='NEXT_CLOSE_RETURN' "
-                + "AND json_extract(prediction,'$.targetDate')>substr(json_extract(prediction,'$.generatedAt'),1,10) "
+                // All stored times are Asia/Shanghai local timestamps. Midnight does not end the pre-open window.
+                + "AND julianday(json_extract(prediction,'$.generatedAt')) "
+                + ">=julianday(json_extract(prediction,'$.asOfDate')||'T15:00:00') "
+                + "AND julianday(json_extract(prediction,'$.generatedAt')) "
+                + "<julianday(json_extract(prediction,'$.targetDate')||'T09:30:00') "
+                + "AND julianday(frozen_at)<julianday(json_extract(prediction,'$.targetDate')||'T09:30:00') "
                 + "AND json_extract(prediction,'$.targetDate')>json_extract(prediction,'$.asOfDate') "
                 + "AND length(json_extract(prediction,'$.dataFingerprint'))=64 "
                 + "AND json_extract(prediction,'$.upProbability') BETWEEN 0 AND 1 "

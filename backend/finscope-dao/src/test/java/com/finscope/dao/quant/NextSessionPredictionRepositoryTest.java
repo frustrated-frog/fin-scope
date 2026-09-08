@@ -52,7 +52,7 @@ class NextSessionPredictionRepositoryTest {
     }
 
     @Test
-    void neverImportsPredictionsGeneratedAfterTheirTargetDayStartedOrStaleResults() {
+    void neverImportsPredictionsGeneratedAfterTheTargetOpenOrStaleResults() {
         insertDiscovery("2026-09-07T16:00:00", "READY");
         assertEquals(0, repository.importFrozenReports());
         jdbc.update("DELETE FROM stock_discovery_run");
@@ -89,6 +89,23 @@ class NextSessionPredictionRepositoryTest {
         assertEquals(0.2545, joint.getPooledBrierScore());
         assertEquals(com.finscope.common.enums.quant.JointReturnTarget.MARKET_RESIDUAL, joint.getReturnTarget());
         assertEquals(com.finscope.common.enums.quant.JointEvidenceKind.RETROSPECTIVE, joint.getEvidenceKind());
+    }
+
+    @Test
+    void importsOvernightPredictionBeforeOpenButRejectsTheOpeningBoundary() {
+        insertDiscovery("2026-09-07T01:36:00", "WATCH");
+        assertEquals(1, repository.importFrozenReports());
+        jdbc.update("DELETE FROM next_session_prediction");
+        jdbc.update("DELETE FROM stock_discovery_run");
+        insertDiscovery("2026-09-07T09:30:00", "WATCH");
+        assertEquals(0, repository.importFrozenReports());
+    }
+
+    @Test
+    void rejectsLateFrozenReportEvenWhenItsGenerationTimestampIsEarlier() {
+        insertDiscovery("2026-09-04T16:00:00", "READY");
+        jdbc.update("UPDATE stock_discovery_run SET completed_at='2026-09-07T10:00:00'");
+        assertEquals(0, repository.importFrozenReports());
     }
 
     private void insertDiscovery(String generatedAt, String status) {

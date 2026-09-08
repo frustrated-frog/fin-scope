@@ -17,7 +17,7 @@ function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
     {audit.flatSampleCount != null && <p>零涨跌 {audit.flatSampleCount} 个样本，归非上涨类别。</p>}
     <p>全体方向准确率 {percent(audit.accuracy)} · 平衡准确率 {percent(audit.balancedAccuracy ?? undefined)}</p>
     <p>高置信度预测：覆盖 {percent(audit.highConfidence.coverage)} · 命中 {percent(audit.highConfidence.accuracy ?? undefined)}（单列统计，不替代全体准确率）</p>
-    {Object.entries(audit.comparisons).map(([code, comparison]) => <p key={code}>相对 {code} 的准确率差区间 {signed(comparison.accuracyDifferenceLower)} ～ {signed(comparison.accuracyDifferenceUpper)}；Brier 差区间 {comparison.brierDifferenceLower.toFixed(4)} ～ {comparison.brierDifferenceUpper.toFixed(4)}</p>)}
+    {Object.entries(audit.comparisons).map(([code, comparison]) => <p key={code}>相对 {code} 的准确率差区间 {excessPoints(comparison.accuracyDifferenceLower)} ～ {excessPoints(comparison.accuracyDifferenceUpper)}；Brier 差区间 {comparison.brierDifferenceLower.toFixed(4)} ～ {comparison.brierDifferenceUpper.toFixed(4)}</p>)}
     <p>以上区间按交易日分块重采样，并对多基线比较校正。{audit.reason}</p>
   </div>;
 }
