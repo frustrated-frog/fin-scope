@@ -108,7 +108,7 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
         return NextSessionPrediction(status="BEFORE_CLOSE", **base, warnings=["当日收盘数据尚未完成，15:10 后再生成"])
     if target is None:
         return NextSessionPrediction(status="CALENDAR_UNAVAILABLE", **base, warnings=["目标年份交易日历尚未核验，不猜测交易日期"])
-    if target <= current.date():
+    if current >= datetime.combine(target, time(9, 30)):
         return NextSessionPrediction(status="STALE_DATA", **base, warnings=["行情截止日过旧，禁止事后生成目标日预测"])
     if any(b.adjustment != "QFQ" for b in ordered):
         return NextSessionPrediction(status="INSUFFICIENT_DATA", **base, warnings=["次日模型需要一致的前复权日线"])

@@ -91,3 +91,11 @@ def test_existing_single_stock_report_includes_next_close_prediction_even_when_2
                             quality_status="FRESH_PRIMARY", warnings=[], panel_now=datetime(2026,9,5,11))
     assert report.next_session.target_date == "2026-09-07"
     assert report.next_session.up_probability is not None
+
+
+@pytest.mark.parametrize('hour,minute,status', [(0, 0, 'INSUFFICIENT_DATA'), (9, 29, 'INSUFFICIENT_DATA'), (9, 30, 'STALE_DATA')])
+def test_previous_close_remains_usable_until_target_session_open(hour, minute, status):
+    # Friday's close remains usable on Monday before the open, including across midnight/weekend.
+    result = build_next_session_forecast(bars(100), now=datetime(2026, 9, 7, hour, minute))
+    assert result.target_date == '2026-09-07'
+    assert result.status == status
