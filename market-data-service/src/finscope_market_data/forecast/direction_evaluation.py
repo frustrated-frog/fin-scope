@@ -1,5 +1,31 @@
 """Date-balanced absolute-direction evaluation with paired moving-block uncertainty."""
 import numpy as np
+from sklearn.metrics import roc_auc_score
+
+
+def probability_diagnostics(probabilities, labels, dates):
+    p, y, dates = np.asarray(probabilities, dtype=float), np.asarray(labels), np.asarray(dates)
+    if (p.ndim != 1 or p.shape != y.shape or p.shape != dates.shape or not len(p)
+            or not np.all(np.isfinite(p)) or np.any((p < 0) | (p > 1))
+            or not np.all(np.isin(y, [0, 1]))):
+        raise ValueError('概率诊断输入无效')
+    days, inverse, counts = np.unique(dates, return_inverse=True, return_counts=True)
+    weights = 1. / counts[inverse] / len(days)
+    aucs = []
+    for index in range(len(days)):
+        mask = inverse == index
+        if len(np.unique(y[mask])) == 2:
+            aucs.append(float(roc_auc_score(y[mask], p[mask])))
+    bounded = np.clip(p, 1e-6, 1 - 1e-6)
+    # Weighted inverse empirical CDF: dates, then stocks, have equal mass.
+    order = np.argsort(p, kind='stable')
+    cumulative = np.cumsum(weights[order])
+    quantiles = {f'p{q:02d}': float(p[order[min(len(p)-1, np.searchsorted(cumulative, q/100))]])
+                 for q in (5, 25, 50, 75, 95)}
+    return dict(predictedUpRate=float(weights @ (p >= .5)), probabilityQuantiles=quantiles,
+        auc=float(roc_auc_score(y, p, sample_weight=weights)) if len(np.unique(y)) == 2 else None,
+        crossSectionAuc=float(np.mean(aucs)) if aucs else None, crossSectionAucDayCount=len(aucs),
+        logLoss=float(-weights @ (y * np.log(bounded) + (1-y) * np.log1p(-bounded))))
 
 
 def evaluate_direction(probabilities, labels, dates, baselines, regimes=None):
@@ -53,6 +79,7 @@ def evaluate_direction(probabilities, labels, dates, baselines, regimes=None):
                     and all(v['brierDifferenceUpper'] < 0 and v['accuracyDifferenceLower'] > 0 for v in comparisons.values()))
     return dict(task='NEXT_CLOSE_DIRECTION', sampleCount=len(p), dayCount=len(days), accuracy=average(hit),
         balancedAccuracy=balanced, brierScore=average(errors), observedUpRate=average(y),
+        **probability_diagnostics(p, y, dates),
         highConfidence=dict(threshold=.6, coverage=coverage, accuracy=average(hit & confident) / coverage if coverage else None),
         comparisons=comparisons, byRegime=by_regime, eligible=eligible, blockDays=block,
         confidenceLevel=1-alpha, weighting='EQUAL_DATE_THEN_STOCK',
