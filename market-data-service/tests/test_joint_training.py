@@ -44,6 +44,12 @@ def test_joint_models_learn_signal_and_keep_test_out_of_selection():
     data = dataset()
     result = train_joint_snapshot(data)
     evidence = result['evidence']
+    calibration_audit = evidence['directionEvaluation']['calibrationAudit']
+    assert 0 <= calibration_audit['raw']['predictedUpRate'] <= 1
+    assert calibration_audit['raw']['auc'] is not None
+    assert calibration_audit['trainingThrough'] < calibration_audit['calibrationStart']
+    assert calibration_audit['calibrationThrough'] < evidence['testStart']
+    assert 'slope' in calibration_audit['parameters']
     assert evidence['pooledBrierScore'] < evidence['baselineBrierScore']
     assert evidence['rankIc'] > .5
     assert evidence['validationDayCount'] == 60

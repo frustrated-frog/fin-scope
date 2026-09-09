@@ -396,6 +396,13 @@ export interface SingleStockForecast {
 
 export interface DirectionEvaluation {
   accuracy: number; balancedAccuracy: number | null; brierScore: number;
+  predictedUpRate?: number;
+  auc?: number | null; crossSectionAuc?: number | null; crossSectionAucDayCount?: number;
+  calibrationAudit?: {
+    raw: { accuracy: number; balancedAccuracy: number | null; brierScore: number; predictedUpRate: number; auc?: number | null };
+    parameters: { slope: number; intercept: number };
+    trainingThrough: string; calibrationStart: string; calibrationThrough: string;
+  };
   flatSampleCount?: number;
   dayCount: number; sampleCount: number; eligible: boolean; reason: string;
   highConfidence: { coverage: number; accuracy: number | null };

@@ -6,6 +6,7 @@ Scores measure the supplied universe only, not a survivorship-free market backte
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import asdict
 import hashlib
 import json
 import math
@@ -24,7 +25,7 @@ from finscope_market_data.forecast.direction_evaluation import evaluate_directio
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow
 
-MODEL_VERSION = 'next-session-general-adaptive-v3'
+MODEL_VERSION = 'next-session-general-adaptive-v3-audit1'
 METHOD_FROZEN_THROUGH = '2026-09-09'
 PARAMETERS = dict(n_estimators=100, learning_rate=.03, num_leaves=15,
                   max_depth=5, min_child_samples=40, reg_lambda=5.,
@@ -176,6 +177,18 @@ def train_joint_snapshot(dataset: JointDataset, *, evaluation_codes: set[str] | 
         {'PRIOR': np.full(len(vy), baseline), 'LOGISTIC': logistic,
          'MOMENTUM': np.asarray([.55 if r.sample.features[0] > 0 else .45 for r in split['test']])}, regimes)
     direction['flatSampleCount'] = int(np.sum(vy == 0))
+    raw_probability = _probability(classifiers[selected], vx)
+    calibration_parameters = PlattCalibrator.fit(_probability(classifiers[selected], cx), cy > 0)
+    raw_audit = evaluate_direction(raw_probability, vy > 0, [r.sample.signal_date for r in split['test']],
+                                   {'PRIOR': np.full(len(vy), baseline)})
+    direction['calibrationAudit'] = dict(
+        raw={key: raw_audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'predictedUpRate',
+                                            'auc', 'crossSectionAuc', 'probabilityQuantiles', 'logLoss')},
+        parameters=asdict(calibration_parameters),
+        trainingThrough=max(r.sample.exit_date for r in split['train']),
+        calibrationStart=split['calibration'][0].sample.signal_date,
+        calibrationThrough=max(r.sample.exit_date for r in split['calibration']),
+        role='DIAGNOSTIC_ONLY_NOT_SELECTION')
     classification_eligible = direction['eligible']
     ranking_eligible = all(metrics['rankIc'] > 0 and metrics['top5PoolExcess'] > 0
                            and metrics['top5MomentumExcess'] > 0 for metrics in (selection_rank, ranking))

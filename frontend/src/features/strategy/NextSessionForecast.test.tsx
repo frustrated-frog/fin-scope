@@ -59,3 +59,19 @@ test('separates full direction accuracy from high-confidence coverage', () => {
   expect(screen.getByText(/覆盖 20.0%.*命中 70.0%/)).toBeInTheDocument();
   expect(screen.getByText(/60 个交易日.*6000 个股票样本/)).toBeInTheDocument();
 });
+
+test('shows calibration decision collapse separately from continuous score discrimination', () => {
+  const directionEvaluation = {
+    accuracy: .51, balancedAccuracy: .5, brierScore: .25, dayCount: 60, sampleCount: 6000,
+    highConfidence: { coverage: 0, accuracy: null }, eligible: false, reason: '对照', comparisons: {},
+    predictedUpRate: 0, auc: .53, crossSectionAuc: .52, crossSectionAucDayCount: 60,
+    calibrationAudit: { raw: { accuracy: .52, balancedAccuracy: .52, brierScore: .2495, predictedUpRate: .5, auc: .53 },
+      parameters: { slope: .1383, intercept: -.0342 }, trainingThrough: '2026-01-01',
+      calibrationStart: '2026-03-01', calibrationThrough: '2026-06-01' },
+  };
+  render(<NextSessionForecast prediction={{ ...prediction, directionEvaluation }} />);
+  expect(screen.getByText(/预测上涨占比 0.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/总体 AUC 0.530.*同日 AUC 0.520/)).toBeInTheDocument();
+  expect(screen.getByText(/校准前：方向准确率 52.0%.*预测上涨占比 50.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/斜率 0.1383/)).toBeInTheDocument();
+});

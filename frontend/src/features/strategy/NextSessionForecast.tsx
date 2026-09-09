@@ -16,6 +16,13 @@ function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
     <p>{audit.dayCount} 个交易日 · {audit.sampleCount} 个股票样本 · 按交易日等权</p>
     {audit.flatSampleCount != null && <p>零涨跌 {audit.flatSampleCount} 个样本，归非上涨类别。</p>}
     <p>全体方向准确率 {percent(audit.accuracy)} · 平衡准确率 {percent(audit.balancedAccuracy ?? undefined)}</p>
+    {audit.predictedUpRate != null && <p>预测上涨占比 {percent(audit.predictedUpRate)}（以 50% 概率为界）</p>}
+    {audit.auc !== undefined && <p>分数区分能力：总体 AUC {audit.auc?.toFixed(3) ?? '—'} · 同日 AUC {audit.crossSectionAuc?.toFixed(3) ?? '—'}（{audit.crossSectionAucDayCount ?? 0} 个可计算日期；0.5 为随机水平）</p>}
+    {audit.calibrationAudit && <details><summary>查看概率校准的影响</summary>
+      <p>校准前：方向准确率 {percent(audit.calibrationAudit.raw.accuracy)} · 平衡准确率 {percent(audit.calibrationAudit.raw.balancedAccuracy ?? undefined)} · 预测上涨占比 {percent(audit.calibrationAudit.raw.predictedUpRate)}</p>
+      <p>校准前 Brier {audit.calibrationAudit.raw.brierScore.toFixed(4)} → 校准后 {audit.brierScore.toFixed(4)}；斜率 {audit.calibrationAudit.parameters.slope.toFixed(4)} · 截距 {audit.calibrationAudit.parameters.intercept.toFixed(4)}</p>
+      <p>本次历史测试模型训练截至 {audit.calibrationAudit.trainingThrough}，校准使用 {audit.calibrationAudit.calibrationStart} ～ {audit.calibrationAudit.calibrationThrough}。校准可能改变 50% 阈值下的判断，不能代替模型学习新信息。</p>
+    </details>}
     <p>高置信度预测：覆盖 {percent(audit.highConfidence.coverage)} · 命中 {percent(audit.highConfidence.accuracy ?? undefined)}（单列统计，不替代全体准确率）</p>
     {Object.entries(audit.comparisons).map(([code, comparison]) => <p key={code}>相对 {code} 的准确率差区间 {excessPoints(comparison.accuracyDifferenceLower)} ～ {excessPoints(comparison.accuracyDifferenceUpper)}；Brier 差区间 {comparison.brierDifferenceLower.toFixed(4)} ～ {comparison.brierDifferenceUpper.toFixed(4)}</p>)}
     <p>以上区间按交易日分块重采样，并对多基线比较校正。{audit.reason}</p>
