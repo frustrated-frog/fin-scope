@@ -21,25 +21,27 @@
 
 ## 批次 1：校准和诊断
 
-- [ ] 新增 `tests/test_direction_calibration.py`：47%/51% 已校准分桶保持决策；权重复制不变；单调性；无效/不足样本回退。
-- [ ] 执行 `.venv/bin/pytest tests/test_direction_calibration.py -q`，确认因缺少实现失败。
-- [ ] 新增 `forecast/direction_calibration.py`，复用 CalibrationResult，正则向 (1,0) 收缩，斜率非负、只截距模式、日期权重，无正则化损失退化容忍。
-- [ ] 在 `direction_evaluation.py` 增加 `probability_diagnostics` 并集成，测试总体与截面 AUC 的区别和单类日期分母。
-- [ ] 通过相关测试、自检后提交推送。
+- [x] 新增 `tests/test_direction_calibration.py`：47%/51% 已校准分桶保持决策；权重复制不变；单调性；无效/不足样本回退。
+- [x] 执行 `.venv/bin/pytest tests/test_direction_calibration.py -q`，确认因缺少实现失败。
+- [x] 新增 `forecast/direction_calibration.py`，复用 CalibrationResult，正则向 (1,0) 收缩，斜率非负、只截距模式、日期权重，无正则化损失退化容忍。
+- [x] 在 `direction_evaluation.py` 增加 `probability_diagnostics` 并集成，测试总体与截面 AUC 的区别和单类日期分母。
+- [x] 通过相关测试、自检后提交推送。
 
 ## 批次 2：滚动实验
 
-- [ ] 新增 `tests/test_rolling_direction.py`，验证训练/校准无未来标签、每五日新模型、未来标签变化不影响之前预测及预先选择。
-- [ ] 新增 `forecast/rolling_direction.py`，生成同族 OOF、预先选择和四组配对比较；复用 fit_candidates 并支持只拟合指定族，避免无关重训。
-- [ ] 新增 `scripts/evaluate_rolling_direction.py`，复用只读行情加载，保存压缩逐条预测、输入及代码指纹、参数和汇总。
-- [ ] 固定 240 股实跑，记录所有结果，不能以测试期最佳候选冒充预先选择结果。
-- [ ] 验证后提交推送。
+- [x] 新增 `tests/test_rolling_direction.py`，验证训练/校准无未来标签、每五日新模型、未来标签变化不影响之前预测及预先选择。
+- [x] 新增 `forecast/rolling_direction.py`，生成同族 OOF、预先选择和四组配对比较；复用 fit_candidates 并支持只拟合指定族，避免无关重训。
+- [x] 新增 `scripts/evaluate_rolling_direction.py`，复用只读行情加载，保存压缩逐条预测、输入及代码指纹、参数和汇总。
+- [x] 固定 240 股实跑，记录所有结果，不能以测试期最佳候选冒充预先选择结果。
+- [x] 验证后提交推送。
 
 ## 批次 3：现有入口与运行验证
 
-- [ ] 联合训练证据记录所选模型校准前后诊断及生产训练截止；现有股票发现/单股预测展开区展示预测上涨比例、AUC和校准影响。
-- [ ] 定向 Python/前端测试、生产构建，完整 Python 回归，按项目规范自检，提交推送。
-- [ ] 重启受影响服务，通过实际 API 和浏览器验证新证据、次日日期及影子状态。
-- [ ] 在 `docs/quant/2026-09-09-calibration-rolling-review.md` 记录实测、限制和下一阶段依据，更新清单，提交推送。
+- [x] 联合训练证据记录所选模型校准前后诊断及生产训练截止；现有股票发现/单股预测展开区展示预测上涨比例、AUC和校准影响。
+- [x] 定向 Python/前端测试、生产构建，完整 Python 回归，按项目规范自检，提交推送。
+- [x] 重启受影响服务，通过实际 API 和浏览器验证新证据、次日日期及影子状态。
+- [x] 在 `docs/quant/2026-09-09-calibration-rolling-review.md` 记录实测、限制和下一阶段依据，更新清单，提交推送。
 
 后续 E1 行业历史、分钟数据、条件残差融合分别形成实验，不在 E0 内凭空生成缺失历史或承诺 +2 个百分点。
+
+实际验收和未通过的准确率实验见 `docs/quant/2026-09-09-calibration-rolling-review.md`。新校准/滚动只用于离线研究，未自动替换线上概率。
