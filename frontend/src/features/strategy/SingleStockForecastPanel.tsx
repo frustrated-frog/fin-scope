@@ -7,6 +7,7 @@ import { BacktestAuditPanel } from './BacktestAuditPanel';
 import { ForecastProfessionalAudit } from './ForecastProfessionalAudit';
 import { ForecastReturnPrism } from './ForecastReturnPrism';
 import { NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
+import { DirectionResearchComparison } from './DirectionResearchComparison';
 import {
   EquityDrawdownChart,
   FactorContributionChart,
@@ -195,7 +196,7 @@ export function SingleStockForecastPanel({ addToast, setMessage, initialCode }: 
           {report.productionModel.candidateProbability != null && <p>近期候选上涨概率 {(report.productionModel.candidateProbability * 100).toFixed(1)}% · 仅用于后续验证</p>}
           <p>{report.productionModel.reason}</p>
         </section>}
-        {report && <><NextSessionForecast prediction={report.nextSession} /><NextSessionOutcomeHistory code={report.instrumentCode} /></>}
+        {report && <><NextSessionForecast prediction={report.nextSession} /><DirectionResearchComparison /><NextSessionOutcomeHistory code={report.instrumentCode} /></>}
         {report && report.status !== 'INSUFFICIENT_DATA' && report.upProbability != null && <>
           <section className="single-forecast-board" data-tone={status.tone}>
             <header><div><span>{report.instrumentCode}</span><small>运行 #{selected?.id} · {report.horizonDays}D 独立试验 · 数据截止 {report.asOfDate}</small></div><b>{status.label}</b></header>

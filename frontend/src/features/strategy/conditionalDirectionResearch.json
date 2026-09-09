@@ -1,0 +1,52 @@
+{
+  "version": "next-direction-conditional-e1-v1",
+  "evidenceKind": "RETROSPECTIVE",
+  "productionEligible": false,
+  "asOfDate": "2026-09-08",
+  "universeCount": 240,
+  "testStart": "2026-06-15",
+  "testEnd": "2026-09-08",
+  "marketBreadthMse": 0.05161979237517851,
+  "marketPriorMse": 0.05084427743884149,
+  "selected": "RANK_0.1",
+  "sampleCount": 13290,
+  "dayCount": 60,
+  "accuracy": 0.5011665031731356,
+  "balancedAccuracy": 0.5013548985052345,
+  "brierScore": 0.2565729790685045,
+  "comparisons": {
+    "FIXED_LEGACY": {
+      "brierScore": 0.24965171434539551,
+      "accuracy": 0.5403616159727632,
+      "brierDifference": 0.006921264723108994,
+      "accuracyDifference": -0.039195112799627646,
+      "brierDifferenceLower": -0.003639819963843485,
+      "brierDifferenceUpper": 0.019059480990829675,
+      "accuracyDifferenceLower": -0.10243590923582488,
+      "accuracyDifferenceUpper": 0.02412227317953925
+    },
+    "ROLLING_RAW": {
+      "brierScore": 0.25515307721066804,
+      "accuracy": 0.5210051822720366,
+      "brierDifference": 0.0014199018578364504,
+      "accuracyDifference": -0.019838679098900934,
+      "brierDifferenceLower": -0.002663836203175648,
+      "brierDifferenceUpper": 0.005469949289153601,
+      "accuracyDifferenceLower": -0.04943853004918088,
+      "accuracyDifferenceUpper": 0.0022431379958639834
+    },
+    "PRIOR": {
+      "brierScore": 0.2498573081896747,
+      "accuracy": 0.5035814748176222,
+      "brierDifference": 0.006715670878829811,
+      "accuracyDifference": -0.002414971644486487,
+      "brierDifferenceLower": -0.004806322124636811,
+      "brierDifferenceUpper": 0.019604345300494035,
+      "accuracyDifferenceLower": -0.10277481284901387,
+      "accuracyDifferenceUpper": 0.08892214402948098
+    }
+  },
+  "sourceFingerprint": "e41612be8211a1d046c16cb6058546a569669996b9385b0b1eb428684f64d9e210d05f1bd264197e46f8237cab9718676ddb9485fdaed020ec6e86e041e1eef0",
+  "inputFingerprint": "6cee560017540e1daecb57ed7edc6e9d29eb8f3cd0b33bd2f5dec64e5f3c6048",
+  "snapshotNote": "固定240股的历史研究快照；不代表当前股票的上涨概率，也未替换线上模型。"
+}

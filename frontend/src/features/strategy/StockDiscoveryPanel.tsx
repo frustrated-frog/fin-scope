@@ -12,6 +12,7 @@ import {
 import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
 import './StockDiscoveryMarketContext.css';
 import { DirectionEvidence, NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
+import { DirectionResearchComparison } from './DirectionResearchComparison';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -164,6 +165,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
     </section>}
 
     <DiscoveryFunnel funnel={report.funnel} />
+    <DirectionResearchComparison />
     {report.joint_training && <section className="next-session-forecast" aria-label="联合训练与预测目标">
         <strong>宽池学习 · 候选范围保持独立</strong>
         <p>训练池 {report.joint_training.trainingUniverseCount ?? report.joint_training.universeCount} 只 · 展示候选 {report.joint_training.displayUniverseCount} 只 · {report.joint_training.featureCount} 个因子 · 训练期行业覆盖 {pct(report.joint_training.industryCoverage)}</p>
