@@ -15,7 +15,8 @@ from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.industry_features import IndustryMembership
-from finscope_market_data.forecast.joint_dataset import build_joint_dataset
+from finscope_market_data.forecast.features import ForecastSample
+from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow, build_joint_dataset
 from finscope_market_data.forecast.joint_training import PARAMETERS, temporal_split
 from finscope_market_data.forecast.rolling_direction import (
     MODEL_CODES, ROLLING_VERSION, calibrated_array, rolling_forecasts, select_direction_method,
@@ -27,19 +28,40 @@ def emit(value):
     print(json.dumps(value, ensure_ascii=False), flush=True)
 
 
+def load_frozen_inputs(path, as_of):
+    with np.load(path, allow_pickle=False) as data:
+        if any(day > as_of for day in data['exitDates']):
+            raise ValueError('冻结输入包含截止日期之后的标签')
+        rows = tuple(JointRow(str(code), ForecastSample(str(day), str(day), str(exit_day),
+                     tuple(features), float(value))) for code, day, exit_day, features, value in
+                     zip(data['codes'], data['signalDates'], data['exitDates'], data['features'], data['returns']))
+        return JointDataset(as_of, rows, {}, {}, tuple(str(code) for code in data['featureCodes']))
+
+
+def source_fingerprint():
+    paths = sorted((Path(__file__).parents[1] / 'src/finscope_market_data/forecast').glob('*.py')) + [Path(__file__)]
+    return hashlib.sha256(b''.join(p.name.encode() + p.read_bytes() for p in paths)).hexdigest()
+
+
 def evaluate(args):
+    source_hash = source_fingerprint()
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    store = ReadOnlyHistory(args.snapshots)
-    try:
-        histories = load_training_universe(store, as_of=args.as_of, max_symbols=args.max_symbols)
-        benchmark = store.daily_history_as_of('SH:000300', args.as_of)
-    finally:
-        store.connection.close()
-    records = json.loads(Path(args.memberships).read_text()) if Path(args.memberships).exists() else []
-    memberships = tuple(IndustryMembership(r['industry'], r['available_on'], tuple(r['codes'])) for r in records)
-    emit(dict(stage='dataset', stocks=len(histories)))
-    dataset = build_joint_dataset(histories, as_of=args.as_of, market_bars=benchmark, memberships=memberships)
+    if args.frozen_inputs:
+        dataset = load_frozen_inputs(args.frozen_inputs, args.as_of)
+        codes = sorted({r.code for r in dataset.rows})
+    else:
+        store = ReadOnlyHistory(args.snapshots)
+        try:
+            histories = load_training_universe(store, as_of=args.as_of, max_symbols=args.max_symbols)
+            benchmark = store.daily_history_as_of('SH:000300', args.as_of)
+        finally:
+            store.connection.close()
+        records = json.loads(Path(args.memberships).read_text()) if Path(args.memberships).exists() else []
+        memberships = tuple(IndustryMembership(r['industry'], r['available_on'], tuple(r['codes'])) for r in records)
+        emit(dict(stage='dataset', stocks=len(histories)))
+        dataset = build_joint_dataset(histories, as_of=args.as_of, market_bars=benchmark, memberships=memberships)
+        codes = sorted(histories)
     split = temporal_split(dataset.rows)
     selection_start = split['selection'][0].sample.signal_date
     selection_end = split['calibration'][0].sample.signal_date
@@ -88,10 +110,10 @@ def evaluate(args):
             stream.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + '\n')
     test_path = output.with_suffix('.test.npz')
     np.savez_compressed(test_path, **cases, labels=y, dates=np.array(dates), codes=np.array([r.code for r in test_rows]))
-    source_files = sorted((Path(__file__).parents[1] / 'src/finscope_market_data/forecast').glob('*.py')) + [Path(__file__)]
-    source_hash = hashlib.sha256(b''.join(p.name.encode() + p.read_bytes() for p in source_files)).hexdigest()
+    if source_fingerprint() != source_hash:
+        raise RuntimeError('实验运行期间源码发生变化，请使用冻结输入重新执行')
     summary = dict(version=ROLLING_VERSION, evidenceKind='RETROSPECTIVE', methodFrozenThrough='2026-09-09',
-        asOfDate=args.as_of, codes=sorted(histories), featureCodes=dataset.feature_codes, sourceFingerprint=source_hash,
+        asOfDate=args.as_of, codes=codes, featureCodes=dataset.feature_codes, sourceFingerprint=source_hash,
         inputFingerprint=hashlib.sha256(inputs.read_bytes()).hexdigest(),
         parameters=PARAMETERS, stepDays=5, trainingWindowDays=505, calibrationWindowDays=60,
         selection=selection, comparisons=audits, testAblation=diagnostic_ablation,
@@ -119,4 +141,5 @@ if __name__ == '__main__':
     parser.add_argument('--memberships', default='data/quant/industry-membership-history.json')
     parser.add_argument('--max-symbols', type=int, default=240)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--frozen-inputs', help='重放已保存的特征矩阵，绕过可变行情缓存')
     evaluate(parser.parse_args())
