@@ -35,7 +35,12 @@ class Ensemble:
         return np.mean([model.predict_proba(x) for model in self.models], axis=0)
 
 
-def fit_candidates(rows, feature_codes, parameters):
+def fit_candidates(rows, feature_codes, parameters, codes=None):
+    requested = set(codes) if codes is not None else {
+        'BASE_TREE', 'FULL_TREE', 'RECENT_TREE', 'DECAY_TREE', 'POOLED_LOGISTIC', 'EQUAL_ENSEMBLE'}
+    needed = requested | ({'FULL_TREE', 'POOLED_LOGISTIC'} if 'EQUAL_ENSEMBLE' in requested else set())
+    if not requested or needed - {'BASE_TREE', 'FULL_TREE', 'RECENT_TREE', 'DECAY_TREE', 'POOLED_LOGISTIC', 'EQUAL_ENSEMBLE'}:
+        raise ValueError('未知或空候选模型族')
     x = np.asarray([r.sample.features for r in rows])
     y = np.asarray([r.sample.positive for r in rows])
     if len(np.unique(y)) < 2:
@@ -51,15 +56,19 @@ def fit_candidates(rows, feature_codes, parameters):
         ('RECENT_TREE', full, recent, None),
         ('DECAY_TREE', full, np.ones(len(rows), dtype=bool), 126),
     ):
+        if code not in needed:
+            continue
         subset = tuple(row for row, keep in zip(rows, mask) if keep)
         models[code] = ColumnModel(LGBMClassifier(**parameters).fit(x[mask][:, columns], y[mask],
             sample_weight=date_weights(subset, half_life)), columns)
-    weights = date_weights(rows)
-    logistic = make_pipeline(StandardScaler(), LogisticRegression(C=.1, max_iter=500)).fit(x, y,
-        standardscaler__sample_weight=weights, logisticregression__sample_weight=weights)
-    models['POOLED_LOGISTIC'] = ColumnModel(logistic, full)
-    models['EQUAL_ENSEMBLE'] = Ensemble((models['FULL_TREE'], models['POOLED_LOGISTIC']))
-    return models
+    if 'POOLED_LOGISTIC' in needed:
+        weights = date_weights(rows)
+        logistic = make_pipeline(StandardScaler(), LogisticRegression(C=.1, max_iter=500)).fit(x, y,
+            standardscaler__sample_weight=weights, logisticregression__sample_weight=weights)
+        models['POOLED_LOGISTIC'] = ColumnModel(logistic, full)
+    if 'EQUAL_ENSEMBLE' in requested:
+        models['EQUAL_ENSEMBLE'] = Ensemble((models['FULL_TREE'], models['POOLED_LOGISTIC']))
+    return {code: model for code, model in models.items() if code in requested}
 
 
 def _mean(values, rows):
