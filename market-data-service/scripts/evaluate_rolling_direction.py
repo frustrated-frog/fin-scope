@@ -19,7 +19,7 @@ from finscope_market_data.forecast.features import ForecastSample
 from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow, build_joint_dataset
 from finscope_market_data.forecast.joint_training import PARAMETERS, temporal_split
 from finscope_market_data.forecast.rolling_direction import (
-    MODEL_CODES, ROLLING_VERSION, calibrated_array, rolling_forecasts, select_direction_method,
+    ROLLING_VERSION, calibrated_array, rolling_forecasts, select_direction_method,
 )
 from finscope_market_data.forecast.training_universe import load_training_universe
 

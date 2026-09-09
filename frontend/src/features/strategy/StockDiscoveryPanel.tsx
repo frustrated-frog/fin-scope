@@ -11,7 +11,7 @@ import {
 } from './StockDiscoveryVisuals';
 import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
 import './StockDiscoveryMarketContext.css';
-import { NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
+import { DirectionEvidence, NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -170,6 +170,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
         <p>选股学习{report.joint_training.rankingTarget === 'MARKET_RESIDUAL' ? '扣除市场影响、按历史波动率调整的个股强弱' : '绝对收盘涨跌'}；单股页面继续预测实际收盘涨跌。</p>
         <p>历史联合 Brier {report.joint_training.pooledBrierScore.toFixed(4)} / 基线 {report.joint_training.baselineBrierScore.toFixed(4)} · 展示池 Rank IC {report.joint_training.rankIc.toFixed(3)}</p>
         {report.joint_training.evidenceKind === 'RETROSPECTIVE' && <p>当前为历史回归对照，尚不作为新方法的全新样本外证据；下一交易日有效预测仍需完整收盘行情。</p>}
+        {report.joint_training.directionEvaluation && <details><summary>查看历史方向与校准诊断</summary><DirectionEvidence audit={report.joint_training.directionEvaluation} /></details>}
       </section>}
       <NextSessionOutcomeHistory />
 

@@ -51,7 +51,7 @@ test('presents the latest automatic selection without a manual refresh action', 
     return apiResponse({
       run: { id: 9, businessDate: '2026-08-14', status: 'SUCCEEDED', budget: 6000, qualityStatus: 'FRESH_PRIMARY', finalCount: 1 },
       report: {
-        joint_training: { trainingUniverseCount: 1200, universeCount: 1192, displayUniverseCount: 183, featureCount: 42, industryCoverage: 0, rankingTarget: 'MARKET_RESIDUAL', evidenceKind: 'RETROSPECTIVE', pooledBrierScore: .2497, baselineBrierScore: .25, rankIc: .057 },
+        joint_training: { trainingUniverseCount: 1200, universeCount: 1192, displayUniverseCount: 183, featureCount: 42, industryCoverage: 0, rankingTarget: 'MARKET_RESIDUAL', evidenceKind: 'RETROSPECTIVE', pooledBrierScore: .2497, baselineBrierScore: .25, rankIc: .057, directionEvaluation: { accuracy: .51, balancedAccuracy: .5, brierScore: .25, predictedUpRate: 0, dayCount: 60, sampleCount: 6000, eligible: false, reason: '历史对照', highConfidence: { coverage: 0, accuracy: null }, comparisons: {} } },
         as_of_date: '2026-08-14', source_family: 'TONGHUASHUN', quality_status: 'FRESH_PRIMARY',
         constituent_source_families: ['TONGHUASHUN'], constituent_quality_status: 'COMPLETE',
         retrieved_at: '2026-08-14T15:38:00', budget: 6000, duration_ms: 81233, warnings: [],
@@ -81,6 +81,7 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByText('38.9% 保留')).toBeInTheDocument();
   expect(screen.getByText('同花顺唯一热榜')).toBeInTheDocument();
   expect(screen.getByRole('region', { name: '联合训练与预测目标' })).toBeInTheDocument();
+  expect(screen.getByText(/预测上涨占比 0.0%/)).toBeInTheDocument();
   expect(screen.getByText(/训练池 1200 只 · 展示候选 183 只/)).toBeInTheDocument();
   expect(screen.getByText(/当前为历史回归对照/)).toBeInTheDocument();
   expect(screen.getByText('净流入降序')).toBeInTheDocument();

@@ -551,7 +551,7 @@ export interface StockDiscoveryEvidence {
 }
 
 export interface StockDiscoveryReport {
-  joint_training?: Pick<NextSessionJointEvidence, 'trainingUniverseCount' | 'displayUniverseCount' | 'universeCount' | 'industryCoverage' | 'featureCount' | 'returnTarget' | 'rankingTarget' | 'evidenceKind' | 'pooledBrierScore' | 'baselineBrierScore' | 'rankIc'>;
+  joint_training?: Pick<NextSessionJointEvidence, 'directionEvaluation' | 'trainingUniverseCount' | 'displayUniverseCount' | 'universeCount' | 'industryCoverage' | 'featureCount' | 'returnTarget' | 'rankingTarget' | 'evidenceKind' | 'pooledBrierScore' | 'baselineBrierScore' | 'rankIc'>;
   as_of_date: string; source_family: string; quality_status: string; retrieved_at: string;
   budget: number; duration_ms: number; warnings: string[];
   constituent_source_families?: string[]; constituent_quality_status?: string;

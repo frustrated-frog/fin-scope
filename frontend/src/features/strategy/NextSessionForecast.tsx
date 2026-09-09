@@ -11,7 +11,7 @@ const percent = (value?: number, digits = 1) => value == null ? '—' : `${(valu
 const signed = (value?: number, digits = 1) => value == null ? '—' : `${value > 0 ? '+' : ''}${percent(value, digits)}`;
 const excessPoints = (value: number) => signed(value, 3).replace('%', ' 个百分点');
 
-function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
+export function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
   return <div className="next-session-audit" aria-label="全体方向与置信度评价">
     <p>{audit.dayCount} 个交易日 · {audit.sampleCount} 个股票样本 · 按交易日等权</p>
     {audit.flatSampleCount != null && <p>零涨跌 {audit.flatSampleCount} 个样本，归非上涨类别。</p>}
