@@ -1,0 +1,48 @@
+{
+  "version": "industry-information-e2-v1",
+  "evidenceKind": "RETROSPECTIVE",
+  "productionEligible": false,
+  "universeCount": 240,
+  "dayCount": 180,
+  "sampleCount": 42077,
+  "observableCount": 42282,
+  "labelCoverage": 0.9951516011541555,
+  "startDate": "2025-12-11",
+  "endDate": "2026-09-07",
+  "dailyAccuracy": 0.4891723719406773,
+  "industryAccuracy": 0.48915090844148645,
+  "comparison": {
+    "brierScore": 0.25523482642478784,
+    "accuracy": 0.4891723719406773,
+    "brierDifference": -0.0002940461009556623,
+    "accuracyDifference": -2.146349919078766e-05,
+    "brierDifferenceLower": -0.0009181183800494339,
+    "brierDifferenceUpper": 0.0003336165538032884,
+    "accuracyDifferenceLower": -0.010334121198084101,
+    "accuracyDifferenceUpper": 0.010864267231385479
+  },
+  "rawDailyAccuracy": 0.5119663840175359,
+  "rawIndustryAccuracy": 0.5123227642949608,
+  "windows": [
+    {
+      "startDate": "2025-12-11",
+      "endDate": "2026-03-16",
+      "dailyAccuracy": 0.4804829349394915,
+      "industryAccuracy": 0.4771088786851023
+    },
+    {
+      "startDate": "2026-03-17",
+      "endDate": "2026-06-12",
+      "dailyAccuracy": 0.5197179931944884,
+      "industryAccuracy": 0.5190915403818431
+    },
+    {
+      "startDate": "2026-06-15",
+      "endDate": "2026-09-07",
+      "dailyAccuracy": 0.46731618768805194,
+      "industryAccuracy": 0.471252306257514
+    }
+  ],
+  "inputFingerprint": "d2ce75917214aef1beb539a72f9a3d62b036c9974cd8f68387605adaae9e3ab2",
+  "industryFingerprint": "ffe23c055d0934e2bc4438f8c06a27f1e133de11c4bffaa5534ea61e1ded9a62"
+}

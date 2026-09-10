@@ -45,3 +45,15 @@ def test_future_target_changes_do_not_change_earlier_raw_or_calibrated_forecasts
     b = rolling_panel_direction(altered,x,start,**options)
     for mode in a['probabilities']:
         np.testing.assert_array_equal(a['probabilities'][mode][a['dates']<=cutoff], b['probabilities'][mode][b['dates']<=cutoff])
+
+
+def test_appending_future_panel_and_labels_preserves_existing_forecasts():
+    data = fixture()
+    later = dataset(days=105,stocks=4)
+    extended = replace(later,observable_rows=tuple(ObservableRow(r.code,r.sample.signal_date,r.sample.features) for r in later.rows))
+    start = data.observable_rows[70*4].signal_date
+    options = dict(parameters={**PARAMETERS,'n_estimators':5})
+    a = rolling_panel_direction(data,np.array([r.features for r in data.observable_rows]),start,**options)
+    b = rolling_panel_direction(extended,np.array([r.features for r in extended.observable_rows]),start,**options)
+    for mode in a['probabilities']:
+        np.testing.assert_array_equal(a['probabilities'][mode],b['probabilities'][mode][:len(a['keys'])])

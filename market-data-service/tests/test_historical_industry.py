@@ -36,3 +36,10 @@ def test_vendor_reconstruction_is_not_strict_historical_availability():
     values, codes = industry_panel_features(rows, CODES, [change('a')], availability='OBSERVED')
     assert values[0,codes.index('SI_MISSING')] == 1
     assert np.isnan(values[0,codes.index('SI_MOMENTUM_5')])
+
+
+def test_evening_observation_cannot_enter_same_day_close_features():
+    rows = [ObservableRow(code,'2026-09-10',(0.,)*5) for code in ('a','b','c')]
+    events = [replace(change(code),retrieved_at='2026-09-10T22:00:00+08:00') for code in ('a','b','c')]
+    values,codes = industry_panel_features(rows,CODES,events,availability='OBSERVED')
+    assert np.all(values[:,codes.index('SI_MISSING')] == 1)

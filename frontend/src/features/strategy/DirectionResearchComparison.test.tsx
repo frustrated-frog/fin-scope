@@ -11,3 +11,11 @@ test('shows the preselected experiment against both strong baselines with retros
   expect(screen.getByText(/未超过较强对照/)).toBeInTheDocument();
   expect(screen.getByText(/未替换线上模型/)).toBeInTheDocument();
 });
+
+test('shows industry information experiment separately with data and uncertainty limitations', () => {
+  render(<DirectionResearchComparison />);
+  expect(screen.getByText('行业信息增量 · 直接涨跌分类')).toBeInTheDocument();
+  expect(screen.getByText(/180 个交易日/)).toBeInTheDocument();
+  expect(screen.getByText(/供应商历史重建/)).toBeInTheDocument();
+  expect(screen.getByText(/本轮行业信息未形成可信提升/)).toBeInTheDocument();
+});

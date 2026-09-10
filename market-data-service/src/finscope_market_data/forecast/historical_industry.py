@@ -24,7 +24,9 @@ def industry_panel_features(rows, feature_codes, changes, *, availability='VENDO
             raise ValueError('行业分类口径不能混用')
         effective = (date.fromisoformat(change.effective_from) + timedelta(days=1)).isoformat()
         # The reconstruction lag is an assumption, never a fabricated available_at.
-        known = (change.available_at or change.retrieved_at)[:10]
+        # Daily close features conservatively use observations from the following day.
+        known = (date.fromisoformat((change.available_at or change.retrieved_at)[:10])
+                 + timedelta(days=1)).isoformat()
         usable = max(effective, known) if availability == 'OBSERVED' else effective
         events.append((usable, change.effective_from, change.code, change.industry))
     events.sort()
