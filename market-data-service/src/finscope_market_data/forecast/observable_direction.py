@@ -5,6 +5,7 @@ import numpy as np
 from lightgbm import LGBMClassifier
 
 from finscope_market_data.forecast.adaptive_classifiers import date_weights
+from finscope_market_data.forecast.calibration_gate import select_calibration_outputs
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.joint_training import PARAMETERS
 from finscope_market_data.forecast.rolling_direction import calibrated_array
@@ -40,7 +41,7 @@ def rolling_panel_direction(dataset, features, start, *, parameters=None, step=5
     days = sorted(set(target_dates))
     if not days:
         raise ValueError('没有可观测预测日期')
-    output = {mode: np.full(len(target_keys), np.nan) for mode in ('RAW','INTERCEPT')}
+    output = {mode: np.full(len(target_keys), np.nan) for mode in ('RAW','INTERCEPT','GATED_DIRECTION','GATED_PROBABILITY')}
     batches, batch_ids = [], np.full(len(target_keys), -1, dtype=int)
     for offset in range(0,len(days),step):
         chunk = days[offset:offset+step]
@@ -68,12 +69,17 @@ def rolling_panel_direction(dataset, features, start, *, parameters=None, step=5
             fitted = fit_direction_calibration(output['RAW'][cal],target_y[cal],date_weights(cal_rows),'INTERCEPT')
             output['INTERCEPT'][mask] = calibrated_array(fitted,raw)
             calibration = asdict(fitted)
+        gate = select_calibration_outputs(output['RAW'][past], output['INTERCEPT'][past],
+                                          target_y[past], target_dates[past])
+        output['GATED_DIRECTION'][mask] = output[gate['directionSource']][mask]
+        output['GATED_PROBABILITY'][mask] = output[gate['probabilitySource']][mask]
+        gate['maturityThrough'] = str(max(target_exits[past])) if np.any(past) else None
         batch_ids[mask] = len(batches)
         batch = dict(batchId=len(batches),startDate=first,endDate=chunk[-1],
             trainingStart=training_days[0],trainingThrough=str(max(exits[train])),
             trainingDayCount=len(training_days),trainingSampleCount=int(train.sum()),
             predictionCount=int(mask.sum()),calibrationDayCount=len(cal_days),
-            calibrationThrough=str(max(target_exits[cal])) if np.any(cal) else None,calibration=calibration)
+            calibrationThrough=str(max(target_exits[cal])) if np.any(cal) else None,calibration=calibration,calibrationGate=gate)
         batches.append(batch)
         if progress:
             progress(dict(stage='direct',batch=len(batches),totalBatches=int(np.ceil(len(days)/step)),startDate=first))

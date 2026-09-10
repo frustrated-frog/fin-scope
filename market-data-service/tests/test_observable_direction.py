@@ -57,3 +57,20 @@ def test_appending_future_panel_and_labels_preserves_existing_forecasts():
     b = rolling_panel_direction(extended,np.array([r.features for r in extended.observable_rows]),start,**options)
     for mode in a['probabilities']:
         np.testing.assert_array_equal(a['probabilities'][mode],b['probabilities'][mode][:len(a['keys'])])
+
+
+def test_integrated_gate_matches_frozen_output_replay():
+    from finscope_market_data.forecast.calibration_gate import replay_calibration_gate
+    data = dataset(days=150, stocks=4)
+    data = replace(data, observable_rows=tuple(
+        ObservableRow(r.code, r.sample.signal_date, r.sample.features) for r in data.rows))
+    result = rolling_panel_direction(data, np.array([r.features for r in data.observable_rows]),
+        data.observable_rows[70*4].signal_date, parameters={**PARAMETERS, 'n_estimators': 5})
+    replay = replay_calibration_gate(result['probabilities']['RAW'], result['probabilities']['INTERCEPT'],
+        result['labels'], result['dates'], result['exits'], result['batchIds'])
+    np.testing.assert_array_equal(replay['direction'], result['probabilities']['GATED_DIRECTION'])
+    np.testing.assert_array_equal(replay['probability'], result['probabilities']['GATED_PROBABILITY'])
+    assert any(batch['calibrationGate']['matureDayCount'] == 60 for batch in result['batches'])
+    for original, frozen in zip(result['batches'], replay['decisions']):
+        assert original['calibrationGate']['directionSource'] == frozen['directionSource']
+        assert original['calibrationGate']['probabilitySource'] == frozen['probabilitySource']
