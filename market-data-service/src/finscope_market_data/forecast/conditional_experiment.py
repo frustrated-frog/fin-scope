@@ -14,7 +14,8 @@ from finscope_market_data.forecast.conditional_direction import (
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.joint_training import PARAMETERS, ranking_labels
 
-CONDITIONAL_VERSION = 'next-direction-conditional-e1-v1'
+CONDITIONAL_VERSION = 'next-direction-conditional-e1-v2'
+SELECTION_VERSION = 'incumbent-net-gain-v2'
 
 
 def conditional_rollout(rows, feature_codes, base, start, *, parameters=None, market_columns=None, progress=None):
@@ -92,7 +93,10 @@ def select_conditional_method(result, start, end):
     mask = np.array([start <= r.sample.signal_date < end and r.sample.exit_date < end for r in result['rows']])
     dates = np.array([r.sample.signal_date for r, keep in zip(result['rows'], mask) if keep])
     y = np.array([r.sample.positive for r, keep in zip(result['rows'], mask) if keep])
+    if len(set(dates)) < 3:
+        raise ValueError('候选选择至少需要 3 个成熟信号日期')
     base = result['probabilities']['BASE'][mask]
+    base_audit = evaluate_direction(base, y, dates, {'BASE': base})
     candidates = {}
     for key, probabilities in result['probabilities'].items():
         p = probabilities[mask]
@@ -103,13 +107,41 @@ def select_conditional_method(result, start, end):
             values = evaluate_direction(p[part], y[part], dates[part], {'BASE': base[part]})
             periods.append(dict(startDate=str(chunk[0]), endDate=str(chunk[-1]), accuracy=values['accuracy'],
                                 baseAccuracy=values['comparisons']['BASE']['accuracy']))
-        eligible = bool(audit['balancedAccuracy'] is not None and audit['balancedAccuracy'] > .5
-                        and audit['brierScore'] <= audit['comparisons']['BASE']['brierScore'] + .001
-                        and sum(v['accuracy'] > v['baseAccuracy'] for v in periods) >= 2)
+        reasons = []
+        if key != 'BASE':
+            if audit['accuracy'] <= base_audit['accuracy'] + 1e-12:
+                reasons.append('NO_ACCURACY_GAIN')
+            if (audit['balancedAccuracy'] is None or base_audit['balancedAccuracy'] is None
+                    or audit['balancedAccuracy'] <= .5
+                    or audit['balancedAccuracy'] < base_audit['balancedAccuracy'] - 1e-12):
+                reasons.append('BALANCED_ACCURACY_DEGRADED')
+            if audit['brierScore'] > base_audit['brierScore'] + .001 + 1e-12:
+                reasons.append('BRIER_DEGRADED')
+            if sum(v['accuracy'] > v['baseAccuracy'] + 1e-12 for v in periods) < 2:
+                reasons.append('INSUFFICIENT_PERIOD_WINS')
         candidates[key] = dict(accuracy=audit['accuracy'], balancedAccuracy=audit['balancedAccuracy'],
-                               brierScore=audit['brierScore'], eligible=eligible, periods=periods)
-    eligible = [key for key, candidate in candidates.items() if candidate['eligible']]
-    selected = min(eligible, key=lambda key: (-candidates[key]['accuracy'], -candidates[key]['balancedAccuracy'],
-                                             candidates[key]['brierScore'], key)) if eligible else 'BASE'
+            brierScore=audit['brierScore'], eligible=not reasons, periods=periods, rejectionReasons=reasons)
+    # Compare extra information with the best legal intercept-only correction,
+    # selected on this same development window, never on the outer evaluation.
+    intercepts = [key for key, value in candidates.items() if key.startswith('INTERCEPT_') and value['eligible']]
+    order = lambda key: (-candidates[key]['accuracy'],
+                         -(candidates[key]['balancedAccuracy'] or 0.), candidates[key]['brierScore'], key)
+    reference = min(intercepts, key=order) if intercepts else 'BASE'
+    for key, value in candidates.items():
+        if key == 'BASE' or key.startswith('INTERCEPT_'):
+            continue
+        benchmark = candidates[reference]
+        if value['accuracy'] <= benchmark['accuracy'] + 1e-12:
+            value['rejectionReasons'].append('NO_INCREMENT_OVER_INTERCEPT')
+        if (value['balancedAccuracy'] is None or benchmark['balancedAccuracy'] is None
+                or value['balancedAccuracy'] < benchmark['balancedAccuracy'] - 1e-12
+                or value['brierScore'] > benchmark['brierScore'] + .001 + 1e-12):
+            value['rejectionReasons'].append('INTERCEPT_QUALITY_DEGRADED')
+        value['eligible'] = not value['rejectionReasons']
+    eligible = [key for key, candidate in candidates.items() if key != 'BASE' and candidate['eligible']]
+    selected = min(eligible, key=order) if eligible else 'BASE'
     return dict(selected=selected, candidates=candidates, passed=bool(eligible),
-                startDate=start, endExclusive=end, evidenceKind='PRE_TEST_SELECTION')
+        reason='CHALLENGER_PASSED_DEVELOPMENT_RULES' if eligible else 'NO_QUALIFIED_CHALLENGER',
+        selectionVersion=SELECTION_VERSION, interceptReference=reference,
+        probabilityQualityRule=dict(metric='BRIER', maxDegradation=.001),
+        startDate=start, endExclusive=end, evidenceKind='PRE_TEST_SELECTION', productionEligible=False)
