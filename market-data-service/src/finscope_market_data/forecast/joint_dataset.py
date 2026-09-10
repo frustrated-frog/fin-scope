@@ -34,12 +34,21 @@ class JointRow:
 
 
 @dataclass(frozen=True)
+class ObservableRow:
+    """Signal-time feature row, independent of future label availability."""
+    code: str
+    signal_date: str
+    features: tuple[float, ...]
+
+
+@dataclass(frozen=True)
 class JointDataset:
     as_of: str
     rows: tuple[JointRow, ...]
     current_features_by_code: dict[str, tuple[float, ...]]
     history_fingerprints: dict[str, str]
     feature_codes: tuple[str, ...]
+    observable_rows: tuple[ObservableRow, ...] = ()
 
 
 def history_fingerprint(bars: Sequence[DailyBar]) -> str:
@@ -155,4 +164,7 @@ def build_joint_dataset(
     rows = tuple(row for row in rows if counts[row.sample.signal_date] >= minimum_cross_section)
     if not rows:
         raise ValueError('可验证次日标签的截面不足')
-    return JointDataset(as_of, rows, current, fingerprints, (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *INDUSTRY_FEATURE_CODES, *cross_codes, *MARKET_STATE_FEATURE_CODES))
+    observable = tuple(sorted((ObservableRow(code, sample.signal_date, sample.features)
+        for code, samples in enriched.items() for sample in samples), key=lambda row: (row.signal_date, row.code)))
+    return JointDataset(as_of, rows, current, fingerprints,
+        (*FEATURE_CODES, *EXTRA_FEATURE_CODES, *INDUSTRY_FEATURE_CODES, *cross_codes, *MARKET_STATE_FEATURE_CODES), observable)

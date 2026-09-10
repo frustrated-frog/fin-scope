@@ -72,3 +72,19 @@ def test_future_industry_observation_cannot_change_historical_features_or_schema
     future = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2,
         memberships=[IndustryMembership('881001', '2026-01-01', tuple(data))])
     assert plain == future
+
+
+def test_observable_panel_preserves_stocks_whose_next_close_is_missing():
+    data = histories()
+    as_of = data['000001'][-1].trade_date
+    signal = data['000001'][89].trade_date
+    original = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
+    data['000001'].pop(90)
+    changed = build_joint_dataset(data, as_of=as_of, minimum_cross_section=2)
+    original_panel = {r.code: r.features for r in original.observable_rows if r.signal_date == signal}
+    changed_panel = {r.code: r.features for r in changed.observable_rows if r.signal_date == signal}
+    assert original_panel == changed_panel
+    assert '000001' in changed_panel
+    assert not any(r.code == '000001' and r.sample.signal_date == signal for r in changed.rows)
+    assert all(not hasattr(r, 'net_return') for r in changed.observable_rows)
+    assert {r.code: r.features for r in changed.observable_rows if r.signal_date == as_of} == changed.current_features_by_code

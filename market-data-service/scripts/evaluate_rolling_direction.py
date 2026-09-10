@@ -15,8 +15,8 @@ from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.industry_features import IndustryMembership
-from finscope_market_data.forecast.features import ForecastSample
-from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow, build_joint_dataset
+from finscope_market_data.forecast.frozen_panel import load_frozen_panel, save_frozen_panel
+from finscope_market_data.forecast.joint_dataset import build_joint_dataset
 from finscope_market_data.forecast.joint_training import PARAMETERS, temporal_split
 from finscope_market_data.forecast.rolling_direction import (
     ROLLING_VERSION, calibrated_array, rolling_forecasts, select_direction_method,
@@ -29,13 +29,7 @@ def emit(value):
 
 
 def load_frozen_inputs(path, as_of):
-    with np.load(path, allow_pickle=False) as data:
-        if any(day > as_of for day in data['exitDates']):
-            raise ValueError('冻结输入包含截止日期之后的标签')
-        rows = tuple(JointRow(str(code), ForecastSample(str(day), str(day), str(exit_day),
-                     tuple(features), float(value))) for code, day, exit_day, features, value in
-                     zip(data['codes'], data['signalDates'], data['exitDates'], data['features'], data['returns']))
-        return JointDataset(as_of, rows, {}, {}, tuple(str(code) for code in data['featureCodes']))
+    return load_frozen_panel(path, as_of)
 
 
 def source_fingerprint():
@@ -70,10 +64,14 @@ def evaluate(args):
     start = days[days.index(selection_start)-60]
     # Store actual frozen model inputs, not just a fingerprint of a mutable cache.
     inputs = output.with_suffix('.inputs.npz')
-    np.savez_compressed(inputs, features=np.array([r.sample.features for r in dataset.rows]),
-        returns=np.array([r.sample.net_return for r in dataset.rows]), codes=np.array([r.code for r in dataset.rows]),
-        signalDates=np.array([r.sample.signal_date for r in dataset.rows]),
-        exitDates=np.array([r.sample.exit_date for r in dataset.rows]), featureCodes=np.array(dataset.feature_codes))
+    if dataset.observable_rows:
+        save_frozen_panel(inputs, dataset)
+    else:
+        # Legacy replay remains explicitly label-only; never claim panel v2.
+        np.savez_compressed(inputs, features=np.array([r.sample.features for r in dataset.rows]),
+            returns=np.array([r.sample.net_return for r in dataset.rows]), codes=np.array([r.code for r in dataset.rows]),
+            signalDates=np.array([r.sample.signal_date for r in dataset.rows]),
+            exitDates=np.array([r.sample.exit_date for r in dataset.rows]), featureCodes=np.array(dataset.feature_codes))
     with threadpool_limits(limits=1):
         rolling = rolling_forecasts(dataset.rows, dataset.feature_codes, PARAMETERS, start, progress=emit)
         selection = select_direction_method(rolling, selection_start, selection_end)
