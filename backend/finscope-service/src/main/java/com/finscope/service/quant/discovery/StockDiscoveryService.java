@@ -62,6 +62,10 @@ public class StockDiscoveryService {
         try {
             StockDiscoveryReport report = client.discover(
                     LocalDate.parse(event.getBusinessDate()), event.getBudget(), event.getPolicyVersion());
+            if (!event.getBusinessDate().equals(report.getAsOfDate())) {
+                throw new IllegalStateException("股票发现收盘数据日期不匹配：请求 " + event.getBusinessDate()
+                        + "，实际 " + report.getAsOfDate() + "；保留上一份成功报告并等待重试");
+            }
             repository.complete(event.getRunId(), attemptToken, report);
         } catch (RuntimeException error) {
             repository.fail(event.getRunId(), attemptToken, safe(error));

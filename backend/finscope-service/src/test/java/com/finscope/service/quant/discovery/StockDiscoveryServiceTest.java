@@ -26,6 +26,27 @@ import static org.mockito.Mockito.when;
 
 class StockDiscoveryServiceTest {
     @Test
+    void rejectsReportWithoutRequestedClosingDate() {
+        StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
+        PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
+        when(repository.findById(7L)).thenReturn(Optional.of(run("CREATED")));
+        when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
+        StockDiscoveryReport report = new StockDiscoveryReport();
+        report.setAsOfDate("2026-08-13");
+        when(client.discover(any(), any(Double.class), any())).thenReturn(report);
+        StockDiscoveryService service = service(repository, mock(StockDiscoveryEventPublisher.class), client);
+        StockDiscoveryRequestedEvent event = new StockDiscoveryRequestedEvent();
+        event.setRunId(7L);
+        event.setBusinessDate("2026-08-14");
+        event.setBudget(6000d);
+        event.setPolicyVersion(StockDiscoveryService.POLICY_VERSION);
+
+        assertThrows(IllegalStateException.class, () -> service.execute(event));
+        verify(repository, never()).complete(any(), anyString(), any());
+        verify(repository).fail(eq(7L), anyString(), eq("股票发现收盘数据日期不匹配：请求 2026-08-14，实际 2026-08-13；保留上一份成功报告并等待重试"));
+    }
+
+    @Test
     void recoveryExecutesLocallyWhenAcceptedMessageNeverReachedAWorker() {
         StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
         StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
@@ -53,6 +74,7 @@ class StockDiscoveryServiceTest {
         Executor executor = mock(Executor.class);
         StockDiscoveryRun run = run("CREATED");
         StockDiscoveryReport report = new StockDiscoveryReport();
+        report.setAsOfDate("2026-08-14");
         when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(run);
         when(repository.findById(7L)).thenReturn(Optional.of(run));
         when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
@@ -75,6 +97,7 @@ class StockDiscoveryServiceTest {
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
         StockDiscoveryRun run = run("CREATED");
         StockDiscoveryReport report = new StockDiscoveryReport();
+        report.setAsOfDate("2026-08-14");
         when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(run);
         when(repository.findById(7L)).thenReturn(Optional.of(run));
         when(repository.tryMarkRunning(eq(7L), anyString())).thenReturn(true);
