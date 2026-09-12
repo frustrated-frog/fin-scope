@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { buildMarketTransitionDecision } from './marketPulseDecision';
 import { MarketTransitionPanel } from './MarketTransitionPanel';
+import { DailyResearchPanel } from './DailyResearchPanel';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
 import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 
@@ -29,6 +30,7 @@ type ViewProps = {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
   onOpenStockDiscovery?: (context?: StockDiscoveryMarketContext) => void;
+  onOpenStock?: (code: string) => void;
 };
 
 function label(value?: string) {
@@ -458,7 +460,7 @@ function HistoryPanel({ points, internalPoints, backfilling, onBackfill, onSelec
   );
 }
 
-export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: ViewProps) {
+export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, onOpenStock }: ViewProps) {
   const [workspace, setWorkspace] = useState<MarketPulseWorkspace | null>(null);
   const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -599,7 +601,11 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery }: 
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
 
-      {view === 'review' && <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />}
+      {view === 'review' && <>
+        <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />
+        {workspace.businessDate && <DailyResearchPanel businessDate={workspace.businessDate} sectors={sectors}
+          refreshKey={workspace.generatedAt} onOpenStockDiscovery={onOpenStockDiscovery} onOpenStock={onOpenStock} />}
+      </>}
 
       {view === 'transition' && transitionDecision && <MarketTransitionPanel decision={transitionDecision}
         onOpenStockDiscovery={context => onOpenStockDiscovery?.(context)} />}

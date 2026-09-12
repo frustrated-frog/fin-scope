@@ -1,3 +1,4 @@
+import { StockDiscoveryMarketContextPanel } from './StockDiscoveryMarketContextPanel';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
@@ -138,6 +139,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
     const businessFailed = statusDetail?.businessStatus === 'FAILED';
     const delivered = statusDetail?.deliveryStatus === 'DELIVERED';
     return <section className="stock-discovery discovery-empty-state" data-failed={businessFailed || undefined}>
+      {marketContext && <StockDiscoveryMarketContextPanel context={marketContext} />}
       <span>AUTOMATED MARKET SCAN</span>
       <h3>{failed ? '暂时无法读取发现结果' : businessFailed ? (delivered ? '任务已送达，业务计算失败' : '任务等待重新投递') : '第一份收盘研究正在路上'}</h3>
       <p>{businessFailed ? statusDetail?.errorMessage ?? '股票发现业务计算暂未完成' : '系统会在交易日收盘后自动读取热门板块、校验一手资金约束、量化全部候选，并只保留通过严格门禁的前五名。你不需要点击运行。'}</p>
@@ -152,17 +154,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
       <aside><i data-status={runningStatus} /><small>{runningStatus === 'RUNNING' ? '新批次计算中' : 'LATEST VERIFIED CLOSE'}</small><strong>{report.as_of_date}</strong><span>{report.source_family} · {report.quality_status === 'FRESH_PRIMARY' ? '主数据源新鲜' : '备用源结果'}</span></aside>
     </header>
 
-    {marketContext && <section className="discovery-market-context" data-risk={marketContext.riskPosture}
-      aria-label="来自市场转折雷达的研究上下文">
-      <header><span>来自市场转折雷达</span><strong>{marketContext.transitionLabel}</strong>
-        <p>{marketContext.summary}</p><time>{marketContext.businessDate ?? '当前交易日'}</time></header>
-      <dl>
-        <div><dt>风险姿态</dt><dd>{{ OFFENSIVE: '进攻观察', BALANCED: '均衡试错', DEFENSIVE: '防守优先' }[marketContext.riskPosture]}</dd></div>
-        <div><dt>优先研究</dt><dd>{marketContext.preferredSectors.join(' · ') || '等待行业确认'}</dd></div>
-        <div><dt>谨慎方向</dt><dd>{marketContext.avoidSectors.join(' · ') || '当前无强制回避'}</dd></div>
-        <div><dt>参与纪律</dt><dd>{{ CONFIRMATION_ALLOWED: '确认后参与', PULLBACK_ONLY: '只等回撤确认', NO_CHASING: '不追高' }[marketContext.chasePolicy]}</dd></div>
-      </dl>
-    </section>}
+    {marketContext && <StockDiscoveryMarketContextPanel context={marketContext} />}
 
     <DiscoveryFunnel funnel={report.funnel} />
     <DirectionResearchComparison />

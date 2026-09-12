@@ -630,6 +630,7 @@ export default function App() {
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
       {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage}
+        onOpenStock={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }}
         onOpenStockDiscovery={(context) => { setStockDiscoveryMarketContext(context); setView('strategy'); }} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
         initialStockCode={industryChainStockCode}

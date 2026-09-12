@@ -233,7 +233,9 @@ test('does not write automatically from the page when market breadth is unavaila
     } else if (path.endsWith('/refresh') && options?.method === 'POST') {
       data = { status: 'SUCCEEDED' };
     } else {
-      latestCalls += 1;
+      if (path.endsWith('/latest')) {
+        latestCalls += 1;
+      }
       data = latestCalls === 1
         ? { ...workspace, breadth: { businessDate: '2026-08-21', qualityStatus: 'UNAVAILABLE' } }
         : workspace;
@@ -268,7 +270,9 @@ test('does not write automatically from the page when historical breadth is inco
     } else if (path.endsWith('/refresh') && options?.method === 'POST') {
       data = { status: 'SUCCEEDED' };
     } else {
-      latestCalls += 1;
+      if (path.endsWith('/latest')) {
+        latestCalls += 1;
+      }
       data = latestCalls === 1
         ? {
             ...workspace,

@@ -1,5 +1,6 @@
 export type StockDiscoveryMarketContext = {
   businessDate?: string;
+  source?: 'SECTOR_FILTER';
   transitionCode:
     | 'REPAIR_EXPANSION'
     | 'NARROWING_DIVERGENCE'
