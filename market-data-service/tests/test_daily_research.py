@@ -112,7 +112,7 @@ def test_empty_and_api_serialization(store):
     response = TestClient(app).get("/v1/markets/CN-A/daily-research?business_date=2026-08-21")
     assert response.status_code == 200
     data = response.json()
-    assert set(data) == {"schema_version", "business_date", "selection_date", "source_code", "quality_status", "sample_count", "stocks", "groups", "warnings"}
+    assert set(data) == {"schema_version", "cache_hit", "calculated_at", "business_date", "selection_date", "source_code", "quality_status", "sample_count", "stocks", "groups", "warnings"}
     assert data["selection_date"] == "2026-08-20"
     assert data["schema_version"] == "daily-research-v1"
 

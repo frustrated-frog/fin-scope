@@ -62,6 +62,7 @@ from finscope_market_data.sectors import TonghuashunSectorService
 from finscope_market_data.sector_history import TonghuashunSectorHistoryService
 from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.daily_research import DailyResearchService
+from finscope_market_data.research_members import ResearchMemberService
 from finscope_market_data.breadth import MarketBreadthService
 
 
@@ -283,9 +284,25 @@ def create_app(
             content=jsonable_encoder(result.model_dump(mode="json")),
         )
 
+    def research_services() -> tuple[DailyResearchService, ResearchMemberService]:
+        if not hasattr(application.state, "daily_research"):
+            provider_router = _router(application)
+            application.state.daily_research = DailyResearchService(provider_router.snapshots)
+            application.state.research_members = ResearchMemberService(provider_router)
+        return application.state.daily_research, application.state.research_members
+
+    @application.post("/v1/markets/CN-A/daily-research/members/{instrument_code}")
+    async def ensure_research_member(instrument_code: str, business_date: date = Query(...)) -> JSONResponse:
+        _, service = research_services()
+        try:
+            result = await service.ensure(business_date, instrument_code)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return JSONResponse(content=result.model_dump(mode="json"))
+
     @application.get("/v1/markets/CN-A/daily-research")
     async def daily_research(business_date: date = Query(...)) -> JSONResponse:
-        service = DailyResearchService(_router(application).snapshots)
+        service, _ = research_services()
         result = await asyncio.to_thread(service.fetch, business_date)
         return JSONResponse(content=result.model_dump(mode="json"))
 

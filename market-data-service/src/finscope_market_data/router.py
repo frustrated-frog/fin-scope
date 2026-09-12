@@ -117,6 +117,7 @@ class ProviderRouter:
         provider_family: str | None = None,
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
+        minimum_history_count = int(kwargs.pop("minimum_history_count", 0))
         supported = sorted(
             (
                 provider
@@ -149,6 +150,9 @@ class ProviderRouter:
                         data = await provider.fetch(capability, symbol, **kwargs)
                     if data is None or data == []:
                         raise ProviderError("EMPTY_DATA", "provider returned no data", True)
+                    if (capability is DataCapability.DAILY_BARS
+                            and minimum_history_count > 0 and len(data) < minimum_history_count):
+                        raise ProviderError("HISTORY_SHRINK", "provider returned shorter history", False)
                     if (
                         capability is DataCapability.CAPITAL_FLOW
                         and kwargs.get("require_minute")

@@ -59,6 +59,58 @@ class SnapshotStore:
                 """
             )
 
+            connection.executescript("""
+                CREATE TABLE IF NOT EXISTS daily_bar_revision (
+                    id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO daily_bar_revision VALUES (1, 0);
+                CREATE TRIGGER IF NOT EXISTS daily_bar_insert AFTER INSERT ON market_data_snapshot
+                WHEN NEW.capability='DAILY_BARS' BEGIN
+                    UPDATE daily_bar_revision SET revision=revision+1 WHERE id=1;
+                END;
+                CREATE TRIGGER IF NOT EXISTS daily_bar_update AFTER UPDATE ON market_data_snapshot
+                WHEN OLD.capability='DAILY_BARS' OR NEW.capability='DAILY_BARS' BEGIN
+                    UPDATE daily_bar_revision SET revision=revision+1 WHERE id=1;
+                END;
+                CREATE TRIGGER IF NOT EXISTS daily_bar_delete AFTER DELETE ON market_data_snapshot
+                WHEN OLD.capability='DAILY_BARS' BEGIN
+                    UPDATE daily_bar_revision SET revision=revision+1 WHERE id=1;
+                END;
+                CREATE TABLE IF NOT EXISTS daily_research_cache (
+                    business_date TEXT PRIMARY KEY, algorithm TEXT NOT NULL,
+                    revision INTEGER NOT NULL, payload_json TEXT NOT NULL
+                );
+            """)
+
+    def daily_bar_revision(self) -> int:
+        with self._connect() as connection:
+            return connection.execute("SELECT revision FROM daily_bar_revision WHERE id=1").fetchone()[0]
+
+    def load_research_cache(self, business_date: str, algorithm: str, revision: int) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM daily_research_cache WHERE business_date=? AND algorithm=? AND revision=?",
+                (business_date, algorithm, revision),
+            ).fetchone()
+        return row[0] if row else None
+
+    def save_research_cache(self, business_date: str, algorithm: str, revision: int, payload: str) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute("SELECT revision FROM daily_bar_revision WHERE id=1").fetchone()[0]
+            if current != revision:
+                return
+            connection.execute(
+                "INSERT INTO daily_research_cache VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(business_date) DO UPDATE SET algorithm=excluded.algorithm, "
+                "revision=excluded.revision, payload_json=excluded.payload_json",
+                (business_date, algorithm, revision, payload),
+            )
+            connection.execute(
+                "DELETE FROM daily_research_cache WHERE business_date NOT IN "
+                "(SELECT business_date FROM daily_research_cache ORDER BY business_date DESC LIMIT 20)"
+            )
+
     def save(self, envelope: DataEnvelope[Any]) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -119,6 +171,16 @@ class SnapshotStore:
             return MarketBreadthSnapshot.model_validate_json(row[0])
         except ValueError:
             return None
+
+    def daily_bar_count(self, symbol: StockSymbol) -> int:
+        # Count the persisted array even if an individual bar cannot be parsed.
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT json_array_length(CASE WHEN json_valid(payload_json) THEN payload_json "
+                "ELSE '{}' END, '$.data') FROM market_data_snapshot WHERE capability=? AND symbol_key=?",
+                (DataCapability.DAILY_BARS.value, symbol.cache_key),
+            ).fetchone()
+        return (row[0] or 0) if row else 0
 
     def daily_bar_symbols(self) -> list[str]:
         with self._connect() as connection:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from functools import lru_cache
+from threading import Lock
 from math import isfinite
 from statistics import median
 from typing import Callable, Literal
@@ -43,6 +44,8 @@ class ResearchGroup(ResearchModel):
 class DailyResearchSnapshot(ResearchModel):
     schema_version: Literal["daily-research-v1"] = "daily-research-v1"
     business_date: date
+    cache_hit: bool = False
+    calculated_at: datetime | None = None
     selection_date: date | None = None
     source_code: Literal["LOCAL_DAILY_BAR_PANEL"] = "LOCAL_DAILY_BAR_PANEL"
     quality_status: Literal["PARTIAL", "UNAVAILABLE"] = "UNAVAILABLE"
@@ -102,12 +105,43 @@ def _return(bars: dict[date, DailyBar], day: date, sessions: int) -> float | Non
     return result if isfinite(result) else None
 
 
+def is_closed_research_date(business_date: date, now: datetime) -> bool:
+    local = now.astimezone(ZoneInfo("Asia/Shanghai"))
+    return (business_date != date.min and business_date <= local.date()
+            and (business_date != local.date() or local.time() >= time(15, 30))
+            and next_session(business_date - timedelta(days=1)) == business_date)
+
+
 class DailyResearchService:
+    ALGORITHM_VERSION = "daily-research-v1.1"
+
     def __init__(self, snapshots: SnapshotStore, now: Callable[[], datetime] | None = None):
         self.snapshots = snapshots
+        self._cache_lock = Lock()
         self.now = now or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
 
     def fetch(self, business_date: date) -> DailyResearchSnapshot:
+        # Validate time on every request: an unavailable pre-close result is never cached.
+        if not is_closed_research_date(business_date, self.now()):
+            return self._calculate(business_date)
+        with self._cache_lock:
+            revision = self.snapshots.daily_bar_revision()
+            cached = self.snapshots.load_research_cache(
+                business_date.isoformat(), self.ALGORITHM_VERSION, revision,
+            )
+            if cached is not None:
+                try:
+                    return DailyResearchSnapshot.model_validate_json(cached).model_copy(update={"cache_hit": True}, deep=True)
+                except ValueError:
+                    pass
+            result = self._calculate(business_date)
+            result.calculated_at = self.now()
+            self.snapshots.save_research_cache(
+                business_date.isoformat(), self.ALGORITHM_VERSION, revision, result.model_dump_json(),
+            )
+            return result.model_copy(deep=True)
+
+    def _calculate(self, business_date: date) -> DailyResearchSnapshot:
         groups = [
             ResearchGroup(code="STRONG", label="强势股", definition="前一交易日涨幅至少3%"),
             ResearchGroup(code="TREND", label="趋势股", definition="前一交易日收盘高于20日均线且5日收益为正（前复权连续交易日）"),
@@ -120,10 +154,7 @@ class DailyResearchService:
             "多日收益及均线仅采用连续交易日前复权收盘；单日可采用供应商涨跌幅。",
             "分组在前一交易日确定；当日缺失仍计成员，有效成员少于5只时不展示分组统计。",
         ])
-        now = self.now().astimezone(ZoneInfo("Asia/Shanghai"))
-        if (business_date == date.min or business_date > now.date()
-                or (business_date == now.date() and now.time() < time(15, 30))
-                or next_session(business_date - timedelta(days=1)) != business_date):
+        if not is_closed_research_date(business_date, self.now()):
             result.warnings.append("请求日期尚未收盘、不是交易日或超出已维护交易日历，未回退到其他日期。")
             return result
         selection_date = _previous_session(business_date)
