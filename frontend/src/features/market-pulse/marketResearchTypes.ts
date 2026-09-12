@@ -19,6 +19,8 @@ export type ResearchGroup = {
   members: string[];
 };
 export type DailyResearch = {
+  cacheHit?: boolean;
+  calculatedAt?: string;
   businessDate: string;
   selectionDate?: string;
   sourceCode: string;
@@ -36,4 +38,15 @@ export type SectorFilter = {
   search: string;
   minBreadth?: number;
   maxReturn5d?: number;
+};
+
+export type ResearchMemberResult = {
+  instrumentCode: string;
+  businessDate: string;
+  status: 'READY' | 'PARTIAL' | 'FAILED' | 'SKIPPED';
+  reason: 'COMPLETE' | 'NO_DATA' | 'DATE_MISSING' | 'HISTORY_GAP' | 'ADJUSTMENT_REQUIRED' | 'NOT_CLOSED' | 'UPSTREAM_FAILED';
+  message: string;
+  validBars: number;
+  requiredBars: number;
+  sourceCode?: string;
 };

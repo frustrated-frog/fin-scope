@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { defaultThemes, loadThemes, parseThemeMembers, pct, ratio, shanghaiDate, stockReturn, summarizeTheme, THEME_STORAGE_KEY } from './marketResearch';
 import { ResearchStockActions } from './ResearchStockActions';
-import type { ResearchPeriod, ResearchStock, ResearchTheme } from './marketResearchTypes';
+import type { ResearchPeriod, ResearchStock, ResearchTheme, ResearchMemberResult } from './marketResearchTypes';
 
-type Props = { businessDate: string; stocks: ResearchStock[]; onOpenStock?: (code: string) => void };
-export function ThemeResearchPanel({ businessDate, stocks, onOpenStock }: Props) {
+type Props = { businessDate: string; stocks: ResearchStock[]; onOpenStock?: (code: string) => void; onMembersChange?: (codes: string[]) => void; memberResults?: Record<string, ResearchMemberResult>; activeMembers?: string[] };
+export function ThemeResearchPanel({ businessDate, stocks, onOpenStock, onMembersChange, memberResults = {}, activeMembers = [] }: Props) {
   const [initial] = useState(() => {
     try {
       return { themes: loadThemes(), error: '' };
@@ -18,6 +18,9 @@ export function ThemeResearchPanel({ businessDate, stocks, onOpenStock }: Props)
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState('');
   const [membersText, setMembersText] = useState('');
+  useEffect(() => {
+    onMembersChange?.([...new Set(themes.flatMap(theme => theme.members.map(member => member.instrumentCode)))]);
+  }, [themes, onMembersChange]);
   const stockMap = new Map(stocks.map(stock => [stock.instrumentCode, stock]));
   function edit(theme: ResearchTheme) {
     setEditing(theme.id);
@@ -58,13 +61,14 @@ export function ThemeResearchPanel({ businessDate, stocks, onOpenStock }: Props)
         {!theme.members.length ? <p className="mp-research-note">添加你关注的公司、产业环节和归属依据，建立主题地图。</p> : <>
           <p className="mp-research-note">成员关系自 {theme.effectiveDate} 生效 · 覆盖 {ratio(summary.coverage)} · 区间上涨比例 {ratio(summary.advanceRatio)}</p>
           {!summary.effective && <p className="mp-research-note">该历史截面早于成员关系生效日期。</p>}
-          {summary.effective && summary.returnPct == null && <p className="mp-research-note">样本覆盖不足。可先在自选中加载成员日K，再重试样本加载。</p>}
+          {summary.effective && summary.returnPct == null && <p className="mp-research-note">样本覆盖不足，系统会自动检查并补齐成员日K。可展开环节查看每只成员的补齐结果；停牌或上市时间较短时仍可能不足。</p>}
           <div className="mp-theme-segments">{segments.map(segment => {
             const members = theme.members.filter(member => member.segment === segment);
             const metrics = summarizeTheme({ ...theme, members }, stocks, businessDate, period);
             return <details key={segment}><summary><strong>{segment}</strong><span>{pct(metrics.returnPct)} · {metrics.validCount}/{members.length}只</span></summary>
               <p className="mp-research-note">区间上涨比例 {ratio(metrics.advanceRatio)} · 今日成交额 {metrics.amount == null ? '—' : `${(metrics.amount / 100000000).toFixed(2)}亿元`}</p>
-              <ul className="mp-research-members">{members.map(member => <li key={member.instrumentCode}><div><strong>{member.name}</strong><span>{summary.effective ? pct(stockReturn(stockMap.get(member.instrumentCode), period)) : '—'}</span></div><small>{member.instrumentCode} · 归属依据：{member.evidence}</small><ResearchStockActions code={member.instrumentCode} onOpenStock={onOpenStock} /></li>)}</ul>
+              <ul className="mp-research-members">{members.map(member => <li key={member.instrumentCode}><div><strong>{member.name}</strong><span>{summary.effective ? pct(stockReturn(stockMap.get(member.instrumentCode), period)) : '—'}</span></div><small>{member.instrumentCode} · 归属依据：{member.evidence}</small>
+                <p className="mp-research-note" aria-live="polite">{activeMembers.includes(member.instrumentCode) ? '正在检查并补齐行情…' : memberResults[member.instrumentCode] ? `${memberResults[member.instrumentCode].message} · ${memberResults[member.instrumentCode].validBars}/${memberResults[member.instrumentCode].requiredBars}个连续交易日` : '等待检查成员行情'}</p><ResearchStockActions code={member.instrumentCode} onOpenStock={onOpenStock} /></li>)}</ul>
             </details>;
           })}</div>
         </>}

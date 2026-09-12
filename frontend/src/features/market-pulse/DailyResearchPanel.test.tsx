@@ -55,3 +55,25 @@ test('discards a response from a previous date', async () => {
   resolveOld(response({ ...research, businessDate: '2026-09-10', groups: [{ ...research.groups[0], label: '旧分组' }] }) as Response);
   await waitFor(() => expect(screen.queryByText('旧分组')).not.toBeInTheDocument());
 });
+test('saved members are filled automatically and completion refreshes cached research', async () => {
+  let researchReads = 0;
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    if (String(url).includes('/members/')) {
+      return response({ instrumentCode: '600519.SH', businessDate: research.businessDate, status: 'READY', reason: 'COMPLETE', validBars: 22, requiredBars: 22, message: '行情完整' }) as Response;
+    }
+    researchReads += 1;
+    return response({ ...research, cacheHit: true, calculatedAt: '2026-09-12T16:00:00+08:00' }) as Response;
+  });
+  const first = render(<DailyResearchPanel businessDate="2026-09-11" sectors={[]} />);
+  fireEvent.click(screen.getAllByRole('button', { name: '维护成员' })[0]);
+  fireEvent.change(screen.getByLabelText('主题成员'), { target: { value: '600519.SH,贵州茅台,白酒,人工笔记' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存主题' }));
+  await screen.findByText(/主题行情检查完成.*完整 1只/);
+  await screen.findByText(/使用日频缓存/);
+  expect(researchReads).toBeGreaterThanOrEqual(2);
+  first.unmount();
+  vi.mocked(fetch).mockClear();
+  render(<DailyResearchPanel businessDate="2026-09-11" sectors={[]} />);
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/market-pulse/research/2026-09-11/members/600519.SH', expect.objectContaining({ method: 'POST' })));
+  await screen.findByText(/主题行情检查完成.*完整 1只/);
+});
