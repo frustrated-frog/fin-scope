@@ -38,6 +38,14 @@ class PythonDailyResearchSourceTest {
     }
 
     @Test
+    void preservesOptionalCacheMetadata() {
+        var result = source(PAYLOAD.replace("\"sample_count\":1", "\"cache_hit\":true,\"calculated_at\":\"2026-09-11T15:40:00+08:00\",\"sample_count\":1")).fetch(DATE);
+        assertTrue(result.getCacheHit());
+        assertEquals("2026-09-11T15:40:00+08:00", result.getCalculatedAt());
+        assertFalse(source(PAYLOAD).fetch(DATE).getCacheHit());
+    }
+
+    @Test
     void rejectsDateVersionCountsAndUnknownMembers() {
         for (String invalid : new String[] {
                 PAYLOAD.replace("daily-research-v1", "daily-research-v0"),

@@ -8,6 +8,8 @@ import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 /** 日频研究的 Web 契约，日期统一为 ISO 字符串。 */
 @Data
 public class DailyResearchResponse {
+    private Boolean cacheHit;
+    private String calculatedAt;
     private String businessDate;
     private String selectionDate;
     private String sourceCode;
@@ -19,6 +21,8 @@ public class DailyResearchResponse {
 
     public static DailyResearchResponse of(DailyResearchSnapshot source) {
         DailyResearchResponse value = new DailyResearchResponse();
+        value.setCacheHit(source.getCacheHit());
+        value.setCalculatedAt(source.getCalculatedAt());
         value.setBusinessDate(source.getBusinessDate() == null ? null : source.getBusinessDate().toString());
         value.setSelectionDate(source.getSelectionDate() == null ? null : source.getSelectionDate().toString());
         value.setSourceCode(source.getSourceCode());

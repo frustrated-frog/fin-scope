@@ -41,4 +41,28 @@ class DailyResearchControllerTest {
         mvc.perform(get("/api/market-pulse/research/not-a-date")).andExpect(status().is4xxClientError());
         verify(service, times(1)).query(any());
     }
+
+    @Test
+    void exposesMemberPostWithDateAndActualCoverage() throws Exception {
+        var service = mock(DailyResearchService.class);
+        var controller = new DailyResearchController();
+        ReflectionTestUtils.setField(controller, "service", service);
+        var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiExceptionHandler()).build();
+        var result = new com.finscope.domain.marketpulse.ResearchMemberResult();
+        result.setBusinessDate(LocalDate.of(2026, 9, 11));
+        result.setInstrumentCode("600519.SH");
+        result.setStatus(com.finscope.common.enums.marketpulse.ResearchMemberStatus.PARTIAL);
+        result.setReason(com.finscope.common.enums.marketpulse.ResearchMemberReason.HISTORY_GAP);
+        result.setValidBars(12);
+        result.setRequiredBars(22);
+        result.setMessage("历史行情存在缺口");
+        when(service.ensureMember(result.getBusinessDate(), "600519.SH")).thenReturn(result);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/market-pulse/research/2026-09-11/members/600519.SH"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.businessDate").value("2026-09-11"))
+                .andExpect(jsonPath("$.data.status").value("PARTIAL"))
+                .andExpect(jsonPath("$.data.validBars").value(12));
+    }
+
 }

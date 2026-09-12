@@ -6,6 +6,8 @@ import com.finscope.web.response.ApiResponses;
 import com.finscope.web.response.DailyResearchResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import com.finscope.web.response.ResearchMemberResponse;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,4 +25,12 @@ public class DailyResearchController {
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate businessDate) {
         return ApiResponses.success(DailyResearchResponse.of(service.query(businessDate)));
     }
+
+    @PostMapping("/api/market-pulse/research/{businessDate}/members/{instrumentCode}")
+    public ApiResponse<ResearchMemberResponse> ensureMember(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate businessDate,
+            @PathVariable String instrumentCode) {
+        return ApiResponses.success(ResearchMemberResponse.of(service.ensureMember(businessDate, instrumentCode)));
+    }
+
 }

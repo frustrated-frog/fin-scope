@@ -81,6 +81,17 @@ public class PythonDailyResearchSource {
         if (value.getSelectionDate() == null && value.getGroups().stream().anyMatch(group -> group.getMemberCount() > 0)) {
             throw invalid("缺少选组日期");
         }
+        if (root.hasNonNull("cache_hit")) {
+            if (!root.path("cache_hit").isBoolean()) {
+                throw invalid("日频缓存标记必须为布尔值");
+            }
+            value.setCacheHit(root.path("cache_hit").asBoolean());
+        }
+        if (root.hasNonNull("calculated_at")) {
+            String calculatedAt = text(root, "calculated_at");
+            java.time.OffsetDateTime.parse(calculatedAt);
+            value.setCalculatedAt(calculatedAt);
+        }
         value.setWarnings(strings(root.path("warnings"), 30));
         return value;
     }
