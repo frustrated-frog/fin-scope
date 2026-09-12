@@ -1,0 +1,56 @@
+.mp-daily-research { display: grid; gap: 18px; margin: 20px 0; min-width: 0; color: var(--ink); }
+.mp-research-section { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 22px; }
+.mp-research-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.mp-research-heading h3 { margin: 5px 0 0; font: 550 24px/1.3 "Iowan Old Style", "Songti SC", serif; }
+.mp-research-heading > div > span { color: var(--mp-blue); font-size: 11px; letter-spacing: .06em; }
+.mp-research-heading > strong, .mp-research-heading > span { color: var(--muted); font: 12px ui-monospace, monospace; }
+.mp-daily-research label { display: grid; gap: 7px; font-size: 12px; color: var(--muted); }
+.mp-daily-research :is(select, input:not([type=checkbox]), textarea) { min-width: 0; width: 100%; border: 1px solid var(--line-strong, var(--line)); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 9px 10px; font: inherit; }
+.mp-daily-research button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--ink); font-family: inherit; font-size: 12px; line-height: 1.4; cursor: pointer; }
+.mp-daily-research button:hover { border-color: var(--mp-blue); }
+.mp-daily-research button:disabled { opacity: .5; cursor: default; }
+.mp-daily-research :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--mp-blue); outline-offset: 3px; }
+.mp-research-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.mp-research-note { color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.mp-research-table-wrap { max-height: 400px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.mp-research-table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.mp-research-table-wrap caption { text-align: left; padding: 9px 12px; color: var(--muted); }
+.mp-research-table-wrap :is(th, td) { padding: 11px 12px; text-align: right; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.mp-research-table-wrap th:nth-child(2), .mp-research-table-wrap td:first-child { text-align: left; }
+.mp-research-table-wrap thead { background: var(--surface-2); }
+.mp-research-table-wrap tbody tr:hover { background: color-mix(in srgb, var(--mp-blue) 4%, var(--surface)); }
+.mp-research-compare, .mp-research-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); padding: 14px 0 0; }
+.mp-research-status { padding: 0 4px; }
+.mp-research-comparison, .mp-cohort-grid, .mp-theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.mp-research-comparison { margin-top: 16px; }
+.mp-research-comparison article, .mp-theme-card, .mp-cohort-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; }
+.mp-theme-card { border-top: 3px solid var(--mp-blue); }
+.mp-daily-research h4 { margin: 0; font-size: 16px; line-height: 1.5; }
+.mp-daily-research dl { display: flex; flex-wrap: wrap; gap: 20px; margin: 16px 0; }
+.mp-daily-research dt { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+.mp-daily-research dd { margin: 0; color: var(--ink); font: 600 20px ui-monospace, monospace; }
+.mp-theme-card > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+.mp-theme-editor { display: grid; gap: 12px; padding: 16px; margin-bottom: 16px; background: var(--surface-2); border-radius: 8px; }
+.mp-theme-editor textarea { resize: vertical; min-height: 120px; }
+.mp-daily-research summary { cursor: pointer; font-size: 12px; line-height: 1.6; padding: 8px 0; }
+.mp-theme-segments details { padding: 5px 0; border-top: 1px solid var(--line); }
+.mp-theme-segments summary span { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mp-stock-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.mp-stock-actions > span, .mp-research-error { color: var(--mp-red); font-size: 12px; overflow-wrap: anywhere; }
+.mp-research-members { list-style: none; padding: 0; margin: 0; }
+.mp-research-members li { padding: 12px 0; border-top: 1px solid var(--line); }
+.mp-research-members li > div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.mp-research-members small { display: block; margin: 5px 0; color: var(--muted); overflow-wrap: anywhere; }
+.mp-research-members .mp-stock-actions { margin-top: 8px; }
+.mp-cohort-card > p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.mp-return-distribution { display: grid; gap: 7px; padding: 10px 0; }
+.mp-return-distribution > div { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font: 11px ui-monospace, monospace; }
+.mp-return-distribution meter { width: 100%; height: 12px; }
+.mp-return-distribution b { font-weight: 500; text-align: right; }
+@media (max-width: 1150px) { .mp-theme-grid, .mp-cohort-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .mp-research-section { padding: 16px; }
+  .mp-research-filters, .mp-research-comparison { grid-template-columns: 1fr 1fr; }
+  .mp-research-heading, .mp-research-compare, .mp-research-status { align-items: flex-start; flex-direction: column; }
+  .mp-research-heading h3 { font-size: 21px; }
+}

@@ -6,7 +6,7 @@
 
 - 行业筛选读取当前 workspace 的行业快照；支持全部、初步转强、中期强势回落、弱势修复；定义公开展示：初步转强为 5日超额收益>0、1日收益>0；回落为20日收益>0、1日收益<0；修复为20日收益<0、5日收益>0。附加最低上涨比例、最高5日涨幅、搜索；缺失所需指标的行业排除。选择最多三个行业比较，进入股票发现时携带选中的行业和日期。
 - Python 新增 GET /v1/markets/CN-A/daily-research?business_date=YYYY-MM-DD，仅读取已有 SnapshotStore 本地日K。使用已维护交易日历确定前一交易日和连续窗口，未知日期失效关闭。不主动抓全市场。股票范围排除指数、基金和其他非A股代码。
-- 输出 schema_version=daily-research-v1，business_date、selection_date、source_code=LOCAL_DAILY_BAR_PANEL、quality_status=PARTIAL或UNAVAILABLE、sample_count、stocks、groups、warnings。百分比字段统一百分点；代码统一600519.SH。
+- 输出 schema_version=daily-research-v1，business_date、selection_date、source_code=LOCAL_DAILY_BAR_PANEL、quality_status=PARTIAL或UNAVAILABLE、sample_count（所检查的本地A股数，含当日缺失）、stocks、groups、warnings。收益字段统一百分点，比例字段为0..1；代码统一600519.SH。
 - stocks 字段：instrument_code、return_1d/5d/20d（可空）、amount（可空）、group_codes。仅以同日有效行情计算结果，缺失当日仍保留已入组成员。
 - groups 固定 STRONG/TREND/BREAKOUT：昨日单日收益>=3%；昨日收盘>昨日MA20且昨日5日收益>0；昨日收盘>此前20日收盘最高值。成员只用 selection_date 及之前的数据确定，今日涨跌不参与选组。groups 字段 code、label、definition、eligible_count（可判断规则的数量）、member_count、valid_count、advance_ratio、median_return、members（代码列表）。今日无数据仍计入member_count，不计入valid_count。收益分布由前端根据成员收益呈现。少于5个有效成员不做统计结论。
 - Java 通过既有 FinanceHttpClient 的 RPC 适配器校验版本、日期、代码、有限数值与计数，再经 Service/Web Response 对外提供 GET /api/market-pulse/research/{businessDate}。独立加载失败只影响新模块，不影响原工作台。
