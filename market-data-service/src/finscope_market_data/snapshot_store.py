@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from math import isfinite
 from pathlib import Path
 from typing import Any
+
+from pydantic import ValidationError
 
 from finscope_market_data.models import (
     CapitalFlowData,
@@ -121,18 +124,25 @@ class SnapshotStore:
         self,
         business_date: str,
         max_bars_per_symbol: int = 320,
+        max_symbols: int = 10000,
+        warnings: list[str] | None = None,
     ) -> dict[str, list[DailyBar]]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                WITH bars AS (
+                WITH snapshots AS (
+                    SELECT symbol_key, payload_json
+                    FROM market_data_snapshot
+                    WHERE capability=?
+                    ORDER BY symbol_key
+                    LIMIT ?
+                ), bars AS (
                     SELECT symbol_key,
                            json_extract(bar.value, '$.trade_date') AS trade_date,
                            bar.value AS bar_json
-                    FROM market_data_snapshot,
+                    FROM snapshots,
                          json_each(payload_json, '$.data') AS bar
-                    WHERE capability=?
-                      AND json_extract(bar.value, '$.trade_date')<=?
+                    WHERE json_extract(bar.value, '$.trade_date')<=?
                 ), ranked AS (
                     SELECT symbol_key, trade_date, bar_json,
                            row_number() OVER (
@@ -147,15 +157,28 @@ class SnapshotStore:
                 """,
                 (
                     DataCapability.DAILY_BARS.value,
+                    min(max(max_symbols, 1), 10000),
                     business_date,
                     max_bars_per_symbol,
                 ),
             ).fetchall()
         panel: dict[str, list[DailyBar]] = {}
+        invalid_count = 0
         for symbol_key, bar_json in rows:
-            panel.setdefault(symbol_key, []).append(
-                DailyBar.model_validate_json(bar_json)
-            )
+            symbol_bars = panel.setdefault(symbol_key, [])
+            try:
+                bar = DailyBar.model_validate_json(bar_json)
+            except ValidationError:
+                invalid_count += 1
+                continue
+            if not all(isfinite(value) for value in (
+                bar.open, bar.high, bar.low, bar.close, bar.volume
+            )):
+                invalid_count += 1
+                continue
+            symbol_bars.append(bar)
+        if invalid_count and warnings is not None:
+            warnings.append(f"本地日线包含{invalid_count}条无效记录，已跳过；相关收益窗口按缺失处理。")
         return panel
 
     def load_daily_bar_pairs(

@@ -59,6 +59,7 @@ from finscope_market_data.settings import Settings
 from finscope_market_data.sectors import TonghuashunSectorService
 from finscope_market_data.sector_history import TonghuashunSectorHistoryService
 from finscope_market_data.snapshot_store import SnapshotStore
+from finscope_market_data.daily_research import DailyResearchService
 from finscope_market_data.breadth import MarketBreadthService
 
 
@@ -276,6 +277,12 @@ def create_app(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json")),
         )
+
+    @application.get("/v1/markets/CN-A/daily-research")
+    async def daily_research(business_date: date = Query(...)) -> JSONResponse:
+        service = DailyResearchService(_router(application).snapshots)
+        result = await asyncio.to_thread(service.fetch, business_date)
+        return JSONResponse(content=result.model_dump(mode="json"))
 
     @application.get("/v1/markets/CN-A/breadth")
     async def market_breadth(
