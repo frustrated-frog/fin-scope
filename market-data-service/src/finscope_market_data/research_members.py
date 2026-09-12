@@ -135,7 +135,9 @@ class ResearchMemberService:
         reason = 'COMPLETE'
         for _ in range(22):
             bar = bars.get(day)
-            if bar is None or not _finite(bar.close) or bar.close <= 0:
+            if (bar is None or not all(_finite(value) for value in (
+                    bar.open, bar.high, bar.low, bar.close, bar.volume,
+            )) or bar.close <= 0):
                 reason = 'DATE_MISSING' if valid == 0 else 'HISTORY_GAP'
                 break
             if bar.adjustment != 'QFQ':

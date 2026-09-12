@@ -187,3 +187,30 @@ async def test_timeout_includes_semaphore_queue(store):
     finally:
         subject._semaphore.release()
         subject._semaphore.release()
+
+
+@pytest.mark.parametrize('field', ['open', 'high', 'low', 'volume'])
+async def test_nonfinite_bar_field_requires_provider_repair(store, field):
+    import sqlite3
+    from test_router import FakeProvider
+    from finscope_market_data.router import ProviderRouter
+    from finscope_market_data.health import ProviderHealthRegistry
+    from finscope_market_data.research_members import ResearchMemberService
+    from finscope_market_data.daily_research import DailyResearchService
+    save(store)
+    symbol = StockSymbol(market='SH', code='600001')
+    healthy = store.load(DataCapability.DAILY_BARS, symbol).data
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "UPDATE market_data_snapshot SET payload_json=json_set(payload_json, ?, 'NaN')",
+            (f'$.data[21].{field}',),
+        )
+    provider = FakeProvider('REPAIR', 'REPAIR', 1, [healthy])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = ProviderRouter([provider], store, ProviderHealthRegistry(), max_retries=0)
+    result = await ResearchMemberService(router, now=lambda: NOW).ensure(TODAY, '600001.SH')
+    assert provider.calls == 1
+    assert result.status == 'READY'
+    assert result.valid_bars == 22
+    daily = DailyResearchService(store, now=lambda: NOW).fetch(TODAY)
+    assert daily.stocks[0].return_1d is not None
