@@ -1,4 +1,5 @@
 export type View =
+  | 'desktopThs'
   | 'dashboard'
   | 'marketPulse'
   | 'sources'

@@ -1,0 +1,7 @@
+package com.finscope.common.enums.desktopths;
+
+public enum ThsCaptureStatus {
+    OK, PARTIAL, PERMISSION_REQUIRED, APP_NOT_RUNNING, NO_WINDOW,
+    UNSUPPORTED_PAGE, AMBIGUOUS, TIMEOUT, READER_UNAVAILABLE, BUSY,
+    READ_FAILED, BRIDGE_UNAVAILABLE
+}

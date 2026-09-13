@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { ThsDesktopView } from './features/desktop-ths/ThsDesktopView';
 import { AppShell } from './app/AppShell';
 import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleView } from './features/articles/ArticleView';
@@ -63,7 +64,7 @@ function isResearchRunActive(status?: string) {
 
 export default function App() {
   const [view, setView] = useState<View>(() => (
-    new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
+    new URLSearchParams(window.location.search).get('view') === 'desktopThs' ? 'desktopThs' : new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
   ));
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -280,6 +281,8 @@ export default function App() {
         return 'Agent Runs';
       case 'settings':
         return 'Settings';
+      case 'desktopThs':
+        return '同花顺页面解读';
       case 'watchlist':
         return 'Watchlist';
       case 'marketIntel':
@@ -565,6 +568,11 @@ export default function App() {
           onBack={() => setView('briefs')}
         />
       )}
+      {view === 'desktopThs' && <ThsDesktopView onResearch={(question) => {
+        setPendingRadarEventId(null);
+        setResearchQuestionDraft(question);
+        setView('research');
+      }} />}
       {view === 'research' && (
         <ResearchView
           initialQuestion={researchQuestionDraft}
