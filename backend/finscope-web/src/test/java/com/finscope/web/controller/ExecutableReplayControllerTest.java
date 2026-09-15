@@ -57,6 +57,25 @@ class ExecutableReplayControllerTest {
     }
 
     @Test
+    void acceptsPythonFrozenBaselineWithoutFakeTrainingTimestamp() throws Exception {
+        String input = Files.readString(Path.of("../../docs/quant/examples/executable-baseline-input-synthetic.json"));
+        String response = mvc.perform(post("/api/quant/executable-replays")
+                        .contentType(MediaType.APPLICATION_JSON).content(input))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.signals[0].signalMethod").value("FIXED_RULE"))
+                .andExpect(jsonPath("$.data.account.equityCurve.length()").value(15))
+                .andReturn().getResponse().getContentAsString();
+        Files.createDirectories(Path.of("target"));
+        mapper.writerWithDefaultPrettyPrinter().writeValue(Path.of("target/executable-baseline-synthetic.report.json").toFile(),
+                mapper.readTree(response).get("data"));
+        ObjectNode invalid = (ObjectNode) mapper.readTree(input);
+        ((ObjectNode) invalid.get("signals").get(0)).put("trainingLabelsMaturedBefore", "2026-08-01T15:00:00");
+        mvc.perform(post("/api/quant/executable-replays").contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(invalid)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void returnsUnifiedBadRequestForMissingCostsAndUnknownExecutionState() throws Exception {
         ObjectNode input = (ObjectNode) mapper.readTree(Files.readString(Path.of("../../docs/quant/examples/executable-replay-synthetic.json")));
         ((ObjectNode) input.get("protocol")).remove("minimumCommission");

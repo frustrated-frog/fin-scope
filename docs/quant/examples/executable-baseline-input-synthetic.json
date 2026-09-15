@@ -1,0 +1,368 @@
+{
+  "protocol": {
+    "version": "OPEN_5D_V1",
+    "holdingTradingDays": 5,
+    "rebalanceTradingDays": 5,
+    "slots": 5,
+    "maxExposure": 1.0,
+    "maxSingleWeight": 0.2,
+    "maxIndustryWeight": 0.4,
+    "signalTime": "15:30",
+    "executionTime": "09:30",
+    "initialCapital": 100000.0,
+    "buyCommission": 0.0003,
+    "sellCommission": 0.0003,
+    "minimumCommission": 5.0,
+    "stampDuty": 0.0005,
+    "slippageBps": 10.0
+  },
+  "tradingDates": [
+    "2026-08-17",
+    "2026-08-18",
+    "2026-08-19",
+    "2026-08-20",
+    "2026-08-21",
+    "2026-08-24",
+    "2026-08-25",
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28",
+    "2026-08-31",
+    "2026-09-01",
+    "2026-09-02",
+    "2026-09-03",
+    "2026-09-04"
+  ],
+  "calendarEvidence": "finscope trading_calendar.py: verified exchange closures; 50e1c14b4b69124108de7185661f1af9dc5aeae579e14b56f090c5a2bdac304f",
+  "priceBasis": "RAW",
+  "corporateActionEvidence": "coverage-manifest-sha256:04e9d46fc1fde8efa06fde03a9eabe082adbd0dd328d6fd6632960b67ffaf469",
+  "hasCorporateActions": false,
+  "signals": [
+    {
+      "signalDate": "2026-08-17",
+      "informationCutoff": "2026-08-17T15:30:00",
+      "trainingLabelsMaturedBefore": null,
+      "signalMethod": "FIXED_RULE",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
+      "dataFingerprint": "9778f2ed52986cdec7b731f4f365475132435073d522ad2c20a5913e1e640cac",
+      "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        }
+      ]
+    },
+    {
+      "signalDate": "2026-08-24",
+      "informationCutoff": "2026-08-24T15:30:00",
+      "trainingLabelsMaturedBefore": null,
+      "signalMethod": "FIXED_RULE",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
+      "dataFingerprint": "f3a193711aa5a5b9e9fe1f662bc823b3bd7ffb791b5ab4d6825cb579e16a6d70",
+      "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        }
+      ]
+    },
+    {
+      "signalDate": "2026-08-31",
+      "informationCutoff": "2026-08-31T15:30:00",
+      "trainingLabelsMaturedBefore": null,
+      "signalMethod": "FIXED_RULE",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
+      "dataFingerprint": "95658d5e7210e0e7badd0220f6f129d0b72c6bf6ded2f1991a0f7a0ea2609f9b",
+      "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "SYNTHETIC",
+          "rankingScore": 0.0,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": null
+        }
+      ]
+    }
+  ],
+  "bars": [
+    {
+      "tradeDate": "2026-08-17",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-17",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-18",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-18",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-19",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-19",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-20",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-20",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-21",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-21",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-24",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-24",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-25",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-25",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-26",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-26",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-27",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-27",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-28",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-28",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-31",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-08-31",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-01",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-01",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-02",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-02",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-03",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-03",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-04",
+      "instrumentCode": "600001.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    },
+    {
+      "tradeDate": "2026-09-04",
+      "instrumentCode": "600002.SH",
+      "open": 10.0,
+      "close": 10.0,
+      "openState": "TRADABLE",
+      "sourceEvidence": "SYNTHETIC_OPEN_STATE_AND_PRICE"
+    }
+  ]
+}

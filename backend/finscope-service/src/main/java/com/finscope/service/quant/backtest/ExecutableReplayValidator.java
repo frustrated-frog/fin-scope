@@ -1,6 +1,7 @@
 package com.finscope.service.quant.backtest;
 
 import com.finscope.common.exception.BusinessException;
+import com.finscope.common.enums.quant.ReplaySignalMethod;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.quant.execution.*;
 import org.springframework.stereotype.Component;
@@ -68,8 +69,13 @@ public class ExecutableReplayValidator {
             require(batch != null && expected.equals(batch.getSignalDate()), "信号必须按日历每五日冻结，空批次也必须显式提供");
             require("OPEN_5D_V1".equals(batch.getProtocolVersion()), "信号的交易目标与协议不一致");
             require(expected.atTime(input.getProtocol().getSignalTime()).equals(batch.getInformationCutoff()), "信号信息截止时间不一致");
-            require(batch.getTrainingLabelsMaturedBefore() != null
-                    && batch.getTrainingLabelsMaturedBefore().isBefore(batch.getInformationCutoff()), "训练标签尚未成熟");
+            require(batch.getSignalMethod() != null, "缺少信号生成方式");
+            if (batch.getSignalMethod() == ReplaySignalMethod.TRAINED_MODEL) {
+                require(batch.getTrainingLabelsMaturedBefore() != null
+                        && batch.getTrainingLabelsMaturedBefore().isBefore(batch.getInformationCutoff()), "训练标签尚未成熟");
+            } else {
+                require(batch.getTrainingLabelsMaturedBefore() == null, "固定规则不得填写虚构的训练截止时间");
+            }
             require(text(batch.getModelVersion()) && text(batch.getDataFingerprint()) && text(batch.getUniverseEvidence()), "缺少模型版本、数据指纹或历史股票池证据");
             require(batch.getCandidates() != null && batch.getCandidates().size() <= 6000, "候选截面缺失或超限");
             Set<String> seen = new HashSet<String>();

@@ -9,6 +9,8 @@ public class FrozenSignalBatch {
     private java.time.LocalDateTime informationCutoff;
     private java.time.LocalDateTime trainingLabelsMaturedBefore;
     private String protocolVersion;
+    private com.finscope.common.enums.quant.ReplaySignalMethod signalMethod =
+            com.finscope.common.enums.quant.ReplaySignalMethod.TRAINED_MODEL;
     private String modelVersion;
     private String dataFingerprint;
     private String universeEvidence;
