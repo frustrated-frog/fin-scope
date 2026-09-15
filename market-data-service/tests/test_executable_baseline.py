@@ -130,3 +130,55 @@ def test_cli_preserves_blocked_audit_and_rejects_overwrite(tmp_path):
     before = (output / 'audit.json').read_bytes()
     assert subprocess.run(cmd, env=env, capture_output=True).returncode != 0
     assert (output / 'audit.json').read_bytes() == before
+
+
+def test_java_failure_preserves_frozen_input_for_retry(tmp_path, monkeypatch):
+    import sys
+    from urllib.error import URLError
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'scripts'))
+    import freeze_executable_baseline as cli
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps(archive_dict()))
+    output = tmp_path / 'result'
+    monkeypatch.setattr(sys, 'argv', ['freeze', '--manifest', str(manifest), '--output', str(output),
+                                     '--replay-api', 'http://127.0.0.1/replay'])
+
+    def unavailable(*args, **kwargs):
+        raise URLError('test transport failure')
+
+    monkeypatch.setattr(cli, 'urlopen', unavailable)
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+    assert (output / 'input.json').exists()
+    assert (output / 'archive.json').exists()
+    assert json.loads((output / 'audit.json').read_text())['replayStatus'] == 'FAILED'
+    assert not (output / 'account.json').exists()
+
+
+def test_java_success_saves_account_and_readable_report(tmp_path, monkeypatch):
+    import io
+    import sys
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'scripts'))
+    import freeze_executable_baseline as cli
+    manifest = tmp_path / 'manifest.json'
+    source = archive_dict()
+    manifest.write_text(json.dumps(source))
+    output = tmp_path / 'result'
+    monkeypatch.setattr(sys, 'argv', ['freeze', '--manifest', str(manifest), '--output', str(output),
+                                     '--replay-api', 'http://127.0.0.1/replay'])
+
+    def successful(request, **kwargs):
+        bundle = json.loads(request.data)
+        assert bundle['signals'][0]['signalMethod'] == 'FIXED_RULE'
+        # Transport fixture only; account mathematics is tested by the Java controller suite.
+        report = dict(protocol=bundle['protocol'], engineVersion='transport-fixture', inputFingerprint='fixture',
+                      targetWeights={}, orders=[], account=dict(trades=[], warnings=[], metrics={'maxDrawdown': 0},
+                      equityCurve=[dict(tradeDate=source['startDate'], cash=100000, totalAsset=100000, portfolioNav=1)]))
+        return io.StringIO(json.dumps({'success': True, 'data': report}))
+
+    monkeypatch.setattr(cli, 'urlopen', successful)
+    cli.main()
+    assert json.loads((output / 'audit.json').read_text())['replayStatus'] == 'SUCCEEDED'
+    assert (output / 'account.json').exists()
+    assert '每日账户' in (output / 'account.md').read_text()

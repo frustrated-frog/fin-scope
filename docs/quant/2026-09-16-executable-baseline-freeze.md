@@ -69,3 +69,5 @@ PYTHONPATH=src .venv/bin/python scripts/freeze_executable_baseline.py \
 测试覆盖固定规则输出、未来价格不改变已冻结信号、候选缺失历史仍保留、交易所节假日、未知年份、公司行为覆盖缺失、晚于截止的候选信息、重复记录、源库只读、输出防覆盖及 Python/Java 契约衔接。保留旧模型信号的训练时间校验。
 
 下一步必须补齐原始执行价格、历史开盘限制、公司行为查询覆盖和时点准入股票池；当前版本已把这些缺口转为明确契约。尚未完成真实历史账户验证、B/C 模型实验或持续模拟，不应根据本批合成数据报告评价策略优势。
+
+本批最终验证结果：Python 28 项、Java 19 项通过。CLI 传输测试覆盖成功保存报告与失败保留冻结输入；Java Web 测试使用 Python 生成的公开合成输入通过真实 Controller、Service 和账本，结果写入 `backend/finscope-web/target/executable-baseline-synthetic.report.json`。未修改运行配置、密钥、数据库结构或前端，新增公共枚举位于 common，业务契约位于 domain，验证逻辑位于 service。
