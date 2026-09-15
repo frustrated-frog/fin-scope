@@ -7,7 +7,7 @@ import lombok.Data;
 public class FrozenCandidate {
     private String instrumentCode;
     private String industry;
-    private double rankingScore;
+    private Double rankingScore;
     private Double predictedPriceReturn;
     private boolean eligible;
     private String rejectionReason;

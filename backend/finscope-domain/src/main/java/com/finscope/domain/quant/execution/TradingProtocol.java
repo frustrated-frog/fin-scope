@@ -6,18 +6,18 @@ import lombok.Data;
 @Data
 public class TradingProtocol {
     private String version;
-    private int holdingTradingDays;
-    private int rebalanceTradingDays;
-    private int slots;
-    private double maxExposure;
-    private double maxSingleWeight;
-    private double maxIndustryWeight;
+    private Integer holdingTradingDays;
+    private Integer rebalanceTradingDays;
+    private Integer slots;
+    private Double maxExposure;
+    private Double maxSingleWeight;
+    private Double maxIndustryWeight;
     private java.time.LocalTime signalTime;
     private java.time.LocalTime executionTime;
-    private double initialCapital;
-    private double buyCommission;
-    private double sellCommission;
-    private double minimumCommission;
-    private double stampDuty;
-    private double slippageBps;
+    private Double initialCapital;
+    private Double buyCommission;
+    private Double sellCommission;
+    private Double minimumCommission;
+    private Double stampDuty;
+    private Double slippageBps;
 }

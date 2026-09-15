@@ -142,6 +142,11 @@ class PortfolioLedger {
         double notional = price * quantity;
         double fee = commission(notional, spec.getCost().getSellCommission(),
                 spec.getCost().getMinimumCommission()) + notional * spec.getCost().getStampDuty();
+        if (cash + notional < fee) {
+            audit(signal, date, code, ReplayOrderSide.SELL, quantity, 0, 0, ReplayOrderReason.COST_EXCEEDS_CASH);
+            warnings.add(date + " " + code + " 现金和卖出金额不足以支付费用，未卖出");
+            return;
+        }
         cash += notional - fee;
         positions.put(code, positions.get(code) - quantity);
         if (positions.get(code) == 0) {
@@ -167,7 +172,7 @@ class PortfolioLedger {
             double notional = price * quantity;
             double fee = commission(notional, spec.getCost().getBuyCommission(), spec.getCost().getMinimumCommission());
             if (notional + fee <= cash + 0.000001) {
-                cash -= notional + fee;
+                cash = Math.max(0d, cash - notional - fee);
                 positions.put(code, positions.getOrDefault(code, 0L) + quantity);
                 audit(signal, date, code, ReplayOrderSide.BUY, requested, quantity, fee,
                         quantity == requested ? ReplayOrderReason.FILLED : ReplayOrderReason.PARTIAL_BUDGET);

@@ -98,9 +98,62 @@ class ExecutableReplayServiceTest {
     }
 
     @Test
+    void blockedOverweightHoldingStopsAllNewRisk() throws Exception {
+        ExecutableReplayInput input = input();
+        input.getProtocol().setMaxExposure(0.4);
+        input.getProtocol().setMaxSingleWeight(0.08);
+        for (ExecutionBar bar : input.getBars()) {
+            if (bar.getTradeDate().equals(input.getTradingDates().get(6)) && bar.getInstrumentCode().equals("600001.SH")) {
+                bar.setOpen(BigDecimal.valueOf(300));
+                bar.setClose(BigDecimal.valueOf(300));
+                bar.setOpenState(OpenExecutionState.SELL_BLOCKED);
+            }
+        }
+        ExecutableReplayReport report = service.replay(input);
+        assertEquals(84000, report.getAccount().getEquityCurve().get(6).getCash(), 1e-8);
+        assertTrue(report.getOrders().stream().filter(order -> order.getSide() == ReplayOrderSide.BUY
+                && order.getTradeDate().equals(input.getTradingDates().get(6)))
+                .allMatch(order -> order.getFilledQuantity() == 0));
+    }
+
+    @Test
+    void highFeesReduceOrderSizeWithoutMakingCashNegative() throws Exception {
+        ExecutableReplayInput input = input();
+        input.getProtocol().setInitialCapital(6000d);
+        input.getProtocol().setMinimumCommission(1000d);
+        input.getProtocol().setMaxIndustryWeight(1d);
+        for (FrozenCandidate candidate : input.getSignals().get(0).getCandidates()) {
+            candidate.setEligible(true);
+        }
+        ExecutableReplayReport report = service.replay(input);
+        assertTrue(report.getAccount().getEquityCurve().stream().allMatch(point -> point.getCash() >= 0));
+        assertEquals(0, report.getAccount().getEquityCurve().get(1).getCash(), 1e-8);
+    }
+
+    @Test
+    void collapseCannotCreateNegativeCashFromMinimumSellCommission() throws Exception {
+        ExecutableReplayInput input = input();
+        input.getProtocol().setMinimumCommission(1000d);
+        // Use larger capital to buy lots, then consume cash with fees before a price collapse.
+        input.getProtocol().setInitialCapital(6000d);
+        for (FrozenCandidate candidate : input.getSignals().get(0).getCandidates()) {
+            candidate.setEligible(true);
+        }
+        for (ExecutionBar bar : input.getBars()) {
+            if (!bar.getTradeDate().isBefore(input.getTradingDates().get(6))) {
+                bar.setOpen(BigDecimal.valueOf(0.01));
+                bar.setClose(BigDecimal.valueOf(0.01));
+            }
+        }
+        ExecutableReplayReport report = service.replay(input);
+        assertTrue(report.getOrders().stream().anyMatch(order -> order.getReason() == ReplayOrderReason.COST_EXCEEDS_CASH));
+        assertTrue(report.getAccount().getEquityCurve().stream().allMatch(point -> point.getCash() >= 0));
+    }
+
+    @Test
     void feesAreChargedPerOrderAndUnrealizedLossIsInEquity() throws Exception {
         ExecutableReplayInput input = input();
-        input.getProtocol().setMinimumCommission(5);
+        input.getProtocol().setMinimumCommission(5d);
         input.getProtocol().setStampDuty(0.001);
         for (ExecutionBar bar : input.getBars()) {
             if (bar.getTradeDate().equals(input.getTradingDates().get(2))) {
@@ -117,7 +170,7 @@ class ExecutableReplayServiceTest {
     @Test
     void insufficientLotAndBlockedOpenAreAudited() throws Exception {
         ExecutableReplayInput input = input();
-        input.getProtocol().setInitialCapital(100);
+        input.getProtocol().setInitialCapital(100d);
         ExecutableReplayReport report = service.replay(input);
         assertTrue(report.getAccount().getTrades().isEmpty());
         assertTrue(report.getOrders().stream().allMatch(o -> o.getReason() == ReplayOrderReason.NO_LOT_BUDGET));
@@ -176,11 +229,11 @@ class ExecutableReplayServiceTest {
     private ExecutableReplayInput input() throws Exception {
         ExecutableReplayInput input = mapper.readValue(Path.of("../../docs/quant/examples/executable-replay-synthetic.json").toFile(),
                 ExecutableReplayInput.class);
-        input.getProtocol().setBuyCommission(0);
-        input.getProtocol().setSellCommission(0);
-        input.getProtocol().setMinimumCommission(0);
-        input.getProtocol().setStampDuty(0);
-        input.getProtocol().setSlippageBps(0);
+        input.getProtocol().setBuyCommission(0d);
+        input.getProtocol().setSellCommission(0d);
+        input.getProtocol().setMinimumCommission(0d);
+        input.getProtocol().setStampDuty(0d);
+        input.getProtocol().setSlippageBps(0d);
         return input;
     }
 }

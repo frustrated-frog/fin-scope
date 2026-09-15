@@ -35,6 +35,11 @@ public class ExecutableReplayValidator {
     }
 
     private void validateProtocol(TradingProtocol p) {
+        require(p.getHoldingTradingDays() != null && p.getRebalanceTradingDays() != null && p.getSlots() != null
+                && p.getInitialCapital() != null && p.getMaxExposure() != null && p.getMaxSingleWeight() != null
+                && p.getMaxIndustryWeight() != null && p.getBuyCommission() != null && p.getSellCommission() != null
+                && p.getMinimumCommission() != null && p.getStampDuty() != null && p.getSlippageBps() != null,
+                "协议必须显式提供全部资金、成本与仓位参数");
         require("OPEN_5D_V1".equals(p.getVersion()) && p.getHoldingTradingDays() == 5
                 && p.getRebalanceTradingDays() == 5 && p.getSlots() == 5, "不支持的交易协议版本或周期");
         require(LocalTime.of(15, 30).equals(p.getSignalTime())
@@ -73,7 +78,7 @@ public class ExecutableReplayValidator {
                 String code = candidate.getInstrumentCode();
                 require(code.matches("(?:(?:600|601|603|605)\\d{3}\\.SH|(?:000|001|002|003)\\d{3}\\.SZ)"), "仅支持沪深主板代码");
                 require(seen.add(code) && text(candidate.getIndustry()), "重复候选或缺少行业分类");
-                require(Double.isFinite(candidate.getRankingScore()) && (candidate.getPredictedPriceReturn() == null
+                require(candidate.getRankingScore() != null && Double.isFinite(candidate.getRankingScore()) && (candidate.getPredictedPriceReturn() == null
                         || Double.isFinite(candidate.getPredictedPriceReturn())), "候选分数不是有限值");
                 require(candidate.isEligible() || text(candidate.getRejectionReason()), "未准入候选必须保留拒绝原因");
                 String before = industries.putIfAbsent(code, candidate.getIndustry());
