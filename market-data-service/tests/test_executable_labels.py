@@ -28,7 +28,7 @@ def test_suspension_does_not_shift_exit_and_future_does_not_change_features():
     missing = build_executable_labels([bar for bar in data if bar.trade_date != dates[66]], dates,
                                       PROTOCOL, as_of=dates[-1])
     assert dates[60] not in {label.signal_date for label in missing}
-    changed = [bar.model_copy(update={'open': bar.open * 2}) if bar.trade_date > dates[60] else bar for bar in data]
+    changed = [bar.model_copy(update={key: getattr(bar, key) * 2 for key in ('open', 'high', 'low', 'close')}) if bar.trade_date > dates[60] else bar for bar in data]
     altered = build_executable_labels(changed, dates, PROTOCOL, as_of=dates[-1])
     assert altered[0].features == labels[0].features
 
