@@ -395,6 +395,12 @@ export interface SingleStockForecast {
 }
 
 export interface DirectionEvaluation {
+  trainingSelection?: {
+    modelVersion: string; selected: string; selectionStart: string; selectionThrough: string;
+    calibrationFitThrough: string; calibrationCheckStart: string; calibrationCheckThrough: string;
+    calibrationApplied: boolean;
+    candidates: Record<string, { accuracy: number; brier: number; balancedAccuracy: number | null }>;
+  };
   accuracy: number; balancedAccuracy: number | null; brierScore: number;
   predictedUpRate?: number;
   auc?: number | null; crossSectionAuc?: number | null; crossSectionAucDayCount?: number;

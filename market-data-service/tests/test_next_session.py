@@ -106,7 +106,7 @@ def test_next_session_reports_absolute_direction_benchmarks_and_coverage():
     audit = result.direction_evaluation
     assert audit['task'] == 'NEXT_CLOSE_DIRECTION'
     assert audit['dayCount'] == 60
-    assert set(audit['comparisons']) == {'PRIOR','MOMENTUM'}
+    assert set(audit['comparisons']) == {'PRIOR','MOMENTUM','LEGACY'}
     assert audit['accuracy'] == pytest.approx(result.accuracy)
     assert (result.status == 'READY') == audit['eligible']
-    assert result.model_version == 'next-session-rolling-v2'
+    assert result.model_version == 'local-prediction-v3'

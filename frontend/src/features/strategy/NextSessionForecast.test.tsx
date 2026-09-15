@@ -75,3 +75,17 @@ test('shows calibration decision collapse separately from continuous score discr
   expect(screen.getByText(/校准前：方向准确率 52.0%.*预测上涨占比 50.0%/)).toBeInTheDocument();
   expect(screen.getByText(/斜率 0.1383/)).toBeInTheDocument();
 });
+
+test('shows independent local selection and calibration boundaries', () => {
+  render(<NextSessionForecast prediction={{ ...prediction, directionEvaluation: {
+    accuracy: .54, balancedAccuracy: .51, brierScore: .24, dayCount: 60, sampleCount: 60,
+    highConfidence: { coverage: .2, accuracy: .7 }, eligible: false, reason: '观察', comparisons: {},
+    trainingSelection: { modelVersion: 'local-prediction-v3', selected: 'LOGISTIC',
+      selectionStart: '2026-03-01', selectionThrough: '2026-04-15', calibrationFitThrough: '2026-05-30',
+      calibrationCheckStart: '2026-06-01', calibrationCheckThrough: '2026-07-15', calibrationApplied: false,
+      candidates: { LOGISTIC: { accuracy: .6, brier: .24, balancedAccuracy: .58 } } },
+  } }} />);
+  expect(screen.getByText('本地模型选择与独立校准检查')).toBeInTheDocument();
+  expect(screen.getByText(/独立检查未支持校准，保留原始概率/)).toBeInTheDocument();
+  expect(screen.getByText(/校准拟合截至 2026-05-30/)).toBeInTheDocument();
+});

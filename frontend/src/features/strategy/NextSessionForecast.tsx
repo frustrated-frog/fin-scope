@@ -18,6 +18,12 @@ export function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
     <p>全体方向准确率 {percent(audit.accuracy)} · 平衡准确率 {percent(audit.balancedAccuracy ?? undefined)}</p>
     {audit.predictedUpRate != null && <p>预测上涨占比 {percent(audit.predictedUpRate)}（以 50% 概率为界）</p>}
     {audit.auc !== undefined && <p>分数区分能力：总体 AUC {audit.auc?.toFixed(3) ?? '—'} · 同日 AUC {audit.crossSectionAuc?.toFixed(3) ?? '—'}（{audit.crossSectionAucDayCount ?? 0} 个可计算日期；0.5 为随机水平）</p>}
+    {audit.trainingSelection && <details><summary>本地模型选择与独立校准检查</summary>
+      <p>当前选择 {audit.trainingSelection.selected}；选择样本 {audit.trainingSelection.selectionStart} ～ {audit.trainingSelection.selectionThrough}。</p>
+      <p>校准拟合截至 {audit.trainingSelection.calibrationFitThrough}；独立检查 {audit.trainingSelection.calibrationCheckStart} ～ {audit.trainingSelection.calibrationCheckThrough}。</p>
+      <p>{audit.trainingSelection.calibrationApplied ? '独立检查支持使用校准概率' : '独立检查未支持校准，保留原始概率'}。这些是当前模型的测试前选择记录，不是未来准确率。</p>
+      {Object.entries(audit.trainingSelection.candidates).map(([code, metric]) => <p key={code}>{code}：选择期准确率 {percent(metric.accuracy)} · Brier {metric.brier.toFixed(4)}</p>)}
+    </details>}
     {audit.calibrationAudit && <details><summary>查看概率校准的影响</summary>
       <p>校准前：方向准确率 {percent(audit.calibrationAudit.raw.accuracy)} · 平衡准确率 {percent(audit.calibrationAudit.raw.balancedAccuracy ?? undefined)} · 预测上涨占比 {percent(audit.calibrationAudit.raw.predictedUpRate)}</p>
       <p>校准前 Brier {audit.calibrationAudit.raw.brierScore.toFixed(4)} → 校准后 {audit.brierScore.toFixed(4)}；斜率 {audit.calibrationAudit.parameters.slope.toFixed(4)} · 截距 {audit.calibrationAudit.parameters.intercept.toFixed(4)}</p>

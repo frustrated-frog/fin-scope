@@ -64,7 +64,7 @@ class NextSessionPrediction(BaseModel):
     upper_return: float | None = None
     decision: Literal["UP", "DOWN", "ABSTAIN"] = "ABSTAIN"
     model_code: str | None = None
-    model_version: str = "next-session-rolling-v2"
+    model_version: str = "local-prediction-v3"
     data_fingerprint: str
     training_through: str | None = None
     calibration_through: str | None = None
