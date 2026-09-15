@@ -1,0 +1,17 @@
+{
+  "version": "OPEN_5D_V1",
+  "holdingTradingDays": 5,
+  "rebalanceTradingDays": 5,
+  "slots": 5,
+  "maxExposure": 1.0,
+  "maxSingleWeight": 0.2,
+  "maxIndustryWeight": 0.4,
+  "signalTime": "15:30",
+  "executionTime": "09:30",
+  "initialCapital": 100000.0,
+  "buyCommission": 0.0003,
+  "sellCommission": 0.0003,
+  "minimumCommission": 5.0,
+  "stampDuty": 0.0005,
+  "slippageBps": 10.0
+}
