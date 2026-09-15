@@ -1,0 +1,434 @@
+{
+  "protocol": {
+    "version": "OPEN_5D_V1",
+    "holdingTradingDays": 5,
+    "rebalanceTradingDays": 5,
+    "slots": 5,
+    "maxExposure": 1.0,
+    "maxSingleWeight": 0.2,
+    "maxIndustryWeight": 0.4,
+    "signalTime": "15:30",
+    "executionTime": "09:30",
+    "initialCapital": 100000.0,
+    "buyCommission": 0.0003,
+    "sellCommission": 0.0003,
+    "minimumCommission": 5.0,
+    "stampDuty": 0.0005,
+    "slippageBps": 10.0
+  },
+  "tradingDates": [
+    "2026-09-01",
+    "2026-09-02",
+    "2026-09-03",
+    "2026-09-04",
+    "2026-09-07",
+    "2026-09-08",
+    "2026-09-09",
+    "2026-09-10",
+    "2026-09-11",
+    "2026-09-14",
+    "2026-09-15",
+    "2026-09-16"
+  ],
+  "calendarEvidence": "synthetic-calendar-for-contract-tests",
+  "priceBasis": "RAW",
+  "corporateActionEvidence": "synthetic-fixture-no-corporate-actions",
+  "hasCorporateActions": false,
+  "signals": [
+    {
+      "signalDate": "2026-09-01",
+      "informationCutoff": "2026-09-01T15:30:00",
+      "trainingLabelsMaturedBefore": "2026-09-01T09:30:00",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "SYNTHETIC_FIXTURE_V1",
+      "dataFingerprint": "synthetic-not-market-data",
+      "universeEvidence": "synthetic-complete-candidate-fixture",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "sector-0",
+          "rankingScore": 3,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "sector-1",
+          "rankingScore": 2,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600003.SH",
+          "industry": "sector-2",
+          "rankingScore": 1,
+          "predictedPriceReturn": null,
+          "eligible": false,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        }
+      ]
+    },
+    {
+      "signalDate": "2026-09-08",
+      "informationCutoff": "2026-09-08T15:30:00",
+      "trainingLabelsMaturedBefore": "2026-09-08T09:30:00",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "SYNTHETIC_FIXTURE_V1",
+      "dataFingerprint": "synthetic-not-market-data",
+      "universeEvidence": "synthetic-complete-candidate-fixture",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "sector-0",
+          "rankingScore": 3,
+          "predictedPriceReturn": null,
+          "eligible": false,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "sector-1",
+          "rankingScore": 2,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600003.SH",
+          "industry": "sector-2",
+          "rankingScore": 1,
+          "predictedPriceReturn": null,
+          "eligible": true,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        }
+      ]
+    },
+    {
+      "signalDate": "2026-09-15",
+      "informationCutoff": "2026-09-15T15:30:00",
+      "trainingLabelsMaturedBefore": "2026-09-15T09:30:00",
+      "protocolVersion": "OPEN_5D_V1",
+      "modelVersion": "SYNTHETIC_FIXTURE_V1",
+      "dataFingerprint": "synthetic-not-market-data",
+      "universeEvidence": "synthetic-complete-candidate-fixture",
+      "candidates": [
+        {
+          "instrumentCode": "600001.SH",
+          "industry": "sector-0",
+          "rankingScore": 3,
+          "predictedPriceReturn": null,
+          "eligible": false,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600002.SH",
+          "industry": "sector-1",
+          "rankingScore": 2,
+          "predictedPriceReturn": null,
+          "eligible": false,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        },
+        {
+          "instrumentCode": "600003.SH",
+          "industry": "sector-2",
+          "rankingScore": 1,
+          "predictedPriceReturn": null,
+          "eligible": false,
+          "rejectionReason": "FIXTURE_INELIGIBLE"
+        }
+      ]
+    }
+  ],
+  "bars": [
+    {
+      "tradeDate": "2026-09-01",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-01",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-01",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-02",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-02",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-02",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-03",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-03",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-03",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-04",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-04",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-04",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-07",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-07",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-07",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-08",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-08",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-08",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-09",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-09",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-09",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-10",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-10",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-10",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-11",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-11",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-11",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-14",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-14",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-14",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-15",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-15",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-15",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-16",
+      "instrumentCode": "600001.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-16",
+      "instrumentCode": "600002.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    },
+    {
+      "tradeDate": "2026-09-16",
+      "instrumentCode": "600003.SH",
+      "open": 10,
+      "close": 10,
+      "openState": "TRADABLE",
+      "sourceEvidence": "synthetic-flat-price-fixture"
+    }
+  ]
+}

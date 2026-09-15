@@ -28,46 +28,66 @@ import java.util.LinkedHashSet;
 
 @Component
 public class QuantBacktestEngine {
-    private final FactorRegistry registry = new FactorRegistry();
-    private final FactorPreprocessor preprocessor = new FactorPreprocessor();
-    private final FactorProviderRegistry providers;
-
-    public QuantBacktestEngine() { this(FactorProviderRegistry.legacyOnly()); }
     @Autowired
-    public QuantBacktestEngine(FactorProviderRegistry providers) {
-        if (providers == null) throw new IllegalArgumentException("factor provider registry is required");
-        this.providers = providers;
-    }
+    private FactorRegistry registry;
+    private final FactorPreprocessor preprocessor = new FactorPreprocessor();
+    @Autowired
+    private FactorProviderRegistry providers;
 
     public BacktestResult run(BacktestRequest request) {
-        if (request == null || request.getSpec() == null || request.getBars() == null)
+        if (request == null) {
             throw new IllegalArgumentException("回测输入不完整");
+        }
+        return runInternal(request, null, null, new PortfolioLedger(request.getInitialCapital()));
+    }
+
+    BacktestResult runFrozen(BacktestRequest request, Map<LocalDate, Map<String, Double>> targets,
+                             List<LocalDate> calendar, PortfolioLedger ledger) {
+        return runInternal(request, targets, calendar, ledger);
+    }
+
+    private BacktestResult runInternal(BacktestRequest request, Map<LocalDate, Map<String, Double>> frozen,
+                                      List<LocalDate> calendar, PortfolioLedger ledger) {
+        if (request == null || request.getSpec() == null || request.getBars() == null) {
+            throw new IllegalArgumentException("回测输入不完整");
+        }
         QuantStrategySpec spec = request.getSpec();
         List<QuantDailyBar> availableBars = new ArrayList<QuantDailyBar>();
-        for (QuantDailyBar bar : request.getBars())
-            if (spec.getEndDate() == null || !bar.getTradeDate().isAfter(spec.getEndDate())) availableBars.add(bar);
+        for (QuantDailyBar bar : request.getBars()) {
+            if (spec.getEndDate() == null || !bar.getTradeDate().isAfter(spec.getEndDate())) {
+                availableBars.add(bar);
+            }
+        }
         TreeMap<LocalDate, Map<String, QuantDailyBar>> byDate = group(availableBars);
         Map<String, List<QuantDailyBar>> histories = new LinkedHashMap<String, List<QuantDailyBar>>();
-        PortfolioLedger ledger = new PortfolioLedger(request.getInitialCapital());
+        if (calendar != null) {
+            for (LocalDate date : calendar) {
+                byDate.computeIfAbsent(date, key -> new LinkedHashMap<String, QuantDailyBar>());
+            }
+        }
         BacktestResult result = new BacktestResult();
         LocalDate pendingSignal = null;
         Map<String, Double> pendingTargets = null;
         int index = 0, liveIndex = 0, warmupDays = 0;
         int startAt = spec.getFilters() == null ? 0 : spec.getFilters().getMinTradingDays();
-        for (QuantStrategySpec.FactorWeight factor : spec.getFactors())
+        for (QuantStrategySpec.FactorWeight factor : spec.getFactors()) {
             startAt = Math.max(startAt, registry.contains(factor.getCode())
                     ? registry.get(factor.getCode()).getLookbackDays() : providerLookback(factor.getCode()));
+        }
         double benchmarkNav = 1d;
         Map<String, Double> previousClose = new LinkedHashMap<String, Double>();
         Map<LocalDate, Set<String>> universe = universe(request, byDate.keySet());
         Map<String, QuantCapitalFlowDaily> capital = capital(request.getCapitalFlows());
-        if (universe.isEmpty()) result.getWarnings().add("未提供时点股票池，使用当日可见行情标的作为研究范围");
+        if (universe.isEmpty() && frozen == null) {
+            result.getWarnings().add("未提供时点股票池，使用当日可见行情标的作为研究范围");
+        }
         for (Map.Entry<LocalDate, Map<String, QuantDailyBar>> day : byDate.entrySet()) {
             LocalDate date = day.getKey();
             Map<String, QuantDailyBar> bars = day.getValue();
             if (spec.getStartDate() != null && date.isBefore(spec.getStartDate())) {
-                for (QuantDailyBar bar : bars.values())
+                for (QuantDailyBar bar : bars.values()) {
                     histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
+                }
                 index++;
                 warmupDays++;
                 continue;
@@ -76,12 +96,14 @@ public class QuantBacktestEngine {
                 ledger.rebalance(pendingSignal, date, pendingTargets, bars, spec, result.getWarnings());
                 pendingTargets = null;
             }
-            for (QuantDailyBar bar : bars.values())
+            for (QuantDailyBar bar : bars.values()) {
                 histories.computeIfAbsent(bar.getInstrumentCode(), key -> new ArrayList<QuantDailyBar>()).add(bar);
+            }
             Set<String> dayMembers = universe.isEmpty() ? null : universe.getOrDefault(date, java.util.Collections.<String>emptySet());
             benchmarkNav *= benchmarkDailyReturn(bars, previousClose, dayMembers);
-            for (QuantDailyBar bar : bars.values())
+            for (QuantDailyBar bar : bars.values()) {
                 previousClose.put(bar.getInstrumentCode(), bar.getClose().doubleValue());
+            }
             ledger.rememberClose(bars);
             double asset = ledger.totalAsset(bars, false, result.getWarnings(), date);
             EquityPoint point = new EquityPoint();
@@ -93,7 +115,11 @@ public class QuantBacktestEngine {
             result.getEquityCurve().add(point);
             result.getPositions().addAll(ledger.snapshot(date, bars, asset));
             int firstSignal = Math.max(0, startAt - warmupDays);
-            if (index >= startAt && liveIndex >= firstSignal && (liveIndex - firstSignal) % spec.getPortfolio().getRebalanceEvery() == 0
+            if (frozen != null && frozen.containsKey(date)) {
+                pendingTargets = frozen.get(date);
+                pendingSignal = date;
+            }
+            if (frozen == null && index >= startAt && liveIndex >= firstSignal && (liveIndex - firstSignal) % spec.getPortfolio().getRebalanceEvery() == 0
                     && !date.equals(byDate.lastKey())) {
                 pendingTargets = select(date, bars, histories, request.getFundamentals(), spec,
                         result.getWarnings(), dayMembers, request.getDatasetId(), capital,
@@ -104,8 +130,9 @@ public class QuantBacktestEngine {
             liveIndex++;
         }
         result.setTrades(new ArrayList<com.finscope.domain.quant.backtest.BacktestTrade>(ledger.getTrades()));
-        if (!result.getEquityCurve().isEmpty() && result.getTrades().isEmpty())
+        if (!result.getEquityCurve().isEmpty() && result.getTrades().isEmpty()) {
             result.getWarnings().add("策略在回测区间内未产生可执行交易，请检查样本长度、因子覆盖与过滤参数");
+        }
         PerformanceMetrics performance = new PerformanceMetrics();
         result.setMetrics(performance.calculate(result.getEquityCurve(), request.getAnnualRiskFreeRate(), ledger.turnover()));
         result.setAnnualPerformance(performance.annual(result.getEquityCurve()));

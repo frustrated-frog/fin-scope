@@ -41,7 +41,7 @@ class QuantBacktestEngineTest {
         FactorProviderRegistry providers = new FactorProviderRegistry(Arrays.<FactorProvider>asList(
                 new LegacyQuantFactorProvider(), new CapitalFlowFactorProvider()));
 
-        BacktestResult result = new QuantBacktestEngine(providers).run(request);
+        BacktestResult result = engine(providers).run(request);
 
         assertFalse(result.getTrades().isEmpty());
         assertEquals("600002.SH", result.getTrades().get(0).getInstrumentCode());
@@ -55,7 +55,7 @@ class QuantBacktestEngineTest {
         request.setInitialCapital(100000);
         request.setSpec(spec());
         request.setBars(bars(dates));
-        QuantBacktestEngine engine = new QuantBacktestEngine();
+        QuantBacktestEngine engine = engine(FactorProviderRegistry.legacyOnly());
 
         BacktestResult first = engine.run(request);
         BacktestResult second = engine.run(request);
@@ -81,7 +81,7 @@ class QuantBacktestEngineTest {
         QuantUniverseMember fastOut = new QuantUniverseMember(); fastOut.setTradeDate(dates.get(20)); fastOut.setInstrumentCode("600001.SH");
         fastOut.setMember(false); fastOut.setSourceKind("POINT_IN_TIME"); universe.add(fastOut);
         request.setUniverse(universe);
-        BacktestResult result = new QuantBacktestEngine().run(request);
+        BacktestResult result = engine(FactorProviderRegistry.legacyOnly()).run(request);
         assertFalse(result.getTrades().isEmpty());
         assertEquals("600002.SH", result.getTrades().get(0).getInstrumentCode());
         assertTrue(result.getWarnings().stream().noneMatch(value -> value.contains("未提供时点股票池")));
@@ -93,7 +93,7 @@ class QuantBacktestEngineTest {
         values.removeIf(value -> "600001.SH".equals(value.getInstrumentCode()) && dates.get(22).equals(value.getTradeDate()));
         BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
         request.setSpec(spec()); request.setBars(values);
-        BacktestResult result = new QuantBacktestEngine().run(request);
+        BacktestResult result = engine(FactorProviderRegistry.legacyOnly()).run(request);
         assertTrue(result.getWarnings().stream().anyMatch(value -> value.contains("沿用上一有效收盘价")), result.getWarnings().toString());
         assertTrue(result.getEquityCurve().stream().filter(value -> dates.get(22).equals(value.getTradeDate()))
                 .allMatch(value -> value.getPortfolioNav() > 0.8));
@@ -103,9 +103,17 @@ class QuantBacktestEngineTest {
     void keepsPreRangeHistoryForFactorWarmupButStartsEquityAtRequestedDate() {
         List<LocalDate> dates = tradingDates(32); BacktestRequest request = new BacktestRequest(); request.setInitialCapital(100000);
         QuantStrategySpec spec = spec(); spec.setStartDate(dates.get(20)); spec.setEndDate(dates.get(31)); request.setSpec(spec); request.setBars(bars(dates));
-        BacktestResult result = new QuantBacktestEngine().run(request);
+        BacktestResult result = engine(FactorProviderRegistry.legacyOnly()).run(request);
         assertEquals(dates.get(20), result.getEquityCurve().get(0).getTradeDate()); assertEquals(12, result.getEquityCurve().size());
         assertEquals(dates.get(20), result.getTrades().get(0).getSignalDate()); assertEquals(dates.get(21), result.getTrades().get(0).getTradeDate());
+    }
+
+    private QuantBacktestEngine engine(FactorProviderRegistry providers) {
+        QuantBacktestEngine engine = new QuantBacktestEngine();
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "providers", providers);
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "registry",
+                new com.finscope.service.quant.factor.FactorRegistry());
+        return engine;
     }
 
     private QuantStrategySpec spec() {

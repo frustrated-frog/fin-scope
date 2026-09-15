@@ -46,7 +46,7 @@ public class QuantExperimentRunner {
             request.setUniverse(marketData.findUniverseMembers(dataset.getId()));
             request.setDatasetId(String.valueOf(dataset.getId()));
             if (capitalFlows != null) request.setCapitalFlows(capitalFlows.findByDatasetId(dataset.getId()));
-            BacktestResult result = (backtestEngine == null ? new QuantBacktestEngine() : backtestEngine).run(request);
+            BacktestResult result = backtestEngine.run(request);
             persistSuccess(experimentId, result);
             log.info("量化实验完成 experimentId={} durationMs={} trades={}", experimentId, System.currentTimeMillis() - started, result.getTrades().size());
         } catch (Exception ex) {

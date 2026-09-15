@@ -63,6 +63,10 @@ class QuantExperimentPipelineIntegrationTest {
         ReflectionTestUtils.setField(runner, "strategies", strategyService);
         ReflectionTestUtils.setField(runner, "datasets", datasetService);
         ReflectionTestUtils.setField(runner, "marketData", marketData);
+        com.finscope.service.quant.backtest.QuantBacktestEngine engine = new com.finscope.service.quant.backtest.QuantBacktestEngine();
+        ReflectionTestUtils.setField(engine, "providers", com.finscope.service.factorresearch.FactorProviderRegistry.legacyOnly());
+        ReflectionTestUtils.setField(engine, "registry", new com.finscope.service.quant.factor.FactorRegistry());
+        ReflectionTestUtils.setField(runner, "backtestEngine", engine);
         runner.run(experiment.getId());
 
         QuantExperiment completed = experiments.findById(experiment.getId()).orElseThrow(AssertionError::new);
