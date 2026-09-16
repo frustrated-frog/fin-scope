@@ -15,6 +15,10 @@ from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.peer_context import research_context
+from finscope_market_data.overnight.models import OvernightRequest
+from finscope_market_data.overnight.provider import OvernightMinuteProvider
+from finscope_market_data.overnight.store import OvernightStore
+from finscope_market_data.overnight.service import OvernightService
 from finscope_market_data.discovery.event_provider import MarketEventProvider
 from finscope_market_data.discovery.recall_archive import DiscoveryRecallArchive
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
@@ -121,6 +125,7 @@ def create_app(
     config = settings or Settings()
     panel_store = PanelArtifactStore(config.data_dir / "quant")
     joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
+    overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -384,6 +389,18 @@ def create_app(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
         )
+
+    @application.post("/v1/quant/overnight/generate")
+    async def generate_overnight(request: OvernightRequest):
+        return await asyncio.to_thread(overnight.generate, request)
+
+    @application.get("/v1/quant/overnight/history")
+    async def overnight_history():
+        return await asyncio.to_thread(overnight.store.history)
+
+    @application.post("/v1/quant/overnight/settle")
+    async def settle_overnight():
+        return await asyncio.to_thread(overnight.refresh_outcomes)
 
     @application.post("/v1/quant/holding-strategies/evaluate")
     async def holding_strategy(
