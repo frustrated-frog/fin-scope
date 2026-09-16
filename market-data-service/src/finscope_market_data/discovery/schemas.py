@@ -18,6 +18,9 @@ class DiscoveryRequest(BaseModel):
         extra="forbid",
     )
 
+    sector_seat_cap: int = Field(default=3, ge=1, le=10)
+    strong_seat_share: float = Field(default=0.4, gt=0, lt=1)
+    event_scan_limit: int = Field(default=160, ge=20, le=500)
     business_date: str | None = None
     budget: float = Field(default=6000.0, gt=0)
     sector_limit: int = Field(default=5, ge=1, le=10)
@@ -64,6 +67,8 @@ class DiscoverySector(BaseModel):
 
 
 class DiscoveryCandidate(BaseModel):
+    research_lane: Literal["STABLE_TREND", "SHORT_TERM_STRENGTH"] | None = None
+    discovery_sources: list[str] = Field(default_factory=list)
     code: str
     market: Literal["SH", "SZ"]
     name: str
@@ -125,6 +130,9 @@ class DiscoveryFunnel(BaseModel):
 
 
 class DiscoveryReport(BaseModel):
+    discovery_audit: dict[str, object] = Field(default_factory=dict)
+    strength_watchlist: list[dict[str, object]] = Field(default_factory=list)
+    stable_candidates: list[DeepCandidateEvidence] = Field(default_factory=list)
     joint_training: dict[str, object] | None = None
     schema_version: str = "1.0.0"
     policy_version: str

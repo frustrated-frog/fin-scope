@@ -15,6 +15,7 @@ from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.peer_context import research_context
+from finscope_market_data.discovery.event_provider import MarketEventProvider
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
 from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 from finscope_market_data.discovery.schemas import (
@@ -140,6 +141,7 @@ def create_app(
                     )
                 )
             application.state.discovery = StockDiscoveryService(
+                event_provider=MarketEventProvider(config.data_dir / "discovery-events"),
                 providers=[
                     TonghuashunHotSectorProvider(),
                 ],

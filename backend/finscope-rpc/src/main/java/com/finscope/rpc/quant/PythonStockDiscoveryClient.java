@@ -72,13 +72,17 @@ public class PythonStockDiscoveryClient {
         if (report == null || !"1.0.0".equals(report.getSchemaVersion())
                 || !policyVersion.equals(report.getPolicyVersion()) || report.getAsOfDate() == null
                 || report.getSourceFamily() == null || report.getQualityStatus() == null
-                || !"TONGHUASHUN".equals(report.getSourceFamily())
+                || !("TONGHUASHUN".equals(report.getSourceFamily())
+                || "EASTMONEY_EVENTS".equals(report.getSourceFamily())
+                && "EVENT_ONLY".equals(report.getSourceCode())
+                && "PARTIAL_FRESH".equals(report.getQualityStatus()))
                 || report.getDataFingerprint() == null
                 || !report.getDataFingerprint().matches("[0-9a-f]{64}")
                 || report.getFunnel() == null || report.getFinalCandidates() == null
                 || report.getRelativeCandidates() == null
                 || report.getCandidates() == null || report.getDeepEvidence() == null
-                || report.getSectors() == null || report.getSectors().isEmpty()
+                || report.getSectors() == null
+                || report.getSectors().isEmpty() && !"EASTMONEY_EVENTS".equals(report.getSourceFamily())
                 || report.getConstituentSourceFamilies() == null
                 || report.getConstituentSourceFamilies().isEmpty()
                 || !allowedConstituentQuality(report.getConstituentQualityStatus())

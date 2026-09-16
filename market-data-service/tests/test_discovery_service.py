@@ -773,3 +773,26 @@ async def test_hung_hot_sector_provider_falls_back_to_existing_snapshot(tmp_path
     result = await service._universe(5)
     assert result.members
     assert any('失败' in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_independent_event_pool_survives_hot_sector_failure_and_audits_rejections():
+    class Events:
+        def scan(self, day, limit):
+            return {'status': 'PARTIAL', 'as_of_date': day, 'warnings': [], 'members': [
+                {'code': '605058', 'name': '澳弘电子', 'industry': '元件', 'sources': ['LIMIT_UP']},
+                {'code': '688001', 'name': '权限外', 'industry': '元件', 'sources': ['LIMIT_UP']},
+            ]}
+    service = StockDiscoveryService([BrokenProvider()], FakeMarket(),
+        forecast_builder=lambda *args: {}, event_provider=Events(), provider_attempts=1)
+    # Deliberately reject the stock for budget; the event remains visible for research.
+    day = (date(2023, 1, 1) + timedelta(days=799)).isoformat()
+    report = await service.discover(DiscoveryRequest(business_date=day, budget=100))
+    assert report.source_family == 'EASTMONEY_EVENTS'
+    assert report.funnel.raw_constituent_count == 2
+    assert report.funnel.scope_excluded_count == 1
+    assert report.funnel.constituent_count == 1
+    assert report.strength_watchlist[0]['code'] == '605058'
+    assert report.strength_watchlist[0]['rejection_reasons'] == ['OVER_BUDGET']
+    assert report.discovery_audit['misses'][0]['reasons'] == ['OVER_BUDGET']
+    assert report.final_candidates == []

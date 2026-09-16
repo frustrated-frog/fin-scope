@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from datetime import date, datetime
 import hashlib
 import json
@@ -10,6 +10,9 @@ from pathlib import Path
 import time
 from typing import Awaitable, Callable, Mapping, Protocol, Sequence
 
+from finscope_market_data.discovery.strength import (
+    strength_features, select_research_targets, assess_strength, discovery_audit,
+)
 from finscope_market_data.discovery.providers import HotSectorProvider
 from finscope_market_data.discovery.constituents import (
     ConstituentBatch,
@@ -112,7 +115,9 @@ class StockDiscoveryService:
         joint_store: JointSnapshotStore | None = None,
         training_store: SnapshotStore | None = None,
         provider_timeout_seconds: float = 30.0,
+        event_provider=None,
     ) -> None:
+        self.event_provider = event_provider
         self.providers = tuple(providers)
         self.market = market
         self.forecast_builder = forecast_builder or _forecast
@@ -139,13 +144,34 @@ class StockDiscoveryService:
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
-        universe = await self._universe(request.sector_limit)
+        scan = {'status': 'UNAVAILABLE', 'members': [], 'warnings': ['未配置全市场事件源']}
+        if self.event_provider is not None and request.business_date:
+            try:
+                scan = await asyncio.wait_for(asyncio.to_thread(
+                    self.event_provider.scan, request.business_date, request.event_scan_limit,
+                ), timeout=self.provider_timeout_seconds * 3)
+            except Exception as error:
+                scan['warnings'] = [f'全市场事件扫描失败：{_safe(error)}']
+        try:
+            universe = await self._universe(request.sector_limit)
+        except RuntimeError as error:
+            if not scan.get('members'):
+                raise
+            universe = DiscoveryUniverse([], SnapshotHotSectorProvider('EVENT_ONLY', 'EASTMONEY_EVENTS'),
+                {}, [f'热门行业不可用，使用独立事件池：{_safe(error)}'], 0, {}, (), 'PARTIAL')
+        universe = self._merge_events(universe, scan)
         sectors = universe.sectors
         provider = universe.provider
         members = universe.members
         warnings = universe.warnings
         market_bars = await self._market_context(request, warnings)
         candidates, bars_by_code = await self._admit(members, request, warnings)
+        event_sources = {item['code']: item['sources'] for item in scan.get('members', [])}
+        for candidate in candidates:
+            candidate.discovery_sources = event_sources.get(candidate.code, ['HOT_SECTOR'])
+            candidate.factors.update(strength_features(bars_by_code.get(candidate.code, ()), candidate.code))
+            if candidate.code in event_sources:
+                candidate.factors['event_active'] = 1.
         candidates = enrich_context_factors(candidates, sectors)
         joint_snapshot = await asyncio.to_thread(
             self._train_joint_snapshot,
@@ -163,7 +189,8 @@ class StockDiscoveryService:
         by_code = {item.code: item for item in candidates}
         for ranked in lightweight:
             by_code[ranked.code] = ranked
-        deep_targets = lightweight[: request.deep_limit]
+        deep_targets = select_research_targets(lightweight, request.deep_limit,
+                                               request.sector_seat_cap, request.strong_seat_share)
         deep = await self._deep(
             deep_targets,
             bars_by_code,
@@ -173,6 +200,20 @@ class StockDiscoveryService:
             market_bars,
             joint_snapshot,
         )
+        stable_codes = {item.code for item in deep_targets if item.research_lane == 'STABLE_TREND'}
+        stable = rank_relative_candidates([item for item in deep if item.code in stable_codes], request.final_limit)
+        strength_watchlist = []
+        for item in sorted(candidates, key=lambda x: (-x.factors.get('strength_score', 0), x.code)):
+            if not item.factors.get('event_active'):
+                continue
+            bars = bars_by_code.get(item.code, ())
+            assessment = assess_strength(bars, item.code, [bar.trade_date for bar in market_bars])
+            if request.business_date and (not bars or bars[-1].trade_date != request.business_date):
+                assessment = {'status': 'STALE_DATA', 'sample_count': 0,
+                              'execution_status': 'UNVERIFIED', 'qualified': False}
+            strength_watchlist.append({'code': item.code, 'name': item.name,
+                'sources': item.discovery_sources, 'admitted': item.admitted,
+                'rejection_reasons': item.rejection_reasons, 'assessment': assessment})
         final = rank_deep_candidates(deep, request.final_limit)
         relative = rank_relative_candidates(deep, request.final_limit)
         as_of = max(
@@ -189,6 +230,8 @@ class StockDiscoveryService:
         )
         fingerprint_payload = {
             "as_of": as_of,
+            "event_scan": scan,
+            "selection_policy": {"sector_cap": request.sector_seat_cap, "strong_share": request.strong_seat_share},
             "sectors": [
                 item.model_dump(mode="json", exclude={"retrieved_at"})
                 for item in sectors
@@ -199,6 +242,9 @@ class StockDiscoveryService:
             json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
         return DiscoveryReport(
+            discovery_audit=discovery_audit(candidates, deep_targets, deep, scan),
+            strength_watchlist=strength_watchlist,
+            stable_candidates=stable,
             joint_training=joint_snapshot['evidence'] if joint_snapshot else None,
             policy_version=request.policy_version,
             as_of_date=as_of,
@@ -266,6 +312,30 @@ class StockDiscoveryService:
         except Exception as error:
             warnings.append(f"沪深300历史上下文不可用，市场因子已降级：{_safe(error)}")
             return ()
+
+    def _merge_events(self, universe, scan):
+        members = dict(universe.members)
+        exclusions = dict(universe.scope_exclusions)
+        added = 0
+        industry_codes = {sector.name: sector.code for sector in universe.sectors}
+        for event in scan.get('members', []):
+            code = event['code']
+            if code in members:
+                continue
+            added += 1
+            decision = self.trading_scope.classify(code)
+            if not decision.allowed:
+                exclusions[decision.reason] = exclusions.get(decision.reason, 0) + 1
+                continue
+            industry = event.get('industry') or '行业未知'
+            sector_code = industry_codes.get(industry, 'EVENT:' + industry)
+            members[code] = (decision.market, event['name'], {sector_code}, {industry})
+        return replace(universe, members=members,
+            raw_constituent_count=universe.raw_constituent_count + added,
+            scope_exclusions=exclusions,
+            warnings=universe.warnings + scan.get('warnings', []),
+            constituent_sources=tuple(dict.fromkeys((*universe.constituent_sources,
+                *(['EASTMONEY_EVENTS'] if scan.get('members') else [])))))
 
     async def _universe(self, limit: int) -> DiscoveryUniverse:
         warnings: list[str] = []
@@ -540,6 +610,8 @@ class StockDiscoveryService:
         })
 
     def _quality_status(self, universe: DiscoveryUniverse) -> str:
+        if universe.provider.source_family == "EASTMONEY_EVENTS":
+            return "PARTIAL_FRESH"
         if isinstance(universe.provider, SnapshotHotSectorProvider):
             return "STALE_FALLBACK"
         if universe.constituent_quality_status == "PARTIAL":

@@ -141,6 +141,34 @@ class PythonStockDiscoveryClientTest {
                 .discover(LocalDate.of(2026, 8, 14), 6000d, "stock-discovery-v2"));
     }
 
+    @Test
+    void mapsEventResearchWithoutRequiringHotSectors() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var node = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(payload());
+        node.put("source_family", "EASTMONEY_EVENTS");
+        node.put("source_code", "EVENT_ONLY");
+        node.put("quality_status", "PARTIAL_FRESH");
+        node.putArray("sectors");
+        node.putObject("discovery_audit").put("event_count", 1);
+        node.putArray("strength_watchlist").addObject().put("code", "605058");
+        FinanceHttpClient http = new FinanceHttpClient() {
+            @Override
+            public FinanceHttpResponse get(String providerCode, URI uri, Map<String, String> headers) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FinanceHttpResponse postJson(String providerCode, URI uri, String body,
+                                                 Map<String, String> headers, int timeoutMs, int maxBytes) {
+                return new FinanceHttpResponse(200, node.toString(), Instant.now(), "hash");
+            }
+        };
+        var report = new PythonStockDiscoveryClient("http://localhost:8001", http, 3000)
+                .discover(LocalDate.of(2026, 8, 14), 6000, "stock-discovery-v2");
+        assertEquals(1, report.getDiscoveryAudit().get("event_count"));
+        assertEquals("605058", report.getStrengthWatchlist().get(0).get("code"));
+    }
+
     private String payload() {
         return "{\"joint_training\":{\"trainingUniverseCount\":1200,\"rankingTarget\":\"MARKET_RESIDUAL\"},\"schema_version\":\"1.0.0\",\"policy_version\":\"stock-discovery-v2\","
                 + "\"as_of_date\":\"2026-08-14\",\"source_code\":\"THS\",\"source_family\":\"TONGHUASHUN\","
