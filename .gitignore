@@ -3,6 +3,8 @@
 # Local data and secrets
 data/finance.db
 data/finance.db-*
+**/overnight-research.db
+**/overnight-research.db-*
 data/raw/
 data/exports/
 data/financials/
