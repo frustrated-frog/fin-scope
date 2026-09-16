@@ -28,3 +28,24 @@ test('shows rejected events, uncertainty and losses without promoting them to bu
   await userEvent.click(screen.getByRole('button', { name: '澳弘电子 605058' }));
   expect(onOpenResearch).toHaveBeenCalledWith('605058');
 });
+
+test('filters the whole pool across pages and recovers from empty results', async () => {
+  const items = Array.from({ length: 10 }, (_, index) => ({
+    code: String(600000 + index), name: `观察股票${index}`, sources: [index === 9 ? 'BROKEN_LIMIT' : 'LIMIT_UP'],
+    admitted: false, rejection_reasons: [], assessment: { status: 'INSUFFICIENT_DATA', sample_count: 0, execution_status: 'UNVERIFIED' },
+  }));
+  const user = userEvent.setup();
+  render(<StrengthDiscoveryPanel report={{ as_of_date: '2026-09-16', strength_watchlist: items } as StockDiscoveryReport} onOpenResearch={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: '观察股票9 600009' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '下一页' }));
+  expect(screen.getByRole('button', { name: '观察股票9 600009' })).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('事件来源'), 'BROKEN_LIMIT');
+  expect(screen.getByText('找到 1 只')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
+  await user.type(screen.getByRole('searchbox', { name: '查找股票' }), '不存在');
+  expect(screen.getByText('没有匹配的股票')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '清除筛选' }));
+  expect(screen.getByText('找到 10 只')).toBeInTheDocument();
+  await user.type(screen.getByRole('searchbox', { name: '查找股票' }), '600009');
+  expect(screen.getByRole('button', { name: '观察股票9 600009' })).toBeInTheDocument();
+});
