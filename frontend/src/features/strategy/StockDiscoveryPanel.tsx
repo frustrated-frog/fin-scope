@@ -14,6 +14,7 @@ import { StockDiscoveryAccuracyPanel } from './StockDiscoveryAccuracyPanel';
 import './StockDiscoveryMarketContext.css';
 import { DirectionEvidence, NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
 import { DirectionResearchComparison } from './DirectionResearchComparison';
+import { StrengthDiscoveryPanel } from './StrengthDiscoveryPanel';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -131,7 +132,12 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
   const candidates = useMemo(() => new Map(report?.candidates.map(item => [item.code, item]) ?? []), [report]);
   const finalCodes = useMemo(() => new Set(report?.final_candidates.map(item => item.code) ?? []), [report]);
   const researchCandidates = useMemo(() => {
-    if (report?.relative_candidates?.length) return report.relative_candidates;
+    if (report?.stable_candidates !== undefined) {
+      return report.stable_candidates;
+    }
+    if (report?.relative_candidates?.length) {
+      return report.relative_candidates;
+    }
     return report?.final_candidates ?? [];
   }, [report]);
 
@@ -142,7 +148,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
       {marketContext && <StockDiscoveryMarketContextPanel context={marketContext} />}
       <span>AUTOMATED MARKET SCAN</span>
       <h3>{failed ? '暂时无法读取发现结果' : businessFailed ? (delivered ? '任务已送达，业务计算失败' : '任务等待重新投递') : '第一份收盘研究正在路上'}</h3>
-      <p>{businessFailed ? statusDetail?.errorMessage ?? '股票发现业务计算暂未完成' : '系统会在交易日收盘后自动读取热门板块、校验一手资金约束、量化全部候选，并只保留通过严格门禁的前五名。你不需要点击运行。'}</p>
+      <p>{businessFailed ? statusDetail?.errorMessage ?? '股票发现业务计算暂未完成' : '系统在交易日收盘后扫描热门行业和强势事件，分别展示研究名单与严格合格结果。'}</p>
       <div><i data-status={runningStatus} /><b>{runningStatus === 'RUNNING' ? '后台正在深度预测' : businessFailed && statusDetail?.retryPending ? '系统会自动重试；热点雷达不受本次失败影响' : '每天 15:30 自动执行，启动时自动补跑'}</b></div>
       {businessFailed && statusDetail?.nextScheduledAt ? <small>下次自动调度：{statusDetail.nextScheduledAt}</small> : null}
     </section>;
@@ -150,11 +156,18 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
 
   return <section className="stock-discovery">
     <header className="discovery-head">
-      <div><p>STOCK DISCOVERY / AUTOPILOT</p><h3>市场已经替你跑完一遍</h3><span>不是按股价挑便宜股票。系统先量化所有买得起一手的热门板块候选，再从深度预测中留下真正更有优势的结果。</span></div>
+      <div><p>STOCK DISCOVERY / AUTOPILOT</p><h3>股票发现与研究观察</h3><span>热门行业与独立强势事件共同提供候选；稳健趋势和短期强势分别研究，通过严格门禁才形成合格结果。</span></div>
       <aside><i data-status={runningStatus} /><small>{runningStatus === 'RUNNING' ? '新批次计算中' : 'LATEST VERIFIED CLOSE'}</small><strong>{report.as_of_date}</strong><span>{report.source_family} · {report.quality_status === 'FRESH_PRIMARY' ? '主数据源新鲜' : '备用源结果'}</span></aside>
     </header>
 
+    <section className="discovery-run-note" aria-label="研究结果日期">
+      <p>当前展示 {report.as_of_date} 的已完成研究 · 生成于 {report.retrieved_at}。</p>
+      {statusDetail?.businessDate && (statusDetail.businessDate > report.as_of_date || runningStatus === 'RUNNING') &&
+        <p>最新任务日期 {statusDetail.businessDate}，{runningStatus === 'RUNNING' ? '正在计算' : '尚未产生新的成功结果'}；当前名单仍属于上述日期。</p>}
+      {!report.strength_watchlist && <p>这是旧版批次，尚未包含独立强势股扫描和漏选审计。</p>}
+    </section>
     {marketContext && <StockDiscoveryMarketContextPanel context={marketContext} />}
+    <StrengthDiscoveryPanel report={report} onOpenResearch={onOpenResearch} />
 
     <DiscoveryFunnel funnel={report.funnel} />
     <DirectionResearchComparison />
@@ -169,7 +182,7 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
       <NextSessionOutcomeHistory />
 
     <section className="discovery-provenance" aria-label="股票发现数据来源与交易范围">
-      <article><span>RANKING AUTHORITY</span><strong>同花顺唯一热榜</strong><small><b>净流入降序</b> · 行业板块</small></article>
+      <article><span>RANKING AUTHORITY</span><strong>{report.source_family === 'EASTMONEY_EVENTS' ? '仅事件池，行业榜不可用' : report.strength_watchlist ? '同花顺行业榜 + 独立事件池' : '同花顺行业榜'}</strong><small><b>净流入降序</b> · 行业板块</small></article>
       <article><span>CONSTITUENT EVIDENCE</span><strong>{(report.constituent_source_families ?? []).map(constituentSource).join(' + ') || '来源待确认'}</strong><small>{constituentQuality(report.constituent_quality_status)}</small></article>
       <article><span>ACCOUNT SCOPE</span><strong>权限范围剔除 {report.funnel.scope_excluded_count ?? 0} 只</strong><small>科创板 {report.funnel.star_market_excluded_count ?? 0} · 北交所 {report.funnel.beijing_market_excluded_count ?? 0}</small></article>
     </section>
@@ -187,8 +200,8 @@ export function StockDiscoveryPanel({ addToast, setMessage, onOpenResearch, mark
 
     <div className="discovery-layout">
       <main>
-        <div className="discovery-section-title"><div><span>RELATIVE RESEARCH SHORTLIST</span><h4>相对优势 Top 5</h4></div><p>从全部深度候选中排序，不把相对领先包装成买入结论</p></div>
-        <div className="discovery-action-gate" data-empty={!report.final_candidates.length || undefined}><div><span>STRICT ACTION GATE</span><strong>严格可行动 {report.final_candidates.length}</strong></div><p>{report.final_candidates.length ? `其中 ${report.final_candidates.map(item => candidates.get(item.code)?.name ?? item.code).join('、')} 通过全部概率、回测、稳定性门禁。` : '本轮无人通过绝对门禁；下方仍展示最值得继续研究的五只，但全部不是买入信号。'}</p></div>
+        <div className="discovery-section-title"><div><span>RELATIVE RESEARCH SHORTLIST</span><h4>{report.stable_candidates !== undefined ? '稳健趋势研究' : '相对优势 Top 5'}</h4></div><p>从全部深度候选中排序，不把相对领先包装成买入结论</p></div>
+        <div className="discovery-action-gate" data-empty={!report.final_candidates.length || undefined}><div><span>STRICT ACTION GATE</span><strong>严格可行动 {report.final_candidates.length}</strong></div><p>{report.final_candidates.length ? `其中 ${report.final_candidates.map(item => candidates.get(item.code)?.name ?? item.code).join('、')} 通过全部概率、回测、稳定性门禁。` : '本轮无人通过绝对门禁；观察名单仅表示研究优先级，不代表已有预测优势。'}</p></div>
         <div className="discovery-final-list">{researchCandidates.length
           ? researchCandidates.map(item => <CandidateCard key={item.code} evidence={item} candidate={candidates.get(item.code)} held={heldCodes.has(item.code)} onOpenResearch={code => onOpenResearch?.(code)} />)
           : <div className="discovery-no-edge"><strong>深度样本暂不可用</strong><p>本批次没有形成可比较的深度证据，系统不会输出空洞排序。</p></div>}</div>

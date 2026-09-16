@@ -116,7 +116,9 @@ class StockDiscoveryService:
         training_store: SnapshotStore | None = None,
         provider_timeout_seconds: float = 30.0,
         event_provider=None,
+        recall_archive=None,
     ) -> None:
+        self.recall_archive = recall_archive
         self.event_provider = event_provider
         self.providers = tuple(providers)
         self.market = market
@@ -241,7 +243,7 @@ class StockDiscoveryService:
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
-        return DiscoveryReport(
+        report = DiscoveryReport(
             discovery_audit=discovery_audit(candidates, deep_targets, deep, scan),
             strength_watchlist=strength_watchlist,
             stable_candidates=stable,
@@ -282,6 +284,14 @@ class StockDiscoveryService:
             warnings=warnings,
             duration_ms=round((time.monotonic() - started) * 1000),
         )
+
+        if self.recall_archive is not None:
+            try:
+                report.recall_evaluations = await asyncio.to_thread(
+                    self.recall_archive.update, report.model_dump(mode='json'))
+            except Exception as error:
+                report.warnings.append(f'漏选评测暂不可用：{_safe(error)}')
+        return report
 
     async def _market_context(
         self,

@@ -130,6 +130,7 @@ class DiscoveryFunnel(BaseModel):
 
 
 class DiscoveryReport(BaseModel):
+    recall_evaluations: list[dict[str, object]] = Field(default_factory=list)
     discovery_audit: dict[str, object] = Field(default_factory=dict)
     strength_watchlist: list[dict[str, object]] = Field(default_factory=list)
     stable_candidates: list[DeepCandidateEvidence] = Field(default_factory=list)

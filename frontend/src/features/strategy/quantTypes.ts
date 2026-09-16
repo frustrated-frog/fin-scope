@@ -556,7 +556,31 @@ export interface StockDiscoveryEvidence {
   evidence: string[]; risks: string[]; forecast_report?: SingleStockForecast;
 }
 
+export interface StrengthAssessment {
+  status: string; sample_count: number; as_of_date?: string;
+  up_probability?: number; up_interval?: number[]; fade_probability?: number;
+  continuation_probability?: number; limit_like_probability?: number; one_price_limit_rate?: number;
+  mean_return?: number; mean_open_to_close_return?: number; loss_rate?: number;
+  validation_count?: number; brier_score?: number; baseline_brier_score?: number;
+  execution_status: string; execution_note?: string; features?: Record<string, number>;
+}
+
+export interface DiscoveryRecallEvaluation {
+  status: string; signal_date: string; target_date?: string; evidence_kind?: string;
+  covered_count?: number; winner_count?: number; event_recall?: number; deep_recall?: number;
+  event_count?: number; event_loss_rate?: number; event_fade_rate?: number; event_brier?: number;
+  missed_winners?: Array<{ code: string; actual_return: number; reason: string }>;
+}
+
 export interface StockDiscoveryReport {
+  stable_candidates?: StockDiscoveryEvidence[];
+  strength_watchlist?: Array<{ code: string; name: string; sources: string[];
+    admitted: boolean; rejection_reasons: string[]; assessment: StrengthAssessment }>;
+  discovery_audit?: { event_count: number; event_deep_count: number;
+    sector_seats: Record<string, number>; misses: Array<{ code: string; name: string; reasons: string[] }>;
+    scan: { status: string; event_count?: number; truncated_count?: number;
+      source_counts?: Record<string, number>; warnings?: string[] } };
+  recall_evaluations?: DiscoveryRecallEvaluation[];
   joint_training?: Pick<NextSessionJointEvidence, 'directionEvaluation' | 'trainingUniverseCount' | 'displayUniverseCount' | 'universeCount' | 'industryCoverage' | 'featureCount' | 'returnTarget' | 'rankingTarget' | 'evidenceKind' | 'pooledBrierScore' | 'baselineBrierScore' | 'rankIc'>;
   as_of_date: string; source_family: string; quality_status: string; retrieved_at: string;
   budget: number; duration_ms: number; warnings: string[];

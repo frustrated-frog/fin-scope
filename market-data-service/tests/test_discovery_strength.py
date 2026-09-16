@@ -90,3 +90,27 @@ def test_before_close_never_freezes_live_event_prices(tmp_path):
     provider = MarketEventProvider(tmp_path, lambda *args: pytest.fail('not a close'),
                                    lambda: datetime(2026, 9, 16, 10))
     assert provider.scan('2026-09-16')['status'] == 'BEFORE_CLOSE'
+
+
+def test_frozen_scan_retains_full_input_when_request_limit_changes(tmp_path):
+    provider = MarketEventProvider(tmp_path, lambda kind, day: [
+        {'代码':f'600{i:03}', '名称':str(i), '涨跌幅':7} for i in range(10)],
+        lambda: datetime(2026, 9, 16, 16))
+    small = provider.scan('2026-09-16', 2)
+    assert len(small['members']) == 2
+    assert small['truncated_count'] == 8
+    assert len(provider.scan('2026-09-16', 8)['members']) == 8
+
+
+def test_strength_continuation_and_execution_risk_are_distinct_from_direction():
+    values = bars(160)
+    for i, bar in enumerate(values):
+        bar.low = min(bar.open, bar.close)
+        # Known historical event outcomes include a gap to a single traded price.
+        if i % 6 == 1:
+            bar.close = values[i - 1].close * 1.1
+            bar.open = bar.high = bar.low = bar.close
+    result = assess_strength(values, '605058', [x.trade_date for x in values])
+    assert result['continuation_probability'] <= result['up_probability']
+    assert result['one_price_limit_rate'] > 0
+    assert result['execution_status'] == 'UNVERIFIED'

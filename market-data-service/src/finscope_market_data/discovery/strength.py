@@ -85,7 +85,11 @@ def assess_strength(bars, code: str, calendar):
         if bool(current.get('limit_like_streak')) != bool(factors['limit_like_streak']):
             continue
         records.append({'signal_date': signal.trade_date, 'outcome_date': outcome.trade_date,
-                        'up': ret > 0, 'return': ret,
+                        'up': ret > 0, 'return': ret, 'continuation': ret >= .03,
+                        'limit_like': ret >= (.195 if code.startswith(('300', '301')) else .095),
+                        'one_price_limit': (ret >= (.195 if code.startswith(('300', '301')) else .095)
+                            and abs(float(outcome.high) - float(outcome.low)) < .005)
+                            if getattr(outcome, 'low', None) is not None else None,
                         'fade': float(outcome.high) / float(signal.close) - 1 >= .03
                                 and float(outcome.close) < float(outcome.open),
                         'open_to_close': float(outcome.close) / float(outcome.open) - 1})
@@ -100,23 +104,27 @@ def assess_strength(bars, code: str, calendar):
     n = len(records)
     up = sum(x['up'] for x in records)
     result.update(up_probability=up / n, up_interval=_interval(up, n),
+                  continuation_probability=sum(x['continuation'] for x in records) / n,
+                  limit_like_probability=sum(x['limit_like'] for x in records) / n,
                   fade_probability=sum(x['fade'] for x in records) / n,
                   mean_return=statistics.fmean(x['return'] for x in records),
                   mean_open_to_close_return=statistics.fmean(x['open_to_close'] for x in records),
                   loss_rate=sum(x['return'] <= 0 for x in records) / n,
                   training_through=records[-1]['outcome_date'])
+    one_price = [x['one_price_limit'] for x in records if x['one_price_limit'] is not None]
+    result['one_price_limit_rate'] = statistics.fmean(one_price) if one_price else None
     # Expanding origin evaluation; no label from the held-out event enters its estimate.
     checks, baselines = [], []
     for index in range(20, n):
         past = records[:index]
-        probability = (sum(x['up'] for x in past) + 1) / (len(past) + 2)
+        probability = sum(x['up'] for x in past) / len(past)
         current_record = records[index]
         matured = [x for x in past if x['outcome_date'] <= current_record['signal_date']]
         if len(matured) != len(past):
             continue
         checks.append((probability - float(current_record['up'])) ** 2)
         baseline_returns = [ret for day, ret in all_returns if day <= current_record['signal_date']]
-        baseline = (sum(ret > 0 for ret in baseline_returns) + 1) / (len(baseline_returns) + 2)
+        baseline = sum(ret > 0 for ret in baseline_returns) / len(baseline_returns)
         baselines.append((baseline - float(current_record['up'])) ** 2)
     result['validation_count'] = len(checks)
     result['brier_score'] = statistics.fmean(checks) if checks else None
@@ -129,7 +137,7 @@ def discovery_audit(candidates, targets, deep, scan):
     chosen = {x.code for x in targets}
     completed = {x.code for x in deep}
     events = [x for x in candidates if x.factors.get('event_active')]
-    return {'method': 'discovery-recall-v1', 'scan': scan,
+    return {'method': 'discovery-recall-v1', 'selection_method': 'dual-lane-v1', 'scan': scan,
             'event_count': len(events), 'event_deep_count': sum(x.code in completed for x in events),
             'sector_seats': dict(Counter(s for x in targets for s in (x.sector_names or ['行业未知']))),
             'misses': [{'code': x.code, 'name': x.name,

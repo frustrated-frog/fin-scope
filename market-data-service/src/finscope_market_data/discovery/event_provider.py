@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 import json
 import math
 
+from finscope_market_data.discovery.evidence_io import freeze_json
+
 
 class MarketEventProvider:
     def __init__(self, snapshot_dir: Path, loader=None, now=None):
@@ -33,7 +35,7 @@ class MarketEventProvider:
         if path.exists():
             frozen = json.loads(path.read_text())
             if frozen.get('as_of_date') == day and frozen.get('method') == 'market-events-v1':
-                return frozen
+                return _bounded(frozen, limit)
         members, warnings, coverage = {}, [], {}
         kinds = ['LIMIT_UP', 'BROKEN_LIMIT']
         if day == now.date().isoformat():
@@ -43,6 +45,8 @@ class MarketEventProvider:
         for kind in kinds:
             try:
                 rows = self.loader(kind, day)
+                if kind == 'SPOT' and not rows:
+                    raise ValueError('全市场行情为空')
                 coverage[kind] = len(rows)
                 for row in rows:
                     code = str(row.get('代码', '')).zfill(6)
@@ -62,17 +66,17 @@ class MarketEventProvider:
             'LIMIT_UP' not in x['sources'], 'BROKEN_LIMIT' not in x['sources'], -x['change_pct'], x['code']))
         result = {'method': 'market-events-v1', 'as_of_date': day, 'retrieved_at': now.isoformat(),
                   'status': 'COMPLETE' if len(coverage) == 3 else 'PARTIAL' if coverage else 'UNAVAILABLE',
-                  'source_counts': coverage, 'event_count': len(ordered), 'truncated_count': max(0, len(ordered) - limit),
-                  'members': ordered[:limit], 'warnings': warnings}
+                  'source_counts': coverage, 'event_count': len(ordered), 'truncated_count': 0,
+                  'members': ordered, 'warnings': warnings}
         # A partial fetch must remain retryable; completed dated evidence is immutable.
         if result['status'] == 'COMPLETE':
-            self.snapshot_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                with path.open('x') as stream:
-                    json.dump(result, stream, ensure_ascii=False)
-            except FileExistsError:
-                return json.loads(path.read_text())
-        return result
+            result = freeze_json(path, result)
+        return _bounded(result, limit)
+
+
+def _bounded(result, limit):
+    return {**result, 'members': result['members'][:limit],
+            'truncated_count': max(0, len(result['members']) - limit)}
 
 
 def _number(value):

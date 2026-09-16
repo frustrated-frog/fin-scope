@@ -1,0 +1,11 @@
+.strength-discovery { margin: 20px 0; padding: 20px; border: 1px solid var(--border-color, #d8dde3); border-radius: 12px; }
+.strength-discovery header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; }
+.strength-discovery h3 { margin: 0; }
+.strength-discovery p, .strength-discovery small { color: var(--text-secondary, #64748b); line-height: 1.6; }
+.strength-table-scroll { overflow-x: auto; max-height: 520px; }
+.strength-discovery table { border-collapse: collapse; width: 100%; min-width: 680px; text-align: left; }
+.strength-discovery th, .strength-discovery td { padding: 12px 10px; border-bottom: 1px solid var(--border-color, #d8dde3); vertical-align: top; }
+.strength-discovery small { display: block; }
+.strength-discovery td button { border: 0; background: transparent; padding: 0; color: inherit; font-weight: 600; cursor: pointer; }
+.strength-discovery details { margin-top: 16px; }
+.strength-discovery summary { cursor: pointer; }

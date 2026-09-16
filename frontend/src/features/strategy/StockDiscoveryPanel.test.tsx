@@ -16,7 +16,7 @@ test('presents the latest automatic selection without a manual refresh action', 
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path === '/api/quant/stock-discoveries/status') {
-      return apiResponse({ status: 'SUCCEEDED', runId: 9, businessDate: '2026-08-14' });
+      return apiResponse({ status: 'RUNNING', runId: 10, businessDate: '2026-08-17' });
     }
     if (path === '/api/quant/stock-discoveries/accuracy') {
       return apiResponse({
@@ -79,7 +79,9 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();
   expect(screen.getByRole('table', { name: '相对候选因子对比' })).toBeInTheDocument();
   expect(screen.getByText('38.9% 保留')).toBeInTheDocument();
-  expect(screen.getByText('同花顺唯一热榜')).toBeInTheDocument();
+  expect(screen.getByText('同花顺行业榜')).toBeInTheDocument();
+  expect(screen.getByText(/最新任务日期 2026-08-17/)).toBeInTheDocument();
+  expect(screen.getByText(/当前展示 2026-08-14 的已完成研究/)).toBeInTheDocument();
   expect(screen.getByRole('region', { name: '联合训练与预测目标' })).toBeInTheDocument();
   expect(screen.getByText(/预测上涨占比 0.0%/)).toBeInTheDocument();
   expect(screen.getByText(/训练池 1200 只 · 展示候选 183 只/)).toBeInTheDocument();

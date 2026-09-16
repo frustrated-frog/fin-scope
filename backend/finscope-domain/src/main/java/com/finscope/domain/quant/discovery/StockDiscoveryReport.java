@@ -8,6 +8,7 @@ import java.util.Map;
 
 @Data
 public class StockDiscoveryReport {
+    private List<Map<String, Object>> recallEvaluations = new ArrayList<Map<String, Object>>();
     private Map<String, Object> discoveryAudit;
     private List<Map<String, Object>> strengthWatchlist = new ArrayList<Map<String, Object>>();
     private List<Map<String, Object>> stableCandidates = new ArrayList<Map<String, Object>>();
