@@ -104,7 +104,7 @@ class AttributionAgentSearchEvidenceTest {
         Article oldArticle = new Article();
         oldArticle.setTitle("英伟达历史公告");
         oldArticle.setUrl("https://local.com/old");
-        oldArticle.setPublishedAt(LocalDateTime.parse("2026-09-17T12:00:00"));
+        oldArticle.setPublishedAt(LocalDateTime.parse("2026-09-14T12:00:00"));
         Article futureArticle = new Article();
         futureArticle.setTitle("英伟达次日本地消息");
         futureArticle.setUrl("https://local.com/future");
@@ -133,7 +133,7 @@ class AttributionAgentSearchEvidenceTest {
 
         assertEquals(2, report.getEvidences().size());
         assertTrue(report.getEvidences().stream().filter(item -> item.getUrl().contains("/old"))
-                .allMatch(item -> item.isHistoricalContext() && item.getPublishedAt().startsWith("2026-09-17")));
+                .allMatch(item -> item.isHistoricalContext() && item.getPublishedAt().startsWith("2026-09-14")));
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(llm).complete(any(), prompt.capture());
         assertTrue(prompt.getValue().contains("目标交易日:2026-09-18"));

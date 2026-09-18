@@ -20,3 +20,14 @@ def next_session(after: date) -> date | None:
             return current
         current += timedelta(days=1)
     return None
+
+
+def previous_session(before: date) -> date | None:
+    """Last exchange session strictly before the supplied date; unknown years fail closed."""
+    current = before - timedelta(days=1)
+    while current.year in _CLOSURES:
+        closed = any(start <= current.strftime("%m-%d") <= end for start, end in _CLOSURES[current.year])
+        if current.weekday() < 5 and not closed:
+            return current
+        current -= timedelta(days=1)
+    return None

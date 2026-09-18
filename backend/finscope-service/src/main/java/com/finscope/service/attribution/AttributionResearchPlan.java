@@ -7,6 +7,10 @@ import java.util.List;
 /** 归因任务的结构化研究计划，仅描述执行合同，不执行外部调用。 */
 public class AttributionResearchPlan {
     private int version = 1;
+    /** 近期证据窗口起点，ISO 自然日；包含该日及休市期间，写入运行计划便于回看。 */
+    @lombok.Getter
+    @lombok.Setter
+    private String evidenceStartDate;
     private String objective;
     private Budget budget = new Budget();
     private List<Track> tracks = new ArrayList<Track>();

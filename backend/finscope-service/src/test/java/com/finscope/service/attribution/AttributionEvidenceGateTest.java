@@ -27,12 +27,12 @@ class AttributionEvidenceGateTest {
     }
 
     @Test
-    void excludesFutureEvidenceAndTreatsEarlierDatesAsBackground() {
+    void excludesFutureEvidenceAndTreatsExpiredDatesAsBackground() {
         AttributionEvidence current = evidence("https://a.com/current", "T1", "DIRECT");
         AttributionEvidence future = evidence("https://a.com/future", "T1", "DIRECT");
         future.setPublishedAt("2026-09-19T08:00:00+08:00");
         AttributionEvidence past = evidence("https://a.com/past", "T1", "DIRECT");
-        past.setPublishedAt("2026-09-17");
+        past.setPublishedAt("2026-09-14");
         AttributionEvidence unknown = evidence("https://a.com/unknown", "T1", "DIRECT");
         unknown.setPublishedAt("yesterday");
         AttributionEvidenceGate gate = new AttributionEvidenceGate();
@@ -76,6 +76,39 @@ class AttributionEvidenceGateTest {
         assertEquals(1, normalized.size());
         assertEquals("COUNTER", normalized.get(0).getStance());
         assertEquals("LOW", gate.capConfidence("HIGH", normalized, LocalDate.parse("2026-09-18")));
+    }
+
+    @Test
+    void mondayUsesFridayAndWeekendEvidenceWithoutTreatingItAsExpired() {
+        AttributionEvidence friday = evidence("https://a.com/friday", "T1", "DIRECT");
+        friday.setPublishedAt("2026-09-18");
+        AttributionEvidence sunday = evidence("https://b.com/sunday", "T2", "INDIRECT");
+        sunday.setPublishedAt("2026-09-20");
+        AttributionEvidence expired = evidence("https://c.com/old", "T1", "DIRECT");
+        expired.setPublishedAt("2026-09-17");
+        LocalDate monday = LocalDate.parse("2026-09-21");
+        AttributionEvidenceGate gate = new AttributionEvidenceGate();
+        gate.eligibleAtDate(Arrays.asList(friday, sunday, expired), monday);
+        assertFalse(friday.isHistoricalContext());
+        assertFalse(sunday.isHistoricalContext());
+        assertTrue(expired.isHistoricalContext());
+        assertEquals("HIGH", gate.capConfidence("HIGH", Arrays.asList(friday, sunday), monday));
+        assertEquals("LOW", gate.capConfidence("HIGH", Arrays.asList(expired), monday));
+    }
+
+    @Test
+    void holidayWindowIncludesNewsOlderThanThreeDaysButNeverFutureNews() {
+        AttributionEvidence holiday = evidence("https://a.com/holiday", "T1", "DIRECT");
+        holiday.setPublishedAt("2026-10-02");
+        AttributionEvidence future = evidence("https://b.com/future", "T1", "DIRECT");
+        future.setPublishedAt("2026-10-09");
+        LocalDate date = LocalDate.parse("2026-10-08");
+        LocalDate start = LocalDate.parse("2026-09-30");
+        AttributionEvidenceGate gate = new AttributionEvidenceGate();
+        List<AttributionEvidence> eligible = gate.eligibleAtDate(Arrays.asList(holiday, future), date, start);
+        assertEquals(1, eligible.size());
+        assertFalse(holiday.isHistoricalContext());
+        assertEquals("MID", gate.capConfidence("HIGH", eligible, date, start));
     }
 
     private AttributionEvidence evidence(String url, String tier, String directness) {

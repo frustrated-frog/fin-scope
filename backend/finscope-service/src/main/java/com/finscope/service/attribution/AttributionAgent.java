@@ -104,6 +104,9 @@ public class AttributionAgent {
         List<AttributionEvidence> evidences = new ArrayList<>();
         Set<String> evidenceKeys = new LinkedHashSet<>();
         AttributionResearchExecution execution = new AttributionResearchExecution();
+        LocalDate startDate = plan != null && plan.getEvidenceStartDate() != null
+                ? LocalDate.parse(plan.getEvidenceStartDate())
+                : report.getReportDate() == null ? null : report.getReportDate().minusDays(3);
 
         // ① question-plan
         long t0 = System.currentTimeMillis();
@@ -219,7 +222,7 @@ public class AttributionAgent {
         // ⑤ evidence-rank
         long t4 = System.currentTimeMillis();
         progressListener.stageStarted("evidence-rank");
-        evidences = evidenceGate.eligibleAtDate(evidences, report.getReportDate());
+        evidences = evidenceGate.eligibleAtDate(evidences, report.getReportDate(), startDate);
         rankEvidences(evidences);
         publisher.publish(taskId, AttributionProgressEvent.stage("evidence-rank", "已整理 " + evidences.size() + " 条有效证据"));
         agentRunRepository.record("attribution:evidence-rank", "SUCCESS", null, "ranked=" + evidences.size(), null, System.currentTimeMillis() - t4);
@@ -227,7 +230,7 @@ public class AttributionAgent {
         // ⑥ attribution-synth
         long t5 = System.currentTimeMillis();
         progressListener.stageStarted("attribution-synth");
-        boolean synthesized = synthesize(report, instrument, changePct, evidences);
+        boolean synthesized = synthesize(report, instrument, changePct, evidences, startDate);
         report.setEvidences(evidences);
         agentRunRepository.record("attribution:attribution-synth", synthesized ? "SUCCESS" : "FALLBACK",
                 instrument.getCode(), report.getSummary(), null, System.currentTimeMillis() - t5);
@@ -354,7 +357,7 @@ public class AttributionAgent {
     private Map<String, String> legacyQueryTracks(Instrument instrument, Double changePct, LocalDate reportDate) {
         Map<String, String> result = new LinkedHashMap<>();
         for (String query : planQuestions(instrument, changePct)) {
-            result.put((reportDate == null ? "日期未提供" : reportDate.toString()) + " "
+            result.put((reportDate == null ? "日期未提供" : (reportDate.minusDays(3) + " 至 " + reportDate)) + " "
                     + query.replace("今日", "目标交易日").replace("最新", "相关"), "COMPANY");
         }
         return result;
@@ -443,13 +446,13 @@ public class AttributionAgent {
     private boolean synthesize(AttributionReport report,
                                Instrument instrument,
                                Double changePct,
-                               List<AttributionEvidence> evidences) {
-        report.setDisclaimer("本分析基于当日公开信息综合，可能含未证实传闻，非投资建议。");
+                               List<AttributionEvidence> evidences, LocalDate startDate) {
+        report.setDisclaimer("本分析基于目标交易日及此前近期公开信息综合，可能含未证实传闻，非投资建议。");
         if (llmChatClient != null && llmChatClient.isConfigured() && !evidences.isEmpty()) {
             try {
-                String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences, report.getReportDate()));
+                String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences, report.getReportDate(), startDate));
                 if (parseSynthResult(report, raw)) {
-                    ensureNarrative(report, instrument, changePct, evidences);
+                    ensureNarrative(report, instrument, changePct, evidences, startDate);
                     return true;
                 }
             } catch (Exception ex) {
@@ -457,7 +460,7 @@ public class AttributionAgent {
             }
         }
         fallbackSynthesize(report);
-        ensureNarrative(report, instrument, changePct, evidences);
+        ensureNarrative(report, instrument, changePct, evidences, startDate);
         return false;
     }
 
@@ -468,9 +471,15 @@ public class AttributionAgent {
     }
 
     String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences, LocalDate reportDate) {
+        return synthUserPrompt(instrument, changePct, evidences, reportDate,
+                reportDate == null ? null : reportDate.minusDays(3));
+    }
+
+    String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences,
+                           LocalDate reportDate, LocalDate startDate) {
         StringBuilder builder = new StringBuilder();
         builder.append("输出格式:{\"summary\":\"综合归因\",\"narrative\":{")
-                .append("\"plainSummary\":\"2-3句白话核心结论\",\"event\":\"目标交易日发生了什么\",")
+                .append("\"plainSummary\":\"2-3句白话核心结论\",\"event\":\"目标交易日或近期发生了什么\",")
                 .append("\"instrumentLink\":\"为什么影响该标的\",\"whyToday\":\"为什么在目标交易日集中反应\",")
                 .append("\"causalSteps\":[\"因果节点\"],\"amplifiers\":[\"放大因素\"],")
                 .append("\"dampeners\":[\"缓冲或反方因素\"]},\"drivers\":[{\"claim\":\"原因\",")
@@ -487,7 +496,7 @@ public class AttributionAgent {
                 .append("\"evidenceUrls\":[\"证据URL\"]}],\"uncertainties\":[\"不确定性\"],")
                 .append("\"observationWindows\":[\"整体观察项\"],\"disclaimer\":\"诚实说明\"}\n")
                 .append("最多给出 6 个有证据对应的驱动因素，不设最低数量；证据不足允许 drivers 为空，禁止凑数。每个驱动的 evidenceUrls 必须来自所给证据。\n")
-                .append("先讲清：目标交易日发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么在目标交易日集中反应 → 价格结果。")
+                .append("先讲清：目标交易日或近期发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么在目标交易日集中反应 → 价格结果。")
                 .append("直接触发、放大因素、背景和反方必须分开；使用普通中文，术语出现时在同一句解释。\n")
                 .append("facts 只写证据明确支持的事实；AI 解读不得重复事实原句。")
                 .append("marketInterpretation 回答市场为什么在意；expectationShift 使用‘原本预期 → 现在预期’。")
@@ -499,7 +508,10 @@ public class AttributionAgent {
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
         builder.append("目标交易日:").append(reportDate == null ? "未提供，不得假定为今天" : reportDate).append("\n");
-        builder.append("只解释目标交易日；旧消息仅作背景，日期未知不得认定为当日触发；同日发布也不代表发生在价格变化之前。反证不得作为主因的支持证据。\n");
+        builder.append("只解释目标交易日；窗口内的近期消息可作为候选驱动，包括周末和节假日消息，但必须说明为何影响延续或在复市日集中反应。窗口外旧消息仅作背景，日期未知不得认定触发时间；同日发布也不代表发生在价格变化之前。反证不得作为主因的支持证据。\n");
+        builder.append("近期证据窗口:").append(startDate == null ? "未知" : startDate)
+                .append(" 至 ").append(reportDate == null ? "未知" : reportDate).append("（自然日，包含休市期间）\n");
+        builder.append("区分当日新催化、近期事件延续和长期背景。综合时间距离、市场是否已消化、业务关联和反证判断解释力；不能仅凭处于窗口内就断言因果。以事件首次发生或实质进展时间判断新意，转载不能刷新旧事件时效。\n");
         builder.append("目标交易日涨跌幅:").append(changePct == null ? "未知" : changePct + "%").append("\n");
         builder.append("证据列表:\n");
         int index = 1;
@@ -588,6 +600,12 @@ public class AttributionAgent {
                          Instrument instrument,
                          Double changePct,
                          List<AttributionEvidence> evidences) {
+        ensureNarrative(report, instrument, changePct, evidences,
+                report.getReportDate() == null ? null : report.getReportDate().minusDays(3));
+    }
+
+    private void ensureNarrative(AttributionReport report, Instrument instrument, Double changePct,
+                                 List<AttributionEvidence> evidences, LocalDate startDate) {
         AttributionNarrative narrative = report.getNarrative();
         if (narrative == null) {
             narrative = new AttributionNarrative();
@@ -599,7 +617,7 @@ public class AttributionAgent {
         List<AttributionEvidence> currentEvidence = new ArrayList<>();
         if (evidences != null) {
             for (AttributionEvidence evidence : evidences) {
-                if (evidence != null && evidenceGate.isCurrentSupport(evidence, report.getReportDate())) {
+                if (evidence != null && evidenceGate.isRecentSupport(evidence, report.getReportDate(), startDate)) {
                     currentEvidence.add(evidence);
                 }
             }
@@ -621,7 +639,7 @@ public class AttributionAgent {
         if (StringUtils.isBlank(narrative.getWhyToday())) {
             narrative.setWhyToday(firstCurrent == null
                     ? "当前公开信息不足以确认行情在当日集中反应的具体触发点。"
-                    : "该线索的发布日期与目标交易日一致，但尚未确认其发生在价格变化之前，不能据此断言因果。");
+                    : "该线索处于近期自然日窗口内；仍需核验消息在休市后的首次反应或持续发酵，不能仅凭时间接近断言因果。");
         }
         if (narrative.getCausalSteps() == null || narrative.getCausalSteps().isEmpty()) {
             List<String> steps = new ArrayList<>();

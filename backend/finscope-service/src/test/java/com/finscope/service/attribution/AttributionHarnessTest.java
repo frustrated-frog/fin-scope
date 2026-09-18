@@ -142,9 +142,48 @@ class AttributionHarnessTest {
         assertEquals("LOW", driver.getExplanatoryPower());
     }
 
+    @Test
+    void carriesHolidayWindowThroughPlanAndFinalConfidenceGate() {
+        AttributionResearchRunRepository repository = mock(AttributionResearchRunRepository.class);
+        when(repository.createRun(any())).thenAnswer(invocation -> {
+            AttributionResearchRun run = invocation.getArgument(0);
+            run.setId(12L);
+            return run;
+        });
+        AttributionHarness harness = createHarness(repository, mock(AttributionAgent.class));
+        AttributionResearchPlanFactory factory = new AttributionResearchPlanFactory();
+        com.finscope.rpc.quote.PythonTradingCalendarClient calendar = mock(com.finscope.rpc.quote.PythonTradingCalendarClient.class);
+        when(calendar.previousSession(LocalDate.parse("2026-10-08"))).thenReturn(LocalDate.parse("2026-09-30"));
+        ReflectionTestUtils.setField(factory, "tradingCalendarClient", calendar);
+        ReflectionTestUtils.setField(harness, "planFactory", factory);
+        AttributionReport report = new AttributionReport();
+        report.setReportDate(LocalDate.parse("2026-10-08"));
+        AttributionEvidence holiday = evidence("假期公告", "https://authority.com/notice", "T1", "DIRECT");
+        holiday.setPublishedAt("2026-10-02");
+        AttributionDriver driver = new AttributionDriver();
+        driver.setClaim("假期消息在复市后反应");
+        driver.setConfidence("HIGH");
+        driver.setEvidenceUrls(Arrays.asList(holiday.getUrl()));
+        report.setDrivers(Arrays.asList(driver));
+        report.setEvidences(Arrays.asList(holiday));
+        Instrument instrument = new Instrument();
+        instrument.setCode("600519");
+        instrument.setType("STOCK");
+
+        harness.research(report, instrument, 2D, "task", mock(AttributionProgressPublisher.class));
+
+        assertEquals("MID", driver.getConfidence());
+        assertTrue(!holiday.isHistoricalContext());
+        ArgumentCaptor<AttributionResearchRun> run = ArgumentCaptor.forClass(AttributionResearchRun.class);
+        verify(repository).createRun(run.capture());
+        assertTrue(run.getValue().getPlanJson().contains("2026-09-30"));
+    }
+
     private AttributionHarness createHarness(AttributionResearchRunRepository repository, AttributionAgent agent) {
         AttributionHarness harness = new AttributionHarness();
-        ReflectionTestUtils.setField(harness, "planFactory", new AttributionResearchPlanFactory());
+        AttributionResearchPlanFactory factory = new AttributionResearchPlanFactory();
+        ReflectionTestUtils.setField(factory, "tradingCalendarClient", mock(com.finscope.rpc.quote.PythonTradingCalendarClient.class));
+        ReflectionTestUtils.setField(harness, "planFactory", factory);
         ReflectionTestUtils.setField(harness, "planValidator", new AttributionPlanValidator());
         ReflectionTestUtils.setField(harness, "evidenceGate", new AttributionEvidenceGate());
         ReflectionTestUtils.setField(harness, "runRepository", repository);

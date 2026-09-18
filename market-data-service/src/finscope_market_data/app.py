@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+from finscope_market_data.forecast.trading_calendar import previous_session
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
@@ -613,6 +614,13 @@ def create_app(
             status_code=503 if quality is QualityStatus.UNAVAILABLE else 200,
             content=jsonable_encoder(payload),
         )
+
+    @application.get("/v1/calendar/previous-session")
+    def calendar_previous_session(before: date):
+        previous = previous_session(before)
+        if previous is None:
+            raise HTTPException(status_code=503, detail="Verified exchange calendar unavailable for this date")
+        return {"previous_session": previous.isoformat()}
 
     return application
 

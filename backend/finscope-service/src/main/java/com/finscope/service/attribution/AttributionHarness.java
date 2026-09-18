@@ -47,6 +47,7 @@ public class AttributionHarness {
                          AttributionProgressPublisher publisher) {
         AttributionResearchPlan plan = planFactory.create(instrument, changePct, report.getReportDate());
         planValidator.validate(plan);
+        LocalDate startDate = plan.getEvidenceStartDate() == null ? null : LocalDate.parse(plan.getEvidenceStartDate());
         AttributionResearchRun run = createRun(report.getId(), plan);
         createTrackSteps(run.getId(), plan);
         try {
@@ -55,10 +56,10 @@ public class AttributionHarness {
             AttributionResearchExecution execution = agent.researchWithPlan(
                     report, instrument, changePct, taskId, publisher, plan,
                     progressListener(run.getId(), plan));
-            List<AttributionEvidence> evidences = evidenceGate.eligibleAtDate(report.getEvidences(), report.getReportDate());
+            List<AttributionEvidence> evidences = evidenceGate.eligibleAtDate(report.getEvidences(), report.getReportDate(), startDate);
             report.setEvidences(evidences);
-            enrichAndVerify(report, instrument, changePct, evidences);
-            appendHistoricalContext(report, instrument, evidences);
+            enrichAndVerify(report, instrument, changePct, evidences, startDate);
+            appendHistoricalContext(report, instrument, evidences, startDate);
             completeSteps(run.getId(), plan, execution, evidences.size());
         } catch (RuntimeException ex) {
             failUnfinishedSteps(run.getId(), "研究异常中断：" + StringUtils.firstNonBlank(ex.getMessage(), "未知错误"));
@@ -87,7 +88,7 @@ public class AttributionHarness {
 
     private void appendHistoricalContext(AttributionReport report,
                                          Instrument instrument,
-                                         List<AttributionEvidence> current) {
+                                         List<AttributionEvidence> current, LocalDate startDate) {
         if (attributionRepository == null || report.getId() == null) {
             return;
         }
@@ -100,7 +101,7 @@ public class AttributionHarness {
             evidence.setDirectness("BACKGROUND");
             merged.add(evidence);
         }
-        report.setEvidences(evidenceGate.eligibleAtDate(merged, report.getReportDate()));
+        report.setEvidences(evidenceGate.eligibleAtDate(merged, report.getReportDate(), startDate));
         if (!historical.isEmpty()) {
             List<String> uncertainties = new ArrayList<String>(report.getUncertainties());
             uncertainties.add("历史证据仅用于连续性对照，不作为当日高置信归因依据。");
@@ -235,13 +236,13 @@ public class AttributionHarness {
     private void enrichAndVerify(AttributionReport report,
                                  Instrument instrument,
                                  Double changePct,
-                                 List<AttributionEvidence> evidences) {
+                                 List<AttributionEvidence> evidences, LocalDate startDate) {
         List<AttributionDriver> drivers = report.getDrivers() == null
                 ? new ArrayList<AttributionDriver>() : new ArrayList<AttributionDriver>(report.getDrivers());
         for (AttributionDriver driver : drivers) {
             List<AttributionEvidence> support = supportForDriver(driver, evidences);
             AttributionEvidence evidence = support.isEmpty() ? null : support.get(0);
-            enrichDriver(driver, evidence, support, report.getReportDate());
+            enrichDriver(driver, evidence, support, report.getReportDate(), startDate);
         }
         report.setDrivers(drivers);
         report.setPrimaryDriver(drivers.isEmpty() ? null : drivers.get(0));
@@ -261,7 +262,7 @@ public class AttributionHarness {
     private void enrichDriver(AttributionDriver driver,
                               AttributionEvidence evidence,
                               List<AttributionEvidence> support,
-                              LocalDate reportDate) {
+                              LocalDate reportDate, LocalDate startDate) {
         if (evidence == null) {
             driver.setFacts(Collections.emptyList());
             driver.setEvidenceUrls(Collections.emptyList());
@@ -284,7 +285,7 @@ public class AttributionHarness {
             driver.setObservationWindow("后续 1–5 个交易日观察量价和相关公告是否确认");
         }
         driver.setConfidence(evidenceGate.capConfidence(StringUtils.firstNonBlank(driver.getConfidence(), "LOW"),
-                support, reportDate));
+                support, reportDate, startDate));
     }
 
     private List<AttributionEvidence> supportForDriver(AttributionDriver driver, List<AttributionEvidence> evidences) {

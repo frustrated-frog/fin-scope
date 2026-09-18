@@ -45,13 +45,18 @@ public class AttributionEvidenceGate {
 
     /** 交易日之后的信息不得参与回溯归因；日期未知的线索保留但不能提高置信度。 */
     public List<AttributionEvidence> eligibleAtDate(List<AttributionEvidence> evidences, LocalDate reportDate) {
+        return eligibleAtDate(evidences, reportDate, reportDate == null ? null : reportDate.minusDays(3));
+    }
+
+    public List<AttributionEvidence> eligibleAtDate(List<AttributionEvidence> evidences, LocalDate reportDate,
+                                                   LocalDate startDate) {
         List<AttributionEvidence> result = new ArrayList<>();
         for (AttributionEvidence evidence : normalizeAndRank(evidences)) {
             LocalDate published = publishedDate(evidence);
             if (reportDate != null && published != null && published.isAfter(reportDate)) {
                 continue;
             }
-            if (reportDate != null && published != null && published.isBefore(reportDate)) {
+            if (startDate != null && published != null && published.isBefore(startDate)) {
                 evidence.setHistoricalContext(true);
             }
             result.add(evidence);
@@ -59,12 +64,19 @@ public class AttributionEvidenceGate {
         return result;
     }
 
-    public boolean isCurrentSupport(AttributionEvidence evidence, LocalDate reportDate) {
-        return reportDate != null && reportDate.equals(publishedDate(evidence))
+    public boolean isRecentSupport(AttributionEvidence evidence, LocalDate reportDate, LocalDate startDate) {
+        LocalDate published = publishedDate(evidence);
+        return reportDate != null && startDate != null && published != null
+                && !published.isBefore(startDate) && !published.isAfter(reportDate)
                 && !evidence.isHistoricalContext() && "SUPPORT".equals(evidence.getStance());
     }
 
     public String capConfidence(String requested, List<AttributionEvidence> evidences, LocalDate reportDate) {
+        return capConfidence(requested, evidences, reportDate, reportDate == null ? null : reportDate.minusDays(3));
+    }
+
+    public String capConfidence(String requested, List<AttributionEvidence> evidences, LocalDate reportDate,
+                                LocalDate startDate) {
         boolean directAuthority = false;
         boolean hasCounter = false;
         Map<String, Boolean> domains = new LinkedHashMap<>();
@@ -73,7 +85,7 @@ public class AttributionEvidenceGate {
                 if ("COUNTER".equals(evidence.getStance())) {
                     hasCounter = true;
                 }
-                if (!isCurrentSupport(evidence, reportDate)) {
+                if (!isRecentSupport(evidence, reportDate, startDate)) {
                     continue;
                 }
                 String host = domain(evidence.getUrl());
