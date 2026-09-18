@@ -40,6 +40,21 @@ class AttributionRepositoryTest {
     }
 
     @Test
+    void persistsAssessmentSnapshotWithoutChangingLegacyReports() {
+        AttributionReport report = save("600519", "STOCK", LocalDate.of(2026, 9, 18), "研判", 2D, "COMPLETED");
+        org.junit.jupiter.api.Assertions.assertNull(repository.findById(report.getId()).get().getAssessment());
+        com.finscope.domain.attribution.AttributionAssessment assessment = new com.finscope.domain.attribution.AttributionAssessment();
+        assessment.setResearchFocus("为什么与行业表现不同");
+        assessment.setStatus(com.finscope.common.enums.attribution.AssessmentStatus.INSUFFICIENT_EVIDENCE);
+        assessment.setCommentary(Arrays.asList("尚缺同业数据，无法确认"));
+        report.setAssessment(assessment);
+        repository.updateResult(report);
+        AttributionReport loaded = repository.findById(report.getId()).get();
+        assertEquals(assessment, loaded.getAssessment());
+        assertEquals(assessment, repository.findHistoryByIdentity("600519", "STOCK", 10).get(0).getAssessment());
+    }
+
+    @Test
     void returnsLatestCompletedReportMetadataPerInstrument() {
         AttributionReport first = save("600519", "STOCK", LocalDate.of(2026, 7, 11), "旧归因", 1.2, "COMPLETED");
         save("600519", "STOCK", LocalDate.of(2026, 7, 12), "失败归因", -1.0, "FAILED");

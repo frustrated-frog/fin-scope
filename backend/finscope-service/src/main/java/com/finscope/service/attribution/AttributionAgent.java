@@ -56,6 +56,8 @@ public class AttributionAgent {
 
     @Resource
     private AttributionEvidenceGate evidenceGate;
+    @Resource
+    private AttributionAssessmentService assessmentService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -230,7 +232,20 @@ public class AttributionAgent {
         // ⑥ attribution-synth
         long t5 = System.currentTimeMillis();
         progressListener.stageStarted("attribution-synth");
-        boolean synthesized = synthesize(report, instrument, changePct, evidences, startDate);
+        boolean synthesized;
+        if ("STOCK".equalsIgnoreCase(instrument.getType())) {
+            report.setAssessment(assessmentService.research(report, instrument, evidences, startDate, stage -> {
+                progressListener.stageStarted(stage);
+                publisher.publish(taskId, AttributionProgressEvent.stage(stage, "正在生成异动研判"));
+            }));
+            report.setSummary(report.getAssessment().getMainJudgment());
+            report.setDrivers(new ArrayList<>());
+            report.setNarrative(null);
+            report.setDisclaimer("研判基于公开证据与目标日日线快照，机制解释不等于因果证明。");
+            synthesized = report.getAssessment().getStatus() != com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED;
+        } else {
+            synthesized = synthesize(report, instrument, changePct, evidences, startDate);
+        }
         report.setEvidences(evidences);
         agentRunRepository.record("attribution:attribution-synth", synthesized ? "SUCCESS" : "FALLBACK",
                 instrument.getCode(), report.getSummary(), null, System.currentTimeMillis() - t5);

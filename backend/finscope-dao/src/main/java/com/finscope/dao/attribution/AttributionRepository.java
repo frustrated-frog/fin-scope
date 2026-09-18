@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.attribution.AttributionDriver;
+import com.finscope.domain.attribution.AttributionAssessment;
 import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
@@ -43,6 +44,7 @@ public class AttributionRepository {
         report.setSummary(rs.getString("summary"));
         report.setDrivers(parseDrivers(rs.getString("drivers_json")));
         report.setNarrative(parseNarrative(rs.getString("narrative_json")));
+        report.setAssessment(parseAssessment(rs.getString("assessment_json")));
         report.setPrimaryDriver(report.getDrivers().isEmpty() ? null : report.getDrivers().get(0));
         report.setUncertainties(parseStrings(rs.getString("uncertainties_json")));
         report.setObservationWindows(parseStrings(rs.getString("observation_windows_json")));
@@ -127,12 +129,12 @@ public class AttributionRepository {
     public void updateResult(AttributionReport report) {
         jdbcTemplate.update("UPDATE attribution_report SET status=?, summary=?, drivers_json=?, narrative_json=?, disclaimer=?, "
                         + "error_message=?, warning_message=?, uncertainties_json=?, observation_windows_json=?, "
-                        + "duration_ms=?, change_pct=?, updated_at=? WHERE id=?",
+                        + "duration_ms=?, change_pct=?, updated_at=?, assessment_json=? WHERE id=?",
                 report.getStatus(), report.getSummary(), writeDrivers(report.getDrivers()), writeNarrative(report.getNarrative()),
                 report.getDisclaimer(),
                 report.getErrorMessage(), report.getWarningMessage(), writeStrings(report.getUncertainties()),
                 writeStrings(report.getObservationWindows()), report.getDurationMs(), report.getChangePct(),
-                TimeUtil.text(LocalDateTime.now()), report.getId());
+                TimeUtil.text(LocalDateTime.now()), writeAssessment(report.getAssessment()), report.getId());
     }
 
     public Optional<AttributionReport> findById(Long id) {
@@ -237,6 +239,28 @@ public class AttributionRepository {
                         + "WHERE r.instrument_code=? AND r.instrument_type=? AND r.status='COMPLETED' AND r.id<>? "
                         + "ORDER BY r.id DESC, e.relevance DESC LIMIT ?",
                 evidenceMapper, code, type, excludeReportId, limit);
+    }
+
+    private String writeAssessment(AttributionAssessment assessment) {
+        if (assessment == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(assessment);
+        } catch (Exception ex) {
+            throw new IllegalStateException("研判快照序列化失败", ex);
+        }
+    }
+
+    private AttributionAssessment parseAssessment(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(value, AttributionAssessment.class);
+        } catch (Exception ex) {
+            throw new IllegalStateException("研判快照读取失败", ex);
+        }
     }
 
     private String writeDrivers(List<AttributionDriver> drivers) {

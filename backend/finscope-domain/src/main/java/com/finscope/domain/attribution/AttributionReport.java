@@ -46,6 +46,8 @@ public class AttributionReport {
     private String summary;
     /** 面向普通用户的结构化因果叙事。 */
     private AttributionNarrative narrative;
+    /** 股票研判 V1；旧报告为空。 */
+    private AttributionAssessment assessment;
     /**
      * 归因驱动因素列表。
      */

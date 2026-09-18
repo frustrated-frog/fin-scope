@@ -1000,6 +1000,7 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("attribution_report", "uncertainties_json", "TEXT");
         ensureColumn("attribution_report", "observation_windows_json", "TEXT");
         ensureColumn("attribution_report", "narrative_json", "TEXT");
+        ensureColumn("attribution_report", "assessment_json", "TEXT");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_code ON attribution_report(instrument_code)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_report_identity "
                 + "ON attribution_report(instrument_code, instrument_type, id)");

@@ -64,6 +64,15 @@ public class PythonDailyBarClient {
     public List<DailyBarPoint> fetchDailyBars(String code, int limit, boolean refresh) {
         String normalizedCode = normalizeCode(code);
         String market = market(normalizedCode);
+        return fetchBars(normalizedCode, market, limit, refresh);
+    }
+
+    /** 显式使用沪深300指数身份，避免把 000300 按股票代码推断为深市股票。 */
+    public List<DailyBarPoint> fetchMarketBenchmark(int limit) {
+        return fetchBars("000300", "SH", limit, false);
+    }
+
+    private List<DailyBarPoint> fetchBars(String normalizedCode, String market, int limit, boolean refresh) {
         int normalizedLimit = Math.max(1, Math.min(limit, 250));
         URI uri = URI.create(baseUrl + "/v1/stocks/" + market + "/" + normalizedCode
                 + "/daily-bars?limit=" + normalizedLimit + (refresh ? "&refresh=true" : ""));

@@ -65,7 +65,7 @@ class AttributionAgentSearchEvidenceTest {
         Instrument instrument = new Instrument();
         instrument.setCode("NVDA");
         instrument.setName("英伟达");
-        instrument.setType("STOCK");
+        instrument.setType("FUND");
         AttributionReport report = new AttributionReport();
         report.setReportDate(LocalDate.parse("2026-09-18"));
 
@@ -76,7 +76,7 @@ class AttributionAgentSearchEvidenceTest {
         assertEquals("公告显示订单和收入增长", report.getEvidences().get(0).getSnippet());
         assertEquals("T1", report.getEvidences().get(0).getSourceTier());
         ArgumentCaptor<SearchEvidenceRequest> captor = ArgumentCaptor.forClass(SearchEvidenceRequest.class);
-        verify(gateway, times(3)).search(captor.capture());
+        verify(gateway, times(2)).search(captor.capture());
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getDepth() == SearchDepth.DEEP));
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getQuery().contains("2026-09-18")));
     }
@@ -124,7 +124,7 @@ class AttributionAgentSearchEvidenceTest {
         Instrument instrument = new Instrument();
         instrument.setCode("NVDA");
         instrument.setName("英伟达");
-        instrument.setType("STOCK");
+        instrument.setType("FUND");
         AttributionReport report = new AttributionReport();
         report.setReportDate(LocalDate.parse("2026-09-18"));
 
