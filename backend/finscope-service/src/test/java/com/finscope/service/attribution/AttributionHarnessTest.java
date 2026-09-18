@@ -1,5 +1,7 @@
 package com.finscope.service.attribution;
 
+import org.springframework.test.util.ReflectionTestUtils;
+import java.time.LocalDate;
 import com.finscope.dao.attribution.AttributionResearchRunRepository;
 import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionDriver;
@@ -25,7 +27,7 @@ import static org.mockito.Mockito.atLeast;
 
 class AttributionHarnessTest {
     @Test
-    void persistsPlanAndBuildsRichFallbackDriversFromEvidence() {
+    void persistsPlanWithoutPaddingDriversFromUnrelatedEvidence() {
         AttributionResearchRunRepository runRepository = mock(AttributionResearchRunRepository.class);
         AttributionAgent agent = mock(AttributionAgent.class);
         when(runRepository.createRun(any(AttributionResearchRun.class))).thenAnswer(invocation -> {
@@ -56,11 +58,10 @@ class AttributionHarnessTest {
             return null;
         }).when(agent).researchWithPlan(any(), any(), any(), any(), any(), any(), any());
 
-        AttributionHarness harness = new AttributionHarness(
-                new AttributionResearchPlanFactory(), new AttributionPlanValidator(),
-                new AttributionEvidenceGate(), runRepository, agent);
+        AttributionHarness harness = createHarness(runRepository, agent);
         AttributionReport report = new AttributionReport();
         report.setId(88L);
+        report.setReportDate(LocalDate.parse("2026-09-18"));
         Instrument instrument = new Instrument();
         instrument.setCode("600519");
         instrument.setName("贵州茅台");
@@ -70,7 +71,7 @@ class AttributionHarnessTest {
         harness.research(report, instrument, 3.1D, "task", publisher);
         harness.markPersisted(report);
 
-        assertEquals(4, report.getDrivers().size());
+        assertEquals(1, report.getDrivers().size());
         assertNotNull(report.getPrimaryDriver());
         assertTrue(report.getPrimaryDriver().getTransmissionPath().length() > 0);
         assertTrue(report.getUncertainties().size() > 0);
@@ -93,9 +94,7 @@ class AttributionHarnessTest {
         when(agent.researchWithPlan(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new AttributionResearchExecution());
 
-        AttributionHarness harness = new AttributionHarness(
-                new AttributionResearchPlanFactory(), new AttributionPlanValidator(),
-                new AttributionEvidenceGate(), runRepository, agent);
+        AttributionHarness harness = createHarness(runRepository, agent);
         AttributionReport report = new AttributionReport();
         report.setId(89L);
         Instrument instrument = new Instrument();
@@ -112,6 +111,47 @@ class AttributionHarnessTest {
                 .allMatch(step -> "PLANNED".equals(step.getStatus())));
     }
 
+    @Test
+    void neverAttachesPositionalEvidenceToAnUnlinkedDriver() {
+        AttributionResearchRunRepository repository = mock(AttributionResearchRunRepository.class);
+        when(repository.createRun(any())).thenAnswer(invocation -> {
+            AttributionResearchRun run = invocation.getArgument(0);
+            run.setId(11L);
+            return run;
+        });
+        AttributionReport report = new AttributionReport();
+        report.setReportDate(LocalDate.parse("2026-09-18"));
+        AttributionDriver driver = new AttributionDriver();
+        driver.setClaim("模型未证明的解释");
+        driver.setConfidence("HIGH");
+        driver.setFacts(Arrays.asList("未经证实的事实"));
+        driver.setEvidenceUrls(Arrays.asList("https://invented.com/notice"));
+        report.setDrivers(Arrays.asList(driver));
+        report.setEvidences(Arrays.asList(evidence("不相关公告", "https://real.com/notice", "T1", "DIRECT")));
+        Instrument instrument = new Instrument();
+        instrument.setCode("600519");
+        instrument.setType("STOCK");
+
+        createHarness(repository, mock(AttributionAgent.class)).research(report, instrument, 1D,
+                "task", mock(AttributionProgressPublisher.class));
+
+        assertEquals(1, report.getDrivers().size());
+        assertTrue(driver.getFacts().isEmpty());
+        assertTrue(driver.getEvidenceUrls().isEmpty());
+        assertEquals("LOW", driver.getConfidence());
+        assertEquals("LOW", driver.getExplanatoryPower());
+    }
+
+    private AttributionHarness createHarness(AttributionResearchRunRepository repository, AttributionAgent agent) {
+        AttributionHarness harness = new AttributionHarness();
+        ReflectionTestUtils.setField(harness, "planFactory", new AttributionResearchPlanFactory());
+        ReflectionTestUtils.setField(harness, "planValidator", new AttributionPlanValidator());
+        ReflectionTestUtils.setField(harness, "evidenceGate", new AttributionEvidenceGate());
+        ReflectionTestUtils.setField(harness, "runRepository", repository);
+        ReflectionTestUtils.setField(harness, "agent", agent);
+        return harness;
+    }
+
     private AttributionEvidence evidence(String title, String url, String tier, String directness) {
         AttributionEvidence evidence = new AttributionEvidence();
         evidence.setTitle(title);
@@ -120,6 +160,8 @@ class AttributionHarnessTest {
         evidence.setSourceTier(tier);
         evidence.setDirectness(directness);
         evidence.setRelevance(80);
+        evidence.setPublishedAt("2026-09-18");
+        evidence.setStance("SUPPORT");
         return evidence;
     }
 }

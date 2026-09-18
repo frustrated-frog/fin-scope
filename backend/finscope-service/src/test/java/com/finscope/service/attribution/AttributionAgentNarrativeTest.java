@@ -1,5 +1,8 @@
 package com.finscope.service.attribution;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.util.ReflectionTestUtils;
+import java.time.LocalDate;
 import com.finscope.domain.attribution.AttributionDriver;
 import com.finscope.domain.attribution.AttributionEvidence;
 import com.finscope.domain.attribution.AttributionReport;
@@ -14,6 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AttributionAgentNarrativeTest {
+    @BeforeEach
+    void setup() {
+        ReflectionTestUtils.setField(agent, "evidenceGate", new AttributionEvidenceGate());
+    }
     private final AttributionAgent agent = new AttributionAgent();
 
     @Test
@@ -48,8 +55,11 @@ class AttributionAgentNarrativeTest {
     @Test
     void asksForBoundedMarketInterpretationInsteadOfRepeatingFacts() {
         String prompt = agent.synthUserPrompt(instrument("STOCK"), -4.2D,
-                Collections.<AttributionEvidence>emptyList());
+                Collections.<AttributionEvidence>emptyList(), LocalDate.parse("2026-09-18"));
 
+        assertTrue(prompt.contains("目标交易日:2026-09-18"));
+        assertTrue(prompt.contains("不设最低数量"));
+        assertFalse(prompt.contains("4-6"));
         assertTrue(prompt.contains("市场为什么在意"));
         assertTrue(prompt.contains("原本预期 → 现在预期"));
         assertTrue(prompt.contains("盈利预期、估值倍数、风险溢价或资金行为"));
@@ -58,9 +68,9 @@ class AttributionAgentNarrativeTest {
 
     @Test
     void givesEachInstrumentTypeItsOwnPriceTransmissionInstruction() {
-        String stockPrompt = agent.synthUserPrompt(instrument("STOCK"), -2.1D, Collections.<AttributionEvidence>emptyList());
-        String fundPrompt = agent.synthUserPrompt(instrument("FUND"), -2.1D, Collections.<AttributionEvidence>emptyList());
-        String sectorPrompt = agent.synthUserPrompt(instrument("SECTOR"), -2.1D, Collections.<AttributionEvidence>emptyList());
+        String stockPrompt = agent.synthUserPrompt(instrument("STOCK"), -2.1D, Collections.<AttributionEvidence>emptyList(), LocalDate.parse("2026-09-18"));
+        String fundPrompt = agent.synthUserPrompt(instrument("FUND"), -2.1D, Collections.<AttributionEvidence>emptyList(), LocalDate.parse("2026-09-18"));
+        String sectorPrompt = agent.synthUserPrompt(instrument("SECTOR"), -2.1D, Collections.<AttributionEvidence>emptyList(), LocalDate.parse("2026-09-18"));
 
         assertTrue(stockPrompt.contains("公司暴露"));
         assertTrue(fundPrompt.contains("组合暴露"));
@@ -73,6 +83,7 @@ class AttributionAgentNarrativeTest {
         AttributionEvidence current = evidence("今日直接线索", false);
         AttributionReport report = new AttributionReport();
         report.setSummary("今日出现下跌");
+        report.setReportDate(LocalDate.parse("2026-09-18"));
 
         agent.ensureNarrative(report, instrument("STOCK"), -2.1D, Arrays.asList(historical, current));
 
@@ -93,6 +104,8 @@ class AttributionAgentNarrativeTest {
         evidence.setTitle(title);
         evidence.setSnippet(title + "的说明");
         evidence.setHistoricalContext(historical);
+        evidence.setPublishedAt("2026-09-18");
+        evidence.setStance("SUPPORT");
         return evidence;
     }
 }

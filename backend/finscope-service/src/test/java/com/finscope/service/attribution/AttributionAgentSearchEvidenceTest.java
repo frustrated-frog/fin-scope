@@ -1,5 +1,8 @@
 package com.finscope.service.attribution;
 
+import com.finscope.domain.article.Article;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
 import com.finscope.domain.attribution.AttributionReport;
@@ -19,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -44,6 +48,7 @@ class AttributionAgentSearchEvidenceTest {
                 Collections.singletonList(evidence), Collections.emptyList(), false));
 
         AttributionAgent agent = new AttributionAgent();
+        ReflectionTestUtils.setField(agent, "evidenceGate", new AttributionEvidenceGate());
         ReflectionTestUtils.setField(agent, "searchEvidenceGateway", gateway);
         SearchEvidenceContentService contentService = mock(SearchEvidenceContentService.class);
         when(contentService.acquire(any(SearchEvidence.class), any(String.class), any(String.class), any(Boolean.class)))
@@ -62,14 +67,81 @@ class AttributionAgentSearchEvidenceTest {
         instrument.setName("英伟达");
         instrument.setType("STOCK");
         AttributionReport report = new AttributionReport();
+        report.setReportDate(LocalDate.parse("2026-09-18"));
 
         agent.research(report, instrument, 2.5D, "task-1", mock(AttributionProgressPublisher.class));
 
+        assertTrue(report.getDrivers().isEmpty());
         assertEquals(1, report.getEvidences().size());
         assertEquals("公告显示订单和收入增长", report.getEvidences().get(0).getSnippet());
         assertEquals("T1", report.getEvidences().get(0).getSourceTier());
         ArgumentCaptor<SearchEvidenceRequest> captor = ArgumentCaptor.forClass(SearchEvidenceRequest.class);
         verify(gateway, times(3)).search(captor.capture());
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getDepth() == SearchDepth.DEEP));
+        assertTrue(captor.getAllValues().stream().allMatch(request -> request.getQuery().contains("2026-09-18")));
     }
+    @Test
+    void filtersFutureWebAndLocalNewsBeforeCallingModelForHistoricalTradingDay() throws Exception {
+        SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
+        when(gateway.isConfigured(SearchDepth.DEEP)).thenReturn(true);
+        SearchEvidence current = new SearchEvidence();
+        current.setTitle("目标交易日公告");
+        current.setUrl("https://example.com/current");
+        current.setPublishedAt("2026-09-18T09:00:00");
+        current.setSourceTier("T1");
+        SearchEvidence future = new SearchEvidence();
+        future.setTitle("次日网页消息");
+        future.setUrl("https://example.com/future");
+        future.setPublishedAt("2026-09-19");
+        when(gateway.search(any())).thenReturn(new SearchEvidenceBatch(
+                Arrays.asList(current, future), Collections.emptyList(), false));
+        SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
+        when(content.acquire(any(), any(), any(), any(Boolean.class))).thenAnswer(invocation -> {
+            SearchEvidence hit = invocation.getArgument(0);
+            return new ResearchEvidenceAcquisitionResult(hit.getTitle(), "搜索摘要",
+                    "FULL_TEXT", "html:readability", "SUCCESS", 12);
+        });
+        Article oldArticle = new Article();
+        oldArticle.setTitle("英伟达历史公告");
+        oldArticle.setUrl("https://local.com/old");
+        oldArticle.setPublishedAt(LocalDateTime.parse("2026-09-17T12:00:00"));
+        Article futureArticle = new Article();
+        futureArticle.setTitle("英伟达次日本地消息");
+        futureArticle.setUrl("https://local.com/future");
+        futureArticle.setPublishedAt(LocalDateTime.parse("2026-09-19T12:00:00"));
+        ArticleRepository articles = mock(ArticleRepository.class);
+        when(articles.findAll()).thenReturn(Arrays.asList(futureArticle, oldArticle));
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(any(), any())).thenReturn("{\"summary\":\"尚无法确认主因\",\"drivers\":[]}");
+        AttributionAgent agent = new AttributionAgent();
+        ReflectionTestUtils.setField(agent, "searchEvidenceGateway", gateway);
+        ReflectionTestUtils.setField(agent, "searchEvidenceContentService", content);
+        ReflectionTestUtils.setField(agent, "evidenceGate", new AttributionEvidenceGate());
+        ReflectionTestUtils.setField(agent, "articleRepository", articles);
+        ReflectionTestUtils.setField(agent, "llmChatClient", llm);
+        ReflectionTestUtils.setField(agent, "agentRunRepository", mock(AgentRunRepository.class));
+        Instrument instrument = new Instrument();
+        instrument.setCode("NVDA");
+        instrument.setName("英伟达");
+        instrument.setType("STOCK");
+        AttributionReport report = new AttributionReport();
+        report.setReportDate(LocalDate.parse("2026-09-18"));
+
+        agent.researchWithPlan(report, instrument, 2D, "task", mock(AttributionProgressPublisher.class),
+                new AttributionResearchPlanFactory().create(instrument, 2D, report.getReportDate()));
+
+        assertEquals(2, report.getEvidences().size());
+        assertTrue(report.getEvidences().stream().filter(item -> item.getUrl().contains("/old"))
+                .allMatch(item -> item.isHistoricalContext() && item.getPublishedAt().startsWith("2026-09-17")));
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(llm).complete(any(), prompt.capture());
+        assertTrue(prompt.getValue().contains("目标交易日:2026-09-18"));
+        assertTrue(prompt.getValue().contains("发布时间=2026-09-18"));
+        assertTrue(prompt.getValue().contains("历史背景=true"));
+        assertTrue(prompt.getValue().contains("立场=COUNTER"));
+        assertFalse(prompt.getValue().contains("次日"));
+        assertTrue(report.getDrivers().isEmpty());
+    }
+
 }

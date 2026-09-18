@@ -4,6 +4,8 @@ import com.finscope.common.util.StringUtils;
 import com.finscope.domain.attribution.AttributionEvidence;
 
 import java.net.URI;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -20,11 +22,20 @@ public class AttributionEvidenceGate {
         Map<String, AttributionEvidence> unique = new LinkedHashMap<String, AttributionEvidence>();
         if (evidences != null) {
             for (AttributionEvidence evidence : evidences) {
-                if (evidence == null) continue;
+                if (evidence == null) {
+                    continue;
+                }
                 String key = evidenceKey(evidence);
                 evidence.setEventKey(key);
                 AttributionEvidence existing = unique.get(key);
-                if (existing == null || score(evidence) > score(existing)) unique.put(key, evidence);
+                if (existing == null || score(evidence) > score(existing)) {
+                    if (existing != null && "COUNTER".equals(existing.getStance())) {
+                        evidence.setStance("COUNTER");
+                    }
+                    unique.put(key, evidence);
+                } else if ("COUNTER".equals(evidence.getStance())) {
+                    existing.setStance("COUNTER");
+                }
             }
         }
         List<AttributionEvidence> result = new ArrayList<AttributionEvidence>(unique.values());
@@ -32,21 +43,74 @@ public class AttributionEvidenceGate {
         return result;
     }
 
-    public String capConfidence(String requested, List<AttributionEvidence> evidences) {
-        boolean directAuthority = false;
-        boolean independentT2 = false;
-        if (evidences != null) {
-            Map<String, Boolean> domains = new LinkedHashMap<String, Boolean>();
-            for (AttributionEvidence evidence : evidences) {
-                if (evidence.isHistoricalContext()) continue;
-                if ("T1".equals(evidence.getSourceTier()) && "DIRECT".equals(evidence.getDirectness())) directAuthority = true;
-                if ("T1".equals(evidence.getSourceTier()) || "T2".equals(evidence.getSourceTier())) domains.put(domain(evidence.getUrl()), Boolean.TRUE);
+    /** 交易日之后的信息不得参与回溯归因；日期未知的线索保留但不能提高置信度。 */
+    public List<AttributionEvidence> eligibleAtDate(List<AttributionEvidence> evidences, LocalDate reportDate) {
+        List<AttributionEvidence> result = new ArrayList<>();
+        for (AttributionEvidence evidence : normalizeAndRank(evidences)) {
+            LocalDate published = publishedDate(evidence);
+            if (reportDate != null && published != null && published.isAfter(reportDate)) {
+                continue;
             }
-            independentT2 = domains.size() >= 2;
+            if (reportDate != null && published != null && published.isBefore(reportDate)) {
+                evidence.setHistoricalContext(true);
+            }
+            result.add(evidence);
         }
-        if ("HIGH".equals(requested) && !(directAuthority && independentT2)) return directAuthority ? "MID" : "LOW";
-        if ("MID".equals(requested) && !directAuthority && !independentT2) return "LOW";
-        return requested == null ? "LOW" : requested;
+        return result;
+    }
+
+    public boolean isCurrentSupport(AttributionEvidence evidence, LocalDate reportDate) {
+        return reportDate != null && reportDate.equals(publishedDate(evidence))
+                && !evidence.isHistoricalContext() && "SUPPORT".equals(evidence.getStance());
+    }
+
+    public String capConfidence(String requested, List<AttributionEvidence> evidences, LocalDate reportDate) {
+        boolean directAuthority = false;
+        boolean hasCounter = false;
+        Map<String, Boolean> domains = new LinkedHashMap<>();
+        if (evidences != null) {
+            for (AttributionEvidence evidence : evidences) {
+                if ("COUNTER".equals(evidence.getStance())) {
+                    hasCounter = true;
+                }
+                if (!isCurrentSupport(evidence, reportDate)) {
+                    continue;
+                }
+                String host = domain(evidence.getUrl());
+                if (StringUtils.isBlank(host)) {
+                    continue;
+                }
+                if ("T1".equals(evidence.getSourceTier()) && "DIRECT".equals(evidence.getDirectness())) {
+                    directAuthority = true;
+                }
+                if ("T1".equals(evidence.getSourceTier()) || "T2".equals(evidence.getSourceTier())) {
+                    domains.put(host, Boolean.TRUE);
+                }
+            }
+        }
+        if (!"HIGH".equals(requested) && !"MID".equals(requested)) {
+            return "LOW";
+        }
+        if (hasCounter || (!directAuthority && domains.size() < 2)) {
+            return "LOW";
+        }
+        return "HIGH".equals(requested) && directAuthority && domains.size() >= 2 ? "HIGH" : "MID";
+    }
+
+    private LocalDate publishedDate(AttributionEvidence evidence) {
+        String value = evidence.getPublishedAt();
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        String date = value.trim();
+        if (!date.matches("\\d{4}-\\d{2}-\\d{2}([T ].*)?")) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(date.substring(0, 10));
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
     }
 
     private String evidenceKey(AttributionEvidence evidence) {
@@ -55,7 +119,9 @@ public class AttributionEvidenceGate {
     }
 
     private String normalizeUrl(String url) {
-        if (StringUtils.isBlank(url)) return "";
+        if (StringUtils.isBlank(url)) {
+            return "";
+        }
         try {
             URI uri = URI.create(url.trim());
             String query = uri.getQuery();
@@ -75,6 +141,15 @@ public class AttributionEvidenceGate {
     }
 
     private String domain(String url) {
-        try { return URI.create(url).getHost(); } catch (Exception ex) { return StringUtils.firstNonBlank(url, ""); }
+        try {
+            URI uri = URI.create(url);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) {
+                return "";
+            }
+            String host = uri.getHost();
+            return host == null ? "" : host.toLowerCase(Locale.ROOT).replaceFirst("^www\\.", "");
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            return "";
+        }
     }
 }

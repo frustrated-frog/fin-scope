@@ -1,5 +1,6 @@
 package com.finscope.service.attribution;
 
+import java.time.LocalDate;
 import com.finscope.domain.instrument.Instrument;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,12 @@ class AttributionResearchPlanFactoryTest {
         instrument.setName("贵州茅台");
         instrument.setType("STOCK");
 
-        AttributionResearchPlan plan = new AttributionResearchPlanFactory().create(instrument, 3.2D);
+        AttributionResearchPlan plan = new AttributionResearchPlanFactory().create(instrument, 3.2D, LocalDate.parse("2026-09-18"));
 
         Set<String> tracks = new HashSet<String>();
         for (AttributionResearchPlan.Track track : plan.getTracks()) {
             tracks.add(track.getCode());
+            assertTrue(track.getQueries().stream().allMatch(query -> query.contains("2026-09-18") && !query.contains("今日") && !query.contains("最新")));
             assertTrue(track.getMaxQueries() > 0);
             assertTrue(track.getSuccessCriteria().length() > 0);
             assertTrue(track.getQueries().size() > 0);
@@ -43,7 +45,7 @@ class AttributionResearchPlanFactoryTest {
         instrument.setName("测试基金");
         instrument.setType("FUND");
 
-        AttributionResearchPlan plan = new AttributionResearchPlanFactory().create(instrument, -1.2D);
+        AttributionResearchPlan plan = new AttributionResearchPlanFactory().create(instrument, -1.2D, LocalDate.parse("2026-09-18"));
 
         assertTrue(plan.hasTrack("FUND_EXPOSURE"));
         assertTrue(plan.hasTrack("COUNTER"));

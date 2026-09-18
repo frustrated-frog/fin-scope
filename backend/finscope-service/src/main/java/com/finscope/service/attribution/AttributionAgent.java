@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -52,6 +53,9 @@ public class AttributionAgent {
     private ArticleRepository articleRepository;
     @Resource
     private AgentRunRepository agentRunRepository;
+
+    @Resource
+    private AttributionEvidenceGate evidenceGate;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -105,9 +109,11 @@ public class AttributionAgent {
         long t0 = System.currentTimeMillis();
         progressListener.stageStarted("question-plan");
         Map<String, String> queryTracks = plan == null
-                ? legacyQueryTracks(instrument, changePct) : plannedQueryTracks(plan);
+                ? legacyQueryTracks(instrument, changePct, report.getReportDate()) : plannedQueryTracks(plan);
         List<String> questions = new ArrayList<>(queryTracks.keySet());
-        for (String track : queryTracks.values()) execution.track(track);
+        for (String track : queryTracks.values()) {
+            execution.track(track);
+        }
         publisher.publish(taskId, AttributionProgressEvent.stage("question-plan",
                 "已生成 " + questions.size() + " 个研究方向"));
         agentRunRepository.record("attribution:question-plan", "SUCCESS",
@@ -153,7 +159,9 @@ public class AttributionAgent {
                     int fullTextReads = 0;
                     for (SearchEvidence hit : batch.getEvidence()) {
                         boolean readFullText = fullTextReads < 1;
-                        if (readFullText) fullTextReads++;
+                        if (readFullText) {
+                            fullTextReads++;
+                        }
                         ResearchEvidenceAcquisitionResult acquired = searchEvidenceContentService.acquire(
                                 hit, q, instrument.getName(), readFullText);
                         AttributionEvidence evidence = toEvidence(hit, acquired, queryTracks.get(q));
@@ -198,7 +206,7 @@ public class AttributionAgent {
         // ③ local-recall
         long t2 = System.currentTimeMillis();
         progressListener.stageStarted("local-recall");
-        int localCount = recallLocalNews(instrument, evidences, evidenceKeys);
+        int localCount = recallLocalNews(instrument, evidences, evidenceKeys, report.getReportDate());
         publisher.publish(taskId, AttributionProgressEvent.stage("local-recall",
                 "本地关联到 " + localCount + " 篇已抓文章"));
         agentRunRepository.record("attribution:local-recall", "SUCCESS", instrument.getCode(),
@@ -211,6 +219,7 @@ public class AttributionAgent {
         // ⑤ evidence-rank
         long t4 = System.currentTimeMillis();
         progressListener.stageStarted("evidence-rank");
+        evidences = evidenceGate.eligibleAtDate(evidences, report.getReportDate());
         rankEvidences(evidences);
         publisher.publish(taskId, AttributionProgressEvent.stage("evidence-rank", "已整理 " + evidences.size() + " 条有效证据"));
         agentRunRepository.record("attribution:evidence-rank", "SUCCESS", null, "ranked=" + evidences.size(), null, System.currentTimeMillis() - t4);
@@ -246,7 +255,7 @@ public class AttributionAgent {
     }
 
     // ---- ③ 本地新闻召回：按别名/名称在已抓文章中匹配 ----
-    private int recallLocalNews(Instrument instrument, List<AttributionEvidence> evidences, Set<String> evidenceKeys) {
+    private int recallLocalNews(Instrument instrument, List<AttributionEvidence> evidences, Set<String> evidenceKeys, LocalDate reportDate) {
         List<String> aliases = new ArrayList<>();
         aliases.add(instrument.getCode());
         if (StringUtils.isNotBlank(instrument.getName())) {
@@ -263,6 +272,10 @@ public class AttributionAgent {
         try {
             List<Article> articles = articleRepository.findAll();
             for (Article article : articles) {
+                if (reportDate != null && article.getPublishedAt() != null
+                        && article.getPublishedAt().toLocalDate().isAfter(reportDate)) {
+                    continue;
+                }
                 String haystack = (StringUtils.firstNonBlank(article.getTitle(), "") + " "
                         + StringUtils.firstNonBlank(article.getSummary(), "")).toLowerCase(Locale.ROOT);
                 for (String alias : aliases) {
@@ -275,6 +288,9 @@ public class AttributionAgent {
                                 article.getSummary(), article.getBody(), ""), 160));
                         evidence.setSourceDomain(StringUtils.firstNonBlank(article.getSourceName(), "本地"));
                         evidence.setSourceTier("T2");
+                        evidence.setPublishedAt(article.getPublishedAt() == null ? null : article.getPublishedAt().toString());
+                        evidence.setStance("SUPPORT");
+                        evidence.setDirectness("INDIRECT");
                         evidence.setRelevance(70);
                         if (addEvidenceIfAbsent(evidences, evidenceKeys, evidence)) {
                             count++;
@@ -335,10 +351,11 @@ public class AttributionAgent {
         return evidence;
     }
 
-    private Map<String, String> legacyQueryTracks(Instrument instrument, Double changePct) {
+    private Map<String, String> legacyQueryTracks(Instrument instrument, Double changePct, LocalDate reportDate) {
         Map<String, String> result = new LinkedHashMap<>();
         for (String query : planQuestions(instrument, changePct)) {
-            result.put(query, "COMPANY");
+            result.put((reportDate == null ? "日期未提供" : reportDate.toString()) + " "
+                    + query.replace("今日", "目标交易日").replace("最新", "相关"), "COMPANY");
         }
         return result;
     }
@@ -349,14 +366,18 @@ public class AttributionAgent {
         for (AttributionResearchPlan.Track track : plan.getTracks()) {
             int trackRemaining = Math.min(track.getMaxQueries(), plan.getBudget().getMaxQueriesPerTrack());
             for (String query : track.getQueries()) {
-                if (remaining <= 0 || trackRemaining <= 0) break;
+                if (remaining <= 0 || trackRemaining <= 0) {
+                    break;
+                }
                 if (StringUtils.isNotBlank(query)) {
                     result.put(query, track.getCode());
                     remaining--;
                     trackRemaining--;
                 }
             }
-            if (remaining <= 0) break;
+            if (remaining <= 0) {
+                break;
+            }
         }
         return result;
     }
@@ -366,6 +387,13 @@ public class AttributionAgent {
                                         AttributionEvidence evidence) {
         String key = evidenceKey(evidence);
         if (!evidenceKeys.add(key)) {
+            if ("COUNTER".equals(evidence.getStance())) {
+                for (AttributionEvidence existing : evidences) {
+                    if (key.equals(evidenceKey(existing))) {
+                        existing.setStance("COUNTER");
+                    }
+                }
+            }
             return false;
         }
         evidences.add(evidence);
@@ -419,7 +447,7 @@ public class AttributionAgent {
         report.setDisclaimer("本分析基于当日公开信息综合，可能含未证实传闻，非投资建议。");
         if (llmChatClient != null && llmChatClient.isConfigured() && !evidences.isEmpty()) {
             try {
-                String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences));
+                String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences, report.getReportDate()));
                 if (parseSynthResult(report, raw)) {
                     ensureNarrative(report, instrument, changePct, evidences);
                     return true;
@@ -428,22 +456,22 @@ public class AttributionAgent {
                 log.warn("归因综合失败 code={} message={}", instrument.getCode(), ex.getMessage());
             }
         }
-        fallbackSynthesize(report, instrument, changePct, evidences);
+        fallbackSynthesize(report);
         ensureNarrative(report, instrument, changePct, evidences);
         return false;
     }
 
     private String synthSystemPrompt() {
-        return "你是 FinScope 标的归因研究员。基于给定的行情与新闻证据，分析标的今日涨跌的可能原因。"
+        return "你是 FinScope 标的归因研究员。基于给定的行情与新闻证据，分析标的目标交易日涨跌的可能原因。"
                 + "要求：只依据证据，不编造；区分事实与传闻；传闻降低置信度；找不到明确原因时如实说明。"
                 + "只返回 JSON，不做买卖建议。";
     }
 
-    String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences) {
+    String synthUserPrompt(Instrument instrument, Double changePct, List<AttributionEvidence> evidences, LocalDate reportDate) {
         StringBuilder builder = new StringBuilder();
         builder.append("输出格式:{\"summary\":\"综合归因\",\"narrative\":{")
-                .append("\"plainSummary\":\"2-3句白话核心结论\",\"event\":\"今天发生了什么\",")
-                .append("\"instrumentLink\":\"为什么影响该标的\",\"whyToday\":\"为什么在今天集中反应\",")
+                .append("\"plainSummary\":\"2-3句白话核心结论\",\"event\":\"目标交易日发生了什么\",")
+                .append("\"instrumentLink\":\"为什么影响该标的\",\"whyToday\":\"为什么在目标交易日集中反应\",")
                 .append("\"causalSteps\":[\"因果节点\"],\"amplifiers\":[\"放大因素\"],")
                 .append("\"dampeners\":[\"缓冲或反方因素\"]},\"drivers\":[{\"claim\":\"原因\",")
                 .append("\"role\":\"TRIGGER|AMPLIFIER|BACKGROUND|COUNTER\",")
@@ -458,8 +486,8 @@ public class AttributionAgent {
                 .append("\"counterEvidence\":\"反证或局限\",\"observationWindow\":\"后续观察窗口\",")
                 .append("\"evidenceUrls\":[\"证据URL\"]}],\"uncertainties\":[\"不确定性\"],")
                 .append("\"observationWindows\":[\"整体观察项\"],\"disclaimer\":\"诚实说明\"}\n")
-                .append("要求给出 4-6 个不重复的驱动因素，覆盖公司、行业、宏观/政策、市场联动和反证；证据不足必须降低置信度。\n")
-                .append("先讲清：今天发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么今天集中反应 → 价格结果。")
+                .append("最多给出 6 个有证据对应的驱动因素，不设最低数量；证据不足允许 drivers 为空，禁止凑数。每个驱动的 evidenceUrls 必须来自所给证据。\n")
+                .append("先讲清：目标交易日发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么在目标交易日集中反应 → 价格结果。")
                 .append("直接触发、放大因素、背景和反方必须分开；使用普通中文，术语出现时在同一句解释。\n")
                 .append("facts 只写证据明确支持的事实；AI 解读不得重复事实原句。")
                 .append("marketInterpretation 回答市场为什么在意；expectationShift 使用‘原本预期 → 现在预期’。")
@@ -470,13 +498,17 @@ public class AttributionAgent {
         builder.append("标的:").append(StringUtils.firstNonBlank(instrument.getName(), instrument.getCode()))
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
-        builder.append("今日涨跌幅:").append(changePct == null ? "未知" : changePct + "%").append("\n");
+        builder.append("目标交易日:").append(reportDate == null ? "未提供，不得假定为今天" : reportDate).append("\n");
+        builder.append("只解释目标交易日；旧消息仅作背景，日期未知不得认定为当日触发；同日发布也不代表发生在价格变化之前。反证不得作为主因的支持证据。\n");
+        builder.append("目标交易日涨跌幅:").append(changePct == null ? "未知" : changePct + "%").append("\n");
         builder.append("证据列表:\n");
         int index = 1;
         for (AttributionEvidence e : evidences) {
             builder.append(index++).append(". [").append(e.getSourceTier()).append("] ")
                     .append(StringUtils.firstNonBlank(e.getTitle(), "")).append(" - ")
                     .append(StringUtils.firstNonBlank(e.getSnippet(), ""))
+                    .append(" 发布时间=").append(StringUtils.firstNonBlank(e.getPublishedAt(), "未知"))
+                    .append(" 立场=").append(e.getStance()).append(" 历史背景=").append(e.isHistoricalContext())
                     .append(" URL=").append(StringUtils.firstNonBlank(e.getUrl(), "无")).append("\n");
             if (index > 10) {
                 break;
@@ -547,32 +579,9 @@ public class AttributionAgent {
         }
     }
 
-    private void fallbackSynthesize(AttributionReport report,
-                                    Instrument instrument,
-                                    Double changePct,
-                                    List<AttributionEvidence> evidences) {
-        if (evidences.isEmpty()) {
-            report.setSummary("今日未检索到明显消息面驱动，涨跌可能源于板块联动或市场情绪。");
-            report.setDrivers(new ArrayList<>());
-            return;
-        }
-        String direction = changePct != null && changePct < 0 ? "下跌" : "上涨";
-        report.setSummary("检索到 " + evidences.size() + " 条相关信息，" + direction
-                + "可能与近期相关消息及板块情绪有关，具体见驱动因素。");
-        List<AttributionDriver> drivers = new ArrayList<>();
-        int limit = Math.min(3, evidences.size());
-        for (int i = 0; i < limit; i++) {
-            AttributionEvidence e = evidences.get(i);
-            AttributionDriver driver = new AttributionDriver();
-            driver.setClaim(StringUtils.firstNonBlank(e.getTitle(), "相关消息"));
-            driver.setRole(i == 0 ? "TRIGGER" : "BACKGROUND");
-            driver.setImpactLevel(i == 0 ? "MID" : "LOW");
-            driver.setConfidence("T1".equals(e.getSourceTier()) ? "MID" : "LOW");
-            driver.setDetail(StringUtils.firstNonBlank(e.getSnippet(), ""));
-            driver.setPlainExplanation(StringUtils.firstNonBlank(e.getSnippet(), e.getTitle(), "该线索可能影响市场预期。"));
-            drivers.add(driver);
-        }
-        report.setDrivers(drivers);
+    private void fallbackSynthesize(AttributionReport report) {
+        report.setSummary("当前证据不足以确认目标交易日涨跌的具体原因；已检索线索仅供核验。");
+        report.setDrivers(new ArrayList<>());
     }
 
     void ensureNarrative(AttributionReport report,
@@ -590,7 +599,9 @@ public class AttributionAgent {
         List<AttributionEvidence> currentEvidence = new ArrayList<>();
         if (evidences != null) {
             for (AttributionEvidence evidence : evidences) {
-                if (evidence != null && !evidence.isHistoricalContext()) currentEvidence.add(evidence);
+                if (evidence != null && evidenceGate.isCurrentSupport(evidence, report.getReportDate())) {
+                    currentEvidence.add(evidence);
+                }
             }
         }
         AttributionEvidence firstCurrent = currentEvidence.isEmpty() ? null : currentEvidence.get(0);
@@ -610,21 +621,27 @@ public class AttributionAgent {
         if (StringUtils.isBlank(narrative.getWhyToday())) {
             narrative.setWhyToday(firstCurrent == null
                     ? "当前公开信息不足以确认行情在当日集中反应的具体触发点。"
-                    : "该公开线索与当日价格异动同时出现，具体时点仍需结合公告时间、板块走势和成交数据继续确认。");
+                    : "该线索的发布日期与目标交易日一致，但尚未确认其发生在价格变化之前，不能据此断言因果。");
         }
         if (narrative.getCausalSteps() == null || narrative.getCausalSteps().isEmpty()) {
             List<String> steps = new ArrayList<>();
             addStep(steps, narrative.getEvent());
             if (primary != null && StringUtils.isNotBlank(primary.getTransmissionPath())) {
-                for (String step : primary.getTransmissionPath().split("\\s*→\\s*")) addStep(steps, step);
+                for (String step : primary.getTransmissionPath().split("\\s*→\\s*")) {
+                    addStep(steps, step);
+                }
             } else if (primary != null) {
                 addStep(steps, StringUtils.firstNonBlank(primary.getPlainExplanation(), primary.getClaim()));
             }
             addStep(steps, priceResult(changePct));
             narrative.setCausalSteps(steps);
         }
-        if (narrative.getAmplifiers() == null) narrative.setAmplifiers(new ArrayList<String>());
-        if (narrative.getDampeners() == null) narrative.setDampeners(new ArrayList<String>());
+        if (narrative.getAmplifiers() == null) {
+            narrative.setAmplifiers(new ArrayList<String>());
+        }
+        if (narrative.getDampeners() == null) {
+            narrative.setDampeners(new ArrayList<String>());
+        }
     }
 
     private String typeTransmissionInstruction(Instrument instrument) {
@@ -640,22 +657,36 @@ public class AttributionAgent {
 
     private String fallbackInstrumentLink(Instrument instrument) {
         String type = instrument.getType() == null ? "STOCK" : instrument.getType().toUpperCase(Locale.ROOT);
-        if ("FUND".equals(type)) return "该基金会通过相关行业或核心持仓的价格变化受到影响，具体组合暴露仍需核验。";
-        if ("SECTOR".equals(type)) return "该事件可能通过龙头股和成分股扩散影响板块表现，当前扩散范围仍需核验。";
-        return "当前证据显示该标的与上述事件相关，但具体业务暴露仍需公开资料进一步确认。";
+        if ("FUND".equals(type)) {
+            return "该基金会通过相关行业或核心持仓的价格变化受到影响，具体组合暴露仍需核验。";
+        }
+        if ("SECTOR".equals(type)) {
+            return "该事件可能通过龙头股和成分股扩散影响板块表现，当前扩散范围仍需核验。";
+        }
+        return "尚未确认公开线索与该标的价格变化的具体联系，业务暴露及传导关系仍需核验。";
     }
 
     private String priceResult(Double changePct) {
-        if (changePct == null) return "价格出现异动";
-        if (changePct < 0) return "卖出压力集中反映为股价或净值下跌";
-        if (changePct > 0) return "买入力量集中反映为股价或净值上涨";
+        if (changePct == null) {
+            return "价格出现异动";
+        }
+        if (changePct < 0) {
+            return "卖出压力集中反映为股价或净值下跌";
+        }
+        if (changePct > 0) {
+            return "买入力量集中反映为股价或净值上涨";
+        }
         return "多空力量接近平衡，价格变化有限";
     }
 
     private void addStep(List<String> steps, String value) {
-        if (steps.size() >= 4 || StringUtils.isBlank(value)) return;
+        if (steps.size() >= 4 || StringUtils.isBlank(value)) {
+            return;
+        }
         String normalized = value.trim();
-        if (!steps.contains(normalized)) steps.add(normalized);
+        if (!steps.contains(normalized)) {
+            steps.add(normalized);
+        }
     }
 
     private String normRole(String value) {
@@ -679,7 +710,9 @@ public class AttributionAgent {
         List<String> result = new ArrayList<>();
         if (node != null && node.isArray()) {
             for (JsonNode value : node) {
-                if (StringUtils.isNotBlank(value.asText())) result.add(value.asText().trim());
+                if (StringUtils.isNotBlank(value.asText())) {
+                    result.add(value.asText().trim());
+                }
             }
         }
         return result;
