@@ -847,6 +847,51 @@ export type AttributionEvidence = {
   historicalContext?: boolean;
 };
 
+export type AttributionMarketContext = {
+  instrumentCode: string;
+  reportDate?: string;
+  capturedAt?: string;
+  benchmarkName?: string;
+  benchmarkCode?: string;
+  stockChangePct?: number | null;
+  benchmarkChangePct?: number | null;
+  relativeChangePct?: number | null;
+  priorFiveSessionChangePct?: number | null;
+  amountRatio?: number | null;
+  quoteVerified: boolean;
+  source?: string;
+  limitations: string[];
+};
+
+export type AttributionHypothesis = {
+  id: string;
+  explanation: string;
+  disposition: 'PREFERRED' | 'COEXISTING' | 'NOT_ADOPTED' | 'UNRESOLVED';
+  selectionReason: string;
+  pricingMechanism: string;
+  explains: string;
+  doesNotExplain: string;
+  evidenceUrls: string[];
+  assumptions: string[];
+  revisionConditions: string[];
+};
+
+export type AttributionAssessment = {
+  version: number;
+  status: 'COMPLETE' | 'INSUFFICIENT_EVIDENCE' | 'DEGRADED';
+  marketContext?: AttributionMarketContext;
+  researchFocus: string;
+  focusReason?: string;
+  missingInformation: string[];
+  mainJudgment: string;
+  pricingDebate?: string;
+  explainedScope: string[];
+  unexplainedScope: string[];
+  hypotheses: AttributionHypothesis[];
+  commentary: string[];
+  warnings: string[];
+};
+
 export type AttributionReport = {
   id: number;
   instrumentCode: string;
@@ -857,6 +902,7 @@ export type AttributionReport = {
   status: 'GENERATING' | 'COMPLETED' | 'FAILED';
   summary?: string;
   narrative?: AttributionNarrative;
+  assessment?: AttributionAssessment;
   drivers?: AttributionDriver[];
   primaryDriver?: AttributionDriver;
   uncertainties?: string[];

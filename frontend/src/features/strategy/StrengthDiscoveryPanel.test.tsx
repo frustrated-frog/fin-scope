@@ -30,12 +30,15 @@ test('shows rejected events, uncertainty and losses without promoting them to bu
 });
 
 test('filters the whole pool across pages and recovers from empty results', async () => {
-  const items = Array.from({ length: 10 }, (_, index) => ({
+  const items: NonNullable<StockDiscoveryReport['strength_watchlist']> = Array.from({ length: 10 }, (_, index) => ({
     code: String(600000 + index), name: `观察股票${index}`, sources: [index === 9 ? 'BROKEN_LIMIT' : 'LIMIT_UP'],
     admitted: false, rejection_reasons: [], assessment: { status: 'INSUFFICIENT_DATA', sample_count: 0, execution_status: 'UNVERIFIED' },
   }));
   const user = userEvent.setup();
-  render(<StrengthDiscoveryPanel report={{ as_of_date: '2026-09-16', strength_watchlist: items } as StockDiscoveryReport} onOpenResearch={vi.fn()} />);
+  render(<StrengthDiscoveryPanel report={{ as_of_date: '2026-09-16', strength_watchlist: items, source_family: 'FIXTURE', quality_status: 'PARTIAL',
+    retrieved_at: '2026-09-16T15:00:00', budget: 10, duration_ms: 0, warnings: [],
+    funnel: { constituent_count: 10, admitted_count: 0, quantified_count: 0, deep_review_count: 0, final_count: 0 },
+    sectors: [], candidates: [], deep_evidence: [], final_candidates: [] }} onOpenResearch={vi.fn()} />);
   expect(screen.queryByRole('button', { name: '观察股票9 600009' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '下一页' }));
   expect(screen.getByRole('button', { name: '观察股票9 600009' })).toBeInTheDocument();

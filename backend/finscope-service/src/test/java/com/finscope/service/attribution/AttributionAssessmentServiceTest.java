@@ -53,6 +53,7 @@ class AttributionAssessmentServiceTest {
 
     @Test
     void keepsWeekendSupportAndOnlyAllowsWriterToOrderApprovedFragments() throws Exception {
+        evidence.setCreatedAt(java.time.LocalDateTime.of(2026, 9, 21, 18, 0));
         when(llm.complete(anyString(), anyString())).thenReturn(focus, decision(evidence.getUrl()),
                 "{\"paragraphIds\":[\"judgment\",\"h1\",\"boundary\"],\"inventedFact\":\"利润增长100倍\"}");
         AttributionAssessment result = run();
@@ -99,6 +100,32 @@ class AttributionAssessmentServiceTest {
         assertEquals(AssessmentStatus.DEGRADED, result.getStatus());
         assertTrue(result.getHypotheses().isEmpty());
         verify(llm, never()).complete(anyString(), anyString());
+    }
+
+    @Test
+    void targetedSupplementIsBoundedAndFiltersFutureEvidence() throws Exception {
+        com.finscope.service.search.evidence.SearchEvidenceGateway gateway = mock(com.finscope.service.search.evidence.SearchEvidenceGateway.class);
+        when(gateway.isConfigured(any())).thenReturn(true);
+        com.finscope.service.search.evidence.SearchEvidence hit = new com.finscope.service.search.evidence.SearchEvidence();
+        hit.setTitle("次日新订单");
+        hit.setUrl("https://future.test/order");
+        hit.setPublishedAt("2026-09-22");
+        com.finscope.service.search.evidence.SearchEvidence duplicate = new com.finscope.service.search.evidence.SearchEvidence();
+        duplicate.setUrl(evidence.getUrl());
+        duplicate.setTitle("同源补查摘要");
+        duplicate.setSourceTier("T1");
+        duplicate.setPublishedAt("2026-09-20");
+        when(gateway.search(any())).thenReturn(new com.finscope.service.search.evidence.SearchEvidenceBatch(
+                Arrays.asList(hit, duplicate), Collections.emptyList(), false));
+        ReflectionTestUtils.setField(service, "searchEvidenceGateway", gateway);
+        when(llm.complete(anyString(), anyString())).thenReturn(
+                focus.replace("订单金额\"]}", "订单金额\"],\"followUpQuery\":\"公司订单金额\"}"), decision(evidence.getUrl()), "{}");
+        java.util.List<AttributionEvidence> items = new java.util.ArrayList<>(Arrays.asList(evidence));
+        service.research(report, instrument, items, report.getReportDate().minusDays(3), stage -> {});
+        verify(gateway, times(1)).search(any());
+        assertEquals(1, items.size());
+        assertEquals(evidence.getUrl(), items.get(0).getUrl());
+        assertEquals("SUPPORT", items.get(0).getStance());
     }
 
     private AttributionAssessment run() {

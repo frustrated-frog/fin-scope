@@ -1,0 +1,49 @@
+/* 研判手记：沿用工作台墨绿与灰白，以批注边界代替评分卡。 */
+.assessment-note {
+  --assessment-ink: var(--ink, #18211f);
+  --assessment-muted: var(--muted, #66736f);
+  --assessment-paper: var(--surface, #ffffff);
+  --assessment-line: var(--line, #d9e0dc);
+  --assessment-accent: var(--accent, #15946f);
+  --assessment-caution: var(--accent-2, #d58a2d);
+  color: var(--assessment-ink);
+  min-width: 0;
+  max-width: 900px;
+  margin-inline: auto;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+.assessment-kicker { display: flex; justify-content: space-between; gap: 16px; color: var(--assessment-muted); font-size: 12px; margin-bottom: 24px; }
+.assessment-label { font-size: 12px; color: var(--assessment-accent); font-weight: 650; }
+.assessment-focus h3 { font-family: 'Songti SC', 'Noto Serif CJK SC', Georgia, serif; font-size: clamp(22px, 2.2vw, 30px); line-height: 1.55; font-weight: 600; margin: 8px 0 12px; }
+.assessment-focus-reason { color: var(--assessment-muted); font-size: 14px; }
+.assessment-note h4 { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
+.assessment-note h5 { font-size: 15px; margin: 6px 0; }
+.assessment-note p { margin: 8px 0 14px; }
+.assessment-judgment, .assessment-prose, .assessment-revision { margin-block: 30px; }
+.assessment-lead { font-size: 18px; line-height: 1.9; }
+.assessment-debate { color: var(--assessment-muted); }
+.assessment-debate strong, .assessment-boundary strong { display: block; color: var(--assessment-ink); font-size: 12px; margin-bottom: 4px; }
+.assessment-note details { border-block-start: 1px solid var(--assessment-line); padding: 14px 0; }
+.assessment-note summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.assessment-note summary span { color: var(--assessment-muted); font-size: 12px; margin-left: 10px; font-weight: 400; }
+.assessment-note summary:focus-visible, .assessment-note a:focus-visible { outline: 2px solid var(--assessment-accent); outline-offset: 5px; border-radius: 3px; }
+.assessment-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-block: 18px; }
+.assessment-metrics dt { font-size: 12px; color: var(--assessment-muted); }
+.assessment-metrics dd { margin: 4px 0 0; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 16px; font-variant-numeric: tabular-nums; }
+.assessment-caption { color: var(--assessment-muted); font-size: 12px; }
+.assessment-prose { font-size: 15px; }
+.assessment-boundary { border-inline-start: 3px solid var(--assessment-caution); padding: 8px 0 8px 20px; margin-block: 28px; background: linear-gradient(90deg, color-mix(in srgb, var(--assessment-caution) 6%, transparent), transparent); }
+.assessment-boundary p { font-size: 14px; }
+.assessment-revision > div { padding-block: 8px; }
+.assessment-note ul { padding-left: 20px; margin: 10px 0; font-size: 14px; }
+.assessment-hypothesis { padding: 20px 0; border-bottom: 1px dashed var(--assessment-line); font-size: 14px; }
+.assessment-source-links { display: flex; flex-wrap: wrap; gap: 16px; }
+.assessment-source-links a { color: var(--assessment-accent); font-size: 12px; text-underline-offset: 4px; }
+.assessment-warning { color: var(--assessment-muted); padding: 10px 14px; background: var(--surface-2, #f0f4f1); border-radius: 8px; font-size: 13px; }
+@media (max-width: 600px) {
+  .assessment-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .assessment-kicker { flex-wrap: wrap; gap: 4px 14px; margin-bottom: 16px; }
+  .assessment-lead { font-size: 16px; }
+  .assessment-boundary { padding-left: 14px; }
+}

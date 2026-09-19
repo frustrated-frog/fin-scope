@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AttributionAssessmentView } from './AttributionAssessmentView';
 import { api } from '../../shared/api/client';
 import { AttributionDriver, AttributionProgress, AttributionReport, AttributionResearchRunView } from '../../shared/types';
 
@@ -10,7 +11,12 @@ const stageLabels: Record<string, string> = {
   'local-recall': '检索本地新闻',
   'chain-reason': '分析产业链关联',
   'evidence-rank': '整理证据',
-  'attribution-synth': '综合生成归因'
+  'attribution-synth': '综合生成归因',
+  'market-context': '核验行情对照',
+  'research-focus': '确定研究焦点',
+  'focus-search': '补查关键缺口',
+  'hypothesis-comparison': '比较候选解释',
+  'research-commentary': '编排研判短评'
 };
 
 const levelLabels: Record<string, string> = { HIGH: '高', MID: '中', LOW: '低' };
@@ -35,8 +41,8 @@ const stepStatusLabels: Record<string, string> = {
   PENDING: '待启动'
 };
 const ATTRIBUTION_POLL_INTERVAL_MS = 1200;
-// 覆盖后台 90 秒研究预算，以及模型调用最长 300 秒超时。
-const ATTRIBUTION_MAX_POLL_ATTEMPTS = 300;
+// 覆盖搜索预算及三次模型调用；SSE 断开后仍能恢复报告。
+const ATTRIBUTION_MAX_POLL_ATTEMPTS = 900;
 
 function levelDots(level?: string) {
   const map: Record<string, string> = { HIGH: '●●●', MID: '●●○', LOW: '●○○' };
@@ -218,10 +224,11 @@ export function AttributionReaderView({
     return groups;
   }, {});
 
-  const changeText = changePct === undefined || changePct === null
+  const headlineChange = report?.assessment ? report.changePct : report?.changePct ?? changePct;
+  const changeText = headlineChange === undefined || headlineChange === null
     ? ''
-    : `${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}%`;
-  const changeCls = (changePct ?? 0) > 0 ? 'watchlist-up' : (changePct ?? 0) < 0 ? 'watchlist-down' : '';
+    : `${headlineChange > 0 ? '+' : ''}${headlineChange.toFixed(2)}%`;
+  const changeCls = (headlineChange ?? 0) > 0 ? 'watchlist-up' : (headlineChange ?? 0) < 0 ? 'watchlist-down' : '';
   const stageKeys = Object.keys(stageLabels);
   const completedStageCount = stageKeys.filter((stage) => stages.includes(stage) || currentStage === stage).length;
   const latestClue = clues[clues.length - 1];
@@ -240,7 +247,7 @@ export function AttributionReaderView({
     : activatedTrackCount === 0
       ? '轨道准备中'
       : `已启动 ${activatedTrackCount}/${plannedTrackCount}，已结算 ${settledTrackCount}/${plannedTrackCount}`;
-  const displayedChangePct = report?.changePct ?? changePct;
+  const displayedChangePct = headlineChange;
   const directionWord = (displayedChangePct ?? 0) < 0 ? '跌' : (displayedChangePct ?? 0) > 0 ? '涨' : '波动';
   const amplifiedMoveLabel = (displayedChangePct ?? 0) < 0 ? '放大跌幅的因素'
     : (displayedChangePct ?? 0) > 0 ? '放大涨幅的因素' : '放大波动的因素';
@@ -364,6 +371,7 @@ export function AttributionReaderView({
         <div className="attribution-report">
           <div className="attribution-report-layout">
             <div className="attribution-report-main">
+              {report.assessment ? <AttributionAssessmentView assessment={report.assessment} /> : <>
               {report.narrative ? (
                 <section className="attribution-narrative" aria-label="今日涨跌通俗解释">
                   <div className="attribution-narrative-hero">
@@ -512,6 +520,7 @@ export function AttributionReaderView({
               ) : (
                 <p className="muted">未识别到明确驱动因素。</p>
               )}
+              </>}
             </div>
 
             <div className="attribution-report-support">

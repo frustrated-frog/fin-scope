@@ -18,6 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PythonDailyBarClientTest {
 
     @Test
+    void benchmarkUsesShanghaiIndexIdentityRatherThanStockCodeInference() {
+        FinanceHttpClient http = (provider, uri, headers) -> {
+            assertEquals("/v1/stocks/SH/000300/daily-bars", uri.getPath());
+            return new FinanceHttpResponse(200, "{\"quality_status\":\"FRESH_PRIMARY\",\"data\":[{"
+                    + "\"trade_date\":\"2026-09-18\",\"open\":100,\"high\":104,\"low\":99,\"close\":103,\"volume\":100}]}",
+                    Instant.now(), "hash");
+        };
+        List<DailyBarPoint> bars = new PythonDailyBarClient("http://localhost:8000", http).fetchMarketBenchmark(250);
+        assertEquals("SH", bars.get(0).getMarket());
+        assertEquals("000300", bars.get(0).getCode());
+    }
+
+    @Test
     void mapsDailyBarsAndInfersShanghaiMarketFromCode() throws Exception {
         AtomicReference<URI> requested = new AtomicReference<URI>();
         FinanceHttpClient http = (providerCode, uri, headers) -> {

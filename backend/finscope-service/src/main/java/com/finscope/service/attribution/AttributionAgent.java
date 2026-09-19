@@ -239,6 +239,10 @@ public class AttributionAgent {
                 publisher.publish(taskId, AttributionProgressEvent.stage(stage, "正在生成异动研判"));
             }));
             report.setSummary(report.getAssessment().getMainJudgment());
+            if (!report.getAssessment().getWarnings().isEmpty()) {
+                report.setWarningMessage(StringUtils.firstNonBlank(report.getWarningMessage(), "")
+                        + " " + String.join("；", report.getAssessment().getWarnings()));
+            }
             report.setDrivers(new ArrayList<>());
             report.setNarrative(null);
             report.setDisclaimer("研判基于公开证据与目标日日线快照，机制解释不等于因果证明。");
