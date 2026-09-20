@@ -29,9 +29,9 @@ export function NewsView({
                          }: {
     setMessage: (message: string) => void;
     addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-    onResearch?: (eventId: number, question: string) => void;
+    onResearch?: (eventId: string | number, question: string) => void;
     onOpenMajorEvents?: () => void;
-    initialRadarEventId?: number | null;
+    initialRadarEventId?: string | number | null;
     onInitialRadarEventOpened?: () => void;
 }) {
     const [mode, setMode] = useState<'live' | 'radar'>(initialRadarEventId ? 'radar' : 'live');
@@ -58,8 +58,8 @@ export function NewsView({
 function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, onInitialEventOpened}: {
     setMessage: (message: string) => void;
     addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-    onResearch?: (eventId: number, question: string) => void;
-    initialEventId?: number | null;
+    onResearch?: (eventId: string | number, question: string) => void;
+    initialEventId?: string | number | null;
     onInitialEventOpened?: () => void;
 }) {
     const [snapshot, setSnapshot] = useState<ResearchRadarSnapshot>();
@@ -170,7 +170,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         }
     }
 
-    async function openNotificationEvent(eventId: number) {
+    async function openNotificationEvent(eventId: string | number) {
         const detail = await api<RadarEventDetail>(`/api/research-radar/events/${eventId}`);
         if (!mounted.current) {
             return false;
@@ -219,16 +219,17 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     ), [normalizedQuery, snapshot]);
     const contextSnapshot = baseSnapshot ?? snapshot;
     const contextEvents = baseSnapshot?.events ?? [];
-    const stateCounts: Record<RadarStateFilter, number> = {
+    const stateCounts: Record<RadarStateFilter, number> = snapshot?.stateCounts && Object.keys(snapshot.stateCounts).length ? snapshot.stateCounts : {
         ALL: contextEvents.filter((item) => matchesRadarState(item, 'ALL')).length,
         UNREAD: contextEvents.filter((item) => matchesRadarState(item, 'UNREAD')).length,
         FOLLOWED: followedCount,
         LATER: contextEvents.filter((item) => matchesRadarState(item, 'LATER')).length,
         IGNORED: contextEvents.filter((item) => matchesRadarState(item, 'IGNORED')).length
     };
-    const radarRefreshing = contextSnapshot?.productionStatus?.running || contextSnapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
-    const productionFailed = contextSnapshot?.productionStatus?.status === 'FAILED';
-    const productionStatusWarning = contextSnapshot?.productionStatus?.warning;
+    const productionStatus = snapshot?.productionStatus ?? contextSnapshot?.productionStatus;
+    const radarRefreshing = productionStatus?.running || contextSnapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
+    const productionFailed = productionStatus?.status === 'FAILED';
+    const productionStatusWarning = productionStatus?.warning;
     const degradedTitle = [contextSnapshot?.warnings?.join('\n'), productionStatusWarning].filter(Boolean).join('\n');
 
     return (

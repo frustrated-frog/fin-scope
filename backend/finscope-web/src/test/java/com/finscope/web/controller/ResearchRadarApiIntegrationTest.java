@@ -43,10 +43,23 @@ class ResearchRadarApiIntegrationTest {
     @MockBean private ViewSnapshotCacheService snapshots;
 
     @Test
+    void serializesCachedLongIdsWithoutPrecisionLossAndOverlaysLiveStatus() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        when(snapshots.read(any(), any())).thenReturn(Optional.of(mapper.readTree(
+                "{\"events\":[{\"id\":6140854697134002116}],\"productionStatus\":{\"running\":false}}")));
+        when(service.productionStatus()).thenReturn(ResearchRadarView.ProductionStatus.of(
+                true, "RUNNING", null, 1, 1, 1, null));
+        mvc.perform(get("/api/research-radar"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events[0].id").value("6140854697134002116"))
+                .andExpect(jsonPath("$.data.productionStatus.running").value(true));
+    }
+
+    @Test
     void readsThePublishedRadarSnapshotWithoutQueryingSqlite() throws Exception {
         RadarEvent cachedEvent = new RadarEvent();
         cachedEvent.setId(9L); cachedEvent.setCanonicalTitle("缓存事件");
-        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL")))
+        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL&queryVersion=2")))
                 .thenReturn(Optional.of(new ObjectMapper().findAndRegisterModules()
                         .valueToTree(new ResearchRadarView(Collections.singletonList(
                                 new ResearchRadarView.EventCard(cachedEvent)), Collections.emptyList(),
@@ -62,15 +75,15 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.events").isArray())
                 .andExpect(jsonPath("$.data.latestChanges").doesNotExist())
                 .andExpect(jsonPath("$.data.liveItems").isArray())
-                .andExpect(jsonPath("$.data.events[0].id").value(9))
+                .andExpect(jsonPath("$.data.events[0].id").value("9"))
                 .andExpect(jsonPath("$.data.overview.eventCount").value(1));
         verify(service, never()).loadStored(any(), anyBoolean(), anyInt(), any());
-        verify(snapshots).read("radar", "category=ALL&watchlist=false&limit=20&state=ALL");
+        verify(snapshots).read("radar", "category=ALL&watchlist=false&limit=20&state=ALL&queryVersion=2");
     }
 
     @Test
     void rebuildsTheRadarFromStoredEventsWhenAWorkspaceChangeInvalidatesItsSnapshot() throws Exception {
-        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL")))
+        when(snapshots.read(eq("radar"), eq("category=ALL&watchlist=false&limit=20&state=ALL&queryVersion=2")))
                 .thenReturn(Optional.empty());
         RadarEvent event = new RadarEvent();
         event.setId(10L); event.setCanonicalTitle("宁德时代发布新电池"); event.setStatus("ACTIVE");
@@ -102,7 +115,7 @@ class ResearchRadarApiIntegrationTest {
         mvc.perform(get("/api/research-radar/followed"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.events.length()").value(1))
-                .andExpect(jsonPath("$.data.events[0].id").value(10))
+                .andExpect(jsonPath("$.data.events[0].id").value("10"))
                 .andExpect(jsonPath("$.data.events[0].followed").value(true));
 
         verify(service).loadFollowed(20);
@@ -116,7 +129,7 @@ class ResearchRadarApiIntegrationTest {
 
         mvc.perform(post("/api/research-radar/events/10/interpretation"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.eventId").value(10))
+                .andExpect(jsonPath("$.data.eventId").value("10"))
                 .andExpect(jsonPath("$.data.status").value("QUEUED"));
 
         verify(service).requestInterpretation(10L);

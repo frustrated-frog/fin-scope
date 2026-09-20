@@ -1,6 +1,8 @@
 package com.finscope.service.research.material;
 
 import com.finscope.dao.cache.ResearchMaterialCacheRepository;
+import com.finscope.domain.news.NewsSourceHealth;
+import com.finscope.common.enums.news.NewsSourceStatus;
 import com.finscope.domain.research.material.ResearchMaterial;
 import com.finscope.domain.research.material.ResearchMaterialCacheEntry;
 import com.finscope.common.enums.research.ResearchMaterialType;
@@ -149,8 +151,22 @@ public class ResearchMaterialGateway {
         List<ResearchMaterialProvider> providers = newsProviders(normalized);
         Map<String, ResearchMaterial> unique = new LinkedHashMap<String, ResearchMaterial>();
         List<String> warnings = new ArrayList<String>();
+        List<NewsSourceHealth> health = new ArrayList<>();
         for (ResearchMaterialProvider provider : providers) {
             Optional<ResearchMaterialCacheEntry> cached = cache.get(sourceSnapshotKey(provider));
+            Optional<ResearchMaterialCacheEntry> attempt = cache.get(sourceSnapshotKey(provider) + ":health");
+            boolean failed = attempt.isPresent() && !attempt.get().getWarnings().isEmpty();
+            health.add(new NewsSourceHealth(provider.providerCode(),
+                    failed ? (cached.isPresent() ? NewsSourceStatus.DEGRADED : NewsSourceStatus.UNAVAILABLE)
+                            : (cached.isPresent() ? NewsSourceStatus.HEALTHY : NewsSourceStatus.WAITING),
+                    attempt.map(ResearchMaterialCacheEntry::getFetchedAt).orElse(null),
+                    cached.map(ResearchMaterialCacheEntry::getFetchedAt).orElse(null)));
+            if (failed) {
+                warnings.addAll(attempt.get().getWarnings());
+                if (cached.isPresent()) {
+                    warnings.add(provider.providerCode() + "：已使用最近一次成功快照");
+                }
+            }
             if (!cached.isPresent()) {
                 warnings.add(provider.providerCode() + "：正在等待后台同步");
                 continue;
@@ -163,7 +179,9 @@ public class ResearchMaterialGateway {
         if (unique.isEmpty() && warnings.isEmpty()) {
             warnings.add("正在同步资讯来源");
         }
-        return new ResearchMaterialGatewayResult(new ArrayList<ResearchMaterial>(unique.values()), warnings);
+        ResearchMaterialGatewayResult result = new ResearchMaterialGatewayResult(new ArrayList<>(unique.values()), warnings);
+        result.setSourceHealth(health);
+        return result;
     }
 
     private ResearchMaterialGatewayResult fetch(ResearchMaterialType type,
@@ -214,6 +232,8 @@ public class ResearchMaterialGateway {
             List<String> warnings = new ArrayList<String>(fetched.getWarnings());
             cache.put(sourceSnapshotKey(provider), new ResearchMaterialCacheEntry(values, warnings, LocalDateTime.now()),
                     sourceSnapshotTtl);
+            cache.put(sourceSnapshotKey(provider) + ":health", new ResearchMaterialCacheEntry(
+                    Collections.emptyList(), Collections.emptyList(), LocalDateTime.now()), sourceSnapshotTtl);
             return new SourceResult(values, warnings);
         } catch (RuntimeException error) {
             return failedSource(provider, safe(error));
@@ -223,6 +243,8 @@ public class ResearchMaterialGateway {
     private SourceResult failedSource(ResearchMaterialProvider provider, String message) {
         List<String> warnings = new ArrayList<String>();
         warnings.add(provider.providerCode() + "：" + message);
+        cache.put(sourceSnapshotKey(provider) + ":health", new ResearchMaterialCacheEntry(
+                Collections.emptyList(), warnings, LocalDateTime.now()), sourceSnapshotTtl);
         Optional<ResearchMaterialCacheEntry> cached = cache.get(sourceSnapshotKey(provider));
         if (cached.isPresent()) {
             warnings.add(provider.providerCode() + "：已使用最近一次成功快照");

@@ -143,7 +143,7 @@ test('shows category quality counts and explainable agent decisions', async () =
 
   expect(await screen.findByRole('button', { name: '公司动态 2' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '待确认 1' })).toBeInTheDocument();
-  expect(screen.getByText('待分类 1')).toBeInTheDocument();
+  expect(screen.getByText('未归类 1')).toBeInTheDocument();
   expect(screen.getAllByText('65%').length).toBeGreaterThan(0);
   expect(screen.getAllByText('公司发布新产品').length).toBeGreaterThan(0);
   expect(screen.getAllByText('待确认').length).toBeGreaterThan(0);
@@ -260,7 +260,7 @@ test('loads original signals only when the user opens the interpretation drawer'
   await openRadar();
   await screen.findByRole('heading', { name: event.title });
 
-  await userEvent.click(screen.getByRole('button', { name: '查看解读' }));
+  await userEvent.click(screen.getByRole('button', { name: '查看详情' }));
 
   expect(await screen.findByRole('dialog', { name: event.title })).toBeInTheDocument();
   expect(screen.getByText('3 个独立来源共同报道')).toBeInTheDocument();
@@ -291,7 +291,7 @@ test('records a radar event with an in-app toast instead of a native alert', asy
 test('shows external evidence and a sanitized agent trace without prompts', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
-  await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
 
   expect(await screen.findByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: '证据' }));
@@ -303,7 +303,7 @@ test('shows external evidence and a sanitized agent trace without prompts', asyn
 
 test('keeps tracking details behind explicit dossier tabs', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-  await openRadar(); await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
+  await openRadar(); await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
   await userEvent.click(await screen.findByRole('button', { name: '事件脉络' }));
   expect(await screen.findByText('新增来源消息')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '证据' }));
@@ -430,7 +430,7 @@ test('opens immediately and generates a missing interpretation in the background
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  fireEvent.click(screen.getByRole('button', { name: '查看解读' }));
+  fireEvent.click(screen.getByRole('button', { name: '查看详情' }));
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
   expect(screen.getByRole('dialog', { name: event.title })).toBeInTheDocument();

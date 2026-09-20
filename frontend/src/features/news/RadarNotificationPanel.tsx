@@ -4,7 +4,7 @@ import type { RadarNotification, RadarNotificationCenter } from './researchRadar
 
 export function RadarNotificationPanel({ hint = 0, onOpenEvent }: {
   hint?: number;
-  onOpenEvent: (eventId: number) => Promise<boolean>;
+  onOpenEvent: (eventId: string | number) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const [center, setCenter] = useState<RadarNotificationCenter>();

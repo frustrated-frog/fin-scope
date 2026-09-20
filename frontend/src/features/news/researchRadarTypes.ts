@@ -12,7 +12,7 @@ export type RadarNewsItem = {
 };
 
 export type RadarEvent = {
-  id: number;
+  id: string | number;
   eventKey: string;
   title: string;
   summary: string;
@@ -59,8 +59,8 @@ export type RadarInterpretationResult = {
 };
 
 export type RadarInterpretation = {
-  id?: number;
-  eventId: number;
+  id?: string | number;
+  eventId: string | number;
   status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'UNAVAILABLE';
   stale: boolean;
   failureCode?: string;
@@ -70,7 +70,7 @@ export type RadarInterpretation = {
 };
 
 export type RadarSignal = {
-  id: number;
+  id: string | number;
   title: string;
   content: string;
   url?: string;
@@ -83,7 +83,7 @@ export type RadarSignal = {
 };
 
 export type RadarEvidence = {
-  id?: number;
+  id?: string | number;
   toolCode: string;
   evidenceType?: string;
   title: string;
@@ -117,16 +117,17 @@ export type RadarEventDetail = {
   researchLinks?: RadarResearchLink[];
 };
 
-export type RadarWorkspaceState = { eventId: number; read: boolean; followed: boolean; disposition: 'ACTIVE' | 'LATER' | 'IGNORED'; readAt?: string };
-export type RadarObservation = { id: number; eventId: number; content: string; status: 'OPEN' | 'DONE'; source: 'SYSTEM' | 'USER'; createdAt: string; completedAt?: string };
-export type RadarTimelineEntry = { id: number; eventId: number; eventType: string; title: string; summary?: string; referenceType?: string; referenceId?: number; occurredAt: string };
+export type RadarWorkspaceState = { eventId: string | number; read: boolean; followed: boolean; disposition: 'ACTIVE' | 'LATER' | 'IGNORED'; readAt?: string };
+export type RadarObservation = { id: string | number; eventId: string | number; content: string; status: 'OPEN' | 'DONE'; source: 'SYSTEM' | 'USER'; createdAt: string; completedAt?: string };
+export type RadarTimelineEntry = { id: string | number; eventId: string | number; eventType: string; title: string; summary?: string; referenceType?: string; referenceId?: string | number; occurredAt: string };
 export type RadarTrust = { independentSourceCount: number; sourceTierCounts: Record<string, number>; citationCoveredCount: number; citationTotalCount: number; concentration: string; conflicts: string[]; limitation: string };
-export type RadarResearchLink = { id: number; eventId: number; researchRunId: number; questionSnapshot?: string; status?: string; summary?: string; createdAt: string };
-export type RadarNotification = { id?: number; eventId?: number; notificationType: string; title: string; message?: string; read: boolean; createdAt: string };
+export type RadarResearchLink = { id: string | number; eventId: string | number; researchRunId: string | number; questionSnapshot?: string; status?: string; summary?: string; createdAt: string };
+export type RadarNotification = { id?: string | number; eventId?: string | number; notificationType: string; title: string; message?: string; read: boolean; createdAt: string };
 export type RadarNotificationCenter = { items: RadarNotification[]; unreadCount: number; todayCount: number; followedChangeCount?: number; openObservationCount?: number };
 export type RadarStateFilter = 'ALL' | 'UNREAD' | 'FOLLOWED' | 'LATER' | 'IGNORED';
 
 export type ResearchRadarSnapshot = {
+  stateCounts?: Record<RadarStateFilter, number>;
   overview: { eventCount: number; highPriorityCount: number; watchlistRelatedCount: number; sourceCount: number };
   events: RadarEvent[];
   liveItems?: RadarNewsItem[];

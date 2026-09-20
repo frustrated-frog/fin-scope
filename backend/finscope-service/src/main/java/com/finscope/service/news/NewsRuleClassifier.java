@@ -1,5 +1,7 @@
 package com.finscope.service.news;
 
+import com.finscope.common.enums.news.NewsClassificationStatus;
+
 import com.finscope.domain.news.NewsCategory;
 import com.finscope.domain.news.NewsItemClassification;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,7 @@ public class NewsRuleClassifier {
         NewsItemClassification result = new NewsItemClassification();
         result.setItemId(candidate.getItemId());
         result.setModelName(VERSION);
-        result.setStatus("UNCLASSIFIED");
+        result.setStatus(NewsClassificationStatus.UNCLASSIFIED.name());
         for (Map.Entry<String, List<String>> rule : RULES.entrySet()) {
             if (categories.stream().noneMatch(category -> category.isEnabled() && category.getCode().equals(rule.getKey()))) {
                 continue;
@@ -27,7 +29,7 @@ public class NewsRuleClassifier {
             for (String keyword : rule.getValue()) {
                 int position = text.indexOf(keyword);
                 if (position >= 0) {
-                    result.setStatus("CLASSIFIED");
+                    result.setStatus(NewsClassificationStatus.CLASSIFIED.name());
                     result.setCategoryCode(rule.getKey());
                     result.setReason("规则 v1：命中「" + keyword + "」，原文位置 " + position);
                     return result;

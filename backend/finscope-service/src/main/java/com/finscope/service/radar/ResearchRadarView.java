@@ -17,6 +17,14 @@ import java.util.List;
 import java.util.Map;
 
 public final class ResearchRadarView {
+    @lombok.Getter
+    private Map<String, Integer> stateCounts = Collections.emptyMap();
+
+    public ResearchRadarView withStateCounts(Map<String, Integer> values) {
+        stateCounts = Collections.unmodifiableMap(new LinkedHashMap<>(values));
+        return this;
+    }
+
     private final Overview overview;
     private final List<EventCard> events;
     private final List<NewsFeedItem> liveItems;
@@ -52,10 +60,10 @@ public final class ResearchRadarView {
     public LocalDateTime getRefreshedAt() { return refreshedAt; }
     public ProductionStatus getProductionStatus() { return productionStatus; }
     public ResearchRadarView withWarnings(List<String> values) {
-        return new ResearchRadarView(events, liveItems, values, refreshedAt, productionStatus);
+        return new ResearchRadarView(events, liveItems, values, refreshedAt, productionStatus).withStateCounts(stateCounts);
     }
     public ResearchRadarView withProductionStatus(ProductionStatus value) {
-        return new ResearchRadarView(events, liveItems, warnings, refreshedAt, value);
+        return new ResearchRadarView(events, liveItems, warnings, refreshedAt, value).withStateCounts(stateCounts);
     }
 
     public static final class ProductionStatus {

@@ -64,9 +64,12 @@ public class ResearchRadarController {
         String normalizedState = state == null ? ALL : state.trim().toUpperCase(java.util.Locale.ROOT);
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
         String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly
-                + "&limit=" + normalizedLimit + "&state=" + normalizedState;
+                + "&limit=" + normalizedLimit + "&state=" + normalizedState + "&queryVersion=2";
         JsonNode data = snapshots.read("radar", variant).orElseGet(() -> mapper.valueToTree(
                 service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState)));
+        if (data.isObject()) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) data).set("productionStatus", mapper.valueToTree(service.productionStatus()));
+        }
         return ApiResponses.success(data);
     }
 

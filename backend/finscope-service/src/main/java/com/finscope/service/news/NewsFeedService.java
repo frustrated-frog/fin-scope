@@ -111,8 +111,10 @@ public class NewsFeedService {
             items.add(enriched);
             sources.add(enriched.getSourceName());
         }
-        return new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size(),
+        NewsFeedSnapshot snapshot = new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size(),
                 categoryCounts, unclassifiedCount);
+        snapshot.setSourceHealth(result.getSourceHealth());
+        return snapshot;
     }
 
     public List<NewsCategory> categories() {

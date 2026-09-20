@@ -115,6 +115,14 @@ class ResearchMaterialGatewayTest {
         assertTrue(result.getWarnings().get(0).contains("FAILED"));
         assertTrue(cache.entries.containsKey("finscope:news-source:HEALTHY"));
         assertEquals(Duration.ofHours(36), cache.lastTtl);
+        LocalDateTime successAt = cache.entries.get("finscope:news-source:FAILED").getFetchedAt();
+        ResearchMaterialGatewayResult read = gateway.readNewsFlashSources(new ResearchMaterialRequest("000001", "", 10));
+        assertTrue(read.getWarnings().stream().anyMatch(value -> value.contains("最近一次成功快照")));
+        com.finscope.domain.news.NewsSourceHealth failed = read.getSourceHealth().stream()
+                .filter(value -> "FAILED".equals(value.getProviderCode())).findFirst().orElseThrow();
+        assertEquals(com.finscope.common.enums.news.NewsSourceStatus.DEGRADED, failed.getStatus());
+        assertEquals(successAt, failed.getLastSuccessAt());
+        assertTrue(failed.getLastAttemptAt() != null);
     }
 
     @Test

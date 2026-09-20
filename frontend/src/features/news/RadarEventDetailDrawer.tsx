@@ -60,7 +60,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
 
         {tab==='evidence'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>证据与来源</h3><span>{(detail?.signals.length??0)+(detail?.evidence?.length??0)} 条</span></div><RadarTrustPanel trust={detail?.trust}/>
           {detail?.evidence?.map((item,index)=><Evidence key={item.id??`${item.toolCode}-${index}`} title={item.title} source={item.sourceName||evidenceTypeLabel(item.evidenceType)} meta={evidenceTypeLabel(item.evidenceType)} url={item.url} summary={item.summary}/>)}
-          {detail?.signals.map((signal)=><Evidence key={signal.id} title={signal.title} source={signal.sourceName} meta={formatDateTime(signal.publishedAt)} url={signal.url} summary={signal.matchReason}/>)}
+          {detail?.signals.map((signal)=><Evidence key={signal.id} title={signal.title} source={signal.sourceName} meta={formatDateTime(signal.publishedAt)} url={signal.url} summary={signal.content || signal.matchReason}/>)}
           {detail?.agentTrace?.length?<details className="radar-agent-trace radar-drawer-trace"><summary>Agent 运行状态</summary><ol>{detail.agentTrace.map((trace,index)=><li key={`${trace.nodeName}-${index}`}><div><strong>{agentNodeLabel(trace.nodeName)}</strong><span>{trace.status} · {trace.durationMs}ms</span></div>{trace.summary?<p>{trace.summary}</p>:null}{trace.fallbackUsed?<small>已降级：{trace.fallbackReason||trace.errorType||'使用确定性结果'}</small>:null}</li>)}</ol></details>:null}
         </section>:null}
 
