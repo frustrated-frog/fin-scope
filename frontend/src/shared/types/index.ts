@@ -775,7 +775,7 @@ export type DashboardHotspotRanking = {
 };
 
 export type DashboardHotspotItem = {
-  id: number;
+  id: string | number;
   title: string;
   summary: string;
   hotspotScore: number;

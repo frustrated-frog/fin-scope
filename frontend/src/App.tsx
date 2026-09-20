@@ -96,8 +96,8 @@ export default function App() {
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
   const [stockDiscoveryMarketContext, setStockDiscoveryMarketContext] = useState<StockDiscoveryMarketContext>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
-  const [pendingRadarEventId, setPendingRadarEventId] = useState<number | null>(null);
-  const [dashboardRadarEventId, setDashboardRadarEventId] = useState<number | null>(null);
+  const [pendingRadarEventId, setPendingRadarEventId] = useState<string | number | null>(null);
+  const [dashboardRadarEventId, setDashboardRadarEventId] = useState<string | number | null>(null);
   const [industryChainStockCode, setIndustryChainStockCode] = useState<string>();
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {

@@ -29,7 +29,7 @@ type DashboardViewProps = {
   intakeCandidates: IntakeCandidate[];
   knowledgeOverview: KnowledgeOverview | null;
   onChangeView: (view: View) => void;
-  onOpenRadarEvent: (eventId: number) => void;
+  onOpenRadarEvent: (eventId: string | number) => void;
 };
 
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
@@ -316,7 +316,7 @@ function normalizeHotspotRankings(rankings?: DashboardHotspotRanking[]) {
 
 function HotspotBoard({ ranking, onOpen }: {
   ranking: DashboardHotspotRanking;
-  onOpen: (eventId: number) => void;
+  onOpen: (eventId: string | number) => void;
 }) {
   return (
     <article className={`dashboard-hotspot-board is-${ranking.categoryCode.toLowerCase()}`} data-flow-surface={ranking.categoryCode}>
@@ -344,7 +344,7 @@ function HotspotBoard({ ranking, onOpen }: {
 function HotspotItem({ item, rank, onOpen }: {
   item: DashboardHotspotItem;
   rank: number;
-  onOpen: (eventId: number) => void;
+  onOpen: (eventId: string | number) => void;
 }) {
   return (
     <button

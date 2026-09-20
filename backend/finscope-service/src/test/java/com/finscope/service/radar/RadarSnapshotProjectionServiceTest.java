@@ -48,10 +48,12 @@ class RadarSnapshotProjectionServiceTest {
         interpretation.setStatus("COMPLETED");
         RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary();
         summary.setFollowed(true);
-        when(interpretations.latestByEventIds(Arrays.asList(1L, 2L)))
+        when(interpretations.latestByEventIds(Arrays.asList(2L, 1L)))
                 .thenReturn(Collections.singletonMap(1L, interpretation));
-        when(workspace.summaries(Arrays.asList(1L, 2L)))
-                .thenReturn(Collections.singletonMap(1L, summary));
+        RadarEventWorkspace.Summary ignored = new RadarEventWorkspace.Summary();
+        ignored.setDisposition("IGNORED");
+        when(workspace.summaries(Arrays.asList(2L, 1L)))
+                .thenReturn(Map.of(1L, summary, 2L, ignored));
 
         assertTrue(service.prewarm(Arrays.asList(event(1L, "FINANCE"), event(2L, "TECHNOLOGY")), run));
 
@@ -65,6 +67,8 @@ class RadarSnapshotProjectionServiceTest {
         verify(snapshots).write(eq("dashboard"), eq(9L), eq(RadarSnapshotProjectionService.HOTSPOT_VARIANT),
                 any(), eq(Duration.ofHours(36)));
         ResearchRadarView projected = (ResearchRadarView) radarView.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals(1, projected.getEvents().size());
+        org.junit.jupiter.api.Assertions.assertEquals(1, projected.getStateCounts().get("IGNORED"));
         assertTrue(projected.getEvents().get(0).isFollowed());
         assertTrue("COMPLETED".equals(projected.getEvents().get(0).getInterpretationStatus()));
     }

@@ -22,7 +22,7 @@ import java.util.LinkedHashMap;
 /** 只消费本轮生产结果，将可点击的页面列表一次性物化为 Redis 快照。 */
 @Service
 public class RadarSnapshotProjectionService {
-    public static final String DEFAULT_RADAR_VARIANT = "category=ALL&watchlist=false&limit=20&state=ALL";
+    public static final String DEFAULT_RADAR_VARIANT = "category=ALL&watchlist=false&limit=20&state=ALL&queryVersion=2";
     public static final String HOTSPOT_VARIANT = "hotspots";
     private static final Duration TTL = Duration.ofHours(36);
 
@@ -77,11 +77,13 @@ public class RadarSnapshotProjectionService {
         List<RadarEvent> ranked = new ArrayList<RadarEvent>(events);
         ranked.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
                 .thenComparing(RadarEvent::getHotspotScore, Comparator.reverseOrder())
-                .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder())));
-        return new ResearchRadarView(cards(ranked, 20), Collections.emptyList(),
+                .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(RadarEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
+        List<ResearchRadarView.EventCard> allCards = cards(ranked, ranked.size());
+        return new ResearchRadarView(RadarEventCardQuery.filter(allCards, "ALL", 20), Collections.emptyList(),
                 Collections.emptyList(), run.getCompletedAt(), ResearchRadarView.ProductionStatus.of(false,
                 run.getStatus(), run.getCompletedAt(), run.getSourceCount(), run.getSignalCount(),
-                run.getEventCount(), run.getWarning()));
+                run.getEventCount(), run.getWarning())).withStateCounts(RadarEventCardQuery.counts(allCards));
     }
 
     private List<ResearchRadarView.EventCard> cards(List<RadarEvent> events, int limit) {

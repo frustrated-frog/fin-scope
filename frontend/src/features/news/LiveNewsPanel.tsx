@@ -29,6 +29,7 @@ type NewsFeedSnapshot = {
   warnings: string[];
   refreshedAt: string;
   sourceCount: number;
+  sourceHealth?: Array<{ providerCode: string; status: 'HEALTHY' | 'DEGRADED' | 'UNAVAILABLE' | 'WAITING'; lastAttemptAt?: string; lastSuccessAt?: string }>;
   categoryCounts?: Record<string, number>;
   unclassifiedCount?: number;
 };
@@ -187,7 +188,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         </div>
         <div className="news-sync-state" aria-live="polite">
           <span>{snapshot ? `${snapshot.sourceCount} 个独立来源` : '连接中'}</span>
-          <strong>{snapshot ? `更新于 ${formatTime(snapshot.refreshedAt, true)}` : '等待首批资讯'}</strong>
+          <strong>{snapshot ? `页面快照 ${formatTime(snapshot.refreshedAt, true)}` : '等待首批资讯'}</strong>
           <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void refreshSources()} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
           </button>
@@ -195,6 +196,13 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         </div>
       </header>
 
+      {snapshot?.sourceHealth?.length ? <details className="news-source-health"><summary>来源同步状态</summary>
+        {snapshot.sourceHealth.map((source) => <p key={source.providerCode}>
+          {source.providerCode} · {{ HEALTHY: '同步正常', DEGRADED: '同步失败，保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' }[source.status]}
+          {' · 最近成功：'}{source.lastSuccessAt ? formatTime(source.lastSuccessAt, true) : '暂无'}
+          {' · 最近尝试：'}{source.lastAttemptAt ? formatTime(source.lastAttemptAt, true) : '暂无'}
+        </p>)}
+      </details> : null}
       <nav className="news-category-rail" aria-label="资讯分类">
         {categories.map((category) => (
           <button type="button" key={category.code} className={selectedCategory === category.code ? 'active' : ''}
@@ -202,7 +210,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
             <span>{category.name}</span><b>{snapshot?.categoryCounts?.[category.code] ?? 0}</b>
           </button>
         ))}
-        <span className="news-unclassified-count">待分类 {snapshot?.unclassifiedCount ?? 0}</span>
+        <span className="news-unclassified-count">未归类 {snapshot?.unclassifiedCount ?? 0}</span>
       </nav>
 
       <div className="news-filter-rail">

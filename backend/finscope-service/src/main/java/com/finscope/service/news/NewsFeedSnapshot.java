@@ -1,5 +1,7 @@
 package com.finscope.service.news;
 
+import com.finscope.domain.news.NewsSourceHealth;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,6 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 public final class NewsFeedSnapshot {
+    @lombok.Getter
+    @lombok.Setter
+    private List<NewsSourceHealth> sourceHealth = Collections.emptyList();
     private final List<NewsFeedItem> items;
     private final List<String> warnings;
     private final LocalDateTime refreshedAt;
