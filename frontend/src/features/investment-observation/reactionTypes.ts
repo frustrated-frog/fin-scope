@@ -3,6 +3,10 @@ export type SampleState = 'DRAFT' | 'OBSERVING' | 'ARCHIVED';
 export type WindowStatus = 'READY' | 'NOT_DUE' | 'MISSING_DATA' | 'SUSPENDED';
 export type PathType = 'OBSERVING' | 'PERSISTENT_STRENGTH' | 'GIVEBACK' | 'DELAYED_STRENGTH' | 'RELATIVE_WEAKNESS' | 'NO_CLEAR_PATTERN';
 export interface ReactionPoint {
+  close?: number | null;
+  adjustedClose?: number | null;
+  volume?: number | null;
+  amount?: number | null;
   session: number;
   tradeDate: string;
   status: WindowStatus;
@@ -35,7 +39,10 @@ export interface ReactionCalculation {
 }
 export interface ReactionSample {
   id: number;
-  majorEventId: number;
+  majorEventId?: number | null;
+  sourceIdentity?: string;
+  automatic?: boolean;
+  discoveryIssue?: string;
   sourceOriginType: string;
   sourceOriginKey: string;
   title: string;
@@ -64,7 +71,7 @@ export interface ReactionCandidate {
   occurredDate?: string;
   suggestedType: EventType;
 }
-export const eventLabels: Record<EventType, string> = { EARNINGS: '业绩披露', CONTRACT: '正式合同' };
+export const eventLabels: Record<EventType, string> = { EARNINGS: '业绩披露', CONTRACT: '合同与订单' };
 export const statusLabels: Record<WindowStatus, string> = {
   READY: '已完成', NOT_DUE: '尚未到期', MISSING_DATA: '行情缺失', SUSPENDED: '无成交／可能停牌'
 };
@@ -85,4 +92,17 @@ export function sourceHref(value?: string) {
   } catch {
     return undefined;
   }
+}
+
+export interface DiscoveryStatus {
+  running: boolean;
+  lastCompletedAt?: string;
+  captured: number;
+  resolved: number;
+  message: string;
+}
+
+export function beforeEventReturn(sample: ReactionSample) {
+  const start = sample.calculation?.points.find(point => point.session === -5)?.stockReturnPct;
+  return start == null || start <= -100 ? undefined : (1 / (1 + start / 100) - 1) * 100;
 }

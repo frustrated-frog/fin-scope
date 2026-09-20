@@ -40,7 +40,7 @@
 .reaction-toolbar p, .reaction-note { font-size: 12px; color: var(--reaction-muted); line-height: 1.8; }
 .reaction-workspace select, .reaction-workspace input, .reaction-workspace textarea { min-width: 0; border: 1px solid var(--reaction-line); border-radius: 5px; padding: 8px 10px; background: var(--surface, #fff); color: var(--ink, #233b53); }
 .reaction-matrix { border: 1px solid var(--reaction-line); border-radius: 10px; overflow: hidden; background: var(--surface, #fff); }
-.reaction-matrix-head, .reaction-matrix-row { display: grid; grid-template-columns: minmax(230px, 2.8fr) repeat(3, minmax(100px, 1fr)) minmax(120px, 1.2fr); align-items: center; gap: 12px; padding: 18px 22px; }
+.reaction-matrix-head, .reaction-matrix-row { display: grid; grid-template-columns: minmax(200px, 2.8fr) repeat(4, minmax(80px, 1fr)) minmax(110px, 1.2fr); align-items: center; gap: 12px; padding: 18px 22px; }
 .reaction-matrix-head { background: var(--reaction-subtle); color: var(--reaction-muted); font-size: 11px; padding-block: 12px; }
 .reaction-matrix-head > span:not(:first-child) { text-align: center; }
 .reaction-matrix-row + .reaction-matrix-row { border-top: 1px solid var(--reaction-line); }
@@ -133,7 +133,7 @@
   .reaction-toolbar { gap: 4px; }
   .reaction-toolbar > div { gap: 10px; }
   .reaction-matrix-head { display: none; }
-  .reaction-matrix-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 8px; padding: 18px 16px; }
+  .reaction-matrix-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 8px; padding: 18px 16px; }
   .reaction-subject, .reaction-row-state { grid-column: 1 / -1; }
   .reaction-row-state { display: flex; justify-content: space-between; border-top: 1px solid var(--reaction-line); padding-top: 10px; }
   .reaction-value > small { display: block; font-size: 10px; color: var(--reaction-muted); }
@@ -162,3 +162,8 @@
   --reaction-warning-bg: #382e1e;
   --reaction-warning-border: #74613b;
 }
+
+.reaction-automation { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 16px; margin-bottom: 20px; background: var(--reaction-band); border-left: 3px solid var(--reaction-teal); font-size: 12px; line-height: 1.7; }
+.reaction-automation strong { color: var(--reaction-teal); }
+.reaction-automation small { flex-basis: 100%; color: var(--reaction-muted); }
+.reaction-selected > details { margin: 18px 0; }

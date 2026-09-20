@@ -13,7 +13,7 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
 }) {
   const calculation = sample.calculation;
   const href = sourceHref(sample.sourceUrl);
-  const overlaps = calculation ? samples.filter(other => other.id !== sample.id && other.majorEventId !== sample.majorEventId
+  const overlaps = calculation ? samples.filter(other => other.id !== sample.id && (other.sourceIdentity || other.majorEventId) !== (sample.sourceIdentity || sample.majorEventId)
     && other.instrumentCode === sample.instrumentCode && other.publishedAt
     && other.publishedAt.slice(0, 10) >= calculation.baselineDate
     && other.publishedAt.slice(0, 10) <= (calculation.windows[calculation.windows.length - 1]?.endDate || '')) : [];
@@ -29,14 +29,14 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
     <p>{sample.summary || '来源未提供摘要。'}</p>
     <div className="reaction-facts">
       <div><span>信息公开</span><strong>{dateTime(sample.publishedAt)}</strong></div>
-      <div><span>首次保存至大事记</span><strong>{dateTime(sample.firstCapturedAt)}</strong></div>
+      <div><span>系统首次捕获</span><strong>{dateTime(sample.firstCapturedAt)}</strong></div>
       <div><span>登记观察</span><strong>{dateTime(sample.registeredAt)}</strong></div>
     </div>
     <p className="reaction-note">{sample.relationNote}{sample.historicalBackfill && ' · 历史补录：公开日期早于登记日期。'}</p>
     {href && <a href={href} target="_blank" rel="noreferrer">查看原始来源 ↗</a>}
     {!href && <p className="reaction-note">原始来源链接不可用，已保留登记时的文字快照。</p>}
     {sample.refreshError && <p className="reaction-warning" role="status">{sample.refreshError} 最近尝试：{dateTime(sample.lastAttemptAt)}</p>}
-    {!calculation ? <p className="reaction-empty">事件已登记，尚无成功计算的行情结果。点击“更新此样本”获取价格路径。</p> : <>
+    {!calculation ? <p className="reaction-empty">事件已登记，尚无成功计算的行情结果。系统会自动补齐事件前行情并持续更新后续窗口。</p> : <>
       <ReactionChart series={[
         { label: sample.instrumentName || sample.instrumentCode, metric: 'stockReturnPct', points: calculation.points, color: 'var(--reaction-ink)' },
         { label: '沪深300', metric: 'benchmarkReturnPct', points: calculation.points, color: 'var(--reaction-teal)' }
@@ -59,8 +59,8 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
         <p>计算时间 {dateTime(calculation.calculatedAt)} · 个股行情截至 {calculation.stockAsOf} · 基准行情截至 {calculation.benchmarkAsOf}</p>
         <p>行情来源：{calculation.stockSource} / {calculation.benchmarkSource} · 质量：{calculation.stockQuality} / {calculation.benchmarkQuality} · 方法：{calculation.methodVersion}</p>
         <ul>{calculation.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
-        <div className="reaction-table-scroll"><table><thead><tr><th>交易日</th><th>偏移</th><th>个股 %</th><th>基准 %</th><th>相对 pp</th><th>状态</th></tr></thead><tbody>
-          {calculation.points.map(point => <tr key={point.session}><td>{point.tradeDate}</td><td>{point.session > 0 ? '+' : ''}{point.session}</td><td>{signed(point.stockReturnPct)}</td><td>{signed(point.benchmarkReturnPct)}</td><td>{signed(point.relativeReturnPp)}</td><td>{statusLabels[point.status]}</td></tr>)}
+        <div className="reaction-table-scroll"><table><thead><tr><th>交易日</th><th>偏移</th><th>收盘价</th><th>前复权收盘价</th><th>成交量（源单位）</th><th>成交额（源单位）</th><th>个股 %</th><th>基准 %</th><th>相对 pp</th><th>状态</th></tr></thead><tbody>
+          {calculation.points.map(point => <tr key={point.session}><td>{point.tradeDate}</td><td>{point.session > 0 ? '+' : ''}{point.session}</td><td>{point.close ?? '—'}</td><td>{point.adjustedClose ?? '—'}</td><td>{point.volume?.toLocaleString() ?? '—'}</td><td>{point.amount?.toLocaleString() ?? '—'}</td><td>{signed(point.stockReturnPct)}</td><td>{signed(point.benchmarkReturnPct)}</td><td>{signed(point.relativeReturnPp)}</td><td>{statusLabels[point.status]}</td></tr>)}
         </tbody></table></div>
       </details>
       <aside className="reaction-overlaps"><h5>期间其他已登记事件</h5>

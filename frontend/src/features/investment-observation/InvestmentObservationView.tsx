@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../shared/api/client';
-import type { EventType, ReactionCandidate, ReactionSample, SampleState } from './reactionTypes';
-import { dateTime, eventLabels, pathLabels, signed, statusLabels } from './reactionTypes';
+import type { DiscoveryStatus, EventType, ReactionCandidate, ReactionSample, SampleState } from './reactionTypes';
+import { beforeEventReturn, dateTime, eventLabels, sourceHref, pathLabels, signed, statusLabels } from './reactionTypes';
 import { ReactionDetail } from './ReactionDetail';
 import { ReactionComparison } from './ReactionComparison';
 import { ReactionRegistrationForm } from './ReactionRegistrationForm';
 import { LegacyObservations } from './LegacyObservations';
 import './investmentReaction.css';
 
-type Tab = SampleState | 'CANDIDATES' | 'LEGACY';
+type Tab = SampleState | 'ALL' | 'CANDIDATES' | 'LEGACY';
 const tabs: Array<{ value: Tab; label: string }> = [
-  { value: 'OBSERVING', label: '反应矩阵' }, { value: 'DRAFT', label: '待确认' },
-  { value: 'CANDIDATES', label: '登记事件' }, { value: 'ARCHIVED', label: '已归档' }, { value: 'LEGACY', label: '历史资料' }
+  { value: 'ALL', label: '自动观察' }, { value: 'OBSERVING', label: '反应矩阵' }, { value: 'DRAFT', label: '待关联线索' },
+  { value: 'CANDIDATES', label: '手动补充' }, { value: 'ARCHIVED', label: '已归档' }, { value: 'LEGACY', label: '历史资料' }
 ];
 
 export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEvents, onResearch }: {
@@ -20,9 +20,10 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
   onOpenMajorEvents?: () => void;
   onResearch?: (question: string) => void;
 }) {
+  const [discovery, setDiscovery] = useState<DiscoveryStatus>();
   const [samples, setSamples] = useState<ReactionSample[]>([]);
   const [candidates, setCandidates] = useState<ReactionCandidate[]>([]);
-  const [tab, setTab] = useState<Tab>('OBSERVING');
+  const [tab, setTab] = useState<Tab>('ALL');
   const [eventType, setEventType] = useState<EventType | 'ALL'>('ALL');
   const [capture, setCapture] = useState('ALL');
   const [selectedId, setSelectedId] = useState<number>();
@@ -37,13 +38,13 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
   const detailRef = useRef<HTMLElement>(null);
   const comparisonRef = useRef<HTMLDivElement>(null);
   const selected = samples.find(sample => sample.id === selectedId);
-  const visible = samples.filter(sample => sample.state === tab && (eventType === 'ALL' || sample.eventType === eventType)
+  const visible = samples.filter(sample => (tab === 'ALL' ? sample.state !== 'ARCHIVED' : sample.state === tab) && (eventType === 'ALL' || sample.eventType === eventType)
     && (capture === 'ALL' || (capture === 'BACKFILL') === sample.historicalBackfill));
   const comparisons = compareIds.flatMap(id => samples.find(sample => sample.id === id) || []);
 
   useEffect(() => {
     let active = true;
-    void api<ReactionSample[]>('/api/investment-reactions').then(result => {
+    void api<ReactionSample[]>('/api/investment-reactions/recent').then(result => {
       if (active) {
         setSamples(result);
         setHasMore(result.length === 100);
@@ -59,6 +60,49 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
       }
     });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let polling = false;
+    async function poll() {
+      if (polling) {
+        return;
+      }
+      polling = true;
+      try {
+        const [status, latest] = await Promise.all([
+          api<DiscoveryStatus>('/api/investment-reactions/discovery'),
+          api<ReactionSample[]>('/api/investment-reactions/recent')
+        ]);
+        if (active) {
+          setDiscovery(status);
+          setHasMore(current => current || latest.length === 100);
+          if (latest.length) {
+            setPageCursor(current => current ? Math.min(current, latest[latest.length - 1].id) : latest[latest.length - 1].id);
+          }
+          setSamples(current => [...latest, ...current.filter(item => latest.length === 100
+            && item.id < latest[latest.length - 1].id)]);
+        }
+      } catch (reason) {
+        if (active) {
+          setError(`自动更新读取失败：${message(reason)}`);
+        }
+      } finally {
+        polling = false;
+      }
+    }
+    void api<DiscoveryStatus>('/api/investment-reactions/discovery').then(status => {
+      if (active) {
+        setDiscovery(status);
+      }
+    }).catch(reason => {
+      if (active) {
+        setError(`自动发现状态读取失败：${message(reason)}`);
+      }
+    });
+    const timer = window.setInterval(() => { void poll(); }, 15000);
+    return () => { active = false; window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -142,17 +186,16 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
   }
 
   return <section className="reaction-workspace" aria-label="市场反应观察室">
-    <header className="reaction-header"><div><p className="reaction-eyebrow">投资观察 / 事件与价格</p><h3>市场如何回应新信息</h3><p>把信息出现后的价格路径留下来，比较延续、回吐与没有发生的反应。</p></div>
+    <header className="reaction-header"><div><p className="reaction-eyebrow">投资观察 / 事件与价格</p><h3>市场如何回应新信息</h3><p>自动发现新闻中的事件，记录相关股票在信息出现前后的走势、成交量与市场对照。</p></div>
       <button className="reaction-primary" disabled={busy} onClick={() => void act(async () => {
-        const result = await api<{ refreshed: number; failed: number; busy: boolean }>('/api/investment-reactions/refresh', { method: 'POST' });
-        const current = await Promise.all(samples.map(sample => api<ReactionSample>(`/api/investment-reactions/${sample.id}`)));
-        setSamples(current);
-        addToast(result.busy ? '观察池正在更新' : `已更新 ${result.refreshed} 项，暂不可用 ${result.failed} 项`, result.failed ? 'info' : 'success');
-      })}>{busy ? '正在处理…' : '更新未完成样本'}</button>
+        setDiscovery(await api<DiscoveryStatus>('/api/investment-reactions/sync', { method: 'POST' }));
+        addToast('自动发现与行情更新已提交，完成后页面会自动显示', 'info');
+      })}>{busy || discovery?.running ? '自动更新中…' : '立即同步'}</button>
     </header>
+    <div className="reaction-automation" role="status"><strong>{discovery?.running ? '正在发现事件并更新行情' : '自动观察已开启'}</strong><span>{discovery?.message || '正在读取后台状态'}{discovery?.lastCompletedAt && ` · 最近发现 ${dateTime(discovery.lastCompletedAt)}`}</span><small>每 5 分钟读取新闻与雷达；当前观察业绩、合同与订单。无需手动登记。</small></div>
     <nav className="reaction-tabs" aria-label="投资观察视图">{tabs.map(item => <button key={item.value} aria-pressed={tab === item.value} onClick={() => changeTab(item.value)}>{item.label}{['DRAFT', 'OBSERVING', 'ARCHIVED'].includes(item.value) && <small>{samples.filter(sample => sample.state === item.value).length}</small>}</button>)}</nav>
     {error && <div className="reaction-warning" role="alert">{error}<button disabled={busy} onClick={() => void act(async () => {
-      const result = await api<ReactionSample[]>('/api/investment-reactions');
+      const result = await api<ReactionSample[]>('/api/investment-reactions/recent');
       setSamples(result);
       setHasMore(result.length === 100);
       setPageCursor(result.length ? result[result.length - 1].id : 0);
@@ -167,34 +210,35 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
       </article>)}
     </section> : <>
       <div className="reaction-toolbar"><div><label>事件类型<select value={eventType} onChange={e => { setEventType(e.target.value as EventType | 'ALL'); setSelectedId(undefined); }}><option value="ALL">全部类型</option>{Object.entries(eventLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>登记方式<select value={capture} onChange={e => { setCapture(e.target.value); setSelectedId(undefined); }}><option value="ALL">全部样本</option><option value="CURRENT">当日登记</option><option value="BACKFILL">历史补录</option></select></label></div><p>{tab === 'DRAFT' ? '补齐股票与公开时刻后开始计算' : '相对沪深300 · 累计收益差 / 百分点'}</p></div>
-      {loading ? <p className="reaction-empty" role="status">正在读取观察样本…</p> : visible.length === 0 ? <div className="reaction-empty"><h4>{tab === 'DRAFT' ? '没有待确认事件' : tab === 'ARCHIVED' ? '没有归档样本' : '从一件明确的事件开始'}</h4><p>业绩披露、正式合同，以及后来没有上涨的案例，都值得留下。</p><button onClick={() => changeTab('CANDIDATES')}>登记事件</button></div> : (
+        <label>登记方式<select value={capture} onChange={e => { setCapture(e.target.value); setSelectedId(undefined); }}><option value="ALL">全部样本</option><option value="CURRENT">当日登记</option><option value="BACKFILL">历史补录</option></select></label></div><p>{tab === 'DRAFT' ? '系统自动重试关联；手动补充为可选操作' : '相对沪深300 · 累计收益差 / 百分点'}</p></div>
+      {loading ? <p className="reaction-empty" role="status">正在读取观察样本…</p> : visible.length === 0 ? <div className="reaction-empty"><h4>{tab === 'DRAFT' ? '没有待确认事件' : tab === 'ARCHIVED' ? '没有归档样本' : '正在等待自动发现的事件'}</h4><p>新闻同步后，系统会自动保存业绩、合同线索并跟踪相关股票。涨跌、无反应都会保留。</p></div> : (
         <div className="reaction-matrix" role="table" aria-label="事件反应矩阵">
-          <div className="reaction-matrix-head" role="row"><span role="columnheader">事件 / 股票</span>{[1, 3, 5].map(size => <span key={size} role="columnheader">前 {size} 个交易日</span>)}<span role="columnheader">当前路径</span></div>
+          <div className="reaction-matrix-head" role="row"><span role="columnheader">事件 / 股票</span><span role="columnheader">事件前 5 日 · 个股</span>{[1, 3, 5].map(size => <span key={size} role="columnheader">事件后 {size} 日 · 相对</span>)}<span role="columnheader">当前路径</span></div>
           {visible.map(sample => <div className="reaction-matrix-row" role="row" key={sample.id} data-selected={sample.id === selectedId}>
-            <div role="cell" className="reaction-subject"><button onClick={() => setSelectedId(sample.id)} aria-expanded={sample.id === selectedId}><strong>{sample.instrumentName || '股票待确认'}</strong><span>{sample.title}</span></button><small>{sample.publishedAt ? dateTime(sample.publishedAt) : '公开时刻待核对'}{sample.historicalBackfill && ' · 历史补录'}</small></div>
+            <div role="cell" className="reaction-subject"><button onClick={() => setSelectedId(sample.id)} aria-expanded={sample.id === selectedId}><strong>{sample.instrumentName || '股票待确认'}</strong><span>{sample.title}</span></button><small>{sample.publishedAt ? dateTime(sample.publishedAt) : '公开时刻待核对'}{sample.historicalBackfill && ' · 历史补录'}{sample.automatic && ' · 自动发现'}</small>{sample.discoveryIssue && <p className="reaction-note">{sample.discoveryIssue}</p>}</div>
+            <div role="cell" className="reaction-value"><small>事件前 5 日</small><strong>{signed(beforeEventReturn(sample), '%')}</strong></div>
             {[1, 3, 5].map(size => {
               const window = sample.calculation?.windows.find(value => value.sessions === size);
               return <div role="cell" className="reaction-value" key={size} data-direction={window?.relativeReturnPp == null ? 'neutral' : window.relativeReturnPp > 0 ? 'up' : 'down'}>
-                <small>前 {size} 日</small><strong>{sample.state === 'DRAFT' ? '待确认' : window?.status === 'READY' ? signed(window.relativeReturnPp) : window ? statusLabels[window.status] : '待更新'}</strong>
+                <small>前 {size} 日</small><strong>{sample.state === 'DRAFT' ? '待关联' : window?.status === 'READY' ? signed(window.relativeReturnPp) : window ? statusLabels[window.status] : '待更新'}</strong>
                 {window && <span>{window.endDate.slice(5)}</span>}
               </div>;
             })}
-            <div role="cell" className="reaction-row-state"><span>{sample.refreshError ? '更新暂不可用' : sample.calculation ? pathLabels[sample.calculation.pathType] : sample.state === 'DRAFT' ? '核对后开始' : '尚未计算'}</span>{sample.calculation && <button onClick={() => addComparison(sample)} aria-label={`对照：${sample.title}`}>对照 +</button>}</div>
+            <div role="cell" className="reaction-row-state"><span>{sample.refreshError ? '更新暂不可用' : sample.calculation ? pathLabels[sample.calculation.pathType] : sample.state === 'DRAFT' ? '自动补全中' : '等待自动计算'}</span>{sample.calculation && <button onClick={() => addComparison(sample)} aria-label={`对照：${sample.title}`}>对照 +</button>}</div>
           </div>)}
         </div>
       )}
       {hasMore && <button disabled={busy} onClick={() => void act(async () => {
-        const next = await api<ReactionSample[]>(`/api/investment-reactions?afterId=${pageCursor}&limit=100`);
+        const next = await api<ReactionSample[]>(`/api/investment-reactions/recent?beforeId=${pageCursor}&limit=100`);
         setSamples(current => [...current, ...next.filter(item => !current.some(value => value.id === item.id))]);
         setHasMore(next.length === 100);
         if (next.length > 0) {
           setPageCursor(next[next.length - 1].id);
         }
       })}>加载更多样本（筛选与数量仅包含已加载项）</button>}
-      {selected && selected.state === tab && <section ref={detailRef} tabIndex={-1} className="reaction-selected" aria-label={`样本详情：${selected.title}`}>
+      {selected && (tab === 'ALL' || selected.state === tab) && <section ref={detailRef} tabIndex={-1} className="reaction-selected" aria-label={`样本详情：${selected.title}`}>
         <button className="reaction-close" onClick={() => setSelectedId(undefined)}>收起详情</button>
-        {selected.state === 'DRAFT' ? <><h4>{selected.title}</h4><ReactionRegistrationForm key={selected.id} sample={selected} busy={busy} onConfirm={body => act(async () => {
+        {selected.state === 'DRAFT' ? <><h4>{selected.title}</h4><p>{selected.summary}</p><p className="reaction-note">{selected.discoveryIssue}</p>{sourceHref(selected.sourceUrl) && <a href={sourceHref(selected.sourceUrl)} target="_blank" rel="noreferrer">查看原始来源 ↗</a>}<details open={!selected.automatic}><summary>手动补充股票（可选）</summary><ReactionRegistrationForm key={selected.id} sample={selected} busy={busy} onConfirm={body => act(async () => {
           const confirmed = await api<ReactionSample>(`/api/investment-reactions/${selected.id}/confirm`, { method: 'POST', body: JSON.stringify(body) });
           replace(confirmed);
           setTab('OBSERVING');
@@ -202,7 +246,7 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
           setCapture('ALL');
           addToast('事件快照已确认，正在获取行情', 'success');
           await refreshSample(confirmed);
-        })} /><button disabled={busy} onClick={() => void act(async () => {
+        })} /></details><button disabled={busy} onClick={() => void act(async () => {
           replace(await api<ReactionSample>(`/api/investment-reactions/${selected.id}/archive`, { method: 'PATCH', body: JSON.stringify({ archived: true, revision: selected.revision }) }));
           setSelectedId(undefined);
         })}>归档待确认线索</button></> : <ReactionDetail sample={selected} samples={samples} busy={busy} onRefresh={() => void act(() => refreshSample(selected))}
@@ -214,7 +258,7 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
       </section>}
     </>}
     {comparisons.length > 0 && <div ref={comparisonRef}><ReactionComparison samples={comparisons} onRemove={id => setCompareIds(current => current.filter(value => value !== id))} /></div>}
-    <footer className="reaction-footer">首个反应交易日前一日收盘为起点，盘后与休市日信息顺延到下一交易日。数据缺失和未到期均不计为零。收盘后自动分批更新；每批最多 20 项，已完成样本可在详情中重新计算。</footer>
+    <footer className="reaction-footer">首个反应交易日前一日收盘为起点，盘后与休市日信息顺延到下一交易日。数据缺失和未到期均不计为零。后台自动分批更新行情；每批最多 20 项，已完成样本可在详情中重新计算。</footer>
   </section>;
 }
 

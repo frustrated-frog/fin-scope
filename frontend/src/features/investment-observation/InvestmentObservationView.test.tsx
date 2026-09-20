@@ -30,9 +30,9 @@ test('empty workspace does not fabricate samples or refresh the legacy scoring p
   const fetch = vi.fn(async () => apiResponse([]));
   vi.stubGlobal('fetch', fetch);
   view();
-  expect(await screen.findByRole('heading', { name: '从一件明确的事件开始' })).toBeInTheDocument();
-  expect(fetch).toHaveBeenCalledTimes(1);
-  expect(fetch.mock.calls[0]).toEqual(expect.arrayContaining(['/api/investment-reactions']));
+  expect(await screen.findByRole('heading', { name: '正在等待自动发现的事件' })).toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch.mock.calls[0]).toEqual(expect.arrayContaining(['/api/investment-reactions/recent']));
 });
 
 test('saves a candidate as draft, requires confirmation, then requests a separate refresh', async () => {
@@ -54,7 +54,7 @@ test('saves a candidate as draft, requires confirmation, then requests a separat
     return apiResponse(init?.method === 'POST' ? draft : []);
   }));
   view();
-  await userEvent.click(screen.getByRole('button', { name: '登记事件' }));
+  await userEvent.click(screen.getByRole('button', { name: '手动补充' }));
   await userEvent.click(await screen.findByRole('button', { name: '保存到待确认' }));
   await userEvent.type(await screen.findByLabelText('股票代码'), '600519.SH');
   await userEvent.type(screen.getByLabelText('股票名称'), '示例设备');
@@ -116,4 +116,18 @@ test('legacy records remain readable without navigating mismatched radar ids', a
   expect(await screen.findByText('旧观察记录')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '查看原始证据' })).not.toBeInTheDocument();
   expect(fetch.mock.calls.some(call => String(call[0]).includes('research-radar'))).toBe(false);
+});
+
+
+test('automatic unresolved events are readable without completing a form', async () => {
+  const unresolved = { ...reactionSample, id: 21, automatic: true, state: 'DRAFT', instrumentCode: '',
+    instrumentName: undefined, calculation: undefined, discoveryIssue: '系统将自动重试关联公司' };
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => apiResponse(String(input).endsWith('/discovery')
+    ? { running: false, message: '自动发现已完成', captured: 1, resolved: 0 }
+    : [unresolved])));
+  view();
+  await userEvent.click(await screen.findByRole('button', { name: /股票待确认 设备公司签订重大合同/ }));
+  expect(screen.getByRole('link', { name: '查看原始来源 ↗' })).toBeInTheDocument();
+  expect(screen.getByText('手动补充股票（可选）').closest('details')).not.toHaveAttribute('open');
+  expect(screen.getByRole('button', { name: '自动观察', pressed: true })).toBeInTheDocument();
 });
