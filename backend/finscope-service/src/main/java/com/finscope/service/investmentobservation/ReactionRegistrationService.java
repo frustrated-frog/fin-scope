@@ -10,7 +10,6 @@ import com.finscope.domain.investmentobservation.ReactionCandidate;
 import com.finscope.domain.investmentobservation.ReactionRegistration;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import com.finscope.domain.majorevent.MajorEvent;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -87,10 +86,13 @@ public class ReactionRegistrationService {
         sample.setRelationNote(command.getRelationNote().trim());
         sample.setHistoricalBackfill(command.getPublishedAt().toLocalDate().isBefore(sample.getRegisteredAt().toLocalDate()));
         sample.setState(ReactionSampleState.OBSERVING);
-        try {
-            requireUpdated(repository.confirm(sample, command.getRevision()));
-        } catch (DuplicateKeyException ex) {
-            throw new BusinessException(ErrorCode.DUPLICATE_OPERATION, "这个事件与股票已登记，请打开已有样本", ex);
+        if (!repository.confirm(sample, command.getRevision())) {
+            boolean duplicate = repository.findBySource(sample.getMajorEventId(), sample.getInstrumentCode())
+                    .filter(existing -> !existing.getId().equals(sample.getId())).isPresent();
+            if (duplicate) {
+                throw new BusinessException(ErrorCode.DUPLICATE_OPERATION, "这个事件与股票已登记，请打开已有样本");
+            }
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
         }
         return require(id);
     }

@@ -198,6 +198,34 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
+    void investmentReactionRegistrationUsesRealSchemaAndIsoDates() throws Exception {
+        jdbcTemplate.update("INSERT INTO major_event(origin_type,origin_key,title,summary,source_name,source_url,"
+                        + "category_code,occurred_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "NEWS_ITEM", "reaction-integration", "公司签订正式合同", "合同原文快照", "公告",
+                "https://example.com/contract", "COMPANY", "2026-09-18", "2026-09-18T10:00:00", "2026-09-18T10:00:00");
+        Long sourceId = jdbcTemplate.queryForObject("SELECT id FROM major_event WHERE origin_key=?", Long.class,
+                "reaction-integration");
+        MvcResult created = mvc.perform(post("/api/investment-reactions")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"majorEventId\":" + sourceId + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.state").value("DRAFT"))
+                .andExpect(jsonPath("$.data.firstCapturedAt").value("2026-09-18T10:00:00"))
+                .andReturn();
+        long id = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString())
+                .path("data").path("id").asLong();
+        mvc.perform(post("/api/investment-reactions/" + id + "/confirm")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"instrumentCode\":\"600519.SH\",\"instrumentName\":\"示例公司\","
+                                + "\"eventType\":\"CONTRACT\",\"publishedAt\":\"2026-09-18T09:00:00\","
+                                + "\"relationNote\":\"公告披露主体\",\"revision\":0}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.state").value("OBSERVING"));
+        mvc.perform(get("/api/investment-reactions/" + id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sourceOriginType").value("NEWS_ITEM"))
+                .andExpect(jsonPath("$.data.publishedAt").value("2026-09-18T09:00:00"))
+                .andExpect(jsonPath("$.data.calculation").doesNotExist());
+    }
+
+    @Test
     void legacySourceFetchRoutesToIntakeAndDoesNotCreateArticles() throws Exception {
         String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
                 + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";

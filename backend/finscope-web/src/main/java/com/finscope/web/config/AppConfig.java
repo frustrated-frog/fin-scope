@@ -319,6 +319,18 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "investmentReactionExecutor")
+    public Executor investmentReactionExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("investment-reaction-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(0);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "stockDiscoveryExecutor")
     public Executor stockDiscoveryExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

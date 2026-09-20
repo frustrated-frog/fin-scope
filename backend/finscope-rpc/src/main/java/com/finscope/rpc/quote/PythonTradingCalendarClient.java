@@ -1,6 +1,7 @@
 package com.finscope.rpc.quote;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -32,12 +33,12 @@ public class PythonTradingCalendarClient {
             if (response.getStatus() != 200) {
                 throw new ProviderContractException("UPSTREAM_UNAVAILABLE", "观察窗口交易日历暂不可用", true);
             }
-            com.fasterxml.jackson.databind.JsonNode rows = json.readTree(response.getBody()).path("sessions");
+            JsonNode rows = json.readTree(response.getBody()).path("sessions");
             if (!rows.isArray() || rows.size() != 11) {
                 throw new ProviderContractException("SCHEMA_DRIFT", "观察窗口必须包含 11 个交易日", false);
             }
             List<LocalDate> sessions = new ArrayList<>();
-            for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+            for (JsonNode row : rows) {
                 LocalDate day = LocalDate.parse(row.asText());
                 if (!sessions.isEmpty() && !day.isAfter(sessions.get(sessions.size() - 1))) {
                     throw new ProviderContractException("SCHEMA_DRIFT", "交易日必须严格递增", false);

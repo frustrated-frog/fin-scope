@@ -6,7 +6,6 @@ import com.finscope.common.enums.investmentobservation.ReactionEventType;
 
 @Data
 public class ReactionRegistration {
-    private Long majorEventId;
     private String instrumentCode;
     private String instrumentName;
     private ReactionEventType eventType;

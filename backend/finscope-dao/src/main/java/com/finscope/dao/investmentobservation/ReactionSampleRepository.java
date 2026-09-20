@@ -58,6 +58,11 @@ public class ReactionSampleRepository {
                 .stream().findFirst();
     }
 
+    public Optional<ReactionSample> findBySource(long majorEventId, String instrumentCode) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE major_event_id=? AND instrument_code=?",
+                mapper, majorEventId, instrumentCode).stream().findFirst();
+    }
+
     public List<ReactionSample> list(ReactionSampleState state, long afterId, int limit) {
         int bounded = Math.max(1, Math.min(100, limit));
         if (state == null) {
@@ -70,9 +75,11 @@ public class ReactionSampleRepository {
 
     public boolean confirm(ReactionSample sample, int revision) {
         return jdbcTemplate.update("UPDATE investment_reaction_sample SET instrument_code=?,state=?,snapshot_json=?,"
-                        + "revision=revision+1 WHERE id=? AND revision=? AND state=?",
+                        + "revision=revision+1 WHERE id=? AND revision=? AND state=? "
+                        + "AND NOT EXISTS (SELECT 1 FROM investment_reaction_sample existing "
+                        + "WHERE existing.major_event_id=? AND existing.instrument_code=? AND existing.id<>?)",
                 sample.getInstrumentCode(), ReactionSampleState.OBSERVING.name(), write(sample), sample.getId(),
-                revision, ReactionSampleState.DRAFT.name()) == 1;
+                revision, ReactionSampleState.DRAFT.name(), sample.getMajorEventId(), sample.getInstrumentCode(), sample.getId()) == 1;
     }
 
     public List<ReactionSample> findDue(LocalDateTime before, int limit) {
