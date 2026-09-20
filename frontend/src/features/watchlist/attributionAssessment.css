@@ -1,14 +1,10 @@
-/* 使用原归因报告的色彩和卡片语言，新增研究信息默认折叠。 */
+/* 使用原归因报告的色彩和卡片语言，候选解释完整分区展示。 */
 .attribution-research-details { min-width: 0; display: grid; gap: 12px; }
 .attribution-research-details details { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); overflow-wrap: anywhere; }
 .attribution-research-details summary { cursor: pointer; font-size: 14px; font-weight: 600; }
 .attribution-research-details summary span { color: var(--muted); margin-left: 10px; font-size: 12px; font-weight: 400; }
 .attribution-research-details p, .attribution-research-details li { font-size: 14px; line-height: 1.75; }
 .attribution-research-details summary:focus-visible, .attribution-research-details a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.attribution-research-candidate { padding: 14px 0; border-bottom: 1px solid var(--line); }
-.attribution-research-candidate:last-child { border-bottom: 0; }
-.attribution-research-candidate h4 { font-size: 15px; margin: 0 0 8px; }
-.attribution-research-candidate small { display: inline-block; font-size: 12px; color: var(--muted); margin-left: 8px; }
 .attribution-research-links { display: flex; flex-wrap: wrap; gap: 14px; }
 .attribution-research-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .attribution-research-metrics dt { color: var(--muted); font-size: 12px; }
@@ -16,3 +12,47 @@
 @media (max-width: 600px) {
   .attribution-research-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 新旧报告共享同一阅读层级；所有样式限定在归因页面内。 */
+.attribution-report { position: relative; z-index: 1; min-width: 0; }
+.attribution-report-main, .attribution-report-support { min-width: 0; overflow-wrap: anywhere; }
+.attribution-report .attribution-driver { padding: 18px 20px; background: color-mix(in srgb, var(--surface) 94%, transparent); }
+.attribution-report .attribution-driver-title { flex: 1 1 240px; align-items: flex-start; flex-wrap: wrap; }
+.attribution-report .attribution-driver-title > strong { min-width: 0; overflow-wrap: anywhere; }
+.attribution-research-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin: 10px 0 14px; }
+.attribution-research-heading > span { font-size: 12px; color: var(--muted); }
+.attribution-hypothesis-card .attribution-driver-title { flex-wrap: nowrap; }
+.attribution-hypothesis-card h4 { margin: 0; font-size: 16px; line-height: 1.6; color: var(--ink); }
+.attribution-hypothesis-number { display: inline-grid; place-items: center; flex: 0 0 25px; height: 25px; border-radius: 7px; color: #31b7cf; background: rgba(49,183,207,.12); font-size: 12px; font-weight: 700; }
+.attribution-hypothesis-status { flex-shrink: 0; padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 650; line-height: 1.5; color: var(--muted); background: var(--surface-2); }
+.attribution-hypothesis-status.status-preferred, .attribution-hypothesis-status.status-coexisting { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.attribution-hypothesis-status.status-unresolved { color: var(--ink); border: 1px solid var(--line); }
+.attribution-research-field { min-width: 0; padding: 12px 14px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 65%, transparent); }
+.attribution-research-field > span { color: var(--muted); font-size: 12px; font-weight: 650; }
+.attribution-research-field p { margin: 7px 0 0; color: var(--ink); }
+.attribution-hypothesis-checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; padding: 16px 0; margin-top: 16px; border-top: 1px solid var(--line); }
+.attribution-hypothesis-checks h5 { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.attribution-hypothesis-checks ul { padding-left: 18px; margin: 0; }
+.attribution-hypothesis-checks li + li { margin-top: 6px; }
+.attribution-research-sources { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+.attribution-research-sources > span { font-size: 12px; color: var(--muted); }
+.attribution-report .attribution-research-links a { display: inline-flex; gap: 6px; padding: 4px 10px; border: 1px solid color-mix(in srgb,var(--accent) 28%,var(--line)); border-radius: 6px; color: var(--accent); background: color-mix(in srgb,var(--accent) 6%,var(--surface)); text-decoration: none; font-size: 12px; }
+.attribution-report .attribution-research-links a:hover { text-decoration: underline; background: var(--surface-2); }
+.attribution-research-metrics > div { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.attribution-research-details .attribution-research-caption { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.attribution-research-gaps ul { padding-left: 18px; }
+.attribution-research-gaps li + li { margin-top: 8px; }
+.attribution-report-support > div { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.attribution-report .attribution-evidence { align-items: baseline; flex-wrap: wrap; gap: 6px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.attribution-report .attribution-evidence:last-child { border-bottom: 0; }
+.attribution-report .attribution-evidence a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .attribution-report .attribution-driver { padding: 14px; }
+  .attribution-report .attribution-driver-ai-grid, .attribution-hypothesis-checks, .attribution-report .attribution-context-grid, .attribution-report .attribution-forces-grid { grid-template-columns: minmax(0,1fr); }
+  .attribution-hypothesis-card .attribution-driver-title { flex-basis: 100%; }
+  .attribution-hypothesis-card .attribution-hypothesis-status { margin-left: 33px; }
+  .attribution-research-field { padding: 10px; }
+  .attribution-research-heading { align-items: flex-start; flex-direction: column; }
+}
+.attribution-research-details > .attribution-disclaimer { border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 14px 16px; }
+.attribution-research-details > .attribution-disclaimer p { margin: 8px 0 0; color: var(--muted); }

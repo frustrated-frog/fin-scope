@@ -450,7 +450,7 @@ export function AttributionReaderView({
                 </>
               )}
 
-              <h4 className="attribution-section-title">🔍 原因拆解</h4>
+              {(!assessment || !!report.drivers?.length) && <h4 className="attribution-section-title">🔍 原因拆解</h4>}
               {report.drivers && report.drivers.length > 0 ? (
                 <div className="attribution-drivers">
                   {report.drivers.map((driver, index) => (
@@ -525,7 +525,7 @@ export function AttributionReaderView({
                   ))}
                 </div>
               ) : (
-                <p className="muted">未识别到明确驱动因素。</p>
+                !assessment && <p className="muted">未识别到明确驱动因素。</p>
               )}
               {assessment && <AttributionAssessmentView assessment={assessment} />}
             </div>
@@ -553,6 +553,7 @@ export function AttributionReaderView({
                   {report.durationMs ? <span className="watchlist-meta"> · 耗时 {Math.round(report.durationMs / 1000)}s</span> : null}
                 </h4>
                 <div className="attribution-evidences">
+                  {!report.evidences?.length && <p className="muted">本次报告暂无可展示的证据来源。</p>}
                   {(report.evidences || []).map((evidence, index) => (
                     <div className="attribution-evidence" key={evidence.id || evidence.eventKey || evidence.url || index}>
                       <span className={`attribution-tier attribution-tier-${evidence.sourceTier || 'T3'}`}>

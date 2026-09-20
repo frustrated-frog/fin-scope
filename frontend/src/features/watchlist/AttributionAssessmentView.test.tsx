@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { AttributionAssessment } from '../../shared/types';
 import { AttributionAssessmentView } from './AttributionAssessmentView';
@@ -18,16 +18,14 @@ const assessment: AttributionAssessment = {
       assumptions: [], revisionConditions: [], evidenceUrls: ['javascript:alert(1)'] }]
 };
 
-test('keeps research details collapsed and reveals candidate evidence and revision conditions', () => {
+test('shows complete candidate cards with analysis, sources and revision conditions', () => {
   render(<AttributionAssessmentView assessment={assessment} />);
   expect(screen.queryByText(assessment.researchFocus)).not.toBeInTheDocument();
-  const summary = screen.getByText('候选解释与改判条件');
-  expect(summary.closest('details')).not.toHaveAttribute('open');
-  fireEvent.click(summary);
+  expect(screen.getByText('候选解释与改判条件')).toBeVisible();
+  expect(screen.getAllByLabelText('候选解释解读')).toHaveLength(2);
   expect(screen.getByText('订单取消则削弱判断')).toBeVisible();
   expect(screen.getByText('缺少利润数据')).toBeVisible();
   expect(screen.getAllByRole('link')).toHaveLength(1);
-  fireEvent.click(screen.getByText('行情对照'));
   expect(screen.getByText('+2.00 个百分点')).toBeVisible();
 });
 
@@ -36,6 +34,13 @@ test('degraded report retains data without presenting fallback text as analysis'
   expect(screen.getByText('研判未完成')).toBeVisible();
   expect(screen.queryByText(assessment.mainJudgment)).not.toBeInTheDocument();
   expect(screen.queryByText('候选解释与改判条件')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText('行情对照'));
   expect(screen.getByText('+6.00%')).toBeVisible();
+});
+
+test('separates a long historical explanation into a short heading and preserves all detail', () => {
+  const detail = '业绩高增的延续：' + '这是保留完整论据而不是用省略号截断的历史解释。'.repeat(10);
+  render(<AttributionAssessmentView assessment={{ ...assessment, hypotheses: [{ ...assessment.hypotheses[0], explanation: detail }] }} />);
+  expect(screen.getByRole('heading', { name: '业绩高增的延续' })).toBeVisible();
+  expect(screen.getByText(detail.split('：')[1])).toBeVisible();
+  expect(screen.getByText('当前更倾向')).toHaveClass('attribution-hypothesis-status');
 });
