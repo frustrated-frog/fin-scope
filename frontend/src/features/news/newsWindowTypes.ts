@@ -48,6 +48,7 @@ export interface NewsPage {
     providerCode: string;
     status: string;
     lastSuccessAt?: string;
+    lastAttemptAt?: string;
   }>;
 }
 export interface NewsDetail {

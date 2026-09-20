@@ -312,16 +312,30 @@ export function LiveNewsPanel({
         <button type="button" aria-pressed={compact} onClick={() => setCompact(!compact)}>
           {compact ? '舒适阅读' : '紧凑阅读'}
         </button>
-        <details>
-          <summary>来源状态</summary>
-          {page?.sourceHealth?.map((source) => (
-            <p key={source.providerCode}>
-              {source.providerCode} · {source.status === 'HEALTHY' ? '同步正常' : '等待同步或暂不可用'} · 最近成功{' '}
-              {dateTime(source.lastSuccessAt)}
-            </p>
-          ))}
-        </details>
       </div>
+      {page?.sourceHealth?.length ? <details className="news-source-health">
+        <summary>
+          <span className="news-health-title"><i aria-hidden="true" />来源同步</span>
+          <span className="news-health-summary">
+            {page.sourceHealth.every((item) => item.status === 'HEALTHY')
+              ? `${page.sourceHealth.length} 个渠道运行正常`
+              : `${page.sourceHealth.filter((item) => item.status === 'HEALTHY').length} / ${page.sourceHealth.length} 个渠道正常`}
+          </span>
+          <span className="news-health-toggle">详情 <span aria-hidden="true">⌄</span></span>
+        </summary>
+        <div className="news-health-grid">
+          {page.sourceHealth.map((item) => <div className="news-health-item" key={item.providerCode}>
+            <div><strong>{providerLabel(item.providerCode)}</strong>
+              <span className={item.status === 'HEALTHY' ? 'news-health-ok' : 'news-health-warning'}>
+                {({ HEALTHY: '已同步', DEGRADED: '保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' } as Record<string, string>)[item.status] ?? '状态未知'}
+              </span>
+            </div>
+            <span>最近成功 <time>{item.lastSuccessAt ? dateTime(item.lastSuccessAt) : '暂无'}</time></span>
+            {item.status !== 'HEALTHY' && item.lastAttemptAt
+              ? <span>最近尝试 <time>{dateTime(item.lastAttemptAt)}</time></span> : null}
+          </div>)}
+        </div>
+      </details> : null}
       {error ? (
         <div className="news-window-error" role="alert">
           {error}
@@ -440,4 +454,17 @@ function highlight(text: string, query: string) {
       {text.slice(offset + query.length)}
     </>
   );
+}
+
+function providerLabel(code: string) {
+  if (code.startsWith('CLS')) {
+    return code.endsWith('_DIGEST') ? '财联社 · 要闻' : '财联社';
+  }
+  if (code.startsWith('THS')) {
+    return code.endsWith('_DIGEST') ? '同花顺 · 要闻' : '同花顺';
+  }
+  if (code.startsWith('EASTMONEY')) {
+    return code.endsWith('_DIGEST') ? '东方财富 · 要闻' : '东方财富';
+  }
+  return code;
 }

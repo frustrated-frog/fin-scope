@@ -116,10 +116,20 @@ public class NewsClassificationRepository {
             return Collections.emptyMap();
         }
         Map<String, NewsItemClassification> result = new LinkedHashMap<String, NewsItemClassification>();
-        for (String itemId : itemIds) {
-            NewsItemClassification value = read(itemId);
-            if (value != null) {
-                result.put(itemId, value);
+        java.util.List<String> ids = new java.util.ArrayList<>(itemIds);
+        for (int start = 0; start < ids.size(); start += 500) {
+            java.util.List<String> batch = ids.subList(start, Math.min(start + 500, ids.size()));
+            java.util.List<String> keys = batch.stream().map(this::key)
+                    .collect(java.util.stream.Collectors.toList());
+            java.util.List<String> payloads = redisTemplate.opsForValue().multiGet(keys);
+            if (payloads == null) {
+                continue;
+            }
+            for (int index = 0; index < payloads.size(); index++) {
+                NewsItemClassification value = deserialize(payloads.get(index));
+                if (value != null) {
+                    result.put(batch.get(index), value);
+                }
             }
         }
         return result;
@@ -140,12 +150,20 @@ public class NewsClassificationRepository {
         }
         try {
             String payload = redisTemplate.opsForValue().get(key(itemId));
-            if (payload == null || payload.trim().isEmpty()) {
-                return null;
-            }
+            return deserialize(payload);
+        } catch (RuntimeException error) {
+            throw new IllegalStateException("Redis 新闻分类缓存读取失败", error);
+        }
+    }
+
+    private NewsItemClassification deserialize(String payload) {
+        if (payload == null || payload.trim().isEmpty()) {
+            return null;
+        }
+        try {
             return objectMapper.readerFor(NewsItemClassification.class)
                     .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(payload);
-        } catch (RuntimeException | JsonProcessingException error) {
+        } catch (JsonProcessingException error) {
             throw new IllegalStateException("Redis 新闻分类缓存读取失败", error);
         }
     }

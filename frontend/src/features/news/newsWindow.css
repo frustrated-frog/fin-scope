@@ -664,3 +664,26 @@
 .news-window input::placeholder { color: var(--nw-muted); opacity: 1; }
 .news-window button.news-window-primary:not(:disabled):hover { background: var(--nw-accent); filter: brightness(1.08); }
 [data-theme='dark'] .news-window, [data-theme='dark'] .news-report-dialog { color-scheme: dark; }
+
+.news-source-health { margin: 0; border: 1px solid var(--nw-line); border-radius: 12px; background: var(--nw-surface); color: var(--nw-muted); font-size: 12px; }
+.news-source-health summary { display: flex; align-items: center; gap: 16px; padding: 12px 16px; list-style: none; cursor: pointer; }
+.news-source-health summary::-webkit-details-marker { display: none; }
+.news-health-title { display: flex; align-items: center; gap: 8px; color: var(--nw-text); font-weight: 600; white-space: nowrap; }
+.news-health-title i { width: 6px; height: 6px; border-radius: 50%; background: var(--nw-accent); }
+.news-health-summary { min-width: 0; }
+.news-health-toggle { display: flex; align-items: center; gap: 7px; margin-left: auto; white-space: nowrap; }
+.news-source-health[open] .news-health-toggle > span { transform: rotate(180deg); }
+.news-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 24px; padding: 16px; border-top: 1px solid var(--nw-line); }
+.news-health-item { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.news-health-item > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.news-health-item strong { color: var(--nw-text); font-size: 12px; font-weight: 600; }
+.news-health-item time { margin-left: 8px; font-variant-numeric: tabular-nums; }
+.news-health-ok { color: var(--nw-accent); font-size: 11px; }
+.news-health-warning { color: var(--nw-text); font-size: 11px; }
+
+.news-source-health summary:focus-visible { outline: 2px solid var(--nw-accent); outline-offset: 3px; }
+@media (max-width: 760px) {
+  .news-health-grid { grid-template-columns: minmax(0, 1fr); }
+  .news-source-health summary { gap: 10px; padding: 12px; }
+  .news-health-summary { font-size: 11px; }
+}
