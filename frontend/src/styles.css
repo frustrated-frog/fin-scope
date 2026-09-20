@@ -13050,7 +13050,7 @@ input[type="checkbox"] {
   line-height: 1.65;
 }
 
-/* Shared analysis surface: typography and fine rules replace nested cards. */
+/* Shared analysis surface: light outlines separate each reading section. */
 .attribution-driver-ai {
   position: relative;
   margin-top: 22px;
@@ -13099,18 +13099,17 @@ input[type="checkbox"] {
 .attribution-driver-ai-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px 32px;
+  gap: 16px;
 }
 
 .attribution-driver-ai-grid > :is(article, .attribution-research-field) {
   min-width: 0;
   margin: 0;
-  padding: 14px 0 0;
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-  border-radius: 0;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 10px;
   background: transparent;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 5%, transparent);
   overflow-wrap: anywhere;
 }
 
