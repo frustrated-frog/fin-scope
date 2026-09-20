@@ -254,12 +254,28 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         </div>
       </header>
 
-      {snapshot?.sourceHealth?.length ? <details className="news-source-health"><summary>来源同步状态</summary>
-        {snapshot.sourceHealth.map((source) => <p key={source.providerCode}>
-          {source.providerCode} · {{ HEALTHY: '同步正常', DEGRADED: '同步失败，保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' }[source.status]}
-          {' · 最近成功：'}{source.lastSuccessAt ? formatTime(source.lastSuccessAt, true) : '暂无'}
-          {' · 最近尝试：'}{source.lastAttemptAt ? formatTime(source.lastAttemptAt, true) : '暂无'}
-        </p>)}
+      {snapshot?.sourceHealth?.length ? <details className="news-source-health">
+        <summary>
+          <span className="news-health-title"><i aria-hidden="true" />来源同步</span>
+          <span className="news-health-summary">
+            {snapshot.sourceHealth.every((item) => item.status === 'HEALTHY')
+              ? `${snapshot.sourceHealth.length} 个渠道运行正常`
+              : `${snapshot.sourceHealth.filter((item) => item.status === 'HEALTHY').length} / ${snapshot.sourceHealth.length} 个渠道正常`}
+          </span>
+          <span className="news-health-toggle">详情 <span aria-hidden="true">⌄</span></span>
+        </summary>
+        <div className="news-health-grid">
+          {snapshot.sourceHealth.map((item) => <div className="news-health-item" key={item.providerCode}>
+            <div><strong>{providerLabel(item.providerCode)}</strong>
+              <span className={item.status === 'HEALTHY' ? 'news-health-ok' : 'news-health-warning'}>
+                {{ HEALTHY: '已同步', DEGRADED: '保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' }[item.status]}
+              </span>
+            </div>
+            <span>最近成功 <time>{item.lastSuccessAt ? formatDateTime(item.lastSuccessAt) : '暂无'}</time></span>
+            {item.status !== 'HEALTHY' && item.lastAttemptAt
+              ? <span>最近尝试 <time>{formatDateTime(item.lastAttemptAt)}</time></span> : null}
+          </div>)}
+        </div>
       </details> : null}
       <nav className="news-category-rail" aria-label="资讯分类">
         {categories.map((category) => (
@@ -275,12 +291,14 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         event.preventDefault();
         changeFilters({ query: query.trim() });
       }}>
+        <div className="news-search-control">
         <label className="news-search">
-          <span>检索</span>
+          <span aria-hidden="true">⌕</span>
           <input type="search" aria-label="搜索资讯" placeholder="搜索公司、行业或事件" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
-        <button type="submit" className="ghost-button">搜索</button>
-        <label>时间范围<select aria-label="资讯时间范围" value={hours}
+        <button type="submit" className="news-search-submit">搜索</button>
+        </div>
+        <label className="news-time-filter"><span>时间范围</span><select aria-label="资讯时间范围" value={hours}
           onChange={(event) => changeFilters({ hours: Number(event.target.value) })}>
           {[6, 12, 24, 36].map((value) => <option key={value} value={value}>最近 {value} 小时</option>)}
         </select></label>
@@ -291,11 +309,13 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
       </form>
       {loadError ? <div role="alert">{loadError} <button type="button" onClick={() => void load(true)}>重试加载</button></div> : null}
       <nav className="news-pagination" aria-label="资讯分页">
-        <span>共 {snapshot?.totalCount ?? 0} 条 · 第 {(snapshot?.page ?? 0) + 1} / {Math.max(1, snapshot?.totalPages ?? 0)} 页</span>
+        <span className="news-result-count">共 {snapshot?.totalCount ?? 0} 条 · 第 {(snapshot?.page ?? 0) + 1} / {Math.max(1, snapshot?.totalPages ?? 0)} 页</span>
+        <div className="news-page-actions">
         <button type="button" disabled={loading || !snapshot || (snapshot.page ?? 0) === 0}
           onClick={() => changeFilters({ page: (snapshot?.page ?? 0) - 1 }, true)}>上一页</button>
         <button type="button" disabled={loading || !snapshot || (snapshot.page ?? 0) + 1 >= (snapshot.totalPages ?? 0)}
           onClick={() => changeFilters({ page: (snapshot?.page ?? 0) + 1 }, true)}>下一页</button>
+        </div>
       </nav>
 
       {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>部分来源暂不可用，已展示可用资讯</div> : null}
