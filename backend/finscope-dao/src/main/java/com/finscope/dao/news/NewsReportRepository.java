@@ -32,7 +32,7 @@ public class NewsReportRepository {
                             + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
                             + "content_version=news_report.content_version+CASE WHEN news_report.title<>excluded.title OR "
                             + "news_report.content<>excluded.content THEN 1 ELSE 0 END,title=excluded.title,content=excluded.content,"
-                            + "url=excluded.url,published_at=COALESCE(excluded.published_at,news_report.published_at),last_seen_at=excluded.last_seen_at,"
+                            + "url=excluded.url,published_at=COALESCE(news_report.published_at,excluded.published_at),last_seen_at=excluded.last_seen_at,"
                             + "category_code=CASE WHEN news_report.manually_reviewed=1 THEN news_report.category_code ELSE excluded.category_code END,"
                             + "category_name=CASE WHEN news_report.manually_reviewed=1 THEN news_report.category_name ELSE excluded.category_name END,"
                             + "classification_reason=excluded.classification_reason,rule_version=excluded.rule_version",
@@ -52,8 +52,22 @@ public class NewsReportRepository {
         return jdbc.query(SELECT + "WHERE n.id=?", row(), id).stream().findFirst();
     }
 
+    public List<NewsReport> related(String id) {
+        return jdbc.query(SELECT + "WHERE n.id<>? AND n.id IN (SELECT s.origin_key FROM investment_reaction_source s "
+                + "WHERE s.origin_type='NEWS_ITEM' AND s.event_key IN (SELECT event_key FROM investment_reaction_source "
+                + "WHERE origin_type='NEWS_ITEM' AND origin_key=?)) ORDER BY n.published_at,n.arrival_sequence LIMIT 100",
+                row(), id, id);
+    }
+
     public long latestSequence() {
         return jdbc.queryForObject("SELECT COALESCE(MAX(arrival_sequence),0) FROM news_report", Long.class);
+    }
+
+    public long count(NewsWindowQuery query, LocalDateTime since, LocalDateTime until) {
+        List<Object> args = new ArrayList<>();
+        String where = where(query, since, until, args);
+        return jdbc.queryForObject("SELECT COUNT(*) FROM news_report n LEFT JOIN news_report_read r ON r.report_id=n.id " + where,
+                Long.class, args.toArray());
     }
 
     public NewsWindowPage query(NewsWindowQuery query, LocalDateTime since, LocalDateTime until) {

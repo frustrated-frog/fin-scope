@@ -62,6 +62,8 @@ public class RadarHotspotProductionPipeline {
     private RadarHotspotPersistenceService persistence;
     @Resource
     private RadarEventSnapshotRepository snapshots;
+    @Resource
+    private RadarRankHistoryService rankHistory;
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
         String category = normalizeCategory(requestedCategory);
@@ -93,6 +95,7 @@ public class RadarHotspotProductionPipeline {
             runs.startStep(run.getId(), "PERSIST", now);
             List<RadarEvent> savedEvents = persist(ranked, now);
             classifyDashboardEvents();
+            rankHistory.record(savedEvents, now);
             Set<String> activeEventKeys = new HashSet<String>();
             for (RadarEvent event : savedEvents) {
                 activeEventKeys.add(event.getEventKey());

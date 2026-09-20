@@ -13,7 +13,7 @@ import java.util.List;
 
 @Service
 public class RadarHotspotScoreService {
-    public static final String SCORE_VERSION = "HOTSPOT_V2";
+    public static final String SCORE_VERSION = "HOTSPOT_V3";
     private final RadarSourceIndependenceService independence;
     private final RadarLifecycleService lifecycles;
 
@@ -45,7 +45,7 @@ public class RadarHotspotScoreService {
         List<RadarSignal> independentSignals = representativeSignals(sources);
         int independentCount = sources.getIndependentSourceCount();
         double freshness = freshness(independentSignals, now);
-        double burst = burst(independentCount, previous, freshness, now);
+        double burst = burst(independentSignals, independentCount, previous, freshness, now);
         double confirmation = confirmation(independentCount);
         double authority = sources.getAuthorityScore();
         double rankTrend = rankTrend(independentSignals);
@@ -58,7 +58,7 @@ public class RadarHotspotScoreService {
         LocalDateTime latest = latestTime(independentSignals);
         String lifecycle = lifecycles.next(normalizedPrevious(previous, independentCount), total,
                 independentCount, latest, now);
-        String explanation = "传播速度/爆发强度 " + percentage(burst)
+        String explanation = (previous == null ? "初次收录强度（暂无速度基线） " : "传播速度/爆发强度 ") + percentage(burst)
                 + "；" + (independentCount > 1 ? "多源独立确认 " : "独立确认 ") + percentage(confirmation)
                 + "；时效 " + percentage(freshness)
                 + "；来源权威 " + percentage(authority)
@@ -92,13 +92,17 @@ public class RadarHotspotScoreService {
         return values;
     }
 
-    private double burst(int independentCount, RadarEventSnapshot previous, double freshness, LocalDateTime now) {
+    private double burst(List<RadarSignal> signals, int independentCount, RadarEventSnapshot previous, double freshness, LocalDateTime now) {
         if (previous == null || previous.getSnapshotAt() == null || now == null) {
             return clamp(independentCount / 2.0D) * freshness;
         }
         int previousCount = previous.getIndependentSourceCount() > 0
                 ? previous.getIndependentSourceCount() : Math.min(previous.getSignalCount(), independentCount);
         int added = Math.max(0, independentCount - previousCount);
+        long newlyPublished = signals.stream().filter(signal -> signal.getPublishedAt() != null
+                && !signal.getPublishedAt().isBefore(previous.getSnapshotAt())
+                && !signal.getPublishedAt().isAfter(now)).count();
+        added = Math.min(added, (int) newlyPublished);
         long minutes = Math.max(1, Duration.between(previous.getSnapshotAt(), now).toMinutes());
         double normalizedWindow = Math.max(1.0D, minutes / 30.0D);
         return clamp(added / normalizedWindow / 2.0D);
@@ -144,7 +148,7 @@ public class RadarHotspotScoreService {
             Integer current = signal.getSourceRank();
             Integer previous = signal.getPreviousSourceRank();
             if (current == null) {
-                total += 0.35D;
+                total += 0D;
             } else if (previous == null) {
                 total += clamp(1.0D - (Math.max(1, current) - 1) / 20.0D);
             } else {

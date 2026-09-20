@@ -138,7 +138,7 @@ public class ResearchMaterialGateway {
             }
             warnings.addAll(result.warnings);
             for (ResearchMaterial material : result.materials) {
-                if (valid(material)) unique.putIfAbsent(key(material), material);
+                if (valid(material)) unique.putIfAbsent(newsKey(material), material);
             }
         }
         materials.addAll(unique.values());
@@ -173,7 +173,7 @@ public class ResearchMaterialGateway {
             }
             warnings.addAll(cached.get().getWarnings());
             for (ResearchMaterial material : cached.get().getMaterials()) {
-                if (valid(material)) unique.putIfAbsent(key(material), material);
+                if (valid(material)) unique.putIfAbsent(newsKey(material), material);
             }
         }
         if (unique.isEmpty() && warnings.isEmpty()) {
@@ -307,6 +307,10 @@ public class ResearchMaterialGateway {
         return value != null && value.getMaterialType() != null
                 && !blank(value.getTitle()) && !blank(value.getContent())
                 && !blank(value.getProviderCode()) && !blank(value.getSourceTier());
+    }
+
+    private String newsKey(ResearchMaterial value) {
+        return value.getProviderCode() + "|" + (blank(value.getExternalId()) ? key(value) : value.getExternalId());
     }
 
     private String key(ResearchMaterial value) {

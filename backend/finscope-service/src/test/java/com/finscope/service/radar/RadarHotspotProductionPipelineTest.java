@@ -54,6 +54,7 @@ class RadarHotspotProductionPipelineTest {
         RadarClusteringService.ClusterResult second = cluster(secondSignal,
                 "601800:公告:信息:20260814:20.61%");
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        ReflectionTestUtils.setField(pipeline, "rankHistory", mock(RadarRankHistoryService.class));
 
         List<RadarClusteringService.ClusterResult> merged = pipeline.mergeDuplicateClusters(
                 Arrays.asList(first, second));
@@ -79,6 +80,7 @@ class RadarHotspotProductionPipelineTest {
         RadarHotspotPersistenceService persistence = new RadarHotspotPersistenceService(repository);
         RadarEventSnapshotRepository snapshots = mock(RadarEventSnapshotRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        ReflectionTestUtils.setField(pipeline, "rankHistory", mock(RadarRankHistoryService.class));
         wire(pipeline, news, repository, clustering, priority, watchlist, runs, enhancement,
                 scores, dashboardCategories, persistence, snapshots);
 
@@ -129,7 +131,7 @@ class RadarHotspotProductionPipelineTest {
         assertEquals(2, result.getEvents().get(0).getSignalCount());
         assertTrue(result.getEvents().get(0).getHotspotScore() >= 75);
         assertTrue(result.getEvents().get(0).getConfidenceScore() > 0);
-        assertEquals("HOTSPOT_V2", result.getEvents().get(0).getScoreVersion());
+        assertEquals("HOTSPOT_V3", result.getEvents().get(0).getScoreVersion());
         assertEquals("宁德时代:发布:电池", result.getEvents().get(0).getEventKey());
         assertEquals("TECHNOLOGY", result.getEvents().get(0).getDashboardCategory());
         ArgumentCaptor<List<RadarSignal>> capturedSignals = ArgumentCaptor.forClass(List.class);
@@ -144,7 +146,7 @@ class RadarHotspotProductionPipelineTest {
         ArgumentCaptor<com.finscope.domain.radar.RadarEventSnapshot> snapshotCaptor =
                 ArgumentCaptor.forClass(com.finscope.domain.radar.RadarEventSnapshot.class);
         verify(snapshots).save(snapshotCaptor.capture());
-        assertEquals("HOTSPOT_V2", snapshotCaptor.getValue().getScoreVersion());
+        assertEquals("HOTSPOT_V3", snapshotCaptor.getValue().getScoreVersion());
         verify(repository).expireEventsExcept(any(), eq(now.minusHours(48)), eq(now));
         org.mockito.InOrder order = inOrder(runs);
         order.verify(runs).startStep(7L, "FETCH", now);
@@ -163,6 +165,7 @@ class RadarHotspotProductionPipelineTest {
         WatchlistRepository watchlist = mock(WatchlistRepository.class);
         RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        ReflectionTestUtils.setField(pipeline, "rankHistory", mock(RadarRankHistoryService.class));
         wire(pipeline, news, repository, clustering, priority, watchlist, runs,
                 mock(RadarEventEnhancementScheduler.class), new RadarHotspotScoreService(),
                 new RadarDashboardCategoryService(), new RadarHotspotPersistenceService(repository),

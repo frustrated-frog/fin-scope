@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /** 已采集内容的工作台；查询不触发外部抓取或模型调用。 */
+@lombok.extern.slf4j.Slf4j
 @Service
 public class NewsWindowService {
     @Resource
@@ -78,7 +79,12 @@ public class NewsWindowService {
         query.setAsOfTime(anchor.toString());
         NewsWindowPage page = reports.query(query, anchor.minusHours(query.getHours()), anchor);
         page.setAsOfTime(anchor.toString());
-        page.setSourceHealth(gateway.readNewsFlashSources(new ResearchMaterialRequest("000001", "", 50)).getSourceHealth());
+        try {
+            page.setSourceHealth(gateway.readNewsFlashSources(new ResearchMaterialRequest("000001", "", 50)).getSourceHealth());
+        } catch (RuntimeException error) {
+            log.warn("来源状态暂不可用，继续展示已持久化新闻", error);
+            page.setSourceHealth(Collections.emptyList());
+        }
         return page;
     }
 
@@ -111,6 +117,7 @@ public class NewsWindowService {
         NewsReportDetail detail = new NewsReportDetail();
         detail.setReport(reports.find(id).orElseThrow(() -> invalid("新闻不存在或已超过保留期限")));
         detail.setVersions(reports.versions(id));
+        detail.setRelatedReports(reports.related(id));
         detail.setReactions(reactions.findByOrigin("NEWS_ITEM", id));
         return detail;
     }
@@ -129,7 +136,20 @@ public class NewsWindowService {
     }
 
     public List<NewsSavedFilter> filters() {
-        return reports.filters();
+        LocalDateTime now = LocalDateTime.now(clock);
+        long sequence = reports.latestSequence();
+        List<NewsSavedFilter> filters = reports.filters();
+        for (NewsSavedFilter filter : filters) {
+            NewsWindowQuery query = filter.getQuery();
+            boolean unreadOnly = query.isUnreadOnly();
+            query.setUnreadOnly(true);
+            query.setAsOfSequence(sequence);
+            query.setPage(0);
+            filter.setUnreadCount(reports.count(query, now.minusHours(query.getHours()), now));
+            query.setUnreadOnly(unreadOnly);
+            query.setAsOfSequence(0);
+        }
+        return filters;
     }
 
     public NewsSavedFilter saveFilter(NewsSavedFilter value) {

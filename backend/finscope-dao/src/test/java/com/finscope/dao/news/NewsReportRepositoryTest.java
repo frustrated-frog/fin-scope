@@ -32,7 +32,7 @@ class NewsReportRepositoryTest {
         repository = new NewsReportRepository();
         ReflectionTestUtils.setField(repository, "jdbc", jdbc);
         ReflectionTestUtils.setField(repository, "mapper", new ObjectMapper());
-        jdbc.execute("CREATE TABLE investment_reaction_source(origin_type TEXT,origin_key TEXT)");
+        jdbc.execute("CREATE TABLE investment_reaction_source(origin_type TEXT,origin_key TEXT,event_key TEXT)");
         jdbc.execute("CREATE TABLE major_event(origin_type TEXT,origin_key TEXT)");
     }
 
@@ -115,7 +115,7 @@ class NewsReportRepositoryTest {
     @Test
     void retentionKeepsInvestmentAndJournalEvidenceAndCleansOrphans() {
         repository.ingest(List.of(report("1", "观察"), report("2", "普通"), report("3", "大事记")));
-        jdbc.update("INSERT INTO investment_reaction_source VALUES('NEWS_ITEM','1')");
+        jdbc.update("INSERT INTO investment_reaction_source VALUES('NEWS_ITEM','1','EVENT:1')");
         jdbc.update("INSERT INTO major_event VALUES('NEWS_ITEM','3')");
         repository.prune(now.plusDays(8));
         assertTrue(repository.find("1").isPresent());
@@ -135,6 +135,15 @@ class NewsReportRepositoryTest {
         assertEquals("减持", repository.filters().get(0).getQuery().getExclude());
         assertTrue(repository.deleteFilter("f1"));
         assertFalse(repository.deleteFilter("f1"));
+    }
+
+    @Test
+    void relatedReportsUseThePersistedEventAssociation() {
+        repository.ingest(List.of(report("1", "合同公告"), report("2", "另一来源合同公告"), report("3", "无关合同")));
+        jdbc.update("INSERT INTO investment_reaction_source VALUES('NEWS_ITEM','1','EVENT:1')");
+        jdbc.update("INSERT INTO investment_reaction_source VALUES('NEWS_ITEM','2','EVENT:1')");
+        jdbc.update("INSERT INTO investment_reaction_source VALUES('NEWS_ITEM','3','EVENT:3')");
+        assertEquals(List.of("2"), repository.related("1").stream().map(NewsReport::getId).toList());
     }
 
     private NewsWindowQuery query() {

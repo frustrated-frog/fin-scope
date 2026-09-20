@@ -9,4 +9,5 @@ public class NewsReportDetail {
     private NewsReport report;
     private List<NewsReportVersion> versions;
     private List<ReactionSample> reactions;
+    private List<NewsReport> relatedReports;
 }
