@@ -212,13 +212,17 @@ export function LiveNewsPanel({
     </>;
     const body = <>
       <button type="button" className="news-story-open news-item-link" aria-label={`阅读资讯：${item.title}`} onClick={() => setSelected(item)}>{content}</button>
-      <button type="button" className={`major-event-save${savedItems.has(item.id) ? ' is-saved' : ''}`}
-        disabled={savedItems.has(item.id)} aria-label={`记入大事记：${item.title}`} onClick={() => void saveMajorEvent(item)}>
-        {savedItems.has(item.id) ? '✓ 已记入大事记' : '+ 记入大事记'}
-      </button>
-      <div className="news-classification"><span>{item.categoryName ?? '未归类'}</span>
-        <button type="button" className="ghost-button" onClick={() => setSelected(item)}>详情与分类</button>
-      </div>
+      <footer className="news-card-footer">
+        <span className={`news-card-category${item.categoryName ? '' : ' is-unclassified'}`}>{item.categoryName ?? '未归类'}</span>
+        <div className="news-card-actions">
+          <button type="button" className="news-card-detail" onClick={() => setSelected(item)}>查看详情 <span aria-hidden="true">↗</span></button>
+          <button type="button" className={`news-card-save${savedItems.has(item.id) ? ' is-saved' : ''}`}
+            disabled={savedItems.has(item.id)} aria-label={`记入大事记：${item.title}`} onClick={() => void saveMajorEvent(item)}>
+            <span aria-hidden="true">{savedItems.has(item.id) ? '✓' : '+'}</span>
+            {savedItems.has(item.id) ? '已记入大事记' : '记入大事记'}
+          </button>
+        </div>
+      </footer>
     </>;
     return depth
       ? <article key={item.id} className="news-depth-card" data-flow-surface={item.categoryCode || 'review'}>{body}</article>
