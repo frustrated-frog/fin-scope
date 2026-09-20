@@ -43,12 +43,53 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
     {sample.refreshError && <p className="reaction-warning" role="status">{sample.refreshError} 最近尝试：{dateTime(sample.lastAttemptAt)}</p>}
     {!calculation ? <p className="reaction-empty">事件已登记，尚无成功计算的行情结果。系统会自动补齐事件前行情并持续更新后续窗口。</p> : <>
       {profile && <section className="reaction-profile" aria-label="三阶段反应画像">
-        <h5>从事前到现在</h5><p>{profile.summary}</p>
+        <header className="reaction-profile-header">
+          <div><span className="reaction-profile-eyebrow">EVENT RESPONSE · 交易日观察</span>
+            <h5>从事前到现在</h5><p>{profile.summary}</p></div>
+          <span className={`reaction-profile-status${profile.windowEnded ? ' is-complete' : ''}`}>
+            <i aria-hidden="true" />{profile.windowEnded ? '观察已结束' : '持续观察中'}
+          </span>
+        </header>
         <div className="reaction-phases">
-          <article><span>01 / 事前 5 日</span><strong>个股 {signed(profile.beforeStockPct, '%')}</strong><small>基准 {signed(profile.beforeBenchmarkPct, '%')} · 相对 {signed(profile.beforeRelativePp, ' pp')}</small></article>
-          <article><span>02 / 首日反应</span><strong>相对 {signed(profile.firstRelativePp, ' pp')}</strong><small>成交量 / 事前均量 {profile.firstVolumeRatio?.toFixed(2) ?? '—'} 倍</small></article>
-          <article><span>03 / 后续路径 · 已观察 {profile.observedSessions} 日</span><strong>当前相对 {signed(profile.currentRelativePp, ' pp')}</strong><small>阶段最高 {signed(profile.peakRelativePp, ' pp')}（第 {profile.peakSession ?? '—'} 日）</small><small>高点回吐 {signed(profile.givebackPp, ' pp')} · 收盘最大回撤 {signed(profile.maxDrawdownPct, '%')}</small></article>
-        </div><p className="reaction-note">{profile.windowEnded ? '五日观察窗口已结束' : '观察窗口仍在进行'} · {profile.dataComplete ? '逐日数据完整' : profile.hasGaps ? '含缺失数据，已知点之间的回撤仅供参考' : '等待后续交易日'}。成交量以同批行情事前五日均量为基准；价格路径描述不代表新闻的因果影响。</p>
+          <article className="reaction-phase is-ready">
+            <div className="reaction-phase-heading"><span className="reaction-phase-number">01</span><h6>事前走势</h6><span className="reaction-phase-period">前 5 个交易日</span></div>
+            <span className="reaction-phase-label">个股累计涨跌</span>
+            <strong className="reaction-phase-value">{signed(profile.beforeStockPct)}<span>%</span></strong>
+            <dl className="reaction-phase-metrics">
+              <div><dt>同期基准</dt><dd>{signed(profile.beforeBenchmarkPct, '%')}</dd></div>
+              <div><dt>相对基准</dt><dd>{signed(profile.beforeRelativePp, ' pp')}</dd></div>
+            </dl>
+          </article>
+          <article className={`reaction-phase${profile.firstRelativePp != null ? ' is-ready' : ' is-pending'}`}>
+            <div className="reaction-phase-heading"><span className="reaction-phase-number">02</span><h6>首日反应</h6><span className="reaction-phase-period">首个交易日</span></div>
+            <span className="reaction-phase-label">相对基准表现</span>
+            {profile.firstRelativePp != null
+              ? <strong className="reaction-phase-value">{signed(profile.firstRelativePp)}<span>pp</span></strong>
+              : <div className="reaction-phase-wait"><span aria-hidden="true">◷</span><strong>等待首日数据</strong><small>收盘后更新价格反应</small></div>}
+            <dl className="reaction-phase-metrics">
+              <div><dt>成交量 / 事前均量</dt><dd>{profile.firstVolumeRatio != null ? `${profile.firstVolumeRatio.toFixed(2)} 倍` : '待更新'}</dd></div>
+            </dl>
+          </article>
+          <article className={`reaction-phase${profile.currentRelativePp != null ? ' is-ready' : ' is-pending'}`}>
+            <div className="reaction-phase-heading"><span className="reaction-phase-number">03</span><h6>后续路径</h6><span className="reaction-phase-period">已观察 {profile.observedSessions} 日</span></div>
+            <span className="reaction-phase-label">当前相对表现</span>
+            {profile.currentRelativePp != null
+              ? <strong className="reaction-phase-value">{signed(profile.currentRelativePp)}<span>pp</span></strong>
+              : <div className="reaction-phase-wait"><span aria-hidden="true">⌁</span><strong>等待路径形成</strong><small>持续跟踪后续交易日</small></div>}
+            {profile.currentRelativePp != null ? <dl className="reaction-phase-metrics">
+              <div><dt>阶段最高{profile.peakSession != null ? ` · 第 ${profile.peakSession} 日` : ''}</dt><dd>{signed(profile.peakRelativePp, ' pp')}</dd></div>
+              <div><dt>高点回吐</dt><dd>{signed(profile.givebackPp, ' pp')}</dd></div>
+              <div><dt>收盘最大回撤</dt><dd>{signed(profile.maxDrawdownPct, '%')}</dd></div>
+            </dl> : <div className="reaction-phase-progress" aria-label={`已观察 ${profile.observedSessions} 个交易日，目标 5 日`}>
+              {Array.from({ length: 5 }, (_, index) => <span key={index} className={index < profile.observedSessions ? 'is-observed' : ''} />)}
+              <small>{profile.observedSessions} / 5 日</small>
+            </div>}
+          </article>
+        </div>
+        <footer className="reaction-profile-footnote">
+          <span className="reaction-profile-quality"><i aria-hidden="true" />{profile.dataComplete ? '逐日数据完整' : profile.hasGaps ? '含缺失数据' : '等待后续交易日'}</span>
+          <p>{profile.hasGaps ? '已知点之间的回撤仅供参考。' : ''}成交量以事前五日均量为基准；价格路径不代表新闻的因果影响。</p>
+        </footer>
       </section>}
       <ReactionChart series={[
         { label: sample.instrumentName || sample.instrumentCode, metric: 'stockReturnPct', points: calculation.points, color: 'var(--reaction-ink)' },

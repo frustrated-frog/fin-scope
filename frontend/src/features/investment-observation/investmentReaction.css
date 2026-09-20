@@ -196,10 +196,6 @@
 .reaction-workspace .reaction-feed p { font-size: 13px; margin: 8px 0 0; }
 .reaction-workspace .reaction-followed { width: 100%; text-align: left; display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--reaction-line); }
 .reaction-workspace .reaction-followed span { font-size: 12px; color: var(--reaction-muted); }
-.reaction-workspace .reaction-profile { margin: 24px 0; padding: 20px; background: var(--reaction-subtle); border: 1px solid var(--reaction-line); border-radius: 10px; }
-.reaction-workspace .reaction-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.reaction-workspace .reaction-phases article { display: grid; align-content: start; gap: 10px; }
-.reaction-workspace .reaction-phases span, .reaction-workspace .reaction-phases small { font-size: 12px; color: var(--reaction-muted); }
 .reaction-workspace .reaction-context { margin-top: 24px; border-top: 1px solid var(--reaction-line); padding-top: 20px; }
 .reaction-workspace .reaction-context details { margin: 20px 0; }
 .reaction-workspace .reaction-context h5 { font-size: 15px; margin: 12px 0; }
@@ -211,7 +207,6 @@
 @container (max-width: 700px) {
   .reaction-workspace .reaction-activity, .reaction-workspace .reaction-phases, .reaction-workspace .reaction-history-groups { grid-template-columns: 1fr; }
   .reaction-workspace .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
-  .reaction-workspace .reaction-phases article + article { border-top: 1px solid var(--reaction-line); padding-top: 14px; }
 }
 
 .reaction-workspace :where(h4, h5, p, figure) { margin-block: 0; }
@@ -233,10 +228,6 @@
 .reaction-workspace .reaction-feed button:hover, .reaction-workspace .reaction-context li button:hover { color: var(--reaction-teal); background: transparent; }
 .reaction-workspace .reaction-followed { border: 0; border-radius: 8px; background: var(--reaction-subtle); padding: 12px; margin-top: 8px; }
 .reaction-workspace .reaction-detail > p { margin-block: 12px; }
-.reaction-workspace .reaction-phases { margin-top: 20px; }
-.reaction-workspace .reaction-phases article + article { border-left: 1px solid var(--reaction-line); padding-left: 20px; }
-.reaction-workspace .reaction-phases strong { font-size: 16px; font-weight: 550; font-variant-numeric: tabular-nums; }
-.reaction-workspace .reaction-profile > .reaction-note { margin-top: 18px; font-size: 11px; }
 .reaction-workspace .reaction-context details { border-block: 1px solid var(--reaction-line); padding-block: 14px; }
 .reaction-workspace summary { cursor: pointer; font-size: 12px; line-height: 1.7; }
 .reaction-workspace .reaction-history-groups { margin-top: 16px; }
@@ -261,7 +252,6 @@
   .reaction-workspace .reaction-toolbar label { display: grid; gap: 6px; }
   .reaction-workspace .reaction-toolbar select { width: 100%; min-width: 0; }
   .reaction-workspace .reaction-subject button { min-height: 44px; }
-  .reaction-workspace .reaction-phases article + article { border-left: 0; padding-left: 0; }
   .reaction-workspace .reaction-tabs button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -281,4 +271,57 @@
 @container (max-width: 760px) {
   .reaction-workspace .reaction-detail-head { flex-direction: column; gap: 8px; }
   .reaction-workspace .reaction-actions { max-width: 100%; justify-content: flex-start; }
+}
+
+/* Three sessions of evidence, with a shared timeline and quiet instrument readouts. */
+.reaction-workspace .reaction-profile {
+  --profile-accent: #278b9d;
+  position: relative; isolation: isolate; overflow: hidden;
+  margin: 26px 0; padding: 24px; border: 1px solid var(--reaction-line); border-radius: 18px;
+  background: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--profile-accent) 10%, transparent), transparent 55%), var(--reaction-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reaction-ink) 6%, transparent);
+}
+[data-theme="dark"] .reaction-workspace .reaction-profile { --profile-accent: #66d4df; }
+.reaction-workspace .reaction-profile-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.reaction-workspace .reaction-profile-eyebrow { color: var(--profile-accent); font: 500 10px/1.5 var(--reaction-numeric); letter-spacing: .13em; }
+.reaction-workspace .reaction-profile-header h5 { margin: 7px 0 5px; color: var(--reaction-ink); font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
+.reaction-workspace .reaction-profile-header p { margin: 0; color: var(--reaction-muted); font-size: 12px; line-height: 1.7; }
+.reaction-workspace .reaction-profile-status { display: inline-flex; align-items: center; flex: none; gap: 7px; margin-top: 3px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--profile-accent) 25%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--profile-accent) 6%, transparent); color: var(--profile-accent); font-size: 10px; letter-spacing: .03em; }
+.reaction-workspace .reaction-profile-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px color-mix(in srgb, var(--profile-accent) 45%, transparent); }
+.reaction-workspace .reaction-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.reaction-workspace .reaction-phase { position: relative; min-width: 0; padding: 18px; border: 1px solid var(--reaction-line); border-radius: 12px; background: color-mix(in srgb, var(--reaction-subtle) 70%, transparent); }
+.reaction-workspace .reaction-phase.is-ready { border-top-color: color-mix(in srgb, var(--profile-accent) 60%, var(--reaction-line)); background: linear-gradient(160deg, color-mix(in srgb, var(--profile-accent) 5%, transparent), transparent 65%), var(--reaction-subtle); }
+.reaction-workspace .reaction-phase-heading { display: flex; align-items: center; gap: 8px; position: relative; margin-bottom: 24px; }
+.reaction-workspace .reaction-phase:not(:last-child) .reaction-phase-heading::after { content: ""; position: absolute; width: 15px; height: 1px; right: -34px; top: 50%; background: var(--reaction-line); }
+.reaction-workspace .reaction-phase-number { flex: none; color: var(--profile-accent); font: 500 11px/24px var(--reaction-numeric); text-align: center; width: 26px; border: 1px solid color-mix(in srgb, var(--profile-accent) 25%, var(--reaction-line)); border-radius: 6px; }
+.reaction-workspace .reaction-phase-heading h6 { margin: 0; font-size: 12px; font-weight: 600; color: var(--reaction-ink); }
+.reaction-workspace .reaction-phase-period { margin-left: auto; color: var(--reaction-muted); font-size: 10px; white-space: nowrap; }
+.reaction-workspace .reaction-phase-label { color: var(--reaction-muted); font-size: 11px; }
+.reaction-workspace .reaction-phase-value { display: flex; align-items: baseline; gap: 6px; margin: 7px 0 20px; color: var(--reaction-ink); font: 500 clamp(23px, 2.4vw, 32px)/1.2 var(--reaction-numeric); letter-spacing: -.06em; font-variant-numeric: tabular-nums; }
+.reaction-workspace .reaction-phase-value > span { color: var(--reaction-muted); font: 400 12px/1.2 var(--reaction-numeric); letter-spacing: 0; }
+.reaction-workspace .reaction-phase-metrics { display: grid; gap: 9px; margin: 0; padding-top: 13px; border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-phase-metrics > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; font-size: 11px; }
+.reaction-workspace .reaction-phase-metrics dt { color: var(--reaction-muted); font-weight: 400; }
+.reaction-workspace .reaction-phase-metrics dd { margin: 0; color: var(--reaction-ink); font: 500 11px/1.5 var(--reaction-numeric); }
+.reaction-workspace .reaction-phase-wait { display: grid; grid-template-columns: 25px 1fr; gap: 5px 8px; align-items: center; margin: 12px 0 19px; }
+.reaction-workspace .reaction-phase-wait > span { grid-row: span 2; color: var(--reaction-muted); font-size: 25px; }
+.reaction-workspace .reaction-phase-wait strong { color: var(--reaction-muted); font-size: 14px; font-weight: 500; }
+.reaction-workspace .reaction-phase-wait small { color: var(--reaction-muted); font-size: 10px; }
+.reaction-workspace .reaction-phase-progress { display: flex; align-items: center; gap: 5px; padding-top: 13px; border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-phase-progress > span { height: 3px; flex: 1; background: var(--reaction-line); border-radius: 2px; }
+.reaction-workspace .reaction-phase-progress > span.is-observed { background: var(--profile-accent); }
+.reaction-workspace .reaction-phase-progress small { margin-left: 5px; color: var(--reaction-muted); font: 10px/1.5 var(--reaction-numeric); white-space: nowrap; }
+.reaction-workspace .reaction-profile-footnote { display: flex; align-items: baseline; gap: 12px 20px; flex-wrap: wrap; margin-top: 18px; }
+.reaction-workspace .reaction-profile-quality { display: flex; align-items: center; gap: 6px; color: var(--reaction-muted); font-size: 10px; white-space: nowrap; }
+.reaction-workspace .reaction-profile-quality i { width: 4px; height: 4px; background: currentColor; border-radius: 50%; }
+.reaction-workspace .reaction-profile-footnote p { flex: 1; min-width: 220px; margin: 0; color: var(--reaction-muted); font-size: 10px; line-height: 1.7; }
+@container (max-width: 850px) {
+  .reaction-workspace .reaction-phases { grid-template-columns: 1fr; }
+  .reaction-workspace .reaction-phase:not(:last-child) .reaction-phase-heading::after { display: none; }
+  .reaction-workspace .reaction-profile { padding: 18px; }
+}
+@media (max-width: 560px) {
+  .reaction-workspace .reaction-profile-header { flex-direction: column; gap: 10px; }
+  .reaction-workspace .reaction-profile { padding: 14px; }
+  .reaction-workspace .reaction-phase { padding: 14px; }
 }
