@@ -70,6 +70,16 @@ public class ReactionSampleRepository {
     public boolean captureSource(ReactionSample proposed) {
         String origin = proposed.getSourceOriginType();
         String key = proposed.getSourceOriginKey();
+        // 兼容旧版 NEWS 身份：新渠道的同日完整标题优先挂到已有事件，保留原 ID。
+        if (proposed.getPublishedAt() != null) {
+            List<String> existingKeys = jdbcTemplate.queryForList("SELECT source_identity FROM investment_reaction_sample "
+                            + "WHERE replace(json_extract(snapshot_json,'$.title'),' ','')=? "
+                            + "AND substr(json_extract(snapshot_json,'$.publishedAt'),1,10)=? ORDER BY id LIMIT 1",
+                    String.class, proposed.getTitle().replaceAll("\\s", ""), proposed.getPublishedAt().toLocalDate().toString());
+            if (!existingKeys.isEmpty()) {
+                proposed.setSourceIdentity(existingKeys.get(0));
+            }
+        }
         jdbcTemplate.update("INSERT INTO investment_reaction_source(origin_type,origin_key,event_key,title,url,published_at,captured_at) "
                         + "VALUES(?,?,?,?,?,?,?) ON CONFLICT(origin_type,origin_key) DO NOTHING", origin, key,
                 proposed.getSourceIdentity(), proposed.getTitle(), proposed.getSourceUrl(), TimeUtil.text(proposed.getPublishedAt()),

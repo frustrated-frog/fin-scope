@@ -37,7 +37,7 @@ class ReactionSampleRepositoryTest {
         migrator.afterPropertiesSet();
         repository = new ReactionSampleRepository();
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbc);
-        ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().registerModule(new JavaTimeModule()));
+        ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().registerModule(new JavaTimeModule()).disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));
     }
 
     @Test
@@ -124,6 +124,25 @@ class ReactionSampleRepositoryTest {
         assertTrue(repository.saveFailure(saved.getId(), 0, "provider unavailable", now));
         assertTrue(repository.findDue(now.plusDays(1), 20).isEmpty());
         assertTrue(repository.saveCalculation(saved.getId(), 1, new ReactionCalculation(), now.plusDays(1)));
+    }
+
+    @Test
+    void newChannelReusesLegacyEventIdentityAndDoesNotCreateAnotherSample() {
+        var original = sample();
+        original.setPublishedAt(now);
+        original.setSourceIdentity("NEWS:legacy");
+        original.setState(ReactionSampleState.OBSERVING);
+        original.setInstrumentCode("600519.SH");
+        var saved = repository.create(original);
+        var incoming = sample();
+        incoming.setPublishedAt(now.plusMinutes(10));
+        incoming.setSourceIdentity("EVENT:new-rule-hash");
+        incoming.setSourceOriginType("RADAR_SIGNAL");
+        incoming.setSourceOriginKey("another-provider:5");
+        assertFalse(repository.captureSource(incoming));
+        assertEquals(1, repository.list(null, 0, 100).size());
+        assertEquals(saved.getId(), repository.findByIdentity("NEWS:legacy").get(0).getId());
+        assertEquals(1, repository.sources("NEWS:legacy").size());
     }
 
     private ReactionSample sample() {
