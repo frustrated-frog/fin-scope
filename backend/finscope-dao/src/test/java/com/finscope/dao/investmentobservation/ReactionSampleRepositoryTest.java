@@ -71,6 +71,24 @@ class ReactionSampleRepositoryTest {
         assertEquals(1, repository.list(ReactionSampleState.OBSERVING, 0, 10).size());
     }
 
+    @Test
+    void endedWindowWithPermanentGapUsesDailyRetryThenStops() {
+        ReactionSample sample = sample();
+        sample.setState(ReactionSampleState.OBSERVING);
+        sample = repository.create(sample);
+        ReactionCalculation calculation = new ReactionCalculation();
+        var window = new com.finscope.domain.investmentobservation.ReactionWindow();
+        window.setSessions(5);
+        window.setEndDate(now.toLocalDate().minusDays(1));
+        window.setStatus(com.finscope.common.enums.investmentobservation.ReactionWindowStatus.MISSING_DATA);
+        calculation.setWindows(java.util.List.of(window));
+        assertTrue(repository.saveCalculation(sample.getId(), 0, calculation, now));
+        assertTrue(repository.findDue(now.plusHours(2), 20).isEmpty());
+        assertEquals(1, repository.findDue(now.plusDays(2), 20).size());
+        assertTrue(repository.saveCalculation(sample.getId(), 1, calculation, now.plusDays(7)));
+        assertTrue(repository.findDue(now.plusDays(30), 20).isEmpty());
+    }
+
     private ReactionSample sample() {
         ReactionSample sample = new ReactionSample();
         sample.setMajorEventId(5L);

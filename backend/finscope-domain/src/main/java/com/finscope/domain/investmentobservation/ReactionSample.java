@@ -8,6 +8,12 @@ import com.finscope.common.enums.investmentobservation.ReactionSampleState;
 
 @Data
 public class ReactionSample {
+    private com.finscope.common.enums.investmentobservation.ReactionEventSubtype eventSubtype =
+            com.finscope.common.enums.investmentobservation.ReactionEventSubtype.UNCLASSIFIED;
+    private String ruleVersion;
+    private String ruleEvidence;
+    private String fact;
+    private boolean followed;
     private Long id;
     private Long majorEventId;
     private String sourceIdentity;

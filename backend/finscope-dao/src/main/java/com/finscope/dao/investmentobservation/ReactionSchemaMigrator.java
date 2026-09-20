@@ -41,6 +41,7 @@ public class ReactionSchemaMigrator implements InitializingBean {
                     VERSION, "event reaction samples with immutable source snapshots", LocalDateTime.now().toString());
         });
         migrateAutomaticSources();
+        migrateEventSources();
     }
 
     private void migrateAutomaticSources() {
@@ -66,4 +67,24 @@ public class ReactionSchemaMigrator implements InitializingBean {
                     "automatic news identity independent of saved major events", LocalDateTime.now().toString());
         });
     }
+    private void migrateEventSources() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            if (jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=412", Integer.class) > 0) {
+                return;
+            }
+            jdbcTemplate.execute("CREATE TABLE investment_reaction_source (origin_type TEXT NOT NULL,origin_key TEXT NOT NULL,"
+                    + "event_key TEXT NOT NULL,title TEXT,url TEXT,published_at TEXT,captured_at TEXT,PRIMARY KEY(origin_type,origin_key))");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_source_event ON investment_reaction_source(event_key)");
+            jdbcTemplate.execute("INSERT OR IGNORE INTO investment_reaction_source SELECT "
+                    + "json_extract(snapshot_json,'$.sourceOriginType'),json_extract(snapshot_json,'$.sourceOriginKey'),"
+                    + "source_identity,json_extract(snapshot_json,'$.title'),json_extract(snapshot_json,'$.sourceUrl'),"
+                    + "json_extract(snapshot_json,'$.publishedAt'),registered_at FROM investment_reaction_sample "
+                    + "WHERE json_extract(snapshot_json,'$.sourceOriginType') IS NOT NULL "
+                    + "AND json_extract(snapshot_json,'$.sourceOriginKey') IS NOT NULL ORDER BY id");
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN followed INTEGER NOT NULL DEFAULT 0");
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN next_attempt_at TEXT");
+            jdbcTemplate.update("INSERT INTO schema_migration VALUES(412,?,?)", "stable sources and bounded observation retries", LocalDateTime.now().toString());
+        });
+    }
+
 }

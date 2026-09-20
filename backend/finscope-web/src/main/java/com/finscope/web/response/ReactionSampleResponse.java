@@ -10,6 +10,12 @@ import java.time.LocalDateTime;
 
 @Data
 public class ReactionSampleResponse {
+    private com.finscope.common.enums.investmentobservation.ReactionEventSubtype eventSubtype =
+            com.finscope.common.enums.investmentobservation.ReactionEventSubtype.UNCLASSIFIED;
+    private String ruleVersion;
+    private String ruleEvidence;
+    private String fact;
+    private boolean followed;
     private Long id;
     private Long majorEventId;
     private String sourceIdentity;
@@ -38,6 +44,11 @@ public class ReactionSampleResponse {
     public static ReactionSampleResponse from(ReactionSample sample) {
         ReactionSampleResponse result = new ReactionSampleResponse();
         result.setId(sample.getId());
+        result.setEventSubtype(sample.getEventSubtype());
+        result.setRuleVersion(sample.getRuleVersion());
+        result.setRuleEvidence(sample.getRuleEvidence());
+        result.setFact(sample.getFact());
+        result.setFollowed(sample.isFollowed());
         result.setMajorEventId(sample.getMajorEventId());
         result.setSourceIdentity(sample.getSourceIdentity());
         result.setAutomatic(sample.isAutomatic());

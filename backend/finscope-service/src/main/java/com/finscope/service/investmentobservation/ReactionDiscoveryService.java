@@ -87,33 +87,20 @@ public class ReactionDiscoveryService {
 
     private int capture(String title, String summary, String url, LocalDateTime publishedAt,
                         LocalDateTime firstSeen, String origin, String key, LocalDateTime now) {
-        ReactionEventType type = classify(title);
+        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(title);
+        ReactionEventType type = decision.getEventType();
         if (type == null || (publishedAt != null && (publishedAt.isAfter(now)
                 || publishedAt.isBefore(now.minusHours(36))))) {
             return 0;
         }
-        if (key != null && !key.isBlank() && publishedAt != null) {
-            var previous = repository.findUnresolvedOrigin(origin, key);
-            if (previous.isPresent() && previous.get().getPublishedAt() == null) {
-                ReactionSample draft = previous.get();
-                draft.setPublishedAt(publishedAt);
-                draft.setOccurredDate(publishedAt.toLocalDate());
-                draft.setEnrichmentAttemptAt(null);
-                draft.setHistoricalBackfill(publishedAt.toLocalDate().isBefore(draft.getRegisteredAt().toLocalDate()));
-                repository.saveDraft(draft);
-                return 0;
-            }
-        }
-        // 同日完全相同标题视为转载；不同标题保守保留，避免把后续公告合并掉。
-        String identity = "NEWS:" + DigestUtils.md5DigestAsHex(((publishedAt == null ? origin + ":" + key : publishedAt.toLocalDate()) + "|"
-                + title.replaceAll("[\\s\\p{Punct}，。！？：；【】（）]", "")).getBytes(StandardCharsets.UTF_8));
-        if (!repository.findByIdentity(identity).isEmpty()) {
-            return 0;
-        }
+        String stableKey = key == null || key.isBlank() ? (url == null || url.isBlank() ? title : url) : key;
+        String mergeKey = decision.getMergeAnchor() != null ? "ANNOUNCEMENT:" + decision.getMergeAnchor()
+                : (publishedAt == null ? origin + ":" + stableKey : publishedAt.toLocalDate()) + "|" + title.replaceAll("\\s", "");
+        String identity = "EVENT:" + DigestUtils.md5DigestAsHex(mergeKey.getBytes(StandardCharsets.UTF_8));
         ReactionSample sample = new ReactionSample();
         sample.setSourceIdentity(identity);
         sample.setSourceOriginType(origin);
-        sample.setSourceOriginKey(key);
+        sample.setSourceOriginKey(stableKey);
         sample.setTitle(title);
         sample.setSummary(summary);
         sample.setSourceUrl(url);
@@ -124,9 +111,12 @@ public class ReactionDiscoveryService {
         sample.setHistoricalBackfill(publishedAt != null && publishedAt.toLocalDate().isBefore(now.toLocalDate()));
         sample.setAutomatic(true);
         sample.setEventType(type);
+        sample.setEventSubtype(decision.getSubtype());
+        sample.setRuleVersion(decision.getRuleVersion());
+        sample.setRuleEvidence(decision.getEvidence());
+        sample.setFact(decision.getFact());
         sample.setDiscoveryIssue("已自动保存，正在识别直接涉及的A股公司");
-        repository.create(sample);
-        return 1;
+        return repository.captureSource(sample) ? 1 : 0;
     }
 
     private int enrich(ReactionSample draft, LocalDateTime now) {
@@ -172,19 +162,12 @@ public class ReactionDiscoveryService {
         sample.setHistoricalBackfill(draft.isHistoricalBackfill());
         sample.setAutomatic(true);
         sample.setEventType(draft.getEventType());
+        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(draft.getTitle());
+        sample.setEventSubtype(decision.getSubtype());
+        sample.setRuleVersion(decision.getRuleVersion());
+        sample.setRuleEvidence(decision.getEvidence());
+        sample.setFact(decision.getFact());
         return sample;
     }
 
-    private ReactionEventType classify(String title) {
-        if (title == null || title.isBlank()) {
-            return null;
-        }
-        if (title.matches(".*(业绩|季报|年报|半年报|财报|净利润).*")) {
-            return ReactionEventType.EARNINGS;
-        }
-        if (title.matches(".*(合同|订单|中标).*")) {
-            return ReactionEventType.CONTRACT;
-        }
-        return null;
-    }
 }

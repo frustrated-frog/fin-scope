@@ -132,6 +132,26 @@ class ReactionDiscoveryServiceTest {
         assertEquals(ReactionSampleState.ARCHIVED, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
     }
 
+    @Test
+    void fillingPublicationTimeDoesNotChangeIdentityAfterPromotionOrArchival() {
+        ResearchMaterial item = news("示例公司签订重大合同");
+        item.setPublishedAt(null);
+        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(item), List.of()));
+        service.discover();
+        String identity = repository.recent(Long.MAX_VALUE, 100).get(0).getSourceIdentity();
+        item.setPublishedAt(now.minusHours(1));
+        service.discover();
+        service.discover();
+        var rows = repository.recent(Long.MAX_VALUE, 100);
+        assertEquals(1, rows.size());
+        assertEquals(identity, rows.get(0).getSourceIdentity());
+        assertEquals(1, repository.sources(identity).size());
+        repository.changeState(rows.get(0).getId(), rows.get(0).getRevision(), ReactionSampleState.ARCHIVED);
+        service.discover();
+        assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
+        assertEquals(ReactionSampleState.ARCHIVED, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
+    }
+
     private void verifyAutomaticPriceTracking(ReactionSample sample) {
         var registration = new ReactionRegistrationService();
         ReflectionTestUtils.setField(registration, "repository", repository);
