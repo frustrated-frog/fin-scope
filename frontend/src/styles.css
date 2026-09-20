@@ -13050,52 +13050,79 @@ input[type="checkbox"] {
   line-height: 1.65;
 }
 
+/* Shared analysis surface: typography and fine rules replace nested cards. */
 .attribution-driver-ai {
   position: relative;
-  margin-top: 13px;
-  padding: 13px 14px 14px 16px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 72%, white);
-  border-radius: 0 9px 9px 0;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface-2));
+  margin-top: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .attribution-driver-ai-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.attribution-driver-ai-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin-left: 6px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 40%, transparent), color-mix(in srgb, var(--line) 45%, transparent) 65%, transparent);
 }
 
 .attribution-driver-ai-heading > span {
   display: inline-grid;
   place-items: center;
-  min-width: 24px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  width: 30px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 6px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 14%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 6%, transparent);
   color: var(--accent);
-  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .08em;
+  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .06em;
 }
 
 .attribution-driver-ai-heading strong {
   color: var(--ink);
-  font-size: 12px;
-  letter-spacing: .04em;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .06em;
 }
 
 .attribution-driver-ai-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px 22px;
+  gap: 24px 32px;
 }
 
-.attribution-driver-ai-grid article {
+.attribution-driver-ai-grid > :is(article, .attribution-research-field) {
   min-width: 0;
+  margin: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow-wrap: anywhere;
 }
 
-.attribution-driver-ai-grid article > span,
+.attribution-driver-ai-grid > :is(article, .attribution-research-field) > span {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
 .attribution-driver-facts > span {
   display: block;
   margin-bottom: 5px;
@@ -13108,8 +13135,9 @@ input[type="checkbox"] {
 .attribution-driver-ai-grid p {
   margin: 0;
   color: var(--ink);
-  font-size: 13px;
-  line-height: 1.68;
+  font-size: 14px;
+  line-height: 1.85;
+  font-weight: 400;
 }
 
 .attribution-explanatory-power {

@@ -27,9 +27,6 @@
 .attribution-hypothesis-status { flex-shrink: 0; padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 650; line-height: 1.5; color: var(--muted); background: var(--surface-2); }
 .attribution-hypothesis-status.status-preferred, .attribution-hypothesis-status.status-coexisting { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .attribution-hypothesis-status.status-unresolved { color: var(--ink); border: 1px solid var(--line); }
-.attribution-research-field { min-width: 0; padding: 12px 14px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 65%, transparent); }
-.attribution-research-field > span { color: var(--muted); font-size: 12px; font-weight: 650; }
-.attribution-research-field p { margin: 7px 0 0; color: var(--ink); }
 .attribution-hypothesis-checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; padding: 16px 0; margin-top: 16px; border-top: 1px solid var(--line); }
 .attribution-hypothesis-checks h5 { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 .attribution-hypothesis-checks ul { padding-left: 18px; margin: 0; }
@@ -51,7 +48,6 @@
   .attribution-report .attribution-driver-ai-grid, .attribution-hypothesis-checks, .attribution-report .attribution-context-grid, .attribution-report .attribution-forces-grid { grid-template-columns: minmax(0,1fr); }
   .attribution-hypothesis-card .attribution-driver-title { flex-basis: 100%; }
   .attribution-hypothesis-card .attribution-hypothesis-status { margin-left: 33px; }
-  .attribution-research-field { padding: 10px; }
   .attribution-research-heading { align-items: flex-start; flex-direction: column; }
 }
 .attribution-research-details > .attribution-disclaimer { border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 14px 16px; }

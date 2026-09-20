@@ -63,7 +63,7 @@
   [class*="-drawer"], [class*="-drawer"] *, [class*="-modal"], [class*="-modal"] *,
   [class*="-overlay"], [class*="-overlay"] *,
   .parameter-map-grid *, .market-transition-chart *, .market-transition-gauges *,
-  .panel-probability-path *, .ic-canvas-shell *
+  .panel-probability-path *, .ic-canvas-shell *, .attribution-driver-ai-grid *
 )) {
   background: var(--workspace-glass);
   backdrop-filter: none;
