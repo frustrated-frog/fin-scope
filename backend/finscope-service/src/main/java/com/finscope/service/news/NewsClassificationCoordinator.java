@@ -1,5 +1,7 @@
 package com.finscope.service.news;
 
+import com.finscope.service.cache.ViewRevisionService;
+
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsClassificationRepository;
@@ -15,39 +17,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
+@lombok.extern.slf4j.Slf4j
 @Service
 public class NewsClassificationCoordinator {
+    @Autowired
+    private NewsWorkbenchCapabilities capabilities;
+    @Autowired
+    private NewsRuleClassifier rules;
+    @Autowired
+    private ViewRevisionService revisions;
     private static final int RETRY_MINUTES = 5;
     private static final int BATCH_SIZE = 12;
-    private final NewsClassificationRepository repository;
-    private final NewsCategoryRepository categories;
-    private final NewsClassificationAgent agent;
-    private final AgentRunRepository runs;
-    private final Executor executor;
-    private final Clock clock;
-
     @Autowired
-    public NewsClassificationCoordinator(NewsClassificationRepository repository,
-                                         NewsCategoryRepository categories,
-                                         NewsClassificationAgent agent,
-                                         AgentRunRepository runs,
-                                         @Qualifier("newsClassificationExecutor") Executor executor) {
-        this(repository, categories, agent, runs, executor, Clock.systemDefaultZone());
-    }
-
-    NewsClassificationCoordinator(NewsClassificationRepository repository,
-                                  NewsCategoryRepository categories,
-                                  NewsClassificationAgent agent,
-                                  AgentRunRepository runs,
-                                  Executor executor,
-                                  Clock clock) {
-        this.repository = repository;
-        this.categories = categories;
-        this.agent = agent;
-        this.runs = runs;
-        this.executor = executor;
-        this.clock = clock;
-    }
+    private NewsClassificationRepository repository;
+    @Autowired
+    private NewsCategoryRepository categories;
+    @Autowired
+    private NewsClassificationAgent agent;
+    @Autowired
+    private AgentRunRepository runs;
+    @Autowired
+    @Qualifier("newsClassificationExecutor")
+    private Executor executor;
+    private Clock clock = Clock.systemDefaultZone();
 
     public int schedule(List<NewsClassificationCandidate> candidates) {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -60,7 +52,13 @@ public class NewsClassificationCoordinator {
         for (int start = 0; start < claimed.size(); start += BATCH_SIZE) {
             List<NewsClassificationCandidate> batch = new ArrayList<NewsClassificationCandidate>(
                     claimed.subList(start, Math.min(start + BATCH_SIZE, claimed.size())));
-            executor.execute(() -> classify(batch));
+            try {
+                executor.execute(() -> classify(batch));
+            } catch (RuntimeException error) {
+                for (NewsClassificationCandidate candidate : batch) {
+                    repository.markFailed(candidate.getItemId(), "分类任务提交失败", modelName(), now);
+                }
+            }
         }
         return claimed.size();
     }
@@ -70,6 +68,13 @@ public class NewsClassificationCoordinator {
         String input = batchInput(batch);
         try {
             List<NewsCategory> enabled = categories.findEnabled();
+            if (!capabilities.isModelEnabled()) {
+                for (NewsClassificationCandidate candidate : batch) {
+                    repository.markRuleResult(rules.classify(candidate, enabled), LocalDateTime.now(clock));
+                }
+                publishClassificationChange();
+                return;
+            }
             Map<String, NewsClassificationAgent.Decision> decisions = agent.classify(batch, enabled);
             LocalDateTime now = LocalDateTime.now(clock);
             for (NewsClassificationCandidate candidate : batch) {
@@ -81,6 +86,7 @@ public class NewsClassificationCoordinator {
                             decision.getConfidence(), decision.getReason(), modelName(), now);
                 }
             }
+            publishClassificationChange();
             runs.record("news-classification", "SUCCESS", input, output(decisions), null,
                     System.currentTimeMillis() - started);
         } catch (Exception ex) {
@@ -91,6 +97,14 @@ public class NewsClassificationCoordinator {
             }
             runs.record("news-classification", "FAILED", input, null, message,
                     System.currentTimeMillis() - started);
+        }
+    }
+
+    private void publishClassificationChange() {
+        try {
+            revisions.invalidate("news");
+        } catch (RuntimeException error) {
+            log.warn("资讯分类已保存，但页面版本通知失败", error);
         }
     }
 
@@ -118,6 +132,9 @@ public class NewsClassificationCoordinator {
     }
 
     private String modelName() {
+        if (!capabilities.isModelEnabled()) {
+            return NewsRuleClassifier.VERSION;
+        }
         String value = agent.modelName();
         return value == null || value.trim().isEmpty() ? "llm" : value;
     }

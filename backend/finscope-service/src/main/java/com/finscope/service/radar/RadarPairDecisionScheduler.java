@@ -1,5 +1,9 @@
 package com.finscope.service.radar;
 
+import com.finscope.service.news.NewsWorkbenchCapabilities;
+
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.finscope.dao.radar.RadarPairDecisionRepository;
 import com.finscope.domain.radar.RadarPairDecision;
 import com.finscope.domain.radar.RadarSignal;
@@ -12,21 +16,22 @@ import java.util.concurrent.Executor;
 
 @Service
 public class RadarPairDecisionScheduler {
-    private final RadarEventMatchAgent agent;
-    private final RadarPairDecisionRepository repository;
-    private final Executor executor;
+    @Autowired
+    private NewsWorkbenchCapabilities capabilities;
+    @Autowired
+    private RadarEventMatchAgent agent;
+    @Autowired
+    private RadarPairDecisionRepository repository;
+    @Autowired
+    @Qualifier("radarAgentExecutor")
+    private Executor executor;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
-
-    public RadarPairDecisionScheduler(RadarEventMatchAgent agent,
-                                      RadarPairDecisionRepository repository,
-                                      @Qualifier("radarAgentExecutor") Executor executor) {
-        this.agent = agent;
-        this.repository = repository;
-        this.executor = executor;
-    }
 
     public void schedule(RadarSignal left, RadarSignal right,
                          String leftFingerprint, String rightFingerprint) {
+        if (!capabilities.isModelEnabled()) {
+            return;
+        }
         String pairKey = RadarPairDecision.pairKey(leftFingerprint, rightFingerprint);
         if (!inFlight.add(pairKey)) return;
         try {

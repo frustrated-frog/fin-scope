@@ -39,6 +39,10 @@ class RadarEventEnhancementSchedulerTest {
             context.registerBean("radarAgentExecutor", Executor.class, () -> Runnable::run);
             context.register(RadarEventEnhancementScheduler.class);
 
+            context.registerBean(com.finscope.rpc.llm.LlmChatClient.class,
+                    () -> mock(com.finscope.rpc.llm.LlmChatClient.class));
+            context.registerBean(com.finscope.service.news.NewsWorkbenchCapabilities.class,
+                    () -> mock(com.finscope.service.news.NewsWorkbenchCapabilities.class));
             context.refresh();
 
             assertNotNull(context.getBean(RadarEventEnhancementScheduler.class));
@@ -54,7 +58,7 @@ class RadarEventEnhancementSchedulerTest {
         when(titles.generate(anyList(),any())).thenReturn(RadarCanonicalTitleAgent.Result.fallback("规则标题","TEST"));
         when(evidence.enrich(any(RadarEvent.class),anyList())).thenReturn(
                 new RadarEvidenceOrchestrator.Outcome("SUCCESS","证据完成","",2,2,"fp"));
-        RadarEventEnhancementScheduler scheduler=new RadarEventEnhancementScheduler(titles,evidence,repository,executor);
+        RadarEventEnhancementScheduler scheduler=createRadarEventEnhancementScheduler(titles,evidence,repository,executor);
 
         scheduler.schedule(event(),Arrays.asList(signal(1L),signal(2L)),LocalDateTime.of(2026,7,31,20,0),true);
 
@@ -72,7 +76,7 @@ class RadarEventEnhancementSchedulerTest {
         RadarEvidenceOrchestrator evidence=mock(RadarEvidenceOrchestrator.class);
         CapturingExecutor executor=new CapturingExecutor();
         when(titles.generate(anyList(),any())).thenReturn(RadarCanonicalTitleAgent.Result.fallback("规则标题","TEST"));
-        RadarEventEnhancementScheduler scheduler=new RadarEventEnhancementScheduler(
+        RadarEventEnhancementScheduler scheduler=createRadarEventEnhancementScheduler(
                 titles,evidence,mock(RadarRepository.class),executor);
 
         scheduler.schedule(event(),Arrays.asList(signal(1L),signal(2L)),LocalDateTime.of(2026,7,31,20,0),false);
@@ -89,7 +93,7 @@ class RadarEventEnhancementSchedulerTest {
         RadarSnapshotProjectionService snapshots=mock(RadarSnapshotProjectionService.class);
         CapturingExecutor executor=new CapturingExecutor();
         when(titles.generate(anyList(),any())).thenReturn(RadarCanonicalTitleAgent.Result.fallback("新标题","TEST"));
-        RadarEventEnhancementScheduler scheduler=new RadarEventEnhancementScheduler(titles,evidence,
+        RadarEventEnhancementScheduler scheduler=createRadarEventEnhancementScheduler(titles,evidence,
                 mock(RadarRepository.class),snapshots,executor);
 
         scheduler.schedule(event(),Arrays.asList(signal(1L),signal(2L)),LocalDateTime.of(2026,7,31,20,0),false);
@@ -101,4 +105,36 @@ class RadarEventEnhancementSchedulerTest {
     private RadarEvent event(){RadarEvent value=new RadarEvent();value.setId(8L);value.setEventKey("event:8");value.setCanonicalTitle("规则标题");value.setPriorityScore(82);return value;}
     private RadarSignal signal(Long id){RadarSignal value=new RadarSignal();value.setId(id);value.setTitle("信号"+id);return value;}
     private static final class CapturingExecutor implements Executor {private Runnable pending;public void execute(Runnable command){pending=command;}void runPending(){pending.run();pending=null;}}
+
+    private static RadarEventEnhancementScheduler createRadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
+                                          RadarEvidenceOrchestrator evidence,
+                                          RadarRepository repository,
+                                          RadarSnapshotProjectionService snapshots,
+                                          Executor executor) {
+        RadarEventEnhancementScheduler value = new RadarEventEnhancementScheduler();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "radarCanonicalTitleAgent", radarCanonicalTitleAgent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "evidence", evidence);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "repository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
+
+    private static RadarEventEnhancementScheduler createRadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
+                                   RadarEvidenceOrchestrator evidence,
+                                   RadarRepository repository,
+                                   Executor executor) {
+        RadarEventEnhancementScheduler value = new RadarEventEnhancementScheduler();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "radarCanonicalTitleAgent", radarCanonicalTitleAgent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "evidence", evidence);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "repository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
 }

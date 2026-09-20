@@ -33,7 +33,7 @@ class RadarHotspotRefreshServiceTest {
         List<Runnable> queued = new ArrayList<Runnable>();
         Executor executor = queued::add;
         Clock clock = Clock.fixed(Instant.parse("2026-08-05T02:00:00Z"), ZoneId.of("Asia/Shanghai"));
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, executor, clock);
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, executor, clock);
 
         assertTrue(service.requestRefresh());
         assertFalse(service.requestRefresh());
@@ -53,7 +53,7 @@ class RadarHotspotRefreshServiceTest {
         RadarRefreshRun latest = new RadarRefreshRun(); latest.setStatus("SUCCESS");
         when(runs.findLatestCompletedRun()).thenReturn(java.util.Optional.of(latest));
 
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, Runnable::run,
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, Runnable::run,
                 Clock.systemDefaultZone());
 
         assertEquals(latest, service.latestCompletedRun().get());
@@ -65,7 +65,7 @@ class RadarHotspotRefreshServiceTest {
         RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
         RadarSnapshotProjectionService snapshots = mock(RadarSnapshotProjectionService.class);
         when(pipeline.run(any(), any(), any())).thenThrow(new IllegalStateException("生产失败"));
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, Runnable::run, Clock.systemDefaultZone());
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, snapshots, Runnable::run, Clock.systemDefaultZone());
 
         assertTrue(service.requestScheduledRefresh());
 
@@ -83,7 +83,7 @@ class RadarHotspotRefreshServiceTest {
                 java.util.Collections.emptyList());
         when(pipeline.run(any(), any(), any())).thenReturn(result);
         when(snapshots.prewarm(result.getEvents(), result.getRun())).thenReturn(true);
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots,
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, snapshots,
                 Runnable::run, Clock.systemDefaultZone());
 
         assertTrue(service.requestScheduledRefresh());
@@ -108,7 +108,7 @@ class RadarHotspotRefreshServiceTest {
                 new NewsFeedSnapshot(java.util.Collections.emptyList(), java.util.Collections.emptyList(), run.getCompletedAt(), 0), events);
         when(pipeline.run(any(), any(), any())).thenReturn(result);
         when(snapshots.prewarm(events, run)).thenReturn(true);
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
                 Runnable::run, Clock.systemDefaultZone());
 
         assertTrue(service.requestScheduledRefresh());
@@ -132,7 +132,7 @@ class RadarHotspotRefreshServiceTest {
                 java.util.Collections.emptyList());
         when(pipeline.run(any(), any(), any())).thenReturn(result);
         when(snapshots.prewarm(result.getEvents(), run)).thenReturn(false);
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
                 Runnable::run, Clock.systemDefaultZone());
 
         assertTrue(service.requestScheduledRefresh());
@@ -154,12 +154,73 @@ class RadarHotspotRefreshServiceTest {
         when(pipeline.run(any(), any(), any())).thenReturn(result);
         when(snapshots.prewarm(result.getEvents(), run)).thenReturn(true);
         org.mockito.Mockito.doThrow(new IllegalStateException("Kafka unavailable")).when(publisher).publish(any());
-        RadarHotspotRefreshService service = new RadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
+        RadarHotspotRefreshService service = createRadarHotspotRefreshService(pipeline, runs, snapshots, publisher,
                 Runnable::run, Clock.systemDefaultZone());
 
         assertTrue(service.requestScheduledRefresh());
 
         verify(snapshots).prewarm(result.getEvents(), run);
         assertFalse(service.isRunning());
+    }
+
+    private static RadarHotspotRefreshService createRadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline,
+                                      RadarRefreshRunRepository runs,
+                                      RadarSnapshotProjectionService snapshots,
+                                      RadarInterpretationBatchPublisher interpretationPublisher,
+                                      Executor executor) {
+        RadarHotspotRefreshService value = new RadarHotspotRefreshService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "pipeline", pipeline);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "interpretationPublisher", interpretationPublisher);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
+
+    private static RadarHotspotRefreshService createRadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
+                               Executor executor, Clock clock) {
+        RadarHotspotRefreshService value = new RadarHotspotRefreshService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "pipeline", pipeline);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
+
+    private static RadarHotspotRefreshService createRadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
+                               RadarSnapshotProjectionService snapshots, Executor executor, Clock clock) {
+        RadarHotspotRefreshService value = new RadarHotspotRefreshService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "pipeline", pipeline);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
+
+    private static RadarHotspotRefreshService createRadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
+                               RadarSnapshotProjectionService snapshots,
+                               RadarInterpretationBatchPublisher interpretationPublisher,
+                               Executor executor, Clock clock) {
+        RadarHotspotRefreshService value = new RadarHotspotRefreshService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "pipeline", pipeline);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "interpretationPublisher", interpretationPublisher);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
     }
 }

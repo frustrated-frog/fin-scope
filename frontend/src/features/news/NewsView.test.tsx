@@ -438,3 +438,18 @@ test('opens immediately and generates a missing interpretation in the background
   await act(async () => { vi.advanceTimersByTime(1_500); await Promise.resolve(); await Promise.resolve(); });
   expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
 });
+
+test('does not request or poll interpretation when the model is disabled', async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path === '/api/research-radar/events/10') return Promise.resolve({ ...detail,
+      interpretation: { eventId: 10, status: 'UNAVAILABLE', stale: false, failureCode: 'MODEL_DISABLED' }
+    });
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
+  expect(await screen.findByRole('heading', { name: '证据与来源' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '解读' }));
+  expect(screen.getByText('模型解读未启用，可继续查看证据与来源、事件脉络。')).toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', expect.anything());
+});

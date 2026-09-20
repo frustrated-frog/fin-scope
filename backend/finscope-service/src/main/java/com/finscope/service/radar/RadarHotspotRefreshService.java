@@ -1,5 +1,9 @@
 package com.finscope.service.radar;
 
+import com.finscope.service.news.NewsWorkbenchCapabilities;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+
 import com.finscope.dao.radar.RadarRefreshRunRepository;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarEvent;
@@ -20,42 +24,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class RadarHotspotRefreshService {
-    private static final Logger log = LoggerFactory.getLogger(RadarHotspotRefreshService.class);
-    private final RadarHotspotProductionPipeline pipeline;
-    private final RadarRefreshRunRepository runs;
-    private final Executor executor;
-    private final RadarSnapshotProjectionService snapshots;
-    private final RadarInterpretationBatchPublisher interpretationPublisher;
-    private final Clock clock;
-    private final AtomicBoolean running = new AtomicBoolean(false);
-
     @Autowired
-    public RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline,
-                                      RadarRefreshRunRepository runs,
-                                      RadarSnapshotProjectionService snapshots,
-                                      RadarInterpretationBatchPublisher interpretationPublisher,
-                                      @org.springframework.beans.factory.annotation.Qualifier("radarRefreshExecutor") Executor executor) {
-        this(pipeline, runs, snapshots, interpretationPublisher, executor, Clock.systemDefaultZone());
-    }
-
-    RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
-                               Executor executor, Clock clock) {
-        this(pipeline, runs, null, message -> { }, executor, clock);
-    }
-
-    RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
-                               RadarSnapshotProjectionService snapshots, Executor executor, Clock clock) {
-        this(pipeline, runs, snapshots, message -> { }, executor, clock);
-    }
-
-    RadarHotspotRefreshService(RadarHotspotProductionPipeline pipeline, RadarRefreshRunRepository runs,
-                               RadarSnapshotProjectionService snapshots,
-                               RadarInterpretationBatchPublisher interpretationPublisher,
-                               Executor executor, Clock clock) {
-        this.pipeline = pipeline; this.runs = runs; this.snapshots = snapshots;
-        this.interpretationPublisher = interpretationPublisher;
-        this.executor = executor; this.clock = clock;
-    }
+    private NewsWorkbenchCapabilities capabilities;
+    private static final Logger log = LoggerFactory.getLogger(RadarHotspotRefreshService.class);
+    @Autowired
+    private RadarHotspotProductionPipeline pipeline;
+    @Autowired
+    private RadarRefreshRunRepository runs;
+    @Autowired
+    @Qualifier("radarRefreshExecutor")
+    private Executor executor;
+    @Autowired
+    private RadarSnapshotProjectionService snapshots;
+    @Autowired
+    private RadarInterpretationBatchPublisher interpretationPublisher;
+    private Clock clock = Clock.systemDefaultZone();
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     public boolean requestRefresh() {
         return request("MANUAL");
@@ -103,6 +87,9 @@ public class RadarHotspotRefreshService {
     }
 
     private void publishInterpretations(RadarHotspotProductionPipeline.ProductionResult result) {
+        if (!capabilities.isModelEnabled()) {
+            return;
+        }
         List<Long> eventIds = new ArrayList<>();
         for (RadarEvent event : result.getEvents()) {
             if (event != null && event.getId() != null) {

@@ -291,11 +291,11 @@ function ClassificationReview({ item, categories, onReview }: {
   const [categoryCode, setCategoryCode] = useState(item.categoryCode ?? categories[0]?.code ?? '');
   const [reason, setReason] = useState(item.manualReason ?? '');
   const [saving, setSaving] = useState(false);
-  if (!item.categoryCode) return <div className="news-classification is-pending">Agent 分类中</div>;
+  if (!item.categoryCode) return <div className="news-classification is-pending">未归类</div>;
   const status = item.reviewStatus === 'PENDING_REVIEW' ? '待确认'
     : item.reviewStatus === 'CORRECTED' ? '已纠正'
       : item.reviewStatus === 'CONFIRMED' ? '已确认' : '已分类';
-  const confidence = item.classificationConfidence == null ? '--' : `${Math.round(item.classificationConfidence * 100)}%`;
+  const confidence = item.classificationConfidence == null ? '规则匹配' : `${Math.round(item.classificationConfidence * 100)}%`;
 
   async function save() {
     if (!categoryCode || saving) return;

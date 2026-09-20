@@ -141,7 +141,7 @@ public class NewsFeedService {
                 classification == null ? null : classification.getEffectiveCategoryCode(),
                 classification == null ? null : categoryNames.get(classification.getEffectiveCategoryCode()),
                 classification == null ? null : classification.getCategoryCode(),
-                classification == null ? null : classification.getConfidence(),
+                classification == null || NewsRuleClassifier.VERSION.equals(classification.getModelName()) ? null : classification.getConfidence(),
                 classification == null ? null : classification.getReason(),
                 classification == null ? null : classification.getReviewStatus(),
                 classification != null && classification.isManuallyReviewed(),

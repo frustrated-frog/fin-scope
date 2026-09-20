@@ -37,7 +37,7 @@ public class NewsClassificationRepository {
             write(pending(itemId, now, now), now);
             return true;
         }
-        if (!"FAILED".equals(existing.getStatus()) || existing.getUpdatedAt() == null
+        if ((!"FAILED".equals(existing.getStatus()) && !"PENDING".equals(existing.getStatus())) || existing.getUpdatedAt() == null
                 || existing.getUpdatedAt().isAfter(retryBefore)) {
             return false;
         }
@@ -60,6 +60,22 @@ public class NewsClassificationRepository {
         if (existing.getManualCategoryCode() == null) {
             existing.setReviewStatus(confidence < 0.70 ? "PENDING_REVIEW" : "AUTO_CONFIRMED");
         }
+        existing.setUpdatedAt(now);
+        write(existing, now);
+    }
+
+    public synchronized void markRuleResult(NewsItemClassification result, LocalDateTime now) {
+        NewsItemClassification existing = read(result.getItemId());
+        if (existing == null || existing.isManuallyReviewed()) {
+            return;
+        }
+        existing.setStatus(result.getStatus());
+        existing.setCategoryCode(result.getCategoryCode());
+        existing.setConfidence(0);
+        existing.setReason(result.getReason());
+        existing.setModelName(result.getModelName());
+        existing.setReviewStatus("UNCLASSIFIED".equals(result.getStatus()) ? null : "PENDING_REVIEW");
+        existing.setErrorMessage(null);
         existing.setUpdatedAt(now);
         write(existing, now);
     }
