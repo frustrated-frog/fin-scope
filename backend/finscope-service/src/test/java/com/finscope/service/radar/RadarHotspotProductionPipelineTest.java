@@ -98,11 +98,12 @@ class RadarHotspotProductionPipelineTest {
                 .thenAnswer(invocation -> new RadarRefreshStep());
 
         AtomicLong ids = new AtomicLong();
-        when(repository.findSignalByItemId(anyString())).thenReturn(Optional.empty());
-        when(repository.capture(any(RadarSignal.class), eq(now))).thenAnswer(invocation -> {
-            RadarSignal value = invocation.getArgument(0);
-            value.setId(ids.incrementAndGet());
-            return value;
+        when(repository.captureBatch(any(), eq(now))).thenAnswer(invocation -> {
+            List<RadarSignal> values = invocation.getArgument(0);
+            for (RadarSignal value : values) {
+                value.setId(ids.incrementAndGet());
+            }
+            return values;
         });
         when(repository.findActiveSignals(now.minusHours(48), 500)).thenAnswer(invocation -> Arrays.asList(
                 signal(1L, first, 1), signal(2L, second, 1)));
@@ -131,10 +132,10 @@ class RadarHotspotProductionPipelineTest {
         assertEquals("HOTSPOT_V2", result.getEvents().get(0).getScoreVersion());
         assertEquals("宁德时代:发布:电池", result.getEvents().get(0).getEventKey());
         assertEquals("TECHNOLOGY", result.getEvents().get(0).getDashboardCategory());
-        ArgumentCaptor<RadarSignal> capturedSignals = ArgumentCaptor.forClass(RadarSignal.class);
-        verify(repository, times(2)).capture(capturedSignals.capture(), eq(now));
+        ArgumentCaptor<List<RadarSignal>> capturedSignals = ArgumentCaptor.forClass(List.class);
+        verify(repository).captureBatch(capturedSignals.capture(), eq(now));
         Set<String> providers = new HashSet<String>();
-        List<RadarSignal> capturedValues = capturedSignals.getAllValues();
+        List<RadarSignal> capturedValues = capturedSignals.getValue();
         for (RadarSignal captured : capturedValues) {
             providers.add(captured.getProviderCode());
         }

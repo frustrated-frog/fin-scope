@@ -37,7 +37,9 @@ public class RedisRadarCacheStore {
     private EphemeralContentCacheProperties properties;
     private Clock clock = Clock.systemDefaultZone();
 
-    public synchronized RadarCacheState read() {
+    // Redis GET 返回最近一次完整 SET 的快照，反序列化后的对象仅由当前读者持有。
+    // 写入仍串行，读取不等待后台生产任务持有的更新锁。
+    public RadarCacheState read() {
         return readAt(LocalDateTime.now(clock));
     }
 

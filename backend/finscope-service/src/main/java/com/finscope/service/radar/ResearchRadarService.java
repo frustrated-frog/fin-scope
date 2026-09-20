@@ -304,21 +304,29 @@ public class ResearchRadarService {
 
     private Map<Long, ResearchRadarView.EventCard> cardIndex(List<RadarEvent> events) {
         Map<Long, RadarEvent> unique = new LinkedHashMap<Long, RadarEvent>();
-        for (RadarEvent event : events) if (event.getId() != null) unique.put(event.getId(), event);
+        for (RadarEvent event : events) {
+            if (event.getId() != null) {
+                unique.put(event.getId(), event);
+            }
+        }
         List<Long> ids = new ArrayList<Long>(unique.keySet());
         Map<Long, RadarEventInterpretation> latest = interpretations == null ? Collections.<Long, RadarEventInterpretation>emptyMap()
                 : interpretations.latestByEventIds(ids);
         Map<Long, RadarEventWorkspace.Summary> summaries = Collections.emptyMap();
-        if (workspace != null) try {
-            summaries = workspace.summaries(ids);
-            for (RadarEvent event : unique.values()) workspace.reconcileRead(event, summaries.get(event.getId()));
-            workspace.createChangeNotifications(new ArrayList<RadarEvent>(unique.values()), summaries);
-        } catch (RuntimeException ignored) {
-            summaries = Collections.emptyMap();
+        if (workspace != null) {
+            try {
+                summaries = workspace.summaries(ids);
+                for (RadarEvent event : unique.values()) {
+                    workspace.reconcileRead(event, summaries.get(event.getId()));
+                }
+            } catch (RuntimeException ignored) {
+                summaries = Collections.emptyMap();
+            }
         }
         Map<Long, ResearchRadarView.EventCard> result = new LinkedHashMap<Long, ResearchRadarView.EventCard>();
-        for (RadarEvent event : unique.values())
+        for (RadarEvent event : unique.values()) {
             result.put(event.getId(), new ResearchRadarView.EventCard(event, latest.get(event.getId()), summaries.get(event.getId())));
+        }
         return result;
     }
 

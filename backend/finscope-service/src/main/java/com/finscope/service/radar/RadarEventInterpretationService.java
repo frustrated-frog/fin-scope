@@ -112,6 +112,9 @@ public class RadarEventInterpretationService {
     }
 
     public Map<Long, RadarEventInterpretation> latestByEventIds(List<Long> eventIds) {
+        if (!capabilities.isModelEnabled()) {
+            return Collections.emptyMap();
+        }
         return interpretations.findLatestByEventIds(eventIds);
     }
 

@@ -1303,3 +1303,18 @@ test('content studio updates idea status through the typed endpoint', async () =
   }));
   expect(await screen.findByText('选题状态已更新')).toBeInTheDocument();
 });
+
+
+test('renders dashboard data while an unrelated startup request is pending', async () => {
+  window.history.replaceState({}, '', '/');
+  const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((input, init) => {
+    if (String(input) === '/api/agent-runs') {
+      return new Promise<Response>(() => {});
+    }
+    return originalFetch(input, init);
+  });
+  render(<App />);
+
+  expect(await screen.findByText('央行宣布下调存款准备金率')).toBeInTheDocument();
+});

@@ -124,11 +124,9 @@ public class RadarHotspotProductionPipeline {
             String provider = firstNonBlank(item.getProviderCode(), item.getSourceName()).toUpperCase(Locale.ROOT);
             int rank = nextRank(ranks, provider);
             RadarSignal signal = toSignal(item, rank);
-            Optional<RadarSignal> previous = repository.findSignalByItemId(item.getId());
-            previous.ifPresent(radarSignal -> signal.setPreviousSourceRank(radarSignal.getSourceRank()));
-            captured.add(repository.capture(signal, now));
+            captured.add(signal);
         }
-        return captured;
+        return repository.captureBatch(captured, now);
     }
 
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,

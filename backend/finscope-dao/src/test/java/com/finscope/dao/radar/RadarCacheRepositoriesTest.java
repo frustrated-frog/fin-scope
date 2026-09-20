@@ -26,6 +26,49 @@ class RadarCacheRepositoriesTest {
     @BeforeEach
     void setUp() {
         store.state = new RadarCacheState();
+        store.reads = 0;
+        store.updates = 0;
+    }
+
+    @Test
+    void capturesBatchOnceAndPreservesIdentityAndPreviousRankOnRecapture() {
+        RadarRepository repository = inject(new RadarRepository());
+        LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
+        java.util.List<RadarSignal> signals = new java.util.ArrayList<>();
+        for (int index = 0; index < 100; index++) {
+            signals.add(RadarSignal.builder().itemId("CLS:" + index).sourceRank(index + 1).build());
+        }
+        repository.captureBatch(signals, now);
+        assertEquals(1, store.updates);
+        assertEquals(100, store.state.getSignals().size());
+        RadarSignal updated = RadarSignal.builder().itemId("CLS:0").sourceRank(5).build();
+        repository.captureBatch(Collections.singletonList(updated), now.plusMinutes(1));
+        assertEquals(signals.get(0).getId(), updated.getId());
+        assertEquals(now, updated.getFirstSeenAt());
+        assertEquals(now.plusMinutes(1), updated.getLastSeenAt());
+        assertEquals(1, updated.getPreviousSourceRank());
+        assertEquals(100, store.state.getSignals().size());
+    }
+
+    @Test
+    void loadsLatestInterpretationsForManyEventsWithOneSnapshotRead() {
+        RadarEventInterpretationRepository repository = inject(new RadarEventInterpretationRepository());
+        RadarEventInterpretation older = new RadarEventInterpretation();
+        older.setId(1L);
+        RadarEventInterpretation latest = new RadarEventInterpretation();
+        latest.setId(2L);
+        latest.setEventId(1L);
+        store.state.getInterpretations().put(1L, java.util.Arrays.asList(older, latest));
+        java.util.List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 500)
+                .boxed().collect(java.util.stream.Collectors.toList());
+
+        java.util.Map<Long, RadarEventInterpretation> result = repository.findLatestByEventIds(ids);
+
+        assertEquals(1, store.reads);
+        assertEquals(1, result.size());
+        assertEquals(2L, result.get(1L).getId());
+        repository.findLatestByEventIds(Collections.emptyList());
+        assertEquals(1, store.reads);
     }
 
     @Test
@@ -119,14 +162,18 @@ class RadarCacheRepositoriesTest {
 
     private static class InMemoryRadarCacheStore extends RedisRadarCacheStore {
         private RadarCacheState state = new RadarCacheState();
+        private int reads;
+        private int updates;
 
         @Override
         public synchronized RadarCacheState read() {
+            reads++;
             return state;
         }
 
         @Override
         public synchronized <T> T update(Function<RadarCacheState, T> mutation) {
+            updates++;
             return mutation.apply(state);
         }
     }
