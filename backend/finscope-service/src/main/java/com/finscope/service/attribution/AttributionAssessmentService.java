@@ -73,7 +73,7 @@ public class AttributionAssessmentService {
         try {
             String material = material(report, instrument, evidence, startDate, result);
             stage.accept("research-focus");
-            JsonNode focus = call("research-focus", material + "\n确定唯一研究焦点，问题不超过40字，理由不超过100字，不得输出内部字段名或重复行情数字。缺少行情时只研究公开信息，不断言逆势或领先同行。"
+            JsonNode focus = call("research-focus", material + "\n从经营变化、行业景气、前期预期和交易行为中选择最有解释价值的问题，不要把是否存在窗口内公告当成研究终点。区分当日催化与持续背景，允许提出待验证的机制解释。问题不超过40字，理由不超过100字，不得输出内部字段名或重复行情数字。缺少行情时只研究公开信息，不断言逆势或领先同行。"
                     + "返回 {\"researchFocus\":\"具体问题\",\"focusReason\":\"为何研究这个问题\",\"missingInformation\":[\"缺口\"],\"followUpQuery\":\"确有必要时一个定向搜索问题，否则空字符串\"}");
             result.setResearchFocus(required(focus, "researchFocus"));
             result.setFocusReason(required(focus, "focusReason"));

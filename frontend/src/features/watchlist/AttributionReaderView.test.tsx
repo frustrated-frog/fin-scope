@@ -374,3 +374,17 @@ test('assessment augments the original narrative and driver cards instead of rep
   expect(screen.getByText('AI 解读')).toBeVisible();
   expect(screen.queryByText('内部研究问题不要放在标题')).not.toBeInTheDocument();
 });
+
+test('historical unresolved hypotheses retain a visibly tentative story without being presented as confirmed causes', async () => {
+  vi.mocked(api).mockResolvedValue({ id: 302, status: 'COMPLETED', summary: '尚不能确认主因',
+    narrative: { plainSummary: '尚不能确认主因' }, drivers: [],
+    assessment: { version: 1, status: 'INSUFFICIENT_EVIDENCE', researchFocus: '', focusReason: '', mainJudgment: '尚不能确认主因', pricingDebate: '',
+      hypotheses: [{ id: 'h1', explanation: '前期订单增长：收入兑现仍需观察', disposition: 'UNRESOLVED', selectionReason: '可能持续影响预期', pricingMechanism: '订单交付可能改善收入预期', explains: '公司主营业务的收入预期', doesNotExplain: '当日集中上涨的时点尚待核验', assumptions: [], revisionConditions: [], evidenceUrls: ['https://example.com/order'] }],
+      commentary: [], explainedScope: [], unexplainedScope: [], missingInformation: [], warnings: [] }
+  });
+  render(<AttributionReaderView reportId={302} code="603618" name="杭电股份" onBack={vi.fn()} />);
+  expect(await screen.findByText('原因故事线 · 待验证的解释路径')).toBeVisible();
+  expect(screen.getByText('为什么是它')).toBeVisible();
+  expect(screen.getByText('为什么是今天')).toBeVisible();
+  expect(screen.getByText(/以下是可能的解释路径，尚不能认定/)).toBeVisible();
+});

@@ -249,7 +249,7 @@ public class AttributionAgent {
                 report.setWarningMessage(StringUtils.firstNonBlank(report.getWarningMessage(), "")
                         + " " + String.join("；", report.getAssessment().getWarnings()));
             }
-            if (report.getAssessment().getStatus() == com.finscope.common.enums.attribution.AssessmentStatus.COMPLETE) {
+            if (report.getAssessment().getStatus() != com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED) {
                 synthesized = synthesize(report, instrument, report.getChangePct(), evidences, startDate);
             } else {
                 boolean failed = report.getAssessment().getStatus() == com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED;
@@ -487,7 +487,7 @@ public class AttributionAgent {
                 String prompt = synthUserPrompt(instrument, changePct, evidences, report.getReportDate(), startDate);
                 if (report.getAssessment() != null) {
                     prompt += "\n已核验研判=" + objectMapper.writeValueAsString(report.getAssessment())
-                            + "\n仅将 PREFERRED/COEXISTING 解释整理为驱动；其余只可作为分歧。保留关键假设与改判条件，不得把未知预期编成市场共识。"
+                            + "\n研判状态不是停止分析的开关。即使尚无确认主因，也要结合已有事实、行业逻辑和历史背景解释可能的作用机制，输出白话摘要、故事线、为什么是它和为什么是今天。UNRESOLVED 可作为低置信候选，使用可能、待验证措辞；NOT_ADOPTED 只作反方。旧消息可解释持续的基本面背景，但不得冒充当日新催化；时点无法确认时明确写出。保留关键假设与改判条件，不得虚构市场共识或资金数据。"
                             + "使用简洁中文：摘要不超过120字，每个解释字段不超过100字，故事线最多4步；禁止输出内部字段名和研究任务问题。";
                 }
                 String raw = llmChatClient.complete(synthSystemPrompt(), prompt);
@@ -506,7 +506,7 @@ public class AttributionAgent {
 
     private String synthSystemPrompt() {
         return "你是 FinScope 标的归因研究员。基于给定的行情与新闻证据，分析标的目标交易日涨跌的可能原因。"
-                + "要求：只依据证据，不编造；区分事实与传闻；传闻降低置信度；找不到明确原因时如实说明。"
+                + "要求：基于给定材料展开分析，允许有明确依据的机制推演；区分已知事实、可能解释和待验证假设，不编造事实。找不到明确触发点时，仍解释已有线索可能如何影响公司和价格，以及哪一步尚不能确认。"
                 + "只返回 JSON，不做买卖建议。";
     }
 

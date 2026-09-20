@@ -225,12 +225,21 @@ export function AttributionReaderView({
   }, {});
 
   const assessment = report?.assessment;
-  const narrative = report?.narrative || (assessment ? {
+  const candidate = assessment?.status !== 'DEGRADED'
+    ? assessment?.hypotheses.find(item => ['PREFERRED', 'COEXISTING', 'UNRESOLVED'].includes(item.disposition) && item.evidenceUrls.length > 0)
+    : undefined;
+  const candidateTitle = candidate?.explanation.split(/[：:]/)[0];
+  const tentativeStory = !!candidate && !report?.narrative?.causalSteps?.length;
+  const narrative = tentativeStory ? {
+    ...report?.narrative,
+    plainSummary: `目前可关注“${candidateTitle}”这条线索，以下是可能的解释路径，尚不能认定为当天涨跌的主因。`,
+    causalSteps: [`已有线索：${candidateTitle}`, `可能的影响：${candidate.pricingMechanism}`, `待验证：${candidate.doesNotExplain}`],
+    instrumentLink: candidate.explains,
+    whyToday: candidate.doesNotExplain
+  } : report?.narrative || (assessment ? {
     plainSummary: assessment.status === 'DEGRADED'
       ? '本次原因分析未完成，已保留行情与证据，可稍后重新发起。'
-      : assessment.status === 'INSUFFICIENT_EVIDENCE'
-        ? '目前未找到足以解释当日涨跌的近期事件。已有线索主要是历史消息或信息入口，不能据此认定当天的原因。'
-        : assessment.mainJudgment
+      : assessment.mainJudgment
   } : undefined);
   const headlineChange = report?.assessment ? report.changePct : report?.changePct ?? changePct;
   const changeText = headlineChange === undefined || headlineChange === null
@@ -389,7 +398,7 @@ export function AttributionReaderView({
 
                   {narrative.causalSteps && narrative.causalSteps.length > 0 && (
                     <div className="attribution-causal-section">
-                      <span className="attribution-summary-label">原因故事线</span>
+                      <span className="attribution-summary-label">原因故事线{tentativeStory ? " · 待验证的解释路径" : ""}</span>
                       <ol className="attribution-causal-flow">
                         {narrative.causalSteps.map((step, index) => (
                           <li key={`${step}-${index}`}>

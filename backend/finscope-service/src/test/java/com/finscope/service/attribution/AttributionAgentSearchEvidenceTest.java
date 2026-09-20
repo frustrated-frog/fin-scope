@@ -80,8 +80,10 @@ class AttributionAgentSearchEvidenceTest {
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getDepth() == SearchDepth.DEEP));
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getQuery().contains("2026-09-18")));
     }
-    @Test
-    void stockAssessmentStillProducesNarrativeAndDriverCards() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = com.finscope.common.enums.attribution.AssessmentStatus.class,
+            names = {"COMPLETE", "INSUFFICIENT_EVIDENCE"})
+    void stockAssessmentStillProducesNarrativeAndDriverCards(com.finscope.common.enums.attribution.AssessmentStatus status) throws Exception {
         SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
         when(gateway.isConfigured(SearchDepth.DEEP)).thenReturn(true);
         SearchEvidence evidence = new SearchEvidence();
@@ -108,7 +110,7 @@ class AttributionAgentSearchEvidenceTest {
         when(llm.complete(any(), any())).thenReturn("{\"summary\":\"订单改善预期\",\"narrative\":{\"plainSummary\":\"新增订单可能改善收入\",\"causalSteps\":[\"订单增加\",\"收入预期改善\"]},\"drivers\":[{\"claim\":\"订单增加\",\"evidenceUrls\":[\"https://example.com/company?a=1\"]}]}");
         AttributionAssessmentService assessmentService = mock(AttributionAssessmentService.class);
         com.finscope.domain.attribution.AttributionAssessment assessment = new com.finscope.domain.attribution.AttributionAssessment();
-        assessment.setStatus(com.finscope.common.enums.attribution.AssessmentStatus.COMPLETE);
+        assessment.setStatus(status);
         when(assessmentService.research(any(), any(), any(), any(), any())).thenReturn(assessment);
         ReflectionTestUtils.setField(agent, "assessmentService", assessmentService);
         ReflectionTestUtils.setField(agent, "llmChatClient", llm);
