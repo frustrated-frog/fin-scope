@@ -107,12 +107,13 @@ const newsSnapshot = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/followed?limit=20') return Promise.resolve({ ...snapshot, events: [] });
     if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
     if (path === '/api/research-radar/events/10/state') return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
@@ -132,7 +133,7 @@ test('keeps the original realtime wire as the default and offers radar as a seco
 
   expect(await screen.findByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '要闻精华' })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100');
+  expect(api).toHaveBeenCalledWith('/api/news/paged?category=ALL&source=ALL&query=&hours=36&page=0&pageSize=50');
 
   await openRadar();
   expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL');
@@ -155,7 +156,7 @@ test('uses the existing realtime view when switching to pending review', async (
 
   fireEvent.click(screen.getByRole('button', { name: '待确认 1' }));
 
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=PENDING_REVIEW&limit=100'));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news/paged?category=PENDING_REVIEW&source=ALL&query=&hours=36&page=0&pageSize=50'));
   expect(screen.getByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
 });
 
@@ -166,7 +167,7 @@ test('corrects a classification and reloads the current realtime category', asyn
       itemId: 'CLS:1', agentCategoryCode: 'COMPANY', effectiveCategoryCode: 'INDUSTRY',
       agentConfidence: 0.65, agentReason: '公司发布新产品', reviewStatus: 'CORRECTED'
     });
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve(snapshot);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -181,7 +182,7 @@ test('corrects a classification and reloads the current realtime category', asyn
     method: 'POST',
     body: JSON.stringify({ itemId: 'CLS:1', categoryCode: 'INDUSTRY', reason: '产业链影响' })
   }));
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100'));
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news/paged?category=ALL&source=ALL&query=&hours=36&page=0&pageSize=50'));
 });
 
 test('keeps the news visible when classification review fails', async () => {
@@ -189,7 +190,7 @@ test('keeps the news visible when classification review fails', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path === '/api/news/classifications/review') return Promise.reject(new Error('复核保存失败'));
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve(snapshot);
   });
   render(<NewsView setMessage={vi.fn()} addToast={addToast} onResearch={vi.fn()} />);
@@ -231,7 +232,7 @@ test('keeps the twenty-item radar context stable while showing the independent f
   };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/followed?limit=20') {
       return Promise.resolve({ ...snapshot, events: [followedEvent, anotherFollowedEvent, followedEvent] });
     }
@@ -336,7 +337,7 @@ test('keeps research priority as the primary score and exposes hotspot score as 
   const rankedEvent = { ...event, hotspotScore: 95, hotspotExplanation: '多源确认且来源排名靠前' };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve({ ...snapshot, events: [rankedEvent] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -356,7 +357,7 @@ test('shows the month and day with the radar event time', async () => {
 test('supports watchlist-only filtering and degraded snapshots', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve({ ...snapshot, warnings: ['实时资讯暂不可用，已展示最近一次结果'] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -372,7 +373,7 @@ test('supports watchlist-only filtering and degraded snapshots', async () => {
 test('describes a busy radar refresh without blaming realtime sources', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     return Promise.resolve({ ...snapshot, warnings: ['雷达正在刷新，已展示最近一次结果'] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -398,7 +399,7 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
   const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events] };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     calls += 1; return Promise.resolve(calls === 1 ? snapshot : updated);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -417,7 +418,7 @@ test('opens immediately and generates a missing interpretation in the background
   let detailCalls = 0;
   vi.mocked(api).mockImplementation((path, options) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path.startsWith('/api/news/paged?')) return Promise.resolve(newsSnapshot);
     if (path === '/api/research-radar/events/10/interpretation' && options?.method === 'POST') {
       return Promise.resolve({ eventId: 10, status: 'QUEUED', stale: false });
     }
@@ -452,4 +453,50 @@ test('does not request or poll interpretation when the model is disabled', async
   fireEvent.click(screen.getByRole('button', { name: '解读' }));
   expect(screen.getByText('模型解读未启用，可继续查看证据与来源、事件脉络。')).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', expect.anything());
+});
+
+test('queries full window on the server and carries the anchor when paging', async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.startsWith('/api/news/paged?')) {
+      const params = new URLSearchParams(path.split('?')[1]);
+      return Promise.resolve({ ...newsSnapshot, page: Number(params.get('page')), totalCount: 151,
+        totalPages: 4, pageSize: 50, asOf: '2026-09-21T10:00:00', sourceOptions: ['CLS', 'THS'] });
+    }
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  expect(await screen.findByText('共 151 条 · 第 1 / 4 页')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+  expect(await screen.findByText('共 151 条 · 第 2 / 4 页')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith(expect.stringContaining('page=1&pageSize=50&asOf=2026-09-21T10%3A00%3A00'));
+  await userEvent.type(screen.getByRole('searchbox', { name: '搜索资讯' }), '芯片');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringContaining('query=%E8%8A%AF%E7%89%87&hours=36&page=0')));
+  await userEvent.click(screen.getByRole('button', { name: '财联社' }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringContaining('source=CLS&query=%E8%8A%AF%E7%89%87')));
+  await userEvent.click(screen.getByRole('button', { name: '公司动态 2' }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringContaining('category=COMPANY&source=CLS&query=%E8%8A%AF%E7%89%87')));
+  expect(JSON.parse(sessionStorage.getItem('finscope.news.filters')!)).toMatchObject({ source: 'CLS', query: '芯片', category: 'COMPANY' });
+});
+
+test('ignores a stale filter response and shows retry after a query failure', async () => {
+  let resolveOld: (value: unknown) => void = () => {};
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path.includes('hours=6')) return new Promise((resolve) => { resolveOld = resolve; });
+    if (path.includes('hours=12')) return Promise.resolve({ ...newsSnapshot, items: [{ ...liveItem, title: '最新筛选结果' }] });
+    if (path.includes('hours=24')) return Promise.reject(new Error('查询失败'));
+    return Promise.resolve(newsSnapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
+  await screen.findByRole('heading', { name: liveItem.title });
+  fireEvent.change(screen.getByLabelText('资讯时间范围'), { target: { value: '6' } });
+  fireEvent.change(screen.getByLabelText('资讯时间范围'), { target: { value: '12' } });
+  await screen.findByRole('heading', { name: '最新筛选结果' });
+  await act(async () => { resolveOld(newsSnapshot); });
+  expect(screen.getByRole('heading', { name: '最新筛选结果' })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('资讯时间范围'), { target: { value: '24' } });
+  expect(await screen.findByRole('alert')).toHaveTextContent('查询失败');
+  expect(screen.getByRole('button', { name: '重试加载' })).toBeInTheDocument();
 });

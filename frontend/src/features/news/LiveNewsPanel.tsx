@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import { api } from '../../shared/api/client';
@@ -29,6 +29,13 @@ type NewsFeedSnapshot = {
   warnings: string[];
   refreshedAt: string;
   sourceCount: number;
+  page?: number;
+  pageSize?: number;
+  totalCount?: number;
+  totalPages?: number;
+  windowHours?: number;
+  asOf?: string;
+  sourceOptions?: string[];
   sourceHealth?: Array<{ providerCode: string; status: 'HEALTHY' | 'DEGRADED' | 'UNAVAILABLE' | 'WAITING'; lastAttemptAt?: string; lastSuccessAt?: string }>;
   categoryCounts?: Record<string, number>;
   unclassifiedCount?: number;
@@ -42,6 +49,33 @@ type NewsCategory = {
   displayOrder?: number;
 };
 
+const FILTER_KEY = 'finscope.news.filters';
+type NewsFilters = { category: string; query: string; source: string; hours: number; page: number; asOf?: string };
+function initialFilters(): NewsFilters {
+  const defaults: NewsFilters = { category: 'ALL', query: '', source: 'ALL', hours: 36, page: 0 };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(FILTER_KEY) ?? '{}');
+    return { ...defaults, category: typeof saved.category === 'string' ? saved.category : 'ALL',
+      query: typeof saved.query === 'string' ? saved.query : '',
+      source: typeof saved.source === 'string' ? saved.source : 'ALL',
+      hours: [6, 12, 24, 36].includes(saved.hours) ? saved.hours : 36 };
+  } catch {
+    return defaults;
+  }
+}
+function providerLabel(code: string) {
+  if (code.startsWith('CLS')) {
+    return code.endsWith('_DIGEST') ? '财联社 · 要闻' : '财联社';
+  }
+  if (code.startsWith('THS')) {
+    return code.endsWith('_DIGEST') ? '同花顺 · 要闻' : '同花顺';
+  }
+  if (code.startsWith('EASTMONEY')) {
+    return code.endsWith('_DIGEST') ? '东方财富 · 要闻' : '东方财富';
+  }
+  return code;
+}
+
 const ALL_CATEGORY: NewsCategory = { code: 'ALL', name: '全部' };
 const PENDING_REVIEW_CATEGORY: NewsCategory = { code: 'PENDING_REVIEW', name: '待确认' };
 
@@ -50,25 +84,37 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onOpenMajorEvents?: () => void;
 }) {
+  const filtersRef = useRef<NewsFilters>(initialFilters());
+  const [hours, setHours] = useState(filtersRef.current.hours);
+  const [loadError, setLoadError] = useState('');
   const [snapshot, setSnapshot] = useState<NewsFeedSnapshot>();
   const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY]);
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedCategory, setSelectedCategory] = useState(filtersRef.current.category);
   const [pendingSnapshot, setPendingSnapshot] = useState<NewsFeedSnapshot>();
   const [pendingCount, setPendingCount] = useState(0);
-  const [query, setQuery] = useState('');
-  const [source, setSource] = useState('ALL');
+  const [query, setQuery] = useState(filtersRef.current.query);
+  const [source, setSource] = useState(filtersRef.current.source);
   const [loading, setLoading] = useState(true);
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set());
   const mounted = useRef(true);
   const snapshotRef = useRef<NewsFeedSnapshot>();
-  const selectedCategoryRef = useRef('ALL');
+  const selectedCategoryRef = useRef(filtersRef.current.category);
   const requestSequence = useRef(0);
 
   async function load(manual = false, polling = false, category = selectedCategoryRef.current) {
     const requestId = ++requestSequence.current;
     try {
-      if (manual) setLoading(true);
-      const response = await api<NewsFeedSnapshot>(`/api/news?category=${encodeURIComponent(category)}&limit=100`);
+      if (manual) {
+        setLoading(true);
+      }
+      setLoadError('');
+      const filters = filtersRef.current;
+      const params = new URLSearchParams({ category, source: filters.source, query: filters.query,
+        hours: String(filters.hours), page: String(filters.page), pageSize: '50' });
+      if (filters.asOf && !(polling && filters.page === 0)) {
+        params.set('asOf', filters.asOf);
+      }
+      const response = await api<NewsFeedSnapshot>(`/api/news/paged?${params}`);
       const next: NewsFeedSnapshot = {
         ...response,
         items: Array.isArray(response?.items) ? response.items : [],
@@ -80,10 +126,11 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
       const current = snapshotRef.current;
       const currentIds = new Set(current?.items.map((item) => item.id) ?? []);
       const added = polling && current ? next.items.filter((item) => !currentIds.has(item.id)).length : 0;
-      if (added > 0) {
+      if (added > 0 && filters.page === 0) {
         setPendingSnapshot(next);
         setPendingCount(added);
       } else {
+        filtersRef.current = { ...filtersRef.current, page: next.page ?? filters.page, asOf: next.asOf };
         snapshotRef.current = next;
         setSnapshot(next);
         setPendingSnapshot(undefined);
@@ -92,8 +139,11 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
       setMessage(next.warnings.length ? '资讯已更新，部分来源暂不可用' : '资讯流已同步');
       if (manual) addToast('资讯已更新', 'success');
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || requestId !== requestSequence.current) {
+        return;
+      }
       const message = error instanceof Error ? error.message : '资讯刷新失败';
+      setLoadError(message);
       setMessage(message);
       if (manual) addToast(message, 'error');
     } finally {
@@ -101,20 +151,35 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
     }
   }
 
-  function switchCategory(code: string) {
-    if (code === selectedCategoryRef.current) return;
-    selectedCategoryRef.current = code;
-    setSelectedCategory(code);
+  function changeFilters(patch: Partial<NewsFilters>, paging = false) {
+    filtersRef.current = { ...filtersRef.current, ...patch,
+      ...(paging ? {} : { page: 0, asOf: undefined }) };
+    const filters = filtersRef.current;
+    selectedCategoryRef.current = filters.category;
+    setSelectedCategory(filters.category);
+    setSource(filters.source);
+    setHours(filters.hours);
     setPendingSnapshot(undefined);
     setPendingCount(0);
-    setQuery('');
-    setSource('ALL');
+    snapshotRef.current = undefined;
+    setSnapshot(undefined);
     setLoading(true);
-    void load(false, false, code);
+    try {
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({ category: filters.category,
+        source: filters.source, query: filters.query, hours: filters.hours }));
+    } catch {
+      // Disabled browser storage does not prevent querying.
+    }
+    void load(false, false, filters.category);
+  }
+
+  function switchCategory(code: string) {
+    changeFilters({ category: code });
   }
 
   function applyPendingSnapshot() {
     if (!pendingSnapshot) return;
+    filtersRef.current = { ...filtersRef.current, page: pendingSnapshot.page ?? 0, asOf: pendingSnapshot.asOf };
     snapshotRef.current = pendingSnapshot;
     setSnapshot(pendingSnapshot);
     setPendingSnapshot(undefined);
@@ -162,15 +227,8 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
     };
   }, []);
 
-  const sources = useMemo(() => Array.from(new Set(snapshot?.items.map((item) => item.sourceName) ?? [])), [snapshot]);
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return (snapshot?.items ?? []).filter((item) => {
-      const matchesSource = source === 'ALL' || item.sourceName === source;
-      const haystack = `${item.title} ${item.content} ${item.sourceName}`.toLocaleLowerCase();
-      return matchesSource && (!normalized || haystack.includes(normalized));
-    });
-  }, [query, snapshot, source]);
+  const sources = snapshot?.sourceOptions ?? [];
+  const filtered = snapshot?.items ?? [];
   const flashes = filtered.filter((item) => item.kind === 'FLASH');
   const articles = filtered.filter((item) => item.kind === 'ARTICLE');
   const latest = flashes[0] ?? articles[0];
@@ -187,7 +245,7 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
           <p>{latest?.title ?? '正在连接公开资讯来源…'}</p>
         </div>
         <div className="news-sync-state" aria-live="polite">
-          <span>{snapshot ? `${snapshot.sourceCount} 个独立来源` : '连接中'}</span>
+          <span>{snapshot ? `${snapshot.sourceCount} 个资讯渠道` : '连接中'}</span>
           <strong>{snapshot ? `页面快照 ${formatTime(snapshot.refreshedAt, true)}` : '等待首批资讯'}</strong>
           <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" onClick={() => void refreshSources()} disabled={loading}>
             {loading ? '同步中' : '立即刷新'}
@@ -213,16 +271,32 @@ export function LiveNewsPanel({ setMessage, addToast, onOpenMajorEvents }: {
         <span className="news-unclassified-count">未归类 {snapshot?.unclassifiedCount ?? 0}</span>
       </nav>
 
-      <div className="news-filter-rail">
+      <form className="news-filter-rail" onSubmit={(event) => {
+        event.preventDefault();
+        changeFilters({ query: query.trim() });
+      }}>
         <label className="news-search">
           <span>检索</span>
           <input type="search" aria-label="搜索资讯" placeholder="搜索公司、行业或事件" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
+        <button type="submit" className="ghost-button">搜索</button>
+        <label>时间范围<select aria-label="资讯时间范围" value={hours}
+          onChange={(event) => changeFilters({ hours: Number(event.target.value) })}>
+          {[6, 12, 24, 36].map((value) => <option key={value} value={value}>最近 {value} 小时</option>)}
+        </select></label>
         <div className="news-source-filter" role="group" aria-label="资讯来源">
-          <button type="button" className={source === 'ALL' ? 'active' : ''} onClick={() => setSource('ALL')}>全部来源</button>
-          {sources.map((item) => <button type="button" key={item} className={source === item ? 'active' : ''} onClick={() => setSource(item)}>{item}</button>)}
+          <button type="button" className={source === 'ALL' ? 'active' : ''} onClick={() => changeFilters({ source: 'ALL' })}>全部来源</button>
+          {sources.map((item) => <button type="button" key={item} className={source === item ? 'active' : ''} onClick={() => changeFilters({ source: item })}>{providerLabel(item)}</button>)}
         </div>
-      </div>
+      </form>
+      {loadError ? <div role="alert">{loadError} <button type="button" onClick={() => void load(true)}>重试加载</button></div> : null}
+      <nav className="news-pagination" aria-label="资讯分页">
+        <span>共 {snapshot?.totalCount ?? 0} 条 · 第 {(snapshot?.page ?? 0) + 1} / {Math.max(1, snapshot?.totalPages ?? 0)} 页</span>
+        <button type="button" disabled={loading || !snapshot || (snapshot.page ?? 0) === 0}
+          onClick={() => changeFilters({ page: (snapshot?.page ?? 0) - 1 }, true)}>上一页</button>
+        <button type="button" disabled={loading || !snapshot || (snapshot.page ?? 0) + 1 >= (snapshot.totalPages ?? 0)}
+          onClick={() => changeFilters({ page: (snapshot?.page ?? 0) + 1 }, true)}>下一页</button>
+      </nav>
 
       {snapshot?.warnings.length ? <div className="news-degraded" role="status" title={snapshot.warnings.join('\n')}><span aria-hidden="true">!</span>部分来源暂不可用，已展示可用资讯</div> : null}
       {pendingCount > 0 ? <button type="button" className="news-update-notice" onClick={applyPendingSnapshot}>发现 {pendingCount} 条新资讯</button> : null}

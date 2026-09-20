@@ -18828,3 +18828,26 @@ input[type="checkbox"] {
   .market-pulse-opportunity-map,
   .market-pulse-discovery-handoff { border-color: var(--ink); box-shadow: none; }
 }
+
+.news-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.news-pagination button,
+.news-filter-rail select {
+  color: inherit;
+  background: var(--surface, transparent);
+  border: 1px solid var(--border, #657080);
+  border-radius: 8px;
+  padding: 7px 12px;
+}
+
+.news-pagination button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
