@@ -10,6 +10,10 @@ import com.finscope.common.enums.investmentobservation.ReactionSampleState;
 public class ReactionSample {
     private Long id;
     private Long majorEventId;
+    private String sourceIdentity;
+    private boolean automatic;
+    private String discoveryIssue;
+    private LocalDateTime enrichmentAttemptAt;
     private String sourceOriginType;
     private String sourceOriginKey;
     private String title;

@@ -28,6 +28,7 @@ public class ReactionSampleRepository {
     private final RowMapper<ReactionSample> mapper = (rs, rowNum) -> {
         ReactionSample sample = read(rs.getString("snapshot_json"), ReactionSample.class);
         sample.setId(rs.getLong("id"));
+        sample.setSourceIdentity(rs.getString("source_identity"));
         sample.setInstrumentCode(rs.getString("instrument_code"));
         sample.setState(ReactionSampleState.valueOf(rs.getString("state")));
         sample.setRevision(rs.getInt("revision"));
@@ -40,16 +41,19 @@ public class ReactionSampleRepository {
 
     /** 数据库唯一键仲裁重试，不覆盖原始事件快照或用户确认。 */
     public ReactionSample create(ReactionSample sample) {
-        int changed = jdbcTemplate.update("INSERT INTO investment_reaction_sample(major_event_id,instrument_code,"
-                        + "state,snapshot_json,registered_at) VALUES(?,?,?,?,?) "
-                        + "ON CONFLICT(major_event_id,instrument_code) DO NOTHING",
-                sample.getMajorEventId(), sample.getInstrumentCode(), sample.getState().name(),
+        if (sample.getSourceIdentity() == null) {
+            sample.setSourceIdentity("MAJOR_EVENT:" + sample.getMajorEventId());
+        }
+        int changed = jdbcTemplate.update("INSERT INTO investment_reaction_sample(major_event_id,source_identity,instrument_code,"
+                        + "state,snapshot_json,registered_at) VALUES(?,?,?,?,?,?) "
+                        + "ON CONFLICT(source_identity,instrument_code) DO NOTHING",
+                sample.getMajorEventId(), sample.getSourceIdentity(), sample.getInstrumentCode(), sample.getState().name(),
                 write(sample), TimeUtil.text(sample.getRegisteredAt()));
         if (changed != 0 && changed != 1) {
             throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR);
         }
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE major_event_id=? AND instrument_code=?",
-                mapper, sample.getMajorEventId(), sample.getInstrumentCode()).stream().findFirst()
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE source_identity=? AND instrument_code=?",
+                mapper, sample.getSourceIdentity(), sample.getInstrumentCode()).stream().findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR));
     }
 
@@ -61,6 +65,53 @@ public class ReactionSampleRepository {
     public Optional<ReactionSample> findBySource(long majorEventId, String instrumentCode) {
         return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE major_event_id=? AND instrument_code=?",
                 mapper, majorEventId, instrumentCode).stream().findFirst();
+    }
+
+    public List<ReactionSample> findByIdentity(String identity) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE source_identity=? ORDER BY id",
+                mapper, identity);
+    }
+
+    public Optional<ReactionSample> findUnresolvedOrigin(String origin, String key) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' "
+                        + "AND json_extract(snapshot_json,'$.sourceOriginType')=? "
+                        + "AND json_extract(snapshot_json,'$.sourceOriginKey')=? ORDER BY id LIMIT 1",
+                mapper, origin, key).stream().findFirst();
+    }
+
+    public List<ReactionSample> findUnresolved(LocalDateTime before, int limit) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' "
+                        + "AND json_extract(snapshot_json,'$.automatic')=1 "
+                        + "AND (enrichment_attempt_at IS NULL OR enrichment_attempt_at<?) "
+                        + "ORDER BY COALESCE(enrichment_attempt_at,''),id LIMIT ?",
+                mapper, before.toString(), Math.max(1, Math.min(10, limit)));
+    }
+
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public boolean promoteDraft(ReactionSample draft, List<ReactionSample> samples) {
+        // 条件写获取数据库写锁，归档或人工确认先完成时不再自动创建样本。
+        if (!saveDraft(draft)) {
+            return false;
+        }
+        for (ReactionSample sample : samples) {
+            create(sample);
+        }
+        int removed = jdbcTemplate.update("DELETE FROM investment_reaction_sample WHERE id=? AND state='DRAFT'",
+                draft.getId());
+        if (removed != 1) {
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
+        }
+        return true;
+    }
+
+    public boolean saveDraft(ReactionSample sample) {
+        return jdbcTemplate.update("UPDATE investment_reaction_sample SET snapshot_json=?,enrichment_attempt_at=?,revision=revision+1 "
+                        + "WHERE id=? AND revision=? AND state='DRAFT'", write(sample), TimeUtil.text(sample.getEnrichmentAttemptAt()), sample.getId(), sample.getRevision()) == 1;
+    }
+
+    public List<ReactionSample> recent(long beforeId, int limit) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE id<? ORDER BY id DESC LIMIT ?",
+                mapper, beforeId, Math.max(1, Math.min(100, limit)));
     }
 
     public List<ReactionSample> list(ReactionSampleState state, long afterId, int limit) {
@@ -77,9 +128,9 @@ public class ReactionSampleRepository {
         return jdbcTemplate.update("UPDATE investment_reaction_sample SET instrument_code=?,state=?,snapshot_json=?,"
                         + "revision=revision+1 WHERE id=? AND revision=? AND state=? "
                         + "AND NOT EXISTS (SELECT 1 FROM investment_reaction_sample existing "
-                        + "WHERE existing.major_event_id=? AND existing.instrument_code=? AND existing.id<>?)",
+                        + "WHERE existing.source_identity=? AND existing.instrument_code=? AND existing.id<>?)",
                 sample.getInstrumentCode(), ReactionSampleState.OBSERVING.name(), write(sample), sample.getId(),
-                revision, ReactionSampleState.DRAFT.name(), sample.getMajorEventId(), sample.getInstrumentCode(), sample.getId()) == 1;
+                revision, ReactionSampleState.DRAFT.name(), sample.getSourceIdentity(), sample.getInstrumentCode(), sample.getId()) == 1;
     }
 
     public List<ReactionSample> findDue(LocalDateTime before, int limit) {
@@ -97,7 +148,9 @@ public class ReactionSampleRepository {
         return jdbcTemplate.update("UPDATE investment_reaction_sample SET calculation_json=?,last_attempt_at=?,"
                         + "refresh_error=NULL,completed=?,revision=revision+1 WHERE id=? AND revision=? AND state=?",
                 write(calculation), TimeUtil.text(attemptedAt), calculation.getWindows().stream()
-                        .anyMatch(window -> window.getSessions() == 5 && window.getStatus() == ReactionWindowStatus.READY) ? 1 : 0,
+                        .anyMatch(window -> window.getSessions() == 5 && window.getStatus() == ReactionWindowStatus.READY)
+                        && calculation.getPoints().size() == 11 && calculation.getPoints().stream()
+                        .allMatch(point -> point.getStatus() == ReactionWindowStatus.READY) ? 1 : 0,
                 id, revision, ReactionSampleState.OBSERVING.name()) == 1;
     }
 

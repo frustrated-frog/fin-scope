@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 public class ReactionSampleResponse {
     private Long id;
     private Long majorEventId;
+    private String sourceIdentity;
+    private boolean automatic;
+    private String discoveryIssue;
     private String sourceOriginType;
     private String sourceOriginKey;
     private String title;
@@ -36,6 +39,9 @@ public class ReactionSampleResponse {
         ReactionSampleResponse result = new ReactionSampleResponse();
         result.setId(sample.getId());
         result.setMajorEventId(sample.getMajorEventId());
+        result.setSourceIdentity(sample.getSourceIdentity());
+        result.setAutomatic(sample.isAutomatic());
+        result.setDiscoveryIssue(sample.getDiscoveryIssue());
         result.setSourceOriginType(sample.getSourceOriginType());
         result.setSourceOriginKey(sample.getSourceOriginKey());
         result.setTitle(sample.getTitle());

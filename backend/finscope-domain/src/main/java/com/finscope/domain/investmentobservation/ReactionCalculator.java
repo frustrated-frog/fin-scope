@@ -55,6 +55,13 @@ public class ReactionCalculator {
             point.setStatus(ReactionWindowStatus.NOT_DUE);
             return point;
         }
+        QuantDailyBar bar = stock.get(date);
+        if (bar != null) {
+            point.setClose(bar.getClose());
+            point.setAdjustedClose(bar.getAdjustedClose());
+            point.setVolume(bar.getVolume());
+            point.setAmount(bar.getAmount());
+        }
         point.setStockReturnPct(returnPct(stock.get(baseline), stock.get(date)));
         point.setBenchmarkReturnPct(returnPct(benchmark.get(baseline), benchmark.get(date)));
         if (point.getStockReturnPct() == null || point.getBenchmarkReturnPct() == null) {

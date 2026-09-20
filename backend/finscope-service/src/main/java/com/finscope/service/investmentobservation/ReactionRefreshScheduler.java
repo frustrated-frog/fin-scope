@@ -1,5 +1,6 @@
 package com.finscope.service.investmentobservation;
 
+import com.finscope.domain.investmentobservation.ReactionDiscoveryStatus;
 import com.finscope.domain.investmentobservation.ReactionRefreshResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,11 +15,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ReactionRefreshScheduler {
     @Resource
     private ReactionRefreshService refreshService;
+    @Resource
+    private ReactionDiscoveryService discovery;
+    private volatile ReactionDiscoveryStatus lastStatus =
+            new ReactionDiscoveryStatus();
     @Resource(name = "investmentReactionExecutor")
     private Executor executor;
     private final AtomicBoolean pending = new AtomicBoolean();
 
-    @Scheduled(cron = "${finscope.investment-reaction.refresh-cron:0 */20 16-23 * * MON-FRI}", zone = "Asia/Shanghai")
+    @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void refreshAfterClose() {
         if (!pending.compareAndSet(false, true)) {
             return;
@@ -31,8 +36,28 @@ public class ReactionRefreshScheduler {
         }
     }
 
+    public ReactionDiscoveryStatus status() {
+        var result = new ReactionDiscoveryStatus();
+        var snapshot = lastStatus;
+        result.setRunning(pending.get());
+        result.setLastCompletedAt(snapshot.getLastCompletedAt());
+        result.setCaptured(snapshot.getCaptured());
+        result.setResolved(snapshot.getResolved());
+        result.setMessage(snapshot.getMessage());
+        return result;
+    }
+
     private void refreshBatch() {
         try {
+            try {
+                lastStatus = discovery.discover();
+            } catch (RuntimeException ex) {
+                var failed = new ReactionDiscoveryStatus();
+                failed.setLastCompletedAt(lastStatus.getLastCompletedAt());
+                failed.setMessage("自动发现暂不可用，系统将在下一轮重试；现有行情样本仍继续更新");
+                lastStatus = failed;
+                log.warn("reaction discovery failed", ex);
+            }
             ReactionRefreshResult result = refreshService.refreshPending();
             if (result.getRefreshed() > 0 || result.getFailed() > 0) {
                 log.info("reaction refresh completed refreshed={} failed={}", result.getRefreshed(), result.getFailed());

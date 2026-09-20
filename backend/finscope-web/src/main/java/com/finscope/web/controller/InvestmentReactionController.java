@@ -1,5 +1,7 @@
 package com.finscope.web.controller;
 
+import com.finscope.service.investmentobservation.ReactionRefreshScheduler;
+import com.finscope.domain.investmentobservation.ReactionDiscoveryStatus;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.common.enums.investmentobservation.ReactionSampleState;
 import com.finscope.domain.investmentobservation.ReactionCandidate;
@@ -26,11 +28,33 @@ public class InvestmentReactionController {
     @Resource
     private ReactionRefreshService refreshService;
 
+    @Resource
+    private ReactionRefreshScheduler scheduler;
+
+    @GetMapping("/discovery")
+    public ApiResponse<ReactionDiscoveryStatus> discoveryStatus() {
+        return ApiResponses.success(scheduler.status());
+    }
+
+    @PostMapping("/sync")
+    public ApiResponse<ReactionDiscoveryStatus> sync() {
+        scheduler.refreshAfterClose();
+        return ApiResponses.success(scheduler.status());
+    }
+
     @GetMapping
     public ApiResponse<List<ReactionSampleResponse>> list(@RequestParam(required = false) ReactionSampleState state,
                                                          @RequestParam(defaultValue = "0") long afterId,
                                                          @RequestParam(defaultValue = "100") int limit) {
         return ApiResponses.success(registration.list(state, afterId, limit).stream()
+                .map(ReactionSampleResponse::from).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/recent")
+    public ApiResponse<List<ReactionSampleResponse>> recent(
+            @RequestParam(defaultValue = "9223372036854775807") long beforeId,
+            @RequestParam(defaultValue = "100") int limit) {
+        return ApiResponses.success(registration.recent(beforeId, limit).stream()
                 .map(ReactionSampleResponse::from).collect(Collectors.toList()));
     }
 

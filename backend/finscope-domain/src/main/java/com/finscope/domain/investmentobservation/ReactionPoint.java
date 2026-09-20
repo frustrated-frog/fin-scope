@@ -7,6 +7,10 @@ import com.finscope.common.enums.investmentobservation.ReactionWindowStatus;
 
 @Data
 public class ReactionPoint {
+    private BigDecimal close;
+    private BigDecimal adjustedClose;
+    private BigDecimal volume;
+    private BigDecimal amount;
     private int session;
     private LocalDate tradeDate;
     private BigDecimal stockReturnPct;

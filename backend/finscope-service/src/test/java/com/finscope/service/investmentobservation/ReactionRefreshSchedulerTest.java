@@ -17,6 +17,9 @@ class ReactionRefreshSchedulerTest {
         ReactionRefreshService service = mock(ReactionRefreshService.class);
         when(service.refreshPending()).thenReturn(new ReactionRefreshResult());
         ReactionRefreshScheduler scheduler = new ReactionRefreshScheduler();
+        ReactionDiscoveryService discovery = mock(ReactionDiscoveryService.class);
+        when(discovery.discover()).thenReturn(new com.finscope.domain.investmentobservation.ReactionDiscoveryStatus());
+        ReflectionTestUtils.setField(scheduler, "discovery", discovery);
         AtomicReference<Runnable> submitted = new AtomicReference<>();
         ReflectionTestUtils.setField(scheduler, "refreshService", service);
         ReflectionTestUtils.setField(scheduler, "executor", (Executor) submitted::set);
@@ -28,6 +31,7 @@ class ReactionRefreshSchedulerTest {
         verifyNoInteractions(service);
         first.run();
         verify(service).refreshPending();
+        verify(discovery).discover();
         ReflectionTestUtils.setField(scheduler, "executor", (Executor) task -> {
             throw new RejectedExecutionException("full");
         });

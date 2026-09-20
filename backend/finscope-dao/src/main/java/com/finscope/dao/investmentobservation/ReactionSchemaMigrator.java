@@ -40,5 +40,30 @@ public class ReactionSchemaMigrator implements InitializingBean {
             jdbcTemplate.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(?,?,?)",
                     VERSION, "event reaction samples with immutable source snapshots", LocalDateTime.now().toString());
         });
+        migrateAutomaticSources();
+    }
+
+    private void migrateAutomaticSources() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM schema_migration WHERE version=411", Integer.class);
+            if (count != null && count > 0) {
+                return;
+            }
+            jdbcTemplate.execute("CREATE TABLE investment_reaction_sample_next ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,major_event_id INTEGER,source_identity TEXT NOT NULL,"
+                    + "instrument_code TEXT NOT NULL DEFAULT '',state TEXT NOT NULL,"
+                    + "snapshot_json TEXT NOT NULL,calculation_json TEXT,revision INTEGER NOT NULL DEFAULT 0,"
+                    + "last_attempt_at TEXT,refresh_error TEXT,registered_at TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,"
+                    + "enrichment_attempt_at TEXT,UNIQUE(source_identity,instrument_code))");
+            jdbcTemplate.execute("INSERT INTO investment_reaction_sample_next SELECT id,major_event_id,"
+                    + "'MAJOR_EVENT:' || major_event_id,instrument_code,state,snapshot_json,calculation_json,revision,"
+                    + "last_attempt_at,refresh_error,registered_at,completed,NULL FROM investment_reaction_sample");
+            jdbcTemplate.execute("DROP TABLE investment_reaction_sample");
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample_next RENAME TO investment_reaction_sample");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_state_id ON investment_reaction_sample(state,id)");
+            jdbcTemplate.update("INSERT INTO schema_migration(version,description,applied_at) VALUES(411,?,?)",
+                    "automatic news identity independent of saved major events", LocalDateTime.now().toString());
+        });
     }
 }

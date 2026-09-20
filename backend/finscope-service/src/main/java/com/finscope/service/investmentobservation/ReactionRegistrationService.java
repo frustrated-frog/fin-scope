@@ -27,6 +27,13 @@ public class ReactionRegistrationService {
     private MajorEventRepository majorEvents;
     private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
+    public List<ReactionSample> recent(long beforeId, int limit) {
+        if (beforeId <= 0 || limit < 1 || limit > 100) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+        }
+        return repository.recent(beforeId, limit);
+    }
+
     public List<ReactionSample> list(ReactionSampleState state, long afterId, int limit) {
         if (afterId < 0 || limit < 1 || limit > 100) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
@@ -87,8 +94,9 @@ public class ReactionRegistrationService {
         sample.setHistoricalBackfill(command.getPublishedAt().toLocalDate().isBefore(sample.getRegisteredAt().toLocalDate()));
         sample.setState(ReactionSampleState.OBSERVING);
         if (!repository.confirm(sample, command.getRevision())) {
-            boolean duplicate = repository.findBySource(sample.getMajorEventId(), sample.getInstrumentCode())
-                    .filter(existing -> !existing.getId().equals(sample.getId())).isPresent();
+            boolean duplicate = repository.findByIdentity(sample.getSourceIdentity()).stream()
+                    .anyMatch(existing -> existing.getInstrumentCode().equals(sample.getInstrumentCode())
+                            && !existing.getId().equals(sample.getId()));
             if (duplicate) {
                 throw new BusinessException(ErrorCode.DUPLICATE_OPERATION, "这个事件与股票已登记，请打开已有样本");
             }
@@ -100,7 +108,7 @@ public class ReactionRegistrationService {
     public ReactionSample archive(long id, int revision, boolean archived) {
         ReactionSample sample = require(id);
         ReactionSampleState target = archived ? ReactionSampleState.ARCHIVED
-                : sample.getPublishedAt() == null ? ReactionSampleState.DRAFT : ReactionSampleState.OBSERVING;
+                : sample.getPublishedAt() == null || blank(sample.getInstrumentCode()) ? ReactionSampleState.DRAFT : ReactionSampleState.OBSERVING;
         if (!archived && sample.getState() != ReactionSampleState.ARCHIVED) {
             throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "仅归档样本可以恢复");
         }
